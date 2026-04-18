@@ -1,6 +1,0 @@
-@AiApiEndpoints_HostAddress = http://localhost:5259
-
-GET {{AiApiEndpoints_HostAddress}}/api/chat
-Accept: application/json
-
-###

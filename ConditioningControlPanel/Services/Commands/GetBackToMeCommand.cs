@@ -11,9 +11,10 @@ public class GetBackToMeCommand(GetBackToMe commandData, CancellationToken cance
         var delay = Math.Max(commandData.Delay, 0);
         try
         {
+            Console.WriteLine($"Delaying getbacktome command {delay} seconds");
             await Task.Delay(delay * 1000, cancellationToken);
             
-            await SendTokenMessage(commandData.Token, commandData.JsonOnly);
+            await SendTokenMessage(commandData.Token, commandData.JsonOnly, commandData.Text);
             
             if (commandData.Commands != null)
             {
@@ -36,9 +37,22 @@ public class GetBackToMeCommand(GetBackToMe commandData, CancellationToken cance
         }
     }
     
-    private async Task SendTokenMessage(string token, bool jsonOnly = false)
+    private async Task SendTokenMessage(string token, bool jsonOnly = false, string? text = null)
     {
         Console.WriteLine($"Sending token: {token}");
-        await App.Ai.GetBambiReplyAsync($"[Token={token}, JsonOnly={jsonOnly}]");
+        if (!string.IsNullOrEmpty(text))
+        {
+            ShowAvatarMessage(text);
+        }
+        var response = await App.Ai.GetBambiReplyAsync($"[Token={token}, JsonOnly={jsonOnly}]");
+        if (!jsonOnly && !string.IsNullOrEmpty(response))
+        {
+            ShowAvatarMessage(response);
+        }
+    }
+
+    private void ShowAvatarMessage(string text)
+    {
+        AvatarTubeWindow.ShowAvatarLine(text);
     }
 }

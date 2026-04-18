@@ -1958,7 +1958,7 @@ namespace ConditioningControlPanel
                         if (!_isGiggling) Giggle("Hmm...");
 
                         // Ask AI for a random thought/bambi-ism
-                        var aiReaction = await App.Ai.GetBambiReplyAsync("Say something random and ditzy about what we're doing (or not doing) right now.");
+                        var aiReaction = await App.Ai.GetBambiReplyAsync("Say something random and ditzy about what we're doing (or not doing) right now.", isUserMessage: true);
                         if (!string.IsNullOrEmpty(aiReaction))
                         {
                             reaction = aiReaction;
@@ -2223,6 +2223,17 @@ namespace ConditioningControlPanel
 
                 App.Logger?.Debug("Priority speech (queue cleared): {Text}", text);
             });
+        }
+
+        /// <summary>
+        /// Shows a line from the avatar with priority.
+        /// Safe to call from any thread.
+        /// </summary>
+        /// <param name="line">The text to display</param>
+        /// <param name="playSound">Whether to play giggle sound</param>
+        public static void ShowAvatarLine(string line, bool playSound = true)
+        {
+            App.AvatarWindow?.GigglePriority(line, playSound: playSound);
         }
 
         /// <summary>
@@ -4305,7 +4316,7 @@ namespace ConditioningControlPanel
                     GigglePriority(GetRandomThinkingPhrase(), playSound: false);
 
                     // Get AI response - no truncation, scrollable bubble handles long text
-                    var reply = await App.Ai.GetBambiReplyAsync(input);
+                    var reply = await App.Ai.GetBambiReplyAsync(input, isUserMessage: true);
 
                     // Double bounce to attract attention, then show AI response
                     PlayDoubleBounce();

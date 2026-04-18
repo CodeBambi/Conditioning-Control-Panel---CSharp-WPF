@@ -1194,7 +1194,7 @@ namespace ConditioningControlPanel.Services
             {
                 var canned = PickCannedPhrase(a.FallbackPhraseCategory);
                 if (!string.IsNullOrEmpty(canned))
-                    ShowAvatarLine(canned);
+                    AvatarTubeWindow.ShowAvatarLine(canned);
                 return;
             }
 
@@ -1214,7 +1214,7 @@ namespace ConditioningControlPanel.Services
                         line = PickCannedPhrase(fallbackCategory);
 
                     if (!string.IsNullOrEmpty(line))
-                        ShowAvatarLine(line);
+                        AvatarTubeWindow.ShowAvatarLine(line);
                 }
                 catch (Exception ex)
                 {
@@ -1240,16 +1240,6 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private static void ShowAvatarLine(string line)
-        {
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
-            dispatcher.BeginInvoke(new Action(() =>
-            {
-                try { App.AvatarWindow?.GigglePriority(line, playSound: true); }
-                catch (Exception ex) { App.Logger?.Debug("AvatarWindow.GigglePriority failed: {Error}", ex.Message); }
-            }));
-        }
 
         /// <summary>
         /// Legacy fallback: the original flat-field dispatch path, run only when a

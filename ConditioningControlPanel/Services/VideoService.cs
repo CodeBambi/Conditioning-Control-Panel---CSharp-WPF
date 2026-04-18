@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -2097,7 +2098,9 @@ namespace ConditioningControlPanel.Services
             // Notify InteractionQueue that video is complete (triggers queued items)
             App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.Video);
 
-            VideoEnded?.Invoke(this, EventArgs.Empty);
+            string pattern = @"[^\\\/]+(?=\.[^.\/]+$)";
+            EventArgs eventArgs = new MessageEventArgs(Regex.Match(_videosPath,pattern).Value);
+            VideoEnded?.Invoke(this, eventArgs);
 
             if (_isRunning && App.Settings.Current.FlashEnabled)
             {
@@ -2795,5 +2798,14 @@ namespace ConditioningControlPanel.Services
             // 1 or 3 words: keep as-is
             return text;
         }
+    }
+}
+public class MessageEventArgs(string message) : EventArgs
+{
+    public string Message { get; init; } = message;
+
+    public void Deconstruct(out string Message)
+    {
+        Message = this.Message;
     }
 }

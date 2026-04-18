@@ -72,7 +72,7 @@ namespace ConditioningControlPanel.Services.AIService
         /// Gets an AI-generated reply in the Bambi personality.
         /// Returns fallback response if API unavailable or daily limit reached.
         /// </summary>
-        public async Task<string> GetBambiReplyAsync(string userInput)
+        public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
         {
             // Return a clear hint when AI is not available (not logged in / offline)
             if (App.Settings?.Current?.OfflineMode == true)
@@ -87,7 +87,7 @@ namespace ConditioningControlPanel.Services.AIService
             // Get prompt from active personality preset (handles all personalities including slut mode)
             var prompt = _bambiSprite.GetSystemPrompt();
 
-            var result = await GetAiResponseAsync(userInput, prompt);
+            var result = await GetAiResponseAsync(userInput, prompt, isUserMessage);
             return result ?? GetFallbackResponse();
         }
 
@@ -154,11 +154,47 @@ namespace ConditioningControlPanel.Services.AIService
             return await GetAiResponseAsync(userInput, systemPrompt);
         }
 
+        public async Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null)
+        {
+            if (!IsAvailable) return null;
+
+            var systemPrompt = _bambiSprite.GetSystemPrompt();
+            string userInput;
+            if (string.IsNullOrEmpty(promptTemplate))
+                userInput =
+                    $"The user made {mistakes} mistakes in '{sentance}' for the lock screen. They had to type it {amount} of time. React in character, one short line.";
+            else
+            {
+                userInput = promptTemplate.Replace("{sentance}", sentance);
+                userInput = userInput.Replace("{mistakes}", mistakes.ToString());
+                userInput = userInput.Replace("{amount}", amount.ToString());
+            }
+
+            return await GetAiResponseAsync(userInput, systemPrompt);
+        }
+
+        public async Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null)
+        {
+            if (!IsAvailable) return null;
+
+            var systemPrompt = _bambiSprite.GetSystemPrompt();
+            string userInput;
+            if (string.IsNullOrEmpty(promptTemplate))
+                userInput =
+                    $"The user has just finished the mandatory video {title}. React in character, one short line.";
+            else
+            {
+                userInput = promptTemplate.Replace("{title}", title);
+            }
+
+            return await GetAiResponseAsync(userInput, systemPrompt);
+        }
+
         /// <summary>
         /// Core method to get an AI response with custom system prompt.
         /// Returns null if unavailable.
         /// </summary>
-        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt)
+        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool isUser = false)
         {
             // Check offline mode first
             if (App.Settings?.Current?.OfflineMode == true)

@@ -130,7 +130,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Session files -->
+    <!-- Knowledge and Session files -->
+    <Content Include="assets\knowledge.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <Content Include="assets\sessions\*.session.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

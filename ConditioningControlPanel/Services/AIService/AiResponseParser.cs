@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using ConditioningControlPanel.Models;
@@ -162,7 +163,9 @@ public class AiResponseParser : IAiResponseParser
 
     private string BalanceBraces(string json)
     {
+        // Move RepairJson to the beginning to fix internal structures first
         json = RepairJson(json);
+        
         int openCount = json.Count(c => c == '{');
         int closeCount = json.Count(c => c == '}');
         while (openCount > closeCount)
@@ -170,6 +173,15 @@ public class AiResponseParser : IAiResponseParser
             json += "}";
             closeCount++;
         }
+        
+        int openBracket = json.Count(c => c == '[');
+        int closeBracket = json.Count(c => c == ']');
+        while (openBracket > closeBracket)
+        {
+            json += "]";
+            closeBracket++;
+        }
+        
         return json;
     }
 
@@ -184,11 +196,47 @@ public class AiResponseParser : IAiResponseParser
         // Fix double commas (e.g., "prop": "val", , "other": "val")
         json = Regex.Replace(json, @",([ \t\r\n]*),", ",");
 
+        // Advanced structural repair: fix missing closing braces before array/object terminators
+        var repaired = new StringBuilder();
+        var stack = new Stack<char>();
+        bool inQuotes = false;
+
+        for (int i = 0; i < json.Length; i++)
+        {
+            char c = json[i];
+            // Handle quotes and escaped quotes
+            if (c == '"' && (i == 0 || json[i - 1] != '\\'))
+            {
+                inQuotes = !inQuotes;
+            }
+
+            if (!inQuotes)
+            {
+                if (c == '{') stack.Push('{');
+                else if (c == '[') stack.Push('[');
+                else if (c == '}')
+                {
+                    if (stack.Count > 0 && stack.Peek() == '{') stack.Pop();
+                }
+                else if (c == ']')
+                {
+                    // If we hit ] but have unclosed objects inside, close them
+                    while (stack.Count > 0 && stack.Peek() == '{')
+                    {
+                        repaired.Append('}');
+                        stack.Pop();
+                    }
+                    if (stack.Count > 0 && stack.Peek() == '[') stack.Pop();
+                }
+            }
+            repaired.Append(c);
+        }
+        json = repaired.ToString();
+
         // Fix missing quotes on property names (e.g., {response: "..."} -> {"response": "..."})
         json = Regex.Replace(json, @"([{,]\s*)([a-zA-Z0-9_]+)(\s*:)", "$1\"$2\"$3");
 
         // Fix unescaped newlines in JSON strings (very common with AI)
-        // We look for content between double quotes and replace internal newlines
         json = Regex.Replace(json, @"""(.*?)""", m => m.Value.Replace("\r", "\\r").Replace("\n", "\\n"), RegexOptions.Singleline);
 
         return json;

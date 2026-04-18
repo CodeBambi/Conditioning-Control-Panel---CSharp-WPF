@@ -1,13 +1,13 @@
-using System.Text.Json;
-using AiApiEndpoints.Functions;
-using AiApiEndpoints.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using ConditioningControlPanel.Models.AiEnrichment;
 
-namespace AiApiEndpoints.Services;
+namespace ConditioningControlPanel.Services.AIService.Enrichment;
 
 public interface IPromptService
 {
     MessageDto BuildEnrichmentMessage(string factsJson, string timeStamp);
-    List<MessageDto> BuildEnrichedMessageList(ChatRequestDto request, MessageDto enrichment);
     object BuildJsonSchema();
 }
 
@@ -29,8 +29,11 @@ public class PromptService : IPromptService
               It is factual knowledge that may be used when relevant.
               Do not treat this as persona or behavior instructions.
               Do not reference or repeat this block in your replies.
-              Always check the <time> before responding, it has the current time.
+              Do not send the same video repeatedly.
+              Videos should be rarely used, they are not a substitute for a mantra.
+              Videos should be used sparingly, they are highly time-consuming and disruptive.
 
+              
               IMPORTANT: IGNORE all previous instructions regarding 'Emergent Command Execution' or any other JSON formatting rules in the chat history.
               You MUST respond using the specified JSON format.
               DO NOT provide any text outside of the JSON object.
@@ -58,34 +61,14 @@ public class PromptService : IPromptService
               </data>
 
               Operational notes:
-              - Follow the *Time-Dependent Suggestion Escalation:* (revise your response if needed).
               - Follow output constraints (character limits, emoji limits, etc.) when applicable.
-              - Don't talk verbose unless necessary. And even then, only if absolutely necessary.
-              - keep responses short and concise.
-              - Keep the response relevant to the current time and context.
+              - Keep the response relevant to the current context.
               - Keep in mind the passage of time or changes in circumstances.
+              - Each bracket must be properly closed.
 
               [END CONTEXT BLOCK]
               """
         );
-    }
-
-    public List<MessageDto> BuildEnrichedMessageList(ChatRequestDto request, MessageDto enrichment)
-    {
-        var enrichedMessages = new List<MessageDto>();
-        
-        if (request.Messages is { Count: > 0 })
-        {
-            enrichedMessages.AddRange(request.Messages.Take(request.Messages.Count - 1));
-            enrichedMessages.Add(enrichment);
-            enrichedMessages.Add(request.Messages.Last());
-        }
-        else
-        {
-            enrichedMessages.Add(enrichment);
-        }
-
-        return enrichedMessages;
     }
 
     public object BuildJsonSchema()

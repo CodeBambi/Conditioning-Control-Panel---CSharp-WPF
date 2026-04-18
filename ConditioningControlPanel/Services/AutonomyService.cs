@@ -1543,10 +1543,7 @@ namespace ConditioningControlPanel.Services
                 var response = await App.Ai!.GetBambiReplyAsync(prompt);
                 if (!string.IsNullOrEmpty(response))
                 {
-                    Application.Current?.Dispatcher?.BeginInvoke(() =>
-                    {
-                        App.AvatarWindow?.GigglePriority(response, false);
-                    });
+                    AvatarTubeWindow.ShowAvatarLine(response, false);
                 }
             }
             catch (Exception ex)
@@ -1572,7 +1569,7 @@ namespace ConditioningControlPanel.Services
 
             var phrase = phrases[_random.Next(phrases.Length)];
 
-            App.AvatarWindow?.GigglePriority(phrase, false);
+            AvatarTubeWindow.ShowAvatarLine(phrase, false);
             AnnouncementMade?.Invoke(this, phrase);
         }
 

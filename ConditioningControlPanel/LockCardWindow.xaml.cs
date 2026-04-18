@@ -368,7 +368,15 @@ namespace ConditioningControlPanel
 
             App.Logger?.Information("Lock Card completed - {Repeats} repeats in {Time:F1}s with {Errors} errors{Test}",
                 _requiredRepeats, completionTime, _totalErrors, _isTest ? " (TEST)" : "");
-            
+            // Get AI reaction in background and show if available
+            Task.Run(async () =>
+            {
+                var reaction = await App.Ai.GetLockScreenReaction(_phrase, _totalErrors, _requiredRepeats);
+                if (!string.IsNullOrEmpty(reaction))
+                {
+                    AvatarTubeWindow.ShowAvatarLine(reaction);
+                }
+            });
             foreach (var window in _allWindows)
             {
                 window._isCompleted = true;

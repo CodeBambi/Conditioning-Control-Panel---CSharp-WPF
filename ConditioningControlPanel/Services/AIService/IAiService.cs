@@ -21,7 +21,7 @@ namespace ConditioningControlPanel.Services.AIService
         /// Gets an AI-generated reply in the Bambi personality.
         /// Returns fallback response if API unavailable or daily limit reached.
         /// </summary>
-        Task<string> GetBambiReplyAsync(string userInput);
+        Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false);
 
         /// <summary>
         /// Gets an AI-generated reaction to the user's current activity.
@@ -41,6 +41,8 @@ namespace ConditioningControlPanel.Services.AIService
         /// Gets an AI-generated reply for a triggered keyword.
         /// </summary>
         Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null);
-        
+
+        Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null);
+        Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null);
     }
 }
