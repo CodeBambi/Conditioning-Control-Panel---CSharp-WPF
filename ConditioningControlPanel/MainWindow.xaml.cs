@@ -3166,6 +3166,13 @@ namespace ConditioningControlPanel
             ShowTab("awareness");
         }
 
+        private void BtnSubLockdown_Click(object sender, RoutedEventArgs e)
+        {
+            ExclusivesSubmenuPopup.IsOpen = false;
+            // Lockdown UI lives inside the Companion tab (Hero Strip + Lockdown panel).
+            ShowTab("companion");
+        }
+
         /// <summary>
         /// Updates "Premium" badges on the Exclusives submenu items based on the
         /// user's current subscription state. Called whenever the popup opens.

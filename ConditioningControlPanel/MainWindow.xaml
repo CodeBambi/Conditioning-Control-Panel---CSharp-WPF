@@ -1697,8 +1697,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v5_8_3_is_out}"
-                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v5_8_3_signed_yours_truly}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v5_8_4_is_out}"
+                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v5_8_4_bugfixes_and_cleanup}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -1958,6 +1958,20 @@
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="👁" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
                                                 <TextBlock Text="{loc:Str tab_awareness}" Foreground="White" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                    </Button>
+                                    <Button x:Name="BtnSubLockdown" Style="{StaticResource ExclusivesSubmenuButton}"
+                                            Click="BtnSubLockdown_Click">
+                                        <DockPanel LastChildFill="True">
+                                            <Border DockPanel.Dock="Right" x:Name="SubBadgeLockdown"
+                                                    Background="#FF69B4" CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="✨" FontSize="9" Foreground="White"/>
+                                            </Border>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="🔒" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{loc:Str tab_lockdown_mode}" Foreground="White" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DockPanel>
                                     </Button>
@@ -6598,85 +6612,8 @@
                     </TextBlock>
                     <TextBlock Text="{loc:Str label_experimental_features_and_special_modes}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,0,0,16"/>
 
-                    <!-- 2x2 Modes Grid -->
-                    <UniformGrid Rows="2" Columns="2">
-                        <!-- Lockdown Mode Card -->
-                        <Border x:Name="LockdownCardBorder" CornerRadius="12" Margin="6" Padding="15">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="#1A1A32" Offset="0"/>
-                                    <GradientStop Color="#201A38" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                            <Border.BorderBrush>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
-                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.BorderBrush>
-                            <Border.BorderThickness>
-                                <Thickness>2</Thickness>
-                            </Border.BorderThickness>
-                            <StackPanel>
-                                <Border x:Name="LockdownImageBorder" CornerRadius="10" Margin="0,0,0,12"
-                                        BorderThickness="2" ClipToBounds="True">
-                                    <Border.Background>
-                                        <SolidColorBrush Color="#12FFFFFF"/>
-                                    </Border.Background>
-                                    <Border.BorderBrush>
-                                        <SolidColorBrush x:Name="LockdownImageBorderBrush" Color="#FF1493"/>
-                                    </Border.BorderBrush>
-                                    <Border.Effect>
-                                        <DropShadowEffect x:Name="LockdownImageGlow" Color="#FF1493" BlurRadius="12" ShadowDepth="0" Opacity="0.7"/>
-                                    </Border.Effect>
-                                    <!-- Lockdown pulse managed in code-behind (StartLockdownPulse/StopLockdownPulse) -->
-                                    <Image Source="Resources/lockdown_icon.png" Stretch="Uniform"
-                                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Border>
-                                <TextBlock Text="{loc:Str label_lockdown_mode}" Foreground="White" FontWeight="Bold" FontSize="16" Margin="0,0,0,6"/>
-                                <TextBlock Text="{loc:Str label_lock_yourself_into_a_timed_conditioning_sessi}"
-                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
-
-                                <!-- Setup Panel (visible when lockdown is NOT active) -->
-                                <StackPanel x:Name="LockdownSetupPanel">
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                        <TextBlock Text="{loc:Str label_duration_2}" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <ComboBox x:Name="CmbLockdownDuration" Width="120" SelectedIndex="1"
-                                                  Background="{DynamicResource DarkerBgBrush}" Foreground="Black" FontSize="12" BorderBrush="{DynamicResource PanelAccentBrush}">
-                                            <ComboBoxItem Content="{loc:Str btn_5_minutes}" Tag="5" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str btn_10_minutes}" Tag="10" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str btn_15_minutes}" Tag="15" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str label_30_minutes}" Tag="30" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str btn_60_minutes}" Tag="60" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str btn_2_hours}" Tag="120" Foreground="Black"/>
-                                            <ComboBoxItem Content="{loc:Str btn_4_hours}" Tag="240" Foreground="Black"/>
-                                        </ComboBox>
-                                    </StackPanel>
-                                    <Button x:Name="BtnActivateLockdown" Content="{loc:Str btn_activate}" Cursor="Hand"
-                                            Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="12"
-                                            BorderThickness="0" Padding="12,8" HorizontalAlignment="Left"
-                                            Click="BtnActivateLockdown_Click">
-                                        <Button.Resources>
-                                            <Style TargetType="Border">
-                                                <Setter Property="CornerRadius" Value="8"/>
-                                            </Style>
-                                        </Button.Resources>
-                                    </Button>
-                                </StackPanel>
-
-                                <!-- Active Panel (visible when lockdown IS active) -->
-                                <StackPanel x:Name="LockdownActivePanel" Visibility="Collapsed">
-                                    <TextBlock Text="{loc:Str label_lockdown_active}" Foreground="#DC143C" FontWeight="Bold" FontSize="14" Margin="0,0,0,6"/>
-                                    <TextBlock x:Name="TxtLockdownTimer" Text="00:00" Foreground="#DC143C" FontWeight="Bold" FontSize="28"
-                                               Margin="0,0,0,6" Cursor="Hand" MouseLeftButtonDown="TxtLockdownTimer_Click"/>
-                                    <TextBox x:Name="TxtLockdownExit" Visibility="Collapsed"
-                                             Background="#1A0A0A" Foreground="#DC143C" BorderBrush="#DC143C" BorderThickness="1"
-                                             FontSize="12" Padding="6,4" Margin="0,6,0,0"
-                                             KeyDown="TxtLockdownExit_KeyDown"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-
+                    <!-- Modes Grid (Lockdown graduated to its own Exclusives tab in v5.8.4) -->
+                    <UniformGrid Rows="1" Columns="3">
                         <!-- Quiz Training Card -->
                         <Border CornerRadius="12" Margin="6" Padding="15">
                             <Border.Background>
@@ -9300,6 +9237,124 @@
                     </Grid>
 
                 </StackPanel>
+            </ScrollViewer>
+        </ContentControl>
+
+        <!-- Lockdown Mode Tab (graduated from Lab in v5.8.4) -->
+        <ContentControl x:Name="LockdownTab" Grid.Row="4" Margin="10,5,10,10"
+                        Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid Margin="36,28,36,28">
+                    <StackPanel MaxWidth="720" HorizontalAlignment="Center">
+
+                        <!-- Header -->
+                        <Grid Margin="0,0,0,22">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="🔒" FontSize="40" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Str tab_lockdown_mode}" Foreground="White" FontSize="26" FontWeight="Bold"/>
+                                <TextBlock Text="{loc:Str label_lock_yourself_into_a_timed_conditioning_sessi}"
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="13" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Lockdown card (lifted from Lab) + premium gate overlay -->
+                        <Grid>
+                            <Border x:Name="LockdownCardBorder" CornerRadius="12" Padding="24,22">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#1A1A32" Offset="0"/>
+                                        <GradientStop Color="#201A38" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                                <Border.BorderThickness>
+                                    <Thickness>2</Thickness>
+                                </Border.BorderThickness>
+                                <StackPanel>
+                                    <Border x:Name="LockdownImageBorder" CornerRadius="10" Margin="0,0,0,18"
+                                            Height="220" BorderThickness="2" ClipToBounds="True">
+                                        <Border.Background>
+                                            <SolidColorBrush Color="#12FFFFFF"/>
+                                        </Border.Background>
+                                        <Border.BorderBrush>
+                                            <SolidColorBrush x:Name="LockdownImageBorderBrush" Color="#FF1493"/>
+                                        </Border.BorderBrush>
+                                        <Border.Effect>
+                                            <DropShadowEffect x:Name="LockdownImageGlow" Color="#FF1493" BlurRadius="14" ShadowDepth="0" Opacity="0.7"/>
+                                        </Border.Effect>
+                                        <!-- Lockdown pulse managed in code-behind (StartLockdownPulse/StopLockdownPulse) -->
+                                        <Image Source="Resources/lockdown_icon.png" Stretch="Uniform"
+                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    </Border>
+
+                                    <!-- Setup Panel (visible when lockdown is NOT active) -->
+                                    <StackPanel x:Name="LockdownSetupPanel">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                            <TextBlock Text="{loc:Str label_duration_2}" Foreground="{DynamicResource TextMutedBrush}" FontSize="13" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                            <ComboBox x:Name="CmbLockdownDuration" Width="140" SelectedIndex="1"
+                                                      Background="{DynamicResource DarkerBgBrush}" Foreground="Black" FontSize="13" BorderBrush="{DynamicResource PanelAccentBrush}">
+                                                <ComboBoxItem Content="{loc:Str btn_5_minutes}" Tag="5" Foreground="Black"/>
+                                                <ComboBoxItem Content="{loc:Str btn_10_minutes}" Tag="10" Foreground="Black"/>
+                                                <ComboBoxItem Content="{loc:Str btn_15_minutes}" Tag="15" Foreground="Black"/>
+                                                <ComboBoxItem Content="{loc:Str label_30_minutes}" Tag="30" Foreground="Black"/>
+                                                <ComboBoxItem Content="{loc:Str btn_60_minutes}" Tag="60" Foreground="Black"/>
+                                                <ComboBoxItem Content="{loc:Str btn_2_hours}" Tag="120" Foreground="Black"/>
+                                                <ComboBoxItem Content="{loc:Str btn_4_hours}" Tag="240" Foreground="Black"/>
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <Button x:Name="BtnActivateLockdown" Content="{loc:Str btn_activate}" Cursor="Hand"
+                                                Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="13"
+                                                BorderThickness="0" Padding="16,10" HorizontalAlignment="Left"
+                                                Click="BtnActivateLockdown_Click">
+                                            <Button.Resources>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="CornerRadius" Value="8"/>
+                                                </Style>
+                                            </Button.Resources>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <!-- Active Panel (visible when lockdown IS active) -->
+                                    <StackPanel x:Name="LockdownActivePanel" Visibility="Collapsed">
+                                        <TextBlock Text="{loc:Str label_lockdown_active}" Foreground="#DC143C" FontWeight="Bold" FontSize="16" Margin="0,0,0,8"/>
+                                        <TextBlock x:Name="TxtLockdownTimer" Text="00:00" Foreground="#DC143C" FontWeight="Bold" FontSize="36"
+                                                   Margin="0,0,0,8" Cursor="Hand" MouseLeftButtonDown="TxtLockdownTimer_Click"/>
+                                        <TextBox x:Name="TxtLockdownExit" Visibility="Collapsed"
+                                                 Background="#1A0A0A" Foreground="#DC143C" BorderBrush="#DC143C" BorderThickness="1"
+                                                 FontSize="13" Padding="8,6" Margin="0,8,0,0"
+                                                 KeyDown="TxtLockdownExit_KeyDown"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Translucent gating overlay (only for free users) -->
+                            <Border x:Name="LockdownGate" Visibility="Collapsed"
+                                    Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
+                                    CornerRadius="12" IsHitTestVisible="True">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
+                                               FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
+                                               Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
+                                    <Button Content="{loc:Str gate_unlock_with_patreon}"
+                                            Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                                            Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                    </StackPanel>
+                </Grid>
             </ScrollViewer>
         </ContentControl>
 

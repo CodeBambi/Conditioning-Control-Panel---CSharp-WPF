@@ -20,31 +20,30 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.8.3";
+        public const string AppVersion = "5.8.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.8.3 — Signed, Yours Truly
-
-✨ FEATURES
-• Auto-disconnect idle remote controllers after 2 minutes of inactivity
+        public const string CurrentPatchNotes = @"v5.8.4 — Bugfixes and cleanup
 
 🔧 BUG FIXES
-• Fixed remote control overlay stuck on screen after idle auto-disconnect
-• Fixed Pick Folder dialog, flash preset display, awareness keyboard decoupling
-• Fixed MindWipe loop playing when disabled
-• Fixed OutlineButton resource crash
-• Bug fixes from triage (skill points, audio crash, settings debounce, purchase auth retry)
+• Feature toggles (Bubbles, Lock Card, Flash, Subliminal, Video, Bouncing Text, Bubble Count) now take effect immediately while the engine is running — no need to stop and restart anymore
+• Pick Assets Folder and Change Panic Key buttons in the System popup now work reliably instead of silently doing nothing
+• Panic key change no longer crashes the app on the next keypress — the prompt updates in-place and confirms the new key with a brief ✓
+• Flash image count from a session no longer carries over after the session ends
+• Bambi takeover no longer plays a mandatory video on top of an active web video
+• Failed mandatory video retries now pick a fresh clip instead of replaying the same one
+• Unselected images are now actually excluded from playback (path normalization fix)
+• Closing a feature popup no longer drops the main window behind other apps
 
-🎨 UI/UX
-• Fixed feature card image corners bleeding through rounded border
-• Dashboard mosaic restyle
+🔒 SECURITY / REMOTE CONTROL (server-side fix, already live)
+• Fixed a rate-limit collision that left users on shared NAT / VPN / household connections stuck in a 429 loop — controller appeared connected but commands never arrived
 
-🔏 Starting with this release, CCP binaries are code-signed for your safety.
-
-Season: Airhead April";
+⚡ STABILITY & CLEANUP
+• Retired the dead Velopack auto-update path — ~800 lines removed, the update flow is now slimmer and faster
+• Reclaimed ~6 GB of stale update artifacts that had been accumulating locally during development";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
@@ -66,11 +65,6 @@ Season: Airhead April";
         /// Fired when an update check or download fails
         /// </summary>
         public event EventHandler<Exception>? UpdateFailed;
-
-        /// <summary>
-        /// Fired when an update is downloaded and ready to install
-        /// </summary>
-        public event EventHandler? UpdateReady;
 
         /// <summary>
         /// Whether an update is available
