@@ -405,10 +405,17 @@ Example responses with REAL video names:
 
             var sb = new StringBuilder();
 
-            // Add personality section
-            if (!string.IsNullOrWhiteSpace(settings.Personality))
+            // Add personality section. When the user has Slut Mode toggled on AND the
+            // current preset has a SlutModePersonality defined, swap to that — same
+            // base personality, spicier vibe. Falls back to standard Personality if the
+            // preset has no slut variant (e.g., presets that are already explicit).
+            var slutMode = App.Settings?.Current?.SlutModeEnabled == true;
+            var personalityText = slutMode && !string.IsNullOrWhiteSpace(settings.SlutModePersonality)
+                ? settings.SlutModePersonality
+                : settings.Personality;
+            if (!string.IsNullOrWhiteSpace(personalityText))
             {
-                sb.AppendLine(settings.Personality);
+                sb.AppendLine(personalityText);
                 sb.AppendLine();
             }
 

@@ -5644,6 +5644,18 @@
                                         </Border>
                                     </StackPanel>
 
+                                    <!-- Slut Mode toggle: swaps the active personality's prompt with the
+                                         spicier SlutModePersonality variant when on. Available to all users. -->
+                                    <Grid Margin="0,4,0,8">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{loc:Str label_slut_mode}" Foreground="White" FontSize="15" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{loc:Str label_slut_mode_subtitle}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <CheckBox x:Name="ChkSlutMode" Style="{StaticResource ToggleStyle}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Checked="ChkSlutMode_Changed" Unchecked="ChkSlutMode_Changed"/>
+                                    </Grid>
+
                                     <Button x:Name="BtnOpenAdvancedPersonality" Content="{loc:Str label_open_advanced_personality}"
                                             Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
                                             Padding="10,8" FontSize="14" Cursor="Hand" Click="BtnCustomizeCompanion_Click"/>

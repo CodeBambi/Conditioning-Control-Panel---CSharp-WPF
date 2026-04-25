@@ -5367,7 +5367,12 @@ namespace ConditioningControlPanel
             // Normal preset menu
             MenuItemPersonality.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")); // Pink default
 
-            var presets = App.Personality?.GetAllPresets() ?? new List<PersonalityPreset>();
+            // Slut Mode used to be its own preset in this list, but it now lives as a
+            // toggle on the Companion tab that swaps the active preset's personality
+            // text with its SlutModePersonality variant. Filter the legacy preset out.
+            var presets = (App.Personality?.GetAllPresets() ?? new List<PersonalityPreset>())
+                .Where(p => p.Id != PersonalityPresets.SlutModeId)
+                .ToList();
             var activeId = App.Settings?.Current?.ActivePersonalityPresetId ?? PersonalityPresets.BambiSpriteId;
 
             foreach (var preset in presets)

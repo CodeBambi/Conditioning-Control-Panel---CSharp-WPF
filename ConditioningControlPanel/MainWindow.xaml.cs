@@ -6965,6 +6965,20 @@ namespace ConditioningControlPanel
             LaunchLocalAiSetupWizard();
         }
 
+        /// <summary>
+        /// Slut Mode toggle: swaps the active personality's Personality text with its
+        /// SlutModePersonality variant in BambiSprite.GetSystemPrompt. Takes effect on
+        /// the next chat — no restart, no provider switch needed.
+        /// </summary>
+        private void ChkSlutMode_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null || ChkSlutMode == null) return;
+            s.SlutModeEnabled = ChkSlutMode.IsChecked == true;
+            App.Settings?.Save();
+        }
+
         private void LaunchLocalAiSetupWizard()
         {
             var wizard = new LocalAiSetupWizard { Owner = this };
@@ -7197,6 +7211,9 @@ namespace ConditioningControlPanel
 
             // Hero pills
             UpdateAiBrainPills();
+
+            // Slut Mode toggle (no Patreon gate — available to all)
+            if (ChkSlutMode != null) ChkSlutMode.IsChecked = s.SlutModeEnabled;
 
             // Live actions placeholder + ItemsSource binding
             if (LiveActionsList != null && LiveActionsList.ItemsSource == null)

@@ -2054,7 +2054,9 @@ namespace ConditioningControlPanel.Models
 
         private bool _slutModeEnabled = false;
         /// <summary>
-        /// Enable less tame AI responses (Patreon only)
+        /// When true, BambiSprite.GetSystemPrompt swaps the active preset's
+        /// Personality text with its SlutModePersonality variant, giving a spicier
+        /// version of the same persona. Available to all users.
         /// </summary>
         public bool SlutModeEnabled
         {
