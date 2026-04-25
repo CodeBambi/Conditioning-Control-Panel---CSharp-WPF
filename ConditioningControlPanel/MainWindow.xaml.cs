@@ -6953,6 +6953,18 @@ namespace ConditioningControlPanel
             LaunchLocalAiSetupWizard();
         }
 
+        /// <summary>
+        /// Lab tab "AI Companion Effects & Memory" notice button — switches to the
+        /// Companion tab so the user can see the AI Brain provider controls, then
+        /// launches the setup wizard. Effects need a local LLM (cloud is stateless +
+        /// has no command-output capability).
+        /// </summary>
+        private void BtnLabEffectsSetupLocal_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("companion");
+            LaunchLocalAiSetupWizard();
+        }
+
         private void LaunchLocalAiSetupWizard()
         {
             var wizard = new LocalAiSetupWizard { Owner = this };
@@ -7117,6 +7129,15 @@ namespace ConditioningControlPanel
             PillAwareness.Text = s.AwarenessModeEnabled
                                 ? Loc.Get("label_awareness_pill_on")
                                 : Loc.Get("label_awareness_pill_off");
+
+            // Effects only work with local AI (cloud has no command output). Hide the
+            // Live Actions feed in the AI Brain panel and show the "needs local" notice
+            // in the Lab effects card whenever the user isn't on local AI.
+            var localAiActive = aiOn && local;
+            if (LiveActionsContainer != null)
+                LiveActionsContainer.Visibility = localAiActive ? Visibility.Visible : Visibility.Collapsed;
+            if (LabEffectsNeedsLocalNotice != null)
+                LabEffectsNeedsLocalNotice.Visibility = localAiActive ? Visibility.Collapsed : Visibility.Visible;
         }
 
         private void UpdateLiveActionsPlaceholder()
@@ -14318,7 +14339,7 @@ namespace ConditioningControlPanel
 
         #region Browser
 
-        private async System.Threading.Tasks.Task InitializeBrowserAsync()
+        private async System.Threading.Tasks.Task InitializeBrowserAsync(string? overrideStartUrl = null)
         {
             if (_browserInitialized) return;
 
@@ -14376,8 +14397,13 @@ namespace ConditioningControlPanel
 
                 BrowserLoadingText.Text = Loc.Get("label_creating_browser");
 
-                // Navigate to mode-appropriate site
-                var startUrl = App.Mods?.GetDefaultBrowserUrl() ?? "https://bambicloud.com/";
+                // Navigate directly to the requested URL when lazy-init was triggered by
+                // a speech-bubble link click. Otherwise fall back to the mod-appropriate
+                // default site. The WebView2's _pendingUrl is the FIRST page Chromium
+                // navigates to once CoreWebView2 finishes initializing — if we don't pass
+                // the user's URL here, a subsequent Navigate would race the default-URL
+                // load and get silently dropped.
+                var startUrl = overrideStartUrl ?? App.Mods?.GetDefaultBrowserUrl() ?? "https://bambicloud.com/";
                 var webView = await _browser.CreateBrowserAsync(startUrl);
 
                 if (webView != null)
@@ -14441,11 +14467,54 @@ namespace ConditioningControlPanel
 
         private async System.Threading.Tasks.Task InitAndNavigateAsync(string url, bool autoPlayFullscreen)
         {
-            await InitializeBrowserAsync();
-            if (_browserInitialized && _browser != null)
+            // Pass the user's URL as the WebView2 start URL so initialization navigates
+            // directly to it. Calling _browser.Navigate(url) right after init silently
+            // dropped the call — BrowserService's _isInitialized only flips true inside
+            // WebView_Loaded (which runs after we'd return), so the request never reached
+            // CoreWebView2 and the start-URL load (BambiCloud) stuck.
+            await InitializeBrowserAsync(url);
+            if (!_browserInitialized || _browser == null) return;
+
+            // Sync the radio button to the URL we just initialized to so the toggle UI
+            // matches the page. Suppress the toggle handler's homepage navigation since
+            // the WebView2 is already on its way to the right URL.
+            var lowerUrl = url.ToLowerInvariant();
+            if (lowerUrl.Contains("bambicloud.com"))
             {
-                NavigateToUrlInBrowser(url, autoPlayFullscreen);
+                _skipSiteToggleNavigation = true;
+                RbBambiCloud.IsChecked = true;
             }
+            else if (lowerUrl.Contains("hypnotube.com"))
+            {
+                _skipSiteToggleNavigation = true;
+                RbHypnoTube.IsChecked = true;
+            }
+            else
+            {
+                // External URL — deselect both so re-clicking either fires Checked again
+                RbBambiCloud.IsChecked = false;
+                RbHypnoTube.IsChecked = false;
+            }
+
+            _browser.ZoomFactor = 0.5;
+
+            // Wire one-shot autoplay handler. BrowserService raises NavigationCompleted
+            // for the start-URL load, so this catches it without us having to issue a
+            // second Navigate.
+            if (autoPlayFullscreen)
+            {
+                void OnNavCompleted(object? s, string completedUrl)
+                {
+                    _browser.NavigationCompleted -= OnNavCompleted;
+                    _ = AutoPlayAndFullscreenVideoAsync();
+                }
+                _browser.NavigationCompleted += OnNavCompleted;
+            }
+
+            // Show the Settings tab and bring the window forward
+            ShowTab("settings");
+            Activate();
+            Focus();
         }
 
         private async void BrowserSiteToggle_Changed(object sender, RoutedEventArgs e)
@@ -14514,10 +14583,10 @@ namespace ConditioningControlPanel
 
             try
             {
-                // Show the Settings tab (where the browser is). Activate/Focus is deferred
-                // until after Navigate kicks off so that taking focus away from a busy
-                // BambiCloud page doesn't race with the navigation request.
+                // Bring window to focus and show the Settings tab (where the browser is)
                 ShowTab("settings");
+                Activate();
+                Focus();
 
                 var lowerUrl = url.ToLowerInvariant();
 
@@ -14561,17 +14630,8 @@ namespace ConditioningControlPanel
                     _browser.WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
                 }
 
-                // Stop any in-progress navigation/loading so the new URL takes effect on
-                // the first call. Without this, clicking a HypnoTube link while a BambiCloud
-                // video is playing/focused can swallow the first Navigate (the page reports
-                // BambiCloud as still active) and the user has to click a second time.
-                try { _browser.WebView?.CoreWebView2?.Stop(); } catch { }
-
+                // Navigate
                 _browser.Navigate(url);
-
-                // Now that navigation is in flight, bring the window forward.
-                Activate();
-                Focus();
 
                 App.Logger?.Information("Speech link navigated to: {Url} (Site: {Site}, AutoPlay: {AutoPlay})",
                     url, lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube", autoPlayFullscreen);
@@ -18386,6 +18446,21 @@ namespace ConditioningControlPanel
                 // Lab Tab: Requires Patreon T2 / whitelist
                 var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2 || (App.Settings?.Current?.PatreonTier ?? 0) >= 2;
                 if (LabSmokescreen != null) LabSmokescreen.Visibility = labUnlocked ? Visibility.Collapsed : Visibility.Visible;
+
+                // AI effect control lives in the Lab — force-disable for non-T2 users so settings can't outlive the entitlement.
+                if (!labUnlocked)
+                {
+                    var cp = App.Settings?.Current?.CompanionPrompt;
+                    if (cp != null && cp.AllowAiToControlEffects)
+                    {
+                        cp.AllowAiToControlEffects = false;
+                        App.Settings?.Save();
+                    }
+                    if (ChkCapEffects != null && ChkCapEffects.IsChecked == true)
+                        ChkCapEffects.IsChecked = false;
+                    if (EffectPermsPanel != null)
+                        EffectPermsPanel.Visibility = Visibility.Collapsed;
+                }
 
                 // Bambi Takeover: Requires Patreon (any tier)
                 var autonomyUnlocked = App.Patreon?.HasPremiumAccess == true;
