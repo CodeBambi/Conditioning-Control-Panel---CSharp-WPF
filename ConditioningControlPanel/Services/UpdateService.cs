@@ -26,24 +26,43 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.8.4 — Bugfixes and cleanup
+        public const string CurrentPatchNotes = @"v5.8.4 — All In Your Head
 
-🔧 BUG FIXES
-• Feature toggles (Bubbles, Lock Card, Flash, Subliminal, Video, Bouncing Text, Bubble Count) now take effect immediately while the engine is running — no need to stop and restart anymore
-• Pick Assets Folder and Change Panic Key buttons in the System popup now work reliably instead of silently doing nothing
-• Panic key change no longer crashes the app on the next keypress — the prompt updates in-place and confirms the new key with a brief ✓
-• Flash image count from a session no longer carries over after the session ends
+✨ WHAT'S NEW
+• Companion AI reworked from the ground up — new providers, smarter chat pipeline, polished interactions throughout
+• Local Ollama provider — your Companion can now think entirely on your machine, no cloud account required
+• One-click local setup wizard installs and configures Ollama and pulls a model for you
+• Companion tab redesigned — new hero with real avatar portrait, taller XP bar, dark ring framing, 2-column AI Brain panel with dot toggles
+• Flashing XP bar when your avatar is draining + drain rate halved — easier to spot, less aggressive
+• Slut Mode toggle right in the Companion tab — swaps the preset prompt, no Patreon gate
+• Avatar chat shortcut is now a customizable system-wide hotkey, restores the window when triggered, and the thinking dots are smoother
+• Avatar speech-bubble link switches sites reliably on the first click
+• Customize AI dialog cleaned up — no more duplicate controls, plus new avatar7 art
+• Live action feed shows what she's doing in real time
+• Startup warm-up so the first reply isn't slow
+• Esc no longer eats your chat input
+• 6 fixes from the post-v5.8.3 review audit
+• Feature toggles (Bubbles, Lock Card, Flash, Subliminal, Video, Bouncing Text, Bubble Count) take effect immediately while the engine is running — no stop/restart
+• Pick Assets Folder and Change Panic Key buttons in the System popup actually work now
+• Panic key change no longer crashes on the next keypress — prompt updates in-place with a ✓ confirm
+• Flash image count no longer carries over after a session ends
 • Bambi takeover no longer plays a mandatory video on top of an active web video
-• Failed mandatory video retries now pick a fresh clip instead of replaying the same one
+• Failed mandatory video retries pick a fresh clip instead of replaying the same one
 • Unselected images are now actually excluded from playback (path normalization fix)
 • Closing a feature popup no longer drops the main window behind other apps
 
-🔒 SECURITY / REMOTE CONTROL (server-side fix, already live)
-• Fixed a rate-limit collision that left users on shared NAT / VPN / household connections stuck in a 429 loop — controller appeared connected but commands never arrived
+🔒 SERVER-SIDE (already live for everyone)
+• Fixed a rate-limit collision that left users on shared NAT/VPN/household connections stuck in a 429 loop — controller appeared connected but commands never arrived
 
-⚡ STABILITY & CLEANUP
-• Retired the dead Velopack auto-update path — ~800 lines removed, the update flow is now slimmer and faster
-• Reclaimed ~6 GB of stale update artifacts that had been accumulating locally during development";
+💖 FOR PATRONS (T1+ / Exclusives)
+• Lockdown Mode is now available to all patrons — graduated from Lab (T2) to Exclusives (T1) and gets its own dedicated tab
+
+🧪 FOR T2 PATRONS (Lab)
+• Persistent chat memory with an enable toggle — your Companion remembers between sessions when you want her to
+• AI-driven live effects — the Companion can trigger flashes, bubbles, subliminals, and more in response to chat
+
+💝 SPECIAL THANKS
+• Huge thanks to Luxiam (Luuxx) for the Ollama implementation and the help making the Companion AI rework happen ❤️";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
