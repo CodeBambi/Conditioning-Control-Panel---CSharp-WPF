@@ -154,7 +154,7 @@ namespace ConditioningControlPanel.Services
         /// Apply a vibration pattern based on the selected mode
         /// Duration stays the same, pattern changes how vibration feels within that duration
         /// </summary>
-        private async Task ApplyVibrationModeAsync(double intensity, int durationMs, VibrationMode mode, System.Threading.CancellationToken? token = null)
+        public async Task ApplyVibrationModeAsync(double intensity, int durationMs, VibrationMode mode, System.Threading.CancellationToken? token = null)
         {
             if (_activeProvider == null || !_activeProvider.IsConnected) return;
 

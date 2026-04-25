@@ -5229,8 +5229,10 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Loads the active companion's animated GIF into the hero avatar circle.
-        /// Mirrors the avatar-set resolution used by AvatarTubeWindow.
+        /// Loads the active companion's pose-1 portrait into the hero avatar circle.
+        /// Uses the same naming pattern (avatar_pose1.png / avatarN_pose1.png) as AvatarTubeWindow
+        /// because the animated GIFs aren't shipped with the project — only static PNGs are.
+        /// The ScaleTransform on the hero Image element crops to head+shoulders.
         /// </summary>
         private void RefreshHeroAvatar()
         {
@@ -5243,15 +5245,29 @@ namespace ConditioningControlPanel
                     var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
                     setNumber = AvatarTubeWindow.GetAvatarSetForLevel(playerLevel);
                 }
-                var resolved = Services.ModResourceResolver.ResolveUri($"animated{setNumber}_1.gif");
-                var gifUri = new Uri(resolved, UriKind.Absolute);
-                XamlAnimatedGif.AnimationBehavior.SetSourceUri(HeroAvatarImage, gifUri);
-                XamlAnimatedGif.AnimationBehavior.SetAutoStart(HeroAvatarImage, true);
-                XamlAnimatedGif.AnimationBehavior.SetRepeatBehavior(HeroAvatarImage, System.Windows.Media.Animation.RepeatBehavior.Forever);
+                var prefix = setNumber == 1 ? "avatar_pose" : $"avatar{setNumber}_pose";
+                var resourceName = $"{prefix}1.png";
+
+                var resolved = Services.ModResourceResolver.ResolveImage(resourceName);
+                if (resolved != null)
+                {
+                    HeroAvatarImage.Source = resolved;
+                    return;
+                }
+
+                // Fallback to embedded resource if the resolver returned null.
+                var uri = new Uri($"pack://application:,,,/Resources/{resourceName}", UriKind.Absolute);
+                var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = uri;
+                bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                HeroAvatarImage.Source = bitmap;
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to load hero avatar GIF");
+                App.Logger?.Warning(ex, "Failed to load hero avatar pose");
             }
         }
 
@@ -13553,6 +13569,17 @@ namespace ConditioningControlPanel
             {
                 e.Effects = DragDropEffects.None;
             }
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// Ctrl+T from the main window — open the avatar chat input panel.
+        /// Bound via Window.InputBindings + Window.CommandBindings using
+        /// AvatarTubeWindow.OpenChatCommand.
+        /// </summary>
+        private void OpenAvatarChat_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            App.AvatarWindow?.OpenChatInput();
             e.Handled = true;
         }
 

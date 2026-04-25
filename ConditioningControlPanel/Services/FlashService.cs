@@ -179,7 +179,7 @@ namespace ConditioningControlPanel.Services
         /// Trigger a one-shot flash that works even when service is not running.
         /// Used by Autonomy Mode to trigger flashes independently of engine state.
         /// </summary>
-        public void TriggerFlashOnce()
+        public void TriggerFlashOnce(int? amount = null, int? duration = null, int? size = null)
         {
             if (_isBusy)
             {
@@ -202,7 +202,7 @@ namespace ConditioningControlPanel.Services
             // Start heartbeat timer for animation and fade management
             _heartbeatTimer?.Start();
 
-            Task.Run(() => LoadAndShowImages());
+            Task.Run(() => LoadAndShowImages(amount, duration, size));
         }
 
         public void LoadAssets()
@@ -276,12 +276,12 @@ namespace ConditioningControlPanel.Services
 
         #region Image Loading
 
-        private async void LoadAndShowImages()
+        private async void LoadAndShowImages(int? amount = null, int? duration = null, int? size = null)
         {
             try
             {
                 var settings = App.Settings.Current;
-                var images = GetNextImages(settings.SimultaneousImages);
+                var images = GetNextImages(amount ?? settings.SimultaneousImages);
 
                 if (images.Count == 0)
                 {
@@ -307,7 +307,7 @@ namespace ConditioningControlPanel.Services
                 var monitors = GetMonitors(settings.DualMonitorEnabled);
                 
                 // Scale is percentage: 50-250%, stored as 50-250, so divide by 100
-                var scale = settings.ImageScale / 100.0;
+                var scale = (size ?? settings.ImageScale) / 100.0;
                 
                 // Load images in parallel on background threads
                 var loadTasks = images.Select(imagePath => LoadImageAsync(imagePath)).ToArray();
@@ -335,7 +335,7 @@ namespace ConditioningControlPanel.Services
                 // Show on UI thread - pass sound path only ONCE
                 await DispatcherHelper.RunOnUIAsync(() =>
                 {
-                    ShowImages(loadedImages, soundPath, false);
+                    ShowImages(loadedImages, soundPath, false, customDuration: duration);
                 });
             }
             catch (Exception ex)
@@ -580,7 +580,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         /// <param name="overrideLifetimeMs">If provided, overrides the calculated lifetime (used for hydra linked timing)~ 🔗</param>
         /// <param name="hydraGeneration">How many hydra hops deep these spawns are (0 = original flash)~ 🐙</param>
-        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication, int? overrideLifetimeMs = null, int hydraGeneration = 0)
+        private void ShowImages(List<LoadedImageData> images, string? soundPath, bool isMultiplication, int? overrideLifetimeMs = null, int hydraGeneration = 0, int? customDuration = null)
         {
             if (!_isRunning && !_oneShotActive)
             {
@@ -589,7 +589,7 @@ namespace ConditioningControlPanel.Services
             }
 
             var settings = App.Settings.Current;
-            double duration = settings.FlashDuration; // Default to manual duration setting
+            double duration = customDuration ?? settings.FlashDuration; // Default to manual duration setting
 
             // Play sound ONLY ONCE per flash event (not for hydra spawns) - only if audio enabled
             if (settings.FlashAudioEnabled && !_soundPlayingForCurrentFlash && !isMultiplication && !string.IsNullOrEmpty(soundPath) && File.Exists(soundPath))

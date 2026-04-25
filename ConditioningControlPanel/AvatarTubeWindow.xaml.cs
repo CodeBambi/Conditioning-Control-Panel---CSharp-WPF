@@ -88,6 +88,18 @@ namespace ConditioningControlPanel
             AI          // AI-generated responses
         }
 
+        // Thinking animation: rotating phrase + animated dots while waiting for AI reply.
+        private DispatcherTimer? _thinkingTimer;
+        private string _thinkingPhraseBase = string.Empty;
+        private int _thinkingTickCount;
+        private int _thinkingGeneration; // bumped on stop so stale ticks bail
+
+        // Typewriter effect: types AI replies char-by-char, then re-renders with hyperlinks.
+        private DispatcherTimer? _typewriterTimer;
+        private string _typewriterFullText = string.Empty;
+        private int _typewriterIndex;
+        private int _typewriterGeneration;
+
         // Speech delay constants
         private const double MinSpeechDelaySeconds = 2.0;      // Minimum delay between any speech
         private const double AiSpeechBonusSeconds = 5.0;       // Extra delay after AI responses (users need time to read)
@@ -2212,6 +2224,9 @@ namespace ConditioningControlPanel
         {
             DispatcherHelper.RunOnUI(() =>
             {
+                // Stop any in-flight thinking animation before showing the reply.
+                StopThinkingAnimation();
+
                 // Clear AI waiting flag
                 _isWaitingForAi = false;
 
@@ -2270,8 +2285,20 @@ namespace ConditioningControlPanel
                 PlayFallbackBubbleSound();
             }
 
-            // Populate bubble with text and clickable hyperlinks
-            PopulateSpeechBubble(text);
+            // Populate bubble with text and clickable hyperlinks.
+            // For AI *replies*, type the text out char-by-char. PopulateSpeechBubble
+            // runs again at the end of the typewriter so video-name links still get
+            // wired up. The thinking animation's first frame also has source=AI but
+            // _isWaitingForAi is true at that point — skip typewriter, the thinking
+            // tick keeps updating the bubble directly.
+            if (source == SpeechSource.AI && !_isWaitingForAi)
+            {
+                StartTypewriter(text);
+            }
+            else
+            {
+                PopulateSpeechBubble(text);
+            }
 
             // Strip markdown links for size calculation (use plain text length)
             var plainText = MarkdownLinkRegex.Replace(text ?? "", "$1");
@@ -4230,7 +4257,7 @@ namespace ConditioningControlPanel
 
             if (_isInputVisible)
             {
-                TxtUserInput.Focus();
+                FocusInputAfterLayout();
             }
         }
 
@@ -4238,7 +4265,57 @@ namespace ConditioningControlPanel
         {
             _isInputVisible = true;
             InputPanel.Visibility = Visibility.Visible;
-            TxtUserInput.Focus();
+            FocusInputAfterLayout();
+        }
+
+        /// <summary>
+        /// Public entry point for opening the avatar chat input (used by Ctrl+T keybindings
+        /// on this window and on MainWindow). Marshals to the UI thread because the
+        /// keybinding handler may run from MainWindow's dispatcher; the avatar window
+        /// could be on a different one if it's been reparented.
+        /// </summary>
+        public void OpenChatInput()
+        {
+            if (Dispatcher.CheckAccess()) ShowInputPanel();
+            else Dispatcher.BeginInvoke(new Action(ShowInputPanel));
+        }
+
+        /// <summary>
+        /// Routed command bound to Ctrl+T on this window (and on MainWindow via
+        /// App.AvatarWindow?.OpenChatInput()). Opens the chat input panel.
+        /// </summary>
+        public static readonly RoutedUICommand OpenChatCommand =
+            new RoutedUICommand("Open Avatar Chat", "OpenChat", typeof(AvatarTubeWindow));
+
+        private void OpenChatCommand_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            OpenChatInput();
+        }
+
+        /// <summary>
+        /// Reliably moves keyboard focus into the chat input. The avatar tube is a
+        /// transparent borderless window — Windows doesn't always activate it on click,
+        /// and a Focus() call right after flipping Visibility runs before layout,
+        /// so it silently fails. Activate the window first, then schedule the focus
+        /// call at Input priority so the panel is fully arranged when it runs.
+        /// </summary>
+        private void FocusInputAfterLayout()
+        {
+            try { Activate(); } catch { /* may fail if window is in a weird state */ }
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    TxtUserInput.Focus();
+                    Keyboard.Focus(TxtUserInput);
+                    TxtUserInput.SelectAll();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("AvatarTube: focus chat input failed: {Error}", ex.Message);
+                }
+            }), DispatcherPriority.Input);
         }
 
         private void TxtUserInput_KeyDown(object sender, KeyEventArgs e)
@@ -4278,6 +4355,173 @@ namespace ConditioningControlPanel
             return phrases[_random.Next(phrases.Length)];
         }
 
+        // ============================================================
+        // THINKING ANIMATION (rotating phrases + animated dots)
+        // ============================================================
+
+        /// <summary>
+        /// Begins the "still thinking" animation in the speech bubble. Picks a phrase,
+        /// shows it via ShowGiggle (so the bubble is visible/sized/z-ordered), then
+        /// rotates phrase + dots every 500ms until <see cref="StopThinkingAnimation"/>
+        /// is called. The dismiss timer that ShowGiggle starts is cancelled — the
+        /// bubble stays visible until the AI reply lands.
+        /// </summary>
+        private void StartThinkingAnimation()
+        {
+            StopThinkingAnimation(); // clear any prior animation
+
+            _isWaitingForAi = true;
+            _thinkingPhraseBase = GetRandomThinkingPhrase();
+            _thinkingTickCount = 0;
+            var generation = ++_thinkingGeneration;
+
+            // Use ShowGiggle for first frame so bubble is sized + visible. playSound:false
+            // because the AI reply will play its own sound when it arrives.
+            ShowGiggle(_thinkingPhraseBase, playSound: false, source: SpeechSource.AI);
+
+            // Cancel auto-dismiss — the bubble stays up until the reply pre-empts it.
+            _speechTimer?.Stop();
+
+            _thinkingTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _thinkingTimer.Tick += (s, e) =>
+            {
+                if (generation != _thinkingGeneration)
+                {
+                    (s as DispatcherTimer)?.Stop();
+                    return;
+                }
+                ThinkingTick();
+            };
+            _thinkingTimer.Start();
+        }
+
+        /// <summary>
+        /// Cancels any in-flight thinking animation. Safe to call repeatedly.
+        /// Bumping the generation counter causes any pending tick callbacks to bail.
+        /// </summary>
+        private void StopThinkingAnimation()
+        {
+            _thinkingGeneration++;
+            _thinkingTimer?.Stop();
+            _thinkingTimer = null;
+        }
+
+        private void ThinkingTick()
+        {
+            _thinkingTickCount++;
+            if (_thinkingTickCount > 3)
+            {
+                // Cycle complete — pick a new phrase, restart dots.
+                _thinkingPhraseBase = GetRandomThinkingPhrase();
+                _thinkingTickCount = 0;
+                RenderSpeechBubbleRaw(_thinkingPhraseBase);
+            }
+            else
+            {
+                var dots = new string('.', _thinkingTickCount);
+                RenderSpeechBubbleRaw(_thinkingPhraseBase + dots);
+            }
+        }
+
+        /// <summary>
+        /// Paints a single string into the speech bubble without going through
+        /// PopulateSpeechBubble's hyperlink/markdown processing. Used by the thinking
+        /// animation and the typewriter (which re-renders with full processing on
+        /// completion).
+        /// </summary>
+        private void RenderSpeechBubbleRaw(string text)
+        {
+            TxtSpeech.Inlines.Clear();
+            if (!string.IsNullOrEmpty(text))
+            {
+                TxtSpeech.Inlines.Add(new Run(text));
+            }
+        }
+
+        // ============================================================
+        // TYPEWRITER EFFECT (AI replies stream in char-by-char)
+        // ============================================================
+
+        // Tunable: ~18ms/char default, but auto-speed-up so any reply finishes within budget.
+        private const int TypewriterMinStepMs = 8;
+        private const int TypewriterMaxStepMs = 30;
+        private const int TypewriterTotalBudgetMs = 2000;
+
+        /// <summary>
+        /// Types <paramref name="fullText"/> into the speech bubble character by character.
+        /// On completion, calls <see cref="PopulateSpeechBubble"/> for the final pass so
+        /// video-name hyperlinks and markdown links become clickable.
+        /// </summary>
+        private void StartTypewriter(string fullText)
+        {
+            StopTypewriter();
+
+            _typewriterFullText = fullText ?? string.Empty;
+            _typewriterIndex = 0;
+            var generation = ++_typewriterGeneration;
+
+            // Strip markdown links the same way PopulateSpeechBubble does, so the typewriter
+            // shows the same plain text the final render will. Otherwise the bubble would
+            // briefly show "[Naughty Bambi](https://...)" before snapping to "Naughty Bambi".
+            _typewriterFullText = MarkdownLinkRegex.Replace(_typewriterFullText, "$1");
+
+            // Render starts empty.
+            RenderSpeechBubbleRaw(string.Empty);
+
+            if (_typewriterFullText.Length == 0)
+            {
+                // Nothing to type — fall through to the final render so links get processed.
+                PopulateSpeechBubble(fullText);
+                return;
+            }
+
+            var stepMs = Math.Min(TypewriterMaxStepMs,
+                Math.Max(TypewriterMinStepMs, TypewriterTotalBudgetMs / Math.Max(1, _typewriterFullText.Length)));
+
+            _typewriterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(stepMs) };
+            _typewriterTimer.Tick += (s, e) =>
+            {
+                if (generation != _typewriterGeneration)
+                {
+                    (s as DispatcherTimer)?.Stop();
+                    return;
+                }
+                TypewriterTick(fullText);
+            };
+            _typewriterTimer.Start();
+        }
+
+        private void StopTypewriter()
+        {
+            _typewriterGeneration++;
+            _typewriterTimer?.Stop();
+            _typewriterTimer = null;
+        }
+
+        private void TypewriterTick(string originalFullText)
+        {
+            // Type 1-2 chars per tick depending on length so very long replies don't drag.
+            // (stepMs is already auto-scaled, but we can also batch chars per tick.)
+            var charsThisTick = Math.Max(1, _typewriterFullText.Length / 100);
+
+            for (int i = 0; i < charsThisTick && _typewriterIndex < _typewriterFullText.Length; i++)
+            {
+                _typewriterIndex++;
+            }
+
+            var partial = _typewriterFullText.Substring(0, _typewriterIndex);
+            RenderSpeechBubbleRaw(partial);
+
+            if (_typewriterIndex >= _typewriterFullText.Length)
+            {
+                _typewriterTimer?.Stop();
+                _typewriterTimer = null;
+                // Final pass: re-render with the original (un-stripped) text so PopulateSpeechBubble
+                // can wire up clickable video links and URL hyperlinks.
+                PopulateSpeechBubble(originalFullText);
+            }
+        }
+
         /// <summary>
         /// Truncates text to a maximum number of words, adding "..." if truncated
         /// </summary>
@@ -4303,11 +4547,9 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Block other giggles while waiting for AI
-                    _isWaitingForAi = true;
-
-                    // Show quick thinking phrase immediately (no sound - save it for the response)
-                    GigglePriority(GetRandomThinkingPhrase(), playSound: false);
+                    // Animated thinking bubble: rotates phrases + dots while we wait.
+                    // Sets _isWaitingForAi internally so other giggles don't interrupt.
+                    StartThinkingAnimation();
 
                     // Get AI response - no truncation, scrollable bubble handles long text
                     var reply = await App.Ai.GetBambiReplyAsync(input);

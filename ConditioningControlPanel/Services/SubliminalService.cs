@@ -174,14 +174,14 @@ namespace ConditioningControlPanel.Services
         /// Flash a custom subliminal text (from remote control).
         /// Sanitizes input and caps length.
         /// </summary>
-        public void FlashSubliminalCustom(string text)
+        public void FlashSubliminalCustom(string text, int? opacity = null)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
             text = text.Trim();
             if (text.Length > 200) text = text.Substring(0, 200);
             text = System.Text.RegularExpressions.Regex.Replace(text, "<[^>]*>", "");
             _oneShotActive = true; // Allow display even when service not running (remote control)
-            TriggerSubliminalWithHapticPattern(text);
+            TriggerSubliminalWithHapticPattern(text, opacity);
             App.Progression?.AddXP(10, XPSource.Subliminal);
         }
 
@@ -494,7 +494,7 @@ namespace ConditioningControlPanel.Services
         /// Pattern depends on the trigger text (Cum/Collapse = long, Freeze = short sharp, Sleep = decay, etc.)
         /// Buttplug.io has ~1.3s latency so we trigger haptics earlier for that provider
         /// </summary>
-        private async void TriggerSubliminalWithHapticPattern(string text)
+        private async void TriggerSubliminalWithHapticPattern(string text, int? opacity = null)
         {
             try
             {
@@ -508,7 +508,7 @@ namespace ConditioningControlPanel.Services
                 await Task.Delay(anticipationMs);
 
                 // Now show on UI thread
-                Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(text));
+                Application.Current?.Dispatcher?.Invoke(() => ShowSubliminalVisuals(text, opacity));
             }
             catch (Exception ex)
             {
@@ -516,7 +516,7 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void ShowSubliminalVisuals(string text)
+        private void ShowSubliminalVisuals(string text, int? opacity = null)
         {
             // Guard against delayed callbacks firing after Stop() — prevents orphaned windows
             // Allow one-shot from remote control even when service not running
@@ -532,7 +532,7 @@ namespace ConditioningControlPanel.Services
 
             // Duration in frames * ~16.6ms per frame, minimum 100ms
             var durationMs = Math.Max(100, App.Settings.Current.SubliminalDuration * 17);
-            var targetOpacity = App.Settings.Current.SubliminalOpacity / 100.0;
+            var targetOpacity = (opacity ?? App.Settings.Current.SubliminalOpacity) / 100.0;
 
             // Colors from settings
             var bgColor = ParseColor(App.Settings.Current.SubBackgroundColor, Colors.Black);

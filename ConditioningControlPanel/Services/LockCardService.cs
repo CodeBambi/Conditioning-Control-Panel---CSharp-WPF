@@ -84,7 +84,7 @@ namespace ConditioningControlPanel.Services
             ShowLockCard();
         }
 
-        public void ShowLockCard(bool isTest = false)
+        public void ShowLockCard(string? customPhrase = null, int customRepeats = -1, bool customStrict = false, bool isTest = false)
         {
             DispatcherHelper.RunOnUISync(() =>
             {
@@ -134,10 +134,10 @@ namespace ConditioningControlPanel.Services
                             queue: false);
                     }
 
-                    // Pick a random phrase
-                    var phrase = enabledPhrases[_random.Next(enabledPhrases.Count)];
-                    var repeats = settings.LockCardRepeats;
-                    var strict = settings.LockCardStrict;
+                    // Pick a random phrase (or use custom one if AI provided it)
+                    var phrase = customPhrase ?? enabledPhrases[_random.Next(enabledPhrases.Count)];
+                    var repeats = customRepeats >= 0 ? customRepeats : settings.LockCardRepeats;
+                    var strict = customStrict || settings.LockCardStrict;
 
                     // Show on all monitors with synced input
                     LockCardWindow.ShowOnAllMonitors(phrase, repeats, strict, isTest);

@@ -5,6 +5,7 @@
         xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers"
         xmlns:features="clr-namespace:ConditioningControlPanel.Features"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        xmlns:local="clr-namespace:ConditioningControlPanel"
         Title="Conditioning Control Panel"
         Height="943" Width="1385"
         MinHeight="620" MinWidth="978"
@@ -19,7 +20,14 @@
         DragLeave="Window_DragLeave"
         DragOver="Window_DragOver"
         FontFamily="Segoe UI">
-    
+
+    <Window.InputBindings>
+        <KeyBinding Modifiers="Control" Key="T" Command="{x:Static local:AvatarTubeWindow.OpenChatCommand}"/>
+    </Window.InputBindings>
+    <Window.CommandBindings>
+        <CommandBinding Command="{x:Static local:AvatarTubeWindow.OpenChatCommand}" Executed="OpenAvatarChat_Executed"/>
+    </Window.CommandBindings>
+
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="0" 
                       ResizeBorderThickness="5"
@@ -5257,15 +5265,26 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <!-- Avatar -->
+                                <!-- Avatar (gradient bg, head+shoulders crop) -->
                                 <Border Grid.Column="0" Width="96" Height="96" CornerRadius="48" Margin="0,0,16,0"
                                         BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
-                                        Background="{DynamicResource SurfaceBgBrush}"
                                         VerticalAlignment="Center">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                            <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
                                     <Border.Clip>
                                         <EllipseGeometry Center="48,48" RadiusX="48" RadiusY="48"/>
                                     </Border.Clip>
-                                    <Image x:Name="HeroAvatarImage" Stretch="UniformToFill"/>
+                                    <Image x:Name="HeroAvatarImage" Stretch="UniformToFill"
+                                           VerticalAlignment="Top" HorizontalAlignment="Center"
+                                           RenderTransformOrigin="0.5,0">
+                                        <Image.RenderTransform>
+                                            <ScaleTransform ScaleX="1.5" ScaleY="1.5"/>
+                                        </Image.RenderTransform>
+                                    </Image>
                                 </Border>
 
                                 <!-- Body -->
@@ -5276,7 +5295,7 @@
                                     </StackPanel>
                                     <TextBlock x:Name="TxtActiveCompanionDesc" Text="{loc:Str label_gains_bonus_xp_based_on_pink_filter_intensity}" Foreground="{DynamicResource TextDimBrush}" FontSize="16" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                     <Grid Margin="0,10,0,0">
-                                        <ProgressBar x:Name="PrgCompanion0" Height="10" Value="0" Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}"/>
+                                        <ProgressBar x:Name="PrgCompanion0" Height="30" Value="0" Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}"/>
                                         <TextBlock x:Name="TxtActiveCompanionXP" Text="{loc:Str label_0_550_xp}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     </Grid>
                                     <Grid Margin="0,10,0,0">

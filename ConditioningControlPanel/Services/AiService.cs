@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.AIService;
 
 namespace ConditioningControlPanel.Services
 {
@@ -16,7 +17,7 @@ namespace ConditioningControlPanel.Services
     /// Uses hosted proxy that forwards to OpenRouter for roleplay.
     /// Free for all users with a cloud identity; falls back to Patreon auth.
     /// </summary>
-    public class AiService : IDisposable
+    public class AiService : IDisposable, IAiService
     {
         private readonly HttpClient _httpClient;
         private readonly BambiSprite _bambiSprite;
@@ -75,8 +76,12 @@ namespace ConditioningControlPanel.Services
         /// Gets an AI-generated reply in the Bambi personality.
         /// Returns fallback response if API unavailable or daily limit reached.
         /// </summary>
-        public async Task<string> GetBambiReplyAsync(string userInput)
+        public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
         {
+            // isUserMessage is honored by the local provider for queue/drop logic;
+            // cloud path has its own circuit breaker and rate limiting, so we ignore it here.
+            _ = isUserMessage;
+
             // Return a clear hint when AI is not available (not logged in / offline)
             if (App.Settings?.Current?.OfflineMode == true)
                 return GetFallbackResponse();
@@ -153,6 +158,46 @@ namespace ConditioningControlPanel.Services
             var userInput = string.IsNullOrEmpty(promptTemplate)
                 ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
                 : promptTemplate.Replace("{keyword}", keyword);
+
+            return await GetAiResponseAsync(userInput, systemPrompt);
+        }
+
+        /// <summary>
+        /// Gets an AI-generated reaction after the user finishes a lock-screen mantra.
+        /// Returns null if AI unavailable.
+        /// </summary>
+        public async Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null)
+        {
+            if (!IsAvailable) return null;
+
+            var systemPrompt = _bambiSprite.GetSystemPrompt();
+            string userInput;
+            if (string.IsNullOrEmpty(promptTemplate))
+            {
+                userInput = $"The user made {mistakes} mistakes in '{sentance}' for the lock screen. They had to type it {amount} of time. React in character, one short line.";
+            }
+            else
+            {
+                userInput = promptTemplate.Replace("{sentance}", sentance);
+                userInput = userInput.Replace("{mistakes}", mistakes.ToString());
+                userInput = userInput.Replace("{amount}", amount.ToString());
+            }
+
+            return await GetAiResponseAsync(userInput, systemPrompt);
+        }
+
+        /// <summary>
+        /// Gets an AI-generated reaction after a mandatory video finishes.
+        /// Returns null if AI unavailable.
+        /// </summary>
+        public async Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null)
+        {
+            if (!IsAvailable) return null;
+
+            var systemPrompt = _bambiSprite.GetSystemPrompt();
+            var userInput = string.IsNullOrEmpty(promptTemplate)
+                ? $"The user has just finished the mandatory video {title}. React in character, one short line."
+                : promptTemplate.Replace("{title}", title);
 
             return await GetAiResponseAsync(userInput, systemPrompt);
         }

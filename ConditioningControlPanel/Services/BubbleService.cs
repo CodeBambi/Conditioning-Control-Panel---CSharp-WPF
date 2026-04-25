@@ -39,7 +39,7 @@ public class BubbleService : IDisposable
     public event Action? OnBubblePopped;
     public event Action? OnBubbleMissed;
 
-    public void Start(bool bypassLevelCheck = false)
+    public void Start(bool bypassLevelCheck = false, int? frequency = null)
     {
         if (_isRunning) return;
 
@@ -48,12 +48,12 @@ public class BubbleService : IDisposable
         _isRunning = true;
 
         _assetsPath = App.UserAssetsPath;
-        
+
         // Pre-load bubble image
         LoadBubbleImage();
 
         // Start spawning bubbles based on frequency setting
-        var intervalMs = 60000.0 / Math.Max(1, settings.BubblesFrequency); // frequency per minute
+        var intervalMs = 60000.0 / Math.Max(1, frequency ?? settings.BubblesFrequency); // frequency per minute
         
         _spawnTimer = new DispatcherTimer
         {

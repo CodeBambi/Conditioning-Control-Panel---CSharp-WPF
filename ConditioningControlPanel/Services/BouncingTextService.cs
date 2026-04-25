@@ -51,7 +51,7 @@ public class BouncingTextService : IDisposable
 
     public event EventHandler? OnBounce;
 
-    public void Start(bool bypassLevelCheck = false)
+    public void Start(bool bypassLevelCheck = false, List<string>? pool = null)
     {
         if (_isRunning) return;
 
@@ -61,12 +61,12 @@ public class BouncingTextService : IDisposable
         // explicitly when we want to start (either by toggle or by session)
 
         _isRunning = true;
-        
+
         // Calculate font size based on settings (50-300% of base)
         _currentFontSize = (int)(BASE_FONT_SIZE * settings.BouncingTextSize / 100.0);
-        
+
         // Get random text from pool
-        SelectRandomText();
+        SelectRandomText(pool);
         
         // Measure actual text size
         MeasureTextSize();
@@ -119,14 +119,16 @@ public class BouncingTextService : IDisposable
         App.Logger?.Information("BouncingTextService stopped");
     }
 
-    private void SelectRandomText()
+    private void SelectRandomText(List<string>? pool = null)
     {
         var settings = App.Settings.Current;
-        var enabledTexts = settings.BouncingTextPool
-            .Where(kv => kv.Value)
-            .Select(kv => kv.Key)
-            .ToList();
-        
+        var enabledTexts = pool != null && pool.Count > 0
+            ? pool.ToList()
+            : settings.BouncingTextPool
+                .Where(kv => kv.Value)
+                .Select(kv => kv.Key)
+                .ToList();
+
         if (enabledTexts.Count == 0)
         {
             _currentText = "GOOD GIRL";

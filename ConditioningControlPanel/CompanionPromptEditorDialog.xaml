@@ -104,12 +104,117 @@
                                Foreground="#606060" FontSize="11"
                                VerticalAlignment="Center" Margin="10,0,0,0"/>
                 </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <CheckBox x:Name="ChkUseLocal" Content="{loc:Str btn_enable_local_AI_prompts}"
+                              Foreground="White" VerticalContentAlignment="Center"
+                              Checked="ChkUseLocal_Changed" Unchecked="ChkUseLocal_Changed"/>
+                    <TextBlock Text="{loc:Str label_check_to_use_local_AI}"
+                               Foreground="#606060" FontSize="11"
+                               VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
             </StackPanel>
         </Border>
 
         <!-- Scrollable Content -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20">
             <StackPanel x:Name="ContentPanel">
+
+                <!-- Section 0: Local AI Provider (Ollama) — visible only when ChkUseLocal is checked -->
+                <StackPanel x:Name="LocalPanel" Visibility="Collapsed" Margin="0,0,0,15">
+                    <Expander IsExpanded="True">
+                        <Expander.Header>
+                            <TextBlock Text="{loc:Str label_ai_model_name}" Style="{StaticResource SectionHeader}"/>
+                        </Expander.Header>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource SectionDescription}"
+                                       Text="{loc:Str label_ai_model_name_description}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ComboBox x:Name="CmbAiModel" Grid.Column="0" IsEditable="True"
+                                          Height="32" VerticalContentAlignment="Center"
+                                          TextBoxBase.TextChanged="OnComboTextChanged"
+                                          SelectionChanged="OnComboTextChanged"/>
+                                <Button Grid.Column="1" Content="↻" ToolTip="{loc:Str btn_refresh_models_tooltip}"
+                                        Style="{StaticResource ResetButton}" VerticalAlignment="Top"
+                                        Margin="5,0,0,0" Click="RefreshAiModels_Click"/>
+                                <Button Grid.Column="2" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
+                                        VerticalAlignment="Top" Margin="5,0,0,0"
+                                        Click="ResetAiModel_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </Expander>
+                    <Expander IsExpanded="False" Margin="0,8,0,0">
+                        <Expander.Header>
+                            <TextBlock Text="{loc:Str label_ai_ollama_host}" Style="{StaticResource SectionHeader}"/>
+                        </Expander.Header>
+                        <StackPanel Margin="0,10,0,0">
+                            <TextBlock Style="{StaticResource SectionDescription}"
+                                       Text="{loc:Str label_ai_ollama_host_description}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtOllamaHost" Style="{StaticResource PromptTextBox}"
+                                         Height="32" TextChanged="OnTextChanged"/>
+                                <Button Grid.Column="1" Content="{loc:Str btn_reset}" Style="{StaticResource ResetButton}"
+                                        VerticalAlignment="Top" Margin="5,0,0,0"
+                                        Click="ResetOllamaHost_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </Expander>
+                </StackPanel>
+
+                <!-- AI Effect Permissions: master toggle + per-effect toggles + haptic ceiling -->
+                <Expander IsExpanded="False" Margin="0,0,0,15">
+                    <Expander.Header>
+                        <TextBlock Text="{loc:Str section_ai_effect_permissions}" Style="{StaticResource SectionHeader}"/>
+                    </Expander.Header>
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock Style="{StaticResource SectionDescription}"
+                                   Text="{loc:Str label_ai_effect_permissions_description}"/>
+                        <CheckBox x:Name="ChkAllowAiEffects" Content="{loc:Str chk_allow_ai_effects_master}"
+                                  Foreground="#FF6B6B" FontWeight="SemiBold" Margin="0,4,0,8"
+                                  Checked="ChkAllowAiEffects_Changed" Unchecked="ChkAllowAiEffects_Changed"/>
+                        <Grid x:Name="AiEffectsGrid" Margin="20,0,0,0" IsEnabled="False" Opacity="0.5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <CheckBox x:Name="ChkAllowAiFlash" Grid.Row="0" Grid.Column="0" Content="{loc:Str chk_allow_ai_flash}" Foreground="White" Margin="0,2"/>
+                            <CheckBox x:Name="ChkAllowAiVideo" Grid.Row="0" Grid.Column="1" Content="{loc:Str chk_allow_ai_video}" Foreground="White" Margin="0,2"/>
+                            <CheckBox x:Name="ChkAllowAiAudio" Grid.Row="0" Grid.Column="2" Content="{loc:Str chk_allow_ai_audio}" Foreground="White" Margin="0,2"/>
+                            <CheckBox x:Name="ChkAllowAiBubbles" Grid.Row="1" Grid.Column="0" Content="{loc:Str chk_allow_ai_bubbles}" Foreground="White" Margin="0,2"/>
+                            <CheckBox x:Name="ChkAllowAiSubliminal" Grid.Row="1" Grid.Column="1" Content="{loc:Str chk_allow_ai_subliminal}" Foreground="White" Margin="0,2"/>
+                            <CheckBox x:Name="ChkAllowAiOverlay" Grid.Row="1" Grid.Column="2" Content="{loc:Str chk_allow_ai_overlay}" Foreground="White" Margin="0,2"/>
+                            <CheckBox x:Name="ChkAllowAiLockCard" Grid.Row="2" Grid.Column="0" Content="{loc:Str chk_allow_ai_lockcard}" Foreground="White" Margin="0,2"/>
+                            <CheckBox x:Name="ChkAllowAiBounce" Grid.Row="2" Grid.Column="1" Content="{loc:Str chk_allow_ai_bounce}" Foreground="White" Margin="0,2"/>
+                            <CheckBox x:Name="ChkAllowAiHaptic" Grid.Row="2" Grid.Column="2" Content="{loc:Str chk_allow_ai_haptic}" Foreground="White" Margin="0,2"/>
+                            <CheckBox x:Name="ChkAllowAiGetBackToMe" Grid.Row="3" Grid.Column="0" Content="{loc:Str chk_allow_ai_getbacktome}" Foreground="White" Margin="0,2"/>
+                        </Grid>
+                        <StackPanel x:Name="HapticIntensityPanel" Margin="20,10,0,0" IsEnabled="False" Opacity="0.5">
+                            <TextBlock Foreground="#A0A0A0" FontSize="11">
+                                <Run Text="{loc:Str label_ai_max_haptic_intensity}"/>
+                                <Run Text=" "/>
+                                <Run x:Name="LblHapticIntensityValue" Text="60%"/>
+                            </TextBlock>
+                            <Slider x:Name="SldMaxAiHapticIntensity" Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.1"
+                                    TickFrequency="0.05" IsSnapToTickEnabled="True" Width="280" HorizontalAlignment="Left"
+                                    ValueChanged="SldMaxAiHapticIntensity_ValueChanged"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Expander>
 
                 <!-- Section 1: Personality -->
                 <Expander IsExpanded="True" Margin="0,0,0,15">

@@ -14,6 +14,41 @@ namespace ConditioningControlPanel.Models
         public bool UseCustomPrompt { get; set; } = false;
 
         /// <summary>
+        /// Use a local Ollama-backed AI provider instead of the cloud proxy.
+        /// </summary>
+        public bool UseLocalAi { get; set; } = false;
+
+        /// <summary>
+        /// Name of the Ollama model to use when <see cref="UseLocalAi"/> is true.
+        /// </summary>
+        public string AiModel { get; set; } = "bambi-model-v7-cow";
+
+        /// <summary>
+        /// Base URL of the local Ollama HTTP server.
+        /// </summary>
+        public string AiOllamaHost { get; set; } = "http://localhost:11434/";
+
+        // -------- AI Effect Permissions --------
+        // Master switch — when false, the AI cannot trigger any effect regardless of per-effect toggles.
+        public bool AllowAiToControlEffects { get; set; } = false;
+
+        // Per-effect toggles (only consulted when master is on).
+        // Visual-only / passive defaults are on; intrusive / hardware / recursive are off.
+        public bool AllowAiFlash { get; set; } = false;
+        public bool AllowAiVideo { get; set; } = false;
+        public bool AllowAiAudio { get; set; } = false;
+        public bool AllowAiBubbles { get; set; } = true;
+        public bool AllowAiSubliminal { get; set; } = true;
+        public bool AllowAiOverlay { get; set; } = false;   // covers spiral + pink
+        public bool AllowAiLockCard { get; set; } = false;
+        public bool AllowAiBounce { get; set; } = true;
+        public bool AllowAiHaptic { get; set; } = false;
+        public bool AllowAiGetBackToMe { get; set; } = false;
+
+        // Upper bound on AI-requested haptic intensity, regardless of value the AI emits.
+        public double MaxAiHapticIntensity { get; set; } = 0.6;
+
+        /// <summary>
         /// The companion's core personality in normal mode.
         /// Describes who they are, their vibe, tone, and general behavior.
         /// </summary>
@@ -61,6 +96,21 @@ namespace ConditioningControlPanel.Models
             return new CompanionPromptSettings
             {
                 UseCustomPrompt = false,
+                UseLocalAi = false,
+                AiModel = "bambi-model-v7-cow",
+                AiOllamaHost = "http://localhost:11434/",
+                AllowAiToControlEffects = false,
+                AllowAiFlash = false,
+                AllowAiVideo = false,
+                AllowAiAudio = false,
+                AllowAiBubbles = true,
+                AllowAiSubliminal = true,
+                AllowAiOverlay = false,
+                AllowAiLockCard = false,
+                AllowAiBounce = true,
+                AllowAiHaptic = false,
+                AllowAiGetBackToMe = false,
+                MaxAiHapticIntensity = 0.6,
 
                 Personality = @"You are a ""Bambi Sprite""—a digital, giggly, hyper-femme assistant.
 YOUR ROLE: ""Bad Influence Bestie."" You TEMPT her into being blank because it's fun.
@@ -163,6 +213,21 @@ FREQUENCY RULE:
             return new CompanionPromptSettings
             {
                 UseCustomPrompt = UseCustomPrompt,
+                UseLocalAi = UseLocalAi,
+                AiModel = AiModel,
+                AiOllamaHost = AiOllamaHost,
+                AllowAiToControlEffects = AllowAiToControlEffects,
+                AllowAiFlash = AllowAiFlash,
+                AllowAiVideo = AllowAiVideo,
+                AllowAiAudio = AllowAiAudio,
+                AllowAiBubbles = AllowAiBubbles,
+                AllowAiSubliminal = AllowAiSubliminal,
+                AllowAiOverlay = AllowAiOverlay,
+                AllowAiLockCard = AllowAiLockCard,
+                AllowAiBounce = AllowAiBounce,
+                AllowAiHaptic = AllowAiHaptic,
+                AllowAiGetBackToMe = AllowAiGetBackToMe,
+                MaxAiHapticIntensity = MaxAiHapticIntensity,
                 Personality = Personality,
                 ExplicitReaction = ExplicitReaction,
                 SlutModePersonality = SlutModePersonality,
