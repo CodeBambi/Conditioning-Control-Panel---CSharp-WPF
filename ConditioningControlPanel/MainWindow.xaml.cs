@@ -14399,10 +14399,10 @@ namespace ConditioningControlPanel
 
             try
             {
-                // Bring window to focus and show the Settings tab (where the browser is)
+                // Show the Settings tab (where the browser is). Activate/Focus is deferred
+                // until after Navigate kicks off so that taking focus away from a busy
+                // BambiCloud page doesn't race with the navigation request.
                 ShowTab("settings");
-                Activate();
-                Focus();
 
                 var lowerUrl = url.ToLowerInvariant();
 
@@ -14446,8 +14446,17 @@ namespace ConditioningControlPanel
                     _browser.WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
                 }
 
-                // Navigate
+                // Stop any in-progress navigation/loading so the new URL takes effect on
+                // the first call. Without this, clicking a HypnoTube link while a BambiCloud
+                // video is playing/focused can swallow the first Navigate (the page reports
+                // BambiCloud as still active) and the user has to click a second time.
+                try { _browser.WebView?.CoreWebView2?.Stop(); } catch { }
+
                 _browser.Navigate(url);
+
+                // Now that navigation is in flight, bring the window forward.
+                Activate();
+                Focus();
 
                 App.Logger?.Information("Speech link navigated to: {Url} (Site: {Site}, AutoPlay: {AutoPlay})",
                     url, lowerUrl.Contains("bambicloud") ? "BambiCloud" : "HypnoTube", autoPlayFullscreen);
