@@ -214,12 +214,17 @@ namespace ConditioningControlPanel
             InitializeComponent();
 
             // Apply the user-configured chat shortcut. AvatarTubeWindow does the same
-            // for itself; both windows respond to the same RoutedUICommand.
+            // for itself; both windows respond to the same RoutedUICommand. We ALSO
+            // register a Win32 system-wide hotkey via GlobalHotkeyService so the same
+            // combo opens chat from any other app (browser, terminal, etc.) without
+            // needing one of our windows to have focus.
             Loaded += (_, _) =>
             {
                 AvatarTubeWindow.ApplyChatShortcutTo(this);
                 RefreshChatShortcutLabel();
+                ApplyGlobalChatHotkey();
             };
+            Closing += (_, _) => Services.GlobalHotkeyService.Unregister();
 
             // Set version dynamically from assembly
             var version = Services.UpdateService.GetCurrentVersion();
@@ -13750,7 +13755,74 @@ namespace ConditioningControlPanel
             AvatarTubeWindow.ApplyChatShortcutTo(this);
             if (App.AvatarWindow != null) AvatarTubeWindow.ApplyChatShortcutTo(App.AvatarWindow);
 
+            // Re-arm the system-wide hotkey too, so the new combo works from any app.
+            ApplyGlobalChatHotkey();
+
             RefreshChatShortcutLabel();
+        }
+
+        /// <summary>
+        /// Reads the user's saved chat-shortcut combo and registers it as a system-wide
+        /// hotkey. Falls back silently if the OS rejects the combo (already taken).
+        /// </summary>
+        private void ApplyGlobalChatHotkey()
+        {
+            var s = App.Settings?.Current?.CompanionPrompt;
+            var keyName = string.IsNullOrWhiteSpace(s?.ChatShortcutKey) ? "T" : s!.ChatShortcutKey;
+            var modsName = s?.ChatShortcutModifiers ?? "Control";
+
+            if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.T;
+            var mods = ModifierKeys.None;
+            if (!string.IsNullOrWhiteSpace(modsName))
+            {
+                foreach (var part in modsName.Split(new[] { ',', '+', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (Enum.TryParse<ModifierKeys>(part, ignoreCase: true, out var mk)) mods |= mk;
+                }
+            }
+            if (mods == ModifierKeys.None) mods = ModifierKeys.Control;
+
+            Services.GlobalHotkeyService.Register(this, mods, key, () =>
+            {
+                // Marshal to UI thread — Win32 hotkeys arrive on the message-pump thread
+                // (which is the dispatcher in WPF, but the helper API doesn't enforce it).
+                Dispatcher.BeginInvoke(new Action(BringToForegroundAndOpenChat));
+            });
+        }
+
+        /// <summary>
+        /// Full "wake up the app" sequence for the global chat hotkey: un-minimize
+        /// MainWindow, bring it to the foreground, re-show the avatar tube (which
+        /// auto-hides while the main window is minimized in attached mode), then
+        /// open the chat input. Used when the shortcut is pressed from another app.
+        /// </summary>
+        private void BringToForegroundAndOpenChat()
+        {
+            try
+            {
+                // 1. Restore MainWindow if minimized.
+                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                Show();
+
+                // 2. Force MainWindow to the foreground. Topmost flicker is the WPF idiom
+                //    that bypasses focus-stealing prevention without Win32 antics.
+                Activate();
+                Topmost = true;
+                Topmost = false;
+
+                // 3. Re-show the avatar tube. When MainWindow minimizes, attached avatars
+                //    are hidden by HideAvatarTube — so without this the chat input would
+                //    open on a hidden window.
+                ShowAvatarTube();
+
+                // 4. Open chat input. AvatarTubeWindow.OpenChatInput does its own
+                //    AttachThreadInput dance to claim keyboard focus reliably.
+                App.AvatarWindow?.OpenChatInput();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BringToForegroundAndOpenChat failed");
+            }
         }
 
         /// <summary>Updates the hero pill text to match the saved shortcut.</summary>
