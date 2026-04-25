@@ -48,6 +48,12 @@ namespace ConditioningControlPanel.Models
         // Upper bound on AI-requested haptic intensity, regardless of value the AI emits.
         public double MaxAiHapticIntensity { get; set; } = 0.6;
 
+        // Keyboard shortcut to open the avatar chat input. Stored as the WPF Key name
+        // ("T", "F2", etc.) and a comma-separated ModifierKeys ("Control", "Control,Shift").
+        // Applied at window load via code-behind so changes take effect without a restart.
+        public string ChatShortcutKey { get; set; } = "T";
+        public string ChatShortcutModifiers { get; set; } = "Control";
+
         /// <summary>
         /// The companion's core personality in normal mode.
         /// Describes who they are, their vibe, tone, and general behavior.
@@ -111,6 +117,8 @@ namespace ConditioningControlPanel.Models
                 AllowAiHaptic = false,
                 AllowAiGetBackToMe = false,
                 MaxAiHapticIntensity = 0.6,
+                ChatShortcutKey = "T",
+                ChatShortcutModifiers = "Control",
 
                 Personality = @"You are a ""Bambi Sprite""—a digital, giggly, hyper-femme assistant.
 YOUR ROLE: ""Bad Influence Bestie."" You TEMPT her into being blank because it's fun.
@@ -228,6 +236,8 @@ FREQUENCY RULE:
                 AllowAiHaptic = AllowAiHaptic,
                 AllowAiGetBackToMe = AllowAiGetBackToMe,
                 MaxAiHapticIntensity = MaxAiHapticIntensity,
+                ChatShortcutKey = ChatShortcutKey,
+                ChatShortcutModifiers = ChatShortcutModifiers,
                 Personality = Personality,
                 ExplicitReaction = ExplicitReaction,
                 SlutModePersonality = SlutModePersonality,

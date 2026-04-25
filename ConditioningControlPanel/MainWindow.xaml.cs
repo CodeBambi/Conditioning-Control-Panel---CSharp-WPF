@@ -213,6 +213,14 @@ namespace ConditioningControlPanel
         {
             InitializeComponent();
 
+            // Apply the user-configured chat shortcut. AvatarTubeWindow does the same
+            // for itself; both windows respond to the same RoutedUICommand.
+            Loaded += (_, _) =>
+            {
+                AvatarTubeWindow.ApplyChatShortcutTo(this);
+                RefreshChatShortcutLabel();
+            };
+
             // Set version dynamically from assembly
             var version = Services.UpdateService.GetCurrentVersion();
             TxtVersion.Text = $"Version {version}";
@@ -545,8 +553,31 @@ namespace ConditioningControlPanel
                 if (CompanionTab.Visibility == Visibility.Visible)
                 {
                     UpdateCompanionCardsUI();
+                    FlashXpBarOnDrain();
                 }
             });
+        }
+
+        /// <summary>
+        /// Pulses a pink overlay over the hero XP bar each time Brain Parasite drains.
+        /// Animating Effect.Opacity on the bar itself didn't visibly redraw, so we use a
+        /// PinkBrush Border with a glow on top of the bar and animate its Opacity instead.
+        /// </summary>
+        private void FlashXpBarOnDrain()
+        {
+            if (PrgCompanion0FlashOverlay == null) return;
+            var anim = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                From = 0.0,
+                To = 0.85,
+                Duration = TimeSpan.FromMilliseconds(180),
+                AutoReverse = true,
+                EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                {
+                    EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut
+                }
+            };
+            PrgCompanion0FlashOverlay.BeginAnimation(UIElement.OpacityProperty, anim);
         }
 
         private void OnCompanionSwitched(object? sender, Models.CompanionId newCompanion)
@@ -13581,6 +13612,50 @@ namespace ConditioningControlPanel
         {
             App.AvatarWindow?.OpenChatInput();
             e.Handled = true;
+        }
+
+        /// <summary>
+        /// Click on the Companion-tab "Chat: Ctrl+T" pill — opens the capture dialog,
+        /// saves the new shortcut to settings, then re-applies the binding to both
+        /// MainWindow and AvatarTubeWindow without restart.
+        /// </summary>
+        private void BtnChatShortcut_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new ChatShortcutCaptureDialog { Owner = this };
+            var ok = dlg.ShowDialog();
+            if (ok != true) return;
+
+            var settings = App.Settings?.Current?.CompanionPrompt;
+            if (settings == null) return;
+
+            if (dlg.ResetToDefault)
+            {
+                settings.ChatShortcutKey = "T";
+                settings.ChatShortcutModifiers = "Control";
+            }
+            else
+            {
+                settings.ChatShortcutKey = dlg.CapturedKey.ToString();
+                settings.ChatShortcutModifiers = AvatarTubeWindow.SerializeModifiers(dlg.CapturedModifiers);
+            }
+            App.Settings?.Save();
+
+            // Re-apply on both windows so the new shortcut takes effect immediately.
+            AvatarTubeWindow.ApplyChatShortcutTo(this);
+            if (App.AvatarWindow != null) AvatarTubeWindow.ApplyChatShortcutTo(App.AvatarWindow);
+
+            RefreshChatShortcutLabel();
+        }
+
+        /// <summary>Updates the hero pill text to match the saved shortcut.</summary>
+        public void RefreshChatShortcutLabel()
+        {
+            try
+            {
+                if (TxtChatShortcutLabel != null)
+                    TxtChatShortcutLabel.Text = AvatarTubeWindow.FormatChatShortcut();
+            }
+            catch { /* Tab not yet realized, fine */ }
         }
 
         private void Window_DragOver(object sender, DragEventArgs e)

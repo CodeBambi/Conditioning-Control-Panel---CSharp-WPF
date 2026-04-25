@@ -172,6 +172,20 @@ namespace ConditioningControlPanel
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
 
+        // Used by ForceForegroundWindow to bypass Windows' focus-stealing prevention
+        // on this tool window (WS_EX_TOOLWINDOW). Without this, Activate() is silently
+        // ignored when the user clicks the avatar from another foreground app.
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool fAttach);
+
         [StructLayout(LayoutKind.Sequential)]
         private struct RECT
         {
@@ -216,6 +230,9 @@ namespace ConditioningControlPanel
         public AvatarTubeWindow(Window parentWindow)
         {
             InitializeComponent();
+
+            // Apply the user-configured chat shortcut keybinding (Ctrl+T by default).
+            Loaded += (_, _) => ApplyChatShortcutTo(this);
 
             _parentWindow = parentWindow;
             // Don't set Owner - it causes black window artifacts during minimize
@@ -4293,20 +4310,94 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Rebuilds the chat-shortcut KeyBinding on a window from the user's setting.
+        /// Removes any prior binding bound to <see cref="OpenChatCommand"/> first so
+        /// repeated calls don't stack duplicates. Safe to call from any thread; falls
+        /// back to defaults if the setting is empty or unparseable.
+        /// </summary>
+        public static void ApplyChatShortcutTo(Window window)
+        {
+            if (window == null) return;
+
+            var s = App.Settings?.Current?.CompanionPrompt;
+            var keyName = string.IsNullOrWhiteSpace(s?.ChatShortcutKey) ? "T" : s!.ChatShortcutKey;
+            var modsName = s?.ChatShortcutModifiers ?? "Control";
+
+            if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.T;
+            if (!TryParseModifiers(modsName, out var mods)) mods = ModifierKeys.Control;
+
+            // Remove any existing chat-shortcut bindings.
+            for (int i = window.InputBindings.Count - 1; i >= 0; i--)
+            {
+                if (window.InputBindings[i] is KeyBinding kb && kb.Command == OpenChatCommand)
+                    window.InputBindings.RemoveAt(i);
+            }
+
+            window.InputBindings.Add(new KeyBinding(OpenChatCommand, key, mods));
+        }
+
+        /// <summary>"Ctrl+T" / "Alt+Shift+B" — for the hero card button label.</summary>
+        public static string FormatChatShortcut()
+        {
+            var s = App.Settings?.Current?.CompanionPrompt;
+            var keyName = string.IsNullOrWhiteSpace(s?.ChatShortcutKey) ? "T" : s!.ChatShortcutKey;
+            var modsName = s?.ChatShortcutModifiers ?? "Control";
+
+            if (!Enum.TryParse<Key>(keyName, ignoreCase: true, out var key)) key = Key.T;
+            if (!TryParseModifiers(modsName, out var mods)) mods = ModifierKeys.Control;
+
+            var parts = new List<string>();
+            if ((mods & ModifierKeys.Control) != 0) parts.Add("Ctrl");
+            if ((mods & ModifierKeys.Alt) != 0) parts.Add("Alt");
+            if ((mods & ModifierKeys.Shift) != 0) parts.Add("Shift");
+            if ((mods & ModifierKeys.Windows) != 0) parts.Add("Win");
+            parts.Add(key.ToString());
+            return string.Join("+", parts);
+        }
+
+        private static bool TryParseModifiers(string s, out ModifierKeys result)
+        {
+            result = ModifierKeys.None;
+            if (string.IsNullOrWhiteSpace(s)) return true;
+            foreach (var part in s.Split(new[] { ',', '+', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (Enum.TryParse<ModifierKeys>(part, ignoreCase: true, out var mk))
+                    result |= mk;
+                else
+                    return false;
+            }
+            return true;
+        }
+
+        public static string SerializeModifiers(ModifierKeys m)
+        {
+            if (m == ModifierKeys.None) return "";
+            var parts = new List<string>();
+            if ((m & ModifierKeys.Control) != 0) parts.Add("Control");
+            if ((m & ModifierKeys.Alt) != 0) parts.Add("Alt");
+            if ((m & ModifierKeys.Shift) != 0) parts.Add("Shift");
+            if ((m & ModifierKeys.Windows) != 0) parts.Add("Windows");
+            return string.Join(",", parts);
+        }
+
+        /// <summary>
         /// Reliably moves keyboard focus into the chat input. The avatar tube is a
-        /// transparent borderless window — Windows doesn't always activate it on click,
-        /// and a Focus() call right after flipping Visibility runs before layout,
-        /// so it silently fails. Activate the window first, then schedule the focus
-        /// call at Input priority so the panel is fully arranged when it runs.
+        /// transparent, borderless WS_EX_TOOLWINDOW — Windows' focus-stealing prevention
+        /// silently rejects <see cref="Window.Activate"/> in that configuration, so we
+        /// bypass it via AttachThreadInput before SetForegroundWindow. Then the focus
+        /// calls are deferred to Input priority so the panel is fully laid out by the
+        /// time we try to put the cursor in the textbox.
         /// </summary>
         private void FocusInputAfterLayout()
         {
-            try { Activate(); } catch { /* may fail if window is in a weird state */ }
-
+            // ContextIdle runs after all pending input events (mouse-up from a
+            // double-click, etc.) have been processed. Using the higher Input priority
+            // raced with the second click's mouse-up and intermittently lost focus.
             Dispatcher.BeginInvoke(new Action(() =>
             {
                 try
                 {
+                    ForceForegroundWindow();
                     TxtUserInput.Focus();
                     Keyboard.Focus(TxtUserInput);
                     TxtUserInput.SelectAll();
@@ -4315,7 +4406,52 @@ namespace ConditioningControlPanel
                 {
                     App.Logger?.Debug("AvatarTube: focus chat input failed: {Error}", ex.Message);
                 }
-            }), DispatcherPriority.Input);
+            }), DispatcherPriority.ContextIdle);
+        }
+
+        /// <summary>
+        /// Forces this window to the foreground regardless of focus-stealing prevention,
+        /// using the AttachThreadInput technique. Required for tool windows
+        /// (WS_EX_TOOLWINDOW) which Windows otherwise refuses to bring forward when
+        /// requested by an app that doesn't currently own the foreground.
+        /// </summary>
+        private void ForceForegroundWindow()
+        {
+            // First try the WPF-friendly path. On the rare occasion it succeeds we save
+            // the Win32 round trip; when it fails it's a no-op and we fall through.
+            try { Activate(); } catch { }
+
+            var hWnd = _tubeHandle != IntPtr.Zero ? _tubeHandle : new WindowInteropHelper(this).Handle;
+            if (hWnd == IntPtr.Zero) return;
+
+            var fg = GetForegroundWindow();
+            if (fg == hWnd) return;
+
+            uint fgThread = GetWindowThreadProcessId(fg, out _);
+            uint myThread = GetCurrentThreadId();
+
+            if (fgThread == 0 || fgThread == myThread)
+            {
+                SetForegroundWindow(hWnd);
+                return;
+            }
+
+            // Briefly share input state with the foreground thread so SetForegroundWindow
+            // is allowed through. Always detach in finally — leaving threads attached
+            // wedges keyboard input across the whole desktop.
+            bool attached = false;
+            try
+            {
+                attached = AttachThreadInput(myThread, fgThread, true);
+                SetForegroundWindow(hWnd);
+            }
+            finally
+            {
+                if (attached)
+                {
+                    try { AttachThreadInput(myThread, fgThread, false); } catch { }
+                }
+            }
         }
 
         private void TxtUserInput_KeyDown(object sender, KeyEventArgs e)
@@ -4355,6 +4491,19 @@ namespace ConditioningControlPanel
             return phrases[_random.Next(phrases.Length)];
         }
 
+        // Strips dots, ellipsis, whitespace, AND markdown emphasis chars (* _ ~) from
+        // both ends of a thinking phrase so the animation's dots aren't duplicated and
+        // wrapping characters like "*Poppin bubbles...*" don't render asterisks around
+        // the animated dots. Trims both ends because phrases come pre-wrapped in *...*.
+        private static string StripTrailingDots(string phrase)
+        {
+            if (string.IsNullOrEmpty(phrase)) return phrase;
+            var trimmed = phrase.Trim('.', '…', '*', '_', '~', ' ', '\t');
+            // If the phrase was nothing but decoration (e.g. "*~*"), keep the original
+            // so we don't end up animating just bare dots.
+            return string.IsNullOrEmpty(trimmed) ? phrase : trimmed;
+        }
+
         // ============================================================
         // THINKING ANIMATION (rotating phrases + animated dots)
         // ============================================================
@@ -4371,7 +4520,7 @@ namespace ConditioningControlPanel
             StopThinkingAnimation(); // clear any prior animation
 
             _isWaitingForAi = true;
-            _thinkingPhraseBase = GetRandomThinkingPhrase();
+            _thinkingPhraseBase = StripTrailingDots(GetRandomThinkingPhrase());
             _thinkingTickCount = 0;
             var generation = ++_thinkingGeneration;
 
@@ -4412,7 +4561,7 @@ namespace ConditioningControlPanel
             if (_thinkingTickCount > 3)
             {
                 // Cycle complete — pick a new phrase, restart dots.
-                _thinkingPhraseBase = GetRandomThinkingPhrase();
+                _thinkingPhraseBase = StripTrailingDots(GetRandomThinkingPhrase());
                 _thinkingTickCount = 0;
                 RenderSpeechBubbleRaw(_thinkingPhraseBase);
             }

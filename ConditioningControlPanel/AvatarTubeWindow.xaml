@@ -15,9 +15,6 @@
         UseLayoutRounding="True"
         FontFamily="Segoe UI">
 
-    <Window.InputBindings>
-        <KeyBinding Modifiers="Control" Key="T" Command="{x:Static local:AvatarTubeWindow.OpenChatCommand}"/>
-    </Window.InputBindings>
     <Window.CommandBindings>
         <CommandBinding Command="{x:Static local:AvatarTubeWindow.OpenChatCommand}" Executed="OpenChatCommand_Executed"/>
     </Window.CommandBindings>

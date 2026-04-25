@@ -1,0 +1,40 @@
+<Window x:Class="ConditioningControlPanel.ChatShortcutCaptureDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_chat_shortcut_capture_title}"
+        Width="380" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{DynamicResource DarkerBgBrush}"
+        Foreground="White"
+        FontFamily="Segoe UI"
+        Focusable="True"
+        KeyDown="Window_KeyDown">
+    <Border Padding="20" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" CornerRadius="8">
+        <StackPanel>
+            <TextBlock Text="{loc:Str dialog_chat_shortcut_capture_prompt}"
+                       Foreground="White" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,12"/>
+            <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,12"
+                    BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                <TextBlock x:Name="TxtCaptured" Text="{loc:Str label_chat_shortcut_listening}"
+                           Foreground="{DynamicResource PinkBrush}" FontSize="20" FontWeight="Bold"
+                           HorizontalAlignment="Center"/>
+            </Border>
+            <TextBlock Text="{loc:Str dialog_chat_shortcut_capture_hint}"
+                       Foreground="{DynamicResource TextDimBrush}" FontSize="11" TextWrapping="Wrap"
+                       Margin="0,0,0,12"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnReset" Content="{loc:Str btn_reset_to_default}"
+                        Click="BtnReset_Click"
+                        Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
+                        BorderBrush="#505050" BorderThickness="1" Padding="12,5" Margin="0,0,8,0" Cursor="Hand"/>
+                <Button x:Name="BtnCancel" Content="{loc:Str btn_cancel}" IsCancel="True"
+                        Click="BtnCancel_Click"
+                        Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
+                        BorderBrush="#505050" BorderThickness="1" Padding="12,5" Cursor="Hand"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>
