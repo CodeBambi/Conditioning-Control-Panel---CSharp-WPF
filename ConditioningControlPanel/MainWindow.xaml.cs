@@ -3169,8 +3169,7 @@ namespace ConditioningControlPanel
         private void BtnSubLockdown_Click(object sender, RoutedEventArgs e)
         {
             ExclusivesSubmenuPopup.IsOpen = false;
-            // Lockdown UI lives inside the Companion tab (Hero Strip + Lockdown panel).
-            ShowTab("companion");
+            ShowTab("lockdown");
         }
 
         /// <summary>
@@ -3185,6 +3184,7 @@ namespace ConditioningControlPanel
             if (SubBadgeBambiTakeover != null) SubBadgeBambiTakeover.Visibility = badgeVis;
             if (SubBadgeHaptics != null) SubBadgeHaptics.Visibility = badgeVis;
             if (SubBadgeAwareness != null) SubBadgeAwareness.Visibility = badgeVis;
+            if (SubBadgeLockdown != null) SubBadgeLockdown.Visibility = badgeVis;
         }
 
         /// <summary>
@@ -4040,6 +4040,7 @@ namespace ConditioningControlPanel
             if (RemoteControlTab != null) RemoteControlTab.Visibility = Visibility.Collapsed;
             if (BambiTakeoverTab != null) BambiTakeoverTab.Visibility = Visibility.Collapsed;
             if (HapticsTab != null) HapticsTab.Visibility = Visibility.Collapsed;
+            if (LockdownTab != null) LockdownTab.Visibility = Visibility.Collapsed;
 
             // Reset all button styles to inactive
             var inactiveStyle = FindResource("TabButton") as Style;
@@ -4115,7 +4116,6 @@ namespace ConditioningControlPanel
                     LabTab.Visibility = Visibility.Visible;
                     AnimateTabIn(LabTab);
                     BtnLab.Style = activeStyle;
-                    StartLockdownPulse();
                     break;
 
                 // Note: "patreon" case is handled at the top of ShowTab as a
@@ -4167,6 +4167,13 @@ namespace ConditioningControlPanel
                     HapticsTab.Visibility = Visibility.Visible;
                     AnimateTabIn(HapticsTab);
                     UpdatePatreonUI();
+                    break;
+
+                case "lockdown":
+                    LockdownTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(LockdownTab);
+                    StartLockdownPulse();
+                    RefreshPremiumGate(LockdownGate);
                     break;
 
             }
@@ -5133,6 +5140,9 @@ namespace ConditioningControlPanel
 
                 // Sync companion leveling UI (v5.3)
                 UpdateCompanionCardsUI();
+
+                // Sync AI Brain panel + hero pills (v5.9)
+                SyncAiBrainUI();
             }
             finally
             {
@@ -5213,6 +5223,36 @@ namespace ConditioningControlPanel
 
             // Update companion prompt labels
             UpdateCompanionPromptLabels();
+
+            // Refresh hero avatar GIF (v5.9)
+            RefreshHeroAvatar();
+        }
+
+        /// <summary>
+        /// Loads the active companion's animated GIF into the hero avatar circle.
+        /// Mirrors the avatar-set resolution used by AvatarTubeWindow.
+        /// </summary>
+        private void RefreshHeroAvatar()
+        {
+            if (HeroAvatarImage == null) return;
+            try
+            {
+                var setNumber = App.Settings?.Current?.SelectedAvatarSet ?? 1;
+                if (setNumber < 1)
+                {
+                    var playerLevel = App.Settings?.Current?.PlayerLevel ?? 1;
+                    setNumber = AvatarTubeWindow.GetAvatarSetForLevel(playerLevel);
+                }
+                var resolved = Services.ModResourceResolver.ResolveUri($"animated{setNumber}_1.gif");
+                var gifUri = new Uri(resolved, UriKind.Absolute);
+                XamlAnimatedGif.AnimationBehavior.SetSourceUri(HeroAvatarImage, gifUri);
+                XamlAnimatedGif.AnimationBehavior.SetAutoStart(HeroAvatarImage, true);
+                XamlAnimatedGif.AnimationBehavior.SetRepeatBehavior(HeroAvatarImage, System.Windows.Media.Animation.RepeatBehavior.Forever);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to load hero avatar GIF");
+            }
         }
 
         /// <summary>
@@ -5743,6 +5783,7 @@ namespace ConditioningControlPanel
             RefreshPremiumGate(HapticsGate);
             RefreshPremiumGate(RemoteControlGate);
             RefreshPremiumGate(AwarenessGate);
+            RefreshPremiumGate(LockdownGate);
 
             // Update AI connection status
             if (TxtAiStatus != null)
@@ -6610,6 +6651,7 @@ namespace ConditioningControlPanel
 
             App.Settings.Current.AiChatEnabled = ChkAiChat.IsChecked == true;
             App.Settings.Save();
+            UpdateAiBrainPills();
         }
 
         private void SliderIdleInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -6731,6 +6773,8 @@ namespace ConditioningControlPanel
                 App.WindowAwareness?.Stop();
                 App.Logger?.Information("Awareness Mode disabled via UI");
             }
+
+            UpdateAiBrainPills();
         }
 
         private void BtnPrivacySpoiler_Click(object sender, RoutedEventArgs e)
@@ -6755,6 +6799,238 @@ namespace ConditioningControlPanel
             TxtAwarenessCooldown.Text = $"{value}s";
             App.Settings.Current.AwarenessReactionCooldownSeconds = value;
             App.Settings.Save();
+        }
+
+        // ============================================================
+        // COMPANION TAB — Hero + AI Brain redesign (v5.9)
+        // ============================================================
+
+        private void BtnSwitchCompanion_Click(object sender, RoutedEventArgs e)
+        {
+            if (CompanionRosterTray == null) return;
+            CompanionRosterTray.Visibility = CompanionRosterTray.Visibility == Visibility.Visible
+                ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private void RadioAiOff_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.AiChatEnabled = false;
+            if (ChkAiChat != null) ChkAiChat.IsChecked = false;
+            App.Settings.Save();
+            if (LocalConfigPanel != null) LocalConfigPanel.Visibility = Visibility.Collapsed;
+            UpdateAiBrainPills();
+        }
+
+        private void RadioAiCloud_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s?.CompanionPrompt == null) return;
+            s.AiChatEnabled = true;
+            s.CompanionPrompt.UseLocalAi = false;
+            if (ChkAiChat != null) ChkAiChat.IsChecked = true;
+            App.Settings.Save();
+            if (LocalConfigPanel != null) LocalConfigPanel.Visibility = Visibility.Collapsed;
+            UpdateAiBrainPills();
+        }
+
+        private void RadioAiLocal_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s?.CompanionPrompt == null) return;
+            s.AiChatEnabled = true;
+            s.CompanionPrompt.UseLocalAi = true;
+            if (ChkAiChat != null) ChkAiChat.IsChecked = true;
+            App.Settings.Save();
+            if (LocalConfigPanel != null) LocalConfigPanel.Visibility = Visibility.Visible;
+            UpdateAiBrainPills();
+        }
+
+        private void TxtAiModel_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current?.CompanionPrompt;
+            if (s == null || TxtAiModel == null) return;
+            s.AiModel = (TxtAiModel.Text ?? "").Trim();
+            App.Settings.Save();
+        }
+
+        private void TxtAiHost_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current?.CompanionPrompt;
+            if (s == null || TxtAiHost == null) return;
+            s.AiOllamaHost = (TxtAiHost.Text ?? "").Trim();
+            App.Settings.Save();
+        }
+
+        private async void BtnTestOllamaConnection_Click(object sender, RoutedEventArgs e)
+        {
+            if (TxtAiHealthStatus == null || TxtAiHost == null) return;
+
+            var host = (TxtAiHost.Text ?? "").Trim();
+            if (string.IsNullOrEmpty(host))
+            {
+                TxtAiHealthStatus.Text = Loc.Get("label_status_failed");
+                TxtAiHealthStatus.Foreground = new SolidColorBrush(Colors.Red);
+                return;
+            }
+            var url = host.TrimEnd('/') + "/api/tags";
+
+            TxtAiHealthStatus.Text = Loc.Get("label_status_testing");
+            TxtAiHealthStatus.Foreground = new SolidColorBrush(Colors.Gray);
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                using var http = new HttpClient();
+                var resp = await http.GetAsync(url, cts.Token);
+                sw.Stop();
+                if (resp.IsSuccessStatusCode)
+                {
+                    TxtAiHealthStatus.Text = $"{Loc.Get("label_status_connected")} · {sw.ElapsedMilliseconds}ms";
+                    TxtAiHealthStatus.Foreground = new SolidColorBrush(Color.FromRgb(0x50, 0xC8, 0x78));
+                }
+                else
+                {
+                    TxtAiHealthStatus.Text = $"{Loc.Get("label_status_failed")} · {(int)resp.StatusCode}";
+                    TxtAiHealthStatus.Foreground = new SolidColorBrush(Colors.Red);
+                }
+            }
+            catch (Exception ex)
+            {
+                TxtAiHealthStatus.Text = $"{Loc.Get("label_status_failed")} · {ex.GetType().Name}";
+                TxtAiHealthStatus.Foreground = new SolidColorBrush(Colors.Red);
+            }
+        }
+
+        private void ChkCapEffects_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current?.CompanionPrompt;
+            if (s == null || ChkCapEffects == null) return;
+            var on = ChkCapEffects.IsChecked == true;
+            s.AllowAiToControlEffects = on;
+            if (EffectPermsPanel != null) EffectPermsPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            App.Settings.Save();
+        }
+
+        private void ChkAllowEffect_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (sender is not CheckBox cb) return;
+            var s = App.Settings?.Current?.CompanionPrompt;
+            if (s == null) return;
+            var on = cb.IsChecked == true;
+            switch (cb.Tag as string)
+            {
+                case "Flash":       s.AllowAiFlash = on; break;
+                case "Video":       s.AllowAiVideo = on; break;
+                case "Audio":       s.AllowAiAudio = on; break;
+                case "Bubbles":     s.AllowAiBubbles = on; break;
+                case "Subliminal":  s.AllowAiSubliminal = on; break;
+                case "Overlay":     s.AllowAiOverlay = on; break;
+                case "LockCard":    s.AllowAiLockCard = on; break;
+                case "Bounce":      s.AllowAiBounce = on; break;
+                case "Haptic":      s.AllowAiHaptic = on; break;
+                case "GetBackToMe": s.AllowAiGetBackToMe = on; break;
+            }
+            App.Settings.Save();
+        }
+
+        private void SliderMaxHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current?.CompanionPrompt;
+            if (s == null || SliderMaxHapticIntensity == null) return;
+            s.MaxAiHapticIntensity = SliderMaxHapticIntensity.Value;
+            if (TxtMaxHapticIntensity != null)
+                TxtMaxHapticIntensity.Text = $"{(int)(SliderMaxHapticIntensity.Value * 100)}%";
+            App.Settings.Save();
+        }
+
+        private void UpdateAiBrainPills()
+        {
+            if (PillAiProvider == null || PillAwareness == null) return;
+            var s = App.Settings?.Current;
+            if (s?.CompanionPrompt == null) return;
+            var aiOn = s.AiChatEnabled;
+            var local = s.CompanionPrompt.UseLocalAi;
+            PillAiProvider.Text = !aiOn ? Loc.Get("label_ai_status_pill_off")
+                                : local ? Loc.Get("label_ai_status_pill_local")
+                                        : Loc.Get("label_ai_status_pill_cloud");
+            PillAwareness.Text = s.AwarenessModeEnabled
+                                ? Loc.Get("label_awareness_pill_on")
+                                : Loc.Get("label_awareness_pill_off");
+        }
+
+        private void UpdateLiveActionsPlaceholder()
+        {
+            if (TxtLiveActionsPlaceholder == null) return;
+            TxtLiveActionsPlaceholder.Visibility = (App.AiLiveActions?.Count ?? 0) == 0
+                ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Populate AI Brain controls from settings. Called from SyncCompanionTabUI.
+        /// </summary>
+        private void SyncAiBrainUI()
+        {
+            var s = App.Settings?.Current;
+            if (s?.CompanionPrompt == null) return;
+
+            // Provider radios
+            var aiOn = s.AiChatEnabled;
+            var local = s.CompanionPrompt.UseLocalAi;
+            if (RadioAiOff != null)   RadioAiOff.IsChecked   = !aiOn;
+            if (RadioAiCloud != null) RadioAiCloud.IsChecked = aiOn && !local;
+            if (RadioAiLocal != null) RadioAiLocal.IsChecked = aiOn && local;
+            if (LocalConfigPanel != null)
+                LocalConfigPanel.Visibility = (aiOn && local) ? Visibility.Visible : Visibility.Collapsed;
+
+            // Local config fields
+            if (TxtAiModel != null) TxtAiModel.Text = s.CompanionPrompt.AiModel ?? "";
+            if (TxtAiHost != null)  TxtAiHost.Text  = s.CompanionPrompt.AiOllamaHost ?? "";
+
+            // Capability checkboxes (ChkAiChat / ChkAwarenessMode handled by their own sync paths)
+            if (ChkCapEffects != null)
+                ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
+            if (EffectPermsPanel != null)
+                EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
+                    ? Visibility.Visible : Visibility.Collapsed;
+
+            // Effect permission grid
+            if (ChkAllowFlash != null)       ChkAllowFlash.IsChecked       = s.CompanionPrompt.AllowAiFlash;
+            if (ChkAllowVideo != null)       ChkAllowVideo.IsChecked       = s.CompanionPrompt.AllowAiVideo;
+            if (ChkAllowAudio != null)       ChkAllowAudio.IsChecked       = s.CompanionPrompt.AllowAiAudio;
+            if (ChkAllowBubbles != null)     ChkAllowBubbles.IsChecked     = s.CompanionPrompt.AllowAiBubbles;
+            if (ChkAllowSubliminal != null)  ChkAllowSubliminal.IsChecked  = s.CompanionPrompt.AllowAiSubliminal;
+            if (ChkAllowOverlay != null)     ChkAllowOverlay.IsChecked     = s.CompanionPrompt.AllowAiOverlay;
+            if (ChkAllowLockCard != null)    ChkAllowLockCard.IsChecked    = s.CompanionPrompt.AllowAiLockCard;
+            if (ChkAllowBounce != null)      ChkAllowBounce.IsChecked      = s.CompanionPrompt.AllowAiBounce;
+            if (ChkAllowHaptic != null)      ChkAllowHaptic.IsChecked      = s.CompanionPrompt.AllowAiHaptic;
+            if (ChkAllowGetBackToMe != null) ChkAllowGetBackToMe.IsChecked = s.CompanionPrompt.AllowAiGetBackToMe;
+
+            // Max haptic intensity
+            if (SliderMaxHapticIntensity != null) SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
+            if (TxtMaxHapticIntensity != null)    TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
+
+            // Awareness panel visibility (from previous handler logic)
+            if (AwarenessSettingsPanel != null)
+                AwarenessSettingsPanel.Visibility = s.AwarenessModeEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+            // Hero pills
+            UpdateAiBrainPills();
+
+            // Live actions placeholder + ItemsSource binding
+            if (LiveActionsList != null && LiveActionsList.ItemsSource == null)
+                LiveActionsList.ItemsSource = App.AiLiveActions;
+            UpdateLiveActionsPlaceholder();
         }
 
         #region Haptics Handlers

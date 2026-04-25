@@ -1,4 +1,5 @@
 using System;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -165,6 +166,11 @@ namespace ConditioningControlPanel
         // Static service references
         public static ILogger Logger { get; private set; } = null!;
         public static SettingsService Settings { get; private set; } = null!;
+
+        // Transient feed of recent AI-driven effect actions, surfaced in the Companion tab's
+        // "Live actions" panel. Populated by the upcoming local-LLM effect controller; not persisted.
+        public static ObservableCollection<string> AiLiveActions { get; } = new();
+
         public static FlashService Flash { get; private set; } = null!;
         public static VideoService Video { get; private set; } = null!;
         public static AudioService Audio { get; private set; } = null!;

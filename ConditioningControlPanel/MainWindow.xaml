@@ -5206,624 +5206,448 @@
             </Border>
         </ContentControl>
 
-        <!-- Companion Tab (v5.5 - Revamped with outlined sections) -->
+        <!-- Companion Tab (v5.9 - Hero + AI Brain redesign) -->
         <ContentControl x:Name="CompanionTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
             <Border Style="{StaticResource SectionPanel}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="15">
 
                         <!-- Tab Header -->
-                        <Grid Margin="0,0,0,15">
+                        <Grid Margin="0,0,0,12">
                             <StackPanel>
-                                <TextBlock Text="{loc:Str tab_companion}" Foreground="White" FontSize="22" FontWeight="Bold">
+                                <TextBlock Text="{loc:Str tab_companion}" Foreground="White" FontSize="26" FontWeight="Bold">
                                     <TextBlock.Effect>
                                         <DropShadowEffect Color="#9370DB" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
                                     </TextBlock.Effect>
                                 </TextBlock>
-                                <TextBlock Text="{loc:Str label_manage_your_ai_companion_personalities_and_co}" Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,2,0,0"/>
+                                <TextBlock Text="{loc:Str label_manage_your_ai_companion_personalities_and_co}" Foreground="{DynamicResource TextDimBrush}" FontSize="13" Margin="0,2,0,0"/>
                             </StackPanel>
                         </Grid>
 
-                        <!-- AI Features Section (free for all users, requires login) -->
-                        <Grid Margin="0,0,0,15">
-                        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="12" Padding="15">
-                            <Border.BorderBrush>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
-                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.BorderBrush>
-                            <Border.BorderThickness>
-                                <Thickness>1</Thickness>
-                            </Border.BorderThickness>
-                            <Border.Effect>
-                                <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.2"/>
-                            </Border.Effect>
-                            <StackPanel>
-                                <Grid Margin="0,0,0,10">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Str label_ai_features}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
-                                        <Border Background="#2A1A3A" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
-                                            <TextBlock Text="{loc:Str label_free_for_all_users}" Foreground="{DynamicResource PinkBrush}" FontSize="9"/>
-                                        </Border>
-                                    </StackPanel>
-                                    <Button x:Name="HelpBtnAiChat" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Tag="AiChat" Panel.ZIndex="1"/>
-                                </Grid>
-
-                                <!-- AI Status -->
-                                <TextBlock x:Name="TxtAiStatus" Text="{loc:Str label_ai_initializing}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,0,0,10"/>
-
-                                <!-- AI Chat Toggle -->
-                                <Grid Margin="0,0,0,8">
-                                    <StackPanel>
-                                        <TextBlock Text="{loc:Str label_enable_ai_chat}" Foreground="White" FontSize="12"/>
-                                        <TextBlock Text="{loc:Str label_double_click_avatar_to_chat}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
-                                    </StackPanel>
-                                    <CheckBox x:Name="ChkAiChat" Style="{StaticResource ToggleStyle}"
-                                              HorizontalAlignment="Right" VerticalAlignment="Center"
-                                              IsChecked="True"
-                                              Checked="ChkAiChat_Changed" Unchecked="ChkAiChat_Changed"/>
-                                </Grid>
-
-                                <!-- Window Awareness -->
-                                <Border BorderBrush="#353550" BorderThickness="0,1,0,0" Margin="0,4,0,0" Padding="0,10,0,0">
-                                    <StackPanel>
-                                        <Grid>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{loc:Str label_window_awareness}" Foreground="White" FontWeight="Bold" FontSize="13"/>
-                                                <Button x:Name="HelpBtnAwareness" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="WindowAwareness" Panel.ZIndex="1"/>
-                                            </StackPanel>
-                                        </Grid>
-
-                                        <!-- Awareness Mode Toggle -->
-                                        <Grid Margin="0,8,0,0">
-                                            <StackPanel>
-                                                <TextBlock Text="{loc:Str label_enable_awareness}" Foreground="White" FontSize="12"/>
-                                                <TextBlock Text="{loc:Str label_reacts_to_your_activity}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
-                                            </StackPanel>
-                                            <CheckBox x:Name="ChkAwarenessMode" Style="{StaticResource ToggleStyle}"
-                                                      HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                      IsChecked="False"
-                                                      Checked="ChkAwarenessMode_Changed" Unchecked="ChkAwarenessMode_Changed"/>
-                                        </Grid>
-
-                                        <!-- Privacy Warning -->
-                                        <Border Background="#2A1A1A" CornerRadius="6" Padding="8" Margin="0,8,0,0" BorderBrush="#FF6B6B" BorderThickness="1">
-                                            <StackPanel>
-                                                <Grid>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="⚠️" FontSize="12" VerticalAlignment="Center"/>
-                                                        <TextBlock Text="{loc:Str label_privacy_notice}" Foreground="#FF6B6B" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
-                                                    </StackPanel>
-                                                    <Button x:Name="BtnPrivacySpoiler" Content="{loc:Str btn_click_to_reveal}"
-                                                            Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" BorderThickness="0"
-                                                            HorizontalAlignment="Right" FontSize="10" Cursor="Hand"
-                                                            Click="BtnPrivacySpoiler_Click"/>
-                                                </Grid>
-                                                <TextBlock x:Name="TxtPrivacyDetails" Visibility="Collapsed"
-                                                           TextWrapping="Wrap" Foreground="#CCCCCC" FontSize="10" Margin="0,8,0,0"
-                                                           Text="{loc:Str label_this_feature_reads_the_name_of_the_active_win}"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Awareness Settings (shown when enabled) -->
-                                <Border x:Name="AwarenessSettingsPanel" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="10" Margin="0,8,0,0" Visibility="Collapsed">
-                                    <StackPanel>
-                                        <TextBlock Text="{loc:Str label_awareness_settings}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold" Margin="0,0,0,8"/>
-                                        <Grid>
-                                            <TextBlock Text="{loc:Str label_reaction_cooldown}" Foreground="White" FontSize="11"/>
-                                            <TextBlock x:Name="TxtAwarenessCooldown" Text="{loc:Str label_90s}" Foreground="{DynamicResource PinkBrush}"
-                                                       HorizontalAlignment="Right" FontSize="11" FontWeight="Bold"/>
-                                        </Grid>
-                                        <Slider x:Name="SliderAwarenessCooldown"
-                                                Style="{StaticResource PinkSlider}"
-                                                Minimum="10" Maximum="300" Value="90"
-                                                Margin="0,6,0,0"
-                                                ValueChanged="SliderAwarenessCooldown_ValueChanged"/>
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- AI Features Lock Overlay (shown when not logged in) -->
-                        <Border x:Name="AiFeaturesLockOverlay" Background="#CC1A1A2E" CornerRadius="12" Panel.ZIndex="100">
-                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,15">
-                                <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                                <TextBlock Text="{loc:Str label_login_required}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center">
-                                    <TextBlock.Effect>
-                                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.5"/>
-                                    </TextBlock.Effect>
-                                </TextBlock>
-                                <TextBlock Text="{loc:Str label_login_with_discord_or_patreon_to_use_ai_featu}"
-                                           Foreground="#AAAAAA" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,0" TextWrapping="Wrap" TextAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                        </Grid>
-
-                        <!-- ROW 1: Companions + Community Prompts -->
-                        <Grid Margin="0,0,0,10">
+                        <!-- 2-COLUMN BODY (left = hero + AI Brain · right = secondary expanders) -->
+                        <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="2*"/>
                                 <ColumnDefinition Width="10"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- COMPANIONS BOX -->
-                            <Border Grid.Column="0" CornerRadius="12" Padding="15"
-                                    Background="{DynamicResource ElevatedSurfaceBrush}"
-                                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-                                <StackPanel>
-                                    <Grid Margin="0,0,0,12">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{loc:Str label_companions}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="Bold"/>
-                                            <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                                                <TextBlock Text="{loc:Str label_beta}" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                            <StackPanel Grid.Column="0">
+
+                        <!-- HERO STRIP -->
+                        <Border CornerRadius="14" Padding="16" Margin="0,0,0,10" BorderThickness="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A1A32" Offset="0"/>
+                                    <GradientStop Color="#241A38" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.Effect>
+                                <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="18" ShadowDepth="0" Opacity="0.18"/>
+                            </Border.Effect>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Avatar -->
+                                <Border Grid.Column="0" Width="96" Height="96" CornerRadius="48" Margin="0,0,16,0"
+                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
+                                        Background="{DynamicResource SurfaceBgBrush}"
+                                        VerticalAlignment="Center">
+                                    <Border.Clip>
+                                        <EllipseGeometry Center="48,48" RadiusX="48" RadiusY="48"/>
+                                    </Border.Clip>
+                                    <Image x:Name="HeroAvatarImage" Stretch="UniformToFill"/>
+                                </Border>
+
+                                <!-- Body -->
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="TxtActiveCompanionName" Text="{loc:Str label_bambi_sprite}" Foreground="White" FontSize="31" FontWeight="Bold"/>
+                                        <TextBlock x:Name="TxtActiveCompanionLevel" Text="{loc:Str label_level_1}" Foreground="#888" FontSize="26" VerticalAlignment="Bottom" Margin="0,0,0,2"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtActiveCompanionDesc" Text="{loc:Str label_gains_bonus_xp_based_on_pink_filter_intensity}" Foreground="{DynamicResource TextDimBrush}" FontSize="16" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                    <Grid Margin="0,10,0,0">
+                                        <ProgressBar x:Name="PrgCompanion0" Height="10" Value="0" Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}"/>
+                                        <TextBlock x:Name="TxtActiveCompanionXP" Text="{loc:Str label_0_550_xp}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    </Grid>
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Border Background="#2A1A3A" CornerRadius="10" Padding="10,4" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                                <TextBlock x:Name="PillAiProvider" Text="{loc:Str label_ai_status_pill_off}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
+                                            </Border>
+                                            <Border Background="#1F2A3A" CornerRadius="10" Padding="10,4" Margin="6,0,0,0" BorderBrush="#9370DB" BorderThickness="1">
+                                                <TextBlock x:Name="PillAwareness" Text="{loc:Str label_awareness_pill_off}" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold"/>
                                             </Border>
                                         </StackPanel>
-                                        <Button x:Name="HelpBtnCompanions" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Companions"/>
+                                        <WrapPanel Grid.Column="1" HorizontalAlignment="Right" Orientation="Horizontal">
+                                            <Button x:Name="BtnSwitchCompanion" Content="{loc:Str btn_companion_switch}" Click="BtnSwitchCompanion_Click"
+                                                    Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                                    Padding="12,6" FontSize="16" Cursor="Hand" Margin="4,2,4,2"/>
+                                            <Button x:Name="BtnDetachCompanionTab" Content="{loc:Str btn_detach}" Click="BtnDetachCompanion_Click"
+                                                    Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                                    Padding="12,6" FontSize="16" Cursor="Hand" Margin="4,2,4,2"
+                                                    ToolTip="{Binding Text, ElementName=TxtDetachStatusCompanion}"/>
+                                            <Button x:Name="BtnCustomizeCompanion" Click="BtnCustomizeCompanion_Click"
+                                                    Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
+                                                    Padding="12,6" FontSize="16" Cursor="Hand" Margin="4,2,4,2">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{loc:Str label_customize_ai}" Foreground="White"/>
+                                                    <TextBlock x:Name="TxtCustomizePromptName" Text="{loc:Str label_default}" Foreground="#9370DB" FontWeight="SemiBold" Margin="4,0,0,0"/>
+                                                </StackPanel>
+                                            </Button>
+                                            <StackPanel Orientation="Horizontal" Margin="4,2,4,2" VerticalAlignment="Center">
+                                                <TextBlock Text="{loc:Str label_show_companion}" Foreground="{DynamicResource TextDimBrush}" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                <CheckBox x:Name="ChkAvatarEnabledCompanion" Style="{StaticResource ToggleStyle}"
+                                                          Checked="ChkAvatarEnabled_Changed" Unchecked="ChkAvatarEnabled_Changed"/>
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal" Margin="4,2,4,2" VerticalAlignment="Center">
+                                                <TextBlock Text="🔇" FontSize="17" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                <CheckBox x:Name="ChkMuteAvatarCompanion" Style="{StaticResource ToggleStyle}"
+                                                          Checked="ChkMuteAvatar_Changed" Unchecked="ChkMuteAvatar_Changed"
+                                                          ToolTip="{loc:Str label_mute_avatar}"/>
+                                            </StackPanel>
+                                        </WrapPanel>
                                     </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
 
-                                    <!-- Companion Cards 3x2 -->
-                                    <UniformGrid Rows="3" Columns="2" Margin="0,0,0,12">
-                                        <Border x:Name="CompanionCard0" CornerRadius="8" Margin="0,0,5,5"
-                                                Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="0"
-                                                BorderThickness="2" BorderBrush="Transparent">
-                                            <Border.Background>
-                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                    <GradientStop Color="#1A1A32" Offset="0"/>
-                                                    <GradientStop Color="#201A38" Offset="1"/>
-                                                </LinearGradientBrush>
-                                            </Border.Background>
-                                            <StackPanel>
-                                                <Grid>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock x:Name="TxtCompanion0Name" Text="{loc:Str label_synthetic_blowdoll}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="SemiBold"/>
-                                                        <TextBlock x:Name="TxtCompanion0Lock" Text=" [50]" Foreground="#FFD700" FontSize="9"
-                                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
-                                                    </StackPanel>
-                                                    <TextBlock x:Name="TxtCompanion0Level" Text="{loc:Str label_lv_1}" Foreground="#AAAAAA" FontSize="12"
-                                                               HorizontalAlignment="Right"/>
-                                                </Grid>
-                                                <TextBlock Text="{loc:Str label_pink_filter_xp_bonus}" Foreground="{DynamicResource TextDimBrush}" FontSize="10" Margin="0,4,0,0"/>
-                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                    <Button x:Name="BtnCompanion0Personality" Content="🎭" FontSize="10" Padding="4,1"
-                                                            Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
-                                                            PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="0" ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
-                                                    <TextBlock x:Name="TxtCompanion0Prompt" Text="" Foreground="#555" FontSize="9"
-                                                               VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
-                                                               MaxWidth="80"/>
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Border>
-                                        <Border x:Name="CompanionCard1" CornerRadius="8" Margin="5,0,0,5"
-                                                Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="1"
-                                                BorderThickness="2" BorderBrush="Transparent">
-                                            <Border.Background>
-                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                    <GradientStop Color="#1A1A32" Offset="0"/>
-                                                    <GradientStop Color="#201A38" Offset="1"/>
-                                                </LinearGradientBrush>
-                                            </Border.Background>
-                                            <StackPanel>
-                                                <Grid>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock x:Name="TxtCompanion1Name" Text="{loc:Str label_perfect_fuckpuppet}" Foreground="#9370DB" FontSize="12" FontWeight="SemiBold"/>
-                                                        <TextBlock x:Name="TxtCompanion1Lock" Text=" [100]" Foreground="#FFD700" FontSize="9"
-                                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
-                                                    </StackPanel>
-                                                    <TextBlock x:Name="TxtCompanion1Level" Text="{loc:Str label_lv_1}" Foreground="#AAAAAA" FontSize="12"
-                                                               HorizontalAlignment="Right"/>
-                                                </Grid>
-                                                <TextBlock Text="{loc:Str label_autonomy_xp_bonus}" Foreground="{DynamicResource TextDimBrush}" FontSize="10" Margin="0,4,0,0"/>
-                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                    <Button x:Name="BtnCompanion1Personality" Content="🎭" FontSize="10" Padding="4,1"
-                                                            Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
-                                                            PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="1" ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
-                                                    <TextBlock x:Name="TxtCompanion1Prompt" Text="" Foreground="#555" FontSize="9"
-                                                               VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
-                                                               MaxWidth="80"/>
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Border>
-                                        <Border x:Name="CompanionCard2" CornerRadius="8" Margin="0,5,5,0"
-                                                Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="2"
-                                                BorderThickness="2" BorderBrush="Transparent">
-                                            <Border.Background>
-                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                    <GradientStop Color="#1A1A32" Offset="0"/>
-                                                    <GradientStop Color="#201A38" Offset="1"/>
-                                                </LinearGradientBrush>
-                                            </Border.Background>
-                                            <StackPanel>
-                                                <Grid>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock x:Name="TxtCompanion2Name" Text="{loc:Str label_brainwashed_slavedoll}" Foreground="#50C878" FontSize="12" FontWeight="SemiBold"/>
-                                                        <TextBlock x:Name="TxtCompanion2Lock" Text=" [125]" Foreground="#FFD700" FontSize="9"
-                                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
-                                                    </StackPanel>
-                                                    <TextBlock x:Name="TxtCompanion2Level" Text="{loc:Str label_lv_1}" Foreground="#AAAAAA" FontSize="12"
-                                                               HorizontalAlignment="Right"/>
-                                                </Grid>
-                                                <TextBlock Text="{loc:Str label_constant_xp_drain}" Foreground="{DynamicResource TextDimBrush}" FontSize="10" Margin="0,4,0,0"/>
-                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                    <Button x:Name="BtnCompanion2Personality" Content="🎭" FontSize="10" Padding="4,1"
-                                                            Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
-                                                            PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="2" ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
-                                                    <TextBlock x:Name="TxtCompanion2Prompt" Text="" Foreground="#555" FontSize="9"
-                                                               VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
-                                                               MaxWidth="80"/>
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Border>
-                                        <Border x:Name="CompanionCard3" CornerRadius="8" Margin="5,5,0,0"
-                                                Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="3"
-                                                BorderThickness="2" BorderBrush="Transparent">
-                                            <Border.Background>
-                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                    <GradientStop Color="#1A1A32" Offset="0"/>
-                                                    <GradientStop Color="#201A38" Offset="1"/>
-                                                </LinearGradientBrush>
-                                            </Border.Background>
-                                            <StackPanel>
-                                                <Grid>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock x:Name="TxtCompanion3Name" Text="{loc:Str label_platinum_puppet}" Foreground="#FF6B6B" FontSize="12" FontWeight="SemiBold"/>
-                                                        <TextBlock x:Name="TxtCompanion3Lock" Text=" [150]" Foreground="#FFD700" FontSize="9"
-                                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
-                                                    </StackPanel>
-                                                    <TextBlock x:Name="TxtCompanion3Level" Text="{loc:Str label_lv_1}" Foreground="#AAAAAA" FontSize="12"
-                                                               HorizontalAlignment="Right"/>
-                                                </Grid>
-                                                <TextBlock Text="{loc:Str label_strict_mode_bonuses}" Foreground="{DynamicResource TextDimBrush}" FontSize="10" Margin="0,4,0,0"/>
-                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                    <Button x:Name="BtnCompanion3Personality" Content="🎭" FontSize="10" Padding="4,1"
-                                                            Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
-                                                            PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="3" ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
-                                                    <TextBlock x:Name="TxtCompanion3Prompt" Text="" Foreground="#555" FontSize="9"
-                                                               VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
-                                                               MaxWidth="80"/>
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Border>
-                                        <Border x:Name="CompanionCard4" CornerRadius="8" Margin="0,5,5,0"
-                                                Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="4"
-                                                BorderThickness="2" BorderBrush="Transparent">
-                                            <Border.Background>
-                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                    <GradientStop Color="#1A1A32" Offset="0"/>
-                                                    <GradientStop Color="#201A38" Offset="1"/>
-                                                </LinearGradientBrush>
-                                            </Border.Background>
-                                            <StackPanel>
-                                                <Grid>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock x:Name="TxtCompanion4Name" Text="{loc:Str label_bambi_cow}" Foreground="#F5DEB3" FontSize="12" FontWeight="SemiBold"/>
-                                                        <TextBlock x:Name="TxtCompanion4Lock" Text=" [75]" Foreground="#FFD700" FontSize="9"
-                                                                   VerticalAlignment="Center" Visibility="Collapsed"/>
-                                                    </StackPanel>
-                                                    <TextBlock x:Name="TxtCompanion4Level" Text="{loc:Str label_lv_1}" Foreground="#AAAAAA" FontSize="12"
-                                                               HorizontalAlignment="Right"/>
-                                                </Grid>
-                                                <TextBlock Text="{loc:Str label_session_completion_bonus}" Foreground="{DynamicResource TextDimBrush}" FontSize="10" Margin="0,4,0,0"/>
-                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                                    <Button x:Name="BtnCompanion4Personality" Content="🎭" FontSize="10" Padding="4,1"
-                                                            Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
-                                                            PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="4" ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
-                                                    <TextBlock x:Name="TxtCompanion4Prompt" Text="" Foreground="#555" FontSize="9"
-                                                               VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis"
-                                                               MaxWidth="80"/>
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Border>
-                                    </UniformGrid>
+                        <!-- Hidden compat: detach status text and companion status -->
+                        <TextBlock x:Name="TxtDetachStatusCompanion" Text="{loc:Str label_anchored_to_main_window}" Visibility="Collapsed"/>
+                        <TextBlock x:Name="TxtCompanionStatus" Text="" Visibility="Collapsed"/>
 
-                                    <!-- Active Companion Info -->
-                                    <Border CornerRadius="8" Padding="12" BorderBrush="{DynamicResource TransparentPink20Brush}" BorderThickness="1">
+                        <!-- COMPANION ROSTER TRAY (toggled by Switch button) -->
+                        <Border x:Name="CompanionRosterTray" Visibility="Collapsed" CornerRadius="12" Padding="14" Margin="0,0,0,10"
+                                Background="{DynamicResource ElevatedSurfaceBrush}"
+                                BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,10">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{loc:Str label_companions}" Foreground="{DynamicResource PinkBrush}" FontSize="16" FontWeight="Bold"/>
+                                        <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{loc:Str label_beta}" Foreground="White" FontSize="11" FontWeight="Bold"/>
+                                        </Border>
+                                        <Button x:Name="HelpBtnCompanions" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="Companions"/>
+                                    </StackPanel>
+                                </Grid>
+                                <UniformGrid Rows="2" Columns="3">
+                                    <Border x:Name="CompanionCard0" CornerRadius="8" Margin="0,0,5,5"
+                                            Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="0"
+                                            BorderThickness="2" BorderBrush="Transparent">
                                         <Border.Background>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                <GradientStop Color="#16162B" Offset="0"/>
-                                                <GradientStop Color="#1C1635" Offset="1"/>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                <GradientStop Color="#1A1A32" Offset="0"/>
+                                                <GradientStop Color="#201A38" Offset="1"/>
                                             </LinearGradientBrush>
                                         </Border.Background>
                                         <StackPanel>
                                             <Grid>
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock x:Name="TxtActiveCompanionName" Text="{loc:Str label_bambi_sprite}" Foreground="White"
-                                                               FontSize="14" FontWeight="Bold"/>
-                                                    <TextBlock x:Name="TxtActiveCompanionLevel" Text="{loc:Str label_level_1}" Foreground="#888"
-                                                               FontSize="14"/>
+                                                    <TextBlock x:Name="TxtCompanion0Name" Text="{loc:Str label_synthetic_blowdoll}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="SemiBold"/>
+                                                    <TextBlock x:Name="TxtCompanion0Lock" Text=" [50]" Foreground="#FFD700" FontSize="11" VerticalAlignment="Center" Visibility="Collapsed"/>
                                                 </StackPanel>
-                                                <TextBlock x:Name="TxtActiveCompanionXP" Text="{loc:Str label_0_550_xp}" Foreground="{DynamicResource PinkBrush}"
-                                                           FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                                                <TextBlock x:Name="TxtCompanion0Level" Text="{loc:Str label_lv_1}" Foreground="#AAAAAA" FontSize="14" HorizontalAlignment="Right"/>
                                             </Grid>
-                                            <ProgressBar x:Name="PrgCompanion0" Height="6" Margin="0,8,0,0" Value="0"
-                                                         Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}"/>
-                                            <TextBlock x:Name="TxtActiveCompanionDesc" Text="{loc:Str label_gains_bonus_xp_based_on_pink_filter_intensity}"
-                                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,8,0,0"/>
+                                            <TextBlock Text="{loc:Str label_pink_filter_xp_bonus}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,4,0,0"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <Button x:Name="BtnCompanion0Personality" Content="🎭" FontSize="12" Padding="4,1"
+                                                        Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                        PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="0" ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
+                                                <TextBlock x:Name="TxtCompanion0Prompt" Text="" Foreground="#555" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="80"/>
+                                            </StackPanel>
                                         </StackPanel>
                                     </Border>
-                                    <TextBlock x:Name="TxtCompanionStatus" Text="" Visibility="Collapsed"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- COMMUNITY PROMPTS BOX -->
-                            <Border Grid.Column="2" CornerRadius="12" Padding="15"
-                                    Background="{DynamicResource ElevatedSurfaceBrush}"
-                                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-                                <StackPanel>
-                                    <Grid Margin="0,0,0,12">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{loc:Str label_community_prompts}" Foreground="#9370DB" FontSize="14" FontWeight="Bold"/>
-                                            <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                                                <TextBlock Text="{loc:Str label_beta}" Foreground="White" FontSize="9" FontWeight="Bold"/>
-                                            </Border>
-                                            <Button x:Name="HelpBtnPrompts" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="CommunityPrompts"/>
-                                        </StackPanel>
-                                        <Button x:Name="BtnRefreshPrompts" Content="{loc:Str btn_refresh}" HorizontalAlignment="Right"
-                                                Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" BorderThickness="0"
-                                                FontSize="11" Padding="8,2" Cursor="Hand" Click="BtnRefreshPrompts_Click"/>
-                                    </Grid>
-
-                                    <!-- Active Prompt -->
-                                    <Border CornerRadius="8" Padding="12" Margin="0,0,0,10" BorderBrush="#339370DB" BorderThickness="1">
+                                    <Border x:Name="CompanionCard1" CornerRadius="8" Margin="5,0,0,5"
+                                            Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="1"
+                                            BorderThickness="2" BorderBrush="Transparent">
                                         <Border.Background>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                <GradientStop Color="#16162B" Offset="0"/>
-                                                <GradientStop Color="#1C1635" Offset="1"/>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                <GradientStop Color="#1A1A32" Offset="0"/>
+                                                <GradientStop Color="#201A38" Offset="1"/>
                                             </LinearGradientBrush>
                                         </Border.Background>
-                                        <Grid>
-                                            <StackPanel>
-                                                <TextBlock Text="{loc:Str label_active_personality}" Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
-                                                <TextBlock x:Name="TxtActivePromptName" Text="{loc:Str label_default_built_in}" Foreground="White"
-                                                           FontSize="14" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                                        <StackPanel>
+                                            <Grid>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock x:Name="TxtCompanion1Name" Text="{loc:Str label_perfect_fuckpuppet}" Foreground="#9370DB" FontSize="14" FontWeight="SemiBold"/>
+                                                    <TextBlock x:Name="TxtCompanion1Lock" Text=" [100]" Foreground="#FFD700" FontSize="11" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                                </StackPanel>
+                                                <TextBlock x:Name="TxtCompanion1Level" Text="{loc:Str label_lv_1}" Foreground="#AAAAAA" FontSize="14" HorizontalAlignment="Right"/>
+                                            </Grid>
+                                            <TextBlock Text="{loc:Str label_autonomy_xp_bonus}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,4,0,0"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <Button x:Name="BtnCompanion1Personality" Content="🎭" FontSize="12" Padding="4,1"
+                                                        Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                        PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="1" ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
+                                                <TextBlock x:Name="TxtCompanion1Prompt" Text="" Foreground="#555" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="80"/>
                                             </StackPanel>
-                                            <Button x:Name="BtnDeactivatePrompt" Content="{loc:Str btn_reset}" HorizontalAlignment="Right"
-                                                    VerticalAlignment="Center"
-                                                    Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource TextMutedBrush}" BorderThickness="0"
-                                                    FontSize="11" Padding="10,4" Cursor="Hand" Visibility="Collapsed"
-                                                    Click="BtnDeactivatePrompt_Click"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border x:Name="CompanionCard2" CornerRadius="8" Margin="0,5,5,0"
+                                            Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="2"
+                                            BorderThickness="2" BorderBrush="Transparent">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                <GradientStop Color="#1A1A32" Offset="0"/>
+                                                <GradientStop Color="#201A38" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <StackPanel>
+                                            <Grid>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock x:Name="TxtCompanion2Name" Text="{loc:Str label_brainwashed_slavedoll}" Foreground="#50C878" FontSize="14" FontWeight="SemiBold"/>
+                                                    <TextBlock x:Name="TxtCompanion2Lock" Text=" [125]" Foreground="#FFD700" FontSize="11" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                                </StackPanel>
+                                                <TextBlock x:Name="TxtCompanion2Level" Text="{loc:Str label_lv_1}" Foreground="#AAAAAA" FontSize="14" HorizontalAlignment="Right"/>
+                                            </Grid>
+                                            <TextBlock Text="{loc:Str label_constant_xp_drain}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,4,0,0"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <Button x:Name="BtnCompanion2Personality" Content="🎭" FontSize="12" Padding="4,1"
+                                                        Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                        PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="2" ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
+                                                <TextBlock x:Name="TxtCompanion2Prompt" Text="" Foreground="#555" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="80"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border x:Name="CompanionCard3" CornerRadius="8" Margin="5,5,0,0"
+                                            Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="3"
+                                            BorderThickness="2" BorderBrush="Transparent">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                <GradientStop Color="#1A1A32" Offset="0"/>
+                                                <GradientStop Color="#201A38" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <StackPanel>
+                                            <Grid>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock x:Name="TxtCompanion3Name" Text="{loc:Str label_platinum_puppet}" Foreground="#FF6B6B" FontSize="14" FontWeight="SemiBold"/>
+                                                    <TextBlock x:Name="TxtCompanion3Lock" Text=" [150]" Foreground="#FFD700" FontSize="11" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                                </StackPanel>
+                                                <TextBlock x:Name="TxtCompanion3Level" Text="{loc:Str label_lv_1}" Foreground="#AAAAAA" FontSize="14" HorizontalAlignment="Right"/>
+                                            </Grid>
+                                            <TextBlock Text="{loc:Str label_strict_mode_bonuses}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,4,0,0"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <Button x:Name="BtnCompanion3Personality" Content="🎭" FontSize="12" Padding="4,1"
+                                                        Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                        PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="3" ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
+                                                <TextBlock x:Name="TxtCompanion3Prompt" Text="" Foreground="#555" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="80"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border x:Name="CompanionCard4" CornerRadius="8" Margin="0,5,5,0"
+                                            Padding="12,10" Cursor="Hand" MouseLeftButtonDown="CompanionCard_Click" Tag="4"
+                                            BorderThickness="2" BorderBrush="Transparent">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                <GradientStop Color="#1A1A32" Offset="0"/>
+                                                <GradientStop Color="#201A38" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <StackPanel>
+                                            <Grid>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock x:Name="TxtCompanion4Name" Text="{loc:Str label_bambi_cow}" Foreground="#F5DEB3" FontSize="14" FontWeight="SemiBold"/>
+                                                    <TextBlock x:Name="TxtCompanion4Lock" Text=" [75]" Foreground="#FFD700" FontSize="11" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                                </StackPanel>
+                                                <TextBlock x:Name="TxtCompanion4Level" Text="{loc:Str label_lv_1}" Foreground="#AAAAAA" FontSize="14" HorizontalAlignment="Right"/>
+                                            </Grid>
+                                            <TextBlock Text="{loc:Str label_session_completion_bonus}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,4,0,0"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <Button x:Name="BtnCompanion4Personality" Content="🎭" FontSize="12" Padding="4,1"
+                                                        Background="{DynamicResource DarkerBgBrush}" Foreground="#888" BorderThickness="0" Cursor="Hand"
+                                                        PreviewMouseLeftButtonDown="BtnCompanionPersonality_Click" Tag="4" ToolTip="{loc:Str tooltip_assign_ai_personality}"/>
+                                                <TextBlock x:Name="TxtCompanion4Prompt" Text="" Foreground="#555" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="80"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </UniformGrid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- AI BRAIN SECTION -->
+                        <Grid Margin="0,0,0,10">
+                            <Border CornerRadius="14" Padding="16" BorderThickness="1">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                        <GradientStop Color="#1F1B36" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                        <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.BorderBrush>
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,10">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{loc:Str label_ai_brain}" Foreground="{DynamicResource PinkBrush}" FontSize="24" FontWeight="Bold"/>
+                                            <Border Background="#2A1A3A" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+                                                <TextBlock Text="{loc:Str label_free_for_all_users}" Foreground="{DynamicResource PinkBrush}" FontSize="11"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <Button x:Name="HelpBtnAiChat" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Tag="AiChat"/>
+                                    </Grid>
+                                    <TextBlock Text="{loc:Str label_ai_brain_subtitle}" Foreground="{DynamicResource TextDimBrush}" FontSize="16" Margin="0,0,0,8"/>
+                                    <TextBlock x:Name="TxtAiStatus" Text="{loc:Str label_ai_initializing}" Foreground="{DynamicResource TextMutedBrush}" FontSize="14" Margin="0,0,0,12"/>
+
+                                    <!-- Provider radios -->
+                                    <TextBlock Text="{loc:Str label_provider}" Foreground="White" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <RadioButton x:Name="RadioAiOff" GroupName="AiProvider" Content="{loc:Str label_provider_off}" Foreground="White" FontSize="17" Margin="0,0,16,0" Checked="RadioAiOff_Checked"/>
+                                        <RadioButton x:Name="RadioAiCloud" GroupName="AiProvider" Content="{loc:Str label_provider_cloud}" Foreground="White" FontSize="17" Margin="0,0,16,0" Checked="RadioAiCloud_Checked"/>
+                                        <RadioButton x:Name="RadioAiLocal" GroupName="AiProvider" Content="{loc:Str label_provider_local}" Foreground="White" FontSize="17" Checked="RadioAiLocal_Checked"/>
+                                    </StackPanel>
+
+                                    <!-- Local config -->
+                                    <Border x:Name="LocalConfigPanel" Visibility="Collapsed" CornerRadius="8" Padding="10" Margin="0,0,0,12"
+                                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#9370DB" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Text="{loc:Str label_local_ollama_config}" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="10"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="{loc:Str label_ollama_model}" Foreground="{DynamicResource TextDimBrush}" FontSize="12"/>
+                                                    <TextBox x:Name="TxtAiModel" Text="bambi-model-v7-cow"
+                                                             Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
+                                                             BorderBrush="#505050" BorderThickness="1" Padding="6,4" FontSize="13" Margin="0,3,0,0"
+                                                             Style="{StaticResource FocusGlowTextBox}" LostFocus="TxtAiModel_LostFocus"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Text="{loc:Str label_ollama_host}" Foreground="{DynamicResource TextDimBrush}" FontSize="12"/>
+                                                    <TextBox x:Name="TxtAiHost" Text="http://localhost:11434/"
+                                                             Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
+                                                             BorderBrush="#505050" BorderThickness="1" Padding="6,4" FontSize="13" Margin="0,3,0,0"
+                                                             Style="{StaticResource FocusGlowTextBox}" LostFocus="TxtAiHost_LostFocus"/>
+                                                </StackPanel>
+                                            </Grid>
+                                            <Grid Margin="0,8,0,0">
+                                                <TextBlock x:Name="TxtAiHealthStatus" Text="{loc:Str label_status_unknown}" Foreground="{DynamicResource TextDimBrush}" FontSize="13" VerticalAlignment="Center"/>
+                                                <Button x:Name="BtnTestOllamaConnection" Content="{loc:Str label_test_connection}" HorizontalAlignment="Right"
+                                                        Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
+                                                        Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnTestOllamaConnection_Click"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Capabilities -->
+                                    <TextBlock Text="{loc:Str label_capabilities}" Foreground="White" FontSize="17" FontWeight="SemiBold" Margin="0,4,0,6"/>
+                                    <StackPanel Margin="0,0,0,10">
+                                        <Grid Margin="0,0,0,6">
+                                            <TextBlock Text="{loc:Str label_capability_chat}" Foreground="White" FontSize="17" VerticalAlignment="Center"/>
+                                            <CheckBox x:Name="ChkAiChat" Style="{StaticResource ToggleStyle}"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                      IsChecked="True"
+                                                      Checked="ChkAiChat_Changed" Unchecked="ChkAiChat_Changed"/>
+                                        </Grid>
+                                        <Grid Margin="0,0,0,6">
+                                            <TextBlock Text="{loc:Str label_capability_awareness}" Foreground="White" FontSize="17" VerticalAlignment="Center"/>
+                                            <CheckBox x:Name="ChkAwarenessMode" Style="{StaticResource ToggleStyle}"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                      IsChecked="False"
+                                                      Checked="ChkAwarenessMode_Changed" Unchecked="ChkAwarenessMode_Changed"/>
+                                        </Grid>
+                                        <Grid>
+                                            <TextBlock Text="{loc:Str label_capability_effects}" Foreground="White" FontSize="17" VerticalAlignment="Center"/>
+                                            <CheckBox x:Name="ChkCapEffects" Style="{StaticResource ToggleStyle}"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                      IsChecked="False"
+                                                      Checked="ChkCapEffects_Changed" Unchecked="ChkCapEffects_Changed"/>
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <!-- Effect permissions -->
+                                    <Border x:Name="EffectPermsPanel" Visibility="Collapsed" CornerRadius="8" Padding="10" Margin="0,0,0,12"
+                                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#FF6B6B" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Text="{loc:Str label_effect_permissions}" Foreground="#FF6B6B" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                            <Grid Margin="0,0,0,8">
+                                                <TextBlock Text="{loc:Str label_max_haptic_intensity}" Foreground="White" FontSize="13" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="TxtMaxHapticIntensity" Text="60%" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                            </Grid>
+                                            <Slider x:Name="SliderMaxHapticIntensity" Style="{StaticResource PinkSlider}"
+                                                    Minimum="0" Maximum="1" Value="0.6" Margin="0,0,0,10"
+                                                    ValueChanged="SliderMaxHapticIntensity_ValueChanged"/>
+                                            <UniformGrid Columns="2" Rows="5">
+                                                <CheckBox x:Name="ChkAllowFlash" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_flash}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Flash"/>
+                                                <CheckBox x:Name="ChkAllowVideo" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_video}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Video"/>
+                                                <CheckBox x:Name="ChkAllowAudio" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_audio}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Audio"/>
+                                                <CheckBox x:Name="ChkAllowBubbles" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_bubbles}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Bubbles"/>
+                                                <CheckBox x:Name="ChkAllowSubliminal" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_subliminal}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Subliminal"/>
+                                                <CheckBox x:Name="ChkAllowOverlay" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_overlay}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Overlay"/>
+                                                <CheckBox x:Name="ChkAllowLockCard" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_lockcard}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="LockCard"/>
+                                                <CheckBox x:Name="ChkAllowBounce" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_bounce}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Bounce"/>
+                                                <CheckBox x:Name="ChkAllowHaptic" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_haptic}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Haptic"/>
+                                                <CheckBox x:Name="ChkAllowGetBackToMe" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_get_back_to_me}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="GetBackToMe"/>
+                                            </UniformGrid>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Live actions -->
+                                    <TextBlock Text="{loc:Str label_live_actions}" Foreground="White" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                    <Border CornerRadius="8" Padding="10" Margin="0,0,0,10" MinHeight="60" MaxHeight="140"
+                                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#22808080" BorderThickness="1">
+                                        <Grid>
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                <ItemsControl x:Name="LiveActionsList">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding}" Foreground="White" FontSize="13" Margin="0,2"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
+                                            <TextBlock x:Name="TxtLiveActionsPlaceholder" Text="{loc:Str label_live_actions_placeholder}"
+                                                       Foreground="#666" FontSize="13" FontStyle="Italic" TextWrapping="Wrap"
+                                                       VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center"/>
                                         </Grid>
                                     </Border>
 
-                                    <!-- Installed List -->
-                                    <TextBlock Text="{loc:Str label_installed_prompts}" Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,0,0,6"/>
-                                    <Border CornerRadius="8" Padding="10" MinHeight="80" MaxHeight="120"
-                                            Margin="0,0,0,12" BorderBrush="#22808080" BorderThickness="1">
-                                        <Border.Background>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                <GradientStop Color="#16162B" Offset="0"/>
-                                                <GradientStop Color="#1A1832" Offset="1"/>
-                                            </LinearGradientBrush>
-                                        </Border.Background>
-                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                            <StackPanel x:Name="InstalledPromptsPanel">
-                                                <TextBlock x:Name="TxtNoInstalledPrompts" Text="{loc:Str label_no_prompts_installed_yet}"
-                                                           Foreground="#505050" FontSize="12" FontStyle="Italic"
-                                                           HorizontalAlignment="Center" Margin="0,20,0,0"/>
-                                            </StackPanel>
-                                        </ScrollViewer>
-                                    </Border>
-
-                                    <!-- Buttons -->
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <Button x:Name="BtnBrowsePrompts" Grid.Column="0" Content="{loc:Str btn_browse}"
-                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
-                                                FontSize="12" Padding="0,8" Margin="0,0,4,0" Cursor="Hand" Click="BtnBrowsePrompts_Click"/>
-                                        <Button x:Name="BtnImportPrompt" Grid.Column="1" Content="{loc:Str btn_import}"
-                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#505050" BorderThickness="1"
-                                                FontSize="12" Padding="0,8" Margin="4,0,4,0" Cursor="Hand" Click="BtnImportPrompt_Click"/>
-                                        <Button x:Name="BtnExportPrompt" Grid.Column="2" Content="{loc:Str btn_export}"
-                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#505050" BorderThickness="1"
-                                                FontSize="12" Padding="0,8" Margin="4,0,0,0" Cursor="Hand" Click="BtnExportPrompt_Click"/>
-                                    </Grid>
-
-                                    <!-- Hypnotube Links Section -->
-                                    <TextBlock Text="{loc:Str label_hypnotube_links}" FontWeight="Bold" FontSize="14"
-                                               Foreground="{DynamicResource PinkBrush}" Margin="0,20,0,5"/>
-                                    <TextBlock Text="{loc:Str label_video_links_for_ai_to_suggest_comma_separated}"
-                                               FontSize="11" Foreground="#888" Margin="0,0,0,5" TextWrapping="Wrap"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                        <TextBlock Text="{loc:Str label_current_mode}" FontSize="11" Foreground="#AAA"/>
-                                        <TextBlock x:Name="TxtHypnotubeModeLabel" Text="{loc:Str label_bambi_sleep}"
-                                                   FontSize="11" Foreground="{DynamicResource PinkBrush}"/>
-                                    </StackPanel>
-                                    <TextBox x:Name="TxtHypnotubeLinks"
-                                             MaxLength="2000"
-                                             TextWrapping="Wrap"
-                                             AcceptsReturn="False"
-                                             Height="60"
-                                             VerticalScrollBarVisibility="Auto"
-                                             Background="{DynamicResource SurfaceBgBrush}"
-                                             Foreground="White"
-                                             BorderBrush="#505050"
-                                             BorderThickness="1"
-                                             Padding="8,6"
-                                             Margin="0,0,0,10"
-                                             Style="{StaticResource FocusGlowTextBox}"
-                                             TextChanged="TxtHypnotubeLinks_TextChanged"/>
-                                </StackPanel>
-                            </Border>
-                        </Grid>
-
-                        <!-- Divider -->
-                        <Border Height="1" Margin="20,5,20,10" CornerRadius="1">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                    <GradientStop Color="Transparent" Offset="0"/>
-                                    <GradientStop Color="#9370DB" Offset="0.5"/>
-                                    <GradientStop Color="Transparent" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                        </Border>
-
-                        <!-- ROW 2: Settings + Quick Controls -->
-                        <Grid Margin="0,0,0,10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="10"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <!-- SETTINGS BOX -->
-                            <Border Grid.Column="0" CornerRadius="12" Padding="15"
-                                    Background="{DynamicResource ElevatedSurfaceBrush}"
-                                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-                                <StackPanel>
-                                    <Grid Margin="0,0,0,15">
-                                        <TextBlock Text="{loc:Str label_companion_settings}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="Bold"/>
-                                        <Button x:Name="HelpBtnCompanionSettings" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="CompanionSettings"/>
-                                    </Grid>
-
-                                    <!-- Show Companion -->
-                                    <Grid Margin="0,0,0,12">
-                                        <TextBlock Text="{loc:Str label_show_companion}" Foreground="White" FontSize="13" VerticalAlignment="Center"/>
-                                        <CheckBox x:Name="ChkAvatarEnabledCompanion" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right"
-                                                  Checked="ChkAvatarEnabled_Changed" Unchecked="ChkAvatarEnabled_Changed"/>
-                                    </Grid>
-
-                                    <!-- Detach -->
-                                    <Grid Margin="0,0,0,12">
-                                        <StackPanel>
-                                            <TextBlock Text="{loc:Str label_window_mode}" Foreground="White" FontSize="13"/>
-                                            <TextBlock x:Name="TxtDetachStatusCompanion" Text="{loc:Str label_anchored_to_main_window}"
-                                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                        <Button x:Name="BtnDetachCompanionTab" Content="{loc:Str btn_detach}" HorizontalAlignment="Right"
-                                                VerticalAlignment="Center"
-                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#505050" BorderThickness="1"
-                                                Padding="15,6" FontSize="12" Cursor="Hand" Click="BtnDetachCompanion_Click"/>
-                                    </Grid>
-
-                                    <!-- Idle Interval -->
-                                    <Grid Margin="0,0,0,15">
-                                        <StackPanel>
-                                            <TextBlock Text="{loc:Str label_idle_giggle_interval}" Foreground="White" FontSize="13"/>
-                                            <TextBlock Text="{loc:Str label_how_often_companion_speaks_when_idle}" Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                        <TextBlock x:Name="TxtIdleIntervalCompanion" Text="{loc:Str label_120s}" Foreground="{DynamicResource PinkBrush}"
-                                                   FontSize="14" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                                    </Grid>
-                                    <Slider x:Name="SliderIdleIntervalCompanion" Style="{StaticResource PinkSlider}"
-                                            Minimum="5" Maximum="300" Value="120" Margin="0,0,0,15"
-                                            ValueChanged="SliderIdleInterval_ValueChanged"/>
-
-                                    <!-- Customize Button -->
-                                    <Button x:Name="BtnCustomizeCompanion"
+                                    <Button x:Name="BtnOpenAdvancedPersonality" Content="{loc:Str label_open_advanced_personality}"
                                             Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
-                                            Padding="10,10" FontSize="13" Cursor="Hand" Click="BtnCustomizeCompanion_Click">
-                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                            <TextBlock Text="{loc:Str label_customize_ai}" Foreground="White"/>
-                                            <TextBlock x:Name="TxtCustomizePromptName" Text="{loc:Str label_default}" Foreground="#9370DB" FontWeight="SemiBold"/>
-                                        </StackPanel>
-                                    </Button>
-
-                                    <!-- Manage Phrases Button -->
-                                    <Button x:Name="BtnManagePhrases"
-                                            Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                            Padding="10,10" FontSize="13" Cursor="Hand" Margin="0,8,0,0"
-                                            Click="BtnManagePhrases_Click">
-                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                            <TextBlock Text="{loc:Str label_manage_phrases}" Foreground="White"/>
-                                            <TextBlock x:Name="TxtPhraseCount" Text="{loc:Str label_0_active}" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
-                                        </StackPanel>
-                                    </Button>
-
-                                    <!-- Phrase Presets -->
-                                    <Grid Margin="0,8,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <ComboBox x:Name="CmbPhrasePresets" Grid.Column="0" FontSize="11"
-                                                  Style="{StaticResource DarkComboBoxStyle}"
-                                                  DisplayMemberPath="DisplayText"
-                                                  SelectedValuePath="Id"
-                                                  SelectionChanged="CmbPhrasePresets_SelectionChanged"/>
-                                        <Button Content="{loc:Str btn_save}" Grid.Column="1"
-                                                Style="{StaticResource SmallPinkButton}"
-                                                Padding="10,4" FontSize="11" Margin="6,0,0,0"
-                                                ToolTip="{loc:Str tooltip_save_current_phrase_config_as_a_preset}"
-                                                Click="BtnSavePhrasePreset_Click"/>
-                                        <Button Content="{loc:Str btn_delete}" Grid.Column="2"
-                                                Style="{StaticResource OutlineButton}"
-                                                Padding="10,4" FontSize="11" Margin="4,0,0,0"
-                                                ToolTip="{loc:Str tooltip_delete_selected_phrase_preset}"
-                                                Click="BtnDeletePhrasePreset_Click"/>
-                                    </Grid>
+                                            Padding="10,8" FontSize="14" Cursor="Hand" Click="BtnCustomizeCompanion_Click"/>
                                 </StackPanel>
                             </Border>
 
-                            <!-- QUICK CONTROLS BOX -->
-                            <Border Grid.Column="2" CornerRadius="12" Padding="15"
-                                    Background="{DynamicResource ElevatedSurfaceBrush}"
-                                    BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-                                <StackPanel>
-                                    <Grid Margin="0,0,0,15">
-                                        <TextBlock Text="{loc:Str label_quick_controls}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="Bold"/>
-                                        <Button x:Name="HelpBtnQuickControls" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="QuickControls"/>
-                                    </Grid>
-
-                                    <!-- Mute Avatar -->
-                                    <Grid Margin="0,0,0,12">
-                                        <StackPanel>
-                                            <TextBlock Text="{loc:Str label_mute_avatar}" Foreground="White" FontSize="13"/>
-                                            <TextBlock Text="{loc:Str label_hide_speech_bubbles_and_sounds}" Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                        <CheckBox x:Name="ChkMuteAvatarCompanion" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                  Checked="ChkMuteAvatar_Changed" Unchecked="ChkMuteAvatar_Changed"/>
-                                    </Grid>
-
-                                    <!-- Mute Whispers -->
-                                    <Grid Margin="0,0,0,12">
-                                        <StackPanel>
-                                            <TextBlock Text="{loc:Str label_mute_whispers}" Foreground="White" FontSize="13"/>
-                                            <TextBlock Text="{loc:Str label_mute_subliminal_audio}" Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                        <CheckBox x:Name="ChkMuteWhispersCompanion" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                  Checked="ChkMuteWhispers_Changed" Unchecked="ChkMuteWhispers_Changed"/>
-                                    </Grid>
-
-                                    <!-- Pause Browser -->
-                                    <Grid Margin="0,0,0,12">
-                                        <StackPanel>
-                                            <TextBlock Text="{loc:Str label_pause_browser}" Foreground="White" FontSize="13"/>
-                                            <TextBlock Text="{loc:Str label_pause_embedded_browser_audio}" Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                        <CheckBox x:Name="ChkPauseBrowserCompanion" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                  Checked="ChkPauseBrowser_Changed" Unchecked="ChkPauseBrowser_Changed"/>
-                                    </Grid>
-
-                                    <!-- Tips -->
-                                    <Border CornerRadius="6" Padding="10" Margin="0,8,0,0" BorderBrush="#22808080" BorderThickness="1">
-                                        <Border.Background>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                <GradientStop Color="#16162B" Offset="0"/>
-                                                <GradientStop Color="#1A1832" Offset="1"/>
-                                            </LinearGradientBrush>
-                                        </Border.Background>
-                                        <TextBlock Foreground="{DynamicResource TextDimBrush}" FontSize="11" TextWrapping="Wrap" TextAlignment="Center">
-                                            <Run Text="{loc:Str label_click_avatar_for_progress_right_click_for_men}"/>
-                                        </TextBlock>
-                                    </Border>
+                            <Border x:Name="AiFeaturesLockOverlay" Background="#CC1A1A2E" CornerRadius="14" Panel.ZIndex="100">
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,15">
+                                    <TextBlock Text="🔒" FontSize="38" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                    <TextBlock Text="{loc:Str label_login_required}" Foreground="{DynamicResource PinkBrush}" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center">
+                                        <TextBlock.Effect>
+                                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.5"/>
+                                        </TextBlock.Effect>
+                                    </TextBlock>
+                                    <TextBlock Text="{loc:Str label_login_with_discord_or_patreon_to_use_ai_featu}"
+                                               Foreground="#AAAAAA" FontSize="14" HorizontalAlignment="Center" Margin="0,6,0,0" TextWrapping="Wrap" TextAlignment="Center"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
 
-                        <!-- ROW 3: Triggers -->
-                        <Border CornerRadius="10" Padding="15" BorderThickness="1">
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2">
+
+                        <!-- BEHAVIOR & TRIGGERS expander -->
+                        <Border CornerRadius="10" Margin="0,0,0,10" BorderThickness="1">
                             <Border.Background>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                     <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
@@ -5831,50 +5655,311 @@
                                 </LinearGradientBrush>
                             </Border.Background>
                             <Border.BorderBrush>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                    <GradientStop Color="#9370DB" Offset="0"/>
-                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="1"/>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
                                 </LinearGradientBrush>
                             </Border.BorderBrush>
                             <Border.Effect>
-                                <DropShadowEffect Color="#9370DB" BlurRadius="12" ShadowDepth="0" Opacity="0.15"/>
+                                <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.15"/>
                             </Border.Effect>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel Grid.Column="0">
+                            <StackPanel Margin="15,12,15,15">
+                                <Grid Margin="0,0,0,10">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{loc:Str label_trigger_mode}" Foreground="#9370DB" FontSize="14" FontWeight="Bold"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock Text="{loc:Str label_random_conditioning_phrases_with_audio}" Foreground="{DynamicResource TextDimBrush}" FontSize="12"
-                                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        <Rectangle Width="3" Margin="0,0,8,0" RadiusX="1.5" RadiusY="1.5">
+                                            <Rectangle.Fill>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Rectangle.Fill>
+                                        </Rectangle>
+                        <StackPanel Orientation="Horizontal">
+                                                                            <TextBlock Text="{loc:Str label_behavior_and_triggers}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
+                                                                        </StackPanel>
                                     </StackPanel>
+                                </Grid>
+<Grid Margin="0,4,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Str label_idle_giggle_interval}" Foreground="White" FontSize="14"/>
+                                        <TextBlock Text="{loc:Str label_how_often_companion_speaks_when_idle}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtIdleIntervalCompanion" Text="{loc:Str label_120s}" Foreground="{DynamicResource PinkBrush}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                                <Slider x:Name="SliderIdleIntervalCompanion" Style="{StaticResource PinkSlider}"
+                                        Minimum="5" Maximum="300" Value="120" Margin="0,6,0,12"
+                                        ValueChanged="SliderIdleInterval_ValueChanged"/>
 
-                                    <!-- Trigger Settings (shown when enabled) -->
-                                    <StackPanel x:Name="TriggerSettingsPanelCompanion" Orientation="Horizontal" Visibility="Collapsed"
-                                                Margin="0,12,0,0">
-                                        <TextBlock Text="{loc:Str label_interval}" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
-                                        <Slider x:Name="SliderTriggerIntervalCompanion" Style="{StaticResource PinkSlider}"
-                                                Width="150" Minimum="10" Maximum="600" Value="60"
-                                                VerticalAlignment="Center" Margin="10,0,0,0"
-                                                ValueChanged="SliderTriggerInterval_ValueChanged"/>
-                                        <TextBlock x:Name="TxtTriggerIntervalCompanion" Text="{loc:Str label_60s}" Foreground="#9370DB"
-                                                   FontSize="13" FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                                        <Button x:Name="BtnEditTriggersCompanion" Content="{loc:Str btn_edit_phrases_2}"
-                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#505050" BorderThickness="1"
-                                                Padding="12,4" FontSize="11" Margin="20,0,0,0" Cursor="Hand"
-                                                Click="BtnEditTriggers_Click"/>
+                                <Border x:Name="AwarenessSettingsPanel" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="10" Margin="0,0,0,12" Visibility="Collapsed">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,8">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{loc:Str label_awareness_settings}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="Bold"/>
+                                                <Button x:Name="HelpBtnAwareness" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="6,0,0,0" Tag="WindowAwareness"/>
+                                            </StackPanel>
+                                        </Grid>
+                                        <Grid>
+                                            <TextBlock Text="{loc:Str label_reaction_cooldown}" Foreground="White" FontSize="13"/>
+                                            <TextBlock x:Name="TxtAwarenessCooldown" Text="{loc:Str label_90s}" Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Right" FontSize="13" FontWeight="Bold"/>
+                                        </Grid>
+                                        <Slider x:Name="SliderAwarenessCooldown" Style="{StaticResource PinkSlider}"
+                                                Minimum="10" Maximum="300" Value="90" Margin="0,6,0,8"
+                                                ValueChanged="SliderAwarenessCooldown_ValueChanged"/>
+                                        <Border Background="#2A1A1A" CornerRadius="6" Padding="8" BorderBrush="#FF6B6B" BorderThickness="1">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="⚠️" FontSize="13" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{loc:Str label_privacy_notice}" Foreground="#FF6B6B" FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                    <Button x:Name="BtnPrivacySpoiler" Content="{loc:Str btn_click_to_reveal}"
+                                                            Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" BorderThickness="0"
+                                                            HorizontalAlignment="Right" FontSize="12" Cursor="Hand"
+                                                            Click="BtnPrivacySpoiler_Click"/>
+                                                </Grid>
+                                                <TextBlock x:Name="TxtPrivacyDetails" Visibility="Collapsed"
+                                                           TextWrapping="Wrap" Foreground="#CCCCCC" FontSize="12" Margin="0,8,0,0"
+                                                           Text="{loc:Str label_this_feature_reads_the_name_of_the_active_win}"/>
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
+                                </Border>
+
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{loc:Str label_trigger_mode}" Foreground="#9370DB" FontSize="14" FontWeight="Bold"/>
+                                        <TextBlock Text="{loc:Str label_random_conditioning_phrases_with_audio}" Foreground="{DynamicResource TextDimBrush}" FontSize="12"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkTriggerModeCompanion" Grid.Column="1" Style="{StaticResource ToggleStyle}"
+                                              VerticalAlignment="Center"
+                                              Checked="ChkTriggerMode_Changed" Unchecked="ChkTriggerMode_Changed"/>
+                                </Grid>
+                                <StackPanel x:Name="TriggerSettingsPanelCompanion" Orientation="Horizontal" Visibility="Collapsed" Margin="0,0,0,8">
+                                    <TextBlock Text="{loc:Str label_interval}" Foreground="White" FontSize="13" VerticalAlignment="Center"/>
+                                    <Slider x:Name="SliderTriggerIntervalCompanion" Style="{StaticResource PinkSlider}"
+                                            Width="150" Minimum="10" Maximum="600" Value="60"
+                                            VerticalAlignment="Center" Margin="10,0,0,0"
+                                            ValueChanged="SliderTriggerInterval_ValueChanged"/>
+                                    <TextBlock x:Name="TxtTriggerIntervalCompanion" Text="{loc:Str label_60s}" Foreground="#9370DB" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                    <Button x:Name="BtnEditTriggersCompanion" Content="{loc:Str btn_edit_phrases_2}"
+                                            Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                            Padding="10,4" FontSize="13" Margin="14,0,0,0" Cursor="Hand"
+                                            Click="BtnEditTriggers_Click"/>
                                 </StackPanel>
 
-                                <CheckBox x:Name="ChkTriggerModeCompanion" Grid.Column="1" Style="{StaticResource ToggleStyle}"
-                                          VerticalAlignment="Top" Margin="0,2,0,0"
-                                          Checked="ChkTriggerMode_Changed" Unchecked="ChkTriggerMode_Changed"/>
-                            </Grid>
+                                <Border BorderBrush="#353550" BorderThickness="0,1,0,0" Margin="0,8,0,0" Padding="0,10,0,0">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Str label_mute_whispers}" Foreground="White" FontSize="14"/>
+                                                <TextBlock Text="{loc:Str label_mute_subliminal_audio}" Foreground="{DynamicResource TextDimBrush}" FontSize="12"/>
+                                            </StackPanel>
+                                            <CheckBox x:Name="ChkMuteWhispersCompanion" Style="{StaticResource ToggleStyle}"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                      Checked="ChkMuteWhispers_Changed" Unchecked="ChkMuteWhispers_Changed"/>
+                                        </Grid>
+                                        <Grid>
+                                            <StackPanel>
+                                                <TextBlock Text="{loc:Str label_pause_browser}" Foreground="White" FontSize="14"/>
+                                                <TextBlock Text="{loc:Str label_pause_embedded_browser_audio}" Foreground="{DynamicResource TextDimBrush}" FontSize="12"/>
+                                            </StackPanel>
+                                            <CheckBox x:Name="ChkPauseBrowserCompanion" Style="{StaticResource ToggleStyle}"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                      Checked="ChkPauseBrowser_Changed" Unchecked="ChkPauseBrowser_Changed"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
                         </Border>
+
+                        <!-- PHRASES & PERSONALITY expander -->
+                        <Border CornerRadius="10" Margin="0,0,0,10" BorderThickness="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                    <GradientStop Color="#252548" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.Effect>
+                                <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.15"/>
+                            </Border.Effect>
+                            <StackPanel Margin="15,12,15,15">
+                                <Grid Margin="0,0,0,10">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Rectangle Width="3" Margin="0,0,8,0" RadiusX="1.5" RadiusY="1.5">
+                                            <Rectangle.Fill>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Rectangle.Fill>
+                                        </Rectangle>
+                        <TextBlock Text="{loc:Str label_phrases_and_personality}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
+                                    </StackPanel>
+                                </Grid>
+<Border CornerRadius="8" Padding="10" Margin="0,4,0,10" BorderBrush="#339370DB" BorderThickness="1">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Color="#16162B" Offset="0"/>
+                                            <GradientStop Color="#1C1635" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock Text="{loc:Str label_active_personality}" Foreground="{DynamicResource TextDimBrush}" FontSize="13"/>
+                                            <TextBlock x:Name="TxtActivePromptName" Text="{loc:Str label_default_built_in}" Foreground="White" FontSize="16" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                        <Button x:Name="BtnDeactivatePrompt" Content="{loc:Str btn_reset}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource TextMutedBrush}" BorderThickness="0"
+                                                FontSize="13" Padding="10,4" Cursor="Hand" Visibility="Collapsed"
+                                                Click="BtnDeactivatePrompt_Click"/>
+                                    </Grid>
+                                </Border>
+
+                                <Button x:Name="BtnManagePhrases"
+                                        Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                        Padding="10,8" FontSize="16" Cursor="Hand" Margin="0,0,0,8"
+                                        Click="BtnManagePhrases_Click">
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <TextBlock Text="{loc:Str label_manage_phrases}" Foreground="White"/>
+                                        <TextBlock x:Name="TxtPhraseCount" Text="{loc:Str label_0_active}" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" Margin="4,0,0,0"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox x:Name="CmbPhrasePresets" Grid.Column="0" FontSize="13"
+                                              Style="{StaticResource DarkComboBoxStyle}"
+                                              DisplayMemberPath="DisplayText"
+                                              SelectedValuePath="Id"
+                                              SelectionChanged="CmbPhrasePresets_SelectionChanged"/>
+                                    <Button Content="{loc:Str btn_save}" Grid.Column="1"
+                                            Style="{StaticResource SmallPinkButton}"
+                                            Padding="10,4" FontSize="13" Margin="6,0,0,0"
+                                            ToolTip="{loc:Str tooltip_save_current_phrase_config_as_a_preset}"
+                                            Click="BtnSavePhrasePreset_Click"/>
+                                    <Button Content="{loc:Str btn_delete}" Grid.Column="2"
+                                            Style="{StaticResource OutlineButton}"
+                                            Padding="10,4" FontSize="13" Margin="4,0,0,0"
+                                            ToolTip="{loc:Str tooltip_delete_selected_phrase_preset}"
+                                            Click="BtnDeletePhrasePreset_Click"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- COMMUNITY PROMPTS expander -->
+                        <Border CornerRadius="10" Margin="0,0,0,10" BorderThickness="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="{DynamicResource SurfaceBg}" Offset="0"/>
+                                    <GradientStop Color="#252548" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.Effect>
+                                <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.15"/>
+                            </Border.Effect>
+                            <StackPanel Margin="15,12,15,15">
+                                <Grid Margin="0,0,0,10">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Rectangle Width="3" Margin="0,0,8,0" RadiusX="1.5" RadiusY="1.5">
+                                            <Rectangle.Fill>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Rectangle.Fill>
+                                        </Rectangle>
+                        <StackPanel Orientation="Horizontal">
+                                                                            <TextBlock Text="{loc:Str label_community_prompts}" Foreground="#9370DB" FontSize="18" FontWeight="Bold"/>
+                                                                            <Border Background="#FF6B6B" CornerRadius="3" Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                                                <TextBlock Text="{loc:Str label_beta}" Foreground="White" FontSize="11" FontWeight="Bold"/>
+                                                                            </Border>
+                                                                            <Button x:Name="HelpBtnPrompts" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="CommunityPrompts"/>
+                                                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+<Grid Margin="0,4,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="BtnBrowsePrompts" Grid.Column="0" Content="{loc:Str btn_browse}"
+                                            Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
+                                            FontSize="14" Padding="0,8" Margin="0,0,4,0" Cursor="Hand" Click="BtnBrowsePrompts_Click"/>
+                                    <Button x:Name="BtnImportPrompt" Grid.Column="1" Content="{loc:Str btn_import}"
+                                            Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                            FontSize="14" Padding="0,8" Margin="4,0,4,0" Cursor="Hand" Click="BtnImportPrompt_Click"/>
+                                    <Button x:Name="BtnExportPrompt" Grid.Column="2" Content="{loc:Str btn_export}"
+                                            Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#505050" BorderThickness="1"
+                                            FontSize="14" Padding="0,8" Margin="4,0,8,0" Cursor="Hand" Click="BtnExportPrompt_Click"/>
+                                    <Button x:Name="BtnRefreshPrompts" Grid.Column="3" Content="{loc:Str btn_refresh}"
+                                            Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" BorderThickness="0"
+                                            FontSize="13" Padding="8,2" Cursor="Hand" Click="BtnRefreshPrompts_Click"/>
+                                </Grid>
+
+                                <TextBlock Text="{loc:Str label_installed_prompts}" Foreground="{DynamicResource TextDimBrush}" FontSize="13" Margin="0,4,0,6"/>
+                                <Border CornerRadius="8" Padding="10" MinHeight="80" MaxHeight="120" Margin="0,0,0,12" BorderBrush="#22808080" BorderThickness="1"
+                                        Background="{DynamicResource SurfaceBgBrush}">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <StackPanel x:Name="InstalledPromptsPanel">
+                                            <TextBlock x:Name="TxtNoInstalledPrompts" Text="{loc:Str label_no_prompts_installed_yet}"
+                                                       Foreground="#505050" FontSize="14" FontStyle="Italic"
+                                                       HorizontalAlignment="Center" Margin="0,20,0,0"/>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </Border>
+
+                                <TextBlock Text="{loc:Str label_hypnotube_links}" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource PinkBrush}" Margin="0,4,0,4"/>
+                                <TextBlock Text="{loc:Str label_video_links_for_ai_to_suggest_comma_separated}" FontSize="13" Foreground="#888" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <TextBlock Text="{loc:Str label_current_mode}" FontSize="13" Foreground="#AAA"/>
+                                    <TextBlock x:Name="TxtHypnotubeModeLabel" Text="{loc:Str label_bambi_sleep}" FontSize="13" Foreground="{DynamicResource PinkBrush}"/>
+                                </StackPanel>
+                                <TextBox x:Name="TxtHypnotubeLinks"
+                                         MaxLength="2000"
+                                         TextWrapping="Wrap"
+                                         AcceptsReturn="False"
+                                         Height="60"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Background="{DynamicResource SurfaceBgBrush}"
+                                         Foreground="White"
+                                         BorderBrush="#505050"
+                                         BorderThickness="1"
+                                         Padding="8,6"
+                                         Margin="0,0,0,4"
+                                         Style="{StaticResource FocusGlowTextBox}"
+                                         TextChanged="TxtHypnotubeLinks_TextChanged"/>
+                            </StackPanel>
+                        </Border>
+
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Hidden help buttons kept for SetHelpContent compat -->
+                        <Button x:Name="HelpBtnCompanionSettings" Visibility="Collapsed" Tag="CompanionSettings"/>
+                        <Button x:Name="HelpBtnQuickControls" Visibility="Collapsed" Tag="QuickControls"/>
 
                     </StackPanel>
                 </ScrollViewer>

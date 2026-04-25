@@ -194,6 +194,34 @@
         </Setter>
     </Style>
 
+    <!-- Dot CheckBox: pink-filled circle when checked, dark grey when not. Used in the Companion tab effect-permissions grid. -->
+    <Style x:Key="DotCheckBoxStyle" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <StackPanel Orientation="Horizontal" Background="Transparent">
+                        <Border x:Name="dot" Width="16" Height="16" CornerRadius="8" Margin="0,0,10,0"
+                                Background="#3A3A48" BorderBrush="#5A5A6A" BorderThickness="1"
+                                VerticalAlignment="Center" SnapsToDevicePixels="True"/>
+                        <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="dot" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                            <Setter TargetName="dot" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="dot" Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="ColorButtonLarge" TargetType="Button" BasedOn="{StaticResource ColorButton}">
         <Setter Property="Height" Value="40"/>
     </Style>
