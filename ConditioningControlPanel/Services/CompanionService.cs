@@ -75,7 +75,7 @@ namespace ConditioningControlPanel.Services
         // XP Drain timer (for Brain Parasite / Brainwashed Slavedoll)
         private DispatcherTimer? _drainTimer;
         private const double DRAIN_XP_PER_TICK = 3.0;
-        private const double DRAIN_INTERVAL_SECONDS = 1.0;
+        private const double DRAIN_INTERVAL_SECONDS = 2.0;
 
         // Active time tracking
         private DateTime _lastActiveTimeUpdate = DateTime.Now;

@@ -2041,8 +2041,18 @@
                     <TextBlock x:Name="TxtLevelLabel" Grid.Column="0" Text="{loc:Str label_lvl_1_2}" Foreground="{DynamicResource PinkBrush}"
                                FontWeight="Bold" FontSize="12" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     <Border Grid.Column="1" Background="{DynamicResource PanelAccentBrush}" CornerRadius="4" Height="8" Margin="0,0,10,0">
-                        <Border x:Name="XPBar" Background="{DynamicResource PinkBrush}" CornerRadius="4"
-                                HorizontalAlignment="Left" Width="100"/>
+                        <Grid>
+                            <Border x:Name="XPBar" Background="{DynamicResource PinkBrush}" CornerRadius="4"
+                                    HorizontalAlignment="Left" Width="100"/>
+                            <Border x:Name="XPBarFlashOverlay" Background="{DynamicResource PinkBrush}" CornerRadius="4"
+                                    HorizontalAlignment="Left"
+                                    Width="{Binding Width, ElementName=XPBar}"
+                                    Opacity="0" IsHitTestVisible="False">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.95"/>
+                                </Border.Effect>
+                            </Border>
+                        </Grid>
                     </Border>
                     <TextBlock x:Name="TxtXP" Grid.Column="2" Text="{loc:Str label_0_70_xp}" Foreground="{StaticResource TextMutedBrush}"
                                FontSize="11" VerticalAlignment="Center" Margin="0,0,15,0"/>
@@ -5308,6 +5318,7 @@
                                         <ProgressBar x:Name="PrgCompanion0" Height="30" Value="0" Background="{DynamicResource SurfaceBgBrush}" Foreground="{DynamicResource PinkBrush}"/>
                                         <Border x:Name="PrgCompanion0FlashOverlay" Height="30" CornerRadius="2"
                                                 Background="{DynamicResource PinkBrush}"
+                                                HorizontalAlignment="Left"
                                                 Opacity="0" IsHitTestVisible="False">
                                             <Border.Effect>
                                                 <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="24" ShadowDepth="0" Opacity="0.95"/>

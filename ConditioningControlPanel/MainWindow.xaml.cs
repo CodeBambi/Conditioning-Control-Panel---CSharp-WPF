@@ -546,38 +546,58 @@ namespace ConditioningControlPanel
 
         private void OnCompanionXPDrained(object? sender, double amount)
         {
-            // Update UI when Brain Parasite drains player XP
+            // Update UI when Brain Parasite drains player XP. Flash is fired regardless
+            // of which tab is visible — animating an offscreen Border is harmless.
             Dispatcher.Invoke(() =>
             {
                 UpdateLevelDisplay();
+                FlashXpBarOnDrain();
                 if (CompanionTab.Visibility == Visibility.Visible)
                 {
                     UpdateCompanionCardsUI();
-                    FlashXpBarOnDrain();
                 }
             });
         }
 
         /// <summary>
-        /// Pulses a pink overlay over the hero XP bar each time Brain Parasite drains.
-        /// Animating Effect.Opacity on the bar itself didn't visibly redraw, so we use a
-        /// PinkBrush Border with a glow on top of the bar and animate its Opacity instead.
+        /// Pulses pink overlays on every XP bar each time Brain Parasite drains.
+        /// Hits both the always-visible header XPBar and the Companion-tab hero bar so the
+        /// player sees the alert wherever they are. Each overlay is sized to match only the
+        /// filled (acquired) portion of its bar so the flash sits on the colored fill, not
+        /// the empty track.
         /// </summary>
         private void FlashXpBarOnDrain()
         {
-            if (PrgCompanion0FlashOverlay == null) return;
+            App.Logger?.Information("XP drain flash fired");
+            // Header bar overlay width is data-bound to XPBar.Width in XAML, no sync needed.
+            FlashOverlay(XPBarFlashOverlay);
+
+            // Companion bar is a templated ProgressBar — compute the filled width at flash time.
+            if (PrgCompanion0FlashOverlay != null && PrgCompanion0 != null && PrgCompanion0.ActualWidth > 0)
+            {
+                var max = Math.Max(1.0, PrgCompanion0.Maximum);
+                var pct = Math.Max(0.0, Math.Min(1.0, PrgCompanion0.Value / max));
+                PrgCompanion0FlashOverlay.Width = pct * PrgCompanion0.ActualWidth;
+            }
+            FlashOverlay(PrgCompanion0FlashOverlay);
+        }
+
+        private static void FlashOverlay(System.Windows.Controls.Border? overlay)
+        {
+            if (overlay == null) return;
+            overlay.BeginAnimation(UIElement.OpacityProperty, null);
             var anim = new System.Windows.Media.Animation.DoubleAnimation
             {
                 From = 0.0,
-                To = 0.85,
-                Duration = TimeSpan.FromMilliseconds(180),
+                To = 1.0,
+                Duration = TimeSpan.FromMilliseconds(250),
                 AutoReverse = true,
                 EasingFunction = new System.Windows.Media.Animation.QuadraticEase
                 {
                     EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut
                 }
             };
-            PrgCompanion0FlashOverlay.BeginAnimation(UIElement.OpacityProperty, anim);
+            overlay.BeginAnimation(UIElement.OpacityProperty, anim);
         }
 
         private void OnCompanionSwitched(object? sender, Models.CompanionId newCompanion)
