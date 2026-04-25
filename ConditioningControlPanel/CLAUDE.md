@@ -127,11 +127,11 @@ Follow `../RELEASE_WORKFLOW.md` - covers all version locations, build steps, and
 - NAudio - Audio playback
 - Serilog - Logging
 - XamlAnimatedGif - GIF animation support
-- Velopack - Auto-updates
 - System.Windows.Forms - Screen enumeration, dialogs
 - LibVLCSharp - Video playback
 - WebView2 - Embedded browser
 - Newtonsoft.Json - JSON serialization
+- (Auto-updates: GitHub Releases API + Inno Setup silent install — no extra package)
 
 ## Architecture Notes
 

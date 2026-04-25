@@ -370,14 +370,14 @@ namespace ConditioningControlPanel.Services
                 Tips = new List<string>
                 {
                     "Click 'Check for Updates' to manually check for new versions",
-                    "Updates are applied automatically when you restart the app",
+                    "Updates download a fresh installer and apply silently — the app restarts itself",
                     "The version number helps when reporting bugs",
                     "Major updates may include new features and unlockables"
                 },
-                HowItWorks = "The app uses Velopack for automatic updates. When an update is available, " +
-                             "it downloads in the background and applies when you restart. The version " +
-                             "displayed follows semantic versioning (major.minor.patch). Release notes " +
-                             "are shown in the update dialog."
+                HowItWorks = "The app checks GitHub Releases for new versions. When one is available, " +
+                             "it downloads the official installer and runs it silently to upgrade in place, " +
+                             "then restarts. The version follows semantic versioning (major.minor.patch). " +
+                             "Release notes are shown in the update dialog."
             },
 
             // ==================== QUESTS TAB ====================

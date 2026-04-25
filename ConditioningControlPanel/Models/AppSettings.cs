@@ -964,17 +964,34 @@ namespace ConditioningControlPanel.Models
             set { _activeAssetPaths = value ?? new(); OnPropertyChanged(); }
         }
 
-        private HashSet<string> _disabledAssetPaths = new();
+        private HashSet<string> _disabledAssetPaths = new(StringComparer.OrdinalIgnoreCase);
         /// <summary>
         /// Set of relative paths to DISABLED assets. Items NOT in this set are active.
         /// This is the inverse of a whitelist - items are active by default.
-        /// Paths are relative to EffectiveAssetsPath.
+        /// Paths are relative to EffectiveAssetsPath, stored with forward-slash separators
+        /// and matched case-insensitively (Windows is case-insensitive at the FS level).
         /// </summary>
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public HashSet<string> DisabledAssetPaths
         {
             get => _disabledAssetPaths;
-            set { _disabledAssetPaths = value ?? new(); OnPropertyChanged(); }
+            set
+            {
+                if (value != null)
+                {
+                    _disabledAssetPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var p in value)
+                    {
+                        if (!string.IsNullOrEmpty(p))
+                            _disabledAssetPaths.Add(p.Replace('\\', '/'));
+                    }
+                }
+                else
+                {
+                    _disabledAssetPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                }
+                OnPropertyChanged();
+            }
         }
 
         private bool _useAssetWhitelist = false;

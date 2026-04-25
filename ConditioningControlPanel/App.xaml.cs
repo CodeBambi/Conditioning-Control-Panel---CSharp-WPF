@@ -2136,6 +2136,12 @@ Application State:
             AudioSync?.Dispose();
             Audio?.Dispose();
 
+            // Terminate any `ollama serve` we spawned so it doesn't outlive the app.
+            // (Servers started by the Ollama installer's auto-start or the user's tray
+            // app are untouched — only the process we explicitly launched.)
+            try { Services.AIService.OllamaSetupService.StopSpawnedServer(); }
+            catch (Exception ex) { Logger?.Warning(ex, "Failed to stop spawned Ollama server"); }
+
             // Clear in-memory secrets before exit to reduce memory exposure
             SecureAuthTokenStore.ClearMemoryCache();
             SecureApiKeyStore.ClearMemoryCache();

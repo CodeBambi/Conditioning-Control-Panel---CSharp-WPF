@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Input;
+using ConditioningControlPanel.Localization;
 
 namespace ConditioningControlPanel
 {
@@ -38,8 +39,21 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // A bare letter/digit/symbol with no modifier would steal that key
+            // globally — typing it in any other app would fire our chat shortcut.
+            // Require at least one modifier; F-keys are accepted bare since they
+            // rarely collide with text input.
+            var mods = Keyboard.Modifiers;
+            if (mods == ModifierKeys.None && !IsFunctionKey(key))
+            {
+                e.Handled = true;
+                if (TxtCaptured != null)
+                    TxtCaptured.Text = Loc.Get("label_chat_shortcut_needs_modifier");
+                return;
+            }
+
             CapturedKey = key;
-            CapturedModifiers = Keyboard.Modifiers;
+            CapturedModifiers = mods;
             ResetToDefault = false;
 
             e.Handled = true;
@@ -68,5 +82,7 @@ namespace ConditioningControlPanel
                 or Key.LWin or Key.RWin
                 or Key.System or Key.None;
         }
+
+        private static bool IsFunctionKey(Key k) => k >= Key.F1 && k <= Key.F24;
     }
 }

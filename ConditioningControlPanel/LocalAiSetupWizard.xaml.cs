@@ -267,9 +267,14 @@ namespace ConditioningControlPanel
                 var ok = await OllamaSetupService.RunInstallerSilentAsync(installerPath, ct: _cts.Token);
                 if (!ok)
                 {
+                    // Leave the installer in %TEMP% on failure so the user (or a re-run)
+                    // can inspect/retry without a fresh ~700MB download.
                     ShowError(Loc.Get("error_local_ai_install_failed"));
                     return;
                 }
+                // Drop the installer on success — it's ~700MB and unneeded once Ollama is in.
+                try { if (System.IO.File.Exists(installerPath)) System.IO.File.Delete(installerPath); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "Failed to delete OllamaSetup.exe after install"); }
                 await StartPullAsync();
             }
             catch (OperationCanceledException)

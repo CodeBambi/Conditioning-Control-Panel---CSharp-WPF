@@ -6893,6 +6893,8 @@ namespace ConditioningControlPanel
             if (ChkAiChat != null) ChkAiChat.IsChecked = false;
             App.Settings.Save();
             if (LocalConfigPanel != null) LocalConfigPanel.Visibility = Visibility.Collapsed;
+            // Drop any stale Live Actions — only local AI populates this feed.
+            App.AiLiveActions?.Clear();
             UpdateAiBrainPills();
         }
 
@@ -6906,6 +6908,8 @@ namespace ConditioningControlPanel
             if (ChkAiChat != null) ChkAiChat.IsChecked = true;
             App.Settings.Save();
             if (LocalConfigPanel != null) LocalConfigPanel.Visibility = Visibility.Collapsed;
+            // Cloud can't trigger effects, so prior local-session entries would be misleading.
+            App.AiLiveActions?.Clear();
             UpdateAiBrainPills();
         }
 
@@ -20840,7 +20844,7 @@ namespace ConditioningControlPanel
             var basePath = App.EffectiveAssetsPath;
             node.CheckedFileCount = files.Count(f =>
             {
-                var relativePath = Path.GetRelativePath(basePath, f);
+                var relativePath = Path.GetRelativePath(basePath, f).Replace('\\', '/');
                 return !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
             });
 
@@ -20917,7 +20921,7 @@ namespace ConditioningControlPanel
 
                 folder.CheckedFileCount = files.Count(f =>
                 {
-                    var relativePath = Path.GetRelativePath(basePath, f);
+                    var relativePath = Path.GetRelativePath(basePath, f).Replace('\\', '/');
                     return !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
                 });
             }
@@ -21121,7 +21125,7 @@ namespace ConditioningControlPanel
 
             foreach (var file in files)
             {
-                var relativePath = Path.GetRelativePath(basePath, file);
+                var relativePath = Path.GetRelativePath(basePath, file).Replace('\\', '/');
                 // Item is checked if NOT in DisabledAssetPaths (blacklist approach)
                 var isActive = !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
 
@@ -21287,7 +21291,7 @@ namespace ConditioningControlPanel
 
                 foreach (var file in files)
                 {
-                    var relativePath = Path.GetRelativePath(basePath, file);
+                    var relativePath = Path.GetRelativePath(basePath, file).Replace('\\', '/');
                     // Use DisabledAssetPaths (blacklist): unchecked items are in the set
                     if (isChecked)
                     {
@@ -21648,7 +21652,7 @@ namespace ConditioningControlPanel
                 var ext = Path.GetExtension(file).ToLowerInvariant();
                 if (!validExts.Contains(ext)) continue;
 
-                var relativePath = Path.GetRelativePath(basePath, file);
+                var relativePath = Path.GetRelativePath(basePath, file).Replace('\\', '/');
                 if (disabledPaths == null || !disabledPaths.Contains(relativePath))
                 {
                     count++;
@@ -22122,7 +22126,7 @@ namespace ConditioningControlPanel
                         if (isVideo) totalVideos++;
 
                         // Use blacklist: files NOT in DisabledAssetPaths are active
-                        var relativePath = Path.GetRelativePath(basePath, file);
+                        var relativePath = Path.GetRelativePath(basePath, file).Replace('\\', '/');
                         var isActive = !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
 
                         if (isActive && isImage) activeImages++;

@@ -24,6 +24,13 @@ namespace ConditioningControlPanel.Services.AIService
         private const string DefaultHost = "http://localhost:11434/";
         private const string OllamaInstallerUrl = "https://ollama.com/download/OllamaSetup.exe";
 
+        // Tracks a headless `ollama serve` process this app spawned, so it can
+        // be terminated on app exit instead of leaving the server orphaned.
+        // Null means we did not start the server (it was already running, or
+        // it was launched by the official installer's auto-start).
+        private static Process? _spawnedServer;
+        private static readonly object _spawnedServerLock = new();
+
         public enum InstallStatus
         {
             NotInstalled,
@@ -331,7 +338,7 @@ namespace ConditioningControlPanel.Services.AIService
 
             try
             {
-                Process.Start(new ProcessStartInfo
+                var proc = Process.Start(new ProcessStartInfo
                 {
                     FileName = cliPath,
                     Arguments = "serve",
@@ -341,6 +348,18 @@ namespace ConditioningControlPanel.Services.AIService
                     RedirectStandardOutput = true,
                     RedirectStandardError = true
                 });
+
+                if (proc != null)
+                {
+                    lock (_spawnedServerLock)
+                    {
+                        // If we somehow already had one, drop the old handle —
+                        // the new spawn supersedes it. Don't kill the old; if it
+                        // was orphaned the new one will fail-bind anyway.
+                        _spawnedServer?.Dispose();
+                        _spawnedServer = proc;
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -368,6 +387,43 @@ namespace ConditioningControlPanel.Services.AIService
         {
             host ??= DefaultHost;
             return TryStartHeadlessServerAsync(host, ct);
+        }
+
+        /// <summary>
+        /// Terminates the headless <c>ollama serve</c> process this app spawned, if any.
+        /// Safe to call multiple times. Does NOT touch a server started by the official
+        /// installer's auto-start or by the user's own Ollama tray app — only the
+        /// process whose handle we captured in <see cref="TryStartHeadlessServerAsync"/>.
+        /// Call from App.OnExit so we don't leave a server running after the app closes.
+        /// </summary>
+        public static void StopSpawnedServer()
+        {
+            Process? proc;
+            lock (_spawnedServerLock)
+            {
+                proc = _spawnedServer;
+                _spawnedServer = null;
+            }
+
+            if (proc == null) return;
+
+            try
+            {
+                if (!proc.HasExited)
+                {
+                    proc.Kill(entireProcessTree: true);
+                    // Brief wait so the OS can release the port before we exit.
+                    proc.WaitForExit(2000);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to stop spawned `ollama serve`");
+            }
+            finally
+            {
+                try { proc.Dispose(); } catch { }
+            }
         }
 
         // -------- Pull model via /api/pull --------
