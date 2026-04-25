@@ -77,7 +77,7 @@ namespace ConditioningControlPanel.Features
             App.Settings?.Save();
 
             // Live-apply: start/stop video service if engine is running
-            if (App.IsSessionRunning)
+            if (App.IsEngineRunning)
             {
                 if (on)
                     App.Video?.Start();

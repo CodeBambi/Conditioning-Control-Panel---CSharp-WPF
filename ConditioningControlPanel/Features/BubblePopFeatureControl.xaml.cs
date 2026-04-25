@@ -65,7 +65,7 @@ namespace ConditioningControlPanel.Features
             App.Settings?.Save();
 
             // Live-apply: start/stop bubble service if engine is running
-            if (App.IsSessionRunning)
+            if (App.IsEngineRunning)
             {
                 if (on)
                     App.Bubbles?.Start();

@@ -73,7 +73,7 @@ namespace ConditioningControlPanel.Features
             App.Settings?.Save();
 
             // Live-apply: start/stop subliminal service if engine is running
-            if (App.IsSessionRunning)
+            if (App.IsEngineRunning)
             {
                 if (on)
                     App.Subliminal?.Start();

@@ -74,7 +74,7 @@ namespace ConditioningControlPanel.Features
             App.Settings?.Save();
 
             // Live-apply: start/stop bubble count service if engine is running
-            if (App.IsSessionRunning)
+            if (App.IsEngineRunning)
             {
                 if (on)
                     App.BubbleCount?.Start();

@@ -19,7 +19,9 @@ namespace ConditioningControlPanel.Features
             Unloaded += OnUnloaded;
         }
 
-        private MainWindow? Main => Application.Current?.MainWindow as MainWindow;
+        // Application.Current.MainWindow is null when MainWindow is hidden to tray;
+        // App.MainWindowRef is set once in OnStartup and stays valid for the app lifetime.
+        private MainWindow? Main => App.MainWindowRef ?? (Application.Current?.MainWindow as MainWindow);
 
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
@@ -53,10 +55,16 @@ namespace ConditioningControlPanel.Features
                     ? Loc.Get("label_random")
                     : Path.GetFileName(s.StartupVideoPath);
 
-                BtnPanicKey.Content = $"🔑 {s.PanicKey}";
+                // Skip overwriting the button while we're showing the "Press any key..."
+                // prompt — LoadFromSettings runs on Loaded and on unrelated property changes,
+                // and we don't want it to clobber the in-progress capture state.
+                if (!_capturingPanicKey)
+                    BtnPanicKey.Content = $"🔑 {s.PanicKey}";
             }
             finally { _isLoading = false; }
         }
+
+        private bool _capturingPanicKey;
 
         private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
@@ -205,6 +213,40 @@ namespace ConditioningControlPanel.Features
 
         private void BtnPanicKey_Click(object sender, RoutedEventArgs e)
         {
+            if (_capturingPanicKey) return;
+            _capturingPanicKey = true;
+            BtnPanicKey.Content = Loc.Get("msg_press_any_key_to_set_as_the_new_panic_key");
+            BtnPanicKey.IsEnabled = false;
+
+            // Subscribe to the next PanicKey change so we can confirm and re-enable.
+            // Use a one-shot handler so subsequent edits behave normally.
+            void OnPanicKeyChanged(object? s, PropertyChangedEventArgs ev)
+            {
+                if (ev.PropertyName != nameof(Models.AppSettings.PanicKey)) return;
+                if (App.Settings?.Current is INotifyPropertyChanged inpc)
+                    inpc.PropertyChanged -= OnPanicKeyChanged;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    var newKey = App.Settings?.Current?.PanicKey ?? "?";
+                    _capturingPanicKey = false;
+                    BtnPanicKey.IsEnabled = true;
+                    // Brief confirmation, then settle into normal label.
+                    BtnPanicKey.Content = $"✓ {newKey}";
+                    var t = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(1200)
+                    };
+                    t.Tick += (_, __) =>
+                    {
+                        t.Stop();
+                        BtnPanicKey.Content = $"🔑 {newKey}";
+                    };
+                    t.Start();
+                }));
+            }
+            if (App.Settings?.Current is INotifyPropertyChanged inpc2)
+                inpc2.PropertyChanged += OnPanicKeyChanged;
+
             Main?.RequestBeginPanicKeyCapture();
         }
 

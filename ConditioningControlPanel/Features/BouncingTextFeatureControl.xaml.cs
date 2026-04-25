@@ -67,7 +67,7 @@ namespace ConditioningControlPanel.Features
             App.Settings?.Save();
 
             // Live-apply: start/stop bouncing text if engine is running
-            if (App.IsSessionRunning)
+            if (App.IsEngineRunning)
             {
                 if (on)
                     App.BouncingText?.Start();

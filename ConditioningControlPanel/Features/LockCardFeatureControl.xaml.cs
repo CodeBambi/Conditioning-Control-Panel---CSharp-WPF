@@ -64,8 +64,18 @@ namespace ConditioningControlPanel.Features
             if (_isLoading) return;
             var s = App.Settings?.Current;
             if (s == null) return;
-            s.LockCardEnabled = ChkEnable.IsChecked ?? false;
+            var on = ChkEnable.IsChecked ?? false;
+            s.LockCardEnabled = on;
             App.Settings?.Save();
+
+            // Live-apply: start/stop lock card service if engine is running
+            if (App.IsEngineRunning)
+            {
+                if (on)
+                    App.LockCard?.Start();
+                else
+                    App.LockCard?.Stop();
+            }
         }
 
         private void SliderFreq_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

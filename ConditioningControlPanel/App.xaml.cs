@@ -232,6 +232,19 @@ namespace ConditioningControlPanel
         public static bool IsSessionRunning { get; set; }
 
         /// <summary>
+        /// Whether the main engine is running (toggle-driven services should start/stop live).
+        /// True for both plain engine runs and AI sessions. Set by MainWindow.StartEngine/StopEngine.
+        /// </summary>
+        public static bool IsEngineRunning { get; set; }
+
+        /// <summary>
+        /// Direct reference to the MainWindow instance. Use this instead of
+        /// Application.Current.MainWindow — the latter returns null when the window
+        /// is hidden to tray.
+        /// </summary>
+        public static MainWindow? MainWindowRef { get; set; }
+
+        /// <summary>
         /// Unified user ID that links Patreon and Discord accounts together
         /// </summary>
         public static string? UnifiedUserId { get; set; }
@@ -877,6 +890,9 @@ namespace ConditioningControlPanel
 
             // Give RemoteControlService a direct reference (Application.Current.MainWindow is null when hidden to tray)
             if (RemoteControl != null) RemoteControl.MainWindowRef = mainWindow;
+            // Same problem hits anywhere code does `Application.Current.MainWindow as MainWindow`
+            // — popups, feature controls, etc. Expose a stable static reference.
+            MainWindowRef = mainWindow;
 
             // Close splash screen with fade animation
             // Drop Topmost FIRST so deferred dialogs (What's New, Age Verification) aren't hidden behind it

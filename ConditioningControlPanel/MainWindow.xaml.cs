@@ -12159,6 +12159,16 @@ namespace ConditioningControlPanel
             {
                 if (_activeFeaturePopup == popup)
                     _activeFeaturePopup = null;
+                // The popup has ShowInTaskbar=False, so when it closes WPF may activate
+                // whatever window happens to be behind us instead of returning focus
+                // to MainWindow. Explicitly bring MainWindow forward.
+                try
+                {
+                    if (WindowState == WindowState.Minimized)
+                        WindowState = WindowState.Normal;
+                    Activate();
+                }
+                catch { /* window may be shutting down */ }
             };
             _activeFeaturePopup = popup;
             popup.Show(); // Non-modal so bubbles and other interactions keep working
@@ -12268,6 +12278,13 @@ namespace ConditioningControlPanel
                 {
                     App.Logger?.Warning(ex, "AppInfo: failed to return account sections");
                 }
+                try
+                {
+                    if (WindowState == WindowState.Minimized)
+                        WindowState = WindowState.Normal;
+                    Activate();
+                }
+                catch { /* window may be shutting down */ }
             };
 
             _activeFeaturePopup = popup;
@@ -15904,6 +15921,7 @@ namespace ConditioningControlPanel
             // Browser audio serves as background - no need to play separate music
 
             _isRunning = true;
+            App.IsEngineRunning = true;
             UpdateStartButton();
 
             // Start conditioning time tracker
@@ -15959,6 +15977,7 @@ namespace ConditioningControlPanel
             StopConditioningTimeTracker();
 
             _isRunning = false;
+            App.IsEngineRunning = false;
             UpdateStartButton();
 
             // Fire event for avatar reaction
@@ -21617,8 +21636,12 @@ namespace ConditioningControlPanel
                 dialog.SelectedPath = App.UserAssetsPath;
             }
 
-            // Pass MainWindow handle so the dialog appears in front (fixes silent fail from popup context)
-            var owner = new Win32WindowWrapper(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+            // Own the dialog to the active popup if one is open — otherwise the dialog
+            // renders behind the popup. If no popup, fall back to MainWindow.
+            var ownerWindow = (_activeFeaturePopup != null && _activeFeaturePopup.IsVisible)
+                ? (Window)_activeFeaturePopup
+                : this;
+            var owner = new Win32WindowWrapper(new System.Windows.Interop.WindowInteropHelper(ownerWindow).Handle);
             if (dialog.ShowDialog(owner) == System.Windows.Forms.DialogResult.OK)
             {
                 var selectedPath = dialog.SelectedPath;
@@ -21860,10 +21883,13 @@ namespace ConditioningControlPanel
 
         private void BtnPanicKey_Click(object sender, RoutedEventArgs e)
         {
+            // Don't show a blocking MessageBox: the global keyboard hook fires through
+            // it, so the next keypress would set the panic key AND immediately trigger
+            // a panic. Instead, just enter capture mode — both this window's button and
+            // the SystemFeatureControl popup button show "Press any key..." until the
+            // hook captures the next key.
             _isCapturingPanicKey = true;
             UpdatePanicKeyButton();
-            MessageBox.Show(Loc.Get("msg_press_any_key_to_set_as_the_new_panic_key"), "Change Panic Key", 
-                MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void ChkStrictLock_Changed(object sender, RoutedEventArgs e)
