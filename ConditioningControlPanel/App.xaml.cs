@@ -769,6 +769,15 @@ namespace ConditioningControlPanel
             splash.SetProgress(0.85, "Initializing companion...");
             Ai = new AiServiceStrategy();
             Commands = new AiCommandService();
+
+            // If local Ollama is the active provider, kick off a background warm-up so
+            // the model is hot in memory by the time the user sends their first chat.
+            // No-op for cloud users; silent on failure (Ollama may not be running).
+            if (Ai is AiServiceStrategy aiStrategy)
+            {
+                _ = Task.Run(async () => { try { await aiStrategy.WarmUpLocalAsync(); } catch { } });
+            }
+
             WindowAwareness = new WindowAwarenessService();
             Patreon = new PatreonService();
             ProfileSync = new ProfileSyncService();

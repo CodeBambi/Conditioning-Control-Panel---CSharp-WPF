@@ -75,5 +75,38 @@ namespace ConditioningControlPanel.Services.AIService
             _cloud?.Dispose();
             _local?.Dispose();
         }
+
+        /// <summary>
+        /// Clears the persisted local-AI conversation memory (in-memory + on-disk).
+        /// No-op for the cloud provider (it's stateless). Safe to call even when
+        /// <see cref="LocalAiService"/> hasn't been constructed yet — we still try
+        /// to delete the file so a fresh local provider starts blank.
+        /// </summary>
+        public void ClearLocalHistory()
+        {
+            // Construct the local instance if needed only to reach the clear method —
+            // alternative is to duplicate the file path here. Cheaper to instantiate.
+            lock (_lock)
+            {
+                _local ??= new LocalAiService();
+            }
+            _local.ClearHistory();
+        }
+
+        /// <summary>
+        /// Pre-loads the configured Ollama model into memory at startup so the first
+        /// chat doesn't pay the cold-start cost. Only runs if the user has local AI
+        /// selected — for cloud users this is a no-op. Best-effort, fire-and-forget.
+        /// </summary>
+        public Task WarmUpLocalAsync()
+        {
+            if (!UseLocal) return Task.CompletedTask;
+
+            lock (_lock)
+            {
+                _local ??= new LocalAiService();
+            }
+            return _local.WarmUpAsync();
+        }
     }
 }

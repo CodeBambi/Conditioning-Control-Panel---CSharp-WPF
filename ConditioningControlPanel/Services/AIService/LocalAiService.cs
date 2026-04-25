@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -53,8 +54,148 @@ namespace ConditioningControlPanel.Services.AIService
             _knowledgeService = new KnowledgeService();
             _promptService = new PromptService();
 
-            App.Logger?.Information("LocalAiService initialized (host={Host}, model={Model})",
-                _activeHost, GetConfiguredModel());
+            // Load any persisted chat history from the previous app session. Local
+            // models can hold long-running context; persistence makes Bambi remember
+            // between launches. (Cloud provider doesn't have or use this.)
+            LoadPersistedHistory();
+
+            App.Logger?.Information("LocalAiService initialized (host={Host}, model={Model}, restored={Count} turns)",
+                _activeHost, GetConfiguredModel(), _messages.Count);
+        }
+
+        // -------- Persistent chat memory (local only) --------
+
+        // Cap on persisted user+assistant pairs. Picked so the file stays small (<200KB
+        // typical) while preserving enough context that Bambi remembers a long conversation.
+        private const int MaxPersistedPairs = 50;
+        private static string HistoryFilePath =>
+            Path.Combine(App.UserDataPath, "local_chat_history.json");
+
+        private sealed class PersistedTurn
+        {
+            public string Role { get; set; } = "";
+            public string Content { get; set; } = "";
+        }
+
+        /// <summary>
+        /// Reads the persisted user/assistant history from disk and seeds <c>_messages</c>.
+        /// Skips system and enrichment messages — those are rebuilt fresh per request.
+        /// Best-effort: any parse failure or missing file results in an empty history.
+        /// </summary>
+        private void LoadPersistedHistory()
+        {
+            try
+            {
+                if (!File.Exists(HistoryFilePath)) return;
+                var json = File.ReadAllText(HistoryFilePath);
+                var turns = JsonSerializer.Deserialize<List<PersistedTurn>>(json);
+                if (turns == null) return;
+
+                foreach (var t in turns)
+                {
+                    if (string.IsNullOrEmpty(t.Role) || string.IsNullOrEmpty(t.Content)) continue;
+                    if (t.Role != "user" && t.Role != "assistant") continue;
+                    _messages.Add(new ChatMessage(t.Role, t.Content));
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "LocalAiService: failed to load persisted chat history");
+            }
+        }
+
+        /// <summary>
+        /// Writes the user/assistant turns of the current conversation to disk.
+        /// Drops the system prompt and any enrichment block so they're regenerated
+        /// freshly on next load. Trimmed to <see cref="MaxPersistedPairs"/> recent
+        /// turns (counted in pairs) to bound file size.
+        /// </summary>
+        private void PersistHistory()
+        {
+            try
+            {
+                var dialogue = _messages
+                    .Where(m => m.Role == "user" || m.Role == "assistant")
+                    .Where(m => !string.IsNullOrEmpty(m.Content)
+                                && !m.Content!.Contains("[CONTEXT BLOCK — NOT DIALOGUE]"))
+                    .Select(m => new PersistedTurn { Role = m.Role, Content = m.Content ?? string.Empty })
+                    .ToList();
+
+                // Cap to last N pairs (one pair = user + assistant). Trim from the front.
+                int maxMessages = MaxPersistedPairs * 2;
+                if (dialogue.Count > maxMessages)
+                {
+                    dialogue = dialogue.Skip(dialogue.Count - maxMessages).ToList();
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(HistoryFilePath)!);
+                var json = JsonSerializer.Serialize(dialogue, new JsonSerializerOptions { WriteIndented = false });
+                File.WriteAllText(HistoryFilePath, json);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "LocalAiService: failed to persist chat history");
+            }
+        }
+
+        /// <summary>
+        /// Clears in-memory and on-disk chat history. Useful for a "reset memory"
+        /// button (not yet exposed in the UI).
+        /// </summary>
+        public void ClearHistory()
+        {
+            _messages.Clear();
+            try { if (File.Exists(HistoryFilePath)) File.Delete(HistoryFilePath); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "LocalAiService: failed to delete chat history file"); }
+            App.Logger?.Information("LocalAiService: chat history cleared");
+        }
+
+        /// <summary>
+        /// Tells Ollama to load the configured model into memory so the first real
+        /// chat doesn't pay the cold-start cost (~30-60s for 8B-class models on CPU,
+        /// less on GPU). Sends an empty <c>/api/generate</c> request — Ollama treats
+        /// this as a "load" hint without generating tokens. <c>keep_alive=30m</c> asks
+        /// the model to stay resident longer than the default 5 minutes.
+        /// Best-effort and silent on failure (Ollama may not be running yet).
+        /// </summary>
+        public async Task WarmUpAsync()
+        {
+            EnsureHost();
+            var model = GetConfiguredModel();
+            if (string.IsNullOrWhiteSpace(model)) return;
+
+            try
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                App.Logger?.Information("LocalAiService: warming up model={Model} on host={Host}", model, _activeHost);
+
+                var payload = JsonSerializer.Serialize(new
+                {
+                    model = model,
+                    keep_alive = "30m"
+                });
+
+                using var req = new HttpRequestMessage(HttpMethod.Post, "api/generate")
+                {
+                    Content = new StringContent(payload, Encoding.UTF8, "application/json")
+                };
+                using var resp = await _http.SendAsync(req);
+
+                sw.Stop();
+                if (resp.IsSuccessStatusCode)
+                {
+                    App.Logger?.Information("LocalAiService: warm-up succeeded in {Ms}ms", sw.ElapsedMilliseconds);
+                }
+                else
+                {
+                    App.Logger?.Information("LocalAiService: warm-up returned HTTP {Status} (model may not be pulled yet)",
+                        (int)resp.StatusCode);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Information("LocalAiService: warm-up failed (Ollama not reachable?): {Error}", ex.Message);
+            }
         }
 
         private static string NormalizeHost(string host)
@@ -262,6 +403,9 @@ namespace ConditioningControlPanel.Services.AIService
 
                 // Append assistant turn so future requests have context.
                 _messages.Add(new ChatMessage("assistant", content));
+
+                // Persist asynchronously so chat latency isn't impacted by disk I/O.
+                _ = Task.Run(PersistHistory);
 
                 var parsed = _parser.Parse(content);
                 _currentCommands = parsed.Commands;

@@ -87,12 +87,9 @@ namespace ConditioningControlPanel
             if (_strictMode)
             {
                 TxtStrict.Text = Loc.Get("label_strict");
-                TxtEscHint.Visibility = Visibility.Collapsed;
             }
-            else
-            {
-                TxtEscHint.Text = Loc.Get("label_press_esc_to_close");
-            }
+            // Esc always works now (even in strict mode) so always show the hint.
+            TxtEscHint.Text = Loc.Get("label_press_esc_to_close");
             
             // Position on screen
             if (screen != null)
@@ -236,9 +233,13 @@ namespace ConditioningControlPanel
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape && !_strictMode && !_isCompleted)
+            // Esc always closes the lock card, even in strict mode. Strict mode used to
+            // block Esc but that left the panic key (often "1") as the only way out —
+            // and "1" can collide with mantra characters, so the user was effectively
+            // trapped. Esc is a dedicated exit that won't ever be part of a mantra.
+            if (e.Key == Key.Escape && !_isCompleted)
             {
-                App.Logger?.Information("Lock Card closed via ESC");
+                App.Logger?.Information("Lock Card closed via ESC (strict={Strict})", _strictMode);
                 CloseAllWindows();
             }
             

@@ -5593,6 +5593,13 @@
                                                         Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
                                                         Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnTestOllamaConnection_Click"/>
                                             </Grid>
+                                            <Grid Margin="0,6,0,0">
+                                                <TextBlock Text="{loc:Str label_chat_memory_hint}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                                <Button x:Name="BtnClearChatMemory" Content="{loc:Str btn_forget_everything}" HorizontalAlignment="Right"
+                                                        Background="{DynamicResource SurfaceBgBrush}" Foreground="#FF6B6B" BorderBrush="#FF6B6B" BorderThickness="1"
+                                                        Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnClearChatMemory_Click"
+                                                        ToolTip="{loc:Str tooltip_forget_everything}"/>
+                                            </Grid>
                                         </StackPanel>
                                     </Border>
 

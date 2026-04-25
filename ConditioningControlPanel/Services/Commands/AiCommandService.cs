@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Windows;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Models.CommandData;
 
 namespace ConditioningControlPanel.Services.Commands
 {
@@ -61,6 +63,9 @@ namespace ConditioningControlPanel.Services.Commands
             App.Logger?.Information("AiCommandService: dispatching {Cmd} with data {@Data}",
                 commandData.Command, commandData.Data);
 
+            // Surface a human-readable line in the AI Brain "Live actions" feed.
+            AppendLiveAction(FormatLiveAction(commandData));
+
             var token = commandData.Data.Token;
             CancellationTokenSource? cts = null;
 
@@ -99,6 +104,78 @@ namespace ConditioningControlPanel.Services.Commands
             foreach (var token in tokens)
             {
                 CancelToken(token);
+            }
+        }
+
+        // Last-N feed cap so the list doesn't grow forever in long sessions.
+        private const int MaxLiveActions = 30;
+
+        /// <summary>
+        /// Appends a user-readable line to <see cref="App.AiLiveActions"/> (bound to the
+        /// AI Brain "Live actions" panel on the Companion tab). Marshals to the UI
+        /// thread because ObservableCollection updates aren't allowed off-thread.
+        /// </summary>
+        private static void AppendLiveAction(string line)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null) return;
+
+            void Apply()
+            {
+                var list = App.AiLiveActions;
+                var stamped = $"[{DateTime.Now:HH:mm:ss}] {line}";
+                list.Add(stamped);
+                while (list.Count > MaxLiveActions) list.RemoveAt(0);
+            }
+
+            if (dispatcher.CheckAccess()) Apply();
+            else dispatcher.BeginInvoke((Action)Apply);
+        }
+
+        /// <summary>
+        /// Turns the parsed command + data into a single short line for the live feed.
+        /// Reads the same data fields the executors use, so the user sees what actually
+        /// fired (after caps are applied at execution time).
+        /// </summary>
+        private static string FormatLiveAction(AiCommandData c)
+        {
+            var d = c.Data;
+            switch (c.Command)
+            {
+                case AICommandType.flash_image when d is FlashImage f:
+                    return $"💥 Flash · {Math.Clamp(f.Amount, 0, 8)} images for {Math.Clamp(f.Duration, 0, 10)}s";
+                case AICommandType.bubbles when d is Bubbles b:
+                    var freq = Math.Clamp(b.Frequency, 0, 10);
+                    return (b.On || freq > 0)
+                        ? $"🫧 Bubbles started ({(freq > 0 ? freq : 5)}/min)"
+                        : "🫧 Bubbles stopped";
+                case AICommandType.subliminal when d is Subliminal s:
+                    var t = (s.Text ?? "").Trim();
+                    if (t.Length > 40) t = t.Substring(0, 40) + "…";
+                    return $"👁️ Subliminal · \"{t}\"";
+                case AICommandType.mantra_lockscreen when d is MantraLockscreen m:
+                    var mt = (m.Mantra ?? "").Trim();
+                    if (mt.Length > 30) mt = mt.Substring(0, 30) + "…";
+                    return $"🔒 Lock card · \"{mt}\" ×{Math.Clamp(m.Amount, 0, 5)}";
+                case AICommandType.spiral when d is SpiralPinkFiler sp:
+                    return sp.On ? $"🌀 Spiral on ({Math.Clamp(sp.Intensity, 0, 30)}%)" : "🌀 Spiral off";
+                case AICommandType.pink when d is SpiralPinkFiler pp:
+                    return pp.On ? $"🩷 Pink filter on ({Math.Clamp(pp.Intensity, 0, 30)}%)" : "🩷 Pink filter off";
+                case AICommandType.bounce when d is Bounce bn:
+                    return bn.On ? "💃 Bouncing text on" : "💃 Bouncing text off";
+                case AICommandType.haptic when d is HapticCommandData h:
+                    var pct = (int)Math.Round(Math.Clamp(h.Intensity, 0, 1) * 100);
+                    return $"📳 Vibrate · {pct}% for {Math.Clamp(h.Duration, 0, 10)}s";
+                case AICommandType.video when d is Media vm:
+                    var vt = string.IsNullOrEmpty(vm.Title) ? (vm.Path ?? "video") : vm.Title;
+                    return $"🎬 Video · {vt}";
+                case AICommandType.audio when d is Media am:
+                    var at = string.IsNullOrEmpty(am.Title) ? (am.Path ?? "audio") : am.Title;
+                    return $"🔊 Audio · {at}";
+                case AICommandType.getbacktome when d is GetBackToMe g:
+                    return $"⏱️ Follow-up in {Math.Clamp(g.Delay, 1, 600)}s";
+                default:
+                    return $"⚙️ {c.Command}";
             }
         }
 

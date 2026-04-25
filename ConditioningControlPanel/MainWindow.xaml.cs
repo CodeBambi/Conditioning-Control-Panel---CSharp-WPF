@@ -6976,6 +6976,41 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Wipes the local AI's persisted chat history (in-memory + on-disk).
+        /// Cloud provider has no memory, so this is a local-only action.
+        /// </summary>
+        private void BtnClearChatMemory_Click(object sender, RoutedEventArgs e)
+        {
+            var confirm = MessageBox.Show(
+                Loc.Get("dialog_forget_everything_prompt"),
+                Loc.Get("btn_forget_everything"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            try
+            {
+                if (App.Ai is Services.AIService.AiServiceStrategy strategy)
+                {
+                    strategy.ClearLocalHistory();
+                }
+
+                // Also clear the live actions feed so the visual state matches "fresh slate".
+                App.AiLiveActions.Clear();
+                UpdateLiveActionsPlaceholder();
+
+                MessageBox.Show(
+                    Loc.Get("dialog_forget_everything_done"),
+                    Loc.Get("btn_forget_everything"),
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BtnClearChatMemory_Click failed");
+            }
+        }
+
         private void ChkCapEffects_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
@@ -7096,7 +7131,15 @@ namespace ConditioningControlPanel
 
             // Live actions placeholder + ItemsSource binding
             if (LiveActionsList != null && LiveActionsList.ItemsSource == null)
+            {
                 LiveActionsList.ItemsSource = App.AiLiveActions;
+                // Auto-toggle the placeholder when entries arrive (added by AiCommandService).
+                App.AiLiveActions.CollectionChanged += (_, _) =>
+                {
+                    if (Dispatcher.CheckAccess()) UpdateLiveActionsPlaceholder();
+                    else Dispatcher.BeginInvoke(new Action(UpdateLiveActionsPlaceholder));
+                };
+            }
             UpdateLiveActionsPlaceholder();
         }
 
