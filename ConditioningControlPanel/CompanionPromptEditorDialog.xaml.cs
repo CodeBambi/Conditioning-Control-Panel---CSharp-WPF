@@ -1,12 +1,10 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Globalization;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Localization;
-using ConditioningControlPanel.Services.AIService;
 
 namespace ConditioningControlPanel
 {
@@ -122,27 +120,8 @@ namespace ConditioningControlPanel
             var settings = App.Settings?.Current?.CompanionPrompt ?? new CompanionPromptSettings();
 
             ChkUseCustom.IsChecked = settings.UseCustomPrompt;
-            ChkUseLocal.IsChecked = settings.UseLocalAi;
-            CmbAiModel.Text = string.IsNullOrWhiteSpace(settings.AiModel)
-                ? _defaults.AiModel : settings.AiModel;
-            TxtOllamaHost.Text = string.IsNullOrWhiteSpace(settings.AiOllamaHost)
-                ? _defaults.AiOllamaHost : settings.AiOllamaHost;
-            // Populate the model dropdown asynchronously from Ollama's /api/tags.
-            _ = RefreshAiModelsAsync();
-
-            ChkAllowAiEffects.IsChecked = settings.AllowAiToControlEffects;
-            ChkAllowAiFlash.IsChecked = settings.AllowAiFlash;
-            ChkAllowAiVideo.IsChecked = settings.AllowAiVideo;
-            ChkAllowAiAudio.IsChecked = settings.AllowAiAudio;
-            ChkAllowAiBubbles.IsChecked = settings.AllowAiBubbles;
-            ChkAllowAiSubliminal.IsChecked = settings.AllowAiSubliminal;
-            ChkAllowAiOverlay.IsChecked = settings.AllowAiOverlay;
-            ChkAllowAiLockCard.IsChecked = settings.AllowAiLockCard;
-            ChkAllowAiBounce.IsChecked = settings.AllowAiBounce;
-            ChkAllowAiHaptic.IsChecked = settings.AllowAiHaptic;
-            ChkAllowAiGetBackToMe.IsChecked = settings.AllowAiGetBackToMe;
-            SldMaxAiHapticIntensity.Value = settings.MaxAiHapticIntensity;
-            LblHapticIntensityValue.Text = $"{(int)(settings.MaxAiHapticIntensity * 100)}%";
+            // Provider toggle, model name, host URL, and effect permissions all live
+            // in the AI Brain panel on the Companion tab — this dialog is personality-only.
 
             // Load values, falling back to defaults if empty
             TxtPersonality.Text = string.IsNullOrWhiteSpace(settings.Personality)
@@ -168,21 +147,8 @@ namespace ConditioningControlPanel
 
             var settings = App.Settings.Current.CompanionPrompt;
             settings.UseCustomPrompt = ChkUseCustom.IsChecked == true;
-            settings.UseLocalAi = ChkUseLocal.IsChecked == true;
-            settings.AiModel = string.IsNullOrWhiteSpace(CmbAiModel.Text) ? _defaults.AiModel : CmbAiModel.Text.Trim();
-            settings.AiOllamaHost = string.IsNullOrWhiteSpace(TxtOllamaHost.Text) ? _defaults.AiOllamaHost : TxtOllamaHost.Text.Trim();
-            settings.AllowAiToControlEffects = ChkAllowAiEffects.IsChecked == true;
-            settings.AllowAiFlash = ChkAllowAiFlash.IsChecked == true;
-            settings.AllowAiVideo = ChkAllowAiVideo.IsChecked == true;
-            settings.AllowAiAudio = ChkAllowAiAudio.IsChecked == true;
-            settings.AllowAiBubbles = ChkAllowAiBubbles.IsChecked == true;
-            settings.AllowAiSubliminal = ChkAllowAiSubliminal.IsChecked == true;
-            settings.AllowAiOverlay = ChkAllowAiOverlay.IsChecked == true;
-            settings.AllowAiLockCard = ChkAllowAiLockCard.IsChecked == true;
-            settings.AllowAiBounce = ChkAllowAiBounce.IsChecked == true;
-            settings.AllowAiHaptic = ChkAllowAiHaptic.IsChecked == true;
-            settings.AllowAiGetBackToMe = ChkAllowAiGetBackToMe.IsChecked == true;
-            settings.MaxAiHapticIntensity = SldMaxAiHapticIntensity.Value;
+            // Provider/model/host/effect-permission settings are owned by the AI Brain
+            // panel; we only persist personality-related fields here.
             settings.Personality = TxtPersonality.Text;
             settings.ExplicitReaction = TxtExplicitReaction.Text;
             settings.SlutModePersonality = TxtSlutMode.Text;
@@ -202,107 +168,15 @@ namespace ConditioningControlPanel
 
         private void UpdateEnabledState()
         {
+            // Whole personality form is dimmed when the user is on default prompts.
             var isEnabled = ChkUseCustom.IsChecked == true;
             ContentPanel.IsEnabled = isEnabled;
             ContentPanel.Opacity = isEnabled ? 1.0 : 0.5;
-
-            if (LocalPanel != null)
-            {
-                LocalPanel.Visibility = ChkUseLocal.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-            }
         }
 
         private void ChkUseCustom_Changed(object sender, RoutedEventArgs e)
         {
             UpdateEnabledState();
-            _hasUnsavedChanges = true;
-        }
-
-        private void ChkUseLocal_Changed(object sender, RoutedEventArgs e)
-        {
-            UpdateEnabledState();
-            _hasUnsavedChanges = true;
-        }
-
-        private void ResetAiModel_Click(object sender, RoutedEventArgs e)
-        {
-            CmbAiModel.Text = _defaults.AiModel;
-        }
-
-        private async void RefreshAiModels_Click(object sender, RoutedEventArgs e)
-        {
-            await RefreshAiModelsAsync();
-        }
-
-        private async Task RefreshAiModelsAsync()
-        {
-            // Use the host as currently typed (not the saved one), so the user can
-            // switch to a remote Ollama and refresh the list before saving.
-            var host = string.IsNullOrWhiteSpace(TxtOllamaHost?.Text) ? _defaults.AiOllamaHost : TxtOllamaHost.Text.Trim();
-            var current = CmbAiModel.Text;
-
-            var models = await LocalAiService.ListInstalledModelsAsync(host);
-
-            CmbAiModel.Items.Clear();
-            foreach (var name in models) CmbAiModel.Items.Add(name);
-
-            // Preserve whatever the user had typed/selected so we don't blow away their setting.
-            CmbAiModel.Text = current;
-        }
-
-        private void OnComboTextChanged(object? sender, EventArgs e)
-        {
-            _hasUnsavedChanges = true;
-        }
-
-        private void ResetOllamaHost_Click(object sender, RoutedEventArgs e)
-        {
-            TxtOllamaHost.Text = _defaults.AiOllamaHost;
-        }
-
-        // Tracks whether the current Checked event was caused by user interaction (so we
-        // can show the warning only on the first opt-in, not when restoring saved state).
-        private bool _aiEffectsLoadedOnce;
-
-        private void ChkAllowAiEffects_Changed(object sender, RoutedEventArgs e)
-        {
-            var on = ChkAllowAiEffects.IsChecked == true;
-
-            if (on && _aiEffectsLoadedOnce)
-            {
-                var result = MessageBox.Show(
-                    Loc.Get("dialog_ai_effects_first_time_warning"),
-                    Loc.Get("section_ai_effect_permissions"),
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-                if (result != MessageBoxResult.Yes)
-                {
-                    ChkAllowAiEffects.IsChecked = false;
-                    return;
-                }
-            }
-
-            if (AiEffectsGrid != null)
-            {
-                AiEffectsGrid.IsEnabled = on;
-                AiEffectsGrid.Opacity = on ? 1.0 : 0.5;
-            }
-            if (HapticIntensityPanel != null)
-            {
-                HapticIntensityPanel.IsEnabled = on;
-                HapticIntensityPanel.Opacity = on ? 1.0 : 0.5;
-            }
-
-            _aiEffectsLoadedOnce = true;
-            _hasUnsavedChanges = true;
-        }
-
-        private void SldMaxAiHapticIntensity_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (LblHapticIntensityValue != null)
-            {
-                LblHapticIntensityValue.Text = $"{(int)(e.NewValue * 100)}%";
-            }
             _hasUnsavedChanges = true;
         }
 

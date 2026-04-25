@@ -21,7 +21,7 @@ namespace ConditioningControlPanel.Services.AIService
     public class LocalAiService : IAiService
     {
         private const string DefaultHost = "http://localhost:11434/";
-        private const string DefaultModel = "bambi-model-v7-cow";
+        private const string DefaultModel = "qwen3.5:latest";
 
         private readonly BambiSprite _bambiSprite;
         private readonly IAiResponseParser _parser;

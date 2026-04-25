@@ -21,7 +21,7 @@ namespace ConditioningControlPanel.Models
         /// <summary>
         /// Name of the Ollama model to use when <see cref="UseLocalAi"/> is true.
         /// </summary>
-        public string AiModel { get; set; } = "bambi-model-v7-cow";
+        public string AiModel { get; set; } = "qwen3.5:latest";
 
         /// <summary>
         /// Base URL of the local Ollama HTTP server.
@@ -103,7 +103,7 @@ namespace ConditioningControlPanel.Models
             {
                 UseCustomPrompt = false,
                 UseLocalAi = false,
-                AiModel = "bambi-model-v7-cow",
+                AiModel = "qwen3.5:latest",
                 AiOllamaHost = "http://localhost:11434/",
                 AllowAiToControlEffects = false,
                 AllowAiFlash = false,
