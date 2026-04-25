@@ -724,7 +724,8 @@ namespace ConditioningControlPanel.Services
             _savedSettings.CorruptionMode = current.CorruptionMode;
             _savedSettings.FlashAudioEnabled = current.FlashAudioEnabled;
             _savedSettings.ImageScale = current.ImageScale;
-            
+            _savedSettings.SimultaneousImages = current.SimultaneousImages;
+
             _savedSettings.SubliminalEnabled = current.SubliminalEnabled;
             _savedSettings.SubliminalFrequency = current.SubliminalFrequency;
             _savedSettings.SubliminalOpacity = current.SubliminalOpacity;
@@ -1022,7 +1023,8 @@ namespace ConditioningControlPanel.Services
             current.CorruptionMode = _savedSettings.CorruptionMode;
             current.FlashAudioEnabled = _savedSettings.FlashAudioEnabled;
             current.ImageScale = _savedSettings.ImageScale;
-            
+            current.SimultaneousImages = _savedSettings.SimultaneousImages;
+
             current.SubliminalEnabled = _savedSettings.SubliminalEnabled;
             current.SubliminalFrequency = _savedSettings.SubliminalFrequency;
             current.SubliminalOpacity = _savedSettings.SubliminalOpacity;

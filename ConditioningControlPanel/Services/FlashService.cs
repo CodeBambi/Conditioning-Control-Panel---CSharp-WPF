@@ -1567,14 +1567,23 @@ namespace ConditioningControlPanel.Services
                     files.Count, blockedCount, sanitizeFailedCount, folder);
             }
 
-            // Filter out disabled assets (blacklist approach)
+            // Filter out disabled assets (blacklist approach).
+            // Normalize both sides for the lookup: case-insensitive and separator-agnostic.
+            // Paths get saved when the user unchecks an item in the asset tree, but the
+            // saved string can differ from the runtime relative path by separator or case
+            // (Windows is case-insensitive at the filesystem level), causing the unchecked
+            // image to slip through the filter.
             if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
             {
                 var basePath = App.EffectiveAssetsPath;
+                static string Norm(string p) => p.Replace('\\', '/');
+                var disabled = new HashSet<string>(
+                    App.Settings.Current.DisabledAssetPaths.Select(Norm),
+                    StringComparer.OrdinalIgnoreCase);
                 files = files.Where(f =>
                 {
-                    var relativePath = Path.GetRelativePath(basePath, f);
-                    return !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
+                    var relativePath = Norm(Path.GetRelativePath(basePath, f));
+                    return !disabled.Contains(relativePath);
                 }).ToList();
             }
 

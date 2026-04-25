@@ -1703,7 +1703,11 @@ namespace ConditioningControlPanel.Services
                         // auto-completing Video during the retry gap, which would let queued
                         // interactions (e.g. BubbleCount) start while the retry video plays.
                         App.InteractionQueue?.ExtendTimeout(300);
-                        PlayVideo(_retryPath!, _strictActive);
+                        // Pick a fresh video for the retry — replaying the same video makes
+                        // attention checks easier to game (memorize the timing) and was a
+                        // user-reported inconsistency vs. BubbleCount which always picks new.
+                        var retryVideo = GetNextVideo();
+                        PlayVideo(string.IsNullOrEmpty(retryVideo) ? _retryPath! : retryVideo, _strictActive);
                     });
                 return;
             }
@@ -2225,15 +2229,21 @@ namespace ConditioningControlPanel.Services
 
             App.Logger?.Debug("VideoService: {Count} videos passed security checks", files.Count);
 
-            // Filter out disabled assets (blacklist approach)
+            // Filter out disabled assets (blacklist approach).
+            // Normalize for case-insensitive, separator-agnostic comparison so saved
+            // entries don't slip past on Windows (case) or path-style mismatch.
             if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
             {
                 var beforeCount = files.Count;
                 var basePath = App.EffectiveAssetsPath;
+                static string Norm(string p) => p.Replace('\\', '/');
+                var disabled = new HashSet<string>(
+                    App.Settings.Current.DisabledAssetPaths.Select(Norm),
+                    StringComparer.OrdinalIgnoreCase);
                 files = files.Where(f =>
                 {
-                    var relativePath = Path.GetRelativePath(basePath, f);
-                    var isDisabled = App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
+                    var relativePath = Norm(Path.GetRelativePath(basePath, f));
+                    var isDisabled = disabled.Contains(relativePath);
                     if (isDisabled)
                     {
                         App.Logger?.Debug("VideoService: Video disabled by user: {Path}", relativePath);

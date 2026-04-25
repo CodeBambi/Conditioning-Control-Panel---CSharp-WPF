@@ -1146,6 +1146,11 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return;
 
+            // Skip mandatory video if a web video is currently active — playing both
+            // simultaneously stacks two videos on screen, which is what users reported
+            // in BUG-XRFQH4AHDN.
+            if (_webVideoActive) return;
+
             // Store original strict mode state
             var wasStrict = settings.StrictLockEnabled;
 

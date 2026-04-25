@@ -520,14 +520,18 @@ public class BubbleCountService : IDisposable
                 files.Add(file);
             }
 
-            // Filter out disabled assets
+            // Filter out disabled assets — same case/separator normalization as Flash/Video.
             if (App.Settings?.Current?.DisabledAssetPaths.Count > 0)
             {
                 var basePath = App.EffectiveAssetsPath;
+                static string Norm(string p) => p.Replace('\\', '/');
+                var disabled = new HashSet<string>(
+                    App.Settings.Current.DisabledAssetPaths.Select(Norm),
+                    StringComparer.OrdinalIgnoreCase);
                 files = files.Where(f =>
                 {
-                    var relativePath = Path.GetRelativePath(basePath, f);
-                    return !App.Settings.Current.DisabledAssetPaths.Contains(relativePath);
+                    var relativePath = Norm(Path.GetRelativePath(basePath, f));
+                    return !disabled.Contains(relativePath);
                 }).ToList();
             }
 
