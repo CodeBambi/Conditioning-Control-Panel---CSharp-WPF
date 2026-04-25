@@ -1,0 +1,258 @@
+<Window x:Class="ConditioningControlPanel.LocalAiSetupWizard"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str dialog_local_ai_setup_title}"
+        Width="560" Height="540"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource DarkerBgBrush}">
+
+    <Window.Resources>
+        <Style x:Key="WizardHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style x:Key="WizardSub" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#B0B0B0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+        </Style>
+        <Style x:Key="WizardBody" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="WizardButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="18,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="100"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WizardPrimaryButton" TargetType="Button" BasedOn="{StaticResource WizardButton}">
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Padding="24,18">
+            <StackPanel>
+                <TextBlock x:Name="TxtStepTitle" Style="{StaticResource WizardHeader}"
+                           Text="{loc:Str dialog_local_ai_setup_title}"/>
+                <TextBlock x:Name="TxtStepSubtitle" Style="{StaticResource WizardSub}"
+                           Text="{loc:Str label_local_ai_setup_subtitle}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Body -->
+        <Grid Grid.Row="1" Margin="24,18,24,0">
+
+            <!-- Step: Detecting -->
+            <StackPanel x:Name="PanelDetecting" Visibility="Visible" VerticalAlignment="Center">
+                <TextBlock Style="{StaticResource WizardBody}"
+                           HorizontalAlignment="Center"
+                           Text="{loc:Str label_local_ai_detecting}"/>
+                <ProgressBar IsIndeterminate="True" Height="6" Margin="0,16,0,0"
+                             Background="{DynamicResource PanelBgBrush}"
+                             Foreground="{StaticResource PinkBrush}"/>
+            </StackPanel>
+
+            <!-- Step: Consent -->
+            <StackPanel x:Name="PanelConsent" Visibility="Collapsed">
+                <TextBlock Style="{StaticResource WizardBody}"
+                           Text="{loc:Str label_local_ai_consent_intro}"/>
+
+                <Border Margin="0,14,0,0" Padding="14,10"
+                        Background="{DynamicResource PanelBgBrush}" CornerRadius="6">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource WizardBody}"
+                                   FontWeight="SemiBold"
+                                   Text="{loc:Str label_local_ai_consent_will_do}"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="TxtConsentLine1" Style="{StaticResource WizardBody}"
+                                       Text="{loc:Str label_local_ai_consent_install_ollama}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="TxtConsentLine2" Style="{StaticResource WizardBody}"
+                                       Text="{loc:Str label_local_ai_consent_pull_model}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="•" Foreground="{StaticResource PinkBrush}" FontSize="13" Margin="0,0,8,0"/>
+                            <TextBlock Style="{StaticResource WizardBody}"
+                                       Text="{loc:Str label_local_ai_consent_runs_local}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Margin="0,14,0,0" Style="{StaticResource WizardSub}"
+                           Text="{loc:Str label_local_ai_consent_disk_note}"/>
+
+                <CheckBox x:Name="ChkAdvanced" Margin="0,14,0,0"
+                          Foreground="#B0B0B0" Content="{loc:Str label_local_ai_advanced_use_different_model}"
+                          Checked="ChkAdvanced_Changed" Unchecked="ChkAdvanced_Changed"/>
+                <Grid x:Name="AdvancedPanel" Visibility="Collapsed" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Style="{StaticResource WizardBody}"
+                               VerticalAlignment="Center" Margin="0,0,8,0"
+                               Text="{loc:Str label_local_ai_advanced_model_label}"/>
+                    <TextBox Grid.Column="1" x:Name="TxtAdvancedModel"
+                             Background="{DynamicResource PanelBgBrush}" Foreground="#E0E0E0"
+                             BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                             Padding="6,4" FontSize="13"/>
+                </Grid>
+
+                <TextBlock Margin="0,14,0,0">
+                    <Hyperlink x:Name="LinkManualInstall" Click="LinkManualInstall_Click"
+                               Foreground="#B084DC" TextDecorations="Underline">
+                        <Run Text="{loc:Str link_local_ai_manual_install}"/>
+                    </Hyperlink>
+                </TextBlock>
+            </StackPanel>
+
+            <!-- Step: Downloading installer -->
+            <StackPanel x:Name="PanelDownloadInstaller" Visibility="Collapsed">
+                <TextBlock Style="{StaticResource WizardBody}"
+                           Text="{loc:Str label_local_ai_downloading_installer}"/>
+                <Border Margin="0,12,0,0" Background="{DynamicResource PanelBgBrush}"
+                        CornerRadius="4" Height="20" Padding="2">
+                    <Grid>
+                        <Border x:Name="DownloadProgressFill"
+                                Background="{StaticResource PinkBrush}"
+                                CornerRadius="3" HorizontalAlignment="Left" Width="0"/>
+                    </Grid>
+                </Border>
+                <TextBlock x:Name="TxtDownloadProgress" Style="{StaticResource WizardBody}"
+                           Margin="0,8,0,0" HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Step: Installing -->
+            <StackPanel x:Name="PanelInstalling" Visibility="Collapsed" VerticalAlignment="Center">
+                <TextBlock Style="{StaticResource WizardBody}" HorizontalAlignment="Center"
+                           Text="{loc:Str label_local_ai_installing}"/>
+                <ProgressBar IsIndeterminate="True" Height="6" Margin="0,16,0,0"
+                             Background="{DynamicResource PanelBgBrush}"
+                             Foreground="{StaticResource PinkBrush}"/>
+                <TextBlock Style="{StaticResource WizardSub}" HorizontalAlignment="Center"
+                           Margin="0,12,0,0"
+                           Text="{loc:Str label_local_ai_installing_hint}"/>
+            </StackPanel>
+
+            <!-- Step: Pulling model -->
+            <StackPanel x:Name="PanelPullModel" Visibility="Collapsed">
+                <TextBlock x:Name="TxtPullHeader" Style="{StaticResource WizardBody}"
+                           Text="{loc:Str label_local_ai_pulling_model}"/>
+                <Border Margin="0,12,0,0" Background="{DynamicResource PanelBgBrush}"
+                        CornerRadius="4" Height="20" Padding="2">
+                    <Grid>
+                        <Border x:Name="PullProgressFill"
+                                Background="{StaticResource PinkBrush}"
+                                CornerRadius="3" HorizontalAlignment="Left" Width="0"/>
+                    </Grid>
+                </Border>
+                <TextBlock x:Name="TxtPullStatus" Style="{StaticResource WizardBody}"
+                           Margin="0,8,0,0" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtPullDetail" Style="{StaticResource WizardSub}"
+                           Margin="0,4,0,0" HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Step: Smoke test -->
+            <StackPanel x:Name="PanelSmokeTest" Visibility="Collapsed" VerticalAlignment="Center">
+                <TextBlock Style="{StaticResource WizardBody}" HorizontalAlignment="Center"
+                           Text="{loc:Str label_local_ai_smoke_test}"/>
+                <ProgressBar IsIndeterminate="True" Height="6" Margin="0,16,0,0"
+                             Background="{DynamicResource PanelBgBrush}"
+                             Foreground="{StaticResource PinkBrush}"/>
+                <TextBlock Style="{StaticResource WizardSub}" HorizontalAlignment="Center"
+                           Margin="0,12,0,0"
+                           Text="{loc:Str label_local_ai_smoke_test_hint}"/>
+            </StackPanel>
+
+            <!-- Step: Done -->
+            <StackPanel x:Name="PanelDone" Visibility="Collapsed" VerticalAlignment="Center">
+                <TextBlock Foreground="{StaticResource PinkBrush}" FontSize="36"
+                           HorizontalAlignment="Center" Text="✓" FontWeight="Bold"/>
+                <TextBlock Style="{StaticResource WizardBody}" HorizontalAlignment="Center"
+                           Margin="0,12,0,0" FontSize="15" FontWeight="SemiBold"
+                           Text="{loc:Str label_local_ai_done}"/>
+                <TextBlock x:Name="TxtDoneDetail" Style="{StaticResource WizardSub}"
+                           Margin="0,8,0,0" HorizontalAlignment="Center"
+                           TextAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Step: Error -->
+            <StackPanel x:Name="PanelError" Visibility="Collapsed">
+                <TextBlock Foreground="#FF6B6B" FontSize="32" HorizontalAlignment="Center"
+                           Text="!" FontWeight="Bold"/>
+                <TextBlock Style="{StaticResource WizardBody}" HorizontalAlignment="Center"
+                           Margin="0,8,0,0" FontWeight="SemiBold"
+                           Text="{loc:Str label_local_ai_error_heading}"/>
+                <TextBox x:Name="TxtErrorDetail" Margin="0,12,0,0" MaxHeight="180"
+                         Background="{DynamicResource PanelBgBrush}" Foreground="#E0E0E0"
+                         BorderBrush="{DynamicResource PanelAccentBrush}" BorderThickness="1"
+                         Padding="8" FontFamily="Consolas" FontSize="11"
+                         IsReadOnly="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"/>
+                <TextBlock Margin="0,12,0,0">
+                    <Hyperlink x:Name="LinkManualInstallError" Click="LinkManualInstall_Click"
+                               Foreground="#B084DC" TextDecorations="Underline">
+                        <Run Text="{loc:Str link_local_ai_manual_install}"/>
+                    </Hyperlink>
+                </TextBlock>
+            </StackPanel>
+        </Grid>
+
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}" Padding="20,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="1" x:Name="BtnSecondary" Style="{StaticResource WizardButton}"
+                        Margin="0,0,10,0" Click="BtnSecondary_Click"
+                        Content="{loc:Str btn_cancel}"/>
+                <Button Grid.Column="2" x:Name="BtnPrimary" Style="{StaticResource WizardPrimaryButton}"
+                        Click="BtnPrimary_Click"
+                        Content="{loc:Str btn_continue}"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

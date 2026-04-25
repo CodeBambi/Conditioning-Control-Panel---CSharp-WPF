@@ -6915,6 +6915,49 @@ namespace ConditioningControlPanel
             App.Settings.Save();
             if (LocalConfigPanel != null) LocalConfigPanel.Visibility = Visibility.Visible;
             UpdateAiBrainPills();
+
+            // First-time opt-in: if Ollama isn't reachable, offer the setup wizard so
+            // the user doesn't have to hunt for the button. Detect runs on a 2s timeout.
+            _ = MaybeOfferLocalAiSetupAsync();
+        }
+
+        private async Task MaybeOfferLocalAiSetupAsync()
+        {
+            try
+            {
+                var model = App.Settings?.Current?.CompanionPrompt?.AiModel;
+                var snap = await Services.AIService.OllamaSetupService.DetectAsync(targetModel: model);
+                if (snap.Status == Services.AIService.OllamaSetupService.InstallStatus.Ready) return;
+
+                var result = MessageBox.Show(
+                    this,
+                    Loc.Get("dialog_local_ai_setup_offer_body"),
+                    Loc.Get("dialog_local_ai_setup_offer_title"),
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (result == MessageBoxResult.Yes) LaunchLocalAiSetupWizard();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "MainWindow: detect-on-local-toggle failed");
+            }
+        }
+
+        private void BtnSetupLocalAi_Click(object sender, RoutedEventArgs e)
+        {
+            LaunchLocalAiSetupWizard();
+        }
+
+        private void LaunchLocalAiSetupWizard()
+        {
+            var wizard = new LocalAiSetupWizard { Owner = this };
+            var ok = wizard.ShowDialog() == true;
+            if (ok && wizard.LocalAiReady)
+            {
+                if (TxtAiModel != null) TxtAiModel.Text = wizard.SelectedModel;
+                if (RadioAiLocal != null) RadioAiLocal.IsChecked = true;
+                UpdateAiBrainPills();
+            }
         }
 
         private void TxtAiModel_LostFocus(object sender, RoutedEventArgs e)

@@ -5574,7 +5574,7 @@
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel Grid.Column="0">
                                                     <TextBlock Text="{loc:Str label_ollama_model}" Foreground="{DynamicResource TextDimBrush}" FontSize="12"/>
-                                                    <TextBox x:Name="TxtAiModel" Text="bambi-model-v7-cow"
+                                                    <TextBox x:Name="TxtAiModel" Text="qwen3.5:latest"
                                                              Background="{DynamicResource SurfaceBgBrush}" Foreground="White"
                                                              BorderBrush="#505050" BorderThickness="1" Padding="6,4" FontSize="13" Margin="0,3,0,0"
                                                              Style="{StaticResource FocusGlowTextBox}" LostFocus="TxtAiModel_LostFocus"/>
@@ -5589,9 +5589,15 @@
                                             </Grid>
                                             <Grid Margin="0,8,0,0">
                                                 <TextBlock x:Name="TxtAiHealthStatus" Text="{loc:Str label_status_unknown}" Foreground="{DynamicResource TextDimBrush}" FontSize="13" VerticalAlignment="Center"/>
-                                                <Button x:Name="BtnTestOllamaConnection" Content="{loc:Str label_test_connection}" HorizontalAlignment="Right"
-                                                        Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
-                                                        Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnTestOllamaConnection_Click"/>
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                    <Button x:Name="BtnSetupLocalAi" Content="{loc:Str btn_setup_local_ai}"
+                                                            Background="{StaticResource PinkBrush}" Foreground="White" BorderThickness="0"
+                                                            Padding="10,4" FontSize="13" Cursor="Hand" Margin="0,0,8,0"
+                                                            Click="BtnSetupLocalAi_Click"/>
+                                                    <Button x:Name="BtnTestOllamaConnection" Content="{loc:Str label_test_connection}"
+                                                            Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#9370DB" BorderThickness="1"
+                                                            Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnTestOllamaConnection_Click"/>
+                                                </StackPanel>
                                             </Grid>
                                             <Grid Margin="0,6,0,0">
                                                 <TextBlock Text="{loc:Str label_chat_memory_hint}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"/>
