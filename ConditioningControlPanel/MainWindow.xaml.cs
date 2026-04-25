@@ -5230,9 +5230,10 @@ namespace ConditioningControlPanel
 
         /// <summary>
         /// Loads the active companion's pose-1 portrait into the hero avatar circle.
-        /// Uses the same naming pattern (avatar_pose1.png / avatarN_pose1.png) as AvatarTubeWindow
-        /// because the animated GIFs aren't shipped with the project — only static PNGs are.
-        /// The ScaleTransform on the hero Image element crops to head+shoulders.
+        /// Uses Stretch="Uniform" so the full figure shows centered inside the gradient ring,
+        /// scaled down to fit, instead of being cropped (which broke for avatars whose figure
+        /// isn't anchored to the top of the source PNG). Uses the same naming pattern as
+        /// AvatarTubeWindow (avatar_pose1.png / avatarN_pose1.png).
         /// </summary>
         private void RefreshHeroAvatar()
         {
@@ -5255,7 +5256,6 @@ namespace ConditioningControlPanel
                     return;
                 }
 
-                // Fallback to embedded resource if the resolver returned null.
                 var uri = new Uri($"pack://application:,,,/Resources/{resourceName}", UriKind.Absolute);
                 var bitmap = new System.Windows.Media.Imaging.BitmapImage();
                 bitmap.BeginInit();

@@ -5265,26 +5265,20 @@
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <!-- Avatar (gradient bg, head+shoulders crop) -->
+                                <!-- Avatar: dark gradient bg, head/shoulders bitmap crop -->
                                 <Border Grid.Column="0" Width="96" Height="96" CornerRadius="48" Margin="0,0,16,0"
                                         BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2"
                                         VerticalAlignment="Center">
                                     <Border.Background>
                                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                            <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
-                                            <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                            <GradientStop Color="#0E0A1C" Offset="0"/>
+                                            <GradientStop Color="#1B0F2A" Offset="1"/>
                                         </LinearGradientBrush>
                                     </Border.Background>
                                     <Border.Clip>
                                         <EllipseGeometry Center="48,48" RadiusX="48" RadiusY="48"/>
                                     </Border.Clip>
-                                    <Image x:Name="HeroAvatarImage" Stretch="UniformToFill"
-                                           VerticalAlignment="Top" HorizontalAlignment="Center"
-                                           RenderTransformOrigin="0.5,0">
-                                        <Image.RenderTransform>
-                                            <ScaleTransform ScaleX="1.5" ScaleY="1.5"/>
-                                        </Image.RenderTransform>
-                                    </Image>
+                                    <Image x:Name="HeroAvatarImage" Stretch="Uniform" Margin="6"/>
                                 </Border>
 
                                 <!-- Body -->
