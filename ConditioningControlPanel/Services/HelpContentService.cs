@@ -878,6 +878,28 @@ namespace ConditioningControlPanel.Services
                              "No screen sharing or file access is involved — the controller only sends commands."
             },
 
+            ["GetBackToMe"] = new HelpContent
+            {
+                SectionId = "GetBackToMe",
+                Icon = "⏱",
+                Title = "Get Back To Me",
+                WhatItDoes = "Lets the AI schedule delayed follow-ups — pop back into the conversation seconds or minutes after a reply. " +
+                             "Useful for things like \"remind me in 5 minutes\", \"check on me after this video\", or \"edge for two minutes then tell me when to stop\".\n\n" +
+                             "When the timer fires, Bambi will speak a follow-up line, generate a fresh AI reply, and optionally trigger a small chain of effects (flashes, bubbles, subliminals, etc.).",
+                Tips = new List<string>
+                {
+                    "Default OFF — surprise pop-ins can be jarring if you've moved on to something else",
+                    "Caps protect you: max delay 10 minutes, recursion depth 2, max 3 chained commands per follow-up",
+                    "Each callback re-spends compute — on local Ollama that's a 5-30s wait, on cloud it'd burn another request",
+                    "Asking the AI to \"remind me\" or \"check back in N minutes\" is the natural way to trigger this",
+                    "Combine with Lockdown for hands-free guided sessions — Bambi can pace you through a routine"
+                },
+                HowItWorks = "When the AI emits a getbacktome command (delay, optional follow-up text, optional nested commands), the dispatcher " +
+                             "schedules a Task.Delay. After the delay, the avatar speaks the follow-up line (if provided), the AI is called again " +
+                             "with a follow-up prompt, and any nested commands are dispatched through the normal AiCommandService gating + caps. " +
+                             "Each scheduled follow-up has a unique token so the AI can cancel it later if needed."
+            },
+
             ["Leaderboard"] = new HelpContent
             {
                 SectionId = "Leaderboard",

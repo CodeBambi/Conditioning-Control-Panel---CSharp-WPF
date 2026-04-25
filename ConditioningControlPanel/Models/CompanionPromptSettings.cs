@@ -48,6 +48,11 @@ namespace ConditioningControlPanel.Models
         // Upper bound on AI-requested haptic intensity, regardless of value the AI emits.
         public double MaxAiHapticIntensity { get; set; } = 0.6;
 
+        // Persistent chat memory for the local AI. When false, history is neither
+        // restored at startup nor written after each turn. Default is on so existing
+        // users keep the behavior they had before this toggle existed.
+        public bool ChatMemoryEnabled { get; set; } = true;
+
         // Keyboard shortcut to open the avatar chat input. Stored as the WPF Key name
         // ("T", "F2", etc.) and a comma-separated ModifierKeys ("Control", "Control,Shift").
         // Applied at window load via code-behind so changes take effect without a restart.
@@ -117,6 +122,7 @@ namespace ConditioningControlPanel.Models
                 AllowAiHaptic = false,
                 AllowAiGetBackToMe = false,
                 MaxAiHapticIntensity = 0.6,
+                ChatMemoryEnabled = true,
                 ChatShortcutKey = "T",
                 ChatShortcutModifiers = "Control",
 
@@ -236,6 +242,7 @@ FREQUENCY RULE:
                 AllowAiHaptic = AllowAiHaptic,
                 AllowAiGetBackToMe = AllowAiGetBackToMe,
                 MaxAiHapticIntensity = MaxAiHapticIntensity,
+                ChatMemoryEnabled = ChatMemoryEnabled,
                 ChatShortcutKey = ChatShortcutKey,
                 ChatShortcutModifiers = ChatShortcutModifiers,
                 Personality = Personality,

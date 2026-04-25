@@ -86,6 +86,7 @@ namespace ConditioningControlPanel.Services.AIService
         {
             try
             {
+                if (App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled == false) return;
                 if (!File.Exists(HistoryFilePath)) return;
                 var json = File.ReadAllText(HistoryFilePath);
                 var turns = JsonSerializer.Deserialize<List<PersistedTurn>>(json);
@@ -114,6 +115,7 @@ namespace ConditioningControlPanel.Services.AIService
         {
             try
             {
+                if (App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled == false) return;
                 var dialogue = _messages
                     .Where(m => m.Role == "user" || m.Role == "assistant")
                     .Where(m => !string.IsNullOrEmpty(m.Content)

@@ -6961,7 +6961,10 @@
                                         <CheckBox x:Name="ChkAllowLockCard" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_lockcard}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="LockCard"/>
                                         <CheckBox x:Name="ChkAllowBounce" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_bounce}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Bounce"/>
                                         <CheckBox x:Name="ChkAllowHaptic" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_haptic}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Haptic"/>
-                                        <CheckBox x:Name="ChkAllowGetBackToMe" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_get_back_to_me}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="GetBackToMe"/>
+                                        <StackPanel Orientation="Horizontal" Margin="4,2,0,2">
+                                            <CheckBox x:Name="ChkAllowGetBackToMe" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_get_back_to_me}" Foreground="White" FontSize="13" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="GetBackToMe"/>
+                                            <Button x:Name="HelpBtnGetBackToMe" Style="{StaticResource HelpButtonStyle}" Tag="GetBackToMe"/>
+                                        </StackPanel>
                                     </UniformGrid>
                                 </StackPanel>
                             </Border>
@@ -6969,20 +6972,22 @@
                             <!-- Memory section -->
                             <Border CornerRadius="8" Padding="10"
                                     Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#9370DB" BorderThickness="1">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                                        <TextBlock Text="{loc:Str label_chat_memory_title}" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
-                                        <TextBlock Text="{loc:Str label_chat_memory_hint}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <Button Grid.Column="1" x:Name="BtnClearChatMemory" Content="{loc:Str btn_forget_everything}" VerticalAlignment="Center"
+                                <StackPanel>
+                                    <Grid>
+                                        <StackPanel VerticalAlignment="Center" Margin="0,0,12,0" HorizontalAlignment="Left">
+                                            <TextBlock Text="{loc:Str label_chat_memory_title}" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                            <TextBlock Text="{loc:Str label_chat_memory_hint}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <CheckBox x:Name="ChkChatMemoryEnabled" Style="{StaticResource ToggleStyle}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  IsChecked="True"
+                                                  Checked="ChkChatMemoryEnabled_Changed" Unchecked="ChkChatMemoryEnabled_Changed"/>
+                                    </Grid>
+                                    <Button x:Name="BtnClearChatMemory" Content="{loc:Str btn_forget_everything}" HorizontalAlignment="Right" Margin="0,8,0,0"
                                             Background="{DynamicResource SurfaceBgBrush}" Foreground="#FF6B6B" BorderBrush="#FF6B6B" BorderThickness="1"
                                             Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnClearChatMemory_Click"
                                             ToolTip="{loc:Str tooltip_forget_everything}"/>
-                                </Grid>
+                                </StackPanel>
                             </Border>
                         </StackPanel>
                     </Border>

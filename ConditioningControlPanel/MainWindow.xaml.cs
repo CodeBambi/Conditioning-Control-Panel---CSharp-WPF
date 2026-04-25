@@ -7085,6 +7085,24 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void ChkChatMemoryEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current?.CompanionPrompt;
+            if (s == null || ChkChatMemoryEnabled == null) return;
+            var on = ChkChatMemoryEnabled.IsChecked == true;
+            if (s.ChatMemoryEnabled == on) return;
+            s.ChatMemoryEnabled = on;
+            App.Settings?.Save();
+
+            // Turning memory off should wipe what's already saved — not just stop persisting new turns.
+            if (!on && App.Ai is Services.AIService.AiServiceStrategy strategy)
+            {
+                try { strategy.ClearLocalHistory(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "ChkChatMemoryEnabled_Changed: ClearLocalHistory failed"); }
+            }
+        }
+
         private void ChkCapEffects_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
@@ -7204,6 +7222,9 @@ namespace ConditioningControlPanel
             // Max haptic intensity
             if (SliderMaxHapticIntensity != null) SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
             if (TxtMaxHapticIntensity != null)    TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
+
+            // Chat memory toggle
+            if (ChkChatMemoryEnabled != null) ChkChatMemoryEnabled.IsChecked = s.CompanionPrompt.ChatMemoryEnabled;
 
             // Awareness panel visibility (from previous handler logic)
             if (AwarenessSettingsPanel != null)
@@ -12096,6 +12117,7 @@ namespace ConditioningControlPanel
             SetHelpContent(HelpBtnKeywordTriggers, "KeywordTriggers");
             SetHelpContent(HelpBtnScreenOcr, "ScreenOcr");
             SetHelpContent(HelpBtnRemoteControl, "RemoteControl");
+            SetHelpContent(HelpBtnGetBackToMe, "GetBackToMe");
 
             // Side panels
             SetHelpContent(HelpBtnAchievements, "Achievements");
