@@ -76,7 +76,7 @@ Follow `../RELEASE_WORKFLOW.md` - covers all version locations, build steps, and
 - **SessionEngine.cs** - AI-powered session management with OpenRouter integration
 - **ProgressionService.cs** - XP and leveling system
 - **AchievementService.cs** - Achievement tracking and unlocks
-- **UpdateService.cs** - Auto-update using Velopack + GitHub releases
+- **UpdateService.cs** - Auto-update via GitHub Releases API + Inno Setup silent installer
 - **PatreonService.cs** - Patreon OAuth, subscription validation, whitelist (server-side)
 - **ContentPackService.cs** - Download/install encrypted content packs
 
@@ -152,9 +152,9 @@ Follow `../RELEASE_WORKFLOW.md` - covers all version locations, build steps, and
 5. Results cached for 24 hours
 
 ### Update Flow
-1. `UpdateService.CheckForUpdatesAsync()` on startup
-2. Checks GitHub releases via Velopack
-3. Compares `AppVersion` constant with latest release
-4. If newer: shows update dialog
-5. Downloads `.nupkg`, applies on restart
-6. Fallback: Server banner notifies users who missed auto-update
+1. `UpdateService.CheckForUpdatesAsync()` on startup hits the GitHub Releases API
+2. Compares `AppVersion` constant with the `tag_name` of the latest release
+3. If newer: shows `UpdateNotificationDialog`
+4. On install: downloads the `Setup.exe` asset from the release and runs it silently with `/SILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS` so Inno Setup upgrades the existing install in place
+5. Fallback: server marquee/banner notifies users whose check failed
+6. Velopack was retired in v5.8.4 (the in-app `UpdateManager` had been bypassed since v5.4.10's switch to Inno Setup)

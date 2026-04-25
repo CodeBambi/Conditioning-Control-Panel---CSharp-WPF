@@ -14,10 +14,10 @@ using Microsoft.Win32;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.AIService;
+using ConditioningControlPanel.Services.Commands;
 using Serilog;
-using Velopack;
 
-// Alias to avoid ambiguity with Velopack.UpdateInfo
 using AppUpdateInfo = ConditioningControlPanel.Models.UpdateInfo;
 
 namespace ConditioningControlPanel
@@ -25,17 +25,12 @@ namespace ConditioningControlPanel
     public partial class App : Application
     {
         /// <summary>
-        /// Custom entry point required for Velopack auto-updates.
-        /// Must call VelopackApp.Build().Run() before WPF Application starts.
+        /// Custom entry point. Originally added for Velopack's update hooks; kept after
+        /// Velopack removal (v5.8.4) so we still control startup ordering explicitly.
         /// </summary>
         [STAThread]
         public static void Main(string[] args)
         {
-// Velopack: Handle updates before anything else
-            // This allows Velopack to process update commands (install, uninstall, etc.)
-            VelopackApp.Build().Run();
-
-            // Now start the WPF application normally
             var app = new App();
             app.InitializeComponent();
             app.Run();
@@ -187,7 +182,8 @@ namespace ConditioningControlPanel
         public static QuestDefinitionService QuestDefinitions { get; private set; } = null!;
         public static QuestService Quests { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
-        public static AiService Ai { get; private set; } = null!;
+        public static IAiService Ai { get; private set; } = null!;
+        public static IAiCommandService Commands { get; private set; } = null!;
         public static WindowAwarenessService WindowAwareness { get; private set; } = null!;
         public static PatreonService Patreon { get; private set; } = null!;
         public static UpdateService Update { get; private set; } = null!;
@@ -765,7 +761,8 @@ namespace ConditioningControlPanel
             Achievements?.Progress?.AwardDeferredStreakBonus();
 
             splash.SetProgress(0.85, "Initializing companion...");
-            Ai = new AiService();
+            Ai = new AiServiceStrategy();
+            Commands = new AiCommandService();
             WindowAwareness = new WindowAwarenessService();
             Patreon = new PatreonService();
             ProfileSync = new ProfileSyncService();
@@ -1471,70 +1468,30 @@ namespace ConditioningControlPanel
                 Logger?.Information("Showing update notification dialog for version {Version}", updateInfo.Version);
                 IsUpdateDialogActive = true;
 
-                // Check if this is a major update requiring fresh install
-                var requiresFreshInstall = Update?.RequiresFreshInstall == true;
-                Logger?.Information("Update requires fresh install: {RequiresFreshInstall}", requiresFreshInstall);
-
-                // Ensure owner window is active and in foreground
                 owner.Activate();
                 owner.Focus();
 
-                bool installRequested;
-
-                if (requiresFreshInstall)
+                var dialog = new UpdateNotificationDialog(updateInfo)
                 {
-                    // Show special warning for fresh install updates
-                    var result = MessageBox.Show(
-                        owner,
-                        $"Version {updateInfo.Version} is a major update that requires a fresh installation.\n\n" +
-                        "What this means:\n" +
-                        "• The installer will run and let you choose your install location\n" +
-                        "• Your assets folder (images, videos) will NOT be touched\n" +
-                        "• Your settings and progress will be preserved\n\n" +
-                        "The app will close and the installer will start automatically.\n\n" +
-                        "Would you like to update now?",
-                        "Major Update Available",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Information);
-
-                    installRequested = result == MessageBoxResult.Yes;
-                }
-                else
+                    Owner = owner,
+                    Topmost = true,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+                dialog.Loaded += (s, e) =>
                 {
-                    var dialog = new UpdateNotificationDialog(updateInfo)
-                    {
-                        Owner = owner,
-                        Topmost = true,
-                        WindowStartupLocation = WindowStartupLocation.CenterOwner
-                    };
+                    dialog.Activate();
+                    dialog.Focus();
+                };
 
-                    // Activate dialog when it's loaded to ensure it's visible
-                    dialog.Loaded += (s, e) =>
-                    {
-                        dialog.Activate();
-                        dialog.Focus();
-                    };
-
-                    installRequested = dialog.ShowDialog() == true && dialog.InstallRequested;
-                }
-
+                var installRequested = dialog.ShowDialog() == true && dialog.InstallRequested;
                 Logger?.Information("Update dialog closed, install requested: {InstallRequested}", installRequested);
 
                 if (installRequested)
                 {
-                    // Keep flag active during download
-                    if (requiresFreshInstall)
-                    {
-                        DownloadAndRunInstallerAsync(owner);
-                    }
-                    else
-                    {
-                        DownloadAndInstallUpdateAsync(owner);
-                    }
+                    DownloadAndRunInstallerAsync(owner);
                 }
                 else
                 {
-                    // User declined or closed dialog
                     IsUpdateDialogActive = false;
                 }
             }
@@ -1726,100 +1683,6 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Download and install the update with progress dialog
-        /// </summary>
-        private async void DownloadAndInstallUpdateAsync(Window owner)
-        {
-            UpdateProgressDialog? progressDialog = null;
-            EventHandler<int>? progressHandler = null;
-
-            try
-            {
-                // Create and show dialog directly (we're already on UI thread)
-                Logger?.Information("Creating progress dialog...");
-                progressDialog = new UpdateProgressDialog();
-                progressDialog.Topmost = true;
-                Logger?.Information("Showing progress dialog...");
-                progressDialog.Show();
-                Logger?.Information("Progress dialog shown");
-
-                // Allow UI to update
-                await Task.Delay(100);
-
-                Logger?.Information("Starting update download...");
-
-                // Create progress handler that safely updates the dialog
-                progressHandler = (s, progress) =>
-                {
-                    try
-                    {
-                        progressDialog?.Dispatcher.BeginInvoke(() =>
-                        {
-                            if (progressDialog.IsVisible)
-                            {
-                                progressDialog.SetProgress(progress);
-                            }
-                        });
-                    }
-                    catch
-                    {
-                        // Ignore if dialog was closed
-                    }
-                };
-
-                Update.DownloadProgressChanged += progressHandler;
-
-                await Update.DownloadUpdateAsync();
-
-                progressDialog.Close();
-                progressDialog = null;
-
-                // Ask user to restart
-                var result = MessageBox.Show(
-                    owner,
-                    "Update downloaded successfully. Restart now to apply the update?",
-                    "Update Ready",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
-
-                if (result == MessageBoxResult.Yes)
-                {
-                    Update.ApplyUpdateAndRestart();
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger?.Error(ex, "Failed to download update");
-
-                try
-                {
-                    progressDialog?.Close();
-                }
-                catch
-                {
-                    // Ignore close errors
-                }
-
-                MessageBox.Show(
-                    owner,
-                    $"Failed to download update: {ex.Message}",
-                    "Update Failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-            }
-            finally
-            {
-                // Always unsubscribe the event handler
-                if (progressHandler != null)
-                {
-                    Update.DownloadProgressChanged -= progressHandler;
-                }
-
-                IsUpdateDialogActive = false;
-            }
-        }
-
-        /// <summary>
         /// Manually check for updates (called from MainWindow)
         /// </summary>
         public static async Task<bool> CheckForUpdatesManuallyAsync(Window owner)
@@ -1842,72 +1705,26 @@ namespace ConditioningControlPanel
                 {
                     IsUpdateDialogActive = true;
 
-                    // Check if this is a major update requiring fresh install
-                    var requiresFreshInstall = Update?.RequiresFreshInstall == true;
-
-                    // Ensure owner window is active and in foreground
                     owner.Activate();
                     owner.Focus();
 
-                    bool installRequested;
-
-                    if (requiresFreshInstall)
+                    var dialog = new UpdateNotificationDialog(updateInfo)
                     {
-                        // Show special warning for fresh install updates
-                        var result = MessageBox.Show(
-                            owner,
-                            $"Version {updateInfo.Version} is a major update that requires a fresh installation.\n\n" +
-                            "What this means:\n" +
-                            "• The installer will run and let you choose your install location\n" +
-                            "• Your assets folder (images, videos) will NOT be touched\n" +
-                            "• Your settings and progress will be preserved\n\n" +
-                            "The app will close and the installer will start automatically.\n\n" +
-                            "Would you like to update now?",
-                            "Major Update Available",
-                            MessageBoxButton.YesNo,
-                            MessageBoxImage.Information);
-
-                        installRequested = result == MessageBoxResult.Yes;
-                    }
-                    else
+                        Owner = owner,
+                        Topmost = true,
+                        WindowStartupLocation = WindowStartupLocation.CenterOwner
+                    };
+                    dialog.Loaded += (s, e) =>
                     {
-                        var dialog = new UpdateNotificationDialog(updateInfo)
-                        {
-                            Owner = owner,
-                            Topmost = true,
-                            WindowStartupLocation = WindowStartupLocation.CenterOwner
-                        };
+                        dialog.Activate();
+                        dialog.Focus();
+                    };
 
-                        // Activate dialog when it's loaded to ensure it's visible
-                        dialog.Loaded += (s, e) =>
-                        {
-                            dialog.Activate();
-                            dialog.Focus();
-                        };
-
-                        installRequested = dialog.ShowDialog() == true && dialog.InstallRequested;
-                    }
+                    var installRequested = dialog.ShowDialog() == true && dialog.InstallRequested;
 
                     if (installRequested)
                     {
-                        // Use installer download for:
-                        // 1. Major updates requiring fresh install (pre-5.1 to 5.1+)
-                        // 2. Updates detected via GitHub API fallback (Velopack couldn't find them)
-                        // 3. Inno Setup installations (Velopack not available)
-                        var useInstallerDownload = requiresFreshInstall ||
-                                                   updateInfo.IsGitHubFallback ||
-                                                   (UpdateService.IsInstalledViaInstaller && Update?.IsInstalled == false);
-
-                        if (useInstallerDownload)
-                        {
-                            Logger?.Information("Using installer download flow (requiresFreshInstall={Fresh}, isGitHubFallback={Fallback}, isInnoSetup={Inno})",
-                                requiresFreshInstall, updateInfo.IsGitHubFallback, UpdateService.IsInstalledViaInstaller && Update?.IsInstalled == false);
-                            ((App)Current).DownloadAndRunInstallerAsync(owner);
-                        }
-                        else
-                        {
-                            ((App)Current).DownloadAndInstallUpdateAsync(owner);
-                        }
+                        ((App)Current).DownloadAndRunInstallerAsync(owner);
                     }
                     else
                     {

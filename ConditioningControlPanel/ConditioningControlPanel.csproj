@@ -27,7 +27,7 @@
     <GenerateAssemblyFileVersionAttribute>true</GenerateAssemblyFileVersionAttribute>
     <GenerateAssemblyInformationalVersionAttribute>true</GenerateAssemblyInformationalVersionAttribute>
 
-    <!-- Use custom Main entry point for Velopack -->
+    <!-- Custom Main entry point (originally added for Velopack; kept for control over startup) -->
     <StartupObject>ConditioningControlPanel.App</StartupObject>
 
     <!-- Disable WPF auto-generated entry point so we can use our custom Main -->
@@ -64,6 +64,7 @@
     <!-- Audio Control -->
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageReference Include="OllamaSharp" Version="5.4.16" />
     
     <!-- Logging -->
     <PackageReference Include="Serilog" Version="3.1.1" />
@@ -96,9 +97,6 @@
     <!-- GIF Animation Support -->
     <PackageReference Include="XamlAnimatedGif" Version="2.3.0" />
 
-    <!-- Auto-Update -->
-    <PackageReference Include="Velopack" Version="0.0.1298" />
-
     <!-- QR Code Generation (used by Remote Control tab for mobile pairing) -->
     <PackageReference Include="QRCoder" Version="1.6.0" />
   </ItemGroup>
@@ -123,6 +121,12 @@
   <ItemGroup>
     <!-- Session files -->
     <Content Include="assets\sessions\*.session.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- AI knowledge base placeholder (read by Services/AIService/Enrichment/KnowledgeService) -->
+    <Content Include="assets\knowledge.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
