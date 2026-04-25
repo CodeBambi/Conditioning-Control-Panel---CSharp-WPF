@@ -16,12 +16,20 @@ namespace ConditioningControlPanel.Services.Commands
         public Task<bool> ExecuteAsync()
         {
             var frequency = Math.Clamp(_data.Frequency, 0, MaxFrequency);
+
+            // Tolerant intent detection: treat frequency > 0 as "start" even if the
+            // AI forgot to set On=true. Conversely, frequency == 0 with On=false is stop.
+            // This handles models that emit only one of the two fields.
+            var shouldStart = _data.On || frequency > 0;
+            App.Logger?.Information("BubbleCommand: On={On} Frequency={Freq} -> {Action}",
+                _data.On, frequency, shouldStart ? "Start" : "Stop");
+
             try
             {
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    if (_data.On)
-                        App.Bubbles?.Start(true, frequency);
+                    if (shouldStart)
+                        App.Bubbles?.Start(true, frequency > 0 ? frequency : (int?)null);
                     else
                         App.Bubbles?.Stop();
                 });

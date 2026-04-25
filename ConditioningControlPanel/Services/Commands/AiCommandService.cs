@@ -58,7 +58,8 @@ namespace ConditioningControlPanel.Services.Commands
                 return;
             }
 
-            App.Logger?.Information("AiCommandService: dispatching {Cmd}", commandData.Command);
+            App.Logger?.Information("AiCommandService: dispatching {Cmd} with data {@Data}",
+                commandData.Command, commandData.Data);
 
             var token = commandData.Data.Token;
             CancellationTokenSource? cts = null;
