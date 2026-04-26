@@ -59,7 +59,14 @@ namespace ConditioningControlPanel.Services
     //    Iris   → Iris model on 64×64 eye crops (right eye flipped before
     //             inference, output un-flipped). Iris-center landmark gives
     //             a precise gaze vector — replaces darkest-pixel heuristic.
-    //    Mouth-open: DEFERRED to v2.
+    //    Mouth-open → MAR (Mouth Aspect Ratio) on FaceMesh's inner-lip landmarks
+    //             (pattern matches EAR — same percentile baseline + hysteresis).
+    //             No new model.
+    //    Tongue-out → HSV color heuristic inside the inner-lip polygon, gated
+    //             on mouth-open. Counts pink/red pixels excluding teeth-bright
+    //             and shadow-dark; fires above a ratio threshold. Known false-
+    //             positive: red lipstick on the inner lip. Documented as v2
+    //             follow-up that would need a dedicated model.
     // ─────────────────────────────────────────────────────────────────────────────
 
     public enum GazeSide { Left, Right, Center }
@@ -134,6 +141,57 @@ namespace ConditioningControlPanel.Services
         private static readonly int[] LeftEyeBoxIndices  = { 33, 133, 159, 145, 158, 153 };  // 33 outer, 133 inner, 159 top, 145 bottom
         private static readonly int[] RightEyeBoxIndices = { 263, 362, 386, 374, 385, 380 }; // 263 outer, 362 inner, 386 top, 374 bottom
 
+        // Mouth-open detection — MAR (Mouth Aspect Ratio), same shape as EAR.
+        // Uses FaceMesh's inner-lip landmarks (already in the 468-point set, no
+        // new model needed). Three vertical chord pairs averaged to suppress
+        // single-landmark noise, divided by mouth corner-to-corner width.
+        //   Corners: 78 (left), 308 (right)
+        //   Vertical pairs (top, bottom): (81,178), (13,14), (311,402)
+        // Baseline pattern matches EAR: 90-frame rolling buffer, 90th-percentile
+        // baseline (rejects yawn / surprised-face spikes from polluting it).
+        // Hysteresis: enter "open" at >1.8×baseline, leave at <1.4×baseline.
+        // Min open window 80 ms (filters single-frame jitter). Cooldown 800 ms.
+        private const int MarBaselineFrames = 90;
+        private const int MarMinSamplesForBaseline = 15;
+        private const double MarOpenRatio = 1.80;
+        private const double MarCloseRatio = 1.40;
+        private const int MinMouthOpenMs = 80;
+        private const int MouthCooldownMs = 800;
+        private const int MouthDiagLogIntervalMs = 3000;
+        private static readonly int[] MarVerticalPairs = { 81, 178, 13, 14, 311, 402 };
+        private const int MouthCornerLeftIdx = 78;
+        private const int MouthCornerRightIdx = 308;
+
+        // Tongue-out detection — HSV color heuristic on pixels inside the inner-
+        // lip polygon. Only runs when MAR says the mouth is currently open, so
+        // closed-mouth lipstick can't false-fire. The 16 indices below trace the
+        // inner-lip ring clockwise from upper-center (canonical MediaPipe
+        // FaceMesh layout). Per-pixel HSV bands and the open/close ratio are
+        // tuned for typical webcam lighting; documented limitation: red lipstick
+        // on the inner lip can false-fire (would need a dedicated model to fix).
+        private static readonly int[] InnerLipPolygonIndices =
+        {
+            13, 312, 311, 310, 415, 308, 324, 318, 402, 317,
+            14, 87, 178, 88, 95, 78, 191, 80, 81, 82
+        };
+        private const double TongueEnterRatio = 0.18;   // tongue_px / valid_px
+        private const double TongueLeaveRatio = 0.10;
+        private const int MinTongueOutMs = 150;
+        private const int TongueCooldownMs = 700;
+        private const int TongueDiagLogIntervalMs = 3000;
+        // HSV bands (OpenCV: H ∈ [0,179], S/V ∈ [0,255]). Tuned loose because
+        // consumer webcams often desaturate skin/tongue tones — a strict S>80
+        // gate misclassifies real tongue pixels as "other".
+        private const int TongueHueLow1 = 0;
+        private const int TongueHueHigh1 = 20;
+        private const int TongueHueLow2 = 160;
+        private const int TongueHueHigh2 = 179;
+        private const int TongueMinSat = 50;
+        private const int TongueMinVal = 50;
+        private const int TeethMinVal = 200;            // bright + low sat = teeth (excluded)
+        private const int TeethMaxSat = 50;
+        private const int ShadowMaxVal = 40;            // very dark = shadow / mouth interior void (excluded)
+
         // Gaze parameters
         private const int GazeBufferSize = 30;
         private const int LongStareDurationMs = 3000;
@@ -151,7 +209,8 @@ namespace ConditioningControlPanel.Services
 
         public event Action? OnBlink;
         public event Action<System.Windows.Point>? OnLongStare;
-        public event Action? OnMouthOpen;          // reserved for v2
+        public event Action? OnMouthOpen;
+        public event Action? OnTongueOut;
         public event Action<System.Windows.Point>? OnGazeMove;
         public event Action<GazeSide>? OnGazeSide;
         public event Action? OnFaceLost;
@@ -192,6 +251,33 @@ namespace ConditioningControlPanel.Services
         private int _windowNearMissCount;                        // count of frames where EAR < 0.90×baseline but we didn't trigger closed
         private DateTime _lastBlinkDiagAt = DateTime.MinValue;
         private int _blinkCount;                                 // total blinks fired since service start
+
+        // Mouth state (mirrors blink state machine)
+        private DateTime _lastMouthOpenAt = DateTime.MinValue;
+        private readonly Queue<double> _marBuffer = new();
+        private double _marBaseline;
+        private bool _mouthOpen;
+        private DateTime? _mouthOpenedAt;
+        private double _maxMarThisOpening;
+        private double _windowMinMar = double.MaxValue;
+        private double _windowMaxMar = double.MinValue;
+        private DateTime _lastMouthDiagAt = DateTime.MinValue;
+        private int _mouthOpenCount;
+
+        // Tongue state (gated on _mouthOpen)
+        private DateTime _lastTongueOutAt = DateTime.MinValue;
+        private bool _tongueOut;
+        private DateTime? _tongueOutSince;
+        private double _maxTongueRatioThisFire;
+        private double _windowMaxTongueRatio;
+        private DateTime _lastTongueDiagAt = DateTime.MinValue;
+        private int _tongueOutCount;
+        // Per-window class accumulators for the tongue diag log — totals across
+        // all sampled frames since the last log emission. Lets us see whether
+        // tongue is being misclassified as "other" (loosen sat) or as "shadow"
+        // (loosen ShadowMaxVal), instead of guessing.
+        private long _diagTongueSum, _diagTeethSum, _diagShadowSum, _diagOtherSum;
+        private int _diagTongueFrames;
         // Gaze-side stability filter — require N consecutive frames of the same
         // classification before emitting, so that transient passes through Center
         // during a Left↔Right movement don't fire spurious Center events.
@@ -481,6 +567,23 @@ namespace ConditioningControlPanel.Services
             _windowNearMissCount = 0;
             _lastBlinkDiagAt = DateTime.MinValue;
             _blinkCount = 0;
+            _marBuffer.Clear();
+            _marBaseline = 0;
+            _mouthOpen = false;
+            _mouthOpenedAt = null;
+            _maxMarThisOpening = 0;
+            _windowMinMar = double.MaxValue;
+            _windowMaxMar = double.MinValue;
+            _lastMouthDiagAt = DateTime.MinValue;
+            _mouthOpenCount = 0;
+            _tongueOut = false;
+            _tongueOutSince = null;
+            _maxTongueRatioThisFire = 0;
+            _windowMaxTongueRatio = 0;
+            _lastTongueDiagAt = DateTime.MinValue;
+            _tongueOutCount = 0;
+            _diagTongueSum = _diagTeethSum = _diagShadowSum = _diagOtherSum = 0;
+            _diagTongueFrames = 0;
             _irisDxSmoothBuffer.Clear();
             _irisDySmoothBuffer.Clear();
             _lastGazeSide = GazeSide.Center;
@@ -607,6 +710,13 @@ namespace ConditioningControlPanel.Services
                 UpdateBlinkState(earL, earR);
             }
 
+            // 5a) MAR-based mouth-open detection on FaceMesh inner-lip landmarks.
+            //     Tongue heuristic runs only if mouth is currently open (gated
+            //     inside UpdateTongueState). Both share the lip polygon math.
+            double mar = ComputeMAR(landmarks);
+            UpdateMouthState(mar);
+            UpdateTongueState(bgr, landmarks);
+
             // 6) Iris-vector for gaze (head-pose stable, normalized against
             //    eye-corner midpoint and scaled by corner-to-corner distance).
             double sumDx = 0, sumDy = 0;
@@ -657,6 +767,10 @@ namespace ConditioningControlPanel.Services
             _lastRightEyeRect = null;
             _eyesClosed = false;
             _eyesClosedAt = null;
+            _mouthOpen = false;
+            _mouthOpenedAt = null;
+            _tongueOut = false;
+            _tongueOutSince = null;
             if (_consecutiveNoFaceFrames > FaceLostFramesThreshold * 2)
             {
                 _gazeBuffer.Clear();
@@ -684,8 +798,20 @@ namespace ConditioningControlPanel.Services
 
         private void EmitGazeEvents(double irisDx, double irisDy)
         {
+            // Suppress all gaze emission while the eyes are closed. The iris
+            // model still returns an iris-center landmark on a closing eye, but
+            // the eye-corner reference frame collapses vertically as the lid
+            // descends, so the normalized iris vector goes haywire — the
+            // visualization dot bobs up/down on every blink, and calibration
+            // sampling absorbs garbage frames if the user blinks while looking
+            // at a dot. Holding the last emitted state through the blink fixes
+            // both. The gaze-side stability buffer and screen-projection state
+            // resume cleanly when the eyes reopen.
+            if (_eyesClosed) return;
+
             // Raw iris vector — used by the calibration window to sample reference
-            // points. Always fires; calibration consumers expect every frame.
+            // points. Always fires (when eyes are open); calibration consumers
+            // expect a per-frame event during sampling.
             Dispatch(() => OnRawIris?.Invoke(irisDx, irisDy));
 
             // Smoothed iris vector — used by live classification. Per-frame iris
@@ -1049,6 +1175,271 @@ namespace ConditioningControlPanel.Services
             if (idx >= arr.Length) idx = arr.Length - 1;
             if (idx < 0) idx = 0;
             return arr[idx];
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  MAR (Mouth Aspect Ratio) mouth-open detection.
+        //  Pattern matches EAR: rolling 90-frame buffer, 90th-percentile baseline
+        //  (rejects yawn / surprise spikes), hysteresis enter at 1.8× baseline,
+        //  leave at 1.4×, min open window 80 ms, cooldown 800 ms. Diag log
+        //  every ~3 s (counts only — privacy contract).
+        // ─────────────────────────────────────────────────────────────────────────
+        private static double ComputeMAR(float[][] landmarks)
+        {
+            // Three vertical chord pairs averaged, normalized by corner-to-corner
+            // width. Direct port of the standard MAR formula.
+            double v1 = Distance(landmarks[MarVerticalPairs[0]], landmarks[MarVerticalPairs[1]]);
+            double v2 = Distance(landmarks[MarVerticalPairs[2]], landmarks[MarVerticalPairs[3]]);
+            double v3 = Distance(landmarks[MarVerticalPairs[4]], landmarks[MarVerticalPairs[5]]);
+            double w  = Distance(landmarks[MouthCornerLeftIdx], landmarks[MouthCornerRightIdx]);
+            return w > 1e-6 ? (v1 + v2 + v3) / (3.0 * w) : 0.0;
+        }
+
+        private void UpdateMouthState(double mar)
+        {
+            EnqueueWithCap(_marBuffer, mar, MarBaselineFrames);
+            // Closed-mouth values dominate the buffer; the 10th percentile
+            // approximates the resting closed MAR. We compare current MAR to
+            // that closed baseline (e.g. >1.8× resting = open).
+            _marBaseline = PercentileOf(_marBuffer, 0.10);
+
+            if (mar < _windowMinMar) _windowMinMar = mar;
+            if (mar > _windowMaxMar) _windowMaxMar = mar;
+
+            var now = DateTime.UtcNow;
+            MaybeLogMouthDiag(now);
+
+            if (_marBuffer.Count < MarMinSamplesForBaseline) return;
+            if (_marBaseline <= 0) return;
+
+            bool nowOpen = _mouthOpen
+                ? mar > MarCloseRatio * _marBaseline
+                : mar > MarOpenRatio  * _marBaseline;
+
+            if (nowOpen && !_mouthOpen)
+            {
+                _mouthOpenedAt = now;
+                _maxMarThisOpening = mar;
+            }
+            else if (nowOpen)
+            {
+                if (mar > _maxMarThisOpening) _maxMarThisOpening = mar;
+                // Fire OnMouthOpen once per open window, after MinMouthOpenMs has
+                // elapsed and cooldown allows it. Edge-trigger so a long-held
+                // open mouth doesn't spam the event.
+                if (_mouthOpenedAt.HasValue && _lastMouthOpenAt < _mouthOpenedAt.Value)
+                {
+                    var openMs = (now - _mouthOpenedAt.Value).TotalMilliseconds;
+                    if (openMs >= MinMouthOpenMs
+                        && (now - _lastMouthOpenAt).TotalMilliseconds >= MouthCooldownMs)
+                    {
+                        _lastMouthOpenAt = now;
+                        _mouthOpenCount++;
+                        Dispatch(() => OnMouthOpen?.Invoke());
+                        App.Logger?.Information(
+                            "WebcamTrackingService: mouth-open #{N} FIRED (open for {Ms:F0}ms, baseline MAR={Base:F3}, max MAR during open={Max:F3}, ratio={Ratio:F2}× baseline)",
+                            _mouthOpenCount, openMs, _marBaseline, _maxMarThisOpening,
+                            _maxMarThisOpening / _marBaseline);
+                    }
+                }
+            }
+            else if (!nowOpen && _mouthOpen)
+            {
+                _mouthOpenedAt = null;
+                _maxMarThisOpening = 0;
+            }
+
+            _mouthOpen = nowOpen;
+        }
+
+        private void MaybeLogMouthDiag(DateTime now)
+        {
+            if (_lastMouthDiagAt == DateTime.MinValue) { _lastMouthDiagAt = now; return; }
+            if ((now - _lastMouthDiagAt).TotalMilliseconds < MouthDiagLogIntervalMs) return;
+            _lastMouthDiagAt = now;
+
+            double openThreshold = _marBaseline * MarOpenRatio;
+            double closeThreshold = _marBaseline * MarCloseRatio;
+            double winMaxRatio = _marBaseline > 0 ? _windowMaxMar / _marBaseline : 0;
+            App.Logger?.Information(
+                "WebcamTrackingService: mouth-diag baseline={Base:F3} openThr={OT:F3} closeThr={CT:F3} winMin={WMin:F3} winMax={WMax:F3}({WMaxR:P0}) state={State} mouthOpens={N} samples={S}",
+                _marBaseline, openThreshold, closeThreshold,
+                _windowMinMar, _windowMaxMar, winMaxRatio,
+                _mouthOpen ? "OPEN" : "closed", _mouthOpenCount, _marBuffer.Count);
+
+            _windowMinMar = double.MaxValue;
+            _windowMaxMar = double.MinValue;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  Tongue-out detection (HSV color heuristic, gated on _mouthOpen).
+        //  Builds the inner-lip polygon, masks it onto the source frame, converts
+        //  the masked region to HSV, classifies each pixel as tongue / teeth /
+        //  shadow / other. Fires when tongue / valid pixel ratio crosses the
+        //  enter threshold and the mouth has been open long enough to expose
+        //  the tongue. Hysteresis on leave to avoid flicker.
+        // ─────────────────────────────────────────────────────────────────────────
+        private void UpdateTongueState(Mat bgr, float[][] landmarks)
+        {
+            // Hard reset when the mouth is closed. Tongue is by definition
+            // invisible at that point, and the polygon would be a sliver where
+            // teeth/shadow ratios go haywire.
+            if (!_mouthOpen)
+            {
+                if (_tongueOut)
+                {
+                    _tongueOut = false;
+                    _tongueOutSince = null;
+                    _maxTongueRatioThisFire = 0;
+                }
+                return;
+            }
+
+            double tongueRatio = ComputeTongueRatio(bgr, landmarks,
+                out int tonguePx, out int teethPx, out int shadowPx, out int otherPx);
+
+            if (tongueRatio > _windowMaxTongueRatio) _windowMaxTongueRatio = tongueRatio;
+            _diagTongueSum += tonguePx;
+            _diagTeethSum  += teethPx;
+            _diagShadowSum += shadowPx;
+            _diagOtherSum  += otherPx;
+            _diagTongueFrames++;
+
+            var now = DateTime.UtcNow;
+            MaybeLogTongueDiag(now);
+
+            bool nowOut = _tongueOut
+                ? tongueRatio > TongueLeaveRatio
+                : tongueRatio > TongueEnterRatio;
+
+            if (nowOut && !_tongueOut)
+            {
+                _tongueOutSince = now;
+                _maxTongueRatioThisFire = tongueRatio;
+            }
+            else if (nowOut)
+            {
+                if (tongueRatio > _maxTongueRatioThisFire) _maxTongueRatioThisFire = tongueRatio;
+                if (_tongueOutSince.HasValue && _lastTongueOutAt < _tongueOutSince.Value)
+                {
+                    var outMs = (now - _tongueOutSince.Value).TotalMilliseconds;
+                    if (outMs >= MinTongueOutMs
+                        && (now - _lastTongueOutAt).TotalMilliseconds >= TongueCooldownMs)
+                    {
+                        _lastTongueOutAt = now;
+                        _tongueOutCount++;
+                        Dispatch(() => OnTongueOut?.Invoke());
+                        App.Logger?.Information(
+                            "WebcamTrackingService: tongue-out #{N} FIRED (visible for {Ms:F0}ms, max ratio={Max:P0})",
+                            _tongueOutCount, outMs, _maxTongueRatioThisFire);
+                    }
+                }
+            }
+            else if (!nowOut && _tongueOut)
+            {
+                _tongueOutSince = null;
+                _maxTongueRatioThisFire = 0;
+            }
+
+            _tongueOut = nowOut;
+        }
+
+        private static double ComputeTongueRatio(Mat bgr, float[][] landmarks,
+            out int tongue, out int teeth, out int shadow, out int other)
+        {
+            tongue = teeth = shadow = other = 0;
+
+            // Build polygon in source-frame pixel coords + bounding box.
+            int n = InnerLipPolygonIndices.Length;
+            var pts = new CvPoint[n];
+            int xMin = int.MaxValue, yMin = int.MaxValue, xMax = int.MinValue, yMax = int.MinValue;
+            for (int i = 0; i < n; i++)
+            {
+                int px = (int)Math.Round(landmarks[InnerLipPolygonIndices[i]][0]);
+                int py = (int)Math.Round(landmarks[InnerLipPolygonIndices[i]][1]);
+                pts[i] = new CvPoint(px, py);
+                if (px < xMin) xMin = px;
+                if (py < yMin) yMin = py;
+                if (px > xMax) xMax = px;
+                if (py > yMax) yMax = py;
+            }
+
+            // Clip bbox to source frame; bail if degenerate.
+            xMin = Math.Max(0, xMin);
+            yMin = Math.Max(0, yMin);
+            xMax = Math.Min(bgr.Width - 1, xMax);
+            yMax = Math.Min(bgr.Height - 1, yMax);
+            int bbW = xMax - xMin + 1;
+            int bbH = yMax - yMin + 1;
+            if (bbW < 4 || bbH < 4) return 0.0;
+
+            // Translate polygon into bbox-local coords for the mask.
+            var localPts = new CvPoint[n];
+            for (int i = 0; i < n; i++)
+                localPts[i] = new CvPoint(pts[i].X - xMin, pts[i].Y - yMin);
+
+            using var mask = new Mat(bbH, bbW, MatType.CV_8UC1, Scalar.All(0));
+            Cv2.FillPoly(mask, new[] { localPts }, Scalar.All(255));
+
+            using var crop = new Mat(bgr, new CvRect(xMin, yMin, bbW, bbH));
+            using var hsv = new Mat();
+            Cv2.CvtColor(crop, hsv, ColorConversionCodes.BGR2HSV);
+
+            // Walk pixels by raw byte access for speed (avoids per-pixel C# Mat
+            // indexer calls). HSV is CV_8UC3, so 3 bytes per pixel, row-major.
+            int total = bbW * bbH;
+            var hsvBytes = new byte[total * 3];
+            System.Runtime.InteropServices.Marshal.Copy(hsv.Data, hsvBytes, 0, hsvBytes.Length);
+            var maskBytes = new byte[total];
+            System.Runtime.InteropServices.Marshal.Copy(mask.Data, maskBytes, 0, maskBytes.Length);
+
+            for (int i = 0; i < total; i++)
+            {
+                if (maskBytes[i] == 0) continue;
+                byte h = hsvBytes[3 * i + 0];
+                byte s = hsvBytes[3 * i + 1];
+                byte v = hsvBytes[3 * i + 2];
+
+                // Order matters: shadow first (V is dominant), then teeth (V high
+                // + S low), then tongue (red-pink hue + saturated + bright enough),
+                // else "other" (lip surface, in-between).
+                if (v < ShadowMaxVal) { shadow++; continue; }
+                if (v >= TeethMinVal && s <= TeethMaxSat) { teeth++; continue; }
+                bool inHue = (h >= TongueHueLow1 && h <= TongueHueHigh1)
+                          || (h >= TongueHueLow2 && h <= TongueHueHigh2);
+                if (inHue && s >= TongueMinSat && v >= TongueMinVal) { tongue++; continue; }
+                other++;
+            }
+
+            int valid = tongue + other;     // exclude teeth and shadow from the denominator
+            if (valid < 8) return 0.0;      // too few useful pixels to trust the ratio
+            return (double)tongue / valid;
+        }
+
+        private void MaybeLogTongueDiag(DateTime now)
+        {
+            if (_lastTongueDiagAt == DateTime.MinValue) { _lastTongueDiagAt = now; return; }
+            if ((now - _lastTongueDiagAt).TotalMilliseconds < TongueDiagLogIntervalMs) return;
+            _lastTongueDiagAt = now;
+
+            // Per-class share of pixels across the window. If "tongue" stays
+            // tiny but "other" is huge while the user reports sticking out
+            // their tongue, the saturation gate is too tight (loosen
+            // TongueMinSat). If "shadow" dominates, ShadowMaxVal is too high.
+            long classified = _diagTongueSum + _diagTeethSum + _diagShadowSum + _diagOtherSum;
+            double tonguePct = classified > 0 ? (double)_diagTongueSum / classified : 0;
+            double teethPct  = classified > 0 ? (double)_diagTeethSum  / classified : 0;
+            double shadowPct = classified > 0 ? (double)_diagShadowSum / classified : 0;
+            double otherPct  = classified > 0 ? (double)_diagOtherSum  / classified : 0;
+
+            App.Logger?.Information(
+                "WebcamTrackingService: tongue-diag winMaxRatio={Max:P0} state={State} fires={N} frames={F} | per-class share: tongue={T:P0} teeth={E:P0} shadow={S:P0} other={O:P0}",
+                _windowMaxTongueRatio, _tongueOut ? "OUT" : "in", _tongueOutCount,
+                _diagTongueFrames, tonguePct, teethPct, shadowPct, otherPct);
+
+            _windowMaxTongueRatio = 0;
+            _diagTongueSum = _diagTeethSum = _diagShadowSum = _diagOtherSum = 0;
+            _diagTongueFrames = 0;
         }
 
         // ─────────────────────────────────────────────────────────────────────────
