@@ -3139,6 +3139,187 @@ namespace ConditioningControlPanel
             ShowTab("lab");
         }
 
+        // ─── [DEBUG] Webcam smoke test — TEMPORARY, remove with the XAML card ───
+        private bool _webcamDebugSubscribed;
+        private int _webcamDebugBlinkCount;
+        private GazeSide _webcamDebugLastGaze = GazeSide.Center;
+        private bool _webcamDebugLastGazeSet;
+        private string _webcamDebugFaceLabel = "—";
+
+        private void BtnWebcamDebugStart_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null)
+            {
+                AppendWebcamDebugLog("App.Webcam is null — service not initialized");
+                return;
+            }
+
+            if (svc.IsRunning)
+            {
+                svc.Stop();
+                BtnWebcamDebugStart.Content = "Start tracking";
+                AppendWebcamDebugLog("Stop requested.");
+                return;
+            }
+
+            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            {
+                AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                var dlg = new WebcamConsentDialog { Owner = this };
+                var ok = dlg.ShowDialog();
+                if (ok != true || !dlg.ConsentGiven)
+                {
+                    AppendWebcamDebugLog("Consent declined or dialog cancelled.");
+                    return;
+                }
+                AppendWebcamDebugLog("Consent granted.");
+            }
+
+            EnsureWebcamDebugSubscribed();
+            _webcamDebugBlinkCount = 0;
+            _webcamDebugLastGazeSet = false;
+            _webcamDebugFaceLabel = "—";
+            UpdateWebcamDebugCounters();
+
+            var started = svc.Start();
+            if (started)
+            {
+                BtnWebcamDebugStart.Content = "Stop tracking";
+                AppendWebcamDebugLog("Start() returned true — capture thread launching.");
+            }
+            else
+            {
+                AppendWebcamDebugLog($"Start() returned false. State={svc.State}. See logs/app.log.");
+            }
+        }
+
+        private void EnsureWebcamDebugSubscribed()
+        {
+            if (_webcamDebugSubscribed || App.Webcam == null) return;
+            _webcamDebugSubscribed = true;
+
+            App.Webcam.OnTrackingStateChanged += s =>
+            {
+                if (TxtWebcamDebugStatus != null) TxtWebcamDebugStatus.Text = s.ToString();
+                AppendWebcamDebugLog($"State → {s}");
+                if (s == WebcamTrackingState.Stopped || s == WebcamTrackingState.Error
+                    || s == WebcamTrackingState.CameraInUse || s == WebcamTrackingState.CameraDenied)
+                {
+                    if (BtnWebcamDebugStart != null) BtnWebcamDebugStart.Content = "Start tracking";
+                }
+            };
+            App.Webcam.OnFaceFound += () =>
+            {
+                _webcamDebugFaceLabel = "yes";
+                UpdateWebcamDebugCounters();
+                AppendWebcamDebugLog("Face FOUND");
+            };
+            App.Webcam.OnFaceLost += () =>
+            {
+                _webcamDebugFaceLabel = "lost";
+                UpdateWebcamDebugCounters();
+                AppendWebcamDebugLog("Face LOST");
+            };
+            App.Webcam.OnBlink += () =>
+            {
+                _webcamDebugBlinkCount++;
+                UpdateWebcamDebugCounters();
+                AppendWebcamDebugLog($"Blink #{_webcamDebugBlinkCount}");
+            };
+            App.Webcam.OnGazeSide += side =>
+            {
+                // Only log on CHANGE — gaze side fires every frame and would
+                // otherwise drown out blinks and face events.
+                if (_webcamDebugLastGazeSet && side == _webcamDebugLastGaze)
+                {
+                    _webcamDebugLastGaze = side;
+                    return;
+                }
+                _webcamDebugLastGaze = side;
+                _webcamDebugLastGazeSet = true;
+                UpdateWebcamDebugCounters();
+                AppendWebcamDebugLog($"Gaze → {side}");
+            };
+        }
+
+        private void UpdateWebcamDebugCounters()
+        {
+            if (TxtWebcamDebugCounters == null) return;
+            var gaze = _webcamDebugLastGazeSet ? _webcamDebugLastGaze.ToString() : "—";
+            TxtWebcamDebugCounters.Text = $"Face: {_webcamDebugFaceLabel} | Blinks: {_webcamDebugBlinkCount} | Gaze: {gaze}";
+        }
+
+        private void BtnWebcamDebugCalibrate_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null)
+            {
+                AppendWebcamDebugLog("App.Webcam is null — service not initialized");
+                return;
+            }
+
+            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            {
+                AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                var consent = new WebcamConsentDialog { Owner = this };
+                var ok = consent.ShowDialog();
+                if (ok != true || !consent.ConsentGiven)
+                {
+                    AppendWebcamDebugLog("Consent declined.");
+                    return;
+                }
+            }
+
+            // Calibration window expects the service to be running so OnRawIris fires.
+            EnsureWebcamDebugSubscribed();
+            var startedHere = false;
+            if (!svc.IsRunning)
+            {
+                AppendWebcamDebugLog("Starting tracking for calibration…");
+                if (!svc.Start())
+                {
+                    AppendWebcamDebugLog($"Couldn't start tracking. State={svc.State}.");
+                    return;
+                }
+                startedHere = true;
+                BtnWebcamDebugStart.Content = "Stop tracking";
+            }
+
+            AppendWebcamDebugLog("Opening calibration window…");
+            var calDlg = new WebcamCalibrationWindow { Owner = this };
+            var result = calDlg.ShowDialog();
+
+            if (result == true)
+            {
+                AppendWebcamDebugLog("Calibration applied. Gaze classification should now be much more accurate.");
+            }
+            else
+            {
+                AppendWebcamDebugLog("Calibration cancelled or failed.");
+            }
+
+            // Leave the service running if the user manually started it earlier.
+            // Only auto-stop if calibration was the only reason it's running.
+            if (startedHere && result != true)
+            {
+                svc.Stop();
+                BtnWebcamDebugStart.Content = "Start tracking";
+            }
+        }
+
+        private void AppendWebcamDebugLog(string line)
+        {
+            if (TxtWebcamDebugLog == null) return;
+            var stamp = DateTime.Now.ToString("HH:mm:ss");
+            var existing = TxtWebcamDebugLog.Text;
+            if (existing == "(events will appear here)") existing = "";
+            var lines = (existing + (existing.Length > 0 ? "\n" : "") + $"[{stamp}] {line}")
+                .Split('\n');
+            if (lines.Length > 12) lines = lines[(lines.Length - 12)..];
+            TxtWebcamDebugLog.Text = string.Join("\n", lines);
+        }
+
         private void BtnPatreonExclusives_Click(object sender, RoutedEventArgs e)
         {
             // The Exclusives tab no longer exists — this button is now purely a

@@ -6876,6 +6876,49 @@
                         </Border>
                     </UniformGrid>
 
+                    <!-- [DEBUG] Webcam Smoke Test card — TEMPORARY, remove once real Lab Box 1 UI lands -->
+                    <Border CornerRadius="12" Margin="6,12,6,6" Padding="15"
+                            Background="#1A1A2E" BorderBrush="#FF8800" BorderThickness="2">
+                        <StackPanel>
+                            <TextBlock Text="[DEBUG] Webcam Smoke Test" Foreground="#FF8800" FontWeight="Bold" FontSize="16"/>
+                            <TextBlock Text="Temp UI for verifying capture loop. Remove before merge."
+                                       Foreground="#888888" FontSize="11" Margin="0,2,0,12"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="Status:" Foreground="#888" FontSize="11"/>
+                                    <TextBlock x:Name="TxtWebcamDebugStatus" Text="Stopped"
+                                               Foreground="White" FontSize="14" FontWeight="SemiBold"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button x:Name="BtnWebcamDebugCalibrate" Content="Calibrate (5-point)"
+                                            Padding="12,8" Margin="0,0,8,0"
+                                            Background="#33333A" Foreground="White" BorderBrush="#FF8800"
+                                            BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
+                                            Click="BtnWebcamDebugCalibrate_Click"/>
+                                    <Button x:Name="BtnWebcamDebugStart" Content="Start tracking"
+                                            Padding="14,8" Background="#FF8800" Foreground="Black" BorderThickness="0"
+                                            FontWeight="Bold" Cursor="Hand" Click="BtnWebcamDebugStart_Click"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock x:Name="TxtWebcamDebugCounters"
+                                       Text="Face: — | Blinks: 0 | Gaze: —"
+                                       Foreground="#FFD080" FontFamily="Consolas" FontSize="12"
+                                       FontWeight="SemiBold" Margin="0,10,0,0"/>
+
+                            <Border Background="#0A0A14" CornerRadius="6" Padding="10" Margin="0,8,0,0">
+                                <TextBlock x:Name="TxtWebcamDebugLog" Text="(events will appear here)"
+                                           Foreground="#88CC88" FontFamily="Consolas" FontSize="11"
+                                           TextWrapping="Wrap" MinHeight="80"/>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
                     <!-- AI Companion Effects & Memory (full-width Lab card, T2-gated by smokescreen) -->
                     <Border CornerRadius="12" Margin="6,12,6,6" Padding="15">
                         <Border.Background>
