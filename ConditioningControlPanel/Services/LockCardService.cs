@@ -7,6 +7,13 @@ using ConditioningControlPanel.Helpers;
 
 namespace ConditioningControlPanel.Services
 {
+    public class LockCardCompletedEventArgs : EventArgs
+    {
+        public string Phrase { get; init; } = "";
+        public int Mistakes { get; init; }
+        public int Repeats { get; init; }
+    }
+
     /// <summary>
     /// Service that manages Lock Card popups
     /// </summary>
@@ -19,6 +26,22 @@ namespace ConditioningControlPanel.Services
         private DateTime _lastShown = DateTime.MinValue;
 
         public bool IsRunning => _isRunning;
+
+        /// <summary>
+        /// Fires when the user finishes typing all repeats of a real (non-test) lock card.
+        /// Subscribers like the avatar use this to trigger AI reactions.
+        /// </summary>
+        public event EventHandler<LockCardCompletedEventArgs>? LockCardCompleted;
+
+        internal void NotifyCompleted(string phrase, int mistakes, int repeats)
+        {
+            LockCardCompleted?.Invoke(this, new LockCardCompletedEventArgs
+            {
+                Phrase = phrase,
+                Mistakes = mistakes,
+                Repeats = repeats
+            });
+        }
 
         public void Start()
         {

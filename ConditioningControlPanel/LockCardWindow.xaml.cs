@@ -369,7 +369,10 @@ namespace ConditioningControlPanel
 
             App.Logger?.Information("Lock Card completed - {Repeats} repeats in {Time:F1}s with {Errors} errors{Test}",
                 _requiredRepeats, completionTime, _totalErrors, _isTest ? " (TEST)" : "");
-            
+
+            if (!_isTest)
+                App.LockCard?.NotifyCompleted(_phrase, _totalErrors, _requiredRepeats);
+
             foreach (var window in _allWindows)
             {
                 window._isCompleted = true;
