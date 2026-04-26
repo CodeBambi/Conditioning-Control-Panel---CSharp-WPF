@@ -37,23 +37,23 @@ namespace ConditioningControlPanel.Services
     //  Frames live in RAM, get processed, get disposed. That is the whole story.
     // ─────────────────────────────────────────────────────────────────────────────
     //
-    //  Detection pipeline (current — phase-3 partial pivot, mid-rollout):
+    //  Detection pipeline (current — full MediaPipe ONNX, post phase-4 pivot):
     //    Resources/Models/face_detection_short_range.onnx  — BlazeFace (MediaPipe)
     //    Resources/Models/blazeface_anchors.json           — precomputed 896 SSD anchors
     //    Resources/Models/face_landmark.onnx               — FaceMesh 468 landmarks (MediaPipe)
+    //    Resources/Models/iris_landmark.onnx               — Iris 71 eye contour + 5 iris pts (MediaPipe)
     //    All shipped in the installer. No internet at runtime.
     //
     //    Face   → BlazeFace ONNX, top-1 above 0.5 sigmoid score, mapped back
     //             to source-frame pixel coords through letterbox padding.
     //    Mesh   → FaceMesh ONNX on a 1.5×-expanded SquareLong face crop, returning
     //             468 landmarks in source-frame pixel coords.
-    //    Eyes   → eye corners from FaceMesh landmarks (33/133/263/362); eye boxes
-    //             built from outer/inner corners + upper/lower eyelid points.
-    //    Blink  → EAR (Eye Aspect Ratio) on standard 6-point eyelid indices, with
-    //             rolling 90-frame baseline, per-eye hysteresis (closed<0.7×base,
-    //             open>0.85×base), both-eyes closed→open transition.
-    //    Gaze   → iris-as-darkest-pixel within FaceMesh-derived eye boxes
-    //             (TEMPORARY — replaced by Iris model exact iris-center in phase 4).
+    //    Blink  → EAR (Eye Aspect Ratio) on standard 6-point eyelid indices from
+    //             FaceMesh, with rolling 90-frame baseline, per-eye hysteresis
+    //             (closed<0.7×base, open>0.85×base), both-eyes closed→open.
+    //    Iris   → Iris model on 64×64 eye crops (right eye flipped before
+    //             inference, output un-flipped). Iris-center landmark gives
+    //             a precise gaze vector — replaces darkest-pixel heuristic.
     //    Mouth-open: DEFERRED to v2.
     // ─────────────────────────────────────────────────────────────────────────────
 
@@ -90,10 +90,6 @@ namespace ConditioningControlPanel.Services
         private const int TargetFps = 30;
         private const int MaxConsecutiveReadFails = 30;            // ~1s at 30fps
         private const int FaceLostFramesThreshold = 15;            // ~0.5s
-
-        // Iris vector ROI padding (still used by darkest-pixel iris estimator,
-        // replaced in phase 4)
-        private const int EyeRoiPaddingPx = 4;
 
         // EAR-based blink detection. Standard 6-point EAR (Soukupová & Čech 2016)
         // computed on FaceMesh's eyelid landmarks. Per-eye rolling baseline; both-
@@ -146,10 +142,16 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public event Action<double, double>? OnRawIris;
 
+        // FaceMesh corner indices used for iris ROI + iris-vector reference frame
+        // (left = subject's left eye, on the right side of an unmirrored frame)
+        private const int LeftEyeOuterIdx = 33,  LeftEyeInnerIdx = 133;
+        private const int RightEyeOuterIdx = 263, RightEyeInnerIdx = 362;
+
         // Capture-thread state
         private VideoCapture? _capture;
         private BlazeFaceDetector? _faceDetector;
         private FaceMeshDetector? _faceMesh;
+        private IrisDetector? _irisDetector;
         private Thread? _captureThread;
         private volatile bool _stopRequested;
 
@@ -207,9 +209,9 @@ namespace ConditioningControlPanel.Services
                 SetState(WebcamTrackingState.Starting);
 
                 var paths = ResolveModelPaths();
-                if (paths.FaceModel == null || paths.FaceAnchors == null || paths.MeshModel == null)
+                if (paths.FaceModel == null || paths.FaceAnchors == null || paths.MeshModel == null || paths.IrisModel == null)
                 {
-                    App.Logger?.Warning("WebcamTrackingService: model files missing in Resources/Models/ (face_detection_short_range.onnx, blazeface_anchors.json, face_landmark.onnx)");
+                    App.Logger?.Warning("WebcamTrackingService: model files missing in Resources/Models/ (face_detection_short_range.onnx, blazeface_anchors.json, face_landmark.onnx, iris_landmark.onnx)");
                     SetState(WebcamTrackingState.Error);
                     return false;
                 }
@@ -219,7 +221,7 @@ namespace ConditioningControlPanel.Services
                     return false; // state already set
                 }
 
-                if (!TryLoadModels(paths.FaceModel, paths.FaceAnchors, paths.MeshModel))
+                if (!TryLoadModels(paths.FaceModel, paths.FaceAnchors, paths.MeshModel, paths.IrisModel))
                 {
                     ReleaseCapture();
                     SetState(WebcamTrackingState.Error);
@@ -329,7 +331,7 @@ namespace ConditioningControlPanel.Services
         //  Setup helpers
         // ─────────────────────────────────────────────────────────────────────────
 
-        private static (string? FaceModel, string? FaceAnchors, string? MeshModel) ResolveModelPaths()
+        private static (string? FaceModel, string? FaceAnchors, string? MeshModel, string? IrisModel) ResolveModelPaths()
         {
             try
             {
@@ -337,14 +339,16 @@ namespace ConditioningControlPanel.Services
                 var faceModel = Path.Combine(baseDir, "Resources", "Models", "face_detection_short_range.onnx");
                 var faceAnchors = Path.Combine(baseDir, "Resources", "Models", "blazeface_anchors.json");
                 var meshModel = Path.Combine(baseDir, "Resources", "Models", "face_landmark.onnx");
+                var irisModel = Path.Combine(baseDir, "Resources", "Models", "iris_landmark.onnx");
                 return (
                     File.Exists(faceModel) ? faceModel : null,
                     File.Exists(faceAnchors) ? faceAnchors : null,
-                    File.Exists(meshModel) ? meshModel : null);
+                    File.Exists(meshModel) ? meshModel : null,
+                    File.Exists(irisModel) ? irisModel : null);
             }
             catch
             {
-                return (null, null, null);
+                return (null, null, null, null);
             }
         }
 
@@ -391,13 +395,14 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private bool TryLoadModels(string faceModelPath, string faceAnchorsPath, string meshModelPath)
+        private bool TryLoadModels(string faceModelPath, string faceAnchorsPath, string meshModelPath, string irisModelPath)
         {
             try
             {
                 _faceDetector = new BlazeFaceDetector(faceModelPath, faceAnchorsPath);
                 _faceMesh = new FaceMeshDetector(meshModelPath);
-                App.Logger?.Information("WebcamTrackingService: BlazeFace + FaceMesh loaded");
+                _irisDetector = new IrisDetector(irisModelPath);
+                App.Logger?.Information("WebcamTrackingService: BlazeFace + FaceMesh + Iris loaded");
                 return true;
             }
             catch (Exception ex)
@@ -418,8 +423,10 @@ namespace ConditioningControlPanel.Services
         {
             try { _faceDetector?.Dispose(); } catch { }
             try { _faceMesh?.Dispose(); } catch { }
+            try { _irisDetector?.Dispose(); } catch { }
             _faceDetector = null;
             _faceMesh = null;
+            _irisDetector = null;
         }
 
         private void ResetHeuristicState()
@@ -460,7 +467,7 @@ namespace ConditioningControlPanel.Services
             {
                 while (!_stopRequested)
                 {
-                    if (_capture == null || _faceDetector == null || _faceMesh == null) break;
+                    if (_capture == null || _faceDetector == null || _faceMesh == null || _irisDetector == null) break;
 
                     if (!_capture.Read(frame) || frame.Empty())
                     {
@@ -538,7 +545,7 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            // 3) Eye boxes from FaceMesh corner+eyelid landmarks
+            // 3) Eye boxes for diagnostics/visualization (not used for iris now)
             _lastLeftEyeRect = EyeBoxFromLandmarks(landmarks, LeftEyeBoxIndices, gray.Width, gray.Height);
             _lastRightEyeRect = EyeBoxFromLandmarks(landmarks, RightEyeBoxIndices, gray.Width, gray.Height);
 
@@ -549,15 +556,44 @@ namespace ConditioningControlPanel.Services
 
             HandleFaceFound();
 
-            if (_lastLeftEyeRect == null || _lastRightEyeRect == null) return;
+            // 5) Iris model — exact iris-center landmark per eye, normalized
+            //    against eye-corner midpoint to give a head-pose-stable gaze
+            //    vector. Right eye is fed flipped, output un-flipped, by the
+            //    detector. Eye-corner-to-corner distance defines the unit so
+            //    the vector is roughly invariant to face-to-camera distance.
+            var leftIrisCenter  = _irisDetector!.DetectIrisCenter(bgr, landmarks[LeftEyeOuterIdx],  landmarks[LeftEyeInnerIdx],  isRightEye: false);
+            var rightIrisCenter = _irisDetector!.DetectIrisCenter(bgr, landmarks[RightEyeOuterIdx], landmarks[RightEyeInnerIdx], isRightEye: true);
+            if (leftIrisCenter == null && rightIrisCenter == null) return;
 
-            // 5) Iris-as-darkest-pixel within the FaceMesh-derived eye boxes
-            //    (replaced by Iris-model exact iris-center in phase 4).
-            var leftIris = ComputeIrisVector(gray, _lastLeftEyeRect.Value);
-            var rightIris = ComputeIrisVector(gray, _lastRightEyeRect.Value);
-            var avgX = (leftIris.X + rightIris.X) / 2.0;
-            var avgY = (leftIris.Y + rightIris.Y) / 2.0;
-            EmitGazeEvents(avgX, avgY);
+            double sumDx = 0, sumDy = 0;
+            int count = 0;
+            if (leftIrisCenter != null)
+            {
+                var v = NormalizeIrisVector(leftIrisCenter.Value, landmarks[LeftEyeOuterIdx], landmarks[LeftEyeInnerIdx]);
+                sumDx += v.Dx; sumDy += v.Dy; count++;
+            }
+            if (rightIrisCenter != null)
+            {
+                var v = NormalizeIrisVector(rightIrisCenter.Value, landmarks[RightEyeOuterIdx], landmarks[RightEyeInnerIdx]);
+                sumDx += v.Dx; sumDy += v.Dy; count++;
+            }
+            EmitGazeEvents(sumDx / count, sumDy / count);
+        }
+
+        /// <summary>
+        /// Convert an iris-center pixel position into a head-pose-stable iris
+        /// vector relative to the eye-corner midpoint, scaled by corner-to-corner
+        /// distance. Output is roughly in [-0.5, +0.5] for normal gaze ranges.
+        /// </summary>
+        private static (double Dx, double Dy) NormalizeIrisVector((double X, double Y) iris, float[] outerCorner, float[] innerCorner)
+        {
+            double cx = (outerCorner[0] + innerCorner[0]) / 2.0;
+            double cy = (outerCorner[1] + innerCorner[1]) / 2.0;
+            double w = Math.Sqrt(
+                (outerCorner[0] - innerCorner[0]) * (outerCorner[0] - innerCorner[0]) +
+                (outerCorner[1] - innerCorner[1]) * (outerCorner[1] - innerCorner[1]));
+            if (w < 1.0) return (0, 0);
+            return ((iris.X - cx) / w, (iris.Y - cy) / w);
         }
 
         private void HandleNoFace()
@@ -600,29 +636,8 @@ namespace ConditioningControlPanel.Services
         }
 
         // ─────────────────────────────────────────────────────────────────────────
-        //  Heuristics (pure functions of the current frame + state)
+        //  Gaze-event emission (consumes iris vectors from the iris model)
         // ─────────────────────────────────────────────────────────────────────────
-
-        private static (double X, double Y) ComputeIrisVector(Mat gray, CvRect eyeRect)
-        {
-            var rect = ClipRect(
-                eyeRect.X + EyeRoiPaddingPx,
-                eyeRect.Y + EyeRoiPaddingPx,
-                eyeRect.Width - 2 * EyeRoiPaddingPx,
-                eyeRect.Height - 2 * EyeRoiPaddingPx,
-                gray.Width,
-                gray.Height);
-            if (rect.Width < 4 || rect.Height < 4) return (0, 0);
-
-            using var roi = new Mat(gray, rect);
-            using var blurred = new Mat();
-            Cv2.GaussianBlur(roi, blurred, new CvSize(5, 5), 0);
-            Cv2.MinMaxLoc(blurred, out _, out _, out var minLoc, out _);
-
-            var dx = (minLoc.X - rect.Width / 2.0) / rect.Width;
-            var dy = (minLoc.Y - rect.Height / 2.0) / rect.Height;
-            return (dx, dy);
-        }
 
         private void EmitGazeEvents(double irisDx, double irisDy)
         {
@@ -1236,6 +1251,154 @@ namespace ConditioningControlPanel.Services
                 try { _resizedBuffer?.Dispose(); } catch { }
                 _croppedBuffer = null;
                 _resizedBuffer = null;
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  Iris detector (MediaPipe — iris_landmark.onnx)
+        //  ────────────────────────────────────────────────────────────────────────
+        //  Input: 1×64×64×3 RGB normalized to [0, 1]. ROI is a 2.3×-expanded
+        //  SquareLong bbox of the eye-corner pair. Right eye is flipped horizontally
+        //  before inference and the output landmarks are un-flipped (x' = 64 - x)
+        //  before mapping back. (The model was trained on left eyes only.)
+        //
+        //  Output: 71 eyelid contour points + 5 iris points per eye, each (x, y, z)
+        //  in 64-px tensor coords. We only need iris point 0 (CENTER).
+        //
+        //  Returns: (X, Y) iris center in source-frame pixel coords, or null
+        //  if the eye corners aren't far enough apart to give a meaningful crop.
+        // ─────────────────────────────────────────────────────────────────────────
+        private sealed class IrisDetector : IDisposable
+        {
+            private const int InputSize = 64;
+            private const float RoiScale = 2.3f;
+            private const int NumEyeContour = 71;
+            private const int NumIrisPoints = 5;
+            private const int LandmarkDims = 3;
+
+            private readonly InferenceSession _session;
+            private readonly string _inputName;
+            private readonly float[] _inputBuffer = new float[InputSize * InputSize * 3];
+            private Mat? _croppedBuffer;
+            private Mat? _resizedBuffer;
+            private Mat? _flippedBuffer;
+            private int _lastSide = -1;
+
+            public IrisDetector(string modelPath)
+            {
+                var so = new SessionOptions
+                {
+                    GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+                    InterOpNumThreads = 1,
+                    IntraOpNumThreads = 2,
+                };
+                _session = new InferenceSession(modelPath, so);
+                _inputName = _session.InputMetadata.Keys.First();
+            }
+
+            public (double X, double Y)? DetectIrisCenter(Mat bgr, float[] outerCorner, float[] innerCorner, bool isRightEye)
+            {
+                int srcW = bgr.Width, srcH = bgr.Height;
+
+                // Square ROI of the corner-pair bbox, expanded 2.3x.
+                float xMin = Math.Min(outerCorner[0], innerCorner[0]);
+                float xMax = Math.Max(outerCorner[0], innerCorner[0]);
+                float yMin = Math.Min(outerCorner[1], innerCorner[1]);
+                float yMax = Math.Max(outerCorner[1], innerCorner[1]);
+                float cx = (xMin + xMax) / 2f;
+                float cy = (yMin + yMax) / 2f;
+                float side = Math.Max(xMax - xMin, yMax - yMin) * RoiScale;
+                if (side < 8) return null;
+                int rx = (int)Math.Round(cx - side / 2f);
+                int ry = (int)Math.Round(cy - side / 2f);
+                int rs = (int)Math.Round(side);
+                if (rs < InputSize / 4) return null;
+
+                if (_croppedBuffer == null || _lastSide != rs)
+                {
+                    _croppedBuffer?.Dispose();
+                    _croppedBuffer = new Mat(rs, rs, MatType.CV_8UC3, Scalar.All(0));
+                    _lastSide = rs;
+                }
+                else
+                {
+                    _croppedBuffer.SetTo(Scalar.All(0));
+                }
+                _resizedBuffer ??= new Mat();
+                _flippedBuffer ??= new Mat();
+
+                int sx0 = Math.Max(0, rx);
+                int sy0 = Math.Max(0, ry);
+                int sx1 = Math.Min(srcW, rx + rs);
+                int sy1 = Math.Min(srcH, ry + rs);
+                if (sx1 > sx0 && sy1 > sy0)
+                {
+                    using var src = new Mat(bgr, new CvRect(sx0, sy0, sx1 - sx0, sy1 - sy0));
+                    using var dst = new Mat(_croppedBuffer, new CvRect(sx0 - rx, sy0 - ry, sx1 - sx0, sy1 - sy0));
+                    src.CopyTo(dst);
+                }
+
+                Cv2.Resize(_croppedBuffer, _resizedBuffer, new CvSize(InputSize, InputSize), 0, 0, InterpolationFlags.Linear);
+
+                Mat fed = _resizedBuffer;
+                if (isRightEye)
+                {
+                    Cv2.Flip(_resizedBuffer, _flippedBuffer, FlipMode.Y);
+                    fed = _flippedBuffer;
+                }
+
+                FillInputBufferFromBgr(fed, _inputBuffer);
+
+                var inputTensor = new DenseTensor<float>(_inputBuffer, new[] { 1, InputSize, InputSize, 3 });
+                using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(_inputName, inputTensor) });
+
+                // Identify outputs by length. Iris output has 5×3 = 15 floats.
+                Tensor<float>? irisT = null;
+                foreach (var r in results)
+                {
+                    var t = r.AsTensor<float>();
+                    long len = 1;
+                    foreach (var d in t.Dimensions) len *= d;
+                    if (len == NumIrisPoints * LandmarkDims) { irisT = t; break; }
+                }
+                if (irisT == null) return null;
+
+                var iris = irisT.ToArray();
+                // Iris center is point 0 (IrisIndex.CENTER in IntelliProve constants).
+                float ix64 = iris[0];
+                float iy64 = iris[1];
+                if (isRightEye) ix64 = InputSize - ix64;
+                float nx = ix64 / InputSize;
+                float ny = iy64 / InputSize;
+                return (rx + nx * rs, ry + ny * rs);
+            }
+
+            private static void FillInputBufferFromBgr(Mat bgr64, float[] dst)
+            {
+                if (bgr64.Width != InputSize || bgr64.Height != InputSize || bgr64.Type() != MatType.CV_8UC3)
+                    throw new InvalidOperationException("IrisDetector.FillInputBufferFromBgr: expected 64×64 CV_8UC3");
+
+                int total = InputSize * InputSize;
+                var bytes = new byte[total * 3];
+                System.Runtime.InteropServices.Marshal.Copy(bgr64.Data, bytes, 0, bytes.Length);
+                const float kScale = 1f / 255f;
+                for (int i = 0; i < total; i++)
+                {
+                    dst[3 * i + 0] = bytes[3 * i + 2] * kScale; // R
+                    dst[3 * i + 1] = bytes[3 * i + 1] * kScale; // G
+                    dst[3 * i + 2] = bytes[3 * i + 0] * kScale; // B
+                }
+            }
+
+            public void Dispose()
+            {
+                try { _session.Dispose(); } catch { }
+                try { _croppedBuffer?.Dispose(); } catch { }
+                try { _resizedBuffer?.Dispose(); } catch { }
+                try { _flippedBuffer?.Dispose(); } catch { }
+                _croppedBuffer = null;
+                _resizedBuffer = null;
+                _flippedBuffer = null;
             }
         }
     }
