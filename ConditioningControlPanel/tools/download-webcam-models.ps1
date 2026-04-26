@@ -51,16 +51,25 @@ if (-not (Test-Path $modelsDir)) {
 }
 
 # Verified URLs as of 2026-04-26.
-# YuNet is OpenCV's official face detector. Hosted in opencv_zoo via Git LFS;
-# Invoke-WebRequest follows the LFS redirect automatically.
+# Haar cascades are bundled with OpenCV itself; we ship them as Resources for use
+# with OpenCvSharp's CascadeClassifier. Stable upstream, MIT-licensed.
 $models = @(
     [PSCustomObject]@{
-        Name        = 'face_detection_yunet.onnx'
-        Description = 'OpenCV YuNet face detector (~250 KB) -- bbox + 5 keypoints (eyes, nose, mouth corners)'
-        Url         = 'https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx'
+        Name        = 'haarcascade_frontalface_default.xml'
+        Description = 'OpenCV Haar cascade for frontal face detection (~900 KB)'
+        Url         = 'https://github.com/opencv/opencv/raw/master/data/haarcascades/haarcascade_frontalface_default.xml'
         MinSize     = 100KB
         FallbackUrls = @(
-            'https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx'
+            'https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml'
+        )
+    },
+    [PSCustomObject]@{
+        Name        = 'haarcascade_eye.xml'
+        Description = 'OpenCV Haar cascade for eye detection (~333 KB)'
+        Url         = 'https://github.com/opencv/opencv/raw/master/data/haarcascades/haarcascade_eye.xml'
+        MinSize     = 50KB
+        FallbackUrls = @(
+            'https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_eye.xml'
         )
     }
 )
