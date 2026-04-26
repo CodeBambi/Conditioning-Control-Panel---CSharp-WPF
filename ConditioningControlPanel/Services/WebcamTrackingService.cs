@@ -37,20 +37,23 @@ namespace ConditioningControlPanel.Services
     //  Frames live in RAM, get processed, get disposed. That is the whole story.
     // ─────────────────────────────────────────────────────────────────────────────
     //
-    //  Detection pipeline (current — phase-2 partial pivot, mid-rollout):
+    //  Detection pipeline (current — phase-3 partial pivot, mid-rollout):
     //    Resources/Models/face_detection_short_range.onnx  — BlazeFace (MediaPipe)
     //    Resources/Models/blazeface_anchors.json           — precomputed 896 SSD anchors
-    //    Resources/Models/haarcascade_eye.xml              — eye detection (still Haar this phase)
+    //    Resources/Models/face_landmark.onnx               — FaceMesh 468 landmarks (MediaPipe)
     //    All shipped in the installer. No internet at runtime.
     //
     //    Face   → BlazeFace ONNX, top-1 above 0.5 sigmoid score, mapped back
     //             to source-frame pixel coords through letterbox padding.
-    //    Eyes   → Haar eye cascade within face ROI (TEMPORARY — replaced by
-    //             FaceMesh landmarks in phase 3).
-    //    Blink  → eye-absence heuristic (TEMPORARY — replaced by EAR on
-    //             FaceMesh eyelid landmarks in phase 3).
-    //    Gaze   → iris-as-darkest-pixel within eye ROI (TEMPORARY — replaced
-    //             by Iris model exact iris-center landmark in phase 4).
+    //    Mesh   → FaceMesh ONNX on a 1.5×-expanded SquareLong face crop, returning
+    //             468 landmarks in source-frame pixel coords.
+    //    Eyes   → eye corners from FaceMesh landmarks (33/133/263/362); eye boxes
+    //             built from outer/inner corners + upper/lower eyelid points.
+    //    Blink  → EAR (Eye Aspect Ratio) on standard 6-point eyelid indices, with
+    //             rolling 90-frame baseline, per-eye hysteresis (closed<0.7×base,
+    //             open>0.85×base), both-eyes closed→open transition.
+    //    Gaze   → iris-as-darkest-pixel within FaceMesh-derived eye boxes
+    //             (TEMPORARY — replaced by Iris model exact iris-center in phase 4).
     //    Mouth-open: DEFERRED to v2.
     // ─────────────────────────────────────────────────────────────────────────────
 
@@ -88,15 +91,28 @@ namespace ConditioningControlPanel.Services
         private const int MaxConsecutiveReadFails = 30;            // ~1s at 30fps
         private const int FaceLostFramesThreshold = 15;            // ~0.5s
 
-        // Eye cascade tuning (Haar — temporary, removed in phase 3)
-        private const double EyeScaleFactor = 1.1;
-        private const int EyeMinNeighbors = 5;
-
-        // Blink detection (eye-absence based — see ProcessFrame for algorithm)
+        // Iris vector ROI padding (still used by darkest-pixel iris estimator,
+        // replaced in phase 4)
         private const int EyeRoiPaddingPx = 4;
-        private const int MinBlinkAbsentFrames = 2;          // ~67ms — filters spurious 1-frame detection misses
-        private const int MaxBlinkAbsentFrames = 12;         // ~400ms — anything longer isn't a blink
+
+        // EAR-based blink detection. Standard 6-point EAR (Soukupová & Čech 2016)
+        // computed on FaceMesh's eyelid landmarks. Per-eye rolling baseline; both-
+        // eyes closed→open transition within MaxBlinkClosedMs fires the event.
+        private const int EarBaselineFrames = 90;            // ~3s at 30fps — rolling max window
+        private const int EarMinSamplesForBaseline = 15;     // need this many before any blink fires
+        private const double EarClosedRatio = 0.70;          // EAR < 0.70 × baseline → enter closed
+        private const double EarOpenRatio = 0.85;            // EAR > 0.85 × baseline → leave closed (hysteresis gap)
+        private const int MinBlinkClosedMs = 50;             // shorter than this is noise, not a real blink
+        private const int MaxBlinkClosedMs = 400;            // longer than this is a stare/squint, not a blink
         private const int BlinkCooldownMs = 700;             // gap required between consecutive blink fires
+
+        // Standard 6-point EAR landmark indices for MediaPipe FaceMesh
+        // (P1=outer, P2/P3=upper eyelid, P4=inner, P5/P6=lower eyelid)
+        private static readonly int[] LeftEarIndices  = { 33, 160, 158, 133, 153, 144 };
+        private static readonly int[] RightEarIndices = { 263, 387, 385, 362, 380, 373 };
+        // Eye-box bounding-box landmarks (outer/inner corners + upper/lower eyelid extremes)
+        private static readonly int[] LeftEyeBoxIndices  = { 33, 133, 159, 145, 158, 153 };  // 33 outer, 133 inner, 159 top, 145 bottom
+        private static readonly int[] RightEyeBoxIndices = { 263, 362, 386, 374, 385, 380 }; // 263 outer, 362 inner, 386 top, 374 bottom
 
         // Gaze parameters
         private const int GazeBufferSize = 30;
@@ -133,13 +149,19 @@ namespace ConditioningControlPanel.Services
         // Capture-thread state
         private VideoCapture? _capture;
         private BlazeFaceDetector? _faceDetector;
-        private CascadeClassifier? _eyeCascade;
+        private FaceMeshDetector? _faceMesh;
         private Thread? _captureThread;
         private volatile bool _stopRequested;
 
         // Heuristic state (capture-thread only)
         private DateTime _lastBlinkAt = DateTime.MinValue;
-        private int _eyesAbsentStreak;                           // frames in a row Haar found <2 eyes
+        private readonly Queue<double> _earBufferL = new();      // rolling EAR samples for baseline
+        private readonly Queue<double> _earBufferR = new();
+        private double _earBaselineL;                            // rolling 90-frame max
+        private double _earBaselineR;
+        private bool _eyeClosedL;                                // hysteresis state per eye
+        private bool _eyeClosedR;
+        private DateTime? _bothEyesClosedAt;                     // start of current both-closed window
         private bool _faceWasFound;
         private int _consecutiveNoFaceFrames;
         private DateTime _lastLongStareAt = DateTime.MinValue;
@@ -185,9 +207,9 @@ namespace ConditioningControlPanel.Services
                 SetState(WebcamTrackingState.Starting);
 
                 var paths = ResolveModelPaths();
-                if (paths.FaceModel == null || paths.FaceAnchors == null || paths.EyeCascade == null)
+                if (paths.FaceModel == null || paths.FaceAnchors == null || paths.MeshModel == null)
                 {
-                    App.Logger?.Warning("WebcamTrackingService: model files missing in Resources/Models/ (face_detection_short_range.onnx, blazeface_anchors.json, haarcascade_eye.xml)");
+                    App.Logger?.Warning("WebcamTrackingService: model files missing in Resources/Models/ (face_detection_short_range.onnx, blazeface_anchors.json, face_landmark.onnx)");
                     SetState(WebcamTrackingState.Error);
                     return false;
                 }
@@ -197,7 +219,7 @@ namespace ConditioningControlPanel.Services
                     return false; // state already set
                 }
 
-                if (!TryLoadModels(paths.FaceModel, paths.FaceAnchors, paths.EyeCascade))
+                if (!TryLoadModels(paths.FaceModel, paths.FaceAnchors, paths.MeshModel))
                 {
                     ReleaseCapture();
                     SetState(WebcamTrackingState.Error);
@@ -307,18 +329,18 @@ namespace ConditioningControlPanel.Services
         //  Setup helpers
         // ─────────────────────────────────────────────────────────────────────────
 
-        private static (string? FaceModel, string? FaceAnchors, string? EyeCascade) ResolveModelPaths()
+        private static (string? FaceModel, string? FaceAnchors, string? MeshModel) ResolveModelPaths()
         {
             try
             {
                 var baseDir = AppContext.BaseDirectory;
                 var faceModel = Path.Combine(baseDir, "Resources", "Models", "face_detection_short_range.onnx");
                 var faceAnchors = Path.Combine(baseDir, "Resources", "Models", "blazeface_anchors.json");
-                var eye = Path.Combine(baseDir, "Resources", "Models", "haarcascade_eye.xml");
+                var meshModel = Path.Combine(baseDir, "Resources", "Models", "face_landmark.onnx");
                 return (
                     File.Exists(faceModel) ? faceModel : null,
                     File.Exists(faceAnchors) ? faceAnchors : null,
-                    File.Exists(eye) ? eye : null);
+                    File.Exists(meshModel) ? meshModel : null);
             }
             catch
             {
@@ -369,18 +391,13 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private bool TryLoadModels(string faceModelPath, string faceAnchorsPath, string eyeCascadePath)
+        private bool TryLoadModels(string faceModelPath, string faceAnchorsPath, string meshModelPath)
         {
             try
             {
                 _faceDetector = new BlazeFaceDetector(faceModelPath, faceAnchorsPath);
-                _eyeCascade = new CascadeClassifier(eyeCascadePath);
-                if (_eyeCascade.Empty())
-                {
-                    App.Logger?.Warning("WebcamTrackingService: eye cascade loaded empty");
-                    return false;
-                }
-                App.Logger?.Information("WebcamTrackingService: BlazeFace + Haar eye loaded");
+                _faceMesh = new FaceMeshDetector(meshModelPath);
+                App.Logger?.Information("WebcamTrackingService: BlazeFace + FaceMesh loaded");
                 return true;
             }
             catch (Exception ex)
@@ -400,9 +417,9 @@ namespace ConditioningControlPanel.Services
         private void ReleaseModels()
         {
             try { _faceDetector?.Dispose(); } catch { }
-            try { _eyeCascade?.Dispose(); } catch { }
+            try { _faceMesh?.Dispose(); } catch { }
             _faceDetector = null;
-            _eyeCascade = null;
+            _faceMesh = null;
         }
 
         private void ResetHeuristicState()
@@ -413,7 +430,13 @@ namespace ConditioningControlPanel.Services
             _lastFaceRect = null;
             _lastLeftEyeRect = null;
             _lastRightEyeRect = null;
-            _eyesAbsentStreak = 0;
+            _earBufferL.Clear();
+            _earBufferR.Clear();
+            _earBaselineL = 0;
+            _earBaselineR = 0;
+            _eyeClosedL = false;
+            _eyeClosedR = false;
+            _bothEyesClosedAt = null;
             _irisDxSmoothBuffer.Clear();
             _irisDySmoothBuffer.Clear();
             _lastGazeSide = GazeSide.Center;
@@ -437,7 +460,7 @@ namespace ConditioningControlPanel.Services
             {
                 while (!_stopRequested)
                 {
-                    if (_capture == null || _faceDetector == null || _eyeCascade == null) break;
+                    if (_capture == null || _faceDetector == null || _faceMesh == null) break;
 
                     if (!_capture.Read(frame) || frame.Empty())
                     {
@@ -490,6 +513,7 @@ namespace ConditioningControlPanel.Services
 
         private void ProcessFrame(Mat bgr, Mat gray)
         {
+            // 1) BlazeFace face detection
             var faceRectOrNull = _faceDetector!.Detect(bgr);
             if (faceRectOrNull == null)
             {
@@ -506,47 +530,29 @@ namespace ConditioningControlPanel.Services
             }
             _lastFaceRect = faceRect;
 
-            using var faceRoi = new Mat(gray, faceRect);
-            var eyes = _eyeCascade!.DetectMultiScale(
-                faceRoi,
-                scaleFactor: EyeScaleFactor,
-                minNeighbors: EyeMinNeighbors);
-            bool bothEyesDetected = eyes != null && eyes.Length >= 2;
-
-            if (bothEyesDetected)
+            // 2) FaceMesh — 468 landmarks in source-frame pixel coords
+            var landmarks = _faceMesh!.Detect(bgr, faceRect);
+            if (landmarks == null)
             {
-                var sorted = eyes!.OrderBy(e => e.X).Take(2).ToArray();
-                _lastLeftEyeRect = OffsetRect(sorted[0], faceRect.X, faceRect.Y);
-                _lastRightEyeRect = OffsetRect(sorted[1], faceRect.X, faceRect.Y);
+                HandleNoFace();
+                return;
+            }
 
-                // Eye-absence blink detection: a brief streak of frames where
-                // Haar's eye cascade fails to find both eyes (because the
-                // cascade is trained on open eyes, the eyelid breaks it),
-                // followed by re-detection, signals a blink. Far more robust
-                // than pixel-variance across glasses, lighting, head angles.
-                if (_eyesAbsentStreak >= MinBlinkAbsentFrames && _eyesAbsentStreak <= MaxBlinkAbsentFrames)
-                {
-                    var now = DateTime.UtcNow;
-                    if ((now - _lastBlinkAt).TotalMilliseconds >= BlinkCooldownMs)
-                    {
-                        _lastBlinkAt = now;
-                        Dispatch(() => OnBlink?.Invoke());
-                    }
-                }
-                _eyesAbsentStreak = 0;
-            }
-            else
-            {
-                _eyesAbsentStreak++;
-                // Don't clear eye rects yet — keep last good ones so gaze
-                // stays smooth across the brief blink itself.
-            }
+            // 3) Eye boxes from FaceMesh corner+eyelid landmarks
+            _lastLeftEyeRect = EyeBoxFromLandmarks(landmarks, LeftEyeBoxIndices, gray.Width, gray.Height);
+            _lastRightEyeRect = EyeBoxFromLandmarks(landmarks, RightEyeBoxIndices, gray.Width, gray.Height);
+
+            // 4) EAR-based blink detection
+            double earL = ComputeEAR(landmarks, LeftEarIndices);
+            double earR = ComputeEAR(landmarks, RightEarIndices);
+            UpdateBlinkState(earL, earR);
 
             HandleFaceFound();
 
             if (_lastLeftEyeRect == null || _lastRightEyeRect == null) return;
 
-            // Iris-as-darkest-pixel for gaze direction.
+            // 5) Iris-as-darkest-pixel within the FaceMesh-derived eye boxes
+            //    (replaced by Iris-model exact iris-center in phase 4).
             var leftIris = ComputeIrisVector(gray, _lastLeftEyeRect.Value);
             var rightIris = ComputeIrisVector(gray, _lastRightEyeRect.Value);
             var avgX = (leftIris.X + rightIris.X) / 2.0;
@@ -565,10 +571,13 @@ namespace ConditioningControlPanel.Services
             }
             // Drop cached eye rects so gaze code can't fire on stale data while
             // the face is missing. (Hand-over-camera test that fired a ghost
-            // blink was caused by stale rects — keep this clear.)
+            // blink was caused by stale rects — keep this clear.) Also drop
+            // mid-blink state so a face-loss can't be misread as a giant blink.
             _lastLeftEyeRect = null;
             _lastRightEyeRect = null;
-            _eyesAbsentStreak = 0;
+            _eyeClosedL = false;
+            _eyeClosedR = false;
+            _bothEyesClosedAt = null;
             if (_consecutiveNoFaceFrames > FaceLostFramesThreshold * 2)
             {
                 _gazeBuffer.Clear();
@@ -776,6 +785,120 @@ namespace ConditioningControlPanel.Services
         }
 
         // ─────────────────────────────────────────────────────────────────────────
+        //  EAR (Eye Aspect Ratio) blink detection — see Soukupová & Čech 2016.
+        //  Per-eye rolling 90-frame max baseline (closed frames can't bias it
+        //  down because max naturally rejects low values). Per-eye hysteresis:
+        //  enter "closed" at <0.7×baseline, leave at >0.85×baseline. Blink fires
+        //  on the both-eyes closed→open transition when the closed window was
+        //  50–400 ms long, with a 700 ms cooldown.
+        // ─────────────────────────────────────────────────────────────────────────
+        private static double ComputeEAR(float[][] landmarks, int[] idx)
+        {
+            // Standard 6-point EAR: (||p2-p6|| + ||p3-p5||) / (2 * ||p1-p4||)
+            var p1 = landmarks[idx[0]];
+            var p2 = landmarks[idx[1]];
+            var p3 = landmarks[idx[2]];
+            var p4 = landmarks[idx[3]];
+            var p5 = landmarks[idx[4]];
+            var p6 = landmarks[idx[5]];
+            double a = Distance(p2, p6);
+            double b = Distance(p3, p5);
+            double c = Distance(p1, p4);
+            return c > 1e-6 ? (a + b) / (2.0 * c) : 0.0;
+        }
+
+        private static double Distance(float[] a, float[] b)
+        {
+            double dx = a[0] - b[0];
+            double dy = a[1] - b[1];
+            return Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        private static CvRect? EyeBoxFromLandmarks(float[][] landmarks, int[] indices, int frameW, int frameH)
+        {
+            // First two indices are outer/inner corner; remaining are upper/lower
+            // eyelid points whose y-extent gives the eye height. We pad ~25% each
+            // side to give the iris-darkest-pixel estimator some margin.
+            float xMin = float.MaxValue, xMax = float.MinValue;
+            float yMin = float.MaxValue, yMax = float.MinValue;
+            foreach (var i in indices)
+            {
+                if (landmarks[i][0] < xMin) xMin = landmarks[i][0];
+                if (landmarks[i][0] > xMax) xMax = landmarks[i][0];
+                if (landmarks[i][1] < yMin) yMin = landmarks[i][1];
+                if (landmarks[i][1] > yMax) yMax = landmarks[i][1];
+            }
+            float w = xMax - xMin;
+            float h = yMax - yMin;
+            if (w < 4 || h < 2) return null;
+            float padX = w * 0.15f;
+            float padY = h * 0.50f;          // eyelid landmarks are tight; need vertical room
+            int rx = (int)Math.Round(xMin - padX);
+            int ry = (int)Math.Round(yMin - padY);
+            int rw = (int)Math.Round(w + 2 * padX);
+            int rh = (int)Math.Round(h + 2 * padY);
+            return ClipRect(rx, ry, rw, rh, frameW, frameH);
+        }
+
+        private void UpdateBlinkState(double earL, double earR)
+        {
+            // Update rolling baselines.
+            EnqueueWithCap(_earBufferL, earL, EarBaselineFrames);
+            EnqueueWithCap(_earBufferR, earR, EarBaselineFrames);
+            _earBaselineL = MaxOf(_earBufferL);
+            _earBaselineR = MaxOf(_earBufferR);
+
+            // Need enough samples before any blink can fire (avoid a startup
+            // spurious blink while the baseline is still seeded by the first
+            // few low-EAR frames).
+            if (_earBufferL.Count < EarMinSamplesForBaseline || _earBufferR.Count < EarMinSamplesForBaseline)
+                return;
+            if (_earBaselineL <= 0 || _earBaselineR <= 0) return;
+
+            // Hysteresis: once closed, stay closed until EAR > 0.85×baseline.
+            bool nowClosedL = _eyeClosedL
+                ? earL < EarOpenRatio  * _earBaselineL
+                : earL < EarClosedRatio * _earBaselineL;
+            bool nowClosedR = _eyeClosedR
+                ? earR < EarOpenRatio  * _earBaselineR
+                : earR < EarClosedRatio * _earBaselineR;
+
+            bool wasBothClosed = _eyeClosedL && _eyeClosedR;
+            bool nowBothClosed = nowClosedL && nowClosedR;
+
+            var now = DateTime.UtcNow;
+            if (nowBothClosed && !wasBothClosed)
+            {
+                _bothEyesClosedAt = now;
+            }
+            else if (!nowBothClosed && wasBothClosed && _bothEyesClosedAt.HasValue)
+            {
+                var closedMs = (now - _bothEyesClosedAt.Value).TotalMilliseconds;
+                if (closedMs >= MinBlinkClosedMs && closedMs <= MaxBlinkClosedMs
+                    && (now - _lastBlinkAt).TotalMilliseconds >= BlinkCooldownMs)
+                {
+                    _lastBlinkAt = now;
+                    Dispatch(() => OnBlink?.Invoke());
+                }
+                _bothEyesClosedAt = null;
+            }
+            else if (!nowBothClosed)
+            {
+                _bothEyesClosedAt = null;
+            }
+
+            _eyeClosedL = nowClosedL;
+            _eyeClosedR = nowClosedR;
+        }
+
+        private static double MaxOf(Queue<double> q)
+        {
+            double m = 0;
+            foreach (var v in q) if (v > m) m = v;
+            return m;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
         //  BlazeFace short-range detector (MediaPipe)
         //  ────────────────────────────────────────────────────────────────────────
         //  Loads face_detection_short_range.onnx + the precomputed 896 SSD anchors
@@ -965,6 +1088,154 @@ namespace ConditioningControlPanel.Services
                 try { _paddedBuffer?.Dispose(); } catch { }
                 _resizeBuffer = null;
                 _paddedBuffer = null;
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  FaceMesh detector (MediaPipe — face_landmark.onnx)
+        //  ────────────────────────────────────────────────────────────────────────
+        //  Input: 1×192×192×3 RGB normalized to [0, 1] of a 1.5×-expanded square
+        //  crop around the BlazeFace face rect.
+        //  Output: 1404 floats (468 landmarks × x,y,z) in 192-px tensor coords +
+        //  a face-presence sigmoid.
+        //
+        //  Returns: 468 (x, y) landmarks in source-frame pixel coordinates, or
+        //  null if face presence sigmoid < 0.5.
+        //
+        //  Z is intentionally dropped (not used by gaze/blink). All output coords
+        //  stay in float pixel space — caller rounds when needed.
+        // ─────────────────────────────────────────────────────────────────────────
+        private sealed class FaceMeshDetector : IDisposable
+        {
+            private const int InputSize = 192;
+            private const int NumLandmarks = 468;
+            private const int LandmarkDims = 3;     // x, y, z (z dropped on output)
+            private const float MinPresenceScore = 0.5f;
+            private const float RoiScale = 1.5f;    // SquareLong scale around face bbox
+
+            private readonly InferenceSession _session;
+            private readonly string _inputName;
+            private readonly float[] _inputBuffer = new float[InputSize * InputSize * 3];
+            private Mat? _croppedBuffer;            // square crop with black padding
+            private Mat? _resizedBuffer;            // 192×192 resized
+            private int _lastSide = -1;
+
+            public FaceMeshDetector(string modelPath)
+            {
+                var so = new SessionOptions
+                {
+                    GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+                    InterOpNumThreads = 1,
+                    IntraOpNumThreads = 2,
+                };
+                _session = new InferenceSession(modelPath, so);
+                _inputName = _session.InputMetadata.Keys.First();
+            }
+
+            /// <summary>
+            /// Detect 468 face landmarks. Returns array of [x, y] in source-frame
+            /// pixel coords, or null if no face.
+            /// </summary>
+            public float[][]? Detect(Mat bgr, CvRect faceRect)
+            {
+                int srcW = bgr.Width, srcH = bgr.Height;
+
+                // Square ROI around face center, 1.5× the longer side.
+                float cx = faceRect.X + faceRect.Width / 2f;
+                float cy = faceRect.Y + faceRect.Height / 2f;
+                float side = Math.Max(faceRect.Width, faceRect.Height) * RoiScale;
+                int rx = (int)Math.Round(cx - side / 2f);
+                int ry = (int)Math.Round(cy - side / 2f);
+                int rs = (int)Math.Round(side);
+                if (rs < 16) return null;
+
+                if (_croppedBuffer == null || _lastSide != rs)
+                {
+                    _croppedBuffer?.Dispose();
+                    _croppedBuffer = new Mat(rs, rs, MatType.CV_8UC3, Scalar.All(0));
+                    _lastSide = rs;
+                }
+                else
+                {
+                    _croppedBuffer.SetTo(Scalar.All(0));
+                }
+                _resizedBuffer ??= new Mat();
+
+                // Black-padded crop: copy in only the in-bounds portion.
+                int sx0 = Math.Max(0, rx);
+                int sy0 = Math.Max(0, ry);
+                int sx1 = Math.Min(srcW, rx + rs);
+                int sy1 = Math.Min(srcH, ry + rs);
+                if (sx1 > sx0 && sy1 > sy0)
+                {
+                    int dx0 = sx0 - rx;
+                    int dy0 = sy0 - ry;
+                    using var src = new Mat(bgr, new CvRect(sx0, sy0, sx1 - sx0, sy1 - sy0));
+                    using var dst = new Mat(_croppedBuffer, new CvRect(dx0, dy0, sx1 - sx0, sy1 - sy0));
+                    src.CopyTo(dst);
+                }
+
+                Cv2.Resize(_croppedBuffer, _resizedBuffer, new CvSize(InputSize, InputSize), 0, 0, InterpolationFlags.Linear);
+                FillInputBufferFromBgr(_resizedBuffer, _inputBuffer);
+
+                var inputTensor = new DenseTensor<float>(_inputBuffer, new[] { 1, InputSize, InputSize, 3 });
+                using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(_inputName, inputTensor) });
+
+                // Identify outputs by tensor length rather than by name (the ONNX
+                // exporter named them generic conv2d_X).
+                Tensor<float>? landmarksRaw = null;
+                Tensor<float>? presenceRaw = null;
+                foreach (var r in results)
+                {
+                    var t = r.AsTensor<float>();
+                    long len = 1;
+                    foreach (var d in t.Dimensions) len *= d;
+                    if (len >= NumLandmarks * LandmarkDims) landmarksRaw = t;
+                    else if (len == 1) presenceRaw = t;
+                }
+                if (landmarksRaw == null || presenceRaw == null) return null;
+
+                float presenceVal = presenceRaw.ToArray()[0];
+                float presence = 1f / (1f + (float)Math.Exp(-presenceVal));
+                if (presence < MinPresenceScore) return null;
+
+                var raw = landmarksRaw.ToArray();
+                var output = new float[NumLandmarks][];
+                for (int i = 0; i < NumLandmarks; i++)
+                {
+                    float x192 = raw[i * LandmarkDims + 0];
+                    float y192 = raw[i * LandmarkDims + 1];
+                    float nx = x192 / InputSize;
+                    float ny = y192 / InputSize;
+                    output[i] = new[] { rx + nx * rs, ry + ny * rs };
+                }
+                return output;
+            }
+
+            private static void FillInputBufferFromBgr(Mat bgr192, float[] dst)
+            {
+                if (bgr192.Width != InputSize || bgr192.Height != InputSize || bgr192.Type() != MatType.CV_8UC3)
+                    throw new InvalidOperationException("FaceMesh.FillInputBufferFromBgr: expected 192×192 CV_8UC3");
+
+                int total = InputSize * InputSize;
+                var bytes = new byte[total * 3];
+                System.Runtime.InteropServices.Marshal.Copy(bgr192.Data, bytes, 0, bytes.Length);
+                const float kScale = 1f / 255f;
+                for (int i = 0; i < total; i++)
+                {
+                    dst[3 * i + 0] = bytes[3 * i + 2] * kScale; // R
+                    dst[3 * i + 1] = bytes[3 * i + 1] * kScale; // G
+                    dst[3 * i + 2] = bytes[3 * i + 0] * kScale; // B
+                }
+            }
+
+            public void Dispose()
+            {
+                try { _session.Dispose(); } catch { }
+                try { _croppedBuffer?.Dispose(); } catch { }
+                try { _resizedBuffer?.Dispose(); } catch { }
+                _croppedBuffer = null;
+                _resizedBuffer = null;
             }
         }
     }
