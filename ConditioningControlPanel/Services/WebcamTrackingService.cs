@@ -101,9 +101,10 @@ namespace ConditioningControlPanel.Services
         // up to 1.5s as a single blink — anything longer is treated as a stare.
         private const int EarBaselineFrames = 90;            // ~3s at 30fps — rolling max window
         private const int EarMinSamplesForBaseline = 15;     // need this many before any blink fires
-        private const double EarClosedRatio = 0.75;          // EAR < 0.75 × baseline → enter closed
-        private const double EarOpenRatio = 0.85;            // EAR > 0.85 × baseline → leave closed (hysteresis gap)
-        private const int MinBlinkClosedMs = 30;             // shorter than this is noise, not a real blink
+        private const double EarClosedRatio = 0.80;          // EAR < 0.80 × baseline → enter closed
+        private const double EarOpenRatio = 0.88;            // EAR > 0.88 × baseline → leave closed (hysteresis gap)
+        private const double EarNearMissRatio = 0.90;        // dips below 0.90×base log as near-miss for tuning
+        private const int MinBlinkClosedMs = 60;             // shorter than this is noise (filters 1-frame jitter)
         private const int MaxBlinkClosedMs = 1500;           // longer than this is a stare/squint, not a blink
         private const int BlinkCooldownMs = 500;             // gap required between consecutive blink fires
         private const int BlinkDiagLogIntervalMs = 3000;     // log EAR baseline + blink count every ~3s
@@ -122,6 +123,7 @@ namespace ConditioningControlPanel.Services
         private const double LongStareMaxDeviationPx = 60.0;
         private const int LongStareCooldownMs = 5000;
         private const int IrisSmoothFrames = 5;              // rolling-mean window over raw iris vector
+        private const int SideStabilityFrames = 3;           // consecutive frames of same classification before emitting (filters Center pass-through)
 
         private readonly object _stateLock = new();
         private bool _disposed;
@@ -167,8 +169,18 @@ namespace ConditioningControlPanel.Services
         private double _earBaseline;                             // rolling 90-frame max of avg EAR
         private bool _eyesClosed;                                // hysteresis state for both eyes (single)
         private DateTime? _eyesClosedAt;                         // start of current closed window
+        private double _minEarThisClosure;                       // tracks deepest closure during current closed window
+        private double _windowMinEar = double.MaxValue;          // min EAR seen since last diag log (for tuning)
+        private double _windowMaxEar = double.MinValue;          // max EAR seen since last diag log
+        private int _windowNearMissCount;                        // count of frames where EAR < 0.90×baseline but we didn't trigger closed
         private DateTime _lastBlinkDiagAt = DateTime.MinValue;
         private int _blinkCount;                                 // total blinks fired since service start
+        // Gaze-side stability filter — require N consecutive frames of the same
+        // classification before emitting, so that transient passes through Center
+        // during a Left↔Right movement don't fire spurious Center events.
+        private GazeSide _lastEmittedSide = GazeSide.Center;
+        private GazeSide _pendingSide = GazeSide.Center;
+        private int _pendingSideStreak;
         private bool _faceWasFound;
         private int _consecutiveNoFaceFrames;
         private DateTime _lastLongStareAt = DateTime.MinValue;
@@ -446,11 +458,18 @@ namespace ConditioningControlPanel.Services
             _earBaseline = 0;
             _eyesClosed = false;
             _eyesClosedAt = null;
+            _minEarThisClosure = double.MaxValue;
+            _windowMinEar = double.MaxValue;
+            _windowMaxEar = double.MinValue;
+            _windowNearMissCount = 0;
             _lastBlinkDiagAt = DateTime.MinValue;
             _blinkCount = 0;
             _irisDxSmoothBuffer.Clear();
             _irisDySmoothBuffer.Clear();
             _lastGazeSide = GazeSide.Center;
+            _lastEmittedSide = GazeSide.Center;
+            _pendingSide = GazeSide.Center;
+            _pendingSideStreak = 0;
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -660,8 +679,34 @@ namespace ConditioningControlPanel.Services
             var smoothDx = sumX / _irisDxSmoothBuffer.Count;
             var smoothDy = sumY / _irisDySmoothBuffer.Count;
 
-            var side = ClassifyGazeSide(smoothDx);
-            Dispatch(() => OnGazeSide?.Invoke(side));
+            var classifiedSide = ClassifyGazeSide(smoothDx);
+
+            // Stability filter: only emit a side change once it's been the
+            // classification for SideStabilityFrames consecutive frames. Without
+            // this, a fast Left→Right movement passes through the Center band
+            // for a frame or two and fires a spurious Center event in the
+            // middle, which breaks the calibration validation gate's hold timer.
+            if (classifiedSide == _lastEmittedSide)
+            {
+                _pendingSide = classifiedSide;
+                _pendingSideStreak = 0;
+            }
+            else if (classifiedSide == _pendingSide)
+            {
+                _pendingSideStreak++;
+                if (_pendingSideStreak >= SideStabilityFrames)
+                {
+                    _lastEmittedSide = _pendingSide;
+                    _pendingSideStreak = 0;
+                    var emit = _lastEmittedSide;
+                    Dispatch(() => OnGazeSide?.Invoke(emit));
+                }
+            }
+            else
+            {
+                _pendingSide = classifiedSide;
+                _pendingSideStreak = 1;
+            }
 
             var screenPoint = ProjectGazeToScreen(smoothDx, smoothDy);
             if (screenPoint.HasValue)
@@ -869,6 +914,10 @@ namespace ConditioningControlPanel.Services
             EnqueueWithCap(_earBuffer, avgEar, EarBaselineFrames);
             _earBaseline = MaxOf(_earBuffer);
 
+            // Track per-window min/max for diagnostic log
+            if (avgEar < _windowMinEar) _windowMinEar = avgEar;
+            if (avgEar > _windowMaxEar) _windowMaxEar = avgEar;
+
             var now = DateTime.UtcNow;
             MaybeLogBlinkDiag(now, avgEar);
 
@@ -878,7 +927,15 @@ namespace ConditioningControlPanel.Services
             if (_earBuffer.Count < EarMinSamplesForBaseline) return;
             if (_earBaseline <= 0) return;
 
-            // Hysteresis: once closed, stay closed until EAR > 0.85×baseline.
+            // Near-miss: dropped under 0.90×baseline but we're not in closed
+            // state. Counting these per window tells us how many "almost-blinks"
+            // we missed without committing to an aggressive threshold up front.
+            if (!_eyesClosed && avgEar < EarNearMissRatio * _earBaseline)
+            {
+                _windowNearMissCount++;
+            }
+
+            // Hysteresis: once closed, stay closed until EAR > openRatio×baseline.
             bool nowClosed = _eyesClosed
                 ? avgEar < EarOpenRatio  * _earBaseline
                 : avgEar < EarClosedRatio * _earBaseline;
@@ -886,24 +943,35 @@ namespace ConditioningControlPanel.Services
             if (nowClosed && !_eyesClosed)
             {
                 _eyesClosedAt = now;
+                _minEarThisClosure = avgEar;       // start tracking minimum
+            }
+            else if (nowClosed)
+            {
+                if (avgEar < _minEarThisClosure) _minEarThisClosure = avgEar;
             }
             else if (!nowClosed && _eyesClosed && _eyesClosedAt.HasValue)
             {
                 var closedMs = (now - _eyesClosedAt.Value).TotalMilliseconds;
+                bool fired = false;
                 if (closedMs >= MinBlinkClosedMs && closedMs <= MaxBlinkClosedMs
                     && (now - _lastBlinkAt).TotalMilliseconds >= BlinkCooldownMs)
                 {
                     _lastBlinkAt = now;
                     _blinkCount++;
-                    App.Logger?.Information("WebcamTrackingService: blink #{N} fired (closed for {Ms:F0}ms, baseline EAR={Base:F3}, min EAR during closure ≈ {Min:F3})",
-                        _blinkCount, closedMs, _earBaseline, avgEar);
+                    fired = true;
                     Dispatch(() => OnBlink?.Invoke());
                 }
+                App.Logger?.Information(
+                    "WebcamTrackingService: blink {Outcome} (closed for {Ms:F0}ms, baseline EAR={Base:F3}, min EAR during closure={Min:F3}, ratio={Ratio:F2}× baseline)",
+                    fired ? $"#{_blinkCount} FIRED" : "rejected",
+                    closedMs, _earBaseline, _minEarThisClosure, _minEarThisClosure / _earBaseline);
                 _eyesClosedAt = null;
+                _minEarThisClosure = double.MaxValue;
             }
             else if (!nowClosed)
             {
                 _eyesClosedAt = null;
+                _minEarThisClosure = double.MaxValue;
             }
 
             _eyesClosed = nowClosed;
@@ -912,18 +980,28 @@ namespace ConditioningControlPanel.Services
         private void MaybeLogBlinkDiag(DateTime now, double avgEar)
         {
             // Periodic diagnostic log — counts and aggregate state only, no
-            // per-frame data. Helps debug blink misses ("baseline=0.32, current
-            // closed=false, blinks fired=2" lets us reason about thresholds).
+            // per-frame data. Window min/max help tune thresholds: if you blink
+            // hard during a window and windowMin only reaches 0.85×baseline,
+            // that tells us EAR isn't dropping enough for the current 0.80
+            // threshold — switch to iris-model contour or loosen further.
             if (_lastBlinkDiagAt == DateTime.MinValue) { _lastBlinkDiagAt = now; return; }
             if ((now - _lastBlinkDiagAt).TotalMilliseconds < BlinkDiagLogIntervalMs) return;
             _lastBlinkDiagAt = now;
 
             double closedThreshold = _earBaseline * EarClosedRatio;
             double openThreshold = _earBaseline * EarOpenRatio;
+            double winMinRatio = _earBaseline > 0 ? _windowMinEar / _earBaseline : 0;
+            double winMaxRatio = _earBaseline > 0 ? _windowMaxEar / _earBaseline : 0;
             App.Logger?.Information(
-                "WebcamTrackingService: blink-diag baseline={Base:F3} closedThr={CT:F3} openThr={OT:F3} state={State} blinks={N} samples={S}",
+                "WebcamTrackingService: blink-diag baseline={Base:F3} closedThr={CT:F3} openThr={OT:F3} winMin={WMin:F3}({WMinR:P0}) winMax={WMax:F3}({WMaxR:P0}) nearMiss={NM} state={State} blinks={N} samples={S}",
                 _earBaseline, closedThreshold, openThreshold,
+                _windowMinEar, winMinRatio, _windowMaxEar, winMaxRatio,
+                _windowNearMissCount,
                 _eyesClosed ? "CLOSED" : "open", _blinkCount, _earBuffer.Count);
+
+            _windowMinEar = double.MaxValue;
+            _windowMaxEar = double.MinValue;
+            _windowNearMissCount = 0;
         }
 
         private static double MaxOf(Queue<double> q)
