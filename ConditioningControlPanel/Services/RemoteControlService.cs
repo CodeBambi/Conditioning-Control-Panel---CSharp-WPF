@@ -91,6 +91,21 @@ namespace ConditioningControlPanel.Services
             return await _httpClient.SendAsync(request);
         }
 
+        // Server returns { "error": "...", "cap": "user"|"ip", "count": N } on rate limit.
+        // The cap label tells us whether the user's per-account or per-IP bucket fired,
+        // which is critical for diagnosing "stuck offline" reports.
+        private static async Task<(string cap, string count)> Read429CapAsync(HttpResponseMessage response)
+        {
+            try
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                if (string.IsNullOrEmpty(body)) return ("?", "?");
+                var obj = JObject.Parse(body);
+                return (obj["cap"]?.ToString() ?? "?", obj["count"]?.ToString() ?? "?");
+            }
+            catch { return ("?", "?"); }
+        }
+
         /// <summary>
         /// Starts a remote control session with the given tier.
         /// </summary>
@@ -256,7 +271,9 @@ namespace ConditioningControlPanel.Services
                         _currentPollInterval = Math.Min(_currentPollInterval * 2, MaxBackoffSeconds);
                         if (_pollTimer != null)
                             _pollTimer.Interval = TimeSpan.FromSeconds(_currentPollInterval);
-                        App.Logger?.Warning("[RemoteControl] Rate limited (429) [code={Code}], backing off to {Interval}s", SessionCode ?? "?", _currentPollInterval);
+                        var (cap, count) = await Read429CapAsync(response);
+                        App.Logger?.Warning("[RemoteControl] Rate limited (429) [code={Code} cap={Cap} count={Count}], backing off to {Interval}s",
+                            SessionCode ?? "?", cap, count, _currentPollInterval);
                     }
                     else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                     {
@@ -492,9 +509,10 @@ namespace ConditioningControlPanel.Services
                     if (response.StatusCode == (System.Net.HttpStatusCode)429)
                     {
                         _statusBackoffUntil = DateTime.UtcNow.AddSeconds(StatusBackoffSeconds);
+                        var (cap, count) = await Read429CapAsync(response);
                         App.Logger?.Warning(
-                            "[RemoteControl] Status push rate limited (429) [code={Code}] — suppressing status pushes for {Seconds}s",
-                            SessionCode ?? "?", StatusBackoffSeconds);
+                            "[RemoteControl] Status push rate limited (429) [code={Code} cap={Cap} count={Count}] — suppressing status pushes for {Seconds}s",
+                            SessionCode ?? "?", cap, count, StatusBackoffSeconds);
                     }
                     else
                     {
