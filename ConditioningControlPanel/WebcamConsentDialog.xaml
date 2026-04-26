@@ -1,0 +1,274 @@
+<Window x:Class="ConditioningControlPanel.WebcamConsentDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Webcam Tracking — Privacy and Consent"
+        Width="640" Height="640"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource DarkerBgBrush}">
+
+    <Window.Resources>
+        <Style x:Key="DlgHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style x:Key="DlgSub" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#B0B0B0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+        </Style>
+        <Style x:Key="DlgBody" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E8E8E8"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="22"/>
+        </Style>
+        <Style x:Key="DlgPromise" TargetType="TextBlock" BasedOn="{StaticResource DlgBody}">
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+        <Style x:Key="DlgButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="22,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="DlgPrimaryButton" TargetType="Button" BasedOn="{StaticResource DlgButton}">
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+        </Style>
+        <Style x:Key="DlgSecondaryButton" TargetType="Button" BasedOn="{StaticResource DlgButton}">
+            <Setter Property="Background" Value="#3A3A52"/>
+        </Style>
+        <Style x:Key="DlgCheckbox" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#E8E8E8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,8,0,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="32,28,32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Step indicator -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,20">
+            <Ellipse x:Name="DotStep1" Width="10" Height="10" Margin="4,0" Fill="{StaticResource PinkBrush}"/>
+            <Ellipse x:Name="DotStep2" Width="10" Height="10" Margin="4,0" Fill="#3A3A52"/>
+            <Ellipse x:Name="DotStep3" Width="10" Height="10" Margin="4,0" Fill="#3A3A52"/>
+            <Ellipse x:Name="DotStep4" Width="10" Height="10" Margin="4,0" Fill="#3A3A52"/>
+        </StackPanel>
+
+        <!-- ─── STEP 1 — What this enables ─── -->
+        <ScrollViewer x:Name="PanelStep1" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Style="{StaticResource DlgHeader}" Text="Webcam Tracking — Lab Feature"/>
+                <TextBlock Style="{StaticResource DlgSub}" Text="Optional. Off by default. Powers two new Lab features."/>
+
+                <TextBlock Style="{StaticResource DlgBody}" Margin="0,24,0,0">
+                    This optional feature uses your webcam to detect when you blink, open your mouth,
+                    or look at parts of the screen. Detection runs entirely on your computer using
+                    AI models bundled with the app — no internet connection is used.
+                </TextBlock>
+
+                <TextBlock Style="{StaticResource DlgBody}" Margin="0,16,0,0" FontWeight="SemiBold" Foreground="{StaticResource PinkBrush}">
+                    What you get:
+                </TextBlock>
+
+                <TextBlock Style="{StaticResource DlgBody}" Margin="14,8,0,0">
+                    <Run FontWeight="Bold">• Webcam Triggers</Run>
+                    <LineBreak/>
+                    <Run>Blink, look at a spot for a while, or open your mouth — each can drive a flash, subliminal, or other effect.</Run>
+                </TextBlock>
+
+                <TextBlock Style="{StaticResource DlgBody}" Margin="14,12,0,0">
+                    <Run FontWeight="Bold">• Focus Training</Run>
+                    <LineBreak/>
+                    <Run>A split-screen video game. Look at the "correct" side, get rewarded with XP and reinforcement.</Run>
+                </TextBlock>
+
+                <TextBlock Style="{StaticResource DlgBody}" Margin="0,28,0,0" Foreground="#9090A8" FontStyle="Italic">
+                    Before turning this on, the next screen explains exactly what we do with the camera —
+                    and what we never do. Read it carefully.
+                </TextBlock>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ─── STEP 2 — Privacy contract ─── -->
+        <ScrollViewer x:Name="PanelStep2" Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock Style="{StaticResource DlgHeader}" Text="Your camera frames stay on this computer."/>
+                <TextBlock Style="{StaticResource DlgSub}" Text="Always. Read each line."/>
+
+                <Border Margin="0,24,0,0" Padding="20" CornerRadius="6" Background="#1F1F38" BorderBrush="{StaticResource PinkBrush}" BorderThickness="0,0,0,3">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">•</Run>
+                            <Run>Frames are</Run>
+                            <Run FontWeight="Bold">never transmitted</Run> — not to our server, not to Patreon, not to any third party.
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">•</Run>
+                            <Run>Frames are processed in memory and</Run>
+                            <Run FontWeight="Bold">immediately discarded.</Run>
+                            <Run>No video, no images, no snapshots are ever written to disk.</Run>
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">•</Run>
+                            <Run>Only</Run>
+                            <Run FontWeight="Bold">numbers</Run>
+                            <Run>(eye-open ratio, gaze coordinates, mouth-open ratio) flow between components — never pictures.</Run>
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">•</Run>
+                            <Run>All AI tracking runs</Run>
+                            <Run FontWeight="Bold">offline</Run>
+                            <Run>with models bundled in the app.</Run>
+                            <Run FontWeight="Bold">No internet connection is used or required.</Run>
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">•</Run>
+                            <Run FontWeight="Bold">Audio is never captured.</Run>
+                            <Run>The webcam microphone is not accessed.</Run>
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">•</Run>
+                            <Run>The webcam light is</Run>
+                            <Run FontWeight="Bold">on whenever this feature is active</Run>, controlled by Windows itself — we cannot hide it.
+                        </TextBlock>
+                        <TextBlock Style="{StaticResource DlgPromise}">
+                            <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">•</Run>
+                            <Run>You can disable this</Run>
+                            <Run FontWeight="Bold">instantly</Run>
+                            <Run>with the panic key, the in-app toggle, or by closing the app.</Run>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Style="{StaticResource DlgBody}" Margin="0,18,0,0" Foreground="#B8B8C8">
+                    Want to verify? The source code for this feature is public.
+                    <Hyperlink x:Name="LnkSource" Click="LnkSource_Click" Foreground="{StaticResource PinkBrush}">
+                        View on GitHub →
+                    </Hyperlink>
+                </TextBlock>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ─── STEP 3 — Explicit consent ─── -->
+        <ScrollViewer x:Name="PanelStep3" Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock Style="{StaticResource DlgHeader}" Text="Confirm consent"/>
+                <TextBlock Style="{StaticResource DlgSub}" Text="Each box must be checked. None are pre-checked."/>
+
+                <CheckBox x:Name="ChkConsent1" Style="{StaticResource DlgCheckbox}" Margin="0,24,0,0" Checked="ConsentCheckChanged" Unchecked="ConsentCheckChanged">
+                    <TextBlock TextWrapping="Wrap" Text="I understand camera frames stay on this device and are never transmitted."/>
+                </CheckBox>
+                <CheckBox x:Name="ChkConsent2" Style="{StaticResource DlgCheckbox}" Checked="ConsentCheckChanged" Unchecked="ConsentCheckChanged">
+                    <TextBlock TextWrapping="Wrap" Text="I understand frames are processed in memory and never saved to disk."/>
+                </CheckBox>
+                <CheckBox x:Name="ChkConsent3" Style="{StaticResource DlgCheckbox}" Checked="ConsentCheckChanged" Unchecked="ConsentCheckChanged">
+                    <TextBlock TextWrapping="Wrap" Text="I am the only person in front of this camera, or others present have given consent."/>
+                </CheckBox>
+
+                <TextBlock Style="{StaticResource DlgBody}" Margin="0,28,0,8" FontWeight="SemiBold">
+                    Type ENABLE in capitals to confirm:
+                </TextBlock>
+                <TextBox x:Name="TxtConfirm" FontSize="14" Padding="10,8" Background="#1F1F38" Foreground="White"
+                         BorderBrush="#3A3A52" BorderThickness="1" CaretBrush="White"
+                         TextChanged="TxtConfirm_TextChanged"/>
+
+                <TextBlock x:Name="TxtConfirmHint" Style="{StaticResource DlgBody}" Margin="0,8,0,0" Foreground="#8888A0" FontStyle="Italic"
+                           Text="Waiting for: 3 checkboxes + ENABLE typed."/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ─── STEP 4 — Calibration prompt ─── -->
+        <ScrollViewer x:Name="PanelStep4" Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock Style="{StaticResource DlgHeader}" Text="Calibration"/>
+                <TextBlock Style="{StaticResource DlgSub}" Text="Quick one-time setup so the camera knows where you're looking."/>
+
+                <TextBlock Style="{StaticResource DlgBody}" Margin="0,24,0,0">
+                    Two options. You can switch later from the Lab card.
+                </TextBlock>
+
+                <Border Margin="0,16,0,0" Padding="18" CornerRadius="6" Background="#1F1F38">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource DlgBody}" FontWeight="Bold" Foreground="{StaticResource PinkBrush}" Text="Fast (about 10 seconds)"/>
+                        <TextBlock Style="{StaticResource DlgBody}" Margin="0,4,0,0">
+                            Just left vs right gaze. Enough for the Focus Training game.
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Margin="0,12,0,0" Padding="18" CornerRadius="6" Background="#1F1F38">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource DlgBody}" FontWeight="Bold" Foreground="{StaticResource PinkBrush}" Text="Full (about 30 seconds)"/>
+                        <TextBlock Style="{StaticResource DlgBody}" Margin="0,4,0,0">
+                            Five-point precision. Needed for "long stare" triggers and stare-to-pop bubbles.
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Style="{StaticResource DlgBody}" Margin="0,20,0,0" Foreground="#9090A8" FontStyle="Italic">
+                    You can also skip and calibrate later. The Lab cards will be visible but features that
+                    need calibration will show a "Calibrate to enable" hint until you do.
+                </TextBlock>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Button row -->
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="BtnCancel" Grid.Column="0" Style="{StaticResource DlgSecondaryButton}" HorizontalAlignment="Left"
+                    Content="Cancel" Click="BtnCancel_Click"/>
+
+            <Button x:Name="BtnBack" Grid.Column="1" Style="{StaticResource DlgSecondaryButton}" Margin="0,0,8,0"
+                    Content="← Back" Click="BtnBack_Click" Visibility="Collapsed"/>
+
+            <Button x:Name="BtnNext" Grid.Column="2" Style="{StaticResource DlgPrimaryButton}"
+                    Content="I want to know more →" Click="BtnNext_Click"/>
+
+            <Button x:Name="BtnEnable" Grid.Column="2" Style="{StaticResource DlgPrimaryButton}"
+                    Content="Enable Webcam Tracking" Click="BtnEnable_Click" IsEnabled="False" Visibility="Collapsed"/>
+
+            <Button x:Name="BtnSkipCal" Grid.Column="2" Style="{StaticResource DlgSecondaryButton}" Margin="0,0,8,0"
+                    Content="Calibrate later" Click="BtnSkipCal_Click" Visibility="Collapsed"/>
+
+            <Button x:Name="BtnCalNow" Grid.Column="3" Style="{StaticResource DlgPrimaryButton}"
+                    Content="Calibrate now" Click="BtnCalNow_Click" Visibility="Collapsed"/>
+        </Grid>
+    </Grid>
+</Window>
