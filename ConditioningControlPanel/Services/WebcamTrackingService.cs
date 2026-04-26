@@ -681,11 +681,14 @@ namespace ConditioningControlPanel.Services
 
             var classifiedSide = ClassifyGazeSide(smoothDx);
 
-            // Stability filter: only emit a side change once it's been the
-            // classification for SideStabilityFrames consecutive frames. Without
-            // this, a fast Left→Right movement passes through the Center band
-            // for a frame or two and fires a spurious Center event in the
-            // middle, which breaks the calibration validation gate's hold timer.
+            // Stability filter: only switch the *confirmed* side after the new
+            // classification has held for SideStabilityFrames consecutive frames.
+            // We still emit the confirmed side EVERY frame so consumers (like the
+            // calibration validation gate's hold timer) get continuous polling —
+            // they need a per-frame event to advance their elapsed-time check.
+            // Without this stability gate, a fast Left→Right movement passes
+            // through the Center band for a frame or two and the gate's elapsed
+            // timer resets mid-hold.
             if (classifiedSide == _lastEmittedSide)
             {
                 _pendingSide = classifiedSide;
@@ -698,8 +701,6 @@ namespace ConditioningControlPanel.Services
                 {
                     _lastEmittedSide = _pendingSide;
                     _pendingSideStreak = 0;
-                    var emit = _lastEmittedSide;
-                    Dispatch(() => OnGazeSide?.Invoke(emit));
                 }
             }
             else
@@ -707,6 +708,8 @@ namespace ConditioningControlPanel.Services
                 _pendingSide = classifiedSide;
                 _pendingSideStreak = 1;
             }
+            var emit = _lastEmittedSide;
+            Dispatch(() => OnGazeSide?.Invoke(emit));
 
             var screenPoint = ProjectGazeToScreen(smoothDx, smoothDy);
             if (screenPoint.HasValue)
