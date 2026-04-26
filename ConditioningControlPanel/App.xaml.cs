@@ -221,6 +221,8 @@ namespace ConditioningControlPanel
         public static ModService Mods { get; private set; } = null!;
         public static BugReportService BugReport { get; private set; } = null!;
         public static WallpaperService? Wallpaper { get; private set; }
+        public static WebcamTrackingService Webcam { get; private set; } = null!;
+        public static FocusGameService FocusGame { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -837,6 +839,11 @@ namespace ConditioningControlPanel
 
             // Initialize content packs service
             ContentPacks = new ContentPackService();
+
+            // Initialize webcam tracking + focus game services (Lab — gated by consent dialog).
+            // Constructors are no-ops; the camera handle only opens after explicit user consent.
+            Webcam = new WebcamTrackingService();
+            FocusGame = new FocusGameService();
 
             // Initialize lockdown service (ephemeral — not persisted)
             Lockdown = new LockdownService();
@@ -2124,6 +2131,8 @@ Application State:
             ScreenMirror?.Dispose();
             Autonomy?.Dispose();
             Wallpaper?.Dispose();
+            Webcam?.Dispose();
+            FocusGame?.Dispose();
             ContentPacks?.Dispose();
             Roadmap?.Dispose();
             SkillTree?.Dispose();

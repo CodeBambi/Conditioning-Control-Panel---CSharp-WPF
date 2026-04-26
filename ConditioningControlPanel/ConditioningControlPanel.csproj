@@ -99,6 +99,13 @@
 
     <!-- QR Code Generation (used by Remote Control tab for mobile pairing) -->
     <PackageReference Include="QRCoder" Version="1.6.0" />
+
+    <!-- Webcam Tracking (Lab) — local-only face/eye/mouth detection.
+         Privacy contract: frames stay on device, never transmitted, never written to disk.
+         See Services/WebcamTrackingService.cs. -->
+    <PackageReference Include="OpenCvSharp4" Version="4.9.0.20240103" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.9.0.20240103" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.17.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -255,6 +262,13 @@
     </Content>
     <!-- Awareness Engine preset packs -->
     <Content Include="Resources\AwarenessPresets\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <!-- Webcam tracking ONNX models (offline-only, no network calls).
+         README.md documents required files; .onnx binaries dropped in by build process. -->
+    <Content Include="Resources\Models\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
