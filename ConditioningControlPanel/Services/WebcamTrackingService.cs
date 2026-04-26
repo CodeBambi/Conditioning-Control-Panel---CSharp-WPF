@@ -48,11 +48,14 @@ namespace ConditioningControlPanel.Services
     //             to source-frame pixel coords through letterbox padding.
     //    Mesh   → FaceMesh ONNX on a 1.5×-expanded SquareLong face crop, returning
     //             468 landmarks in source-frame pixel coords.
-    //    Blink  → EAR (Eye Aspect Ratio) averaged across both eyes from FaceMesh
-    //             6-point eyelid indices. Rolling 90-frame max baseline, hysteresis
-    //             (closed<0.75×base, open>0.85×base), closed→open transition with
-    //             30 ms–1.5 s window absorbs both fast natural blinks and slow
-    //             deliberate ones. Periodic diagnostic log every ~3s.
+    //    Blink  → EAR (Eye Aspect Ratio) averaged across both eyes computed from
+    //             the IRIS MODEL's 71-point eye contour (the model is dedicated
+    //             to the eye region — its eyelid landmarks compress aggressively
+    //             on closure, unlike FaceMesh's whole-face landmarks which barely
+    //             move). Baseline = 90th percentile of last 90 frames (rejects
+    //             transient EAR spikes from eyebrow raises etc.). Hysteresis
+    //             closed<0.80×base / open>0.88×base, closed→open transition with
+    //             60 ms–1.5 s window. Diagnostic log every ~3s.
     //    Iris   → Iris model on 64×64 eye crops (right eye flipped before
     //             inference, output un-flipped). Iris-center landmark gives
     //             a precise gaze vector — replaces darkest-pixel heuristic.
@@ -109,11 +112,25 @@ namespace ConditioningControlPanel.Services
         private const int BlinkCooldownMs = 500;             // gap required between consecutive blink fires
         private const int BlinkDiagLogIntervalMs = 3000;     // log EAR baseline + blink count every ~3s
 
-        // Standard 6-point EAR landmark indices for MediaPipe FaceMesh
-        // (P1=outer, P2/P3=upper eyelid, P4=inner, P5/P6=lower eyelid)
-        private static readonly int[] LeftEarIndices  = { 33, 160, 158, 133, 153, 144 };
-        private static readonly int[] RightEarIndices = { 263, 387, 385, 362, 380, 373 };
-        // Eye-box bounding-box landmarks (outer/inner corners + upper/lower eyelid extremes)
+        // EAR is computed against the IRIS MODEL's 71-point eye contour, NOT
+        // FaceMesh's eyelid landmarks. FaceMesh's landmarks barely move during
+        // mid-closed eyelids (the model is trained on whole-face geometry, not
+        // eyelid edges), so EAR drops only ~10% during real blinks — too little
+        // to reliably trigger threshold. The iris model is dedicated to the eye
+        // region and tracks closure aggressively.
+        //
+        // Iris-model contour layout (per IntelliProve LEFT_EYE_TO_FACE_LANDMARK_INDEX):
+        //   indices 0..8 = lower contour (outer→inner along bottom)
+        //   indices 9..15 = upper contour (outer→inner along top)
+        // 6-point EAR mapping (P1=outer, P2/P3=upper, P4=inner, P5/P6=lower):
+        //   P1=0 (outer corner), P4=8 (inner corner)
+        //   P2=11 (upper, FaceMesh-equiv 160), P6=3 (lower, FaceMesh-equiv 144)
+        //   P3=13 (upper, FaceMesh-equiv 158), P5=5 (lower, FaceMesh-equiv 153)
+        // Same indices apply to both eyes — right-eye contour was un-flipped by
+        // IrisDetector so geometry matches left-eye orientation.
+        private static readonly int[] IrisContourEarIndices = { 0, 11, 13, 8, 5, 3 };
+
+        // FaceMesh eye-box bounding-box landmarks (kept for diagnostic eye rects)
         private static readonly int[] LeftEyeBoxIndices  = { 33, 133, 159, 145, 158, 153 };  // 33 outer, 133 inner, 159 top, 145 bottom
         private static readonly int[] RightEyeBoxIndices = { 263, 362, 386, 374, 385, 380 }; // 263 outer, 362 inner, 386 top, 374 bottom
 
@@ -572,32 +589,36 @@ namespace ConditioningControlPanel.Services
             _lastLeftEyeRect = EyeBoxFromLandmarks(landmarks, LeftEyeBoxIndices, gray.Width, gray.Height);
             _lastRightEyeRect = EyeBoxFromLandmarks(landmarks, RightEyeBoxIndices, gray.Width, gray.Height);
 
-            // 4) EAR-based blink detection
-            double earL = ComputeEAR(landmarks, LeftEarIndices);
-            double earR = ComputeEAR(landmarks, RightEarIndices);
-            UpdateBlinkState(earL, earR);
-
             HandleFaceFound();
 
-            // 5) Iris model — exact iris-center landmark per eye, normalized
-            //    against eye-corner midpoint to give a head-pose-stable gaze
-            //    vector. Right eye is fed flipped, output un-flipped, by the
-            //    detector. Eye-corner-to-corner distance defines the unit so
-            //    the vector is roughly invariant to face-to-camera distance.
-            var leftIrisCenter  = _irisDetector!.DetectIrisCenter(bgr, landmarks[LeftEyeOuterIdx],  landmarks[LeftEyeInnerIdx],  isRightEye: false);
-            var rightIrisCenter = _irisDetector!.DetectIrisCenter(bgr, landmarks[RightEyeOuterIdx], landmarks[RightEyeInnerIdx], isRightEye: true);
-            if (leftIrisCenter == null && rightIrisCenter == null) return;
+            // 4) Iris model — exact iris-center landmark per eye AND 71-point
+            //    eye contour for EAR. Right eye is fed flipped by IrisDetector,
+            //    output un-flipped, so contour indices are consistent across eyes.
+            var leftEye  = _irisDetector!.Detect(bgr, landmarks[LeftEyeOuterIdx],  landmarks[LeftEyeInnerIdx],  isRightEye: false);
+            var rightEye = _irisDetector!.Detect(bgr, landmarks[RightEyeOuterIdx], landmarks[RightEyeInnerIdx], isRightEye: true);
+            if (leftEye == null && rightEye == null) return;
 
+            // 5) EAR-based blink detection on iris-model contour (more responsive
+            //    to closure than FaceMesh's eyelid landmarks).
+            if (leftEye != null && rightEye != null)
+            {
+                double earL = ComputeEAR(leftEye.Contour, IrisContourEarIndices);
+                double earR = ComputeEAR(rightEye.Contour, IrisContourEarIndices);
+                UpdateBlinkState(earL, earR);
+            }
+
+            // 6) Iris-vector for gaze (head-pose stable, normalized against
+            //    eye-corner midpoint and scaled by corner-to-corner distance).
             double sumDx = 0, sumDy = 0;
             int count = 0;
-            if (leftIrisCenter != null)
+            if (leftEye != null)
             {
-                var v = NormalizeIrisVector(leftIrisCenter.Value, landmarks[LeftEyeOuterIdx], landmarks[LeftEyeInnerIdx]);
+                var v = NormalizeIrisVector(leftEye.IrisCenter, landmarks[LeftEyeOuterIdx], landmarks[LeftEyeInnerIdx]);
                 sumDx += v.Dx; sumDy += v.Dy; count++;
             }
-            if (rightIrisCenter != null)
+            if (rightEye != null)
             {
-                var v = NormalizeIrisVector(rightIrisCenter.Value, landmarks[RightEyeOuterIdx], landmarks[RightEyeInnerIdx]);
+                var v = NormalizeIrisVector(rightEye.IrisCenter, landmarks[RightEyeOuterIdx], landmarks[RightEyeInnerIdx]);
                 sumDx += v.Dx; sumDy += v.Dy; count++;
             }
             EmitGazeEvents(sumDx / count, sumDy / count);
@@ -913,9 +934,14 @@ namespace ConditioningControlPanel.Services
             // from being measured as simultaneously closed at the same frame.
             double avgEar = (earL + earR) / 2.0;
 
-            // Update rolling baseline. Max naturally rejects low (closed) values.
+            // Update rolling baseline. We use the 90th percentile of the buffer
+            // (NOT the max) because raising eyebrows / surprised expressions
+            // briefly spike EAR way above the user's normal open-eye value.
+            // A single spike pollutes a max-baseline for 3 seconds, making the
+            // closed threshold unreachable. The 90th percentile rejects those
+            // outliers while still tracking the user's normal open-eye EAR.
             EnqueueWithCap(_earBuffer, avgEar, EarBaselineFrames);
-            _earBaseline = MaxOf(_earBuffer);
+            _earBaseline = PercentileOf(_earBuffer, 0.90);
 
             // Track per-window min/max for diagnostic log
             if (avgEar < _windowMinEar) _windowMinEar = avgEar;
@@ -1012,6 +1038,17 @@ namespace ConditioningControlPanel.Services
             double m = 0;
             foreach (var v in q) if (v > m) m = v;
             return m;
+        }
+
+        private static double PercentileOf(Queue<double> q, double pct)
+        {
+            if (q.Count == 0) return 0;
+            var arr = q.ToArray();
+            Array.Sort(arr);
+            int idx = (int)(arr.Length * pct);
+            if (idx >= arr.Length) idx = arr.Length - 1;
+            if (idx < 0) idx = 0;
+            return arr[idx];
         }
 
         // ─────────────────────────────────────────────────────────────────────────
@@ -1364,11 +1401,19 @@ namespace ConditioningControlPanel.Services
         //  before mapping back. (The model was trained on left eyes only.)
         //
         //  Output: 71 eyelid contour points + 5 iris points per eye, each (x, y, z)
-        //  in 64-px tensor coords. We only need iris point 0 (CENTER).
+        //  in 64-px tensor coords. We use iris[0] (CENTER) for gaze and the eye
+        //  contour for blink EAR (more responsive to closure than FaceMesh).
         //
-        //  Returns: (X, Y) iris center in source-frame pixel coords, or null
-        //  if the eye corners aren't far enough apart to give a meaningful crop.
+        //  Returns: EyeLandmarks containing iris center + 71-point eye contour
+        //  in source-frame pixel coords, or null if the eye corners aren't far
+        //  enough apart to give a meaningful crop.
         // ─────────────────────────────────────────────────────────────────────────
+        public sealed class EyeLandmarks
+        {
+            public (double X, double Y) IrisCenter;
+            public float[][] Contour = System.Array.Empty<float[]>();   // 71 [x, y]
+        }
+
         private sealed class IrisDetector : IDisposable
         {
             private const int InputSize = 64;
@@ -1397,7 +1442,7 @@ namespace ConditioningControlPanel.Services
                 _inputName = _session.InputMetadata.Keys.First();
             }
 
-            public (double X, double Y)? DetectIrisCenter(Mat bgr, float[] outerCorner, float[] innerCorner, bool isRightEye)
+            public EyeLandmarks? Detect(Mat bgr, float[] outerCorner, float[] innerCorner, bool isRightEye)
             {
                 int srcW = bgr.Width, srcH = bgr.Height;
 
@@ -1453,25 +1498,41 @@ namespace ConditioningControlPanel.Services
                 var inputTensor = new DenseTensor<float>(_inputBuffer, new[] { 1, InputSize, InputSize, 3 });
                 using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(_inputName, inputTensor) });
 
-                // Identify outputs by length. Iris output has 5×3 = 15 floats.
+                // Iris output: 5×3 = 15 floats. Eye contour: 71×3 = 213 floats.
                 Tensor<float>? irisT = null;
+                Tensor<float>? eyeT = null;
                 foreach (var r in results)
                 {
                     var t = r.AsTensor<float>();
                     long len = 1;
                     foreach (var d in t.Dimensions) len *= d;
-                    if (len == NumIrisPoints * LandmarkDims) { irisT = t; break; }
+                    if (len == NumIrisPoints * LandmarkDims) irisT = t;
+                    else if (len == NumEyeContour * LandmarkDims) eyeT = t;
                 }
-                if (irisT == null) return null;
+                if (irisT == null || eyeT == null) return null;
 
-                var iris = irisT.ToArray();
+                float invInput = 1f / InputSize;
+
                 // Iris center is point 0 (IrisIndex.CENTER in IntelliProve constants).
+                var iris = irisT.ToArray();
                 float ix64 = iris[0];
                 float iy64 = iris[1];
                 if (isRightEye) ix64 = InputSize - ix64;
-                float nx = ix64 / InputSize;
-                float ny = iy64 / InputSize;
-                return (rx + nx * rs, ry + ny * rs);
+                double irisX = rx + (ix64 * invInput) * rs;
+                double irisY = ry + (iy64 * invInput) * rs;
+
+                // Eye contour 71 points → source-frame pixel coords.
+                var eye = eyeT.ToArray();
+                var contour = new float[NumEyeContour][];
+                for (int i = 0; i < NumEyeContour; i++)
+                {
+                    float ex64 = eye[i * LandmarkDims + 0];
+                    float ey64 = eye[i * LandmarkDims + 1];
+                    if (isRightEye) ex64 = InputSize - ex64;
+                    contour[i] = new[] { rx + (ex64 * invInput) * rs, ry + (ey64 * invInput) * rs };
+                }
+
+                return new EyeLandmarks { IrisCenter = (irisX, irisY), Contour = contour };
             }
 
             private static void FillInputBufferFromBgr(Mat bgr64, float[] dst)
