@@ -11,7 +11,8 @@ namespace ConditioningControlPanel.Services
     //  This service must NEVER:
     //    • Write a frame, image, or any per-frame derived array to disk.
     //    • Send a frame, image, or any per-frame derived array over the network.
-    //    • Log per-frame numbers (gaze X/Y, EAR, MAR) — only state strings + counts.
+    //    • Log per-frame numbers (gaze X/Y, eye-state, etc.) — only state
+    //      strings and counts.
     //    • Open audio capture (VideoCapture is video-only by API contract).
     //    • Persist anything beyond the calibration JSON (numbers only, see
     //      WebcamCalibrationData).
@@ -21,6 +22,18 @@ namespace ConditioningControlPanel.Services
     //  so users re-consent on next launch.
     //
     //  Frames live in RAM, get processed, get disposed. That is the whole story.
+    // ─────────────────────────────────────────────────────────────────────────────
+    //
+    //  Detection pipeline (v1):
+    //    Resources/Models/face_detection_yunet.onnx — OpenCV's YuNet detector
+    //    Outputs: face bbox + 5 keypoints (left eye, right eye, nose tip,
+    //             left mouth corner, right mouth corner)
+    //
+    //    Blink detection: eye-region pixel-intensity variance heuristic
+    //                     (cruder than EAR but works without lid landmarks)
+    //    Gaze direction:  iris-as-darkest-pixel relative to eye center
+    //    Mouth-open:      DEFERRED to v2 — YuNet keypoints lack lip vertical
+    //                     extents needed for MAR-style detection
     // ─────────────────────────────────────────────────────────────────────────────
 
     public enum GazeSide { Left, Right, Center }
