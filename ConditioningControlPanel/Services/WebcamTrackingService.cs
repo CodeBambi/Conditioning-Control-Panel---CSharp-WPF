@@ -48,9 +48,11 @@ namespace ConditioningControlPanel.Services
     //             to source-frame pixel coords through letterbox padding.
     //    Mesh   → FaceMesh ONNX on a 1.5×-expanded SquareLong face crop, returning
     //             468 landmarks in source-frame pixel coords.
-    //    Blink  → EAR (Eye Aspect Ratio) on standard 6-point eyelid indices from
-    //             FaceMesh, with rolling 90-frame baseline, per-eye hysteresis
-    //             (closed<0.7×base, open>0.85×base), both-eyes closed→open.
+    //    Blink  → EAR (Eye Aspect Ratio) averaged across both eyes from FaceMesh
+    //             6-point eyelid indices. Rolling 90-frame max baseline, hysteresis
+    //             (closed<0.75×base, open>0.85×base), closed→open transition with
+    //             30 ms–1.5 s window absorbs both fast natural blinks and slow
+    //             deliberate ones. Periodic diagnostic log every ~3s.
     //    Iris   → Iris model on 64×64 eye crops (right eye flipped before
     //             inference, output un-flipped). Iris-center landmark gives
     //             a precise gaze vector — replaces darkest-pixel heuristic.
@@ -92,15 +94,19 @@ namespace ConditioningControlPanel.Services
         private const int FaceLostFramesThreshold = 15;            // ~0.5s
 
         // EAR-based blink detection. Standard 6-point EAR (Soukupová & Čech 2016)
-        // computed on FaceMesh's eyelid landmarks. Per-eye rolling baseline; both-
-        // eyes closed→open transition within MaxBlinkClosedMs fires the event.
+        // averaged across both eyes (avoids per-eye asymmetry shrinking the
+        // both-closed detection window to nothing). Rolling 90-frame max baseline.
+        // Window is generous: real blinks are ~100ms but the calibration prompt
+        // explicitly tells users to "blink slowly and deliberately" so we accept
+        // up to 1.5s as a single blink — anything longer is treated as a stare.
         private const int EarBaselineFrames = 90;            // ~3s at 30fps — rolling max window
         private const int EarMinSamplesForBaseline = 15;     // need this many before any blink fires
-        private const double EarClosedRatio = 0.70;          // EAR < 0.70 × baseline → enter closed
+        private const double EarClosedRatio = 0.75;          // EAR < 0.75 × baseline → enter closed
         private const double EarOpenRatio = 0.85;            // EAR > 0.85 × baseline → leave closed (hysteresis gap)
-        private const int MinBlinkClosedMs = 50;             // shorter than this is noise, not a real blink
-        private const int MaxBlinkClosedMs = 400;            // longer than this is a stare/squint, not a blink
-        private const int BlinkCooldownMs = 700;             // gap required between consecutive blink fires
+        private const int MinBlinkClosedMs = 30;             // shorter than this is noise, not a real blink
+        private const int MaxBlinkClosedMs = 1500;           // longer than this is a stare/squint, not a blink
+        private const int BlinkCooldownMs = 500;             // gap required between consecutive blink fires
+        private const int BlinkDiagLogIntervalMs = 3000;     // log EAR baseline + blink count every ~3s
 
         // Standard 6-point EAR landmark indices for MediaPipe FaceMesh
         // (P1=outer, P2/P3=upper eyelid, P4=inner, P5/P6=lower eyelid)
@@ -157,13 +163,12 @@ namespace ConditioningControlPanel.Services
 
         // Heuristic state (capture-thread only)
         private DateTime _lastBlinkAt = DateTime.MinValue;
-        private readonly Queue<double> _earBufferL = new();      // rolling EAR samples for baseline
-        private readonly Queue<double> _earBufferR = new();
-        private double _earBaselineL;                            // rolling 90-frame max
-        private double _earBaselineR;
-        private bool _eyeClosedL;                                // hysteresis state per eye
-        private bool _eyeClosedR;
-        private DateTime? _bothEyesClosedAt;                     // start of current both-closed window
+        private readonly Queue<double> _earBuffer = new();       // rolling avg-EAR samples for baseline
+        private double _earBaseline;                             // rolling 90-frame max of avg EAR
+        private bool _eyesClosed;                                // hysteresis state for both eyes (single)
+        private DateTime? _eyesClosedAt;                         // start of current closed window
+        private DateTime _lastBlinkDiagAt = DateTime.MinValue;
+        private int _blinkCount;                                 // total blinks fired since service start
         private bool _faceWasFound;
         private int _consecutiveNoFaceFrames;
         private DateTime _lastLongStareAt = DateTime.MinValue;
@@ -437,13 +442,12 @@ namespace ConditioningControlPanel.Services
             _lastFaceRect = null;
             _lastLeftEyeRect = null;
             _lastRightEyeRect = null;
-            _earBufferL.Clear();
-            _earBufferR.Clear();
-            _earBaselineL = 0;
-            _earBaselineR = 0;
-            _eyeClosedL = false;
-            _eyeClosedR = false;
-            _bothEyesClosedAt = null;
+            _earBuffer.Clear();
+            _earBaseline = 0;
+            _eyesClosed = false;
+            _eyesClosedAt = null;
+            _lastBlinkDiagAt = DateTime.MinValue;
+            _blinkCount = 0;
             _irisDxSmoothBuffer.Clear();
             _irisDySmoothBuffer.Clear();
             _lastGazeSide = GazeSide.Center;
@@ -611,9 +615,8 @@ namespace ConditioningControlPanel.Services
             // mid-blink state so a face-loss can't be misread as a giant blink.
             _lastLeftEyeRect = null;
             _lastRightEyeRect = null;
-            _eyeClosedL = false;
-            _eyeClosedR = false;
-            _bothEyesClosedAt = null;
+            _eyesClosed = false;
+            _eyesClosedAt = null;
             if (_consecutiveNoFaceFrames > FaceLostFramesThreshold * 2)
             {
                 _gazeBuffer.Clear();
@@ -857,53 +860,70 @@ namespace ConditioningControlPanel.Services
 
         private void UpdateBlinkState(double earL, double earR)
         {
-            // Update rolling baselines.
-            EnqueueWithCap(_earBufferL, earL, EarBaselineFrames);
-            EnqueueWithCap(_earBufferR, earR, EarBaselineFrames);
-            _earBaselineL = MaxOf(_earBufferL);
-            _earBaselineR = MaxOf(_earBufferR);
+            // Combine the two eyes into a single signal — averaging absorbs
+            // small per-eye asymmetry that would otherwise prevent the eyes
+            // from being measured as simultaneously closed at the same frame.
+            double avgEar = (earL + earR) / 2.0;
+
+            // Update rolling baseline. Max naturally rejects low (closed) values.
+            EnqueueWithCap(_earBuffer, avgEar, EarBaselineFrames);
+            _earBaseline = MaxOf(_earBuffer);
+
+            var now = DateTime.UtcNow;
+            MaybeLogBlinkDiag(now, avgEar);
 
             // Need enough samples before any blink can fire (avoid a startup
             // spurious blink while the baseline is still seeded by the first
             // few low-EAR frames).
-            if (_earBufferL.Count < EarMinSamplesForBaseline || _earBufferR.Count < EarMinSamplesForBaseline)
-                return;
-            if (_earBaselineL <= 0 || _earBaselineR <= 0) return;
+            if (_earBuffer.Count < EarMinSamplesForBaseline) return;
+            if (_earBaseline <= 0) return;
 
             // Hysteresis: once closed, stay closed until EAR > 0.85×baseline.
-            bool nowClosedL = _eyeClosedL
-                ? earL < EarOpenRatio  * _earBaselineL
-                : earL < EarClosedRatio * _earBaselineL;
-            bool nowClosedR = _eyeClosedR
-                ? earR < EarOpenRatio  * _earBaselineR
-                : earR < EarClosedRatio * _earBaselineR;
+            bool nowClosed = _eyesClosed
+                ? avgEar < EarOpenRatio  * _earBaseline
+                : avgEar < EarClosedRatio * _earBaseline;
 
-            bool wasBothClosed = _eyeClosedL && _eyeClosedR;
-            bool nowBothClosed = nowClosedL && nowClosedR;
-
-            var now = DateTime.UtcNow;
-            if (nowBothClosed && !wasBothClosed)
+            if (nowClosed && !_eyesClosed)
             {
-                _bothEyesClosedAt = now;
+                _eyesClosedAt = now;
             }
-            else if (!nowBothClosed && wasBothClosed && _bothEyesClosedAt.HasValue)
+            else if (!nowClosed && _eyesClosed && _eyesClosedAt.HasValue)
             {
-                var closedMs = (now - _bothEyesClosedAt.Value).TotalMilliseconds;
+                var closedMs = (now - _eyesClosedAt.Value).TotalMilliseconds;
                 if (closedMs >= MinBlinkClosedMs && closedMs <= MaxBlinkClosedMs
                     && (now - _lastBlinkAt).TotalMilliseconds >= BlinkCooldownMs)
                 {
                     _lastBlinkAt = now;
+                    _blinkCount++;
+                    App.Logger?.Information("WebcamTrackingService: blink #{N} fired (closed for {Ms:F0}ms, baseline EAR={Base:F3}, min EAR during closure ≈ {Min:F3})",
+                        _blinkCount, closedMs, _earBaseline, avgEar);
                     Dispatch(() => OnBlink?.Invoke());
                 }
-                _bothEyesClosedAt = null;
+                _eyesClosedAt = null;
             }
-            else if (!nowBothClosed)
+            else if (!nowClosed)
             {
-                _bothEyesClosedAt = null;
+                _eyesClosedAt = null;
             }
 
-            _eyeClosedL = nowClosedL;
-            _eyeClosedR = nowClosedR;
+            _eyesClosed = nowClosed;
+        }
+
+        private void MaybeLogBlinkDiag(DateTime now, double avgEar)
+        {
+            // Periodic diagnostic log — counts and aggregate state only, no
+            // per-frame data. Helps debug blink misses ("baseline=0.32, current
+            // closed=false, blinks fired=2" lets us reason about thresholds).
+            if (_lastBlinkDiagAt == DateTime.MinValue) { _lastBlinkDiagAt = now; return; }
+            if ((now - _lastBlinkDiagAt).TotalMilliseconds < BlinkDiagLogIntervalMs) return;
+            _lastBlinkDiagAt = now;
+
+            double closedThreshold = _earBaseline * EarClosedRatio;
+            double openThreshold = _earBaseline * EarOpenRatio;
+            App.Logger?.Information(
+                "WebcamTrackingService: blink-diag baseline={Base:F3} closedThr={CT:F3} openThr={OT:F3} state={State} blinks={N} samples={S}",
+                _earBaseline, closedThreshold, openThreshold,
+                _eyesClosed ? "CLOSED" : "open", _blinkCount, _earBuffer.Count);
         }
 
         private static double MaxOf(Queue<double> q)
