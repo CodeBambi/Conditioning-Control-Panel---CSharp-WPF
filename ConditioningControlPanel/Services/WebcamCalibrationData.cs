@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Services
     {
         public const string FileName = "webcam-calibration.json";
 
-        /// <summary>"TwoPoint" (gaze-side only) or "FivePoint" (precise gaze).</summary>
+        /// <summary>"TwoPoint" (gaze-side only), "FivePoint" (legacy), or "NinePoint" (current, 3×3 grid for tighter homography fit).</summary>
         [JsonProperty] public string Mode { get; set; } = "";
 
         [JsonProperty] public DateTime Timestamp { get; set; }

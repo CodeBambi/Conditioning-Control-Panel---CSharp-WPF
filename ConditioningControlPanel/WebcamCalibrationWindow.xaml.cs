@@ -11,17 +11,23 @@ using WpfPoint = System.Windows.Point;
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// Fullscreen 5-point gaze calibration. Walks the user through 5 dots
-    /// (TL, TR, C, BL, BR), samples raw iris vectors at each, fits a 3x3
+    /// Fullscreen 9-point gaze calibration (3×3 grid: TL, TC, TR, ML, MC, MR,
+    /// BL, BC, BR). Samples raw iris vectors at each point, fits a 3×3
     /// homography (iris → screen DIPs), and persists via WebcamCalibrationData.
+    ///
+    /// Why 9 points: the homography is 8 DOF — with 5 points we're at the bare
+    /// minimum and the fit floats. With 9 we get a real least-squares fit, which
+    /// noticeably tightens accuracy at the screen edges where 5-point drifts
+    /// most. Per-point sampling time is shorter to keep total calibration time
+    /// roughly the same as the 5-point version.
     ///
     /// Caller is responsible for ensuring App.Webcam is already running.
     /// </summary>
     public partial class WebcamCalibrationWindow : System.Windows.Window
     {
-        private const int ReadyMs = 800;          // dot moves, user re-fixates
-        private const int SampleMs = 2500;        // longer sample → tighter mean (was 1500)
-        private const int SettleMs = 300;         // pause between dots
+        private const int ReadyMs = 600;          // dot moves, user re-fixates
+        private const int SampleMs = 1400;        // ~42 samples at 30fps; above MinSamplesPerPoint
+        private const int SettleMs = 200;         // pause between dots
         private const int MinSamplesPerPoint = 20;
 
         private readonly List<List<(double X, double Y)>> _allSamples = new();
@@ -90,13 +96,23 @@ namespace ConditioningControlPanel
             var w = ActualWidth;
             var h = ActualHeight;
             const double margin = 90;
+            // 3×3 grid in row-major order. Index layout:
+            //   0=TL  1=TC  2=TR
+            //   3=ML  4=MC  5=MR
+            //   6=BL  7=BC  8=BR
+            // (Used downstream when picking left-column / right-column points
+            // for the LeftRefVec / RightRefVec averages.)
             var positions = new (string Label, WpfPoint Screen)[]
             {
-                ("Top-left",     new WpfPoint(margin,         margin)),
-                ("Top-right",    new WpfPoint(w - margin,     margin)),
-                ("Center",       new WpfPoint(w / 2,          h / 2)),
-                ("Bottom-left",  new WpfPoint(margin,         h - margin)),
-                ("Bottom-right", new WpfPoint(w - margin,     h - margin)),
+                ("Top-left",      new WpfPoint(margin,     margin)),
+                ("Top-center",    new WpfPoint(w / 2,      margin)),
+                ("Top-right",     new WpfPoint(w - margin, margin)),
+                ("Middle-left",   new WpfPoint(margin,     h / 2)),
+                ("Center",        new WpfPoint(w / 2,      h / 2)),
+                ("Middle-right",  new WpfPoint(w - margin, h / 2)),
+                ("Bottom-left",   new WpfPoint(margin,     h - margin)),
+                ("Bottom-center", new WpfPoint(w / 2,      h - margin)),
+                ("Bottom-right",  new WpfPoint(w - margin, h - margin)),
             };
 
             for (int i = 0; i < positions.Length; i++)
@@ -200,17 +216,25 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // LeftRefVec  = mean of TL + BL iris vectors  (looking at screen-left dots)
-            // RightRefVec = mean of TR + BR iris vectors  (looking at screen-right dots)
-            var leftRef = new[] { (srcMeans[0].X + srcMeans[3].X) / 2.0, (srcMeans[0].Y + srcMeans[3].Y) / 2.0 };
-            var rightRef = new[] { (srcMeans[1].X + srcMeans[4].X) / 2.0, (srcMeans[1].Y + srcMeans[4].Y) / 2.0 };
+            // LeftRefVec  = mean of left column (TL=0, ML=3, BL=6) iris vectors
+            // RightRefVec = mean of right column (TR=2, MR=5, BR=8) iris vectors
+            // 3-point average per side is more robust to head-pose drift than
+            // the old 2-point (TL+BL / TR+BR) average from the 5-point flow.
+            var leftRef = new[] {
+                (srcMeans[0].X + srcMeans[3].X + srcMeans[6].X) / 3.0,
+                (srcMeans[0].Y + srcMeans[3].Y + srcMeans[6].Y) / 3.0
+            };
+            var rightRef = new[] {
+                (srcMeans[2].X + srcMeans[5].X + srcMeans[8].X) / 3.0,
+                (srcMeans[2].Y + srcMeans[5].Y + srcMeans[8].Y) / 3.0
+            };
 
             var primary = SystemParameters.PrimaryScreenWidth;
             var primaryH = SystemParameters.PrimaryScreenHeight;
 
             var data = new WebcamCalibrationData
             {
-                Mode = "FivePoint",
+                Mode = "NinePoint",
                 Timestamp = DateTime.UtcNow,
                 MonitorBounds = new MonitorBoundsRecord
                 {
@@ -238,7 +262,7 @@ namespace ConditioningControlPanel
                 // Roll back: don't write to disk, restore the previous in-memory state.
                 App.Webcam?.SetCalibrationLive(previousCalibration);
                 ShowError(
-                    "The system couldn't reliably detect your gaze and blinks with this calibration. " +
+                    "The system couldn't reliably detect your gaze, blinks, mouth-open, or tongue with this calibration. " +
                     "Tips: sit closer to the camera, make sure your face is well-lit and unshadowed, " +
                     "remove reflective glasses if possible, and try again.");
                 return;
@@ -251,7 +275,7 @@ namespace ConditioningControlPanel
             if (settings != null)
             {
                 settings.WebcamCalibrated = true;
-                settings.WebcamCalibrationMode = "FivePoint";
+                settings.WebcamCalibrationMode = "NinePoint";
                 App.Settings?.Save();
             }
 
@@ -259,7 +283,7 @@ namespace ConditioningControlPanel
 
             ValidationPanel.Visibility = Visibility.Collapsed;
             TxtTitle.Text = "Calibration verified";
-            TxtStatus.Text = "Gaze + blink detection confirmed working.";
+            TxtStatus.Text = "Gaze, blink, mouth-open, and tongue detection confirmed working.";
             TxtProgress.Text = "Closing…";
             DotCanvas.Visibility = Visibility.Collapsed;
 
@@ -284,8 +308,8 @@ namespace ConditioningControlPanel
             await Task.Delay(1400);
             if (_cancelled) return false;
 
-            // Sequence: L, R, L, R, blink x2.
-            // Each step gets up to 3 attempts (8 s timeout each) before failing
+            // Sequence: L, R, L, R, blink×2, mouth-open×1, tongue-out×1.
+            // Each step gets up to 3 attempts (12 s timeout each) before failing
             // the whole calibration.
             if (!await ValidateGazeStepAsync(GazeSide.Left,  "Look LEFT",  "←", roundLabel: "1 of 4")) return false;
             if (_cancelled) return false;
@@ -296,6 +320,10 @@ namespace ConditioningControlPanel
             if (!await ValidateGazeStepAsync(GazeSide.Right, "Look RIGHT", "→", roundLabel: "4 of 4")) return false;
             if (_cancelled) return false;
             if (!await ValidateBlinkStepAsync(needed: 2)) return false;
+            if (_cancelled) return false;
+            if (!await ValidateMouthOpenStepAsync(needed: 1)) return false;
+            if (_cancelled) return false;
+            if (!await ValidateTongueOutStepAsync(needed: 1)) return false;
             return true;
         }
 
@@ -376,6 +404,76 @@ namespace ConditioningControlPanel
             return false;
         }
 
+        private async Task<bool> ValidateMouthOpenStepAsync(int needed)
+        {
+            const int TimeoutMs = 12000;
+            const int MaxAttempts = 3;
+
+            for (int attempt = 1; attempt <= MaxAttempts; attempt++)
+            {
+                if (_cancelled) return false;
+
+                TxtValidationCue.Text = "😮";
+                TxtValidationPrompt.Text = needed == 1 ? "Open your mouth wide" : $"Open your mouth wide {needed} times";
+                TxtValidationDetail.Text = "Detected: 0 / " + needed;
+                TxtValidationAttempt.Text = $"Attempt {attempt} / {MaxAttempts}";
+
+                var got = await WaitForMouthOpensAsync(needed, TimeoutMs, count =>
+                {
+                    TxtValidationDetail.Text = $"Detected: {count} / {needed}";
+                });
+                if (_cancelled) return false;
+
+                if (got)
+                {
+                    await FlashSuccessAsync();
+                    return true;
+                }
+
+                if (attempt < MaxAttempts)
+                {
+                    TxtValidationDetail.Text = "Didn't detect a mouth-open. Try again — open wide like a yawn.";
+                    await Task.Delay(900);
+                }
+            }
+            return false;
+        }
+
+        private async Task<bool> ValidateTongueOutStepAsync(int needed)
+        {
+            const int TimeoutMs = 12000;
+            const int MaxAttempts = 3;
+
+            for (int attempt = 1; attempt <= MaxAttempts; attempt++)
+            {
+                if (_cancelled) return false;
+
+                TxtValidationCue.Text = "👅";
+                TxtValidationPrompt.Text = needed == 1 ? "Stick out your tongue" : $"Stick out your tongue {needed} times";
+                TxtValidationDetail.Text = "Detected: 0 / " + needed;
+                TxtValidationAttempt.Text = $"Attempt {attempt} / {MaxAttempts}";
+
+                var got = await WaitForTongueOutsAsync(needed, TimeoutMs, count =>
+                {
+                    TxtValidationDetail.Text = $"Detected: {count} / {needed}";
+                });
+                if (_cancelled) return false;
+
+                if (got)
+                {
+                    await FlashSuccessAsync();
+                    return true;
+                }
+
+                if (attempt < MaxAttempts)
+                {
+                    TxtValidationDetail.Text = "Didn't detect a tongue-out. Try again — open your mouth and stick your tongue out clearly.";
+                    await Task.Delay(900);
+                }
+            }
+            return false;
+        }
+
         private async Task FlashSuccessAsync()
         {
             var prevCue = TxtValidationCue.Text;
@@ -448,6 +546,56 @@ namespace ConditioningControlPanel
             finally
             {
                 App.Webcam.OnBlink -= Handler;
+            }
+        }
+
+        private async Task<bool> WaitForMouthOpensAsync(int needed, int timeoutMs, Action<int> onProgress)
+        {
+            if (App.Webcam == null) return false;
+            var tcs = new TaskCompletionSource<bool>();
+            int count = 0;
+
+            void Handler()
+            {
+                count++;
+                onProgress(count);
+                if (count >= needed) tcs.TrySetResult(true);
+            }
+
+            App.Webcam.OnMouthOpen += Handler;
+            try
+            {
+                var winner = await Task.WhenAny(tcs.Task, Task.Delay(timeoutMs));
+                return winner == tcs.Task && tcs.Task.Result;
+            }
+            finally
+            {
+                App.Webcam.OnMouthOpen -= Handler;
+            }
+        }
+
+        private async Task<bool> WaitForTongueOutsAsync(int needed, int timeoutMs, Action<int> onProgress)
+        {
+            if (App.Webcam == null) return false;
+            var tcs = new TaskCompletionSource<bool>();
+            int count = 0;
+
+            void Handler()
+            {
+                count++;
+                onProgress(count);
+                if (count >= needed) tcs.TrySetResult(true);
+            }
+
+            App.Webcam.OnTongueOut += Handler;
+            try
+            {
+                var winner = await Task.WhenAny(tcs.Task, Task.Delay(timeoutMs));
+                return winner == tcs.Task && tcs.Task.Result;
+            }
+            finally
+            {
+                App.Webcam.OnTongueOut -= Handler;
             }
         }
 
