@@ -1,0 +1,346 @@
+<Window x:Class="ConditioningControlPanel.Lab.GazeMinigame.GazeMinigameWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
+        Title="Gaze Minigame"
+        Width="1100" Height="720"
+        MinWidth="900" MinHeight="600"
+        Background="Black"
+        WindowStartupLocation="CenterOwner"
+        KeyDown="Window_KeyDown"
+        Closing="Window_Closing">
+    <Window.Resources>
+        <LinearGradientBrush x:Key="TitleBg" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#1A1A2E" Offset="0"/>
+            <GradientStop Color="#252542" Offset="0.5"/>
+            <GradientStop Color="#3A1A2E" Offset="1"/>
+        </LinearGradientBrush>
+        <Style x:Key="PrimaryBtn" TargetType="Button">
+            <Setter Property="Background" Value="#FF69B4"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="22,10"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style x:Key="SecondaryBtn" TargetType="Button">
+            <Setter Property="Background" Value="#33333A"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="18,10"/>
+            <Setter Property="BorderBrush" Value="#FF69B4"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <!-- ─── Title screen ─── -->
+        <Grid x:Name="TitleScreen" Background="{StaticResource TitleBg}">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="👁" Foreground="#FF69B4" FontSize="120"
+                           HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                <TextBlock Text="Gaze Minigame" Foreground="White" FontSize="48"
+                           FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock Text="Train your eyes to focus on the right thing."
+                           Foreground="#AAAAAA" FontSize="16" Margin="0,8,0,40"
+                           HorizontalAlignment="Center"/>
+
+                <Button x:Name="BtnSelectAssets" Content="Select assets"
+                        Style="{StaticResource SecondaryBtn}"
+                        HorizontalAlignment="Center" Margin="0,0,0,12"
+                        Click="BtnSelectAssets_Click"/>
+                <Button x:Name="BtnGoToReady" Content="Continue →"
+                        Style="{StaticResource PrimaryBtn}"
+                        HorizontalAlignment="Center" IsEnabled="False"
+                        Click="BtnGoToReady_Click"/>
+
+                <TextBlock x:Name="TxtTitleStatus" Text="Pick at least 2 asset packs to begin."
+                           Foreground="#888888" FontSize="12" Margin="0,16,0,0"
+                           HorizontalAlignment="Center" FontStyle="Italic"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- ─── Ready screen ─── -->
+        <Grid x:Name="ReadyScreen" Background="{StaticResource TitleBg}" Visibility="Collapsed">
+            <Grid Margin="40">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="Ready to get conditioned?"
+                           Foreground="White" FontSize="32" FontWeight="Bold"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="1" Text="Hold your gaze on the correct content. Look away too long and we'll let you know."
+                           Foreground="#AAAAAA" FontSize="14" Margin="0,8,0,24"
+                           HorizontalAlignment="Center"/>
+
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Pack recap -->
+                    <Border Grid.Column="0" Background="#0F0F1A" BorderBrush="#33333A"
+                            BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,8,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Loaded packs"
+                                       Foreground="White" FontSize="14" FontWeight="Bold"
+                                       Margin="0,0,0,8"/>
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="ReadyPackRecap"/>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+                    <!-- Settings sliders -->
+                    <Border Grid.Column="1" Background="#0F0F1A" BorderBrush="#33333A"
+                            BorderThickness="1" CornerRadius="6" Padding="14" Margin="8,0,0,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <TextBlock Text="Session settings"
+                                       Foreground="White" FontSize="14" FontWeight="Bold"
+                                       Margin="0,0,0,12"/>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Image count" Foreground="#CCCCCC" FontSize="12"/>
+                                <TextBlock Grid.Column="1" x:Name="TxtImageCountVal" Text="8"
+                                           Foreground="#FF69B4" FontFamily="Consolas" FontSize="12"/>
+                            </Grid>
+                            <Slider x:Name="SliderImageCount" Minimum="0" Maximum="20" Value="8"
+                                    TickFrequency="1" IsSnapToTickEnabled="True"
+                                    ValueChanged="SliderImageCount_ValueChanged" Margin="0,0,0,16"/>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Video count" Foreground="#CCCCCC" FontSize="12"/>
+                                <TextBlock Grid.Column="1" x:Name="TxtVideoCountVal" Text="2"
+                                           Foreground="#FF69B4" FontFamily="Consolas" FontSize="12"/>
+                            </Grid>
+                            <Slider x:Name="SliderVideoCount" Minimum="0" Maximum="10" Value="2"
+                                    TickFrequency="1" IsSnapToTickEnabled="True"
+                                    ValueChanged="SliderVideoCount_ValueChanged" Margin="0,0,0,16"/>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Image duration (sec)" Foreground="#CCCCCC" FontSize="12"/>
+                                <TextBlock Grid.Column="1" x:Name="TxtImageDurVal" Text="5"
+                                           Foreground="#FF69B4" FontFamily="Consolas" FontSize="12"/>
+                            </Grid>
+                            <Slider x:Name="SliderImageDur" Minimum="2" Maximum="10" Value="5"
+                                    TickFrequency="1" IsSnapToTickEnabled="True"
+                                    ValueChanged="SliderImageDur_ValueChanged" Margin="0,0,0,16"/>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Video max duration (sec)" Foreground="#CCCCCC" FontSize="12"/>
+                                <TextBlock Grid.Column="1" x:Name="TxtVideoDurVal" Text="30"
+                                           Foreground="#FF69B4" FontFamily="Consolas" FontSize="12"/>
+                            </Grid>
+                            <Slider x:Name="SliderVideoDur" Minimum="10" Maximum="120" Value="30"
+                                    TickFrequency="5" IsSnapToTickEnabled="True"
+                                    ValueChanged="SliderVideoDur_ValueChanged" Margin="0,0,0,16"/>
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Pass time (sec)" Foreground="#CCCCCC" FontSize="12"/>
+                                <TextBlock Grid.Column="1" x:Name="TxtPassTimeVal" Text="3"
+                                           Foreground="#FF69B4" FontFamily="Consolas" FontSize="12"/>
+                            </Grid>
+                            <Slider x:Name="SliderPassTime" Minimum="3" Maximum="30" Value="3"
+                                    TickFrequency="1" IsSnapToTickEnabled="True"
+                                    ValueChanged="SliderPassTime_ValueChanged"/>
+                            <TextBlock x:Name="TxtPassTimeWarn" Text=""
+                                       Foreground="#FFB347" FontSize="11" FontStyle="Italic"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                            <Rectangle Height="1" Fill="#33333A" Margin="0,16,0,12"/>
+
+                            <TextBlock Text="Vibration"
+                                       Foreground="#CCCCCC" FontSize="12" Margin="0,0,0,4"/>
+                            <ComboBox x:Name="CboVibration"
+                                      Background="#1A1A2E" Foreground="White" BorderBrush="#33333A"
+                                      Padding="6,4" Margin="0,0,0,4"
+                                      SelectionChanged="CboVibration_SelectionChanged">
+                                <ComboBoxItem Content="None" Tag="None"/>
+                                <ComboBoxItem Content="On correct (reward)" Tag="OnCorrect"/>
+                                <ComboBoxItem Content="On wrong (punishment)" Tag="OnWrong"/>
+                            </ComboBox>
+                            <TextBlock x:Name="TxtVibrationStatus" Text=""
+                                       Foreground="#888888" FontSize="10" FontStyle="Italic"
+                                       Margin="0,0,0,12"/>
+
+                            <TextBlock Text="Reward effect (on correct)"
+                                       Foreground="#CCCCCC" FontSize="12" Margin="0,0,0,4"/>
+                            <ComboBox x:Name="CboReward"
+                                      Background="#1A1A2E" Foreground="White" BorderBrush="#33333A"
+                                      Padding="6,4" Margin="0,0,0,8"
+                                      SelectionChanged="CboReward_SelectionChanged">
+                                <ComboBoxItem Content="None" Tag="None"/>
+                                <ComboBoxItem Content="Flashes (small burst)" Tag="Flashes"/>
+                                <ComboBoxItem Content="Bubbles (4–5)" Tag="Bubbles"/>
+                                <ComboBoxItem Content="Audio clip" Tag="Audio"/>
+                                <ComboBoxItem Content="Mind wipe" Tag="MindWipe"/>
+                                <ComboBoxItem Content="Overlay pulse" Tag="OverlayPulse"/>
+                            </ComboBox>
+
+                            <Grid x:Name="RewardAudioRow" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Audio clip:" Foreground="#CCCCCC"
+                                           FontSize="11" VerticalAlignment="Center" Margin="6,0,8,0"/>
+                                <ComboBox Grid.Column="1" x:Name="CboRewardAudio"
+                                          Background="#1A1A2E" Foreground="White" BorderBrush="#33333A"
+                                          Padding="6,4"
+                                          SelectionChanged="CboRewardAudio_SelectionChanged"/>
+                            </Grid>
+
+                            <TextBlock Text="Press F11 to toggle fullscreen during the game."
+                                       Foreground="#666666" FontSize="10" FontStyle="Italic"
+                                       Margin="0,16,0,0"/>
+                        </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+
+                <Border Grid.Row="3" x:Name="ReadyBanner" Visibility="Collapsed"
+                        Background="#3A1A1A" BorderBrush="#FF8080" BorderThickness="1"
+                        CornerRadius="4" Padding="12" Margin="0,16,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="TxtReadyBanner" Grid.Column="0" Text=""
+                                   Foreground="#FFC8C8" FontSize="13" TextWrapping="Wrap"
+                                   VerticalAlignment="Center"/>
+                        <Button x:Name="BtnReadyBannerAction" Grid.Column="1" Content="Calibrate"
+                                Style="{StaticResource SecondaryBtn}" Margin="12,0,0,0"
+                                Visibility="Collapsed" Click="BtnReadyBannerAction_Click"/>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="4" Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="← Back"
+                            Style="{StaticResource SecondaryBtn}"
+                            Click="BtnReadyBack_Click"/>
+                    <Button Grid.Column="2" x:Name="BtnStartGame" Content="Start"
+                            Style="{StaticResource PrimaryBtn}"
+                            Padding="40,12" FontSize="16"
+                            Click="BtnStartGame_Click"/>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- ─── Countdown screen ─── -->
+        <Grid x:Name="CountdownScreen" Background="Black" Visibility="Collapsed">
+            <TextBlock x:Name="TxtCountdown" Text="3"
+                       Foreground="#FF69B4" FontSize="320" FontWeight="Bold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock.Effect>
+                    <DropShadowEffect Color="#FF69B4" BlurRadius="60" ShadowDepth="0" Opacity="0.7"/>
+                </TextBlock.Effect>
+            </TextBlock>
+        </Grid>
+
+        <!-- ─── Gameplay screen ─── -->
+        <Grid x:Name="GameplayScreen" Background="Black" Visibility="Collapsed">
+            <Grid x:Name="GameplayPairGrid">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0" x:Name="LeftPane" Background="#050505" Margin="6"/>
+                <Grid Grid.Column="1" x:Name="RightPane" Background="#050505" Margin="6"/>
+            </Grid>
+
+            <!-- Round info (top) -->
+            <Border Background="#88000000" CornerRadius="4" Padding="10,4"
+                    HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,12,0,0">
+                <TextBlock x:Name="TxtRoundInfo" Text="Round 1 / 10"
+                           Foreground="White" FontFamily="Consolas" FontSize="13"/>
+            </Border>
+
+            <!-- WRONG / GOOD GIRL flash is rendered via SubliminalFlashOverlay
+                 (separate topmost transparent window) because LibVLC's
+                 VideoView is a WindowsFormsHost native HWND that paints over
+                 WPF siblings — a TextBlock here would be hidden behind the
+                 video on video rounds. -->
+        </Grid>
+
+        <!-- ─── Results screen ─── -->
+        <Grid x:Name="ResultsScreen" Background="{StaticResource TitleBg}" Visibility="Collapsed">
+            <Grid Margin="40">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="Session complete"
+                           Foreground="White" FontSize="32" FontWeight="Bold"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Grid.Row="1" x:Name="TxtResultsHeadline"
+                           Text="—"
+                           Foreground="#FF69B4" FontSize="22" FontWeight="SemiBold"
+                           Margin="0,12,0,16" HorizontalAlignment="Center"/>
+
+                <Border Grid.Row="2" Background="#0F0F1A" BorderBrush="#33333A"
+                        BorderThickness="1" CornerRadius="6" Padding="14">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="ResultsList"/>
+                    </ScrollViewer>
+                </Border>
+
+                <Grid Grid.Row="3" Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="Close"
+                            Style="{StaticResource SecondaryBtn}"
+                            Click="BtnResultsClose_Click"/>
+                    <Button Grid.Column="2" Content="Play again"
+                            Style="{StaticResource PrimaryBtn}"
+                            Padding="32,10"
+                            Click="BtnResultsPlayAgain_Click"/>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

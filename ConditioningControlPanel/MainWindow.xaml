@@ -6900,6 +6900,11 @@
                                             Background="#33333A" Foreground="White" BorderBrush="#FF8800"
                                             BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
                                             Click="BtnWebcamDebugCalibrate_Click"/>
+                                    <Button x:Name="BtnWebcamDebugTrackerTest" Content="Tracker Test"
+                                            Padding="12,8" Margin="0,0,8,0"
+                                            Background="#33333A" Foreground="White" BorderBrush="#00B0FF"
+                                            BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
+                                            Click="BtnWebcamDebugTrackerTest_Click"/>
                                     <Button x:Name="BtnWebcamDebugStart" Content="Start tracking"
                                             Padding="14,8" Background="#FF8800" Foreground="Black" BorderThickness="0"
                                             FontWeight="Bold" Cursor="Hand" Click="BtnWebcamDebugStart_Click"/>
@@ -6917,6 +6922,30 @@
                                            TextWrapping="Wrap" MinHeight="80"/>
                             </Border>
                         </StackPanel>
+                    </Border>
+
+                    <!-- Gaze Minigame — first playable webcam-driven game -->
+                    <Border CornerRadius="12" Margin="6,12,6,6" Padding="15"
+                            Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="2">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="👁" Foreground="#FF69B4" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Gaze Minigame" Foreground="#FF69B4" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="Look at the correct content. Get conditioned to ignore the rest."
+                                           Foreground="#AAAAAA" FontSize="11" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" x:Name="BtnGazeMinigame" Content="Open"
+                                    Padding="20,10" Background="#FF69B4" Foreground="Black"
+                                    BorderThickness="0" FontWeight="Bold" Cursor="Hand"
+                                    VerticalAlignment="Center"
+                                    Click="BtnGazeMinigame_Click"/>
+                        </Grid>
                     </Border>
 
                     <!-- AI Companion Effects & Memory (full-width Lab card, T2-gated by smokescreen) -->

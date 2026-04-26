@@ -3142,6 +3142,8 @@ namespace ConditioningControlPanel
         // ─── [DEBUG] Webcam smoke test — TEMPORARY, remove with the XAML card ───
         private bool _webcamDebugSubscribed;
         private int _webcamDebugBlinkCount;
+        private int _webcamDebugMouthOpenCount;
+        private int _webcamDebugTongueOutCount;
         private GazeSide _webcamDebugLastGaze = GazeSide.Center;
         private bool _webcamDebugLastGazeSet;
         private string _webcamDebugFaceLabel = "—";
@@ -3178,6 +3180,8 @@ namespace ConditioningControlPanel
 
             EnsureWebcamDebugSubscribed();
             _webcamDebugBlinkCount = 0;
+            _webcamDebugMouthOpenCount = 0;
+            _webcamDebugTongueOutCount = 0;
             _webcamDebugLastGazeSet = false;
             _webcamDebugFaceLabel = "—";
             UpdateWebcamDebugCounters();
@@ -3226,6 +3230,16 @@ namespace ConditioningControlPanel
                 _webcamDebugBlinkCount++;
                 UpdateWebcamDebugCounters();
                 AppendWebcamDebugLog($"Blink #{_webcamDebugBlinkCount}");
+            };
+            App.Webcam.OnMouthOpen += () =>
+            {
+                _webcamDebugMouthOpenCount++;
+                AppendWebcamDebugLog($"Mouth-open #{_webcamDebugMouthOpenCount}");
+            };
+            App.Webcam.OnTongueOut += () =>
+            {
+                _webcamDebugTongueOutCount++;
+                AppendWebcamDebugLog($"Tongue-out #{_webcamDebugTongueOutCount}");
             };
             App.Webcam.OnGazeSide += side =>
             {
@@ -3302,6 +3316,70 @@ namespace ConditioningControlPanel
             // Leave the service running if the user manually started it earlier.
             // Only auto-stop if calibration was the only reason it's running.
             if (startedHere && result != true)
+            {
+                svc.Stop();
+                BtnWebcamDebugStart.Content = "Start tracking";
+            }
+        }
+
+        private void BtnGazeMinigame_Click(object sender, RoutedEventArgs e)
+        {
+            new Lab.GazeMinigame.GazeMinigameWindow { Owner = this }.Show();
+        }
+
+        private void BtnWebcamDebugTrackerTest_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null)
+            {
+                AppendWebcamDebugLog("App.Webcam is null — service not initialized");
+                return;
+            }
+
+            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            {
+                AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                var consent = new WebcamConsentDialog { Owner = this };
+                var ok = consent.ShowDialog();
+                if (ok != true || !consent.ConsentGiven)
+                {
+                    AppendWebcamDebugLog("Consent declined.");
+                    return;
+                }
+            }
+
+            // Tracker test needs the service running so OnGazeMove fires, AND a
+            // calibration loaded so there's a homography to project through.
+            EnsureWebcamDebugSubscribed();
+            var startedHere = false;
+            if (!svc.IsRunning)
+            {
+                AppendWebcamDebugLog("Starting tracking for tracker test…");
+                if (!svc.Start())
+                {
+                    AppendWebcamDebugLog($"Couldn't start tracking. State={svc.State}.");
+                    return;
+                }
+                startedHere = true;
+                BtnWebcamDebugStart.Content = "Stop tracking";
+            }
+
+            if (svc.Calibration == null)
+            {
+                AppendWebcamDebugLog("No calibration loaded — run Calibrate (5-point) first.");
+                if (startedHere) { svc.Stop(); BtnWebcamDebugStart.Content = "Start tracking"; }
+                return;
+            }
+
+            AppendWebcamDebugLog("Opening tracker test window…");
+            var trackerDlg = new WebcamGazeTrackerWindow { Owner = this };
+            trackerDlg.ShowDialog();
+            AppendWebcamDebugLog("Tracker test closed.");
+
+            // Match calibration handler's lifetime: only auto-stop tracking if we
+            // were the ones that started it. If the user already had it running,
+            // leave it running.
+            if (startedHere)
             {
                 svc.Stop();
                 BtnWebcamDebugStart.Content = "Start tracking";
