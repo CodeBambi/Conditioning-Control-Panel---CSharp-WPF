@@ -174,8 +174,8 @@ namespace ConditioningControlPanel.Services
             13, 312, 311, 310, 415, 308, 324, 318, 402, 317,
             14, 87, 178, 88, 95, 78, 191, 80, 81, 82
         };
-        private const double TongueEnterRatio = 0.12;   // tongue_px / valid_px (was 0.18 — too strict for dim/desaturated webcams)
-        private const double TongueLeaveRatio = 0.07;
+        private const double TongueEnterRatio = 0.22;   // tongue_px / valid_px
+        private const double TongueLeaveRatio = 0.14;
         private const int MinTongueOutMs = 150;
         private const int TongueCooldownMs = 700;
         private const int TongueDiagLogIntervalMs = 3000;
