@@ -3248,5 +3248,37 @@ namespace ConditioningControlPanel.Models
         }
 
         #endregion
+
+        #region Blink Trainer (Lab — Webcam Games)
+
+        private List<string> _blinkTrainerFolders = new();
+        public List<string> BlinkTrainerFolders
+        {
+            get => _blinkTrainerFolders;
+            set { _blinkTrainerFolders = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private int _blinkTrainerDurationMinutes = 10;
+        public int BlinkTrainerDurationMinutes
+        {
+            get => _blinkTrainerDurationMinutes;
+            set { _blinkTrainerDurationMinutes = Math.Clamp(value, 1, 180); OnPropertyChanged(); }
+        }
+
+        private int _blinkTrainerOpacity = 80;
+        public int BlinkTrainerOpacity
+        {
+            get => _blinkTrainerOpacity;
+            set { _blinkTrainerOpacity = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+        }
+
+        private bool _blinkTrainerIncludeVideos;
+        public bool BlinkTrainerIncludeVideos
+        {
+            get => _blinkTrainerIncludeVideos;
+            set { _blinkTrainerIncludeVideos = value; OnPropertyChanged(); }
+        }
+
+        #endregion
     }
 }

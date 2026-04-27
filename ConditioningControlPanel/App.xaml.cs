@@ -225,6 +225,7 @@ namespace ConditioningControlPanel
         public static FocusGameService FocusGame { get; private set; } = null!;
         public static GazeFocusService GazeFocus { get; private set; } = null!;
         public static GazeDebugCursorService GazeCursor { get; private set; } = null!;
+        public static BlinkTrainerService BlinkTrainer { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -848,6 +849,7 @@ namespace ConditioningControlPanel
             FocusGame = new FocusGameService();
             GazeCursor = new GazeDebugCursorService();
             GazeFocus = new GazeFocusService();
+            BlinkTrainer = new BlinkTrainerService();
 
             // Initialize lockdown service (ephemeral — not persisted)
             Lockdown = new LockdownService();

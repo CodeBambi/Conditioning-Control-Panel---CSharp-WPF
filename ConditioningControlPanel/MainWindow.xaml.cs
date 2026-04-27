@@ -227,6 +227,7 @@ namespace ConditioningControlPanel
                 RefreshChatShortcutLabel();
                 ApplyGlobalChatHotkey();
                 HookFocusGazeService();
+                HookBlinkTrainerService();
             };
             Closing += (_, _) => Services.GlobalHotkeyService.Unregister();
 
@@ -748,6 +749,10 @@ namespace ConditioningControlPanel
 
         private void HandlePanicKeyPress()
         {
+            // Stop standalone Lab minigames first — they run independently of
+            // the main engine, so the rest of the panic flow won't touch them.
+            App.BlinkTrainer?.Stop();
+
             var now = DateTime.Now;
             var timeSinceLastPress = (now - _lastPanicTime).TotalMilliseconds;
             
@@ -3407,6 +3412,204 @@ namespace ConditioningControlPanel
             {
                 App.GazeFocus.Stop();
                 if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = "";
+            }
+        }
+
+        // ─── Blink Trainer (Lab) ──────────────────────────────────────────
+        private DispatcherTimer? _blinkTrainerTickTimer;
+        private bool _blinkTrainerSyncing;
+
+        private void HookBlinkTrainerService()
+        {
+            if (App.BlinkTrainer == null) return;
+
+            // Stop on MainWindow close so the camera doesn't stay lit if the
+            // overlay window is the only thing keeping the process alive.
+            Closing += (_, _) => App.BlinkTrainer?.Stop();
+
+            InitializeBlinkTrainerUI();
+
+            App.BlinkTrainer.StateChanged += () =>
+            {
+                if (!Dispatcher.CheckAccess())
+                {
+                    Dispatcher.BeginInvoke(SyncBlinkTrainerUI);
+                    return;
+                }
+                SyncBlinkTrainerUI();
+            };
+        }
+
+        private void InitializeBlinkTrainerUI()
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            _blinkTrainerSyncing = true;
+            try
+            {
+                if (LstBlinkTrainerFolders != null)
+                {
+                    LstBlinkTrainerFolders.Items.Clear();
+                    foreach (var f in settings.BlinkTrainerFolders)
+                        LstBlinkTrainerFolders.Items.Add(f);
+                }
+
+                if (SliderBlinkTrainerDuration != null)
+                    SliderBlinkTrainerDuration.Value = settings.BlinkTrainerDurationMinutes;
+                if (TxtBlinkTrainerDuration != null)
+                    TxtBlinkTrainerDuration.Text = $"{settings.BlinkTrainerDurationMinutes} min";
+
+                if (SliderBlinkTrainerOpacity != null)
+                    SliderBlinkTrainerOpacity.Value = settings.BlinkTrainerOpacity;
+                if (TxtBlinkTrainerOpacity != null)
+                    TxtBlinkTrainerOpacity.Text = $"{settings.BlinkTrainerOpacity}%";
+
+                if (ChkBlinkTrainerIncludeVideos != null)
+                    ChkBlinkTrainerIncludeVideos.IsChecked = settings.BlinkTrainerIncludeVideos;
+            }
+            finally { _blinkTrainerSyncing = false; }
+
+            SyncBlinkTrainerUI();
+        }
+
+        private void SyncBlinkTrainerUI()
+        {
+            if (App.BlinkTrainer == null) return;
+            var running = App.BlinkTrainer.IsRunning;
+
+            if (BtnBlinkTrainerStart != null)
+                BtnBlinkTrainerStart.Content = running ? "Stop" : "Start";
+
+            // Lock the configurator while a session is in progress.
+            if (BtnBlinkTrainerAddFolder != null) BtnBlinkTrainerAddFolder.IsEnabled = !running;
+            if (BtnBlinkTrainerRemoveFolder != null) BtnBlinkTrainerRemoveFolder.IsEnabled = !running;
+            if (LstBlinkTrainerFolders != null) LstBlinkTrainerFolders.IsEnabled = !running;
+            if (ChkBlinkTrainerIncludeVideos != null) ChkBlinkTrainerIncludeVideos.IsEnabled = !running;
+            if (SliderBlinkTrainerDuration != null) SliderBlinkTrainerDuration.IsEnabled = !running;
+            if (SliderBlinkTrainerOpacity != null) SliderBlinkTrainerOpacity.IsEnabled = !running;
+
+            if (running)
+            {
+                if (_blinkTrainerTickTimer == null)
+                {
+                    _blinkTrainerTickTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                    _blinkTrainerTickTimer.Tick += BlinkTrainerTick;
+                    _blinkTrainerTickTimer.Start();
+                }
+                BlinkTrainerTick(this, EventArgs.Empty);
+            }
+            else
+            {
+                if (_blinkTrainerTickTimer != null)
+                {
+                    try { _blinkTrainerTickTimer.Stop(); } catch { }
+                    _blinkTrainerTickTimer.Tick -= BlinkTrainerTick;
+                    _blinkTrainerTickTimer = null;
+                }
+                if (TxtBlinkTrainerStatus != null)
+                    TxtBlinkTrainerStatus.Text = string.IsNullOrEmpty(App.BlinkTrainer.LastError)
+                        ? ""
+                        : App.BlinkTrainer.LastError;
+            }
+        }
+
+        private void BlinkTrainerTick(object? sender, EventArgs e)
+        {
+            if (App.BlinkTrainer == null || !App.BlinkTrainer.IsRunning) return;
+            var rem = App.BlinkTrainer.Remaining;
+            if (TxtBlinkTrainerStatus != null)
+                TxtBlinkTrainerStatus.Text = $"Running — {(int)rem.TotalMinutes}m {rem.Seconds:00}s remaining";
+        }
+
+        private void BtnBlinkTrainerAddFolder_Click(object sender, RoutedEventArgs e)
+        {
+            using var dlg = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = "Pick a folder of images / GIFs (videos optional)",
+                UseDescriptionForTitle = true,
+                SelectedPath = App.EffectiveAssetsPath ?? "",
+            };
+            if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+
+            var folder = dlg.SelectedPath;
+            if (string.IsNullOrWhiteSpace(folder)) return;
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            if (settings.BlinkTrainerFolders.Any(f =>
+                string.Equals(f, folder, StringComparison.OrdinalIgnoreCase))) return;
+
+            settings.BlinkTrainerFolders.Add(folder);
+            App.Settings?.Save();
+
+            LstBlinkTrainerFolders?.Items.Add(folder);
+            if (TxtBlinkTrainerStatus != null) TxtBlinkTrainerStatus.Text = "";
+        }
+
+        private void BtnBlinkTrainerRemoveFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (LstBlinkTrainerFolders?.SelectedItem is not string sel) return;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            settings.BlinkTrainerFolders.RemoveAll(f => string.Equals(f, sel, StringComparison.OrdinalIgnoreCase));
+            App.Settings?.Save();
+            LstBlinkTrainerFolders.Items.Remove(sel);
+        }
+
+        private void SliderBlinkTrainerDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_blinkTrainerSyncing) return;
+            var v = (int)Math.Round(e.NewValue);
+            if (App.Settings?.Current != null) App.Settings.Current.BlinkTrainerDurationMinutes = v;
+            if (TxtBlinkTrainerDuration != null) TxtBlinkTrainerDuration.Text = $"{v} min";
+            App.Settings?.Save();
+        }
+
+        private void SliderBlinkTrainerOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_blinkTrainerSyncing) return;
+            var v = (int)Math.Round(e.NewValue);
+            if (App.Settings?.Current != null) App.Settings.Current.BlinkTrainerOpacity = v;
+            if (TxtBlinkTrainerOpacity != null) TxtBlinkTrainerOpacity.Text = $"{v}%";
+            App.Settings?.Save();
+        }
+
+        private void ChkBlinkTrainerIncludeVideos_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_blinkTrainerSyncing) return;
+            if (App.Settings?.Current != null)
+                App.Settings.Current.BlinkTrainerIncludeVideos = ChkBlinkTrainerIncludeVideos?.IsChecked == true;
+            App.Settings?.Save();
+        }
+
+        private void BtnBlinkTrainerStart_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.BlinkTrainer == null) return;
+            if (App.BlinkTrainer.IsRunning)
+            {
+                App.BlinkTrainer.Stop();
+                return;
+            }
+
+            // Webcam consent gate (mirrors Focus Gaze flow)
+            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            {
+                var dlg = new WebcamConsentDialog { Owner = this };
+                var ok = dlg.ShowDialog();
+                if (ok != true || !dlg.ConsentGiven)
+                {
+                    if (TxtBlinkTrainerStatus != null)
+                        TxtBlinkTrainerStatus.Text = "Webcam consent required.";
+                    return;
+                }
+            }
+
+            if (!App.BlinkTrainer.Start() && TxtBlinkTrainerStatus != null)
+            {
+                TxtBlinkTrainerStatus.Text = string.IsNullOrEmpty(App.BlinkTrainer.LastError)
+                    ? "Could not start."
+                    : App.BlinkTrainer.LastError;
             }
         }
 

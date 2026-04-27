@@ -6913,6 +6913,102 @@
                                               VerticalAlignment="Center"
                                               Checked="ChkFocusGaze_Changed" Unchecked="ChkFocusGaze_Changed"/>
                                 </Grid>
+
+                                <Border Height="1" Background="#33FF69B4" Margin="0,8,0,8"/>
+
+                                <!-- Blink Trainer row -->
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                        <TextBlock Text="💫" Foreground="#FF69B4" FontSize="13" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Blink Trainer" Foreground="White" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock Text="Topmost overlay that swaps to a new random asset every time you blink. Pick folders, set duration + opacity, hit Start."
+                                               Foreground="#AAAAAA" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+
+                                    <!-- Folder list + Add / Remove -->
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ListBox x:Name="LstBlinkTrainerFolders" Grid.Column="0"
+                                                 Background="#11000000" Foreground="#DDDDDD"
+                                                 BorderBrush="#33FF69B4" BorderThickness="1"
+                                                 MinHeight="44" MaxHeight="80" FontSize="11"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Top" Margin="6,0,0,0">
+                                            <Button x:Name="BtnBlinkTrainerAddFolder" Content="+ Add"
+                                                    Padding="10,4" FontSize="11" Cursor="Hand"
+                                                    Background="#FF69B4" Foreground="Black"
+                                                    BorderThickness="0" FontWeight="Bold"
+                                                    Click="BtnBlinkTrainerAddFolder_Click">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style>
+                                                </Button.Resources>
+                                            </Button>
+                                            <Button x:Name="BtnBlinkTrainerRemoveFolder" Content="Remove"
+                                                    Padding="10,4" FontSize="11" Margin="0,4,0,0" Cursor="Hand"
+                                                    Background="#33FF69B4" Foreground="White"
+                                                    BorderThickness="0"
+                                                    Click="BtnBlinkTrainerRemoveFolder_Click">
+                                                <Button.Resources>
+                                                    <Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style>
+                                                </Button.Resources>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Duration / Opacity sliders -->
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <Grid>
+                                                <TextBlock Style="{StaticResource SettingLabel}" Text="Duration" FontSize="11"/>
+                                                <TextBlock x:Name="TxtBlinkTrainerDuration" Style="{StaticResource ValueLabel}" Text="10 min" HorizontalAlignment="Right"/>
+                                            </Grid>
+                                            <Slider x:Name="SliderBlinkTrainerDuration" Minimum="1" Maximum="180" Value="10" Margin="0,1"
+                                                    ValueChanged="SliderBlinkTrainerDuration_Changed"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <Grid>
+                                                <TextBlock Style="{StaticResource SettingLabel}" Text="Opacity" FontSize="11"/>
+                                                <TextBlock x:Name="TxtBlinkTrainerOpacity" Style="{StaticResource ValueLabel}" Text="80%" HorizontalAlignment="Right"/>
+                                            </Grid>
+                                            <Slider x:Name="SliderBlinkTrainerOpacity" Minimum="1" Maximum="100" Value="80" Margin="0,1"
+                                                    ValueChanged="SliderBlinkTrainerOpacity_Changed"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Include Videos + Start/Stop button -->
+                                    <Grid Margin="0,4,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox Grid.Column="0" x:Name="ChkBlinkTrainerIncludeVideos"
+                                                  Content="Include videos"
+                                                  Foreground="#CCCCCC" FontSize="11" VerticalAlignment="Center"
+                                                  Checked="ChkBlinkTrainerIncludeVideos_Changed"
+                                                  Unchecked="ChkBlinkTrainerIncludeVideos_Changed"/>
+                                        <Button Grid.Column="1" x:Name="BtnBlinkTrainerStart" Content="Start"
+                                                Padding="14,6" Background="#FF69B4" Foreground="Black"
+                                                BorderThickness="0" FontWeight="Bold" FontSize="12" Cursor="Hand"
+                                                Click="BtnBlinkTrainerStart_Click">
+                                            <Button.Resources>
+                                                <Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style>
+                                            </Button.Resources>
+                                        </Button>
+                                    </Grid>
+
+                                    <TextBlock x:Name="TxtBlinkTrainerStatus" Text=""
+                                               Foreground="#FFD080" FontSize="11" Margin="0,4,0,0"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </UniformGrid>
