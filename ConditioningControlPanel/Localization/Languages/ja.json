@@ -794,6 +794,8 @@
   "tooltip_delete_all_downloaded_content_packs_your_loca": "ダウンロード済みコンテンツパックをすべて削除（ローカルファイルは影響なし）",
   "btn_open_folder": "📂 フォルダを開く",
   "tooltip_open_assets_folder_in_explorer": "エクスプローラーでアセットフォルダを開く",
+  "btn_get_packs": "🎁 パックを入手",
+  "tooltip_get_packs": "Discord でコミュニティコンテンツパックを探す",
   "label_community_content_packs": "🎁 コミュニティコンテンツパック",
   "label_after_downloading_a_pack_just_drag_and_drop_t": "パックをダウンロードしたら、ZIPファイルをこのウィンドウにドラッグ＆ドロップするだけ！",
   "label_no_preview": "プレビューなし",

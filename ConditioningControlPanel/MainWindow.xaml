@@ -7436,19 +7436,24 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="BtnRefreshPacks" Content="{loc:Str btn_refresh_2}"
                             Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
-                            Click="BtnRefreshPacks_Click" ToolTip="{loc:Str tooltip_refresh_available_packs}"/>
+                            Click="BtnRefreshPacks_Click" ToolTip="{loc:Str tooltip_refresh_available_packs}"
+                            Visibility="Collapsed"/>
                     <Button x:Name="BtnDeleteDownloadedPacks" Content="{loc:Str btn_delete_downloaded_packs}"
                             Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
                             Click="BtnDeleteDownloadedPacks_Click"
-                            ToolTip="{loc:Str tooltip_delete_all_downloaded_content_packs_your_loca}"/>
+                            ToolTip="{loc:Str tooltip_delete_all_downloaded_content_packs_your_loca}"
+                            Visibility="Collapsed"/>
+                    <Button x:Name="BtnGetPacks" Content="{loc:Str btn_get_packs}"
+                            Style="{StaticResource OutlineButton}" Margin="0,0,8,0" Padding="12,6"
+                            Click="BtnGetPacks_Click" ToolTip="{loc:Str tooltip_get_packs}"/>
                     <Button x:Name="BtnOpenAssetsFolder" Content="{loc:Str btn_open_folder}"
                             Style="{StaticResource OutlineButton}" Padding="12,6"
                             Click="BtnOpenAssetsFolder_Click" ToolTip="{loc:Str tooltip_open_assets_folder_in_explorer}"/>
                 </StackPanel>
             </Grid>
 
-            <!-- TOP: Content Packs Section -->
-            <Border Grid.Row="1" Style="{StaticResource SectionPanel}" Padding="12">
+            <!-- TOP: Content Packs Section (hidden — most packs live outside the app now; use BtnGetPacks instead) -->
+            <Border x:Name="PacksSection" Grid.Row="1" Style="{StaticResource SectionPanel}" Padding="12" Visibility="Collapsed">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -7690,9 +7695,9 @@
                 </Grid>
             </Border>
 
-            <!-- Splitter -->
-            <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch"
-                          Background="Transparent" Cursor="SizeNS"/>
+            <!-- Splitter (hidden alongside PacksSection) -->
+            <GridSplitter x:Name="PacksSplitter" Grid.Row="2" Height="5" HorizontalAlignment="Stretch"
+                          Background="Transparent" Cursor="SizeNS" Visibility="Collapsed"/>
 
             <!-- BOTTOM: Interactive File Browser -->
             <Border Grid.Row="3" Style="{StaticResource SectionPanel}" Padding="12">

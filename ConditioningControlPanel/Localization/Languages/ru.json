@@ -776,6 +776,8 @@
   "tooltip_delete_all_downloaded_content_packs_your_loca": "Удалить все скачанные контент-паки (твои локальные файлы не пострадают)",
   "btn_open_folder": "📂 Открыть папку",
   "tooltip_open_assets_folder_in_explorer": "Открыть папку ассетов в проводнике",
+  "btn_get_packs": "🎁 Получить паки",
+  "tooltip_get_packs": "Смотрите контент-паки сообщества в нашем Discord",
   "label_community_content_packs": "🎁 Контент-паки сообщества",
   "label_after_downloading_a_pack_just_drag_and_drop_t": "После скачивания пака просто перетащи ZIP-файл в это окно!",
   "label_no_preview": "Нет превью",

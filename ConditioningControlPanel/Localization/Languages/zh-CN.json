@@ -794,6 +794,8 @@
   "tooltip_delete_all_downloaded_content_packs_your_loca": "删除所有已下载的内容包（你的本地文件不受影响）",
   "btn_open_folder": "📂 打开文件夹",
   "tooltip_open_assets_folder_in_explorer": "在资源管理器中打开资源文件夹",
+  "btn_get_packs": "🎁 获取内容包",
+  "tooltip_get_packs": "在我们的 Discord 上浏览社区内容包",
   "label_community_content_packs": "🎁 社区内容包",
   "label_after_downloading_a_pack_just_drag_and_drop_t": "下载内容包后，只需将ZIP文件拖放到此窗口中！",
   "label_no_preview": "无预览",

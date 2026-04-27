@@ -196,6 +196,9 @@ namespace ConditioningControlPanel
         private string _currentMarqueeMessage = "";
 
         // Content packs
+        // PacksSection in MainWindow.xaml is currently Visibility="Collapsed" — most packs live outside the app,
+        // and users are routed to Discord via BtnGetPacks. Flip this const + the two Visibility values to restore.
+        private const bool PacksSectionEnabled = false;
         private ObservableCollection<ContentPack> _availablePacks = new();
         private DispatcherTimer? _packPreviewTimer;
 
@@ -4450,7 +4453,7 @@ namespace ConditioningControlPanel
                     BtnOpenAssetsTop.Style = activeStyle;
                     RefreshAssetTree();
                     InitializeAssetPresets();
-                    _ = RefreshPacksAsync();
+                    if (PacksSectionEnabled) _ = RefreshPacksAsync();
                     break;
 
                 case "discord":
@@ -20894,6 +20897,11 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "Failed to open Discord link");
             }
+        }
+
+        private void BtnGetPacks_Click(object sender, RoutedEventArgs e)
+        {
+            BtnCreatorDiscord_Click(sender, e);
         }
 
         private void PacksScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)

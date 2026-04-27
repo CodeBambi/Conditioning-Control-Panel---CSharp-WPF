@@ -794,6 +794,8 @@
   "tooltip_delete_all_downloaded_content_packs_your_loca": "다운로드한 콘텐츠 팩을 모두 삭제해요 (로컬 파일에는 영향 없어요)",
   "btn_open_folder": "📂 폴더 열기",
   "tooltip_open_assets_folder_in_explorer": "탐색기에서 에셋 폴더 열기",
+  "btn_get_packs": "🎁 팩 받기",
+  "tooltip_get_packs": "Discord에서 커뮤니티 콘텐츠 팩 둘러보기",
   "label_community_content_packs": "🎁 커뮤니티 콘텐츠 팩",
   "label_after_downloading_a_pack_just_drag_and_drop_t": "팩을 다운로드한 후 ZIP 파일을 이 창에 드래그 앤 드롭하면 돼요!",
   "label_no_preview": "미리보기 없음",
