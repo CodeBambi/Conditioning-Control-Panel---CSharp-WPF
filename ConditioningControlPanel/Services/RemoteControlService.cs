@@ -256,7 +256,10 @@ namespace ConditioningControlPanel.Services
                         _currentPollInterval = Math.Min(_currentPollInterval * 2, MaxBackoffSeconds);
                         if (_pollTimer != null)
                             _pollTimer.Interval = TimeSpan.FromSeconds(_currentPollInterval);
-                        App.Logger?.Warning("[RemoteControl] Rate limited (429) [code={Code}], backing off to {Interval}s", SessionCode ?? "?", _currentPollInterval);
+                        // Server returns { cap: "user"|"ip", count: N } so we know which limit fired
+                        var cap = "?";
+                        try { cap = JObject.Parse(await response.Content.ReadAsStringAsync())["cap"]?.ToString() ?? "?"; } catch { }
+                        App.Logger?.Warning("[RemoteControl] Rate limited (429) [code={Code} cap={Cap}], backing off to {Interval}s", SessionCode ?? "?", cap, _currentPollInterval);
                     }
                     else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                     {
@@ -492,9 +495,11 @@ namespace ConditioningControlPanel.Services
                     if (response.StatusCode == (System.Net.HttpStatusCode)429)
                     {
                         _statusBackoffUntil = DateTime.UtcNow.AddSeconds(StatusBackoffSeconds);
+                        var cap = "?";
+                        try { cap = JObject.Parse(await response.Content.ReadAsStringAsync())["cap"]?.ToString() ?? "?"; } catch { }
                         App.Logger?.Warning(
-                            "[RemoteControl] Status push rate limited (429) [code={Code}] — suppressing status pushes for {Seconds}s",
-                            SessionCode ?? "?", StatusBackoffSeconds);
+                            "[RemoteControl] Status push rate limited (429) [code={Code} cap={Cap}] — suppressing status pushes for {Seconds}s",
+                            SessionCode ?? "?", cap, StatusBackoffSeconds);
                     }
                     else
                     {
