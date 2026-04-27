@@ -390,11 +390,13 @@ namespace ConditioningControlPanel
             await Task.Delay(1400);
             if (_cancelled) return false;
 
-            // Sequence: L, R, L, R, blink×2, mouth-open×3, tongue-out×3.
+            // Sequence: L, R, L, R, blink×2, mouth-open×3, tongue-out×1.
             // Each step gets up to 3 attempts (12 s timeout each) before failing
-            // the whole calibration. Mouth/tongue use 3 passes (was 1) so a
-            // single accidental trigger can't pass the gate — the user has to
-            // genuinely cycle the gesture three full times.
+            // the whole calibration. Mouth uses 3 passes (the MAR ratio is
+            // steady, gestures are unambiguous). Tongue stays at 1 — the HSV-
+            // color heuristic is reliable enough for a single deliberate
+            // protrusion, but stacking 3 cycles in 12 s with a 700 ms cooldown
+            // ran into too many missed detections from lighting/angle variance.
             if (!await ValidateGazeStepAsync(GazeSide.Left,  "Look LEFT",  "←", roundLabel: "1 of 4")) return false;
             if (_cancelled) return false;
             if (!await ValidateGazeStepAsync(GazeSide.Right, "Look RIGHT", "→", roundLabel: "2 of 4")) return false;
@@ -407,7 +409,7 @@ namespace ConditioningControlPanel
             if (_cancelled) return false;
             if (!await ValidateMouthOpenStepAsync(needed: 3)) return false;
             if (_cancelled) return false;
-            if (!await ValidateTongueOutStepAsync(needed: 3)) return false;
+            if (!await ValidateTongueOutStepAsync(needed: 1)) return false;
             return true;
         }
 
