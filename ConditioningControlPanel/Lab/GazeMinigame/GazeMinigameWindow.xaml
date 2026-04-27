@@ -184,12 +184,12 @@
                             <TextBlock Text="Vibration"
                                        Foreground="#CCCCCC" FontSize="12" Margin="0,0,0,4"/>
                             <ComboBox x:Name="CboVibration"
-                                      Background="#1A1A2E" Foreground="White" BorderBrush="#33333A"
+                                      Background="White" Foreground="Black" BorderBrush="#33333A"
                                       Padding="6,4" Margin="0,0,0,4"
                                       SelectionChanged="CboVibration_SelectionChanged">
-                                <ComboBoxItem Content="None" Tag="None"/>
-                                <ComboBoxItem Content="On correct (reward)" Tag="OnCorrect"/>
-                                <ComboBoxItem Content="On wrong (punishment)" Tag="OnWrong"/>
+                                <ComboBoxItem Content="None" Tag="None" Foreground="Black"/>
+                                <ComboBoxItem Content="On correct (reward)" Tag="OnCorrect" Foreground="Black"/>
+                                <ComboBoxItem Content="On wrong (punishment)" Tag="OnWrong" Foreground="Black"/>
                             </ComboBox>
                             <TextBlock x:Name="TxtVibrationStatus" Text=""
                                        Foreground="#888888" FontSize="10" FontStyle="Italic"
@@ -198,15 +198,15 @@
                             <TextBlock Text="Reward effect (on correct)"
                                        Foreground="#CCCCCC" FontSize="12" Margin="0,0,0,4"/>
                             <ComboBox x:Name="CboReward"
-                                      Background="#1A1A2E" Foreground="White" BorderBrush="#33333A"
+                                      Background="White" Foreground="Black" BorderBrush="#33333A"
                                       Padding="6,4" Margin="0,0,0,8"
                                       SelectionChanged="CboReward_SelectionChanged">
-                                <ComboBoxItem Content="None" Tag="None"/>
-                                <ComboBoxItem Content="Flashes (small burst)" Tag="Flashes"/>
-                                <ComboBoxItem Content="Bubbles (4–5)" Tag="Bubbles"/>
-                                <ComboBoxItem Content="Audio clip" Tag="Audio"/>
-                                <ComboBoxItem Content="Mind wipe" Tag="MindWipe"/>
-                                <ComboBoxItem Content="Overlay pulse" Tag="OverlayPulse"/>
+                                <ComboBoxItem Content="None" Tag="None" Foreground="Black"/>
+                                <ComboBoxItem Content="Flashes (small burst)" Tag="Flashes" Foreground="Black"/>
+                                <ComboBoxItem Content="Bubbles (4–5)" Tag="Bubbles" Foreground="Black"/>
+                                <ComboBoxItem Content="Audio clip" Tag="Audio" Foreground="Black"/>
+                                <ComboBoxItem Content="Mind wipe" Tag="MindWipe" Foreground="Black"/>
+                                <ComboBoxItem Content="Overlay pulse" Tag="OverlayPulse" Foreground="Black"/>
                             </ComboBox>
 
                             <Grid x:Name="RewardAudioRow" Visibility="Collapsed">
@@ -217,7 +217,7 @@
                                 <TextBlock Grid.Column="0" Text="Audio clip:" Foreground="#CCCCCC"
                                            FontSize="11" VerticalAlignment="Center" Margin="6,0,8,0"/>
                                 <ComboBox Grid.Column="1" x:Name="CboRewardAudio"
-                                          Background="#1A1A2E" Foreground="White" BorderBrush="#33333A"
+                                          Background="White" Foreground="Black" BorderBrush="#33333A"
                                           Padding="6,4"
                                           SelectionChanged="CboRewardAudio_SelectionChanged"/>
                             </Grid>

@@ -169,7 +169,12 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             CboRewardAudio.Items.Clear();
             foreach (var f in GazeMinigameSettings.BundledAudioFiles)
             {
-                var item = new ComboBoxItem { Content = f, Tag = f };
+                var item = new ComboBoxItem
+                {
+                    Content = f,
+                    Tag = f,
+                    Foreground = System.Windows.Media.Brushes.Black,
+                };
                 CboRewardAudio.Items.Add(item);
                 if (string.Equals(f, _settings.RewardAudioFile, StringComparison.OrdinalIgnoreCase))
                     item.IsSelected = true;
@@ -367,7 +372,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
 
             if (App.Webcam.Calibration == null)
             {
-                ShowReadyBanner("No gaze calibration loaded yet. Run a 9-point calibration first so the minigame can tell which side you're looking at.", showCalibrateAction: true);
+                ShowReadyBanner("No gaze calibration loaded yet. Run a 16-point calibration first so the minigame can tell which side you're looking at.", showCalibrateAction: true);
                 return;
             }
 
