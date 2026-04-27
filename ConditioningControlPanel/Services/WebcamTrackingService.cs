@@ -174,20 +174,22 @@ namespace ConditioningControlPanel.Services
             13, 312, 311, 310, 415, 308, 324, 318, 402, 317,
             14, 87, 178, 88, 95, 78, 191, 80, 81, 82
         };
-        private const double TongueEnterRatio = 0.18;   // tongue_px / valid_px
-        private const double TongueLeaveRatio = 0.10;
+        private const double TongueEnterRatio = 0.12;   // tongue_px / valid_px (was 0.18 — too strict for dim/desaturated webcams)
+        private const double TongueLeaveRatio = 0.07;
         private const int MinTongueOutMs = 150;
         private const int TongueCooldownMs = 700;
         private const int TongueDiagLogIntervalMs = 3000;
         // HSV bands (OpenCV: H ∈ [0,179], S/V ∈ [0,255]). Tuned loose because
         // consumer webcams often desaturate skin/tongue tones — a strict S>80
-        // gate misclassifies real tongue pixels as "other".
+        // gate misclassifies real tongue pixels as "other". Sat/val floor was
+        // 50/50 — bumped down because users with dim or color-corrected
+        // cameras had the detector miss real protrusions entirely.
         private const int TongueHueLow1 = 0;
         private const int TongueHueHigh1 = 20;
         private const int TongueHueLow2 = 160;
         private const int TongueHueHigh2 = 179;
-        private const int TongueMinSat = 50;
-        private const int TongueMinVal = 50;
+        private const int TongueMinSat = 30;
+        private const int TongueMinVal = 40;
         private const int TeethMinVal = 200;            // bright + low sat = teeth (excluded)
         private const int TeethMaxSat = 50;
         private const int ShadowMaxVal = 40;            // very dark = shadow / mouth interior void (excluded)
