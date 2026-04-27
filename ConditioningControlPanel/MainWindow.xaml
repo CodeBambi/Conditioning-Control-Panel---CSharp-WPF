@@ -7062,7 +7062,10 @@
 
                             <!-- Master toggle -->
                             <Grid Margin="0,0,0,8">
-                                <TextBlock Text="{loc:Str label_capability_effects}" Foreground="White" FontSize="15" VerticalAlignment="Center"/>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                    <TextBlock Text="{loc:Str label_capability_effects}" Foreground="White" FontSize="15" VerticalAlignment="Center"/>
+                                    <Button Style="{StaticResource HelpButtonStyle}" ToolTip="{loc:Str tooltip_lab_ai_effects}"/>
+                                </StackPanel>
                                 <CheckBox x:Name="ChkCapEffects" Style="{StaticResource ToggleStyle}"
                                           HorizontalAlignment="Right" VerticalAlignment="Center"
                                           IsChecked="False"
@@ -7105,7 +7108,10 @@
                                 <StackPanel>
                                     <Grid>
                                         <StackPanel VerticalAlignment="Center" Margin="0,0,12,0" HorizontalAlignment="Left">
-                                            <TextBlock Text="{loc:Str label_chat_memory_title}" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                <TextBlock Text="{loc:Str label_chat_memory_title}" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold"/>
+                                                <Button Style="{StaticResource HelpButtonStyle}" ToolTip="{loc:Str tooltip_lab_ai_memory}"/>
+                                            </StackPanel>
                                             <TextBlock Text="{loc:Str label_chat_memory_hint}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <CheckBox x:Name="ChkChatMemoryEnabled" Style="{StaticResource ToggleStyle}"
