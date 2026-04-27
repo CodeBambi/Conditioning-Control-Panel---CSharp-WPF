@@ -5724,6 +5724,19 @@
                                         Minimum="5" Maximum="300" Value="120" Margin="0,6,0,12"
                                         ValueChanged="SliderIdleInterval_ValueChanged"/>
 
+                                <Grid Margin="0,4,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Str label_bubble_duration}" Foreground="White" FontSize="14"/>
+                                        <TextBlock Text="{loc:Str desc_bubble_duration}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtBubbleDurationCompanion" Text="2s" Foreground="{DynamicResource PinkBrush}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                </Grid>
+                                <Slider x:Name="SliderBubbleDurationCompanion" Style="{StaticResource PinkSlider}"
+                                        Minimum="1" Maximum="10" Value="2" Margin="0,6,0,12"
+                                        IsSnapToTickEnabled="True" TickFrequency="1"
+                                        ToolTip="{loc:Str tooltip_bubble_duration}"
+                                        ValueChanged="SliderBubbleDuration_ValueChanged"/>
+
                                 <Border x:Name="AwarenessSettingsPanel" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="10" Margin="0,0,0,12" Visibility="Collapsed">
                                     <StackPanel>
                                         <Grid Margin="0,0,0,8">
@@ -6945,6 +6958,31 @@
                                     BorderThickness="0" FontWeight="Bold" Cursor="Hand"
                                     VerticalAlignment="Center"
                                     Click="BtnGazeMinigame_Click"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Focus Gaze — pop bubbles / dismiss flashes by looking at them -->
+                    <Border CornerRadius="12" Margin="6,12,6,6" Padding="15"
+                            Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="2">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🎯" Foreground="#FF69B4" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Focus Gaze" Foreground="#FF69B4" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="Look at a bubble or flash for 1s to pop it. Calibration required."
+                                           Foreground="#AAAAAA" FontSize="11" Margin="0,4,0,0"/>
+                                <TextBlock x:Name="TxtFocusGazeStatus" Text=""
+                                           Foreground="#FFD080" FontSize="11" Margin="0,4,0,0"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" x:Name="ChkFocusGaze" Style="{StaticResource ToggleStyle}"
+                                      VerticalAlignment="Center"
+                                      Checked="ChkFocusGaze_Changed" Unchecked="ChkFocusGaze_Changed"/>
                         </Grid>
                     </Border>
 

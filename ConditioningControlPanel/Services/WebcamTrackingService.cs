@@ -197,7 +197,7 @@ namespace ConditioningControlPanel.Services
         private const int LongStareDurationMs = 3000;
         private const double LongStareMaxDeviationPx = 60.0;
         private const int LongStareCooldownMs = 5000;
-        private const int IrisSmoothFrames = 5;              // rolling-mean window over raw iris vector
+        private const int IrisSmoothFrames = 12;             // rolling-mean window over raw iris vector (~400ms at ~30fps)
         private const int SideStabilityFrames = 3;           // consecutive frames of same classification before emitting (filters Center pass-through)
 
         private readonly object _stateLock = new();
@@ -918,15 +918,32 @@ namespace ConditioningControlPanel.Services
 
         private System.Windows.Point? ProjectGazeToScreen(double irisDx, double irisDy)
         {
+            // Prefer 2nd-order polynomial when present — captures the
+            // nonlinear iris→screen response. Falls back to homography for
+            // calibrations saved before the polynomial fit was added.
+            var poly = Calibration?.Polynomial;
+            if (poly != null && poly.X != null && poly.Y != null
+                && poly.X.Length == 6 && poly.Y.Length == 6)
+            {
+                var ix2 = irisDx * irisDx;
+                var iy2 = irisDy * irisDy;
+                var ixy = irisDx * irisDy;
+                var x = poly.X[0] + poly.X[1] * irisDx + poly.X[2] * irisDy
+                      + poly.X[3] * ix2 + poly.X[4] * iy2 + poly.X[5] * ixy;
+                var y = poly.Y[0] + poly.Y[1] * irisDx + poly.Y[2] * irisDy
+                      + poly.Y[3] * ix2 + poly.Y[4] * iy2 + poly.Y[5] * ixy;
+                return new System.Windows.Point(x, y);
+            }
+
             var h = Calibration?.Homography;
             if (h == null || h.Length != 3 || h[0].Length != 3) return null;
 
-            var x = h[0][0] * irisDx + h[0][1] * irisDy + h[0][2];
-            var y = h[1][0] * irisDx + h[1][1] * irisDy + h[1][2];
-            var w = h[2][0] * irisDx + h[2][1] * irisDy + h[2][2];
-            if (Math.Abs(w) < 1e-9) return null;
+            var hx = h[0][0] * irisDx + h[0][1] * irisDy + h[0][2];
+            var hy = h[1][0] * irisDx + h[1][1] * irisDy + h[1][2];
+            var hw = h[2][0] * irisDx + h[2][1] * irisDy + h[2][2];
+            if (Math.Abs(hw) < 1e-9) return null;
 
-            return new System.Windows.Point(x / w, y / w);
+            return new System.Windows.Point(hx / hw, hy / hw);
         }
 
         private void UpdateLongStareHeuristic(System.Windows.Point point)

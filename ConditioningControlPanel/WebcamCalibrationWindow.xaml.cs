@@ -216,6 +216,54 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // 2nd-order polynomial fit: 9 means → 12 coefficients (6 per axis).
+            // Captures the nonlinear iris→screen response that the homography
+            // can't, so accuracy at the edges/corners matches the center much
+            // more closely. Solved via Cv2.Solve(..., DecompTypes.Normal) on
+            // an overdetermined 9×6 design matrix.
+            PolynomialFitData? polynomial = null;
+            try
+            {
+                using var A = new Mat(9, 6, MatType.CV_64FC1);
+                using var bX = new Mat(9, 1, MatType.CV_64FC1);
+                using var bY = new Mat(9, 1, MatType.CV_64FC1);
+                for (int i = 0; i < 9; i++)
+                {
+                    double ix = srcMeans[i].X, iy = srcMeans[i].Y;
+                    A.Set(i, 0, 1.0);
+                    A.Set(i, 1, ix);
+                    A.Set(i, 2, iy);
+                    A.Set(i, 3, ix * ix);
+                    A.Set(i, 4, iy * iy);
+                    A.Set(i, 5, ix * iy);
+                    bX.Set(i, 0, dstPoints[i].X);
+                    bY.Set(i, 0, dstPoints[i].Y);
+                }
+                using var coeffsX = new Mat();
+                using var coeffsY = new Mat();
+                if (Cv2.Solve(A, bX, coeffsX, DecompTypes.Normal)
+                 && Cv2.Solve(A, bY, coeffsY, DecompTypes.Normal))
+                {
+                    polynomial = new PolynomialFitData
+                    {
+                        X = new[]
+                        {
+                            coeffsX.At<double>(0, 0), coeffsX.At<double>(1, 0), coeffsX.At<double>(2, 0),
+                            coeffsX.At<double>(3, 0), coeffsX.At<double>(4, 0), coeffsX.At<double>(5, 0),
+                        },
+                        Y = new[]
+                        {
+                            coeffsY.At<double>(0, 0), coeffsY.At<double>(1, 0), coeffsY.At<double>(2, 0),
+                            coeffsY.At<double>(3, 0), coeffsY.At<double>(4, 0), coeffsY.At<double>(5, 0),
+                        },
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "WebcamCalibrationWindow: polynomial fit failed; falling back to homography only");
+            }
+
             // LeftRefVec  = mean of left column (TL=0, ML=3, BL=6) iris vectors
             // RightRefVec = mean of right column (TR=2, MR=5, BR=8) iris vectors
             // 3-point average per side is more robust to head-pose drift than
@@ -246,6 +294,7 @@ namespace ConditioningControlPanel
                 LeftRefVec = leftRef,
                 RightRefVec = rightRef,
                 Homography = homography,
+                Polynomial = polynomial,
             };
 
             // Live-apply (in-memory only, no disk write yet) so the validation

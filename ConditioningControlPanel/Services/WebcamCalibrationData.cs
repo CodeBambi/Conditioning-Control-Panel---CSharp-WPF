@@ -33,6 +33,16 @@ namespace ConditioningControlPanel.Services
         /// <summary>3x3 homography mapping iris vector to screen coords. Null in TwoPoint mode.</summary>
         [JsonProperty] public double[][]? Homography { get; set; }
 
+        /// <summary>
+        /// 2nd-order polynomial fit (6 coefficients per axis) mapping iris
+        /// vector to screen coords. Captures the nonlinear iris→screen
+        /// response that a homography can't, so cursor accuracy at the
+        /// edges/corners matches the center much more closely.
+        /// Null on calibrations from older app versions — the projection
+        /// path falls back to <see cref="Homography"/> when this is null.
+        /// </summary>
+        [JsonProperty] public PolynomialFitData? Polynomial { get; set; }
+
         public static string FilePath => Path.Combine(App.UserDataPath, FileName);
 
         public static WebcamCalibrationData? Load()
@@ -82,5 +92,18 @@ namespace ConditioningControlPanel.Services
         [JsonProperty] public int Width { get; set; }
         [JsonProperty] public int Height { get; set; }
         [JsonProperty] public double DpiScale { get; set; } = 1.0;
+    }
+
+    /// <summary>
+    /// Coefficients for screen = a0 + a1*ix + a2*iy + a3*ix² + a4*iy² + a5*ix*iy,
+    /// fit per axis from the 9 calibration means via least-squares.
+    /// </summary>
+    public class PolynomialFitData
+    {
+        /// <summary>X-axis coefficients [a0, a1, a2, a3, a4, a5].</summary>
+        [JsonProperty] public double[] X { get; set; } = new double[6];
+
+        /// <summary>Y-axis coefficients [b0, b1, b2, b3, b4, b5].</summary>
+        [JsonProperty] public double[] Y { get; set; } = new double[6];
     }
 }

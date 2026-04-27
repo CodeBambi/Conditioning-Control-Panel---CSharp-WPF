@@ -223,6 +223,7 @@ namespace ConditioningControlPanel
         public static WallpaperService? Wallpaper { get; private set; }
         public static WebcamTrackingService Webcam { get; private set; } = null!;
         public static FocusGameService FocusGame { get; private set; } = null!;
+        public static GazeFocusService GazeFocus { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -844,6 +845,7 @@ namespace ConditioningControlPanel
             // Constructors are no-ops; the camera handle only opens after explicit user consent.
             Webcam = new WebcamTrackingService();
             FocusGame = new FocusGameService();
+            GazeFocus = new GazeFocusService();
 
             // Initialize lockdown service (ephemeral — not persisted)
             Lockdown = new LockdownService();
@@ -2131,6 +2133,7 @@ Application State:
             ScreenMirror?.Dispose();
             Autonomy?.Dispose();
             Wallpaper?.Dispose();
+            GazeFocus?.Dispose();
             Webcam?.Dispose();
             FocusGame?.Dispose();
             ContentPacks?.Dispose();

@@ -226,6 +226,7 @@ namespace ConditioningControlPanel
                 AvatarTubeWindow.ApplyChatShortcutTo(this);
                 RefreshChatShortcutLabel();
                 ApplyGlobalChatHotkey();
+                HookFocusGazeService();
             };
             Closing += (_, _) => Services.GlobalHotkeyService.Unregister();
 
@@ -3330,6 +3331,85 @@ namespace ConditioningControlPanel
             new Lab.GazeMinigame.GazeMinigameWindow { Owner = this }.Show();
         }
 
+        // ─── Focus Gaze (Lab) ──────────────────────────────────────────
+        private bool _focusGazeSyncing;
+
+        private void HookFocusGazeService()
+        {
+            if (App.GazeFocus == null) return;
+
+            // Belt-and-suspenders: stop GazeFocus before WPF checks its window
+            // count on MainWindow close. Without this, the cursor window can
+            // keep the OnLastWindowClose process alive — App.OnExit then never
+            // runs, leaving Webcam.Dispose uncalled and the camera lit.
+            Closing += (_, _) => App.GazeFocus?.Stop();
+
+            App.GazeFocus.OnActiveChanged += active =>
+            {
+                // Service may stop itself (e.g., webcam death) — keep the
+                // toggle visually in sync without re-entering the handler.
+                if (!Dispatcher.CheckAccess())
+                {
+                    Dispatcher.BeginInvoke(() => SyncFocusGazeToggle(active));
+                    return;
+                }
+                SyncFocusGazeToggle(active);
+            };
+        }
+
+        private void SyncFocusGazeToggle(bool active)
+        {
+            if (ChkFocusGaze == null) return;
+            if (ChkFocusGaze.IsChecked == active) return;
+            _focusGazeSyncing = true;
+            try { ChkFocusGaze.IsChecked = active; }
+            finally { _focusGazeSyncing = false; }
+            if (TxtFocusGazeStatus != null && !active) TxtFocusGazeStatus.Text = "";
+        }
+
+        private void ChkFocusGaze_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_focusGazeSyncing) return;
+            if (App.GazeFocus == null) return;
+
+            var on = ChkFocusGaze.IsChecked == true;
+            if (on)
+            {
+                if (App.Settings?.Current?.WebcamConsentGiven != true)
+                {
+                    var dlg = new WebcamConsentDialog { Owner = this };
+                    var ok = dlg.ShowDialog();
+                    if (ok != true || !dlg.ConsentGiven)
+                    {
+                        SyncFocusGazeToggle(false);
+                        if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = "Camera consent is required.";
+                        return;
+                    }
+                }
+
+                if (App.GazeFocus.Start())
+                {
+                    if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = "Active — gaze and dwell.";
+                }
+                else
+                {
+                    SyncFocusGazeToggle(false);
+                    if (TxtFocusGazeStatus != null)
+                    {
+                        if (App.Webcam?.Calibration == null)
+                            TxtFocusGazeStatus.Text = "Calibrate the webcam first (Lab → webcam tracker test).";
+                        else
+                            TxtFocusGazeStatus.Text = $"Couldn't start the webcam (state: {App.Webcam?.State}).";
+                    }
+                }
+            }
+            else
+            {
+                App.GazeFocus.Stop();
+                if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = "";
+            }
+        }
+
         private void BtnWebcamDebugTrackerTest_Click(object sender, RoutedEventArgs e)
         {
             var svc = App.Webcam;
@@ -5451,6 +5531,11 @@ namespace ConditioningControlPanel
                 SliderIdleIntervalCompanion.Value = idleInterval;
                 TxtIdleIntervalCompanion.Text = $"{idleInterval}s";
 
+                // Sync bubble persistence duration
+                var bubbleDuration = App.Settings?.Current?.BubbleDurationSeconds ?? 2.0;
+                SliderBubbleDurationCompanion.Value = bubbleDuration;
+                TxtBubbleDurationCompanion.Text = $"{(int)bubbleDuration}s";
+
                 // Sync detach status
                 var isDetached = _avatarTubeWindow?.IsDetached == true;
                 TxtDetachStatusCompanion.Text = isDetached ? "Floating freely" : "Anchored to window";
@@ -6889,6 +6974,8 @@ namespace ConditioningControlPanel
             ChkAiChat.IsChecked = settings.AiChatEnabled;
             SliderIdleIntervalCompanion.Value = settings.IdleGiggleIntervalSeconds;
             TxtIdleIntervalCompanion.Text = $"{settings.IdleGiggleIntervalSeconds}s";
+            SliderBubbleDurationCompanion.Value = settings.BubbleDurationSeconds;
+            TxtBubbleDurationCompanion.Text = $"{(int)settings.BubbleDurationSeconds}s";
 
             // Awareness Mode settings (free for all users)
             var awarenessAvailable = true;
@@ -6996,6 +7083,17 @@ namespace ConditioningControlPanel
             var value = (int)(slider?.Value ?? 120);
             TxtIdleIntervalCompanion.Text = $"{value}s";
             App.Settings.Current.IdleGiggleIntervalSeconds = value;
+            App.Settings.Save();
+        }
+
+        private void SliderBubbleDuration_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtBubbleDurationCompanion == null) return;
+
+            var slider = sender as Slider;
+            var value = slider?.Value ?? 2.0;
+            TxtBubbleDurationCompanion.Text = $"{(int)value}s";
+            App.Settings.Current.BubbleDurationSeconds = value;
             App.Settings.Save();
         }
 
