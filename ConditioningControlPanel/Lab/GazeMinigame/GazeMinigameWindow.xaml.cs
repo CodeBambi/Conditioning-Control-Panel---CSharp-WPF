@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Media;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -9,7 +8,9 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services;
 using LibVLCSharp.Shared;
@@ -51,6 +52,13 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
         private readonly List<RoundResult> _results = new();
         private int _currentRoundIdx = -1;
         private DateTime _roundStartedAt;
+        // Grace window at the start of each round: gaze accumulation AND the
+        // duration timeout are both paused until UtcNow >= this. Lets the user
+        // visually find the correct asset if their pre-round gaze happened to
+        // land on the noise side (especially under WrongHoldMs=0 strict mode
+        // where one frame on the wrong side instantly fails the round).
+        private DateTime _roundIgnoreGazeUntil;
+        private const int GraceMs = 1000;
         private double _correctMs;
         private double _wrongMs;
         private GameSide _currentSide = GameSide.None;
@@ -493,8 +501,18 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
 
             if (spec.Type == AssetType.Image)
             {
-                LeftPane.Children.Add(BuildImageView(leftPath));
-                RightPane.Children.Add(BuildImageView(rightPath));
+                var leftImg = BuildImageView(leftPath);
+                var rightImg = BuildImageView(rightPath);
+                LeftPane.Children.Add(leftImg);
+                RightPane.Children.Add(rightImg);
+                AnimateAssetIn(leftImg);
+                AnimateAssetIn(rightImg);
+                // Sparkle burst is image-only: on video rounds the LibVLC
+                // VideoView is a native HWND that masks WPF children once it
+                // starts rendering, so spawned sparkles would disappear the
+                // moment the Playing event fires. Skip rather than spawn-and-hide.
+                SpawnSparkleBurst(LeftPane);
+                SpawnSparkleBurst(RightPane);
             }
             else
             {
@@ -502,6 +520,8 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
                 _rightVideoView = new VideoView { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
                 LeftPane.Children.Add(_leftVideoView);
                 RightPane.Children.Add(_rightVideoView);
+                AnimateAssetIn(_leftVideoView);
+                AnimateAssetIn(_rightVideoView);
 
                 _leftPlayerAlive = new[] { true };
                 _rightPlayerAlive = new[] { true };
@@ -514,6 +534,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             _wrongMs = 0;
             _currentSide = GameSide.None;
             _roundStartedAt = DateTime.UtcNow;
+            _roundIgnoreGazeUntil = DateTime.UtcNow.AddMilliseconds(GraceMs);
             _gameRunning = true;
             StartRoundTicker();
         }
@@ -688,6 +709,15 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
         private void RoundTicker_Tick(object? sender, EventArgs e)
         {
             if (!_gameRunning) return;
+            // Round-start grace: pause BOTH gaze accumulation and the duration
+            // timeout. The duration is the visible-and-decisional window — the
+            // ~1s warm-up shouldn't eat into it. _roundStartedAt is also
+            // effectively shifted by ignoring elapsed time during grace.
+            if (DateTime.UtcNow < _roundIgnoreGazeUntil)
+            {
+                _roundStartedAt = DateTime.UtcNow;
+                return;
+            }
             var spec = _rounds[_currentRoundIdx];
 
             // Accumulate time on whichever side the gaze is currently on.
@@ -743,19 +773,35 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
                 WrongMs = _wrongMs,
             });
 
+            // Tear down assets BEFORE animating the feedback card in: gives a
+            // clean black backdrop AND avoids the LibVLC airspace problem
+            // (native VideoView HWND would paint over any in-window WPF text).
+            // Reward effects / shake fire first, while assets are still
+            // visible — the visceral cue reads against the asset, then blackout.
             switch (outcome)
             {
                 case RoundOutcome.Correct:
                     FireRewardEffect(_settings.RewardEffect);
                     if (_settings.VibrationMode == GazeVibrationMode.OnCorrect) FireVibration("reward");
-                    await FlashSubliminalAsync("GOOD GIRL", Color.FromRgb(0xFF, 0x69, 0xB4), beep: false);
+                    DisposeCurrentRoundPlayers();
+                    LeftPane.Children.Clear();
+                    RightPane.Children.Clear();
+                    PlayJingle();
+                    await ShowFullscreenFeedbackAsync("GOOD GIRL", Color.FromRgb(0xFF, 0x69, 0xB4));
                     break;
                 case RoundOutcome.Wrong:
                     if (_settings.VibrationMode == GazeVibrationMode.OnWrong) FireVibration("punish");
-                    await FlashSubliminalAsync("WRONG", Color.FromRgb(0xFF, 0x40, 0x40), beep: true);
+                    await ShakeGameplayAsync();
+                    DisposeCurrentRoundPlayers();
+                    LeftPane.Children.Clear();
+                    RightPane.Children.Clear();
+                    await ShowFullscreenFeedbackAsync("WRONG", Color.FromRgb(0xFF, 0x40, 0x40));
                     break;
                 case RoundOutcome.Timeout:
-                    await System.Threading.Tasks.Task.Delay(200);   // silent advance
+                    DisposeCurrentRoundPlayers();
+                    LeftPane.Children.Clear();
+                    RightPane.Children.Clear();
+                    await System.Threading.Tasks.Task.Delay(500);   // silent buffer
                     break;
             }
 
@@ -841,22 +887,134 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        //  Subliminal flash
+        //  Inter-round feedback card
         // ─────────────────────────────────────────────────────────────────────
 
-        private async System.Threading.Tasks.Task FlashSubliminalAsync(string text, Color color, bool beep)
+        // Full-screen feedback card. Caller MUST clear panes + dispose video
+        // players before calling — otherwise LibVLC's native HWND will paint
+        // over this in-window TextBlock.
+        private async Task ShowFullscreenFeedbackAsync(string text, Color color)
         {
-            // The flash uses a separate topmost transparent window because
-            // LibVLC's VideoView is a WindowsFormsHost native HWND that paints
-            // over WPF siblings — so a TextBlock above the video can't be
-            // shown. The overlay window sits above the native video surface
-            // at the OS Z-order level. (For image-only rounds it works the
-            // same; the overlay is a single code path.)
-            if (beep)
+            TxtFeedback.Text = text;
+            TxtFeedback.Foreground = new SolidColorBrush(color);
+            FeedbackShadow.Color = color;
+
+            FeedbackCard.Visibility = Visibility.Visible;
+            var fadeIn  = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(100));
+            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(100));
+            FeedbackCard.BeginAnimation(OpacityProperty, fadeIn);
+            await Task.Delay(1400);                     // 100ms fade-in + 1300ms hold
+            FeedbackCard.BeginAnimation(OpacityProperty, fadeOut);
+            await Task.Delay(120);                      // fade-out + tiny tail
+            // Detach the running animation so the local Opacity assignment
+            // below isn't clobbered by the held animation value.
+            FeedbackCard.BeginAnimation(OpacityProperty, null);
+            FeedbackCard.Opacity = 0;
+            FeedbackCard.Visibility = Visibility.Collapsed;
+        }
+
+        // Reuses the existing PlayRewardAudio NAudio path; chime.wav is
+        // already bundled at Resources/AwarenessPresets/audio/chime.wav.
+        // Plays unconditionally on correct rounds, independent of the user's
+        // configured RewardEffect (which has its own opt-in audio path).
+        private static void PlayJingle() => PlayRewardAudio("chime.wav");
+
+        // Brief horizontal shake of the panes container on wrong outcomes.
+        // Animates the existing GameplayShake TranslateTransform on
+        // GameplayPairGrid (defined in XAML) — NOT Window.Left, which doesn't
+        // move while the window is WindowState.Maximized.
+        private async Task ShakeGameplayAsync()
+        {
+            var anim = new DoubleAnimationUsingKeyFrames();
+            // 9 keyframes, 40ms apart, ±10px → ±3px → 0. ~360ms total.
+            int[] offsets = { -10, 10, -8, 8, -5, 5, -3, 3, 0 };
+            double t = 0;
+            foreach (var o in offsets)
             {
-                try { SystemSounds.Beep.Play(); } catch { }
+                anim.KeyFrames.Add(new LinearDoubleKeyFrame(o, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(t))));
+                t += 40;
             }
-            await SubliminalFlashOverlay.FlashAsync(this, text, color);
+            GameplayShake.BeginAnimation(TranslateTransform.XProperty, anim);
+            await Task.Delay((int)t);
+            GameplayShake.BeginAnimation(TranslateTransform.XProperty, null);
+            GameplayShake.X = 0;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Asset entry effects
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Fade-in + subtle scale-up on the asset element. Works cleanly for
+        // WPF Image; for VideoView the WPF opacity animation only shows during
+        // the brief moment before LibVLC's native HWND starts rendering
+        // (acceptable v1 limitation — the sparkle burst is image-only too).
+        private static void AnimateAssetIn(FrameworkElement el)
+        {
+            el.Opacity = 0;
+            var scale = new ScaleTransform(0.95, 0.95);
+            el.RenderTransformOrigin = new WpfPoint(0.5, 0.5);
+            el.RenderTransform = scale;
+
+            var fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(300))
+                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+            var grow = new DoubleAnimation(0.95, 1.0, TimeSpan.FromMilliseconds(300))
+                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+            el.BeginAnimation(UIElement.OpacityProperty, fade);
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+        }
+
+        // Pink sparkle particles bursting outward from the pane center.
+        // Self-cleaning: each particle removes itself from the host's Children
+        // when its fade-out animation completes, so Children doesn't pile up
+        // across rounds.
+        private static void SpawnSparkleBurst(Grid host)
+        {
+            const int count = 12;
+            var rng = Random.Shared;
+            var pink = Color.FromRgb(0xFF, 0x69, 0xB4);
+            for (int i = 0; i < count; i++)
+            {
+                var dot = new Ellipse
+                {
+                    Width = 8,
+                    Height = 8,
+                    Fill = new SolidColorBrush(pink),
+                    Effect = new DropShadowEffect
+                    {
+                        Color = pink,
+                        BlurRadius = 12,
+                        ShadowDepth = 0,
+                        Opacity = 0.9,
+                    },
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    IsHitTestVisible = false,
+                };
+                var t = new TranslateTransform();
+                dot.RenderTransform = t;
+                host.Children.Add(dot);
+
+                double angle = rng.NextDouble() * Math.PI * 2;
+                double dist  = 80 + rng.NextDouble() * 60;     // 80–140 px
+                double dx    = Math.Cos(angle) * dist;
+                double dy    = Math.Sin(angle) * dist;
+                int dur      = 450 + rng.Next(0, 150);          // 450–600 ms
+
+                var animX = new DoubleAnimation(0, dx, TimeSpan.FromMilliseconds(dur))
+                    { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var animY = new DoubleAnimation(0, dy, TimeSpan.FromMilliseconds(dur))
+                    { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } };
+                var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(dur))
+                    { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+
+                var dotRef = dot;
+                fade.Completed += (_, _) => { try { host.Children.Remove(dotRef); } catch { } };
+
+                t.BeginAnimation(TranslateTransform.XProperty, animX);
+                t.BeginAnimation(TranslateTransform.YProperty, animY);
+                dot.BeginAnimation(UIElement.OpacityProperty, fade);
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────

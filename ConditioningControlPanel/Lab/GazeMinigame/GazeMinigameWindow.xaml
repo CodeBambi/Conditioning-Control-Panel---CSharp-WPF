@@ -278,13 +278,16 @@
         <!-- ─── Gameplay screen ─── -->
         <Grid x:Name="GameplayScreen" Background="Black" Visibility="Collapsed">
             <Grid x:Name="GameplayPairGrid">
+                <Grid.RenderTransform>
+                    <TranslateTransform x:Name="GameplayShake"/>
+                </Grid.RenderTransform>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="0" x:Name="LeftPane" Background="#050505" Margin="6"/>
-                <Grid Grid.Column="1" x:Name="RightPane" Background="#050505" Margin="6"/>
+                <Grid Grid.Column="0" x:Name="LeftPane" Background="#050505" Margin="6" ClipToBounds="True"/>
+                <Grid Grid.Column="1" x:Name="RightPane" Background="#050505" Margin="6" ClipToBounds="True"/>
             </Grid>
 
             <!-- Round info (top) -->
@@ -294,11 +297,19 @@
                            Foreground="White" FontFamily="Consolas" FontSize="13"/>
             </Border>
 
-            <!-- WRONG / GOOD GIRL flash is rendered via SubliminalFlashOverlay
-                 (separate topmost transparent window) because LibVLC's
-                 VideoView is a WindowsFormsHost native HWND that paints over
-                 WPF siblings — a TextBlock here would be hidden behind the
-                 video on video rounds. -->
+            <!-- Inter-round feedback card. Shown ONLY after panes are cleared
+                 and any LibVLC players are disposed — otherwise the native
+                 video HWND paints over this in-window TextBlock. -->
+            <Grid x:Name="FeedbackCard" Background="Black" Visibility="Collapsed" Opacity="0">
+                <TextBlock x:Name="TxtFeedback" Text=""
+                           FontSize="240" FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock.Effect>
+                        <DropShadowEffect x:Name="FeedbackShadow" Color="White"
+                                          BlurRadius="60" ShadowDepth="0" Opacity="0.9"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+            </Grid>
         </Grid>
 
         <!-- ─── Results screen ─── -->
