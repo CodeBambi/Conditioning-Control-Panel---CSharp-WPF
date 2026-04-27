@@ -298,6 +298,54 @@ namespace ConditioningControlPanel.Services
         private readonly Queue<double> _irisDxSmoothBuffer = new();
         private readonly Queue<double> _irisDySmoothBuffer = new();
 
+        // Head-pose state — solvePnP-derived yaw/pitch (radians), smoothed to
+        // match iris smoothing. Used to apply a geometric correction on the
+        // iris vector before projecting through the polynomial: when the head
+        // turns off the calibration baseline, the eyes have to counter-rotate
+        // to keep looking at the same screen point, so the iris vector shifts
+        // even though gaze didn't move. Subtracting a sin(deltaPose)-scaled
+        // offset puts the cursor back roughly where gaze actually points.
+        private readonly Queue<double> _yawSmoothBuffer = new();
+        private readonly Queue<double> _pitchSmoothBuffer = new();
+        private bool _headPoseValid;
+
+        /// <summary>
+        /// Smoothed head yaw in radians. Sign and magnitude follow whatever
+        /// solvePnP returns for the canonical 3D model below — empirical, used
+        /// as a relative measure (delta from calibration baseline).
+        /// </summary>
+        public double LastYaw { get; private set; }
+        public double LastPitch { get; private set; }
+        public bool HasHeadPose => _headPoseValid;
+
+        /// <summary>Fires every processed frame with the latest smoothed (yaw, pitch). Used by the calibration window to capture the baseline.</summary>
+        public event Action<double, double>? OnHeadPose;
+
+        // Geometric correction applied to the iris vector when a baseline pose
+        // is recorded in the calibration. ix' = ix + Yaw * sin(deltaYaw),
+        // iy' = iy + Pitch * sin(deltaPitch). Coefficients are educated
+        // starting points — if the cursor moves the wrong way when the head
+        // turns, flip the sign of the matching coefficient. If it
+        // overcorrects/undercorrects, scale the magnitude.
+        private const double YawCompCoeff = 0.4;
+        private const double PitchCompCoeff = 0.3;
+
+        // Canonical 3D face model (mm-ish, dlib/OpenCV head-pose tutorial
+        // values). Anchored at the nose tip; +X to subject's left (image
+        // right on an unmirrored frame), +Y up, +Z toward camera. solvePnP
+        // figures out the rotation that maps these to the per-frame 2D
+        // landmarks, and we extract Euler yaw/pitch from that.
+        private static readonly Point3f[] HeadPoseModelPoints = new[]
+        {
+            new Point3f(0f,     0f,     0f),       // 0: nose tip      (FaceMesh idx 1)
+            new Point3f(0f,     -330f,  -65f),     // 1: chin          (FaceMesh idx 152)
+            new Point3f(225f,   170f,   -135f),    // 2: subject's left eye outer  (FaceMesh idx 33)
+            new Point3f(-225f,  170f,   -135f),    // 3: subject's right eye outer (FaceMesh idx 263)
+            new Point3f(150f,   -150f,  -125f),    // 4: subject's left mouth corner  (FaceMesh idx 61)
+            new Point3f(-150f,  -150f,  -125f),    // 5: subject's right mouth corner (FaceMesh idx 291)
+        };
+        private static readonly int[] HeadPoseLandmarkIndices = new[] { 1, 152, 33, 263, 61, 291 };
+
         // Hysteresis state for gaze-side classification — keeps the side from
         // toggling on tiny crossings of the midpoint band.
         private GazeSide _lastGazeSide = GazeSide.Center;
@@ -586,6 +634,11 @@ namespace ConditioningControlPanel.Services
             _diagTongueFrames = 0;
             _irisDxSmoothBuffer.Clear();
             _irisDySmoothBuffer.Clear();
+            _yawSmoothBuffer.Clear();
+            _pitchSmoothBuffer.Clear();
+            _headPoseValid = false;
+            LastYaw = 0;
+            LastPitch = 0;
             _lastGazeSide = GazeSide.Center;
             _lastEmittedSide = GazeSide.Center;
             _pendingSide = GazeSide.Center;
@@ -694,6 +747,13 @@ namespace ConditioningControlPanel.Services
 
             HandleFaceFound();
 
+            // 3a) Head pose — solvePnP against the canonical 3D face model
+            //     using 6 stable FaceMesh landmarks. Updates LastYaw/LastPitch
+            //     (smoothed) and _headPoseValid. Used downstream by the gaze
+            //     projection to apply a geometric correction relative to the
+            //     calibration baseline.
+            UpdateHeadPose(landmarks, gray.Width, gray.Height);
+
             // 4) Iris model — exact iris-center landmark per eye AND 71-point
             //    eye contour for EAR. Right eye is fed flipped by IrisDetector,
             //    output un-flipped, so contour indices are consistent across eyes.
@@ -750,6 +810,91 @@ namespace ConditioningControlPanel.Services
             return ((iris.X - cx) / w, (iris.Y - cy) / w);
         }
 
+        /// <summary>
+        /// Run solvePnP on 6 stable FaceMesh landmarks (nose tip, chin, both
+        /// outer eye corners, both mouth corners) against the canonical 3D
+        /// model, extract Euler yaw/pitch from the rotation matrix, and feed
+        /// the smoothing buffers. Failures (degenerate landmarks, solvePnP
+        /// returning false) leave the previous smoothed value in place — the
+        /// downstream comp falls back to "no compensation" via _headPoseValid.
+        /// </summary>
+        private void UpdateHeadPose(float[][] landmarks, int frameW, int frameH)
+        {
+            if (landmarks == null || landmarks.Length < 468) { _headPoseValid = false; return; }
+
+            try
+            {
+                // 2D image points matching HeadPoseModelPoints, in source-frame
+                // pixel coords. Drop in early if any landmark is missing/NaN.
+                var imagePoints = new Point2f[HeadPoseLandmarkIndices.Length];
+                for (int i = 0; i < HeadPoseLandmarkIndices.Length; i++)
+                {
+                    var lm = landmarks[HeadPoseLandmarkIndices[i]];
+                    if (lm == null || lm.Length < 2) { _headPoseValid = false; return; }
+                    if (float.IsNaN(lm[0]) || float.IsNaN(lm[1])) { _headPoseValid = false; return; }
+                    imagePoints[i] = new Point2f(lm[0], lm[1]);
+                }
+
+                // Pinhole approximation: focal length ≈ frame width, principal
+                // point at frame center, no distortion. Good enough for
+                // consumer webcams; the absolute angles aren't important —
+                // only deltas relative to calibration are.
+                double fx = frameW;
+                double fy = frameW;
+                double pcx = frameW / 2.0;
+                double pcy = frameH / 2.0;
+                using var cameraMatrix = new Mat(3, 3, MatType.CV_64FC1);
+                cameraMatrix.Set(0, 0, fx); cameraMatrix.Set(0, 1, 0.0); cameraMatrix.Set(0, 2, pcx);
+                cameraMatrix.Set(1, 0, 0.0); cameraMatrix.Set(1, 1, fy); cameraMatrix.Set(1, 2, pcy);
+                cameraMatrix.Set(2, 0, 0.0); cameraMatrix.Set(2, 1, 0.0); cameraMatrix.Set(2, 2, 1.0);
+                using var distCoeffs = new Mat(4, 1, MatType.CV_64FC1, new double[] { 0, 0, 0, 0 });
+                using var objPoints = InputArray.Create(HeadPoseModelPoints);
+                using var imgPoints = InputArray.Create(imagePoints);
+                using var rvec = new Mat();
+                using var tvec = new Mat();
+
+                // SolvePnP overload returns void in this OpenCvSharp version
+                // — failures throw or leave rvec degenerate, and we catch both
+                // via the try/catch + downstream NaN guard.
+                Cv2.SolvePnP(objPoints, imgPoints, cameraMatrix, distCoeffs, rvec, tvec,
+                    useExtrinsicGuess: false, flags: SolvePnPFlags.Iterative);
+                if (rvec.Empty() || rvec.Total() < 3) { _headPoseValid = false; return; }
+
+                using var rotMat = new Mat();
+                Cv2.Rodrigues(rvec, rotMat);
+
+                // Euler-angle extraction from R (Y-X-Z order, picking yaw=Y,
+                // pitch=X). Values in radians. Sign convention is whatever
+                // solvePnP gave us — irrelevant for the relative-delta path
+                // we use downstream.
+                double r20 = rotMat.At<double>(2, 0);
+                double r21 = rotMat.At<double>(2, 1);
+                double r22 = rotMat.At<double>(2, 2);
+                double pitch = Math.Atan2(r21, r22);
+                double yaw   = Math.Atan2(-r20, Math.Sqrt(r21 * r21 + r22 * r22));
+
+                if (double.IsNaN(yaw) || double.IsNaN(pitch)) { _headPoseValid = false; return; }
+
+                EnqueueWithCap(_yawSmoothBuffer,   yaw,   IrisSmoothFrames);
+                EnqueueWithCap(_pitchSmoothBuffer, pitch, IrisSmoothFrames);
+                double sumY = 0, sumP = 0;
+                foreach (var v in _yawSmoothBuffer)   sumY += v;
+                foreach (var v in _pitchSmoothBuffer) sumP += v;
+                LastYaw   = sumY / _yawSmoothBuffer.Count;
+                LastPitch = sumP / _pitchSmoothBuffer.Count;
+                _headPoseValid = true;
+
+                var emitYaw = LastYaw;
+                var emitPitch = LastPitch;
+                Dispatch(() => OnHeadPose?.Invoke(emitYaw, emitPitch));
+            }
+            catch (Exception ex)
+            {
+                _headPoseValid = false;
+                App.Logger?.Debug("UpdateHeadPose failed: {Error}", ex.Message);
+            }
+        }
+
         private void HandleNoFace()
         {
             _consecutiveNoFaceFrames++;
@@ -765,6 +910,9 @@ namespace ConditioningControlPanel.Services
             // mid-blink state so a face-loss can't be misread as a giant blink.
             _lastLeftEyeRect = null;
             _lastRightEyeRect = null;
+            _headPoseValid = false;
+            _yawSmoothBuffer.Clear();
+            _pitchSmoothBuffer.Clear();
             _eyesClosed = false;
             _eyesClosedAt = null;
             _mouthOpen = false;
@@ -858,7 +1006,25 @@ namespace ConditioningControlPanel.Services
             var emit = _lastEmittedSide;
             Dispatch(() => OnGazeSide?.Invoke(emit));
 
-            var screenPoint = ProjectGazeToScreen(smoothDx, smoothDy);
+            // Apply head-pose compensation if the calibration recorded a
+            // baseline pose. When the head turns off the calibration pose,
+            // the eyes counter-rotate to keep gaze on the same target — that
+            // shifts the iris-vs-corner geometry even though gaze didn't
+            // move. A sin(deltaPose)-scaled offset on the iris vector cancels
+            // most of that shift before the polynomial fit consumes it.
+            // Old calibrations have BaselineHeadPose=null → skipped (path is
+            // no worse than before this change).
+            double correctedDx = smoothDx;
+            double correctedDy = smoothDy;
+            if (_headPoseValid && Calibration?.BaselineHeadPose is { } baseline)
+            {
+                var deltaYaw = LastYaw - baseline.Yaw;
+                var deltaPitch = LastPitch - baseline.Pitch;
+                correctedDx += YawCompCoeff * Math.Sin(deltaYaw);
+                correctedDy += PitchCompCoeff * Math.Sin(deltaPitch);
+            }
+
+            var screenPoint = ProjectGazeToScreen(correctedDx, correctedDy);
             if (screenPoint.HasValue)
             {
                 var p = screenPoint.Value;

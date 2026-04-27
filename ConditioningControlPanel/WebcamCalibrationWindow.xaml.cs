@@ -31,6 +31,10 @@ namespace ConditioningControlPanel
         private const int MinSamplesPerPoint = 20;
 
         private readonly List<List<(double X, double Y)>> _allSamples = new();
+        // Head-pose samples accumulated across all 9 dots (single flat list,
+        // not per-dot — we just want a "head still, looking forward" average
+        // for the baseline). Sampled in lockstep with iris during _collecting.
+        private readonly List<(double Yaw, double Pitch)> _allPoseSamples = new();
         private bool _collecting;
         private bool _cancelled;
         private bool _completedOk;
@@ -49,6 +53,7 @@ namespace ConditioningControlPanel
             }
 
             App.Webcam.OnRawIris += OnRawIris;
+            App.Webcam.OnHeadPose += OnHeadPose;
             try
             {
                 await RunSequenceAsync();
@@ -62,7 +67,11 @@ namespace ConditioningControlPanel
 
         private void Window_Closed(object sender, EventArgs e)
         {
-            if (App.Webcam != null) App.Webcam.OnRawIris -= OnRawIris;
+            if (App.Webcam != null)
+            {
+                App.Webcam.OnRawIris -= OnRawIris;
+                App.Webcam.OnHeadPose -= OnHeadPose;
+            }
         }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
@@ -86,6 +95,12 @@ namespace ConditioningControlPanel
         {
             if (!_collecting) return;
             _allSamples[_allSamples.Count - 1].Add((dx, dy));
+        }
+
+        private void OnHeadPose(double yaw, double pitch)
+        {
+            if (!_collecting) return;
+            _allPoseSamples.Add((yaw, pitch));
         }
 
         private async Task RunSequenceAsync()
@@ -123,7 +138,7 @@ namespace ConditioningControlPanel
 
                 MoveDotTo(positions[i].Screen);
                 TxtProgress.Text = $"Point {i + 1} / {positions.Length}  ({positions[i].Label})";
-                TxtStatus.Text = "Look at the orange dot…";
+                TxtStatus.Text = "Look at the pink dot…";
                 await Task.Delay(ReadyMs);
                 if (_cancelled) return;
 
@@ -280,6 +295,23 @@ namespace ConditioningControlPanel
             var primary = SystemParameters.PrimaryScreenWidth;
             var primaryH = SystemParameters.PrimaryScreenHeight;
 
+            // Average head pose across all sampling windows — the user is
+            // expected to hold their head still while looking at each dot, so
+            // a single mean across all samples represents "looking forward
+            // with head at rest" well enough. Skipped if the pose stream
+            // never produced a valid sample (e.g. solvePnP kept failing).
+            CalibrationHeadPose? baselinePose = null;
+            if (_allPoseSamples.Count >= MinSamplesPerPoint)
+            {
+                double sumYaw = 0, sumPitch = 0;
+                foreach (var s in _allPoseSamples) { sumYaw += s.Yaw; sumPitch += s.Pitch; }
+                baselinePose = new CalibrationHeadPose
+                {
+                    Yaw = sumYaw / _allPoseSamples.Count,
+                    Pitch = sumPitch / _allPoseSamples.Count,
+                };
+            }
+
             var data = new WebcamCalibrationData
             {
                 Mode = "NinePoint",
@@ -295,6 +327,7 @@ namespace ConditioningControlPanel
                 RightRefVec = rightRef,
                 Homography = homography,
                 Polynomial = polynomial,
+                BaselineHeadPose = baselinePose,
             };
 
             // Live-apply (in-memory only, no disk write yet) so the validation
@@ -357,9 +390,11 @@ namespace ConditioningControlPanel
             await Task.Delay(1400);
             if (_cancelled) return false;
 
-            // Sequence: L, R, L, R, blink×2, mouth-open×1, tongue-out×1.
+            // Sequence: L, R, L, R, blink×2, mouth-open×3, tongue-out×3.
             // Each step gets up to 3 attempts (12 s timeout each) before failing
-            // the whole calibration.
+            // the whole calibration. Mouth/tongue use 3 passes (was 1) so a
+            // single accidental trigger can't pass the gate — the user has to
+            // genuinely cycle the gesture three full times.
             if (!await ValidateGazeStepAsync(GazeSide.Left,  "Look LEFT",  "←", roundLabel: "1 of 4")) return false;
             if (_cancelled) return false;
             if (!await ValidateGazeStepAsync(GazeSide.Right, "Look RIGHT", "→", roundLabel: "2 of 4")) return false;
@@ -370,9 +405,9 @@ namespace ConditioningControlPanel
             if (_cancelled) return false;
             if (!await ValidateBlinkStepAsync(needed: 2)) return false;
             if (_cancelled) return false;
-            if (!await ValidateMouthOpenStepAsync(needed: 1)) return false;
+            if (!await ValidateMouthOpenStepAsync(needed: 3)) return false;
             if (_cancelled) return false;
-            if (!await ValidateTongueOutStepAsync(needed: 1)) return false;
+            if (!await ValidateTongueOutStepAsync(needed: 3)) return false;
             return true;
         }
 

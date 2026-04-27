@@ -43,6 +43,17 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         [JsonProperty] public PolynomialFitData? Polynomial { get; set; }
 
+        /// <summary>
+        /// Head pose (radians) averaged across all calibration samples — the
+        /// "head still, looking forward" reference. At runtime, the projection
+        /// path subtracts this from the live head pose to get a delta and
+        /// applies a geometric correction to the iris vector before the
+        /// polynomial fit consumes it. Lets the cursor stay roughly anchored
+        /// when the user moves their head off the calibration pose.
+        /// Null on calibrations from older app versions — compensation skipped.
+        /// </summary>
+        [JsonProperty] public CalibrationHeadPose? BaselineHeadPose { get; set; }
+
         public static string FilePath => Path.Combine(App.UserDataPath, FileName);
 
         public static WebcamCalibrationData? Load()
@@ -105,5 +116,19 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>Y-axis coefficients [b0, b1, b2, b3, b4, b5].</summary>
         [JsonProperty] public double[] Y { get; set; } = new double[6];
+    }
+
+    /// <summary>
+    /// Average head orientation captured during calibration (radians). Used as
+    /// a "looking forward" reference; runtime pose deltas drive a geometric
+    /// correction on the iris vector.
+    /// </summary>
+    public class CalibrationHeadPose
+    {
+        /// <summary>Rotation around vertical axis. Positive = subject turned head one way (sign empirical, set by solvePnP convention).</summary>
+        [JsonProperty] public double Yaw { get; set; }
+
+        /// <summary>Rotation around horizontal axis. Positive = subject pitched head one way (sign empirical).</summary>
+        [JsonProperty] public double Pitch { get; set; }
     }
 }

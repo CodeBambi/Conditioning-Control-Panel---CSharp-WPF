@@ -33,11 +33,11 @@ public class GazeFocusService : IDisposable
     private const int TickMs = 33; // ~30 FPS
 
     // Hit-test slack — how far outside a target's bounds the gaze can land
-    // and still count as a hit. Tuned to roughly absorb typical homography
-    // drift (~3–5% of screen) without making everything trigger from
-    // anywhere. Bubbles need help; flashes are already large.
-    private const double BubbleSlackDips = 60;
-    private const double FlashSlackDips = 0;
+    // and still count as a hit. Closest target within slack wins, so a
+    // generous slack mostly just means "always lock on to *something*
+    // nearby" rather than misfire on the wrong target.
+    private const double BubbleSlackDips = 120;
+    private const double FlashSlackDips = 40;
 
     private DispatcherTimer? _timer;
     private Point? _lastGazePoint;
