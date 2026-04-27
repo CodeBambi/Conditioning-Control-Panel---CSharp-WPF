@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Media;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -57,6 +59,11 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
 
         private VlcMediaPlayer? _leftPlayer, _rightPlayer;
         private VideoView? _leftVideoView, _rightVideoView;
+        // Per-player "is this player still owned by the active round?" flags.
+        // Captured by the Playing-event lambda so a late-firing event (after
+        // we've moved on to the next round and started disposing) no-ops
+        // instead of touching a disposed native MediaPlayer (→ AV crash).
+        private bool[]? _leftPlayerAlive, _rightPlayerAlive;
 
         private bool _gameRunning;
         private bool _webcamSubscribed;
@@ -496,8 +503,10 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
                 LeftPane.Children.Add(_leftVideoView);
                 RightPane.Children.Add(_rightVideoView);
 
-                _leftPlayer = StartVideo(_leftVideoView, leftPath);
-                _rightPlayer = StartVideo(_rightVideoView, rightPath);
+                _leftPlayerAlive = new[] { true };
+                _rightPlayerAlive = new[] { true };
+                _leftPlayer = StartVideo(_leftVideoView, leftPath, _leftPlayerAlive);
+                _rightPlayer = StartVideo(_rightVideoView, rightPath, _rightPlayerAlive);
             }
 
             // Reset per-round state.
@@ -534,7 +543,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             return img;
         }
 
-        private VlcMediaPlayer? StartVideo(VideoView view, string path)
+        private VlcMediaPlayer? StartVideo(VideoView view, string path, bool[] alive)
         {
             var libvlc = VideoService.SharedLibVLC;
             if (libvlc == null)
@@ -550,8 +559,13 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
 
                 // Random offset for variety: jump to a position somewhere in the
                 // first 50% of the video once playback has actually started.
+                // The `alive` flag is flipped to false the instant we begin
+                // disposing this player; checking it here avoids touching a
+                // disposed native MediaPlayer when LibVLC's event thread fires
+                // Playing late (a managed try/catch can't catch native AVs).
                 player.Playing += (_, _) =>
                 {
+                    if (!alive[0]) return;
                     try
                     {
                         player.Position = (float)(Random.Shared.NextDouble() * 0.5);
@@ -570,15 +584,91 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             }
         }
 
-        private void DisposeCurrentRoundPlayers()
+        // Safe LibVLC teardown ordering (mirrors VideoService.CloseAll, see
+        // Services/VideoService.cs:1898-2040). The hard-won lesson there:
+        //   STOP first, then DETACH, then DISPOSE — with message-pump waits in
+        //   between so LibVLC's UI-thread callbacks (rendering, frame-ready)
+        //   can drain. Detaching VideoView.MediaPlayer while the player is
+        //   still rendering crashes natively (esp. with two side-by-side
+        //   videos sharing the dispatcher).
+        //
+        // synchronous=true is used by Window_Closing so disposal completes
+        // before the AppDomain starts unloading native LibVLC libraries (the
+        // 2026-04-26 01:45 DllNotFoundException was that exact race).
+        private void DisposeCurrentRoundPlayers(bool synchronous = false)
         {
-            try { _leftPlayer?.Stop(); _leftPlayer?.Dispose(); } catch { }
-            try { _rightPlayer?.Stop(); _rightPlayer?.Dispose(); } catch { }
+            // 1. Mark the players as no-longer-owned so any in-flight Playing
+            //    event lambdas no-op instead of touching freed natives.
+            if (_leftPlayerAlive != null) _leftPlayerAlive[0] = false;
+            if (_rightPlayerAlive != null) _rightPlayerAlive[0] = false;
+            _leftPlayerAlive = null;
+            _rightPlayerAlive = null;
+
+            // 2. Snapshot + clear refs so re-entry can't see them.
+            var leftPlayer = _leftPlayer;
+            var rightPlayer = _rightPlayer;
+            var leftView = _leftVideoView;
+            var rightView = _rightVideoView;
             _leftPlayer = null;
             _rightPlayer = null;
+            _leftVideoView = null;
+            _rightVideoView = null;
 
-            if (_leftVideoView != null) { try { _leftVideoView.MediaPlayer = null; } catch { } _leftVideoView = null; }
-            if (_rightVideoView != null) { try { _rightVideoView.MediaPlayer = null; } catch { } _rightVideoView = null; }
+            if (leftPlayer == null && rightPlayer == null) return;
+
+            // 3. Stop players FIRST (parallel, with timeout). Stop must come
+            //    before VideoView detach — otherwise we yank the HWND binding
+            //    while LibVLC is mid-render.
+            var stopTasks = new List<Task>(2);
+            if (leftPlayer  != null) stopTasks.Add(Task.Run(() => { try { leftPlayer.Stop();  } catch { } }));
+            if (rightPlayer != null) stopTasks.Add(Task.Run(() => { try { rightPlayer.Stop(); } catch { } }));
+            try { Task.WaitAll(stopTasks.ToArray(), TimeSpan.FromMilliseconds(500)); } catch { }
+
+            // 4. Pump messages so LibVLC's UI-thread callbacks finish before
+            //    we touch the VideoView binding.
+            WaitWithMessagePump(200);
+
+            // 5. Detach view→player on the UI thread. Safe now: player stopped.
+            if (leftView  != null) { try { leftView.MediaPlayer  = null; } catch { } }
+            if (rightView != null) { try { rightView.MediaPlayer = null; } catch { } }
+
+            // 6. Dispose. Synchronous on window-close so AppDomain teardown
+            //    doesn't race LibVLC native cleanup; async during gameplay so
+            //    we don't stall the UI between rounds.
+            if (synchronous)
+            {
+                WaitWithMessagePump(150);
+                try { leftPlayer?.Dispose(); }  catch { }
+                try { rightPlayer?.Dispose(); } catch { }
+            }
+            else
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(150);
+                    try { leftPlayer?.Dispose(); }  catch { }
+                    try { rightPlayer?.Dispose(); } catch { }
+                });
+            }
+        }
+
+        // Pump WPF messages while waiting so LibVLC's UI-thread callbacks can
+        // run. Plain Thread.Sleep on the UI thread would deadlock against
+        // those callbacks. Mirrors VideoService.WaitWithMessagePump.
+        private static void WaitWithMessagePump(int milliseconds)
+        {
+            var endTime = DateTime.UtcNow.AddMilliseconds(milliseconds);
+            while (DateTime.UtcNow < endTime)
+            {
+                try
+                {
+                    Application.Current?.Dispatcher?.Invoke(
+                        DispatcherPriority.Background,
+                        new Action(() => { }));
+                }
+                catch { return; }
+                Thread.Sleep(10);
+            }
         }
 
         private void StartRoundTicker()
@@ -969,7 +1059,12 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
         {
             _gameRunning = false;
             StopRoundTicker();
-            DisposeCurrentRoundPlayers();
+            // synchronous=true so Stop+detach+Dispose all complete before the
+            // window's HWND dies and (potentially) before app shutdown unloads
+            // native LibVLC. Without this, a fire-and-forget Dispose Task can
+            // race AppDomain teardown — that's the 2026-04-26 01:45 native
+            // DllNotFoundException in the crash log.
+            DisposeCurrentRoundPlayers(synchronous: true);
             UnsubscribeWebcam();
         }
     }
