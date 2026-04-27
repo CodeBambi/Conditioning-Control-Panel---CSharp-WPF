@@ -3469,6 +3469,26 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnWebcamReviewPrivacy_Click(object sender, RoutedEventArgs e)
+        {
+            // Re-open the consent flow for users who want to read the privacy
+            // contract again after they've already agreed. The dialog only
+            // overwrites WebcamConsentGiven when the user explicitly walks
+            // through the gates and clicks Enable — Cancel/close leaves the
+            // existing consent state alone, so this is safe to invoke any
+            // time as a "review only" path.
+            try
+            {
+                var dlg = new WebcamConsentDialog { Owner = this };
+                dlg.ShowDialog();
+                AppendWebcamDebugLog("Privacy info reviewed.");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Webcam review privacy dialog failed");
+            }
+        }
+
         private void ChkWebcamDebugCursor_Changed(object sender, RoutedEventArgs e)
         {
             if (ChkWebcamDebugCursor == null) return;

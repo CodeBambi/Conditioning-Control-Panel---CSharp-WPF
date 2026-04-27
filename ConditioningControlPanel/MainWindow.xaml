@@ -6893,9 +6893,24 @@
                     <Border CornerRadius="12" Margin="6,12,6,6" Padding="15"
                             Background="#1A1A2E" BorderBrush="#FF8800" BorderThickness="2">
                         <StackPanel>
-                            <TextBlock Text="[DEBUG] Webcam Smoke Test" Foreground="#FF8800" FontWeight="Bold" FontSize="16"/>
-                            <TextBlock Text="Temp UI for verifying capture loop. Remove before merge."
-                                       Foreground="#888888" FontSize="11" Margin="0,2,0,12"/>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="[DEBUG] Webcam Smoke Test" Foreground="#FF8800" FontWeight="Bold" FontSize="16"/>
+                                    <TextBlock Text="Temp UI for verifying capture loop. Remove before merge."
+                                               Foreground="#888888" FontSize="11" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <Button x:Name="BtnWebcamReviewPrivacy" Grid.Column="1"
+                                        Content="Review privacy info"
+                                        Padding="10,6" VerticalAlignment="Top"
+                                        Background="Transparent" Foreground="#FF69B4"
+                                        BorderBrush="#FF69B4" BorderThickness="1"
+                                        FontSize="11" FontWeight="SemiBold" Cursor="Hand"
+                                        Click="BtnWebcamReviewPrivacy_Click"/>
+                            </Grid>
 
                             <Grid>
                                 <Grid.ColumnDefinitions>
