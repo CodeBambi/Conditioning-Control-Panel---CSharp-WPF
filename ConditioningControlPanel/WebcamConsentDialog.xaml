@@ -229,9 +229,9 @@
 
                 <Border Margin="0,12,0,0" Padding="18" CornerRadius="6" Background="#1F1F38">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource DlgBody}" FontWeight="Bold" Foreground="{StaticResource PinkBrush}" Text="Full (about 30 seconds)"/>
+                        <TextBlock Style="{StaticResource DlgBody}" FontWeight="Bold" Foreground="{StaticResource PinkBrush}" Text="Full (about 45 seconds)"/>
                         <TextBlock Style="{StaticResource DlgBody}" Margin="0,4,0,0">
-                            Nine-point precision. Needed for "long stare" triggers and stare-to-pop bubbles.
+                            Sixteen-point precision. Needed for "long stare" triggers and stare-to-pop bubbles.
                         </TextBlock>
                     </StackPanel>
                 </Border>

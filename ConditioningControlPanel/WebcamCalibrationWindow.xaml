@@ -14,6 +14,27 @@
         Closed="Window_Closed">
     <Grid>
         <Canvas x:Name="DotCanvas">
+            <!-- Background ring: faint full circle so the user always sees the
+                 progress track. -->
+            <Ellipse x:Name="DotRingBg" Width="84" Height="84"
+                     Stroke="#33FFFFFF" StrokeThickness="3"/>
+            <!-- Foreground ring: fills clockwise from 12 o'clock as samples
+                 accumulate. Drawn via StrokeDashArray (visible/gap) so we can
+                 update the fill amount per-frame from code-behind. -->
+            <Ellipse x:Name="DotRingFg" Width="84" Height="84"
+                     Stroke="#FFFF69B4" StrokeThickness="4"
+                     StrokeDashArray="0 10000" StrokeDashCap="Round"
+                     RenderTransformOrigin="0.5,0.5">
+                <Ellipse.RenderTransform>
+                    <TransformGroup>
+                        <RotateTransform Angle="-90"/>
+                        <ScaleTransform x:Name="DotRingScale" ScaleX="1" ScaleY="1"/>
+                    </TransformGroup>
+                </Ellipse.RenderTransform>
+                <Ellipse.Effect>
+                    <DropShadowEffect Color="#FF69B4" BlurRadius="14" ShadowDepth="0" Opacity="0.7"/>
+                </Ellipse.Effect>
+            </Ellipse>
             <Ellipse x:Name="Dot" Width="44" Height="44">
                 <Ellipse.Fill>
                     <RadialGradientBrush>

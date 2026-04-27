@@ -324,21 +324,15 @@ namespace ConditioningControlPanel.Services
         public event Action<double, double>? OnHeadPose;
 
         // Geometric correction applied to the iris vector when a baseline pose
-        // is recorded in the calibration. ix' = ix + Yaw * sin(deltaYaw),
-        // iy' = iy + Pitch * sin(deltaPitch). Coefficients are educated
-        // starting points — if the cursor moves the wrong way when the head
-        // turns, flip the sign of the matching coefficient. If it
-        // overcorrects/undercorrects, scale the magnitude.
-        // Currently disabled: when first wired up the comp made gaze
-        // accuracy and stability noticeably worse rather than better,
-        // suggesting either a sign flip or a magnitude that's far off for
-        // this camera. Pipeline stays in place (solvePnP runs, baseline is
-        // captured at calibration) so the only thing needed to re-enable is
-        // flipping HeadPoseCompEnabled — and ideally tuning the coefficients
-        // off real diag logs first.
-        private const bool HeadPoseCompEnabled = false;
-        private const double YawCompCoeff = 0.4;
-        private const double PitchCompCoeff = 0.3;
+        // is recorded in the calibration:
+        //   ix' = ix + AxYaw * sin(Δyaw) + AxPitch * sin(Δpitch)
+        //   iy' = iy + AyYaw * sin(Δyaw) + AyPitch * sin(Δpitch)
+        // Coefficients are fit empirically per calibration (in
+        // WebcamCalibrationWindow.FitHeadPoseComp) from the natural head-pose
+        // variance during sampling, so sign and magnitude are correct by
+        // construction for this camera/face. Comp is skipped when the
+        // calibration didn't include a fit (older calibrations, or the user
+        // held perfectly still during sampling so R² was below threshold).
 
         // Canonical 3D face model (mm-ish, dlib/OpenCV head-pose tutorial
         // values). Anchored at the nose tip; +X to subject's left (image
@@ -1016,22 +1010,25 @@ namespace ConditioningControlPanel.Services
             var emit = _lastEmittedSide;
             Dispatch(() => OnGazeSide?.Invoke(emit));
 
-            // Apply head-pose compensation if the calibration recorded a
-            // baseline pose. When the head turns off the calibration pose,
-            // the eyes counter-rotate to keep gaze on the same target — that
-            // shifts the iris-vs-corner geometry even though gaze didn't
-            // move. A sin(deltaPose)-scaled offset on the iris vector cancels
-            // most of that shift before the polynomial fit consumes it.
-            // Old calibrations have BaselineHeadPose=null → skipped (path is
-            // no worse than before this change).
+            // Apply head-pose compensation if the calibration recorded both a
+            // baseline pose AND empirically-fit comp coefficients. When the
+            // head turns off the calibration pose, the eyes counter-rotate to
+            // keep gaze on the same target — that shifts the iris-vs-corner
+            // geometry even though gaze didn't move. The comp cancels most
+            // of that shift before the polynomial fit consumes it.
+            // Old calibrations or "user held perfectly still" calibrations
+            // have HeadPoseComp=null → comp skipped (path is no worse than
+            // not having a fit).
             double correctedDx = smoothDx;
             double correctedDy = smoothDy;
-            if (HeadPoseCompEnabled && _headPoseValid && Calibration?.BaselineHeadPose is { } baseline)
+            if (_headPoseValid
+                && Calibration?.BaselineHeadPose is { } baseline
+                && Calibration?.HeadPoseComp is { } comp)
             {
-                var deltaYaw = LastYaw - baseline.Yaw;
-                var deltaPitch = LastPitch - baseline.Pitch;
-                correctedDx += YawCompCoeff * Math.Sin(deltaYaw);
-                correctedDy += PitchCompCoeff * Math.Sin(deltaPitch);
+                var sinDyaw = Math.Sin(LastYaw - baseline.Yaw);
+                var sinDpitch = Math.Sin(LastPitch - baseline.Pitch);
+                correctedDx += comp.AxYaw * sinDyaw + comp.AxPitch * sinDpitch;
+                correctedDy += comp.AyYaw * sinDyaw + comp.AyPitch * sinDpitch;
             }
 
             var screenPoint = ProjectGazeToScreen(correctedDx, correctedDy);

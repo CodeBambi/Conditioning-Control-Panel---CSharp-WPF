@@ -36,7 +36,7 @@ namespace ConditioningControlPanel
             }
             if (App.Webcam.Calibration == null)
             {
-                ShowError("No calibration loaded. Run Calibrate (9-point) first — the tracker test needs a calibration to project gaze onto the screen.");
+                ShowError("No calibration loaded. Run Calibrate (16-point) first — the tracker test needs a calibration to project gaze onto the screen.");
                 return;
             }
 

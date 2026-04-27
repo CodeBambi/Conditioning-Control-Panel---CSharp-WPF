@@ -17,7 +17,7 @@ namespace ConditioningControlPanel.Services
     {
         public const string FileName = "webcam-calibration.json";
 
-        /// <summary>"TwoPoint" (gaze-side only), "FivePoint" (legacy), or "NinePoint" (current, 3×3 grid for tighter homography fit).</summary>
+        /// <summary>"TwoPoint" (gaze-side only), "FivePoint" (legacy), "NinePoint" (3×3), or "SixteenPoint" (current, 4×4 grid for tighter polynomial fit at edges/corners and curved screens).</summary>
         [JsonProperty] public string Mode { get; set; } = "";
 
         [JsonProperty] public DateTime Timestamp { get; set; }
@@ -53,6 +53,16 @@ namespace ConditioningControlPanel.Services
         /// Null on calibrations from older app versions — compensation skipped.
         /// </summary>
         [JsonProperty] public CalibrationHeadPose? BaselineHeadPose { get; set; }
+
+        /// <summary>
+        /// Empirically-fit head-pose compensation coefficients for the iris
+        /// vector. Replaces the old hardcoded constants (which had to be
+        /// disabled because their sign/magnitude was wrong for this camera).
+        /// Fitted at calibration finalize time from the natural head-pose
+        /// variance across the sampling windows; null when the variance was
+        /// too small to fit reliably (R² below threshold).
+        /// </summary>
+        [JsonProperty] public HeadPoseCompFit? HeadPoseComp { get; set; }
 
         public static string FilePath => Path.Combine(App.UserDataPath, FileName);
 
@@ -130,5 +140,27 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>Rotation around horizontal axis. Positive = subject pitched head one way (sign empirical).</summary>
         [JsonProperty] public double Pitch { get; set; }
+    }
+
+    /// <summary>
+    /// Iris-vector correction coefficients fit empirically from the natural
+    /// head-pose variance during calibration sampling. Applied as
+    ///   ix' = ix + AxYaw * sin(Δyaw) + AxPitch * sin(Δpitch)
+    ///   iy' = iy + AyYaw * sin(Δyaw) + AyPitch * sin(Δpitch)
+    /// where Δ is (live pose − BaselineHeadPose). Sign and magnitude come out
+    /// of the LS fit, so they're correct by construction for this camera/face.
+    /// </summary>
+    public class HeadPoseCompFit
+    {
+        [JsonProperty] public double AxYaw { get; set; }
+        [JsonProperty] public double AxPitch { get; set; }
+        [JsonProperty] public double AyYaw { get; set; }
+        [JsonProperty] public double AyPitch { get; set; }
+        /// <summary>Coefficient of determination of the iris-X residual fit. Diagnostic only.</summary>
+        [JsonProperty] public double RSquaredX { get; set; }
+        /// <summary>Coefficient of determination of the iris-Y residual fit. Diagnostic only.</summary>
+        [JsonProperty] public double RSquaredY { get; set; }
+        /// <summary>Number of samples that contributed to the fit.</summary>
+        [JsonProperty] public int SampleCount { get; set; }
     }
 }
