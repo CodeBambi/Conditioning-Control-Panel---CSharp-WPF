@@ -47,11 +47,6 @@ public class GazeFocusService : IDisposable
     private Bubble? _currentBubble;
     private FlashWindow? _currentFlash;
 
-    // Key the shared GazeDebugCursorService uses to remember Focus Gaze
-    // wants the dot visible. The Lab webcam-debug toggle uses its own key,
-    // so the cursor stays up while either client wants it.
-    private const string CursorKey = "focus-gaze";
-
     public bool IsActive { get; private set; }
     public int DwellMs { get; set; } = DefaultDwellMs;
 
@@ -81,7 +76,9 @@ public class GazeFocusService : IDisposable
         if (App.Webcam.Calibration == null) return false;
 
         Subscribe();
-        App.GazeCursor?.Show(CursorKey);
+        // Cursor visibility is controlled solely by the explicit "Show debug
+        // gaze cursor" checkbox in the Lab webcam-debug card. Focus Gaze runs
+        // silently — turning it on shouldn't paint a dot on the user's screen.
 
         _timer = new DispatcherTimer(DispatcherPriority.Render)
         {
@@ -110,7 +107,6 @@ public class GazeFocusService : IDisposable
 
         ClearTarget();
         App.GazeCursor?.SetLocked(false);
-        App.GazeCursor?.Hide(CursorKey);
         _lastGazePoint = null;
         _faceLost = false;
         _cooldownUntil = DateTime.MinValue;
