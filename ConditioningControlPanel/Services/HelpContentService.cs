@@ -1101,6 +1101,80 @@ namespace ConditioningControlPanel.Services
                              "filenames (achievements/*.png, features/*.png, skills/*.png, avatar_pose*.png, etc). " +
                              "Voice lines in resources/sounds/flashes_audio/ replace the default set entirely. " +
                              "Text replacements are applied globally across all UI text."
+            },
+
+            ["WebcamGames"] = new HelpContent
+            {
+                SectionId = "WebcamGames",
+                Icon = "\ud83d\udc41",
+                Title = "Webcam Games",
+                WhatItDoes = "Two webcam-driven games that use the position of your eyes to interact: " +
+                             "Gaze Minigame (look-at-target conditioning) and Focus Gaze (dwell-to-pop). " +
+                             "Both require a one-time 16-point calibration and explicit camera consent. " +
+                             "Frames are processed locally by MediaPipe \u2014 nothing is recorded, uploaded, or sent anywhere.",
+                Tips = new List<string>
+                {
+                    "Calibrate in even, frontal lighting \u2014 hard side-light from a window throws iris detection off",
+                    "Sit roughly 50\u201370 cm from the camera so your whole face is comfortably in frame",
+                    "Re-run calibration if you change seating, monitor height, or move the laptop \u2014 it's posture-specific",
+                    "You don't need to stop blinking; blinks are filtered out of the gaze signal",
+                    "If hits feel inconsistent, run Tracker Test first to verify face/iris detection before blaming the game"
+                },
+                HowItWorks = "MediaPipe FaceMesh runs locally on each webcam frame to track 478 facial landmarks " +
+                             "including the iris contours. Head pose is estimated and used to compensate small movements " +
+                             "so the gaze stays stable when you tilt your head. The iris position is mapped to screen " +
+                             "coordinates via the polynomial fit captured during 16-point calibration. Game targets use " +
+                             "an enlarged hitbox (\u00d73 of their visual size) for forgiveness, and dwell timers ensure " +
+                             "a quick glance doesn't count as a deliberate look."
+            },
+
+            ["GazeMinigame"] = new HelpContent
+            {
+                SectionId = "GazeMinigame",
+                Icon = "\ud83c\udfaf",
+                Title = "Gaze Minigame",
+                WhatItDoes = "A focus-conditioning round: 'correct' content rewards you for looking at it, " +
+                             "while distractor content is meant to be ignored. Builds tolerance for staying " +
+                             "locked onto chosen stimuli, and trains away the urge to dart your eyes around the screen. " +
+                             "Plays in its own window so it can sit alongside a session.",
+                Tips = new List<string>
+                {
+                    "Calibrate before opening \u2014 the minigame won't start without a working calibration",
+                    "Start with short rounds; eye fatigue is a real thing and degrades tracking accuracy",
+                    "Mix in distractors you actually find tempting \u2014 the conditioning works best when ignoring is hard",
+                    "If hits feel sluggish, increase webcam frame rate or close other apps competing for the camera",
+                    "The Focus Gaze toggle in the Lab is independent \u2014 you can run either, or both"
+                },
+                HowItWorks = "Each round spawns target and distractor visuals at scripted positions. The webcam " +
+                             "tracker produces a smoothed gaze coordinate at ~30 Hz, which is tested against each " +
+                             "active hitbox. Looking at a target accumulates a reward timer; looking at a distractor " +
+                             "accumulates a penalty timer. Scoring rewards sustained, deliberate gaze \u2014 brief glances " +
+                             "are filtered out by the same dwell logic used in Focus Gaze."
+            },
+
+            ["FocusGaze"] = new HelpContent
+            {
+                SectionId = "FocusGaze",
+                Icon = "\u2728",
+                Title = "Focus Gaze",
+                WhatItDoes = "Hands-free interaction layer for the regular Bubble and Flash systems: " +
+                             "look at a bubble or flash for about a second and it pops on its own \u2014 no clicking. " +
+                             "Stacks on top of normal click-to-pop, so you can use either at any time. " +
+                             "Useful when your hands are busy, or as a slow, mindful alternative to clicking.",
+                Tips = new List<string>
+                {
+                    "Calibration is mandatory; the toggle won't engage without one",
+                    "If random items pop while you're scanning around, your calibration may have drifted \u2014 redo it",
+                    "Dwell time is roughly 1 second \u2014 long enough that quick glances don't count as a hit",
+                    "Pair with the debug gaze cursor while learning where the tracker thinks you're looking",
+                    "Focus Gaze respects bubble/flash hitboxes, so smaller items naturally need a steadier look"
+                },
+                HowItWorks = "While enabled, every active Bubble and Flash registers itself with the gaze focus service. " +
+                             "On each tracker frame the gaze coordinate is tested against every registered hitbox " +
+                             "(enlarged \u00d73 for forgiveness). The first item under the gaze starts a dwell timer; " +
+                             "if the gaze stays inside the hitbox long enough, the item's normal pop/dismiss handler " +
+                             "fires \u2014 identical to a click. Looking away cancels the dwell. Webcam consent and a stored " +
+                             "calibration are both prerequisites; either failing produces a localized status message."
             }
         };
 

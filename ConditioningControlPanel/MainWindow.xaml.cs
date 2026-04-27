@@ -3382,14 +3382,14 @@ namespace ConditioningControlPanel
                     if (ok != true || !dlg.ConsentGiven)
                     {
                         SyncFocusGazeToggle(false);
-                        if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = "Camera consent is required.";
+                        if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_consent_required");
                         return;
                     }
                 }
 
                 if (App.GazeFocus.Start())
                 {
-                    if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = "Active — gaze and dwell.";
+                    if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_active");
                 }
                 else
                 {
@@ -3397,9 +3397,9 @@ namespace ConditioningControlPanel
                     if (TxtFocusGazeStatus != null)
                     {
                         if (App.Webcam?.Calibration == null)
-                            TxtFocusGazeStatus.Text = "Calibrate the webcam first (Lab → webcam tracker test).";
+                            TxtFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_calibrate_first");
                         else
-                            TxtFocusGazeStatus.Text = $"Couldn't start the webcam (state: {App.Webcam?.State}).";
+                            TxtFocusGazeStatus.Text = Localization.Loc.GetF("label_focus_gaze_webcam_failed_format", App.Webcam?.State);
                     }
                 }
             }
@@ -3449,7 +3449,7 @@ namespace ConditioningControlPanel
 
             if (svc.Calibration == null)
             {
-                AppendWebcamDebugLog("No calibration loaded — run Calibrate (9-point) first.");
+                AppendWebcamDebugLog("No calibration loaded — run Calibrate (16-point) first.");
                 if (startedHere) { svc.Stop(); BtnWebcamDebugStart.Content = "Start tracking"; }
                 return;
             }
@@ -12513,6 +12513,9 @@ namespace ConditioningControlPanel
 
             // Lab tab
             SetHelpContent(HelpBtnQuiz, "Quiz");
+            SetHelpContent(HelpBtnWebcamGames, "WebcamGames");
+            SetHelpContent(HelpBtnGazeMinigame, "GazeMinigame");
+            SetHelpContent(HelpBtnFocusGaze, "FocusGaze");
             SetHelpContent(HelpBtnKeywordTriggers, "KeywordTriggers");
             SetHelpContent(HelpBtnScreenOcr, "ScreenOcr");
             SetHelpContent(HelpBtnRemoteControl, "RemoteControl");
@@ -23476,6 +23479,21 @@ namespace ConditioningControlPanel
                     App.KeywordTriggers?.Dispose();
                     App.KeywordHighlight?.Dispose();
                     App.Overlay?.Dispose();
+                }
+                catch { }
+
+                // Stop the webcam pipeline immediately on close. Critical: the
+                // gaze debug cursor is an unowned visible window that keeps WPF
+                // alive past MainWindow close — if we don't tear this down here,
+                // App.OnExit never runs, the capture loop keeps holding the
+                // camera handle, and the cursor keeps moving with the app
+                // "closed". Order matters: stop dependents (cursor + focus
+                // gaze) before stopping Webcam, then kill the camera handle.
+                try
+                {
+                    App.GazeFocus?.Dispose();
+                    App.GazeCursor?.Dispose();
+                    App.Webcam?.Dispose();
                 }
                 catch { }
             }
