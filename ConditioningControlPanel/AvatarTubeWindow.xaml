@@ -109,27 +109,109 @@
                     BorderThickness="3"
                     Padding="15,12">
 
-                <!-- ScrollViewer sizes to content, scrolls when over MaxHeight -->
-                <ScrollViewer x:Name="SpeechScroller"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled"
-                              MaxHeight="280"
-                              Style="{StaticResource TinyPinkScrollViewer}">
+                <Grid>
+                    <!-- Single-message mode: existing bubble content -->
+                    <ScrollViewer x:Name="SpeechScroller"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  MaxHeight="280"
+                                  Style="{StaticResource TinyPinkScrollViewer}">
 
-                    <!-- Speech text with bubbly pink font -->
-                    <TextBlock x:Name="TxtSpeech"
-                               Text=""
-                               Foreground="{DynamicResource PinkBrush}"
-                               FontSize="20"
-                               FontWeight="Bold"
-                               TextWrapping="Wrap"
-                               TextAlignment="Left"
-                               Padding="0,0,8,0">
-                        <TextBlock.Effect>
-                            <DropShadowEffect Color="Black" BlurRadius="2" ShadowDepth="1.5" Direction="315" Opacity="0.8"/>
-                        </TextBlock.Effect>
-                    </TextBlock>
-                </ScrollViewer>
+                        <!-- Speech text with bubbly pink font -->
+                        <TextBlock x:Name="TxtSpeech"
+                                   Text=""
+                                   Foreground="{DynamicResource PinkBrush}"
+                                   FontSize="20"
+                                   FontWeight="Bold"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Left"
+                                   Padding="0,0,8,0">
+                            <TextBlock.Effect>
+                                <DropShadowEffect Color="Black" BlurRadius="2" ShadowDepth="1.5" Direction="315" Opacity="0.8"/>
+                            </TextBlock.Effect>
+                        </TextBlock>
+                    </ScrollViewer>
+
+                    <!-- Chat history mode: scrollable WhatsApp-style log -->
+                    <Grid x:Name="ChatHistoryView" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <DockPanel Grid.Row="0" Margin="0,0,0,6" LastChildFill="True">
+                            <Button x:Name="BtnCloseChatHistory"
+                                    DockPanel.Dock="Right"
+                                    Content="✕"
+                                    Width="24" Height="24"
+                                    FontSize="14"
+                                    FontWeight="Bold"
+                                    Background="Transparent"
+                                    Foreground="{DynamicResource PinkBrush}"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    Click="BtnCloseChatHistory_Click"
+                                    ToolTip="{loc:Str tooltip_close_chat_history}"/>
+                            <TextBlock Text="{loc:Str label_chat_history_title}"
+                                       Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
+
+                        <ScrollViewer x:Name="ChatHistoryScroller"
+                                      Grid.Row="1"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      MaxHeight="420"
+                                      Style="{StaticResource TinyPinkScrollViewer}">
+                            <Grid>
+                                <!-- Empty-state hint when no chat history yet -->
+                                <TextBlock x:Name="TxtChatHistoryEmpty"
+                                           Text="{loc:Str label_chat_history_empty}"
+                                           Foreground="#AAAAAA"
+                                           FontSize="14"
+                                           FontStyle="Italic"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,20,0,20"
+                                           Visibility="Collapsed"/>
+
+                                <ItemsControl x:Name="ChatHistoryList"
+                                              HorizontalContentAlignment="Stretch">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border CornerRadius="10" Padding="9,6" Margin="2,3" MaxWidth="380">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="HorizontalAlignment" Value="Left"/>
+                                                        <Setter Property="Background" Value="#3D2A55"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                                                <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                                <Setter Property="Background" Value="#FF69B4"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Text}"
+                                                               Foreground="White"
+                                                               FontSize="14"
+                                                               TextWrapping="Wrap"/>
+                                                    <TextBlock Text="{Binding TimeLabel}"
+                                                               Foreground="#DDDDDD"
+                                                               FontSize="10"
+                                                               HorizontalAlignment="Right"
+                                                               Margin="0,2,0,0"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
             </Border>
 
             <!-- Text Input Panel (hidden by default) - Z-Index 3, positioned near avatar -->
@@ -304,6 +386,7 @@
                         </MenuItem>
                         <MenuItem x:Name="MenuItemMute" Header="{loc:Str section_mute_avatar}" Click="MenuItemMute_Click"/>
                         <Separator/>
+                        <MenuItem x:Name="MenuItemShowChatHistory" Header="{loc:Str section_show_chat_history}" Click="MenuItemShowChatHistory_Click"/>
                         <MenuItem x:Name="MenuItemMuteWhispers" Header="{loc:Str section_mute_whispers}" Click="MenuItemMuteWhispers_Click"/>
                         <MenuItem x:Name="MenuItemPauseBrowser" Header="{loc:Str section_pause_browser}" Click="MenuItemPauseBrowser_Click"/>
                     </ContextMenu>

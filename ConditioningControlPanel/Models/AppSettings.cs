@@ -1897,6 +1897,16 @@ namespace ConditioningControlPanel.Models
             set { _idleGiggleIntervalSeconds = Math.Clamp(value, 10, 600); OnPropertyChanged(); }
         }
 
+        private double _bubbleDurationSeconds = 2.0;
+        /// <summary>
+        /// How long speech bubbles stay on screen (in seconds, 1-10). Default 2.
+        /// </summary>
+        public double BubbleDurationSeconds
+        {
+            get => _bubbleDurationSeconds;
+            set { _bubbleDurationSeconds = Math.Clamp(value, 1.0, 10.0); OnPropertyChanged(); }
+        }
+
         // ============================================================
         // AWARENESS MODE (Window Tracking) - Opt-in feature
         // ============================================================

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -86,6 +87,27 @@ namespace ConditioningControlPanel
             Preset,     // Preset phrases (click reactions, idle, etc.)
             Trigger,    // Random trigger phrases
             AI          // AI-generated responses
+        }
+
+        // Chat history: only the conversational pair (user prompts + AI replies),
+        // not random preset/trigger chatter. Capped at MaxChatHistorySize entries.
+        public class ChatMessage
+        {
+            public string Text { get; set; } = string.Empty;
+            public bool IsUser { get; set; }
+            public DateTime Timestamp { get; set; } = DateTime.Now;
+            public string TimeLabel => Timestamp.ToString("HH:mm");
+        }
+        private const int MaxChatHistorySize = 100;
+        public ObservableCollection<ChatMessage> ChatHistory { get; } = new();
+        private bool _isShowingChatHistory = false;
+
+        private void AddToChatHistory(string text, bool isUser)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            ChatHistory.Add(new ChatMessage { Text = text, IsUser = isUser });
+            while (ChatHistory.Count > MaxChatHistorySize)
+                ChatHistory.RemoveAt(0);
         }
 
         // Thinking animation: rotating phrase + animated dots while waiting for AI reply.
@@ -233,6 +255,12 @@ namespace ConditioningControlPanel
 
             // Apply the user-configured chat shortcut keybinding (Ctrl+T by default).
             Loaded += (_, _) => ApplyChatShortcutTo(this);
+
+            // Bind chat history list to the rolling collection of conversational messages.
+            ChatHistoryList.ItemsSource = ChatHistory;
+
+            // Esc closes chat history mode if open.
+            PreviewKeyDown += AvatarTubeWindow_PreviewKeyDown;
 
             _parentWindow = parentWindow;
             // Don't set Owner - it causes black window artifacts during minimize
@@ -2237,6 +2265,74 @@ namespace ConditioningControlPanel
         /// </summary>
         /// <param name="text">Text to display</param>
         /// <param name="playSound">Whether to play giggle sound (default true for AI responses)</param>
+        // ============================================================
+        // CHAT HISTORY MODE
+        // ============================================================
+
+        private void MenuItemShowChatHistory_Click(object sender, RoutedEventArgs e)
+        {
+            EnterChatHistoryMode();
+        }
+
+        private void BtnCloseChatHistory_Click(object sender, RoutedEventArgs e)
+        {
+            ExitChatHistoryMode();
+        }
+
+        private void AvatarTubeWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape && _isShowingChatHistory)
+            {
+                ExitChatHistoryMode();
+                e.Handled = true;
+            }
+        }
+
+        private void EnterChatHistoryMode()
+        {
+            // Cancel any in-flight bubble timers — chat history takes over the bubble.
+            _speechTimer?.Stop();
+            _speechDelayTimer?.Stop();
+            StopThinkingAnimation();
+            _isWaitingForAi = false;
+            _isGiggling = false;
+
+            _isShowingChatHistory = true;
+
+            // Show empty-state hint when there are no captured messages yet.
+            TxtChatHistoryEmpty.Visibility = ChatHistory.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            // Swap bubble content: hide single-message view, show chat history.
+            SpeechScroller.Visibility = Visibility.Collapsed;
+            ChatHistoryView.Visibility = Visibility.Visible;
+
+            // Enlarge bubble for the chat history layout.
+            SpeechBubble.MaxWidth = 600;
+
+            SpeechBubble.UpdateLayout();
+            SpeechBubble.Visibility = Visibility.Visible;
+
+            // Auto-scroll to most recent message.
+            Dispatcher.BeginInvoke(new Action(() => ChatHistoryScroller.ScrollToBottom()),
+                System.Windows.Threading.DispatcherPriority.Background);
+
+            if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
+            {
+                StartZOrderRefreshTimer();
+                BringAttachedPairToFront();
+            }
+        }
+
+        private void ExitChatHistoryMode()
+        {
+            _isShowingChatHistory = false;
+            ChatHistoryView.Visibility = Visibility.Collapsed;
+            SpeechScroller.Visibility = Visibility.Visible;
+            SpeechBubble.MaxWidth = 380; // Restore default bubble width.
+            SpeechBubble.Visibility = Visibility.Collapsed;
+            StopZOrderRefreshTimer();
+        }
+
         public void GigglePriority(string text, bool playSound = true)
         {
             DispatcherHelper.RunOnUI(() =>
@@ -2256,6 +2352,10 @@ namespace ConditioningControlPanel
 
                 // Show immediately
                 _isGiggling = false;
+
+                // Capture AI reply for chat history
+                AddToChatHistory(text, isUser: false);
+
                 ShowGiggle(text, playSound: playSound, source: SpeechSource.AI);
 
                 App.Logger?.Debug("Priority speech (queue cleared): {Text}", text);
@@ -2270,6 +2370,15 @@ namespace ConditioningControlPanel
         /// <param name="source">The source of the speech (for delay calculation)</param>
         private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset, string? phraseAudioPath = null)
         {
+            // Chat history view owns the bubble — swap back to single-message mode before showing.
+            if (_isShowingChatHistory)
+            {
+                _isShowingChatHistory = false;
+                ChatHistoryView.Visibility = Visibility.Collapsed;
+                SpeechScroller.Visibility = Visibility.Visible;
+                SpeechBubble.MaxWidth = 380;
+            }
+
             // Skip if muted or avatar not visible on screen
             if (_isMuted || !IsAvatarVisibleOnScreen)
             {
@@ -2335,13 +2444,17 @@ namespace ConditioningControlPanel
                 BringAttachedPairToFront();
             }
 
-            // Calculate display duration based on text length
-            // Base: 5 seconds, plus ~0.05s per character, min 5s, max 14s
-            // AI responses get slightly longer display time
-            double baseDuration = source == SpeechSource.AI ? 6.0 : 5.0;
-            double perCharDuration = 0.05;
-            double calculatedDuration = baseDuration + (text.Length * perCharDuration);
-            double displayDuration = Math.Clamp(calculatedDuration, 5.0, 16.0);
+            // Display duration is user-controlled via Companion tab slider (1-10s, default 2).
+            // Long AI replies are still readable: hovering keeps the bubble open, and
+            // "Show chat history" preserves the full conversation for re-reading.
+            double displayDuration = Math.Clamp(App.Settings?.Current?.BubbleDurationSeconds ?? 2.0, 1.0, 10.0);
+
+            // The typewriter eats into the visible window. Add its estimated runtime so the
+            // slider value reflects fully-rendered reading time, not raw bubble-open time.
+            if (source == SpeechSource.AI && !_isWaitingForAi)
+            {
+                displayDuration += EstimateTypewriterDurationMs(text.Length) / 1000.0;
+            }
 
             // Hide after calculated duration
             _speechTimer?.Stop();
@@ -4601,6 +4714,22 @@ namespace ConditioningControlPanel
         /// On completion, calls <see cref="PopulateSpeechBubble"/> for the final pass so
         /// video-name hyperlinks and markdown links become clickable.
         /// </summary>
+        /// <summary>
+        /// Estimates how long the typewriter will take for a given text length, mirroring
+        /// the math in <see cref="StartTypewriter"/> and <see cref="TypewriterTick"/>.
+        /// Used by <see cref="ShowGiggle"/> to compensate the bubble timer so the slider
+        /// value reflects readable time rather than bubble-open time.
+        /// </summary>
+        private static int EstimateTypewriterDurationMs(int length)
+        {
+            if (length <= 0) return 0;
+            int charsPerTick = Math.Max(1, length / 100);
+            int stepMs = Math.Min(TypewriterMaxStepMs,
+                Math.Max(TypewriterMinStepMs, TypewriterTotalBudgetMs / Math.Max(1, length)));
+            int ticks = (int)Math.Ceiling((double)length / charsPerTick);
+            return stepMs * ticks;
+        }
+
         private void StartTypewriter(string fullText)
         {
             StopTypewriter();
@@ -4691,6 +4820,9 @@ namespace ConditioningControlPanel
 
             TxtUserInput.Text = "";
             ToggleInputPanel();
+
+            // Capture user prompt for chat history
+            AddToChatHistory(input, isUser: true);
 
             if (App.Settings?.Current?.AiChatEnabled == true && App.Ai != null && App.Ai.IsAvailable)
             {
