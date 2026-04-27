@@ -6908,7 +6908,7 @@
                                                Foreground="White" FontSize="14" FontWeight="SemiBold"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                    <Button x:Name="BtnWebcamDebugCalibrate" Content="Calibrate (5-point)"
+                                    <Button x:Name="BtnWebcamDebugCalibrate" Content="Calibrate (9-point)"
                                             Padding="12,8" Margin="0,0,8,0"
                                             Background="#33333A" Foreground="White" BorderBrush="#FF8800"
                                             BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
@@ -6923,6 +6923,11 @@
                                             FontWeight="Bold" Cursor="Hand" Click="BtnWebcamDebugStart_Click"/>
                                 </StackPanel>
                             </Grid>
+
+                            <CheckBox x:Name="ChkWebcamDebugCursor" Content="Show debug gaze cursor"
+                                      Foreground="#CCCCCC" Margin="0,10,0,0"
+                                      Checked="ChkWebcamDebugCursor_Changed"
+                                      Unchecked="ChkWebcamDebugCursor_Changed"/>
 
                             <TextBlock x:Name="TxtWebcamDebugCounters"
                                        Text="Face: — | Blinks: 0 | Gaze: —"

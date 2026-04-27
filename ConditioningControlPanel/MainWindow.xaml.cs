@@ -3449,7 +3449,7 @@ namespace ConditioningControlPanel
 
             if (svc.Calibration == null)
             {
-                AppendWebcamDebugLog("No calibration loaded — run Calibrate (5-point) first.");
+                AppendWebcamDebugLog("No calibration loaded — run Calibrate (9-point) first.");
                 if (startedHere) { svc.Stop(); BtnWebcamDebugStart.Content = "Start tracking"; }
                 return;
             }
@@ -3466,6 +3466,21 @@ namespace ConditioningControlPanel
             {
                 svc.Stop();
                 BtnWebcamDebugStart.Content = "Start tracking";
+            }
+        }
+
+        private void ChkWebcamDebugCursor_Changed(object sender, RoutedEventArgs e)
+        {
+            if (ChkWebcamDebugCursor == null) return;
+            if (ChkWebcamDebugCursor.IsChecked == true)
+            {
+                App.GazeCursor?.Show("debug-toggle");
+                AppendWebcamDebugLog("Debug cursor enabled. Tracking must be running + calibrated for the dot to appear.");
+            }
+            else
+            {
+                App.GazeCursor?.Hide("debug-toggle");
+                AppendWebcamDebugLog("Debug cursor hidden.");
             }
         }
 

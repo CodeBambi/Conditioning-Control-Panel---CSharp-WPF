@@ -1,8 +1,5 @@
 using System;
-using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Media;
-using System.Windows.Shapes;
 using System.Windows.Threading;
 
 namespace ConditioningControlPanel.Services;
@@ -50,17 +47,10 @@ public class GazeFocusService : IDisposable
     private Bubble? _currentBubble;
     private FlashWindow? _currentFlash;
 
-    // Debug gaze cursor (translucent click-through dot following the gaze).
-    private Window? _cursorWindow;
-    private Ellipse? _cursorDot;
-    private bool _cursorLocked; // last-known lock state, drives color
-
-    private static readonly Brush CursorIdleFill =
-        new SolidColorBrush(Color.FromArgb(0xB4, 0xFF, 0x69, 0xB4));
-    private static readonly Brush CursorLockedFill =
-        new SolidColorBrush(Color.FromArgb(0xC8, 0xFF, 0xD0, 0x80));
-    private static readonly Brush CursorStroke =
-        new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF));
+    // Key the shared GazeDebugCursorService uses to remember Focus Gaze
+    // wants the dot visible. The Lab webcam-debug toggle uses its own key,
+    // so the cursor stays up while either client wants it.
+    private const string CursorKey = "focus-gaze";
 
     public bool IsActive { get; private set; }
     public int DwellMs { get; set; } = DefaultDwellMs;
@@ -70,9 +60,9 @@ public class GazeFocusService : IDisposable
 
     public GazeFocusService()
     {
-        // ShutdownMode=OnLastWindowClose means our cursor window keeps the
-        // process alive after MainWindow closes. Close it on app-exit so the
-        // window count drops to zero and shutdown can complete. Mirrors
+        // ShutdownMode=OnLastWindowClose means subsystems holding hidden
+        // windows can keep the process alive after MainWindow closes —
+        // close ourselves on app-exit so we drop those references. Mirrors
         // KeywordHighlightService.cs:30-31.
         if (Application.Current != null)
             Application.Current.Exit += (_, _) => Stop();
@@ -91,7 +81,7 @@ public class GazeFocusService : IDisposable
         if (App.Webcam.Calibration == null) return false;
 
         Subscribe();
-        EnsureCursor();
+        App.GazeCursor?.Show(CursorKey);
 
         _timer = new DispatcherTimer(DispatcherPriority.Render)
         {
@@ -119,7 +109,8 @@ public class GazeFocusService : IDisposable
         _timer = null;
 
         ClearTarget();
-        DisposeCursor();
+        App.GazeCursor?.SetLocked(false);
+        App.GazeCursor?.Hide(CursorKey);
         _lastGazePoint = null;
         _faceLost = false;
         _cooldownUntil = DateTime.MinValue;
@@ -152,19 +143,19 @@ public class GazeFocusService : IDisposable
     private void HandleGazeMove(Point p)
     {
         _lastGazePoint = p;
-        UpdateCursorPosition(p);
+        // Cursor visualization is owned by GazeDebugCursorService — it
+        // subscribes to OnGazeMove independently when any client (us or
+        // the Lab debug toggle) has Show()'d its key.
     }
 
     private void HandleFaceLost()
     {
         _faceLost = true;
-        SetCursorVisible(false);
     }
 
     private void HandleFaceFound()
     {
         _faceLost = false;
-        SetCursorVisible(true);
     }
 
     private void HandleBlink()
@@ -207,14 +198,14 @@ public class GazeFocusService : IDisposable
             if (DateTime.UtcNow < _cooldownUntil)
             {
                 ClearTarget();
-                SetCursorLocked(false);
+                App.GazeCursor?.SetLocked(false);
                 return;
             }
 
             if (_faceLost || !_lastGazePoint.HasValue)
             {
                 ClearTarget();
-                SetCursorLocked(false);
+                App.GazeCursor?.SetLocked(false);
                 return;
             }
 
@@ -224,11 +215,11 @@ public class GazeFocusService : IDisposable
             if (hit == null)
             {
                 ClearTarget();
-                SetCursorLocked(false);
+                App.GazeCursor?.SetLocked(false);
                 return;
             }
 
-            SetCursorLocked(true);
+            App.GazeCursor?.SetLocked(true);
 
             if (hit.Value.Bubble is Bubble b)
             {
@@ -373,117 +364,6 @@ public class GazeFocusService : IDisposable
             _currentFlash = null;
         }
     }
-
-    // ─── Debug gaze cursor ───────────────────────────────────────────────
-
-    private const double CursorSize = 14;
-
-    private void EnsureCursor()
-    {
-        if (_cursorWindow != null) return;
-        try
-        {
-            _cursorDot = new Ellipse
-            {
-                Width = CursorSize,
-                Height = CursorSize,
-                Fill = CursorIdleFill,
-                Stroke = CursorStroke,
-                StrokeThickness = 2,
-                IsHitTestVisible = false
-            };
-            _cursorWindow = new Window
-            {
-                WindowStyle = WindowStyle.None,
-                AllowsTransparency = true,
-                Background = Brushes.Transparent,
-                Topmost = true,
-                ShowInTaskbar = false,
-                ShowActivated = false,
-                Focusable = false,
-                IsHitTestVisible = false,
-                Width = CursorSize,
-                Height = CursorSize,
-                Content = _cursorDot,
-                // Park offscreen until the first gaze sample so we don't flash
-                // the cursor at (0, 0) on toggle-on.
-                Left = -10000,
-                Top = -10000
-            };
-            _cursorWindow.Show();
-            MakeClickThrough(_cursorWindow);
-            _cursorLocked = false;
-        }
-        catch (Exception ex)
-        {
-            App.Logger?.Debug("GazeFocusService cursor create failed: {Error}", ex.Message);
-            _cursorWindow = null;
-            _cursorDot = null;
-        }
-    }
-
-    private void DisposeCursor()
-    {
-        if (_cursorWindow == null) return;
-        try { _cursorWindow.Close(); } catch { }
-        _cursorWindow = null;
-        _cursorDot = null;
-        _cursorLocked = false;
-    }
-
-    private void UpdateCursorPosition(Point p)
-    {
-        if (_cursorWindow == null) return;
-        try
-        {
-            _cursorWindow.Left = p.X - CursorSize / 2;
-            _cursorWindow.Top = p.Y - CursorSize / 2;
-            if (_cursorWindow.Visibility != Visibility.Visible)
-                _cursorWindow.Visibility = Visibility.Visible;
-        }
-        catch { }
-    }
-
-    private void SetCursorVisible(bool visible)
-    {
-        if (_cursorWindow == null) return;
-        try { _cursorWindow.Visibility = visible ? Visibility.Visible : Visibility.Hidden; }
-        catch { }
-    }
-
-    private void SetCursorLocked(bool locked)
-    {
-        if (_cursorDot == null) return;
-        if (_cursorLocked == locked) return;
-        _cursorLocked = locked;
-        try { _cursorDot.Fill = locked ? CursorLockedFill : CursorIdleFill; }
-        catch { }
-    }
-
-    // ─── Win32 click-through (mirrors BubbleService non-clickable path) ──
-
-    private static void MakeClickThrough(Window w)
-    {
-        try
-        {
-            var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
-            if (hwnd == IntPtr.Zero) return;
-            var ex = GetWindowLong(hwnd, GWL_EXSTYLE);
-            SetWindowLong(hwnd, GWL_EXSTYLE,
-                ex | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
-        }
-        catch { }
-    }
-
-    private const int GWL_EXSTYLE = -20;
-    private const int WS_EX_TRANSPARENT = 0x00000020;
-    private const int WS_EX_TOOLWINDOW = 0x00000080;
-    private const int WS_EX_NOACTIVATE = 0x08000000;
-
-    [DllImport("user32.dll")]
-    private static extern int GetWindowLong(IntPtr hwnd, int index);
-    [DllImport("user32.dll")]
-    private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
 
     public void Dispose() => Stop();
 }

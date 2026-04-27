@@ -15,6 +15,7 @@ using System.Windows.Threading;
 using ConditioningControlPanel.Services;
 using LibVLCSharp.Shared;
 using LibVLCSharp.WPF;
+using XamlAnimatedGif;
 using WpfPoint = System.Windows.Point;
 using VlcMediaPlayer = LibVLCSharp.Shared.MediaPlayer;
 
@@ -366,7 +367,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
 
             if (App.Webcam.Calibration == null)
             {
-                ShowReadyBanner("No gaze calibration loaded yet. Run a 5-point calibration first so the minigame can tell which side you're looking at.", showCalibrateAction: true);
+                ShowReadyBanner("No gaze calibration loaded yet. Run a 9-point calibration first so the minigame can tell which side you're looking at.", showCalibrateAction: true);
                 return;
             }
 
@@ -549,13 +550,25 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             };
             try
             {
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.UriSource = new Uri(path);
-                bmp.EndInit();
-                bmp.Freeze();
-                img.Source = bmp;
+                // GIFs need XamlAnimatedGif — BitmapImage renders only the first frame.
+                if (System.IO.Path.GetExtension(path).Equals(".gif", StringComparison.OrdinalIgnoreCase))
+                {
+                    AnimationBehavior.SetSourceUri(img, new Uri(path));
+                    AnimationBehavior.SetRepeatBehavior(img, RepeatBehavior.Forever);
+                    AnimationBehavior.AddErrorHandler(img, (_, e) =>
+                        App.Logger?.Warning("GazeMinigame: GIF animation error ({Kind}) for {Path}: {Error}",
+                            e.Kind, path, e.Exception?.Message));
+                }
+                else
+                {
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.UriSource = new Uri(path);
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    img.Source = bmp;
+                }
             }
             catch (Exception ex)
             {
