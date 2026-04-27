@@ -329,6 +329,14 @@ namespace ConditioningControlPanel.Services
         // starting points — if the cursor moves the wrong way when the head
         // turns, flip the sign of the matching coefficient. If it
         // overcorrects/undercorrects, scale the magnitude.
+        // Currently disabled: when first wired up the comp made gaze
+        // accuracy and stability noticeably worse rather than better,
+        // suggesting either a sign flip or a magnitude that's far off for
+        // this camera. Pipeline stays in place (solvePnP runs, baseline is
+        // captured at calibration) so the only thing needed to re-enable is
+        // flipping HeadPoseCompEnabled — and ideally tuning the coefficients
+        // off real diag logs first.
+        private const bool HeadPoseCompEnabled = false;
         private const double YawCompCoeff = 0.4;
         private const double PitchCompCoeff = 0.3;
 
@@ -1018,7 +1026,7 @@ namespace ConditioningControlPanel.Services
             // no worse than before this change).
             double correctedDx = smoothDx;
             double correctedDy = smoothDy;
-            if (_headPoseValid && Calibration?.BaselineHeadPose is { } baseline)
+            if (HeadPoseCompEnabled && _headPoseValid && Calibration?.BaselineHeadPose is { } baseline)
             {
                 var deltaYaw = LastYaw - baseline.Yaw;
                 var deltaPitch = LastPitch - baseline.Pitch;
