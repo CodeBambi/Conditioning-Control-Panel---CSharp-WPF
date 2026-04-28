@@ -356,6 +356,9 @@ namespace ConditioningControlPanel
                 App.Video.VideoEnded += OnVideoEnded;
             }
 
+            if (App.LockCard != null)
+                App.LockCard.LockCardCompleted += OnLockCardCompleted;
+
             // Wire up game completion events
             if (App.BubbleCount != null)
             {
@@ -1744,6 +1747,9 @@ namespace ConditioningControlPanel
                     App.Video.VideoAboutToStart -= OnVideoAboutToStart;
                     App.Video.VideoEnded -= OnVideoEnded;
                 }
+
+                if (App.LockCard != null)
+                    App.LockCard.LockCardCompleted -= OnLockCardCompleted;
 
                 // Unsubscribe from game events
                 if (App.BubbleCount != null)
@@ -4194,7 +4200,7 @@ namespace ConditioningControlPanel
             Giggle("Ooh! Pretty spir-rals...");
         }
 
-        private void OnVideoEnded(object? sender, EventArgs e)
+        private async void OnVideoEnded(object? sender, EventArgs e)
         {
             // After video ends, restore z-order so both windows come back together
             if (_isAttached)
@@ -4211,11 +4217,45 @@ namespace ConditioningControlPanel
                     catch { /* Window may be closing */ }
                 }), DispatcherPriority.Background);
             }
+
+            if (App.Settings?.Current?.AiChatEnabled == true && App.Ai?.IsAvailable == true)
+            {
+                var title = App.Video?.LastVideoTitle;
+                if (string.IsNullOrEmpty(title)) return;
+
+                try
+                {
+                    var reaction = await App.Ai.GetVideoDoneReaction(title);
+                    if (!string.IsNullOrWhiteSpace(reaction))
+                        GigglePriority(reaction);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Failed to get AI video-done reaction");
+                }
+            }
         }
 
         private void OnGameCompleted(object? sender, EventArgs e)
         {
             Giggle("Good girl! So smart!");
+        }
+
+        private async void OnLockCardCompleted(object? sender, Services.LockCardCompletedEventArgs e)
+        {
+            if (App.Settings?.Current?.AiChatEnabled != true || App.Ai?.IsAvailable != true)
+                return;
+
+            try
+            {
+                var reaction = await App.Ai.GetLockScreenReaction(e.Phrase, e.Mistakes, e.Repeats);
+                if (!string.IsNullOrWhiteSpace(reaction))
+                    GigglePriority(reaction);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to get AI lock-screen reaction");
+            }
         }
 
         /// <summary>

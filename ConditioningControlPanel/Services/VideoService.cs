@@ -75,6 +75,13 @@ namespace ConditioningControlPanel.Services
         /// Whether a video is currently playing
         /// </summary>
         public bool IsPlaying => _videoPlaying;
+
+        /// <summary>
+        /// Filename (without extension) of the most recently started video. Stays set after
+        /// the video ends so VideoEnded handlers can pass it to companion AI reactions.
+        /// </summary>
+        public string? LastVideoTitle =>
+            string.IsNullOrEmpty(_retryPath) ? null : Path.GetFileNameWithoutExtension(_retryPath);
         public bool IsRunning => _isRunning;
 
         /// <summary>
