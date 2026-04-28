@@ -163,6 +163,7 @@ namespace ConditioningControlPanel
                 {
                     _ringIsFull = true;
                     StartRingPulse();
+                    CalibrationSoundService.RingFull();
                 }
             }
         }
@@ -247,6 +248,7 @@ namespace ConditioningControlPanel
                     if (_cancelled) return;
 
                     TxtStatus.Text = "Hold steady — sampling…";
+                    CalibrationSoundService.DotSampleStart();
                     _collecting = true;
                     await Task.Delay(SampleMs);
                     _collecting = false;
@@ -275,6 +277,7 @@ namespace ConditioningControlPanel
 
             if (_cancelled) return;
 
+            CalibrationSoundService.AllDotsCollected();
             await FinalizeCalibrationAsync(positions);
         }
 
@@ -423,8 +426,17 @@ namespace ConditioningControlPanel
             var leftRef  = new[] { lx / GridSize, ly / GridSize };
             var rightRef = new[] { rx / GridSize, ry / GridSize };
 
-            var primary = SystemParameters.PrimaryScreenWidth;
-            var primaryH = SystemParameters.PrimaryScreenHeight;
+            // Use the cal window's actual dimensions, NOT
+            // SystemParameters.PrimaryScreenWidth/Height. Borderless-maximized
+            // sizes the window to the monitor it opened on, which can be the
+            // secondary monitor in a multi-monitor setup. The dots above were
+            // placed against ActualWidth/ActualHeight, so the polynomial is
+            // trained against those screen dims — and the runtime clamp must
+            // use the same dims, otherwise the cursor caps at the primary
+            // monitor's edge even when calibration was done on a wider
+            // secondary monitor.
+            var calMonitorWidth = ActualWidth;
+            var calMonitorHeight = ActualHeight;
 
             // Head-pose compensation pipeline (BaselineHeadPose + HeadPoseComp)
             // was retired. The PnP head-pose estimator from face landmarks is
@@ -440,8 +452,8 @@ namespace ConditioningControlPanel
                 Timestamp = DateTime.UtcNow,
                 MonitorBounds = new MonitorBoundsRecord
                 {
-                    Width = (int)primary,
-                    Height = (int)primaryH,
+                    Width = (int)calMonitorWidth,
+                    Height = (int)calMonitorHeight,
                     DpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX
                 },
                 PrimaryDeviceId = "",
@@ -485,6 +497,7 @@ namespace ConditioningControlPanel
             }
 
             _completedOk = true;
+            CalibrationSoundService.CalibrationVerified();
 
             ValidationPanel.Visibility = Visibility.Collapsed;
             TxtTitle.Text = "Calibration verified";
@@ -685,6 +698,7 @@ namespace ConditioningControlPanel
 
         private async Task FlashSuccessAsync()
         {
+            CalibrationSoundService.ValidationStepPass();
             var prevCue = TxtValidationCue.Text;
             var prevColor = TxtValidationCue.Foreground;
             TxtValidationCue.Text = "✓";
@@ -871,7 +885,7 @@ namespace ConditioningControlPanel
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        //  Cerrolaza polynomial fit (ridge + leave-one-out CV)
+        //  Cerrolaza polynomial fit (light-touch ridge regularization)
         // ─────────────────────────────────────────────────────────────────────
 
         // Cerrolaza et al. (2008, 2012) X-axis design row.
@@ -883,6 +897,23 @@ namespace ConditioningControlPanel
         // Cerrolaza Y-axis design row: mirror of X — the high-order term is iy²·ix.
         private static double[] CerrolazaRowY(double ix, double iy)
             => new[] { 1.0, ix, iy, ix * iy, ix * ix, iy * iy, iy * iy * ix };
+
+        // Tikhonov-regularization weight, scaled by trace(AᵀA)/p (the mean
+        // diagonal of the normal-equations matrix) so the value is invariant
+        // to iris-vector magnitude. 1e-5 is essentially zero shrinkage on a
+        // well-posed 25-point fit but still keeps the system numerically
+        // stable when the iris-vector distribution is degenerate (e.g. all
+        // corners collapsed onto one axis from a bad calibration session).
+        //
+        // Earlier this was a leave-one-out CV across {1e-5..1e-1}, but on
+        // 25-point grids LOO punishes corner predictions hard (every leave-out
+        // removes a corner from the training set, forcing the remaining fit
+        // to extrapolate). LOO biases λ-selection toward heavier shrinkage,
+        // which compresses the polynomial's output range — the cursor only
+        // reaches a fraction of the screen even at the user's calibrated iris
+        // extremes. Then dropped to a fixed 1e-4, then 1e-5; each step opens
+        // up the polynomial's reach at the edges another notch.
+        private const double RidgeLambdaScale = 1e-5;
 
         // Solves min ||A·x - b||² + λ·||x||² by stacking sqrt(λ)·I onto A and
         // running OpenCV's normal-equations solve. Returns null if the solve
@@ -914,77 +945,86 @@ namespace ConditioningControlPanel
             return y;
         }
 
-        // Picks ridge λ via leave-one-out cross-validation, then refits on all
-        // data with the chosen λ. Candidate λ's are scaled by trace(AᵀA)/p (the
-        // mean diagonal of the normal-equations matrix) so the chosen value is
-        // invariant to iris-vector magnitude — calibration sessions vary in
-        // camera distance and face size, which would otherwise shift the optimal
-        // raw λ across orders of magnitude.
-        private static double[]? FitRidgeWithLOO(double[][] design, double[] targets)
-        {
-            int n = design.Length;
-            int p = design[0].Length;
-
-            double traceAtA = 0;
-            for (int i = 0; i < n; i++)
-                for (int k = 0; k < p; k++)
-                    traceAtA += design[i][k] * design[i][k];
-            double lambdaBase = traceAtA / p;
-
-            double[] candidates = { 1e-5, 1e-4, 1e-3, 1e-2, 1e-1 };
-            double bestErr = double.MaxValue;
-            double bestLambda = lambdaBase * 1e-3; // matches the previous fixed-λ default if every LOO fit fails
-
-            foreach (var c in candidates)
-            {
-                double lambda = lambdaBase * c;
-                double sumSq = 0;
-                bool ok = true;
-                for (int holdout = 0; holdout < n; holdout++)
-                {
-                    var trainX = new double[n - 1][];
-                    var trainY = new double[n - 1];
-                    int j = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        if (i == holdout) continue;
-                        trainX[j] = design[i];
-                        trainY[j] = targets[i];
-                        j++;
-                    }
-                    var coeffs = FitRidge(trainX, trainY, lambda);
-                    if (coeffs == null) { ok = false; break; }
-                    var err = DotProduct(coeffs, design[holdout]) - targets[holdout];
-                    sumSq += err * err;
-                }
-                if (ok && sumSq < bestErr) { bestErr = sumSq; bestLambda = lambda; }
-            }
-
-            return FitRidge(design, targets, bestLambda);
-        }
-
-        // Builds the per-axis Cerrolaza design matrices and returns the LOO-
-        // selected ridge fit. Returns null if either axis fails to solve —
-        // caller falls back to homography-only projection in that case.
+        // Builds the per-axis Cerrolaza design matrices, fits each with a
+        // single light-touch ridge solve, and returns the result. Logs a
+        // diagnostic line with the chosen λ and per-axis training residuals
+        // so a calibration that comes out compressed or wildly off is
+        // observable in the logs.
         private static PolynomialFitData? FitCerrolazaPolynomial(Point2d[] srcMeans, Point2d[] dstPoints)
         {
             try
             {
                 int n = srcMeans.Length;
+                int p = 7;
                 var designX = new double[n][];
                 var designY = new double[n][];
                 var targetsX = new double[n];
                 var targetsY = new double[n];
+                double traceAtA = 0;
                 for (int i = 0; i < n; i++)
                 {
                     designX[i] = CerrolazaRowX(srcMeans[i].X, srcMeans[i].Y);
                     designY[i] = CerrolazaRowY(srcMeans[i].X, srcMeans[i].Y);
                     targetsX[i] = dstPoints[i].X;
                     targetsY[i] = dstPoints[i].Y;
+                    // Sum the squared-feature magnitudes from the X design;
+                    // X and Y share most features (only the high-order term
+                    // differs), so this is a representative scale.
+                    for (int k = 0; k < p; k++) traceAtA += designX[i][k] * designX[i][k];
                 }
-                var coeffsX = FitRidgeWithLOO(designX, targetsX);
-                var coeffsY = FitRidgeWithLOO(designY, targetsY);
+                double lambda = RidgeLambdaScale * traceAtA / p;
+                var coeffsX = FitRidge(designX, targetsX, lambda);
+                var coeffsY = FitRidge(designY, targetsY, lambda);
                 if (coeffsX == null || coeffsY == null) return null;
+
+                // Diagnostic: per-axis training residuals + per-row breakdown
+                // (top → bottom). Max residual on a tight 5×5 fit is typically
+                // < 30 DIPs; anything much larger means the fit is being
+                // pulled by noisy samples or the regularization is wrong.
+                // The per-row breakdown (when GridSize is 5) surfaces axis
+                // asymmetries — e.g. if top-row residuals are far worse than
+                // bottom-row, iris detection is biased on the upward gaze
+                // (commonly upper-eyelid occlusion when looking up).
+                double ssX = 0, ssY = 0, maxX = 0, maxY = 0;
+                int worstIdxX = -1, worstIdxY = -1;
+                var residualsY = new double[n];
+                var residualsX = new double[n];
+                for (int i = 0; i < n; i++)
+                {
+                    var ex = DotProduct(coeffsX, designX[i]) - targetsX[i];
+                    var ey = DotProduct(coeffsY, designY[i]) - targetsY[i];
+                    residualsX[i] = ex;
+                    residualsY[i] = ey;
+                    ssX += ex * ex; ssY += ey * ey;
+                    if (Math.Abs(ex) > maxX) { maxX = Math.Abs(ex); worstIdxX = i; }
+                    if (Math.Abs(ey) > maxY) { maxY = Math.Abs(ey); worstIdxY = i; }
+                }
+
+                // Per-row Y residual summary if we recognize a square grid.
+                int rowSize = (int)Math.Round(Math.Sqrt(n));
+                string rowSummary = "";
+                if (rowSize * rowSize == n)
+                {
+                    var rowParts = new System.Text.StringBuilder();
+                    for (int r = 0; r < rowSize; r++)
+                    {
+                        double sumY = 0, sumAbsY = 0;
+                        for (int c = 0; c < rowSize; c++)
+                        {
+                            sumY += residualsY[r * rowSize + c];
+                            sumAbsY += Math.Abs(residualsY[r * rowSize + c]);
+                        }
+                        if (rowParts.Length > 0) rowParts.Append(" ");
+                        // Mean signed Y residual / mean absolute Y residual per row.
+                        rowParts.Append($"r{r}={sumY / rowSize:+0;-0;0}/|{sumAbsY / rowSize:F0}|");
+                    }
+                    rowSummary = " | rows_y(mean/|abs|): " + rowParts;
+                }
+
+                App.Logger?.Information(
+                    "WebcamCalibration: polynomial fit n={N} λ={L:E2} | rms_x={Rx:F1} rms_y={Ry:F1} | max_x={Mx:F1}@{Wx} max_y={My:F1}@{Wy}{Rows} (DIPs)",
+                    n, lambda, Math.Sqrt(ssX / n), Math.Sqrt(ssY / n), maxX, worstIdxX, maxY, worstIdxY, rowSummary);
+
                 return new PolynomialFitData { X = coeffsX, Y = coeffsY };
             }
             catch (Exception ex)

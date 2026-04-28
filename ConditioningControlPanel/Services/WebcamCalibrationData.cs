@@ -145,9 +145,11 @@ namespace ConditioningControlPanel.Services
     ///   y_screen = b0 + b1·ix + b2·iy + b3·ix·iy + b4·ix² + b5·iy² + b6·iy²·ix
     /// The asymmetric high-order term (ix²·iy on X, iy²·ix on Y) gives
     /// ~0.15-0.25° DVA over the symmetric 6-coefficient form on webcam grids.
-    /// Fit via ridge regression with λ chosen by leave-one-out CV from a
-    /// log-scaled candidate set, which trims 15-30% off corner error vs the
-    /// fixed-λ Tikhonov fit it replaced.
+    /// Fit via ridge regression with a small fixed λ scaled to trace(AᵀA)/p —
+    /// just enough for numerical stability, not enough to shrink the output
+    /// range. (LOO-CV was tried and over-regularized: corner leave-outs force
+    /// extrapolation, and LOO-error minimization picks heavier shrinkage,
+    /// which compresses the cursor's reach.)
     /// 6-element arrays from older calibrations are still loadable and
     /// projected through the symmetric form (see WebcamTrackingService.ProjectGazeToScreen).
     /// </summary>

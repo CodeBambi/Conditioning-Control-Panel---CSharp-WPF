@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -110,6 +111,7 @@ namespace ConditioningControlPanel
 
             TxtStatus.Text = "Hold your gaze on the dot…";
             _samples.Clear();
+            CalibrationSoundService.DotSampleStart();
             _collecting = true;
             await Task.Delay(SampleMs);
             _collecting = false;
@@ -123,14 +125,21 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // Drop outliers (>2σ from the mean per axis) before computing the
-            // final mean. A single blink or saccade burst can pull the mean
-            // tens of pixels otherwise.
-            var (meanX, meanY) = TrimmedMean(_samples);
+            // Compute the per-axis median over samples after dropping the first
+            // ~330 ms (≈10 frames at 30 fps). The early samples are
+            // contaminated by the saccade onto the dot from wherever the eye
+            // happened to be — typically the status text just above the dot
+            // — and used to bias the mean upward, which made the offset a
+            // downward nudge that pushed the cursor below the user's gaze
+            // post-recal. Median (not mean) is robust to the residual blink
+            // / fixation-break samples in the rest of the window without
+            // having its center estimate inflated by them.
+            var (meanX, meanY) = MedianAfterSaccadeSettle(_samples, dropFirst: 10);
 
-            // Center of the calibration window itself (which is fullscreen
-            // primary). Using ActualWidth/Height matches the same DIP frame
-            // OnGazeMove emits in.
+            // Center of the calibration window itself. The window is
+            // borderless-maximized so its bounds match the monitor it opened
+            // on (not necessarily the primary monitor). ActualWidth/Height
+            // matches the DIP frame OnGazeMove emits in for that calibration.
             double targetX = ActualWidth / 2.0;
             double targetY = ActualHeight / 2.0;
 
@@ -149,39 +158,26 @@ namespace ConditioningControlPanel
                 dx, dy, _samples.Count, meanX, meanY, targetX, targetY);
 
             _completedOk = true;
+            CalibrationSoundService.QuickRecalComplete();
             TxtStatus.Text = $"Done. Cursor nudged by ({dx:F0}, {dy:F0}) px.";
             await Task.Delay(FinishHoldMs);
             DialogResult = true;
             Close();
         }
 
-        private static (double X, double Y) TrimmedMean(List<WpfPoint> samples)
+        // Drops the first <paramref name="dropFirst"/> samples to skip the
+        // saccade onto the dot, then returns the per-axis median of what's
+        // left. Median is robust to blinks / fixation breaks that sometimes
+        // contaminate the rest of the window — unlike the mean+σ trim it
+        // replaces, which got its center and spread estimates inflated by
+        // the very samples it was supposed to filter.
+        private static (double X, double Y) MedianAfterSaccadeSettle(List<WpfPoint> samples, int dropFirst)
         {
-            double sumX = 0, sumY = 0;
-            foreach (var s in samples) { sumX += s.X; sumY += s.Y; }
-            double mx = sumX / samples.Count;
-            double my = sumY / samples.Count;
-
-            double sx = 0, sy = 0;
-            foreach (var s in samples)
-            {
-                sx += (s.X - mx) * (s.X - mx);
-                sy += (s.Y - my) * (s.Y - my);
-            }
-            double stdX = Math.Sqrt(sx / samples.Count);
-            double stdY = Math.Sqrt(sy / samples.Count);
-
-            double thrX = 2.0 * stdX;
-            double thrY = 2.0 * stdY;
-            double sumX2 = 0, sumY2 = 0;
-            int n = 0;
-            foreach (var s in samples)
-            {
-                if (Math.Abs(s.X - mx) > thrX || Math.Abs(s.Y - my) > thrY) continue;
-                sumX2 += s.X; sumY2 += s.Y; n++;
-            }
-            if (n == 0) return (mx, my);
-            return (sumX2 / n, sumY2 / n);
+            int start = (samples.Count - dropFirst >= 15) ? dropFirst : 0;
+            var trimmed = (start == 0) ? samples : samples.GetRange(start, samples.Count - start);
+            var xs = trimmed.Select(s => s.X).OrderBy(v => v).ToList();
+            var ys = trimmed.Select(s => s.Y).OrderBy(v => v).ToList();
+            return (xs[xs.Count / 2], ys[ys.Count / 2]);
         }
 
         private void ShowError(string detail)
