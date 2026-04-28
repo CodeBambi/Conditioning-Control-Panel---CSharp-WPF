@@ -68,7 +68,7 @@ namespace ConditioningControlPanel
         private bool _ringIsFull;
         // Index of the dot currently being sampled. Read by OnRawIris so
         // samples land in the right per-dot bucket across retries (we can't
-        // rely on "last list" because all 9 are allocated up-front).
+        // rely on "last list" because all 25 are allocated up-front).
         private int _activeDotIndex = -1;
 
         public WebcamCalibrationWindow()
@@ -120,6 +120,13 @@ namespace ConditioningControlPanel
 
         private void Window_Closed(object sender, EventArgs e)
         {
+            // Unblock the intro awaiter if the user closed via title-bar X
+            // (or owner-cascade) instead of ESC / Continue. Window_Loaded is
+            // async void and awaits _introDone — without this, the awaiter
+            // sits orphaned and the calibration handlers stay subscribed
+            // until the next GC pass.
+            _introDone.TrySetResult(false);
+
             if (App.Webcam != null)
             {
                 App.Webcam.OnRawIris -= OnRawIris;
@@ -917,7 +924,14 @@ namespace ConditioningControlPanel
 
         // Solves min ||A·x - b||² + λ·||x||² by stacking sqrt(λ)·I onto A and
         // running OpenCV's normal-equations solve. Returns null if the solve
-        // fails (rank-deficient, NaN inputs).
+        // fails (rank-deficient, NaN inputs) or if the solve "succeeds" but
+        // produces NaN/Infinity coefficients (Cv2.Solve can return true on
+        // near-degenerate systems and silently emit NaN entries — happens
+        // when the user moves their head significantly between dots and the
+        // iris-vector cluster collapses onto a line). Caller falls back to
+        // homography-only projection in that case; without this guard the
+        // NaN coefficients would propagate to ProjectGazeToScreen and end
+        // up as Window.Left = NaN, which throws on first cursor emit.
         private static double[]? FitRidge(double[][] design, double[] targets, double lambda)
         {
             int n = design.Length;
@@ -934,7 +948,12 @@ namespace ConditioningControlPanel
             using var x = new Mat();
             if (!Cv2.Solve(A, b, x, DecompTypes.Normal)) return null;
             var result = new double[p];
-            for (int k = 0; k < p; k++) result[k] = x.At<double>(k, 0);
+            for (int k = 0; k < p; k++)
+            {
+                var v = x.At<double>(k, 0);
+                if (double.IsNaN(v) || double.IsInfinity(v)) return null;
+                result[k] = v;
+            }
             return result;
         }
 

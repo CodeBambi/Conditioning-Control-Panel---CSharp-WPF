@@ -3760,6 +3760,36 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnWebcamRevokeConsent_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var result = MessageBox.Show(
+                    this,
+                    "Revoke webcam consent?\n\n" +
+                    "This will:\n" +
+                    "  • Stop webcam tracking immediately\n" +
+                    "  • Delete your calibration data\n" +
+                    "  • Disable Focus Gaze and any webcam triggers\n" +
+                    "  • Clear your consent record\n\n" +
+                    "You'll be re-prompted to consent and recalibrate the next time you enable a webcam feature.",
+                    "Revoke webcam consent",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.Cancel);
+
+                if (result != MessageBoxResult.OK) return;
+
+                App.Webcam?.RevokeConsent();
+                if (ChkWebcamDebugCursor != null) ChkWebcamDebugCursor.IsChecked = false;
+                AppendWebcamDebugLog("Consent revoked. Calibration deleted; webcam features disabled.");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Webcam revoke consent failed");
+            }
+        }
+
         private void ChkWebcamDebugCursor_Changed(object sender, RoutedEventArgs e)
         {
             if (ChkWebcamDebugCursor == null) return;

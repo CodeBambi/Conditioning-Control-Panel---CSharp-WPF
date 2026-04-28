@@ -7198,14 +7198,24 @@
                                     <TextBlock Text="Temp UI for verifying capture loop. Remove before merge."
                                                Foreground="#888888" FontSize="11" Margin="0,2,0,0"/>
                                 </StackPanel>
-                                <Button x:Name="BtnWebcamReviewPrivacy" Grid.Column="1"
-                                        Content="Review privacy info"
-                                        ToolTip="{loc:Str tooltip_webcam_review_privacy}"
-                                        Padding="10,6" VerticalAlignment="Top"
-                                        Background="Transparent" Foreground="#FF69B4"
-                                        BorderBrush="#FF69B4" BorderThickness="1"
-                                        FontSize="11" FontWeight="SemiBold" Cursor="Hand"
-                                        Click="BtnWebcamReviewPrivacy_Click"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                                    <Button x:Name="BtnWebcamReviewPrivacy"
+                                            Content="Review privacy info"
+                                            ToolTip="{loc:Str tooltip_webcam_review_privacy}"
+                                            Padding="10,6"
+                                            Background="Transparent" Foreground="#FF69B4"
+                                            BorderBrush="#FF69B4" BorderThickness="1"
+                                            FontSize="11" FontWeight="SemiBold" Cursor="Hand"
+                                            Click="BtnWebcamReviewPrivacy_Click"/>
+                                    <Button x:Name="BtnWebcamRevokeConsent"
+                                            Content="Revoke consent"
+                                            ToolTip="Stops webcam tracking, deletes calibration data, and clears your consent. You'll be re-prompted next time you enable a webcam feature."
+                                            Padding="10,6" Margin="8,0,0,0"
+                                            Background="Transparent" Foreground="#FF6060"
+                                            BorderBrush="#FF6060" BorderThickness="1"
+                                            FontSize="11" FontWeight="SemiBold" Cursor="Hand"
+                                            Click="BtnWebcamRevokeConsent_Click"/>
+                                </StackPanel>
                             </Grid>
 
                             <Grid>

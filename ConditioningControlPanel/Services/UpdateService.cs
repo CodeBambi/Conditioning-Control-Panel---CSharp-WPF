@@ -68,7 +68,11 @@ This is an opt-in pre-release. The big new feature — Webcam Eye Tracking — w
 • Remote Control 429 logs now identify which rate cap fired (per-account vs per-IP) and the count, for easier triage.
 
 🔒 PRIVACY
-• All webcam frames stay on your device. The pipeline runs offline. No network calls, no disk writes of frame data, no telemetry.";
+• All webcam frames stay on your device. The pipeline runs offline. No network calls, no disk writes of frame data, no telemetry.
+• Revoke consent any time from the Webcam Lab card — it stops tracking, deletes your calibration, and clears the consent record.
+
+⚠️ KNOWN ISSUES (this build)
+• Multi-monitor + Focus Gaze: if you calibrated on one monitor and use Focus Gaze on a different monitor, the gaze cursor can land on the wrong screen. Workaround: calibrate on the monitor you'll use Focus Gaze on. A coordinate-translation fix is queued for v5.9.1.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";

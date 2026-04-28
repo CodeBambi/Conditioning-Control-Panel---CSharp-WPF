@@ -67,7 +67,7 @@
                 <TextBlock Text="Webcam Calibration"
                            Foreground="#FFFFFF" FontSize="26" FontWeight="Bold"
                            HorizontalAlignment="Center" Margin="0,0,0,4"/>
-                <TextBlock Text="Three short phases — about 75 seconds total."
+                <TextBlock Text="Two short phases — about a minute total."
                            Foreground="#FFB6E1" FontSize="14"
                            HorizontalAlignment="Center" Margin="0,0,0,22"/>
 
@@ -79,24 +79,9 @@
                     <TextBlock Grid.Column="0" Text="1." Foreground="#FF69B4"
                                FontSize="15" FontWeight="Bold" VerticalAlignment="Top"/>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="Dot grid (16 dots)" Foreground="#FFFFFF"
+                        <TextBlock Text="Dot grid (25 dots)" Foreground="#FFFFFF"
                                    FontSize="15" FontWeight="SemiBold"/>
-                        <TextBlock Text="A pink dot moves around the screen. Look at it and hold your gaze until the ring around it fills up. ~35 seconds."
-                                   Foreground="#CCCCCC" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                    </StackPanel>
-                </Grid>
-
-                <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="40"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="2." Foreground="#FF69B4"
-                               FontSize="15" FontWeight="Bold" VerticalAlignment="Top"/>
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="Head movement check" Foreground="#FFFFFF"
-                                   FontSize="15" FontWeight="SemiBold"/>
-                        <TextBlock Text="Keep your eyes on the center dot while you slowly nod your head, then turn it left and right. ~6 seconds."
+                        <TextBlock Text="A pink dot moves around the screen. Look at it and hold your gaze until the ring around it fills up."
                                    Foreground="#CCCCCC" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
                 </Grid>
@@ -106,7 +91,7 @@
                         <ColumnDefinition Width="40"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="3." Foreground="#FF69B4"
+                    <TextBlock Grid.Column="0" Text="2." Foreground="#FF69B4"
                                FontSize="15" FontWeight="Bold" VerticalAlignment="Top"/>
                     <StackPanel Grid.Column="1">
                         <TextBlock Text="Quick checks" Foreground="#FFFFFF"
