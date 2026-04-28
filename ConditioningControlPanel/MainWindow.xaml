@@ -5229,7 +5229,11 @@
 
                         <!-- Tab Header -->
                         <Grid Margin="0,0,0,12">
-                            <StackPanel>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
                                 <TextBlock Text="{loc:Str tab_companion}" Foreground="White" FontSize="26" FontWeight="Bold">
                                     <TextBlock.Effect>
                                         <DropShadowEffect Color="#9370DB" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
@@ -5237,6 +5241,11 @@
                                 </TextBlock>
                                 <TextBlock Text="{loc:Str label_manage_your_ai_companion_personalities_and_co}" Foreground="{DynamicResource TextDimBrush}" FontSize="13" Margin="0,2,0,0"/>
                             </StackPanel>
+                            <Button x:Name="BtnCompanionTutorial" Grid.Column="1" Content="🎓 Tutorial"
+                                    Style="{StaticResource SmallPinkButton}"
+                                    VerticalAlignment="Center"
+                                    Click="BtnCompanionTutorial_Click"
+                                    ToolTip="Walk through the Companion tab — the roster, AI Brain, behavior sliders, and phrase library."/>
                         </Grid>
 
                         <!-- 2-COLUMN BODY (left = hero + AI Brain · right = secondary expanders) -->
@@ -5250,7 +5259,7 @@
                             <StackPanel Grid.Column="0">
 
                         <!-- HERO STRIP -->
-                        <Border CornerRadius="14" Padding="16" Margin="0,0,0,10" BorderThickness="1">
+                        <Border x:Name="CompanionHeroBorder" CornerRadius="14" Padding="16" Margin="0,0,0,10" BorderThickness="1">
                             <Border.Background>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                     <GradientStop Color="#1A1A32" Offset="0"/>
@@ -5555,7 +5564,7 @@
 
                                     <!-- Provider radios -->
                                     <TextBlock Text="{loc:Str label_provider}" Foreground="White" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <StackPanel x:Name="AiProviderRadioGroup" Orientation="Horizontal" Margin="0,0,0,10">
                                         <RadioButton x:Name="RadioAiOff" GroupName="AiProvider" Content="{loc:Str label_provider_off}" Foreground="White" FontSize="17" Margin="0,0,16,0" Checked="RadioAiOff_Checked"/>
                                         <RadioButton x:Name="RadioAiCloud" GroupName="AiProvider" Content="{loc:Str label_provider_cloud}" Foreground="White" FontSize="17" Margin="0,0,16,0" Checked="RadioAiCloud_Checked"/>
                                         <RadioButton x:Name="RadioAiLocal" GroupName="AiProvider" Content="{loc:Str label_provider_local}" Foreground="White" FontSize="17" Checked="RadioAiLocal_Checked"/>

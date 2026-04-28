@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Windows;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services
@@ -633,54 +634,247 @@ namespace ConditioningControlPanel.Services
 
         private List<TutorialStep> CreateCompanionSteps()
         {
-            return new List<TutorialStep>
+            // OnActivate helper: idempotently reveal the companion roster tray.
+            // Don't call BtnSwitchCompanion_Click — it's a toggle and would hide
+            // the tray if the user had already opened it before launching the tour.
+            Action revealRoster = () =>
+            {
+                try
+                {
+                    var win = Application.Current?.MainWindow as MainWindow;
+                    if (win == null) return;
+                    var tray = win.FindName("CompanionRosterTray") as FrameworkElement;
+                    if (tray != null) tray.Visibility = Visibility.Visible;
+                }
+                catch { /* tour never blocks on UI quirks */ }
+            };
+
+            bool aiUnlocked = App.HasCloudIdentity;
+
+            var steps = new List<TutorialStep>
             {
                 new TutorialStep
                 {
                     Id = "comp_intro",
                     Icon = "💗",
-                    Title = "Companion Tab Guide",
-                    Description = "Configure your AI companion's behavior and appearance!",
+                    Title = "Meet Your Companion",
+                    Description = "This tab is where she lives.\n\n" +
+                                  "She's the voice in your speech bubbles, the personality behind your AI chats, " +
+                                  "and the one keeping score of your XP. There's a lot in here — let's walk it together.",
                     RequiresTab = "companion",
                     TextPosition = TutorialStepPosition.Center
                 },
                 new TutorialStep
                 {
-                    Id = "comp_speech",
-                    Icon = "💬",
-                    Title = "Speech Bubbles",
-                    Description = "Configure what your companion says:\n" +
-                                  "• Enable/disable speech bubbles\n" +
-                                  "• Adjust frequency and duration\n" +
-                                  "• Customize message categories",
+                    Id = "comp_hero",
+                    Icon = "✨",
+                    Title = "Active Companion",
+                    Description = "Up here you see who's currently active: her avatar, her name, " +
+                                  "her level, and the XP bar toward her next level.\n\n" +
+                                  "The two pills on the right show whether AI is on (Off / Cloud / Local) " +
+                                  "and whether window-Awareness mode is running.",
                     RequiresTab = "companion",
-                    TextPosition = TutorialStepPosition.Center
+                    TargetElementName = "TxtActiveCompanionName",
+                    TextPosition = TutorialStepPosition.Bottom
                 },
                 new TutorialStep
                 {
-                    Id = "comp_triggers",
-                    Icon = "⚡",
-                    Title = "Trigger Messages",
-                    Description = "Set up trigger responses:\n" +
-                                  "• Messages on flash appearance\n" +
-                                  "• Video start/end messages\n" +
-                                  "• Custom trigger words",
+                    Id = "comp_switch",
+                    Icon = "🔄",
+                    Title = "Five Companions",
+                    Description = "There are five companions, and each one gives you a different XP bonus " +
+                                  "(Pink Filter, Autonomy, XP Drain, Strict Mode, Session Completion).\n\n" +
+                                  "Hit Switch any time to swap between them — your XP for each is tracked separately.",
                     RequiresTab = "companion",
-                    TextPosition = TutorialStepPosition.Center
+                    TargetElementName = "BtnSwitchCompanion",
+                    TextPosition = TutorialStepPosition.Right,
+                    OnActivate = revealRoster
                 },
                 new TutorialStep
                 {
-                    Id = "comp_personality",
+                    Id = "comp_roster",
                     Icon = "🎭",
-                    Title = "AI Personality",
-                    Description = "Customize your companion's AI personality:\n" +
-                                  "• Adjust speaking style\n" +
-                                  "• Set personality traits\n" +
-                                  "• Configure response themes",
+                    Title = "The Roster — Two Clicks",
+                    Description = "Two different clicks live on each card:\n\n" +
+                                  "• Click the card itself → switch to that companion.\n" +
+                                  "• Click the small 🎭 button → assign an AI personality to her without switching.\n\n" +
+                                  "Each card also shows that companion's level and her XP bonus.",
+                    RequiresTab = "companion",
+                    TargetElementName = "CompanionRosterTray",
+                    TextPosition = TutorialStepPosition.Top,
+                    OnActivate = revealRoster
+                },
+                new TutorialStep
+                {
+                    Id = "comp_chat_shortcut",
+                    Icon = "💬",
+                    Title = "Chat Hotkey",
+                    Description = "She has a global hotkey for chat — Ctrl+T by default, anywhere on your machine.\n\n" +
+                                  "Click this button to rebind it to whatever combo you like. Useful when " +
+                                  "Ctrl+T collides with another app you use a lot.",
+                    RequiresTab = "companion",
+                    TargetElementName = "BtnChatShortcut",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "comp_avatar",
+                    Icon = "👁",
+                    Title = "Avatar Window Controls",
+                    Description = "Three quick toggles for her avatar window:\n\n" +
+                                  "• Show Avatar — pop her on or off your screen.\n" +
+                                  "• Mute — silence her speech and sound effects.\n" +
+                                  "• Detach (the button next to Switch) — float her free of the main window so " +
+                                  "you can drag her anywhere.",
+                    RequiresTab = "companion",
+                    TargetElementName = "ChkAvatarEnabledCompanion",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "comp_customize",
+                    Icon = "🎨",
+                    Title = "Personality Editor",
+                    Description = "Customize opens the full personality editor — her tone, her quirks, " +
+                                  "the system prompt that drives every AI reply.\n\n" +
+                                  "The \"Open Advanced Personality\" button down in AI Brain opens the same editor.",
+                    RequiresTab = "companion",
+                    TargetElementName = "BtnCustomizeCompanion",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "comp_ai_brain_intro",
+                    Icon = "🧠",
+                    Title = "AI Brain",
+                    Description = aiUnlocked
+                        ? "AI Brain is what gives her real conversation. She'll reply to you, react to " +
+                          "what's on your screen, and chime in unprompted.\n\n" +
+                          "Three things to set up here: which provider, which capabilities, and how spicy."
+                        : "AI Brain is what gives her real conversation — replies, reactions, unprompted chimes.\n\n" +
+                          "Right now it's locked because you're not signed in. " +
+                          "Sign in with Discord or Patreon (Patreon tab) and the section unlocks. " +
+                          "AI is free for all signed-in users.",
                     RequiresTab = "companion",
                     TextPosition = TutorialStepPosition.Center
                 }
             };
+
+            if (aiUnlocked)
+            {
+                steps.Add(new TutorialStep
+                {
+                    Id = "comp_ai_provider",
+                    Icon = "📡",
+                    Title = "Pick a Provider",
+                    Description = "Three modes:\n\n" +
+                                  "• Off — no AI, just her phrase library.\n" +
+                                  "• Cloud — easiest. Talks to our proxy. Free for signed-in users.\n" +
+                                  "• Local — runs Ollama on your own machine. Fully private, but you install Ollama once.\n\n" +
+                                  "Pick Local and the model name + host fields appear below, along with a Setup wizard " +
+                                  "that walks you through Ollama install.",
+                    RequiresTab = "companion",
+                    TargetElementName = "AiProviderRadioGroup",
+                    TextPosition = TutorialStepPosition.Top
+                });
+                steps.Add(new TutorialStep
+                {
+                    Id = "comp_capabilities",
+                    Icon = "💡",
+                    Title = "Capabilities",
+                    Description = "Two switches that decide what she's allowed to do:\n\n" +
+                                  "• AI Chat — turns on real AI replies in chat and bubbles.\n" +
+                                  "• Awareness Mode — she watches which window/program is active and reacts. " +
+                                  "Flipping it on reveals a cooldown slider so she doesn't spam.",
+                    RequiresTab = "companion",
+                    TargetElementName = "ChkAiChat",
+                    TextPosition = TutorialStepPosition.Right
+                });
+                steps.Add(new TutorialStep
+                {
+                    Id = "comp_slut_mode",
+                    Icon = "🌶",
+                    Title = "Slut Mode",
+                    Description = "Flips her to the spicier personality variant — same companion, dirtier mouth.\n\n" +
+                                  "Toggle on or off whenever; it doesn't change her level or XP.",
+                    RequiresTab = "companion",
+                    TargetElementName = "ChkSlutMode",
+                    TextPosition = TutorialStepPosition.Right
+                });
+            }
+            else
+            {
+                steps.Add(new TutorialStep
+                {
+                    Id = "comp_ai_locked",
+                    Icon = "🔒",
+                    Title = "Login Unlocks AI",
+                    Description = "Everything in AI Brain — provider choice, chat replies, awareness, slut mode — " +
+                                  "lives behind this lock until you sign in.\n\n" +
+                                  "Discord login or Patreon login both work. Once you're in, replay this tour and " +
+                                  "we'll cover all the AI controls.",
+                    RequiresTab = "companion",
+                    TargetElementName = "AiFeaturesLockOverlay",
+                    TextPosition = TutorialStepPosition.Top
+                });
+            }
+
+            steps.Add(new TutorialStep
+            {
+                Id = "comp_timing",
+                Icon = "⏱",
+                Title = "How Often, How Long",
+                Description = "Two timing sliders in the Behavior panel on the right:\n\n" +
+                              "• Idle Giggle Interval (5–300s) — how often she chimes in unprompted.\n" +
+                              "• Bubble Duration (1–10s) — how long each speech bubble stays on screen.\n\n" +
+                              "If she feels too chatty, raise the giggle interval. If you can't read fast enough, " +
+                              "raise the bubble duration.",
+                RequiresTab = "companion",
+                TargetElementName = "SliderIdleIntervalCompanion",
+                TextPosition = TutorialStepPosition.Left
+            });
+            steps.Add(new TutorialStep
+            {
+                Id = "comp_triggers",
+                Icon = "⚡",
+                Title = "Trigger Mode",
+                Description = "Trigger Mode rotates a list of phrases at a fixed interval — handy for mantra-style " +
+                              "drilling without typing anything yourself.\n\n" +
+                              "Flip it on and a panel appears with the rotation interval and an Edit Triggers button " +
+                              "where you can add or remove phrases.",
+                RequiresTab = "companion",
+                TargetElementName = "ChkTriggerModeCompanion",
+                TextPosition = TutorialStepPosition.Left
+            });
+            steps.Add(new TutorialStep
+            {
+                Id = "comp_phrases_community",
+                Icon = "📚",
+                Title = "Phrases & Community Prompts",
+                Description = "Three more knobs in this column:\n\n" +
+                              "• Manage Phrases — her speech bubble library, with on/off per phrase.\n" +
+                              "• Phrase Presets — save a phrase config and load it later.\n" +
+                              "• Community Prompts — Browse / Import / Export AI personalities other users have made.\n" +
+                              "• Hypnotube Links — comma-separated video URLs she's allowed to suggest (2000-char cap).",
+                RequiresTab = "companion",
+                TargetElementName = "BtnManagePhrases",
+                TextPosition = TutorialStepPosition.Left
+            });
+            steps.Add(new TutorialStep
+            {
+                Id = "comp_done",
+                Icon = "❤",
+                Title = "You're Set",
+                Description = "That's the whole tab.\n\n" +
+                              "• Want to replay this tour? The 🎓 button next to the tab title runs it again.\n" +
+                              "• It's also in the ? menu (top-right) under Companion.\n" +
+                              "• Most controls have hover tooltips with extra detail.\n\n" +
+                              "Click Finish — go play.",
+                RequiresTab = "companion",
+                TextPosition = TutorialStepPosition.Center
+            });
+
+            return steps;
         }
 
         private List<TutorialStep> CreatePatreonSteps()

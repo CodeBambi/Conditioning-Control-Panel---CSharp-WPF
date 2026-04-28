@@ -18516,6 +18516,11 @@ namespace ConditioningControlPanel
             StartAwarenessTutorial();
         }
 
+        private void BtnCompanionTutorial_Click(object sender, RoutedEventArgs e)
+        {
+            StartTutorial(TutorialType.Companion);
+        }
+
         private void StartAwarenessTutorial()
         {
             // One-shot: when the Awareness tour finishes naturally (user reached the
