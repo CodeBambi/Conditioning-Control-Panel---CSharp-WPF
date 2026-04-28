@@ -2755,7 +2755,7 @@
                         </Grid>
 
                         <!-- Browser Container -->
-                        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True" Height="365">
+                        <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True" Height="340">
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
