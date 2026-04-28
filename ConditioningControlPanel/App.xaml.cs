@@ -851,7 +851,9 @@ namespace ConditioningControlPanel
             GazeFocus = new GazeFocusService();
             BlinkTrainer = new BlinkTrainerService();
 
-            // Initialize lockdown service (ephemeral — not persisted)
+            // Initialize lockdown service (ephemeral — not persisted). Recover from a
+            // prior run that was killed mid-lockdown so the panic key isn't stuck off.
+            LockdownService.RecoverIfNeeded();
             Lockdown = new LockdownService();
 
             // Initialize mantra lab service

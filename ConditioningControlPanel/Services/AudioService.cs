@@ -32,6 +32,20 @@ namespace ConditioningControlPanel.Services
         private System.Threading.Timer? _duckWatchdog; // Safety net: force-unduck if ducking exceeds max duration
         private const int DuckWatchdogMs = 300_000; // 5 minutes — safety net for leaked duck refs, must exceed longest video
 
+        // Periodic re-enumeration during duck window — catches sessions that appear AFTER Duck() ran
+        // (e.g. Discord notification sound, Steam friend ping). Without this they play un-ducked.
+        private System.Threading.Timer? _duckRescanTimer;
+        private const int DuckRescanIntervalMs = 2_500;
+
+        // Sessions that couldn't be restored at Unduck time (PID gone, app silent). Retried on a timer
+        // so when the app starts producing audio again its volume gets restored — fixes "stuck at 0%".
+        private readonly Dictionary<int, float> _pendingRestores = new();
+        private readonly Dictionary<int, string> _processNames = new(); // PID -> name, for fallback matching
+        private System.Threading.Timer? _restoreRetryTimer;
+        private DateTime _restoreRetryDeadline;
+        private const int RestoreRetryIntervalMs = 5_000;
+        private static readonly TimeSpan RestoreRetryWindow = TimeSpan.FromMinutes(3);
+
         private bool _disposed;
 
         // Cached WebView2 process IDs to avoid slow Process.GetProcessById() on every duck
@@ -458,8 +472,10 @@ namespace ConditioningControlPanel.Services
 
                             var currentVolume = session.SimpleAudioVolume.Volume;
 
-                            // Store original volume
+                            // Store original volume + process name (for fallback matching at restore time
+                            // if PID changes — e.g. user closes and reopens Firefox during the session).
                             _originalVolumes[processId] = currentVolume;
+                            _processNames[processId] = TryGetProcessName(processId);
 
                             // Calculate ducked volume
                             var newVolume = currentVolume * (1.0f - _duckAmount);
@@ -486,6 +502,13 @@ namespace ConditioningControlPanel.Services
                             ForceUnduck();
                         }
                     }, null, DuckWatchdogMs, System.Threading.Timeout.Infinite);
+
+                    // Rescan for new sessions during the duck window — without this, a Discord
+                    // notification or Steam ping that creates an audio session AFTER Duck() ran
+                    // plays at full volume.
+                    _duckRescanTimer?.Dispose();
+                    _duckRescanTimer = new System.Threading.Timer(_ => RescanForNewSessions(),
+                        null, DuckRescanIntervalMs, DuckRescanIntervalMs);
 
                     // Save state for crash recovery
                     SaveDuckingState();
@@ -533,6 +556,9 @@ namespace ConditioningControlPanel.Services
                     var sessionManager = device.AudioSessionManager;
                     var sessions = sessionManager.Sessions;
 
+                    var restored = new HashSet<int>();
+                    var nameToCurrentPid = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
                     for (int i = 0; i < sessions.Count; i++)
                     {
                         try
@@ -543,6 +569,14 @@ namespace ConditioningControlPanel.Services
                             if (_originalVolumes.TryGetValue(processId, out var originalVolume))
                             {
                                 session.SimpleAudioVolume.Volume = originalVolume;
+                                restored.Add(processId);
+                            }
+                            else
+                            {
+                                // Build a name-index for fallback restoration of PIDs that no longer exist
+                                var name = TryGetProcessName(processId);
+                                if (!string.IsNullOrEmpty(name) && !nameToCurrentPid.ContainsKey(name))
+                                    nameToCurrentPid[name] = processId;
                             }
                         }
                         catch (Exception ex)
@@ -552,15 +586,66 @@ namespace ConditioningControlPanel.Services
                         }
                     }
 
+                    // Fallback: for stored PIDs whose original session is gone, try to find a
+                    // current session for the same process name (e.g. user restarted Firefox
+                    // mid-session — new PID, same app).
+                    foreach (var kv in _originalVolumes)
+                    {
+                        if (restored.Contains(kv.Key)) continue;
+                        if (!_processNames.TryGetValue(kv.Key, out var name) || string.IsNullOrEmpty(name)) continue;
+                        if (!nameToCurrentPid.TryGetValue(name, out var currentPid)) continue;
+
+                        try
+                        {
+                            for (int i = 0; i < sessions.Count; i++)
+                            {
+                                var session = sessions[i];
+                                if ((int)session.GetProcessID == currentPid)
+                                {
+                                    session.SimpleAudioVolume.Volume = kv.Value;
+                                    restored.Add(kv.Key);
+                                    break;
+                                }
+                            }
+                        }
+                        catch { /* session may have ended between checks */ }
+                    }
+
+                    // Move any unrestored entries (PID gone, app silent / not playing) to pending
+                    // and let the retry timer re-attempt as the app resumes producing audio.
+                    foreach (var kv in _originalVolumes)
+                    {
+                        if (!restored.Contains(kv.Key))
+                            _pendingRestores[kv.Key] = kv.Value;
+                    }
+
                     _originalVolumes.Clear();
                     _isDucked = false;
                     _duckWatchdog?.Dispose();
                     _duckWatchdog = null;
+                    _duckRescanTimer?.Dispose();
+                    _duckRescanTimer = null;
+
+                    if (_pendingRestores.Count > 0)
+                    {
+                        App.Logger?.Information("[Ducking] {Count} session(s) had no current audio at unduck — will retry restore for up to {Min} min",
+                            _pendingRestores.Count, RestoreRetryWindow.TotalMinutes);
+                        _restoreRetryDeadline = DateTime.UtcNow + RestoreRetryWindow;
+                        _restoreRetryTimer?.Dispose();
+                        _restoreRetryTimer = new System.Threading.Timer(_ => RestoreRetryTick(),
+                            null, RestoreRetryIntervalMs, RestoreRetryIntervalMs);
+                    }
+                    else
+                    {
+                        // All restored — process names no longer needed
+                        _processNames.Clear();
+                    }
 
                     // Clear crash recovery file
                     ClearDuckingState();
 
-                    App.Logger?.Debug("Audio unducked");
+                    App.Logger?.Debug("Audio unducked ({Restored} restored, {Pending} deferred)",
+                        restored.Count, _pendingRestores.Count);
                 }
                 catch (Exception ex)
                 {
@@ -595,6 +680,194 @@ namespace ConditioningControlPanel.Services
             Unduck(gen);
         }
 
+        private static string TryGetProcessName(int processId)
+        {
+            try
+            {
+                using var proc = Process.GetProcessById(processId);
+                return proc.ProcessName ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Periodically called while ducked to catch new audio sessions (e.g. Discord notification,
+        /// Steam ping) that didn't exist when Duck() ran. Without this, those play un-ducked.
+        /// </summary>
+        private void RescanForNewSessions()
+        {
+            lock (_lockObj)
+            {
+                if (!_isDucked || _deviceEnumerator == null || _disposed) return;
+
+                try
+                {
+                    var currentProcessId = Environment.ProcessId;
+                    var excludeWebView2 = App.Settings?.Current?.ExcludeBambiCloudFromDucking ?? true;
+                    var device = _deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                    var sessions = device.AudioSessionManager.Sessions;
+
+                    int newlyDucked = 0;
+                    for (int i = 0; i < sessions.Count; i++)
+                    {
+                        try
+                        {
+                            var session = sessions[i];
+                            var processId = (int)session.GetProcessID;
+
+                            if (processId == currentProcessId || processId == 0) continue;
+                            if (excludeWebView2 && _webView2Pids.Contains(processId)) continue;
+                            if (_originalVolumes.ContainsKey(processId)) continue; // already ducked
+
+                            var currentVolume = session.SimpleAudioVolume.Volume;
+                            // Skip sessions already at 0 — most likely they're sessions we ducked in a
+                            // prior generation and the PID got recycled; treating their 0 as "original"
+                            // would silence the app forever.
+                            if (currentVolume <= 0.001f) continue;
+
+                            _originalVolumes[processId] = currentVolume;
+                            _processNames[processId] = TryGetProcessName(processId);
+
+                            var newVolume = currentVolume * (1.0f - _duckAmount);
+                            session.SimpleAudioVolume.Volume = Math.Max(0.0f, newVolume);
+                            newlyDucked++;
+                        }
+                        catch { /* session may have ended */ }
+                    }
+
+                    if (newlyDucked > 0)
+                    {
+                        App.Logger?.Debug("[Ducking] Rescan ducked {Count} new session(s)", newlyDucked);
+                        SaveDuckingState();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("[Ducking] Rescan failed: {Error}", ex.Message);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Retry restoring volumes for sessions that didn't have an active audio session at Unduck
+        /// time. Fires every few seconds for a window after Unduck — when the app starts producing
+        /// audio again, its session reappears and we restore the original volume.
+        /// </summary>
+        private void RestoreRetryTick()
+        {
+            lock (_lockObj)
+            {
+                if (_disposed || _pendingRestores.Count == 0)
+                {
+                    _restoreRetryTimer?.Dispose();
+                    _restoreRetryTimer = null;
+                    _processNames.Clear();
+                    return;
+                }
+
+                if (DateTime.UtcNow > _restoreRetryDeadline)
+                {
+                    App.Logger?.Warning("[Ducking] Restore retry window expired with {Count} unrestored — giving up",
+                        _pendingRestores.Count);
+                    _pendingRestores.Clear();
+                    _processNames.Clear();
+                    _restoreRetryTimer?.Dispose();
+                    _restoreRetryTimer = null;
+                    return;
+                }
+
+                if (_deviceEnumerator == null) return;
+
+                try
+                {
+                    var device = _deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                    var sessions = device.AudioSessionManager.Sessions;
+                    var restored = new List<int>();
+
+                    // Build PID-by-name index so we can match a stored PID to a new PID for the same app
+                    var nameToPid = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < sessions.Count; i++)
+                    {
+                        try
+                        {
+                            var pid = (int)sessions[i].GetProcessID;
+                            if (pid == 0) continue;
+                            var name = TryGetProcessName(pid);
+                            if (!string.IsNullOrEmpty(name) && !nameToPid.ContainsKey(name))
+                                nameToPid[name] = pid;
+                        }
+                        catch { }
+                    }
+
+                    foreach (var kv in _pendingRestores)
+                    {
+                        var storedPid = kv.Key;
+                        var originalVolume = kv.Value;
+                        int? targetPid = null;
+
+                        // Try direct PID match first
+                        for (int i = 0; i < sessions.Count; i++)
+                        {
+                            try
+                            {
+                                if ((int)sessions[i].GetProcessID == storedPid) { targetPid = storedPid; break; }
+                            }
+                            catch { }
+                        }
+
+                        // Fallback: process-name match (handles app-restart with new PID)
+                        if (targetPid == null && _processNames.TryGetValue(storedPid, out var name)
+                            && !string.IsNullOrEmpty(name) && nameToPid.TryGetValue(name, out var freshPid))
+                        {
+                            targetPid = freshPid;
+                        }
+
+                        if (targetPid == null) continue;
+
+                        for (int i = 0; i < sessions.Count; i++)
+                        {
+                            try
+                            {
+                                var session = sessions[i];
+                                if ((int)session.GetProcessID == targetPid.Value)
+                                {
+                                    session.SimpleAudioVolume.Volume = originalVolume;
+                                    restored.Add(storedPid);
+                                    break;
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+
+                    if (restored.Count > 0)
+                    {
+                        foreach (var pid in restored)
+                        {
+                            _pendingRestores.Remove(pid);
+                            _processNames.Remove(pid);
+                        }
+                        App.Logger?.Information("[Ducking] Deferred-restore: recovered volume for {Count} session(s); {Remaining} still pending",
+                            restored.Count, _pendingRestores.Count);
+                    }
+
+                    if (_pendingRestores.Count == 0)
+                    {
+                        _processNames.Clear();
+                        _restoreRetryTimer?.Dispose();
+                        _restoreRetryTimer = null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("[Ducking] Restore retry tick failed: {Error}", ex.Message);
+                }
+            }
+        }
+
         #endregion
 
         #region IDisposable
@@ -612,6 +885,8 @@ namespace ConditioningControlPanel.Services
 
             StopSound();
             _duckWatchdog?.Dispose();
+            _duckRescanTimer?.Dispose();
+            _restoreRetryTimer?.Dispose();
             _deviceEnumerator?.Dispose();
         }
 
