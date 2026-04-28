@@ -6799,35 +6799,12 @@
                                     </Button.Resources>
                                 </Button>
 
-                                <TextBlock Text="{loc:Str label_past_quizzes}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,10,0,4"
-                                           x:Name="TxtPastQuizzesHeader" Visibility="Collapsed"/>
-                                <Border MaxHeight="130" CornerRadius="6" x:Name="PastQuizzesPanel" Visibility="Collapsed"
-                                        Background="#10FFFFFF" BorderBrush="#20FFFFFF" BorderThickness="1">
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                        <StackPanel x:Name="PastQuizzesList"/>
-                                    </ScrollViewer>
-                                </Border>
-                            </StackPanel>
-                        </Border>
+                                <!-- Pop Quiz sub-section (folded in from former standalone Lab card) -->
+                                <Border Height="1" Background="#33FF69B4" Margin="0,12,0,8"/>
 
-                        <!-- Pop Quiz Card -->
-                        <Border CornerRadius="12" Margin="6" Padding="15">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="{DynamicResource TransparentPink20}" Offset="0"/>
-                                    <GradientStop Color="{DynamicResource TransparentPink20}" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                            <Border.BorderBrush>
-                                <SolidColorBrush Color="{DynamicResource TransparentPink40}"/>
-                            </Border.BorderBrush>
-                            <Border.BorderThickness>
-                                <Thickness>1</Thickness>
-                            </Border.BorderThickness>
-                            <StackPanel>
-                                <TextBlock Text="{loc:Str label_pop_quiz}" Foreground="White" FontWeight="Bold" FontSize="16" Margin="0,0,0,6"/>
+                                <TextBlock Text="{loc:Str label_pop_quiz}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,2"/>
                                 <TextBlock Text="{loc:Str label_reinforcement_questions_pop_up_during_session}"
-                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
 
                                 <CheckBox x:Name="ChkPopQuizEnabled" Content="{loc:Str setting_enable_pop_up_questions}"
                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,0,0,8"
@@ -6852,6 +6829,137 @@
                                         </Style>
                                     </Button.Resources>
                                 </Button>
+
+                                <TextBlock Text="{loc:Str label_past_quizzes}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,10,0,4"
+                                           x:Name="TxtPastQuizzesHeader" Visibility="Collapsed"/>
+                                <Border MaxHeight="130" CornerRadius="6" x:Name="PastQuizzesPanel" Visibility="Collapsed"
+                                        Background="#10FFFFFF" BorderBrush="#20FFFFFF" BorderThickness="1">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <StackPanel x:Name="PastQuizzesList"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- AI Companion Effects & Memory (moved up from below; T2-gated by smokescreen) -->
+                        <Border CornerRadius="12" Margin="6" Padding="15">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A1A32" Offset="0"/>
+                                    <GradientStop Color="#1F1B36" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border.BorderBrush>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                                    <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.BorderBrush>
+                            <Border.BorderThickness>
+                                <Thickness>2</Thickness>
+                            </Border.BorderThickness>
+                            <StackPanel>
+                                <Grid Margin="0,0,0,4">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{loc:Str lab_ai_effects_memory_title}" Foreground="White" FontWeight="Bold" FontSize="16"/>
+                                        <TextBlock Text="{loc:Str label_beta_2}" Foreground="{DynamicResource SecondaryBrush}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Text="{loc:Str lab_ai_effects_memory_subtitle}"
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                <!-- Notice + setup button — only shown when the user is NOT on local AI.
+                                     Cloud AI can't drive effects (proxy token cap), so the controls below
+                                     do nothing without a local Ollama. The button switches to the
+                                     Companion tab and launches the setup wizard. -->
+                                <Border x:Name="LabEffectsNeedsLocalNotice" Visibility="Collapsed"
+                                        Background="#221A38" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                        CornerRadius="8" Padding="12" Margin="0,0,0,12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="{loc:Str lab_ai_effects_needs_local_title}"
+                                                       Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="13"/>
+                                            <TextBlock Text="{loc:Str lab_ai_effects_needs_local_body}"
+                                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" x:Name="BtnLabEffectsSetupLocal"
+                                                Content="{loc:Str btn_lab_effects_setup_local}"
+                                                Click="BtnLabEffectsSetupLocal_Click"
+                                                Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="12"
+                                                BorderThickness="0" Padding="12,6" Margin="12,0,0,0" Cursor="Hand"
+                                                VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Master toggle -->
+                                <Grid Margin="0,0,0,8">
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Str label_capability_effects}" Foreground="White" FontSize="15" VerticalAlignment="Center"/>
+                                        <Button Style="{StaticResource HelpButtonStyle}" ToolTip="{loc:Str tooltip_lab_ai_effects}"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="ChkCapEffects" Style="{StaticResource ToggleStyle}"
+                                              HorizontalAlignment="Right" VerticalAlignment="Center"
+                                              IsChecked="False"
+                                              Checked="ChkCapEffects_Changed" Unchecked="ChkCapEffects_Changed"/>
+                                </Grid>
+
+                                <!-- Effect permissions panel -->
+                                <Border x:Name="EffectPermsPanel" Visibility="Collapsed" CornerRadius="8" Padding="10" Margin="0,0,0,12"
+                                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#FF6B6B" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="{loc:Str label_effect_permissions}" Foreground="#FF6B6B" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <Grid Margin="0,0,0,8">
+                                            <TextBlock Text="{loc:Str label_max_haptic_intensity}" Foreground="White" FontSize="13" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="TxtMaxHapticIntensity" Text="60%" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <Slider x:Name="SliderMaxHapticIntensity" Style="{StaticResource PinkSlider}"
+                                                Minimum="0" Maximum="1" Value="0.6" Margin="0,0,0,10"
+                                                ValueChanged="SliderMaxHapticIntensity_ValueChanged"/>
+                                        <UniformGrid Columns="2" Rows="5">
+                                            <CheckBox x:Name="ChkAllowFlash" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_flash}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Flash"/>
+                                            <CheckBox x:Name="ChkAllowVideo" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_video}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Video"/>
+                                            <CheckBox x:Name="ChkAllowAudio" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_audio}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Audio"/>
+                                            <CheckBox x:Name="ChkAllowBubbles" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_bubbles}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Bubbles"/>
+                                            <CheckBox x:Name="ChkAllowSubliminal" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_subliminal}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Subliminal"/>
+                                            <CheckBox x:Name="ChkAllowOverlay" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_overlay}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Overlay"/>
+                                            <CheckBox x:Name="ChkAllowLockCard" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_lockcard}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="LockCard"/>
+                                            <CheckBox x:Name="ChkAllowBounce" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_bounce}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Bounce"/>
+                                            <CheckBox x:Name="ChkAllowHaptic" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_haptic}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Haptic"/>
+                                            <StackPanel Orientation="Horizontal" Margin="4,2,0,2">
+                                                <CheckBox x:Name="ChkAllowGetBackToMe" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_get_back_to_me}" Foreground="White" FontSize="13" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="GetBackToMe"/>
+                                                <Button x:Name="HelpBtnGetBackToMe" Style="{StaticResource HelpButtonStyle}" Tag="GetBackToMe"/>
+                                            </StackPanel>
+                                        </UniformGrid>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Memory section -->
+                                <Border CornerRadius="8" Padding="10"
+                                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#9370DB" BorderThickness="1">
+                                    <StackPanel>
+                                        <Grid>
+                                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0" HorizontalAlignment="Left">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                    <TextBlock Text="{loc:Str label_chat_memory_title}" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold"/>
+                                                    <Button Style="{StaticResource HelpButtonStyle}" ToolTip="{loc:Str tooltip_lab_ai_memory}"/>
+                                                </StackPanel>
+                                                <TextBlock Text="{loc:Str label_chat_memory_hint}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                            <CheckBox x:Name="ChkChatMemoryEnabled" Style="{StaticResource ToggleStyle}"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                      IsChecked="True"
+                                                      Checked="ChkChatMemoryEnabled_Changed" Unchecked="ChkChatMemoryEnabled_Changed"/>
+                                        </Grid>
+                                        <Button x:Name="BtnClearChatMemory" Content="{loc:Str btn_forget_everything}" HorizontalAlignment="Right" Margin="0,8,0,0"
+                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="#FF6B6B" BorderBrush="#FF6B6B" BorderThickness="1"
+                                                Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnClearChatMemory_Click"
+                                                ToolTip="{loc:Str tooltip_forget_everything}"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
 
@@ -6999,11 +7107,19 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <CheckBox Grid.Column="0" x:Name="ChkBlinkTrainerIncludeVideos"
-                                                  Content="Include videos"
-                                                  Foreground="#CCCCCC" FontSize="11" VerticalAlignment="Center"
-                                                  Checked="ChkBlinkTrainerIncludeVideos_Changed"
-                                                  Unchecked="ChkBlinkTrainerIncludeVideos_Changed"/>
+                                        <StackPanel Grid.Column="0" Orientation="Vertical" VerticalAlignment="Center">
+                                            <CheckBox x:Name="ChkBlinkTrainerIncludeVideos"
+                                                      Content="Include videos"
+                                                      Foreground="#CCCCCC" FontSize="11"
+                                                      Checked="ChkBlinkTrainerIncludeVideos_Changed"
+                                                      Unchecked="ChkBlinkTrainerIncludeVideos_Changed"/>
+                                            <CheckBox x:Name="ChkBlinkTrainerMixImages"
+                                                      Content="Mix different images per tile"
+                                                      Foreground="#CCCCCC" FontSize="11" Margin="0,4,0,0"
+                                                      ToolTip="When tiling fills the screen, each tile shows a different image instead of multiplying the same one."
+                                                      Checked="ChkBlinkTrainerMixImages_Changed"
+                                                      Unchecked="ChkBlinkTrainerMixImages_Changed"/>
+                                        </StackPanel>
                                         <Button Grid.Column="1" x:Name="BtnBlinkTrainerStart" Content="Start"
                                                 Padding="14,6" Background="#FF69B4" Foreground="Black"
                                                 BorderThickness="0" FontWeight="Bold" FontSize="12" Cursor="Hand"
@@ -7137,127 +7253,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- AI Companion Effects & Memory (full-width Lab card, T2-gated by smokescreen) -->
-                    <Border CornerRadius="12" Margin="6,12,6,6" Padding="15">
-                        <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                <GradientStop Color="#1A1A32" Offset="0"/>
-                                <GradientStop Color="#1F1B36" Offset="1"/>
-                            </LinearGradientBrush>
-                        </Border.Background>
-                        <Border.BorderBrush>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
-                                <GradientStop Color="{DynamicResource PatreonPurple}" Offset="1"/>
-                            </LinearGradientBrush>
-                        </Border.BorderBrush>
-                        <Border.BorderThickness>
-                            <Thickness>2</Thickness>
-                        </Border.BorderThickness>
-                        <StackPanel>
-                            <Grid Margin="0,0,0,4">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{loc:Str lab_ai_effects_memory_title}" Foreground="White" FontWeight="Bold" FontSize="16"/>
-                                    <TextBlock Text="{loc:Str label_beta_2}" Foreground="{DynamicResource SecondaryBrush}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                </StackPanel>
-                            </Grid>
-                            <TextBlock Text="{loc:Str lab_ai_effects_memory_subtitle}"
-                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
-
-                            <!-- Notice + setup button — only shown when the user is NOT on local AI.
-                                 Cloud AI can't drive effects (proxy token cap), so the controls below
-                                 do nothing without a local Ollama. The button switches to the
-                                 Companion tab and launches the setup wizard. -->
-                            <Border x:Name="LabEffectsNeedsLocalNotice" Visibility="Collapsed"
-                                    Background="#221A38" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
-                                    CornerRadius="8" Padding="12" Margin="0,0,0,12">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                        <TextBlock Text="{loc:Str lab_ai_effects_needs_local_title}"
-                                                   Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold" FontSize="13"/>
-                                        <TextBlock Text="{loc:Str lab_ai_effects_needs_local_body}"
-                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                    </StackPanel>
-                                    <Button Grid.Column="1" x:Name="BtnLabEffectsSetupLocal"
-                                            Content="{loc:Str btn_lab_effects_setup_local}"
-                                            Click="BtnLabEffectsSetupLocal_Click"
-                                            Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="12"
-                                            BorderThickness="0" Padding="12,6" Margin="12,0,0,0" Cursor="Hand"
-                                            VerticalAlignment="Center"/>
-                                </Grid>
-                            </Border>
-
-                            <!-- Master toggle -->
-                            <Grid Margin="0,0,0,8">
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Str label_capability_effects}" Foreground="White" FontSize="15" VerticalAlignment="Center"/>
-                                    <Button Style="{StaticResource HelpButtonStyle}" ToolTip="{loc:Str tooltip_lab_ai_effects}"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ChkCapEffects" Style="{StaticResource ToggleStyle}"
-                                          HorizontalAlignment="Right" VerticalAlignment="Center"
-                                          IsChecked="False"
-                                          Checked="ChkCapEffects_Changed" Unchecked="ChkCapEffects_Changed"/>
-                            </Grid>
-
-                            <!-- Effect permissions panel -->
-                            <Border x:Name="EffectPermsPanel" Visibility="Collapsed" CornerRadius="8" Padding="10" Margin="0,0,0,12"
-                                    Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#FF6B6B" BorderThickness="1">
-                                <StackPanel>
-                                    <TextBlock Text="{loc:Str label_effect_permissions}" Foreground="#FF6B6B" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                    <Grid Margin="0,0,0,8">
-                                        <TextBlock Text="{loc:Str label_max_haptic_intensity}" Foreground="White" FontSize="13" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="TxtMaxHapticIntensity" Text="60%" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                                    </Grid>
-                                    <Slider x:Name="SliderMaxHapticIntensity" Style="{StaticResource PinkSlider}"
-                                            Minimum="0" Maximum="1" Value="0.6" Margin="0,0,0,10"
-                                            ValueChanged="SliderMaxHapticIntensity_ValueChanged"/>
-                                    <UniformGrid Columns="2" Rows="5">
-                                        <CheckBox x:Name="ChkAllowFlash" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_flash}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Flash"/>
-                                        <CheckBox x:Name="ChkAllowVideo" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_video}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Video"/>
-                                        <CheckBox x:Name="ChkAllowAudio" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_audio}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Audio"/>
-                                        <CheckBox x:Name="ChkAllowBubbles" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_bubbles}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Bubbles"/>
-                                        <CheckBox x:Name="ChkAllowSubliminal" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_subliminal}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Subliminal"/>
-                                        <CheckBox x:Name="ChkAllowOverlay" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_overlay}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Overlay"/>
-                                        <CheckBox x:Name="ChkAllowLockCard" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_lockcard}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="LockCard"/>
-                                        <CheckBox x:Name="ChkAllowBounce" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_bounce}" Foreground="White" FontSize="13" Margin="4,2,0,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Bounce"/>
-                                        <CheckBox x:Name="ChkAllowHaptic" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_haptic}" Foreground="White" FontSize="13" Margin="0,2,4,2" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="Haptic"/>
-                                        <StackPanel Orientation="Horizontal" Margin="4,2,0,2">
-                                            <CheckBox x:Name="ChkAllowGetBackToMe" Style="{StaticResource DotCheckBoxStyle}" Content="{loc:Str label_allow_get_back_to_me}" Foreground="White" FontSize="13" Checked="ChkAllowEffect_Changed" Unchecked="ChkAllowEffect_Changed" Tag="GetBackToMe"/>
-                                            <Button x:Name="HelpBtnGetBackToMe" Style="{StaticResource HelpButtonStyle}" Tag="GetBackToMe"/>
-                                        </StackPanel>
-                                    </UniformGrid>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- Memory section -->
-                            <Border CornerRadius="8" Padding="10"
-                                    Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#9370DB" BorderThickness="1">
-                                <StackPanel>
-                                    <Grid>
-                                        <StackPanel VerticalAlignment="Center" Margin="0,0,12,0" HorizontalAlignment="Left">
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                                <TextBlock Text="{loc:Str label_chat_memory_title}" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold"/>
-                                                <Button Style="{StaticResource HelpButtonStyle}" ToolTip="{loc:Str tooltip_lab_ai_memory}"/>
-                                            </StackPanel>
-                                            <TextBlock Text="{loc:Str label_chat_memory_hint}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                        <CheckBox x:Name="ChkChatMemoryEnabled" Style="{StaticResource ToggleStyle}"
-                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                  IsChecked="True"
-                                                  Checked="ChkChatMemoryEnabled_Changed" Unchecked="ChkChatMemoryEnabled_Changed"/>
-                                    </Grid>
-                                    <Button x:Name="BtnClearChatMemory" Content="{loc:Str btn_forget_everything}" HorizontalAlignment="Right" Margin="0,8,0,0"
-                                            Background="{DynamicResource SurfaceBgBrush}" Foreground="#FF6B6B" BorderBrush="#FF6B6B" BorderThickness="1"
-                                            Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnClearChatMemory_Click"
-                                            ToolTip="{loc:Str tooltip_forget_everything}"/>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
             </ScrollViewer>
 
