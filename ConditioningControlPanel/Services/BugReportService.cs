@@ -321,13 +321,50 @@ namespace ConditioningControlPanel.Services
                 long tail = Math.Min(info.Length, MaxCrashLogChars);
                 fs.Seek(info.Length - tail, SeekOrigin.Begin);
                 using var sr = new StreamReader(fs, Encoding.UTF8);
-                return sr.ReadToEnd();
+                return FilterBenignCrashes(sr.ReadToEnd());
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("[BugReport] crash log read failed: {Msg}", ex.Message);
                 return string.Empty;
             }
+        }
+
+        /// <summary>
+        /// Drop crash entries that are known to be harmless C++ runtime cleanup at app
+        /// exit (DllNotFoundException with stack frames in __std_type_info_destroy_list /
+        /// _app_exit_callback). These auto-fire on a clean shutdown and otherwise generate
+        /// empty bug reports we can't act on (#147).
+        /// </summary>
+        private static string FilterBenignCrashes(string log)
+        {
+            if (string.IsNullOrEmpty(log)) return log;
+            const string sep = "================================================================================";
+            // Each entry starts at a separator line, has another separator after the
+            // header, and a final separator closing it. Split on a sentinel and reassemble.
+            var marker = "CRASH REPORT - ";
+            var entries = log.Split(new[] { marker }, StringSplitOptions.None);
+            if (entries.Length <= 1) return log;
+
+            var kept = new System.Text.StringBuilder(entries[0]);
+            int dropped = 0;
+            for (int i = 1; i < entries.Length; i++)
+            {
+                var entry = entries[i];
+                bool benign = entry.Contains("System.DllNotFoundException", StringComparison.Ordinal)
+                    && (entry.Contains("__std_type_info_destroy_list", StringComparison.Ordinal)
+                        || entry.Contains("_app_exit_callback", StringComparison.Ordinal));
+                if (benign)
+                {
+                    dropped++;
+                    continue;
+                }
+                kept.Append(marker).Append(entry);
+            }
+
+            if (dropped > 0)
+                App.Logger?.Debug("[BugReport] filtered {Count} benign exit-cleanup crash entries", dropped);
+            return kept.ToString();
         }
 
         /// <summary>

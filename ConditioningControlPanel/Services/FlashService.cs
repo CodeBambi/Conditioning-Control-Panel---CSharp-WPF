@@ -87,6 +87,39 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public bool IsRunning => _isRunning;
 
+        /// <summary>
+        /// Snapshot of currently-active flash windows that should respond to
+        /// Focus Gaze dwells. Returns empty when the user has FlashClickable
+        /// turned off — gaze respects the same opt-in as mouse clicks.
+        /// Caller iterates in reverse for topmost-first selection.
+        /// </summary>
+        internal IReadOnlyList<FlashWindow> GetGazeTargets()
+        {
+            if (App.Settings?.Current?.FlashClickable != true)
+                return Array.Empty<FlashWindow>();
+
+            lock (_lockObj)
+            {
+                var list = new List<FlashWindow>(_activeWindows.Count);
+                foreach (var w in _activeWindows)
+                {
+                    if (w.IsClickable && !w.IsFadingOut) list.Add(w);
+                }
+                return list;
+            }
+        }
+
+        /// <summary>
+        /// Programmatic equivalent of a mouse click on a flash window. Runs
+        /// the same close + hydra-multiplication + haptic + FlashClicked
+        /// pipeline as MouseLeftButtonDown.
+        /// </summary>
+        internal void GazePop(FlashWindow window)
+        {
+            if (window == null || window.IsFadingOut) return;
+            OnFlashClicked(window, App.Settings.Current);
+        }
+
         #endregion
 
         #region Constructor
@@ -1858,6 +1891,32 @@ namespace ConditioningControlPanel.Services
         /// Whether this flash triggered a lucky proc (golden glow effect)
         /// </summary>
         public bool IsLucky { get; set; }
+
+        /// <summary>
+        /// Drives a subtle inflate effect on the flash content during Focus
+        /// Gaze dwell. t01 is the dwell progress in [0, 1]; content is scaled
+        /// 1.0 → 1.10 around its center. Independent of the existing fade
+        /// animation so it composes cleanly.
+        /// </summary>
+        public void SetGazeDwellProgress(double t01)
+        {
+            if (IsFadingOut) return;
+            if (Content is not FrameworkElement fe) return;
+            var clamped = Math.Max(0.0, Math.Min(1.0, t01));
+            var scale = 1.0 + clamped * 0.10;
+            // Reuse an existing ScaleTransform if SetGazeDwellProgress put one
+            // there last frame; otherwise install a fresh one.
+            if (fe.RenderTransform is ScaleTransform st)
+            {
+                st.ScaleX = scale;
+                st.ScaleY = scale;
+            }
+            else
+            {
+                fe.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
+                fe.RenderTransform = new ScaleTransform(scale, scale);
+            }
+        }
     }
 
     internal class LoadedImageData

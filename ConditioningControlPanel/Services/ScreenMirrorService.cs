@@ -46,6 +46,17 @@ namespace ConditioningControlPanel.Services
                     screens.Length,
                     string.Join(", ", screens.Select(s => $"{s.DeviceName} ({s.Bounds.Width}x{s.Bounds.Height})")));
 
+                // Only mirror when there are 2+ active screens, i.e. the user is currently
+                // in EXTEND. With Windows projection set to "second screen only" or "PC screen
+                // only", AllScreens returns 1 — switching to CLONE would fight the user's
+                // projection setting and DisableMirror's hard-coded EXTEND restore would
+                // leave them in extend instead of the single-screen mode they started in (#157).
+                if (screens.Length < 2)
+                {
+                    App.Logger?.Information("ScreenMirror: skipping clone — only {Count} active screen(s); leaving display topology untouched", screens.Length);
+                    return false;
+                }
+
                 var result = SetDisplayConfig(0, IntPtr.Zero, 0, IntPtr.Zero, SDC_TOPOLOGY_CLONE | SDC_APPLY);
 
                 if (result == 0) // ERROR_SUCCESS

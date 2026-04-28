@@ -25,8 +25,8 @@ namespace ConditioningControlPanel.Services.Commands
             {
                 AICommandType.flash_image => new FlashImageCommand((FlashImage)commandData.Data),
                 AICommandType.bubbles => new BubbleCommand((Bubbles)commandData.Data),
-                AICommandType.video => new MediaCommand((Media)commandData.Data),
-                AICommandType.audio => new MediaCommand((Media)commandData.Data),
+                AICommandType.video => new MediaCommand((Media)commandData.Data, AICommandType.video),
+                AICommandType.audio => new MediaCommand((Media)commandData.Data, AICommandType.audio),
                 AICommandType.getbacktome => new GetBackToMeCommand((GetBackToMe)commandData.Data, cancellationToken, depth),
                 AICommandType.mantra_lockscreen => new MantraLockScreenCommand((MantraLockscreen)commandData.Data),
                 AICommandType.pink => new PinkCommand((SpiralPinkFiler)commandData.Data),

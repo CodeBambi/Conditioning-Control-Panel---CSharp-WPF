@@ -221,6 +221,11 @@ namespace ConditioningControlPanel
         public static ModService Mods { get; private set; } = null!;
         public static BugReportService BugReport { get; private set; } = null!;
         public static WallpaperService? Wallpaper { get; private set; }
+        public static WebcamTrackingService Webcam { get; private set; } = null!;
+        public static FocusGameService FocusGame { get; private set; } = null!;
+        public static GazeFocusService GazeFocus { get; private set; } = null!;
+        public static GazeDebugCursorService GazeCursor { get; private set; } = null!;
+        public static BlinkTrainerService BlinkTrainer { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -838,7 +843,17 @@ namespace ConditioningControlPanel
             // Initialize content packs service
             ContentPacks = new ContentPackService();
 
-            // Initialize lockdown service (ephemeral — not persisted)
+            // Initialize webcam tracking + focus game services (Lab — gated by consent dialog).
+            // Constructors are no-ops; the camera handle only opens after explicit user consent.
+            Webcam = new WebcamTrackingService();
+            FocusGame = new FocusGameService();
+            GazeCursor = new GazeDebugCursorService();
+            GazeFocus = new GazeFocusService();
+            BlinkTrainer = new BlinkTrainerService();
+
+            // Initialize lockdown service (ephemeral — not persisted). Recover from a
+            // prior run that was killed mid-lockdown so the panic key isn't stuck off.
+            LockdownService.RecoverIfNeeded();
             Lockdown = new LockdownService();
 
             // Initialize mantra lab service
@@ -2124,6 +2139,10 @@ Application State:
             ScreenMirror?.Dispose();
             Autonomy?.Dispose();
             Wallpaper?.Dispose();
+            GazeFocus?.Dispose();
+            GazeCursor?.Dispose();
+            Webcam?.Dispose();
+            FocusGame?.Dispose();
             ContentPacks?.Dispose();
             Roadmap?.Dispose();
             SkillTree?.Dispose();

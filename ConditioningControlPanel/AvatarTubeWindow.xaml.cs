@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
@@ -86,6 +87,27 @@ namespace ConditioningControlPanel
             Preset,     // Preset phrases (click reactions, idle, etc.)
             Trigger,    // Random trigger phrases
             AI          // AI-generated responses
+        }
+
+        // Chat history: only the conversational pair (user prompts + AI replies),
+        // not random preset/trigger chatter. Capped at MaxChatHistorySize entries.
+        public class ChatMessage
+        {
+            public string Text { get; set; } = string.Empty;
+            public bool IsUser { get; set; }
+            public DateTime Timestamp { get; set; } = DateTime.Now;
+            public string TimeLabel => Timestamp.ToString("HH:mm");
+        }
+        private const int MaxChatHistorySize = 100;
+        public ObservableCollection<ChatMessage> ChatHistory { get; } = new();
+        private bool _isShowingChatHistory = false;
+
+        private void AddToChatHistory(string text, bool isUser)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            ChatHistory.Add(new ChatMessage { Text = text, IsUser = isUser });
+            while (ChatHistory.Count > MaxChatHistorySize)
+                ChatHistory.RemoveAt(0);
         }
 
         // Thinking animation: rotating phrase + animated dots while waiting for AI reply.
@@ -233,6 +255,12 @@ namespace ConditioningControlPanel
 
             // Apply the user-configured chat shortcut keybinding (Ctrl+T by default).
             Loaded += (_, _) => ApplyChatShortcutTo(this);
+
+            // Bind chat history list to the rolling collection of conversational messages.
+            ChatHistoryList.ItemsSource = ChatHistory;
+
+            // Esc closes chat history mode if open.
+            PreviewKeyDown += AvatarTubeWindow_PreviewKeyDown;
 
             _parentWindow = parentWindow;
             // Don't set Owner - it causes black window artifacts during minimize
@@ -2243,6 +2271,74 @@ namespace ConditioningControlPanel
         /// </summary>
         /// <param name="text">Text to display</param>
         /// <param name="playSound">Whether to play giggle sound (default true for AI responses)</param>
+        // ============================================================
+        // CHAT HISTORY MODE
+        // ============================================================
+
+        private void MenuItemShowChatHistory_Click(object sender, RoutedEventArgs e)
+        {
+            EnterChatHistoryMode();
+        }
+
+        private void BtnCloseChatHistory_Click(object sender, RoutedEventArgs e)
+        {
+            ExitChatHistoryMode();
+        }
+
+        private void AvatarTubeWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape && _isShowingChatHistory)
+            {
+                ExitChatHistoryMode();
+                e.Handled = true;
+            }
+        }
+
+        private void EnterChatHistoryMode()
+        {
+            // Cancel any in-flight bubble timers — chat history takes over the bubble.
+            _speechTimer?.Stop();
+            _speechDelayTimer?.Stop();
+            StopThinkingAnimation();
+            _isWaitingForAi = false;
+            _isGiggling = false;
+
+            _isShowingChatHistory = true;
+
+            // Show empty-state hint when there are no captured messages yet.
+            TxtChatHistoryEmpty.Visibility = ChatHistory.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            // Swap bubble content: hide single-message view, show chat history.
+            SpeechScroller.Visibility = Visibility.Collapsed;
+            ChatHistoryView.Visibility = Visibility.Visible;
+
+            // Enlarge bubble for the chat history layout.
+            SpeechBubble.MaxWidth = 600;
+
+            SpeechBubble.UpdateLayout();
+            SpeechBubble.Visibility = Visibility.Visible;
+
+            // Auto-scroll to most recent message.
+            Dispatcher.BeginInvoke(new Action(() => ChatHistoryScroller.ScrollToBottom()),
+                System.Windows.Threading.DispatcherPriority.Background);
+
+            if (!(PopQuizWindow.IsOpen || QuizWindow.IsOpen))
+            {
+                StartZOrderRefreshTimer();
+                BringAttachedPairToFront();
+            }
+        }
+
+        private void ExitChatHistoryMode()
+        {
+            _isShowingChatHistory = false;
+            ChatHistoryView.Visibility = Visibility.Collapsed;
+            SpeechScroller.Visibility = Visibility.Visible;
+            SpeechBubble.MaxWidth = 380; // Restore default bubble width.
+            SpeechBubble.Visibility = Visibility.Collapsed;
+            StopZOrderRefreshTimer();
+        }
+
         public void GigglePriority(string text, bool playSound = true)
         {
             DispatcherHelper.RunOnUI(() =>
@@ -2262,6 +2358,10 @@ namespace ConditioningControlPanel
 
                 // Show immediately
                 _isGiggling = false;
+
+                // Capture AI reply for chat history
+                AddToChatHistory(text, isUser: false);
+
                 ShowGiggle(text, playSound: playSound, source: SpeechSource.AI);
 
                 App.Logger?.Debug("Priority speech (queue cleared): {Text}", text);
@@ -2276,6 +2376,15 @@ namespace ConditioningControlPanel
         /// <param name="source">The source of the speech (for delay calculation)</param>
         private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset, string? phraseAudioPath = null)
         {
+            // Chat history view owns the bubble — swap back to single-message mode before showing.
+            if (_isShowingChatHistory)
+            {
+                _isShowingChatHistory = false;
+                ChatHistoryView.Visibility = Visibility.Collapsed;
+                SpeechScroller.Visibility = Visibility.Visible;
+                SpeechBubble.MaxWidth = 380;
+            }
+
             // Skip if muted or avatar not visible on screen
             if (_isMuted || !IsAvatarVisibleOnScreen)
             {
@@ -2341,13 +2450,17 @@ namespace ConditioningControlPanel
                 BringAttachedPairToFront();
             }
 
-            // Calculate display duration based on text length
-            // Base: 5 seconds, plus ~0.05s per character, min 5s, max 14s
-            // AI responses get slightly longer display time
-            double baseDuration = source == SpeechSource.AI ? 6.0 : 5.0;
-            double perCharDuration = 0.05;
-            double calculatedDuration = baseDuration + (text.Length * perCharDuration);
-            double displayDuration = Math.Clamp(calculatedDuration, 5.0, 16.0);
+            // Display duration is user-controlled via Companion tab slider (1-10s, default 2).
+            // Long AI replies are still readable: hovering keeps the bubble open, and
+            // "Show chat history" preserves the full conversation for re-reading.
+            double displayDuration = Math.Clamp(App.Settings?.Current?.BubbleDurationSeconds ?? 2.0, 1.0, 10.0);
+
+            // The typewriter eats into the visible window. Add its estimated runtime so the
+            // slider value reflects fully-rendered reading time, not raw bubble-open time.
+            if (source == SpeechSource.AI && !_isWaitingForAi)
+            {
+                displayDuration += EstimateTypewriterDurationMs(text.Length) / 1000.0;
+            }
 
             // Hide after calculated duration
             _speechTimer?.Stop();
@@ -2530,6 +2643,16 @@ namespace ConditioningControlPanel
             { "Deep Acceptance", "https://hypnotube.com/video/deep-acceptance-113157.html" },
             { "Eat Your Cum", "https://hypnotube.com/video/eat-your-cum-116026.html" },
             { "Trans Love Hypno - CrimsonPMV", "https://hypnotube.com/video/trans-love-hypno-crimsonpmv-121310.html" },
+
+            // BambiCloud playlists (audio, extracted 2026-04-28)
+            { "IQ Programming", "https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d" },
+            { "Attitude Programming", "https://bambicloud.com/playlist/c0effdad-6002-4269-a982-479d676c8d46" },
+            { "Takeover Programming", "https://bambicloud.com/playlist/726403c2-567c-4c30-9f74-8fd750a82ef9" },
+            { "Cockslut Programming", "https://bambicloud.com/playlist/10091e87-2243-4f75-85d1-912c39951bc4" },
+            { "Uniform Programming", "https://bambicloud.com/playlist/39f0c016-abfb-4a53-a8d3-1c492a86635b" },
+            { "Maid Programming", "https://bambicloud.com/playlist/d244e2d6-be21-4e5b-bab1-b1268ade85ce" },
+            { "Deep Trance Programming", "https://bambicloud.com/playlist/648f16c8-865b-44e2-bba5-881fc499e0f7" },
+            { "Personality Programming", "https://bambicloud.com/playlist/ba1cf73a-5f3e-4ef8-bbc6-67ce2dcae774" },
         };
 
         // Cached copy of the built-in links for restoring when switching away from custom mods
@@ -2564,14 +2687,39 @@ namespace ConditioningControlPanel
 
         private void PopulateSpeechBubble(string text)
         {
-            TxtSpeech.Inlines.Clear();
+            BuildLinkedInlines(text, TxtSpeech.Inlines);
+        }
+
+        /// <summary>
+        /// Strips markdown link syntax, finds known video/playlist titles and raw URLs in
+        /// <paramref name="text"/>, and writes Run / Hyperlink inlines into <paramref name="target"/>.
+        /// Used by the live speech bubble AND the chat history items so both render the same
+        /// clickable pink hyperlinks.
+        /// </summary>
+        private void BuildLinkedInlines(string text, InlineCollection target)
+        {
+            target.Clear();
 
             if (string.IsNullOrEmpty(text))
                 return;
 
-            // Strip any markdown links the AI generates - keep only the link text, discard URLs
-            // This handles cases like [Naughty Bambi](https://youtube.com/...) -> Naughty Bambi
-            text = Regex.Replace(text, @"\[([^\]]+)\]\([^)]+\)", "$1");
+            // Pass 1: collapse markdown links into just their text BUT remember the (text, url)
+            // pairs so we can re-attach them as real Hyperlink inlines below. We used to drop
+            // URLs entirely, which meant the AI couldn't reliably surface clickable links —
+            // small models often produce correct URLs (copied verbatim from the prompt) but
+            // approximate the title text, so the URL is the more authoritative signal.
+            var mdLinks = new List<(string LinkText, string Url)>();
+            text = Regex.Replace(text, @"\[([^\]]+)\]\(([^)]+)\)", m =>
+            {
+                var linkText = m.Groups[1].Value;
+                var url = m.Groups[2].Value.Trim();
+                if (Uri.TryCreate(url, UriKind.Absolute, out var u) &&
+                    (u.Scheme == "https" || u.Scheme == "http"))
+                {
+                    mdLinks.Add((linkText, url));
+                }
+                return linkText; // collapse to plain text in the working buffer
+            });
 
             // Also clean up any malformed markdown like [Url] or (url)
             text = Regex.Replace(text, @"\s*\[Url\]|\s*\(url\)", "", RegexOptions.IgnoreCase);
@@ -2579,6 +2727,19 @@ namespace ConditioningControlPanel
             // Try to find known video names in the text and make them clickable
             var processedText = text;
             var linkPositions = new List<(int start, int length, string name, string url)>();
+
+            // Pass 2: re-find the markdown link texts (now plain) in the buffer and claim them
+            // as the highest-priority link source. Authoritative URL beats name-based guess.
+            foreach (var (linkText, url) in mdLinks)
+            {
+                var idx = processedText.IndexOf(linkText, StringComparison.Ordinal);
+                if (idx < 0) continue;
+                bool overlaps = linkPositions.Any(lp =>
+                    (idx >= lp.start && idx < lp.start + lp.length) ||
+                    (idx + linkText.Length > lp.start && idx + linkText.Length <= lp.start + lp.length));
+                if (!overlaps)
+                    linkPositions.Add((idx, linkText.Length, linkText, url));
+            }
 
             foreach (var kvp in KnownVideoLinks.OrderByDescending(k => k.Key.Length)) // Longest first to avoid partial matches
             {
@@ -2617,7 +2778,7 @@ namespace ConditioningControlPanel
             if (linkPositions.Count == 0)
             {
                 // No known videos found - just show plain text
-                TxtSpeech.Inlines.Add(new Run(text));
+                target.Add(new Run(text));
                 return;
             }
 
@@ -2628,7 +2789,7 @@ namespace ConditioningControlPanel
                 // Add text before the link
                 if (start > lastIndex)
                 {
-                    TxtSpeech.Inlines.Add(new Run(text.Substring(lastIndex, start - lastIndex)));
+                    target.Add(new Run(text.Substring(lastIndex, start - lastIndex)));
                 }
 
                 // Get the actual text from the original (preserving case)
@@ -2643,12 +2804,12 @@ namespace ConditioningControlPanel
                         TextDecorations = TextDecorations.Underline
                     };
                     hyperlink.RequestNavigate += SpeechBubbleHyperlink_RequestNavigate;
-                    TxtSpeech.Inlines.Add(hyperlink);
+                    target.Add(hyperlink);
                     App.Logger?.Information("Auto-linked video: '{Name}' -> {Url}", actualText, url);
                 }
                 catch
                 {
-                    TxtSpeech.Inlines.Add(new Run(actualText));
+                    target.Add(new Run(actualText));
                 }
 
                 lastIndex = start + length;
@@ -2657,8 +2818,19 @@ namespace ConditioningControlPanel
             // Add remaining text
             if (lastIndex < text.Length)
             {
-                TxtSpeech.Inlines.Add(new Run(text.Substring(lastIndex)));
+                target.Add(new Run(text.Substring(lastIndex)));
             }
+        }
+
+        /// <summary>
+        /// Loaded handler for chat history TextBlocks. Pulls the message text from Tag
+        /// (we can't bind to Text because then we couldn't write Inlines) and renders it
+        /// through the same hyperlink builder used by the live bubble.
+        /// </summary>
+        private void ChatHistoryText_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBlock tb && tb.Tag is string text)
+                BuildLinkedInlines(text, tb.Inlines);
         }
 
         /// <summary>
@@ -4641,6 +4813,22 @@ namespace ConditioningControlPanel
         /// On completion, calls <see cref="PopulateSpeechBubble"/> for the final pass so
         /// video-name hyperlinks and markdown links become clickable.
         /// </summary>
+        /// <summary>
+        /// Estimates how long the typewriter will take for a given text length, mirroring
+        /// the math in <see cref="StartTypewriter"/> and <see cref="TypewriterTick"/>.
+        /// Used by <see cref="ShowGiggle"/> to compensate the bubble timer so the slider
+        /// value reflects readable time rather than bubble-open time.
+        /// </summary>
+        private static int EstimateTypewriterDurationMs(int length)
+        {
+            if (length <= 0) return 0;
+            int charsPerTick = Math.Max(1, length / 100);
+            int stepMs = Math.Min(TypewriterMaxStepMs,
+                Math.Max(TypewriterMinStepMs, TypewriterTotalBudgetMs / Math.Max(1, length)));
+            int ticks = (int)Math.Ceiling((double)length / charsPerTick);
+            return stepMs * ticks;
+        }
+
         private void StartTypewriter(string fullText)
         {
             StopTypewriter();
@@ -4731,6 +4919,9 @@ namespace ConditioningControlPanel
 
             TxtUserInput.Text = "";
             ToggleInputPanel();
+
+            // Capture user prompt for chat history
+            AddToChatHistory(input, isUser: true);
 
             if (App.Settings?.Current?.AiChatEnabled == true && App.Ai != null && App.Ai.IsAvailable)
             {

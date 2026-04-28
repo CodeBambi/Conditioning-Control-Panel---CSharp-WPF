@@ -443,6 +443,48 @@ namespace ConditioningControlPanel.Services
             return imported;
         }
 
+        /// <summary>
+        /// Run a synthetic trigger through the normal fire path — pulse feed update,
+        /// TriggerFired event, and full action dispatch (avatar comment, highlight,
+        /// audio, etc.). Used by the Awareness tutorial's demo step so the user can
+        /// witness a fire without typing or waiting for OCR. Does not touch
+        /// AppSettings.KeywordTriggers and bypasses all cooldowns / loop-protection.
+        /// </summary>
+        public void FireDemoTrigger(string keyword, string source = "Tutorial")
+        {
+            if (string.IsNullOrWhiteSpace(keyword)) return;
+
+            var demo = new KeywordTrigger
+            {
+                Id = "tutorial:demo",
+                Keyword = keyword,
+                MatchType = KeywordMatchType.PlainText,
+                Enabled = true,
+                VisualEffect = KeywordVisualEffect.HighlightOnly,
+                Actions = new List<KeywordAction>
+                {
+                    new HighlightAction { Enabled = true },
+                    new AvatarCommentAction
+                    {
+                        Enabled = true,
+                        FallbackPhraseCategory = "PuppyPraise",
+                        RequireAiAvailable = false
+                    }
+                }
+            };
+
+            try
+            {
+                RecordFire(demo, source);
+                TriggerFired?.Invoke(this, demo);
+                _ = DispatchResponseAsync(demo, null);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("FireDemoTrigger failed: {Error}", ex.Message);
+            }
+        }
+
         #endregion
 
         /// <summary>

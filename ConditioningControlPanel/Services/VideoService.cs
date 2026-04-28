@@ -334,6 +334,23 @@ namespace ConditioningControlPanel.Services
             if (_isRunning) return;
             _isRunning = true;
             ScheduleNext();
+
+            // Listen for Windows lock/unlock. Without this, a video that's playing when the
+            // user hits Win-L survives the lock screen and lands back on the desktop in a
+            // half-broken state — attention check buttons missing, overlays floating on top
+            // of the video, and the EndReached cleanup sometimes never fires (leaves a black
+            // window the user has to kill via tray). Force-cleanup on lock; the session can
+            // resume normal scheduling on unlock.
+            try
+            {
+                Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch;
+                Microsoft.Win32.SystemEvents.SessionSwitch += OnSessionSwitch;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoService: failed to subscribe to SessionSwitch — {Error}", ex.Message);
+            }
+
             App.Logger.Information("VideoService started");
         }
 
@@ -345,6 +362,9 @@ namespace ConditioningControlPanel.Services
             _safetyTimer?.Stop();
             _fallbackSafetyTimer?.Stop();
             _fallbackSafetyTimer = null;
+
+            try { Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch; }
+            catch { }
 
             // Force cleanup of any playing video - use synchronous disposal during stop
             // because Stop is typically called during app shutdown
@@ -362,6 +382,33 @@ namespace ConditioningControlPanel.Services
             }
 
             App.Logger?.Information("VideoService stopped");
+        }
+
+        private void OnSessionSwitch(object? sender, Microsoft.Win32.SessionSwitchEventArgs e)
+        {
+            if (e.Reason != Microsoft.Win32.SessionSwitchReason.SessionLock) return;
+            if (!_videoPlaying && _windows.Count == 0) return;
+
+            App.Logger?.Information("VideoService: Windows session locked while a video was active — force-cleaning to prevent broken-overlay state on unlock");
+
+            try
+            {
+                if (Application.Current?.Dispatcher != null && !Application.Current.Dispatcher.HasShutdownStarted)
+                {
+                    Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try { ForceCleanup(); }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Warning(ex, "VideoService: ForceCleanup on session lock threw");
+                        }
+                    }));
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoService: SessionSwitch dispatch failed — {Error}", ex.Message);
+            }
         }
 
         public void TriggerVideo()

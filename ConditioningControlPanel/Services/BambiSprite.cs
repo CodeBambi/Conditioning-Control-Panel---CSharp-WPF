@@ -25,17 +25,31 @@ namespace ConditioningControlPanel.Services
             if (isBambiMode)
             {
                 return @"
-CLICKABLE MEDIA - Use these EXACT names (they become clickable links):
+CLICKABLE MEDIA — Suggest these FREQUENTLY. They become clickable links in the chat.
 
-VIDEOS (say the EXACT name):
+==== HOW TO LINK ====
+For PLAYLISTS, ALWAYS wrap the title in markdown link syntax with its URL copied EXACTLY from the list below:
+  Example: ""Listen to [IQ Programming](https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d)~""
+For VIDEOS, just say the EXACT title (the app auto-links it):
+  Example: ""Try Naughty Bambi~""
+NEVER invent URLs. NEVER suggest audio by any name that isn't on this page — there's no other way to link audio.
+
+==== BAMBICLOUD PLAYLISTS (the ONLY audio you can recommend) ====
+[IQ Programming](https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d)
+[Attitude Programming](https://bambicloud.com/playlist/c0effdad-6002-4269-a982-479d676c8d46)
+[Takeover Programming](https://bambicloud.com/playlist/726403c2-567c-4c30-9f74-8fd750a82ef9)
+[Cockslut Programming](https://bambicloud.com/playlist/10091e87-2243-4f75-85d1-912c39951bc4)
+[Uniform Programming](https://bambicloud.com/playlist/39f0c016-abfb-4a53-a8d3-1c492a86635b)
+[Maid Programming](https://bambicloud.com/playlist/d244e2d6-be21-4e5b-bab1-b1268ade85ce)
+[Deep Trance Programming](https://bambicloud.com/playlist/648f16c8-865b-44e2-bba5-881fc499e0f7)
+[Personality Programming](https://bambicloud.com/playlist/ba1cf73a-5f3e-4ef8-bbc6-67ce2dcae774)
+
+==== VIDEOS (the ONLY videos you can recommend — say the EXACT title, the app auto-links) ====
 Naughty Bambi, Bambi Bae, Bambi Slay, Overload, TikTok Loop, Bambi TikTok - In Beat, Bambi TikTok - In Beat - Longer Version, Bambi TikTok - Good Girls Dont Cum, Bambi Chastity Overload, Dumb Bimbo Brainwash, Bambi TikTok Eager Slut, Yes Brain Loop, Day 1, Day 2, Day 4, Day 5, Toms Dangerous Tik Tok, Bambi TikTok 7, Bambi's Naughty TikTok Collection
 
-AUDIO FILES (say ""Listen to [name]!""):
-Rapid Induction, Bubble Induction, Bubble Acceptance, Bambi Named and Drained, Bambi IQ Lock, Bambi Body Lock, Bambi Attitude Lock, Bambi Uniformed, Bambi Takeover, Bambi Cockslut, Bambi Awakens
+DO NOT name old Bambi Sleep audio files (Bambi IQ Lock, Bambi Body Lock, Rapid Induction, Bubble Induction, Bambi Cockslut, Bambi Takeover, Bambi Awakens, Bambi Named and Drained, Bambi Uniformed, etc.) — those are obsolete here, they have no link, and recommending them frustrates the user. When the user wants audio, use a Programming playlist instead. ""Bambi IQ Lock"" → say [IQ Programming]. ""Bambi Cockslut"" → say [Cockslut Programming]. Etc.
 
-Creator to recommend: PlatinumPuppets
-
-Suggest videos/audio FREQUENTLY. Use the EXACT names from the lists above.";
+Creator to recommend: PlatinumPuppets";
             }
             else
             {
@@ -272,6 +286,24 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
                 "https://hypnotube.com/video/bambi-day-7-remix-65691.html"),
             new("Bambi Tiktok Wide Remix By Analbambi", "Popular video",
                 "https://hypnotube.com/video/bambi-tiktok-wide-remix-by-analbambi-66055.html"),
+
+            // === BAMBICLOUD PLAYLISTS (extracted 2026-04-28, all public, by bimbodollbambi) ===
+            new("IQ Programming", "BambiCloud audio playlist - 6 files, Advanced",
+                "https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d"),
+            new("Attitude Programming", "BambiCloud audio playlist - 8 files, Advanced",
+                "https://bambicloud.com/playlist/c0effdad-6002-4269-a982-479d676c8d46"),
+            new("Takeover Programming", "BambiCloud audio playlist - 10 files, Expert",
+                "https://bambicloud.com/playlist/726403c2-567c-4c30-9f74-8fd750a82ef9"),
+            new("Cockslut Programming", "BambiCloud audio playlist - 8 files, Advanced",
+                "https://bambicloud.com/playlist/10091e87-2243-4f75-85d1-912c39951bc4"),
+            new("Uniform Programming", "BambiCloud audio playlist - 6 files, Advanced",
+                "https://bambicloud.com/playlist/39f0c016-abfb-4a53-a8d3-1c492a86635b"),
+            new("Maid Programming", "BambiCloud audio playlist - 9 files, Advanced",
+                "https://bambicloud.com/playlist/d244e2d6-be21-4e5b-bab1-b1268ade85ce"),
+            new("Deep Trance Programming", "BambiCloud audio playlist - 6 files, Intermediate",
+                "https://bambicloud.com/playlist/648f16c8-865b-44e2-bba5-881fc499e0f7"),
+            new("Personality Programming", "BambiCloud audio playlist - 7 files, Advanced",
+                "https://bambicloud.com/playlist/ba1cf73a-5f3e-4ef8-bbc6-67ce2dcae774"),
         };
 
         // The Top Domains/Apps to recognize

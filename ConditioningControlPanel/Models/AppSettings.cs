@@ -1897,6 +1897,16 @@ namespace ConditioningControlPanel.Models
             set { _idleGiggleIntervalSeconds = Math.Clamp(value, 10, 600); OnPropertyChanged(); }
         }
 
+        private double _bubbleDurationSeconds = 2.0;
+        /// <summary>
+        /// How long speech bubbles stay on screen (in seconds, 1-10). Default 2.
+        /// </summary>
+        public double BubbleDurationSeconds
+        {
+            get => _bubbleDurationSeconds;
+            set { _bubbleDurationSeconds = Math.Clamp(value, 1.0, 10.0); OnPropertyChanged(); }
+        }
+
         // ============================================================
         // AWARENESS MODE (Window Tracking) - Opt-in feature
         // ============================================================
@@ -3088,6 +3098,192 @@ namespace ConditioningControlPanel.Models
         {
             var json = JsonConvert.SerializeObject(this);
             return JsonConvert.DeserializeObject<AppSettings>(json) ?? new AppSettings();
+        }
+
+        #endregion
+
+        #region Webcam Tracking (Lab — Box 1 + Box 2)
+
+        // Consent + calibration
+        private bool _webcamConsentGiven;
+        public bool WebcamConsentGiven
+        {
+            get => _webcamConsentGiven;
+            set { _webcamConsentGiven = value; OnPropertyChanged(); }
+        }
+
+        private string _webcamConsentVersion = "";
+        public string WebcamConsentVersion
+        {
+            get => _webcamConsentVersion;
+            set { _webcamConsentVersion = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private DateTime? _webcamConsentDate;
+        public DateTime? WebcamConsentDate
+        {
+            get => _webcamConsentDate;
+            set { _webcamConsentDate = value; OnPropertyChanged(); }
+        }
+
+        private bool _webcamCalibrated;
+        public bool WebcamCalibrated
+        {
+            get => _webcamCalibrated;
+            set { _webcamCalibrated = value; OnPropertyChanged(); }
+        }
+
+        private string _webcamCalibrationMode = "";
+        public string WebcamCalibrationMode
+        {
+            get => _webcamCalibrationMode;
+            set { _webcamCalibrationMode = value ?? ""; OnPropertyChanged(); }
+        }
+
+        // Box 1 — Webcam Triggers
+        private bool _webcamTriggersEnabled;
+        public bool WebcamTriggersEnabled
+        {
+            get => _webcamTriggersEnabled;
+            set { _webcamTriggersEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _webcamTriggerBlink = true;
+        public bool WebcamTriggerBlink
+        {
+            get => _webcamTriggerBlink;
+            set { _webcamTriggerBlink = value; OnPropertyChanged(); }
+        }
+
+        private bool _webcamTriggerLongStare = true;
+        public bool WebcamTriggerLongStare
+        {
+            get => _webcamTriggerLongStare;
+            set { _webcamTriggerLongStare = value; OnPropertyChanged(); }
+        }
+
+        private bool _webcamTriggerMouthOpen = true;
+        public bool WebcamTriggerMouthOpen
+        {
+            get => _webcamTriggerMouthOpen;
+            set { _webcamTriggerMouthOpen = value; OnPropertyChanged(); }
+        }
+
+        private bool _webcamTriggerBubbleStare;
+        public bool WebcamTriggerBubbleStare
+        {
+            get => _webcamTriggerBubbleStare;
+            set { _webcamTriggerBubbleStare = value; OnPropertyChanged(); }
+        }
+
+        private double _webcamSensitivity = 0.5;
+        public double WebcamSensitivity
+        {
+            get => _webcamSensitivity;
+            set { _webcamSensitivity = value; OnPropertyChanged(); }
+        }
+
+        // Box 2 — Focus Training
+        private bool _focusGameEnabled;
+        public bool FocusGameEnabled
+        {
+            get => _focusGameEnabled;
+            set { _focusGameEnabled = value; OnPropertyChanged(); }
+        }
+
+        private List<FocusGameBucket> _focusGameBuckets = new();
+        public List<FocusGameBucket> FocusGameBuckets
+        {
+            get => _focusGameBuckets;
+            set { _focusGameBuckets = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private int _focusGameRoundCount = 10;
+        public int FocusGameRoundCount
+        {
+            get => _focusGameRoundCount;
+            set { _focusGameRoundCount = value; OnPropertyChanged(); }
+        }
+
+        private int _focusGameRoundDurationMs = 4000;
+        public int FocusGameRoundDurationMs
+        {
+            get => _focusGameRoundDurationMs;
+            set { _focusGameRoundDurationMs = value; OnPropertyChanged(); }
+        }
+
+        private string _focusGameMonitor = "Primary";
+        public string FocusGameMonitor
+        {
+            get => _focusGameMonitor;
+            set { _focusGameMonitor = value ?? "Primary"; OnPropertyChanged(); }
+        }
+
+        private int _focusGameCorrectXp = 30;
+        public int FocusGameCorrectXp
+        {
+            get => _focusGameCorrectXp;
+            set { _focusGameCorrectXp = value; OnPropertyChanged(); }
+        }
+
+        private int _focusGameSessionsPlayed;
+        public int FocusGameSessionsPlayed
+        {
+            get => _focusGameSessionsPlayed;
+            set { _focusGameSessionsPlayed = value; OnPropertyChanged(); }
+        }
+
+        private int _focusGameTotalCorrect;
+        public int FocusGameTotalCorrect
+        {
+            get => _focusGameTotalCorrect;
+            set { _focusGameTotalCorrect = value; OnPropertyChanged(); }
+        }
+
+        private int _focusGameTotalRounds;
+        public int FocusGameTotalRounds
+        {
+            get => _focusGameTotalRounds;
+            set { _focusGameTotalRounds = value; OnPropertyChanged(); }
+        }
+
+        #endregion
+
+        #region Blink Trainer (Lab — Webcam Games)
+
+        private List<string> _blinkTrainerFolders = new();
+        public List<string> BlinkTrainerFolders
+        {
+            get => _blinkTrainerFolders;
+            set { _blinkTrainerFolders = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private int _blinkTrainerDurationMinutes = 10;
+        public int BlinkTrainerDurationMinutes
+        {
+            get => _blinkTrainerDurationMinutes;
+            set { _blinkTrainerDurationMinutes = Math.Clamp(value, 1, 180); OnPropertyChanged(); }
+        }
+
+        private int _blinkTrainerOpacity = 80;
+        public int BlinkTrainerOpacity
+        {
+            get => _blinkTrainerOpacity;
+            set { _blinkTrainerOpacity = Math.Clamp(value, 1, 100); OnPropertyChanged(); }
+        }
+
+        private bool _blinkTrainerIncludeVideos;
+        public bool BlinkTrainerIncludeVideos
+        {
+            get => _blinkTrainerIncludeVideos;
+            set { _blinkTrainerIncludeVideos = value; OnPropertyChanged(); }
+        }
+
+        private bool _blinkTrainerMixImages;
+        public bool BlinkTrainerMixImages
+        {
+            get => _blinkTrainerMixImages;
+            set { _blinkTrainerMixImages = value; OnPropertyChanged(); }
         }
 
         #endregion

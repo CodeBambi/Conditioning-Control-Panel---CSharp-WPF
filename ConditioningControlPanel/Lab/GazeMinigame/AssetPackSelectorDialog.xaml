@@ -1,0 +1,59 @@
+<Window x:Class="ConditioningControlPanel.Lab.GazeMinigame.AssetPackSelectorDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Select Asset Packs"
+        Width="640" Height="540"
+        Background="#1A1A2E"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Select asset packs"
+                   Foreground="White" FontSize="20" FontWeight="Bold"/>
+        <TextBlock Grid.Row="1" Margin="0,6,0,16" TextWrapping="Wrap"
+                   Foreground="#AAAAAA" FontSize="12">
+            The first pack is the <Run Foreground="#FF69B4" FontWeight="Bold">correct</Run> training target — the content the user should learn to focus on.
+            All other packs are <Run Foreground="#FF8080" FontWeight="Bold">noise</Run> — distractor content that should be ignored.
+            Need at least 2 packs.
+        </TextBlock>
+
+        <Border Grid.Row="2" BorderBrush="#33333A" BorderThickness="1" CornerRadius="6"
+                Background="#0F0F1A" Padding="8">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="PackListPanel"/>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="3" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" x:Name="BtnAddPack" Content="+ Add pack"
+                    Padding="14,8" Background="#33333A" Foreground="White"
+                    BorderBrush="#FF69B4" BorderThickness="1" FontWeight="SemiBold"
+                    Cursor="Hand" Click="BtnAddPack_Click"/>
+
+            <Button Grid.Column="2" x:Name="BtnCancel" Content="Cancel"
+                    Padding="20,8" Margin="0,0,8,0"
+                    Background="#33333A" Foreground="White" BorderThickness="0"
+                    Cursor="Hand" Click="BtnCancel_Click"/>
+
+            <Button Grid.Column="3" x:Name="BtnOk" Content="Use these packs"
+                    Padding="20,8"
+                    Background="#FF69B4" Foreground="Black" BorderThickness="0"
+                    FontWeight="Bold" Cursor="Hand" Click="BtnOk_Click"
+                    IsEnabled="False"/>
+        </Grid>
+    </Grid>
+</Window>

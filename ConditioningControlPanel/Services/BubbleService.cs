@@ -34,6 +34,22 @@ public class BubbleService : IDisposable
     public bool IsPaused => _isPaused;
     public int ActiveBubbles => _bubbles.Count;
 
+    /// <summary>
+    /// Snapshot of currently-poppable bubbles for Focus Gaze hit-testing.
+    /// Caller iterates in reverse for topmost-first selection.
+    /// </summary>
+    internal IReadOnlyList<Bubble> GetGazeTargets()
+    {
+        // Defensive copy so callers can iterate without worrying about
+        // _bubbles mutation from the spawn/animation timers.
+        var list = new List<Bubble>(_bubbles.Count);
+        foreach (var b in _bubbles)
+        {
+            if (b.CanGazePop) list.Add(b);
+        }
+        return list;
+    }
+
     private bool _isPaused;
 
     public event Action? OnBubblePopped;
@@ -505,6 +521,7 @@ internal class Bubble
     private bool _isAlive = true;
     private bool _isDestroyed = false;
     private bool _isLucky;
+    private double _gazeDwellScale = 1.0; // multiplied into render scale during Focus Gaze dwell
 
     private readonly Image _bubbleImage;
     private readonly int _size;
@@ -760,7 +777,7 @@ internal class Bubble
 
             // Update scale wobble (scaled for 30fps)
             var wobble = 0.06 * Math.Sin(_timeAlive * 7.5 + _wobbleOffset);
-            var currentScale = _scale + wobble;
+            var currentScale = (_scale + wobble) * _gazeDwellScale;
 
             if (_bubbleImage.RenderTransform is TransformGroup tg && tg.Children.Count >= 2)
             {
@@ -864,6 +881,41 @@ internal class Bubble
         _onPop?.Invoke(this);
         // Don't call Destroy() here - let AnimateFrame() handle the burst animation
         // The animation will expand and fade the bubble, then call Destroy() when done
+    }
+
+    /// <summary>
+    /// Whether this bubble can currently be popped via Focus Gaze.
+    /// False once popping has started or the bubble has been destroyed.
+    /// </summary>
+    public bool CanGazePop => _isAlive && !_isPopping && !_isDestroyed && _isClickable;
+
+    /// <summary>
+    /// Bubble window bounds in WPF DIPs (matches the coordinate space of
+    /// WebcamTrackingService.OnGazeMove samples). Returns Rect.Empty when
+    /// the window is unavailable.
+    /// </summary>
+    public Rect GetGazeBounds()
+    {
+        try
+        {
+            return new Rect(_window.Left, _window.Top, _window.Width, _window.Height);
+        }
+        catch
+        {
+            return Rect.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Drives a small inflate effect during Focus Gaze dwell. t01 is the
+    /// dwell progress in [0, 1]; the bubble's render scale is multiplied
+    /// by 1 + t01 * 0.25.
+    /// </summary>
+    public void SetGazeDwellProgress(double t01)
+    {
+        if (_isPopping || _isDestroyed) return;
+        var clamped = Math.Max(0.0, Math.Min(1.0, t01));
+        _gazeDwellScale = 1.0 + clamped * 0.25;
     }
 
     /// <summary>

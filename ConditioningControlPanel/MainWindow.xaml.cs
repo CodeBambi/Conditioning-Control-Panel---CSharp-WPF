@@ -196,6 +196,9 @@ namespace ConditioningControlPanel
         private string _currentMarqueeMessage = "";
 
         // Content packs
+        // PacksSection in MainWindow.xaml is currently Visibility="Collapsed" — most packs live outside the app,
+        // and users are routed to Discord via BtnGetPacks. Flip this const + the two Visibility values to restore.
+        private const bool PacksSectionEnabled = false;
         private ObservableCollection<ContentPack> _availablePacks = new();
         private DispatcherTimer? _packPreviewTimer;
 
@@ -223,6 +226,8 @@ namespace ConditioningControlPanel
                 AvatarTubeWindow.ApplyChatShortcutTo(this);
                 RefreshChatShortcutLabel();
                 ApplyGlobalChatHotkey();
+                HookFocusGazeService();
+                HookBlinkTrainerService();
             };
             Closing += (_, _) => Services.GlobalHotkeyService.Unregister();
 
@@ -744,6 +749,10 @@ namespace ConditioningControlPanel
 
         private void HandlePanicKeyPress()
         {
+            // Stop standalone Lab minigames first — they run independently of
+            // the main engine, so the rest of the panic flow won't touch them.
+            App.BlinkTrainer?.Stop();
+
             var now = DateTime.Now;
             var timeSinceLastPress = (now - _lastPanicTime).TotalMilliseconds;
             
@@ -3139,6 +3148,675 @@ namespace ConditioningControlPanel
             ShowTab("lab");
         }
 
+        // ─── [DEBUG] Webcam smoke test — TEMPORARY, remove with the XAML card ───
+        private bool _webcamDebugSubscribed;
+        private int _webcamDebugBlinkCount;
+        private int _webcamDebugMouthOpenCount;
+        private int _webcamDebugTongueOutCount;
+        private GazeSide _webcamDebugLastGaze = GazeSide.Center;
+        private bool _webcamDebugLastGazeSet;
+        private string _webcamDebugFaceLabel = "—";
+
+        private void BtnWebcamDebugStart_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null)
+            {
+                AppendWebcamDebugLog("App.Webcam is null — service not initialized");
+                return;
+            }
+
+            if (svc.IsRunning)
+            {
+                svc.Stop();
+                BtnWebcamDebugStart.Content = "Start tracking";
+                AppendWebcamDebugLog("Stop requested.");
+                return;
+            }
+
+            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            {
+                AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                var dlg = new WebcamConsentDialog { Owner = this };
+                var ok = dlg.ShowDialog();
+                if (ok != true || !dlg.ConsentGiven)
+                {
+                    AppendWebcamDebugLog("Consent declined or dialog cancelled.");
+                    return;
+                }
+                AppendWebcamDebugLog("Consent granted.");
+            }
+
+            EnsureWebcamDebugSubscribed();
+            _webcamDebugBlinkCount = 0;
+            _webcamDebugMouthOpenCount = 0;
+            _webcamDebugTongueOutCount = 0;
+            _webcamDebugLastGazeSet = false;
+            _webcamDebugFaceLabel = "—";
+            UpdateWebcamDebugCounters();
+
+            var started = svc.Start();
+            if (started)
+            {
+                BtnWebcamDebugStart.Content = "Stop tracking";
+                AppendWebcamDebugLog("Start() returned true — capture thread launching.");
+            }
+            else
+            {
+                AppendWebcamDebugLog($"Start() returned false. State={svc.State}. See logs/app.log.");
+            }
+        }
+
+        private void EnsureWebcamDebugSubscribed()
+        {
+            if (_webcamDebugSubscribed || App.Webcam == null) return;
+            _webcamDebugSubscribed = true;
+
+            App.Webcam.OnTrackingStateChanged += s =>
+            {
+                if (TxtWebcamDebugStatus != null) TxtWebcamDebugStatus.Text = s.ToString();
+                AppendWebcamDebugLog($"State → {s}");
+                if (s == WebcamTrackingState.Stopped || s == WebcamTrackingState.Error
+                    || s == WebcamTrackingState.CameraInUse || s == WebcamTrackingState.CameraDenied)
+                {
+                    if (BtnWebcamDebugStart != null) BtnWebcamDebugStart.Content = "Start tracking";
+                }
+            };
+            App.Webcam.OnFaceFound += () =>
+            {
+                _webcamDebugFaceLabel = "yes";
+                UpdateWebcamDebugCounters();
+                AppendWebcamDebugLog("Face FOUND");
+            };
+            App.Webcam.OnFaceLost += () =>
+            {
+                _webcamDebugFaceLabel = "lost";
+                UpdateWebcamDebugCounters();
+                AppendWebcamDebugLog("Face LOST");
+            };
+            App.Webcam.OnBlink += () =>
+            {
+                _webcamDebugBlinkCount++;
+                UpdateWebcamDebugCounters();
+                AppendWebcamDebugLog($"Blink #{_webcamDebugBlinkCount}");
+            };
+            App.Webcam.OnMouthOpen += () =>
+            {
+                _webcamDebugMouthOpenCount++;
+                AppendWebcamDebugLog($"Mouth-open #{_webcamDebugMouthOpenCount}");
+            };
+            App.Webcam.OnTongueOut += () =>
+            {
+                _webcamDebugTongueOutCount++;
+                AppendWebcamDebugLog($"Tongue-out #{_webcamDebugTongueOutCount}");
+            };
+            App.Webcam.OnGazeSide += side =>
+            {
+                // Only log on CHANGE — gaze side fires every frame and would
+                // otherwise drown out blinks and face events.
+                if (_webcamDebugLastGazeSet && side == _webcamDebugLastGaze)
+                {
+                    _webcamDebugLastGaze = side;
+                    return;
+                }
+                _webcamDebugLastGaze = side;
+                _webcamDebugLastGazeSet = true;
+                UpdateWebcamDebugCounters();
+                AppendWebcamDebugLog($"Gaze → {side}");
+            };
+        }
+
+        private void UpdateWebcamDebugCounters()
+        {
+            if (TxtWebcamDebugCounters == null) return;
+            var gaze = _webcamDebugLastGazeSet ? _webcamDebugLastGaze.ToString() : "—";
+            TxtWebcamDebugCounters.Text = $"Face: {_webcamDebugFaceLabel} | Blinks: {_webcamDebugBlinkCount} | Gaze: {gaze}";
+        }
+
+        private void BtnWebcamDebugCalibrate_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null)
+            {
+                AppendWebcamDebugLog("App.Webcam is null — service not initialized");
+                return;
+            }
+
+            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            {
+                AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                var consent = new WebcamConsentDialog { Owner = this };
+                var ok = consent.ShowDialog();
+                if (ok != true || !consent.ConsentGiven)
+                {
+                    AppendWebcamDebugLog("Consent declined.");
+                    return;
+                }
+            }
+
+            // Calibration window expects the service to be running so OnRawIris fires.
+            EnsureWebcamDebugSubscribed();
+            var startedHere = false;
+            if (!svc.IsRunning)
+            {
+                AppendWebcamDebugLog("Starting tracking for calibration…");
+                if (!svc.Start())
+                {
+                    AppendWebcamDebugLog($"Couldn't start tracking. State={svc.State}.");
+                    return;
+                }
+                startedHere = true;
+                BtnWebcamDebugStart.Content = "Stop tracking";
+            }
+
+            AppendWebcamDebugLog("Opening calibration window…");
+            var calDlg = new WebcamCalibrationWindow { Owner = this };
+            var result = calDlg.ShowDialog();
+
+            if (result == true)
+            {
+                AppendWebcamDebugLog("Calibration applied. Gaze classification should now be much more accurate.");
+            }
+            else
+            {
+                AppendWebcamDebugLog("Calibration cancelled or failed.");
+            }
+
+            // Leave the service running if the user manually started it earlier.
+            // Only auto-stop if calibration was the only reason it's running.
+            if (startedHere && result != true)
+            {
+                svc.Stop();
+                BtnWebcamDebugStart.Content = "Start tracking";
+            }
+        }
+
+        private void BtnGazeMinigame_Click(object sender, RoutedEventArgs e)
+        {
+            new Lab.GazeMinigame.GazeMinigameWindow { Owner = this }.Show();
+        }
+
+        // ─── Focus Gaze (Lab) ──────────────────────────────────────────
+        private bool _focusGazeSyncing;
+
+        private void HookFocusGazeService()
+        {
+            if (App.GazeFocus == null) return;
+
+            // Belt-and-suspenders: stop GazeFocus before WPF checks its window
+            // count on MainWindow close. Without this, the cursor window can
+            // keep the OnLastWindowClose process alive — App.OnExit then never
+            // runs, leaving Webcam.Dispose uncalled and the camera lit.
+            Closing += (_, _) => App.GazeFocus?.Stop();
+
+            App.GazeFocus.OnActiveChanged += active =>
+            {
+                // Service may stop itself (e.g., webcam death) — keep the
+                // toggle visually in sync without re-entering the handler.
+                if (!Dispatcher.CheckAccess())
+                {
+                    Dispatcher.BeginInvoke(() => SyncFocusGazeToggle(active));
+                    return;
+                }
+                SyncFocusGazeToggle(active);
+            };
+        }
+
+        private void SyncFocusGazeToggle(bool active)
+        {
+            if (ChkFocusGaze == null) return;
+            if (ChkFocusGaze.IsChecked == active) return;
+            _focusGazeSyncing = true;
+            try { ChkFocusGaze.IsChecked = active; }
+            finally { _focusGazeSyncing = false; }
+            if (TxtFocusGazeStatus != null && !active) TxtFocusGazeStatus.Text = "";
+        }
+
+        private void ChkFocusGaze_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_focusGazeSyncing) return;
+            if (App.GazeFocus == null) return;
+
+            var on = ChkFocusGaze.IsChecked == true;
+            if (on)
+            {
+                if (App.Settings?.Current?.WebcamConsentGiven != true)
+                {
+                    var dlg = new WebcamConsentDialog { Owner = this };
+                    var ok = dlg.ShowDialog();
+                    if (ok != true || !dlg.ConsentGiven)
+                    {
+                        SyncFocusGazeToggle(false);
+                        if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_consent_required");
+                        return;
+                    }
+                }
+
+                if (App.GazeFocus.Start())
+                {
+                    if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_active");
+                }
+                else
+                {
+                    SyncFocusGazeToggle(false);
+                    if (TxtFocusGazeStatus != null)
+                    {
+                        if (App.Webcam?.Calibration == null)
+                            TxtFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_calibrate_first");
+                        else
+                            TxtFocusGazeStatus.Text = Localization.Loc.GetF("label_focus_gaze_webcam_failed_format", App.Webcam?.State);
+                    }
+                }
+            }
+            else
+            {
+                App.GazeFocus.Stop();
+                if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = "";
+            }
+        }
+
+        // ─── Blink Trainer (Lab) ──────────────────────────────────────────
+        private DispatcherTimer? _blinkTrainerTickTimer;
+        private bool _blinkTrainerSyncing;
+
+        private void HookBlinkTrainerService()
+        {
+            if (App.BlinkTrainer == null) return;
+
+            // Stop on MainWindow close so the camera doesn't stay lit if the
+            // overlay window is the only thing keeping the process alive.
+            Closing += (_, _) => App.BlinkTrainer?.Stop();
+
+            InitializeBlinkTrainerUI();
+
+            App.BlinkTrainer.StateChanged += () =>
+            {
+                if (!Dispatcher.CheckAccess())
+                {
+                    Dispatcher.BeginInvoke(SyncBlinkTrainerUI);
+                    return;
+                }
+                SyncBlinkTrainerUI();
+            };
+        }
+
+        private void InitializeBlinkTrainerUI()
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+
+            _blinkTrainerSyncing = true;
+            try
+            {
+                if (LstBlinkTrainerFolders != null)
+                {
+                    LstBlinkTrainerFolders.Items.Clear();
+                    foreach (var f in settings.BlinkTrainerFolders)
+                        LstBlinkTrainerFolders.Items.Add(f);
+                }
+
+                if (SliderBlinkTrainerDuration != null)
+                    SliderBlinkTrainerDuration.Value = settings.BlinkTrainerDurationMinutes;
+                if (TxtBlinkTrainerDuration != null)
+                    TxtBlinkTrainerDuration.Text = $"{settings.BlinkTrainerDurationMinutes} min";
+
+                if (SliderBlinkTrainerOpacity != null)
+                    SliderBlinkTrainerOpacity.Value = settings.BlinkTrainerOpacity;
+                if (TxtBlinkTrainerOpacity != null)
+                    TxtBlinkTrainerOpacity.Text = $"{settings.BlinkTrainerOpacity}%";
+
+                if (ChkBlinkTrainerIncludeVideos != null)
+                    ChkBlinkTrainerIncludeVideos.IsChecked = settings.BlinkTrainerIncludeVideos;
+
+                if (ChkBlinkTrainerMixImages != null)
+                    ChkBlinkTrainerMixImages.IsChecked = settings.BlinkTrainerMixImages;
+            }
+            finally { _blinkTrainerSyncing = false; }
+
+            SyncBlinkTrainerUI();
+        }
+
+        private void SyncBlinkTrainerUI()
+        {
+            if (App.BlinkTrainer == null) return;
+            var running = App.BlinkTrainer.IsRunning;
+
+            if (BtnBlinkTrainerStart != null)
+                BtnBlinkTrainerStart.Content = running ? "Stop" : "Start";
+
+            // Lock the configurator while a session is in progress.
+            if (BtnBlinkTrainerAddFolder != null) BtnBlinkTrainerAddFolder.IsEnabled = !running;
+            if (BtnBlinkTrainerRemoveFolder != null) BtnBlinkTrainerRemoveFolder.IsEnabled = !running;
+            if (LstBlinkTrainerFolders != null) LstBlinkTrainerFolders.IsEnabled = !running;
+            if (ChkBlinkTrainerIncludeVideos != null) ChkBlinkTrainerIncludeVideos.IsEnabled = !running;
+            if (ChkBlinkTrainerMixImages != null) ChkBlinkTrainerMixImages.IsEnabled = !running;
+            if (SliderBlinkTrainerDuration != null) SliderBlinkTrainerDuration.IsEnabled = !running;
+            if (SliderBlinkTrainerOpacity != null) SliderBlinkTrainerOpacity.IsEnabled = !running;
+
+            if (running)
+            {
+                if (_blinkTrainerTickTimer == null)
+                {
+                    _blinkTrainerTickTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                    _blinkTrainerTickTimer.Tick += BlinkTrainerTick;
+                    _blinkTrainerTickTimer.Start();
+                }
+                BlinkTrainerTick(this, EventArgs.Empty);
+            }
+            else
+            {
+                if (_blinkTrainerTickTimer != null)
+                {
+                    try { _blinkTrainerTickTimer.Stop(); } catch { }
+                    _blinkTrainerTickTimer.Tick -= BlinkTrainerTick;
+                    _blinkTrainerTickTimer = null;
+                }
+                if (TxtBlinkTrainerStatus != null)
+                    TxtBlinkTrainerStatus.Text = string.IsNullOrEmpty(App.BlinkTrainer.LastError)
+                        ? ""
+                        : App.BlinkTrainer.LastError;
+            }
+        }
+
+        private void BlinkTrainerTick(object? sender, EventArgs e)
+        {
+            if (App.BlinkTrainer == null || !App.BlinkTrainer.IsRunning) return;
+            var rem = App.BlinkTrainer.Remaining;
+            if (TxtBlinkTrainerStatus != null)
+                TxtBlinkTrainerStatus.Text = $"Running — {(int)rem.TotalMinutes}m {rem.Seconds:00}s remaining";
+        }
+
+        private void BtnBlinkTrainerAddFolder_Click(object sender, RoutedEventArgs e)
+        {
+            using var dlg = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = "Pick a folder of images / GIFs (videos optional)",
+                UseDescriptionForTitle = true,
+                SelectedPath = App.EffectiveAssetsPath ?? "",
+            };
+            if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+
+            var folder = dlg.SelectedPath;
+            if (string.IsNullOrWhiteSpace(folder)) return;
+
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            if (settings.BlinkTrainerFolders.Any(f =>
+                string.Equals(f, folder, StringComparison.OrdinalIgnoreCase))) return;
+
+            settings.BlinkTrainerFolders.Add(folder);
+            App.Settings?.Save();
+
+            LstBlinkTrainerFolders?.Items.Add(folder);
+            if (TxtBlinkTrainerStatus != null) TxtBlinkTrainerStatus.Text = "";
+        }
+
+        private void BtnBlinkTrainerRemoveFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (LstBlinkTrainerFolders?.SelectedItem is not string sel) return;
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            settings.BlinkTrainerFolders.RemoveAll(f => string.Equals(f, sel, StringComparison.OrdinalIgnoreCase));
+            App.Settings?.Save();
+            LstBlinkTrainerFolders.Items.Remove(sel);
+        }
+
+        private void SliderBlinkTrainerDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_blinkTrainerSyncing) return;
+            var v = (int)Math.Round(e.NewValue);
+            if (App.Settings?.Current != null) App.Settings.Current.BlinkTrainerDurationMinutes = v;
+            if (TxtBlinkTrainerDuration != null) TxtBlinkTrainerDuration.Text = $"{v} min";
+            App.Settings?.Save();
+        }
+
+        private void SliderBlinkTrainerOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_blinkTrainerSyncing) return;
+            var v = (int)Math.Round(e.NewValue);
+            if (App.Settings?.Current != null) App.Settings.Current.BlinkTrainerOpacity = v;
+            if (TxtBlinkTrainerOpacity != null) TxtBlinkTrainerOpacity.Text = $"{v}%";
+            App.Settings?.Save();
+        }
+
+        private void ChkBlinkTrainerIncludeVideos_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_blinkTrainerSyncing) return;
+            if (App.Settings?.Current != null)
+                App.Settings.Current.BlinkTrainerIncludeVideos = ChkBlinkTrainerIncludeVideos?.IsChecked == true;
+            App.Settings?.Save();
+        }
+
+        private void ChkBlinkTrainerMixImages_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_blinkTrainerSyncing) return;
+            if (App.Settings?.Current != null)
+                App.Settings.Current.BlinkTrainerMixImages = ChkBlinkTrainerMixImages?.IsChecked == true;
+            App.Settings?.Save();
+        }
+
+        private void BtnBlinkTrainerStart_Click(object sender, RoutedEventArgs e)
+        {
+            if (App.BlinkTrainer == null) return;
+            if (App.BlinkTrainer.IsRunning)
+            {
+                App.BlinkTrainer.Stop();
+                return;
+            }
+
+            // Webcam consent gate (mirrors Focus Gaze flow)
+            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            {
+                var dlg = new WebcamConsentDialog { Owner = this };
+                var ok = dlg.ShowDialog();
+                if (ok != true || !dlg.ConsentGiven)
+                {
+                    if (TxtBlinkTrainerStatus != null)
+                        TxtBlinkTrainerStatus.Text = "Webcam consent required.";
+                    return;
+                }
+            }
+
+            if (!App.BlinkTrainer.Start() && TxtBlinkTrainerStatus != null)
+            {
+                TxtBlinkTrainerStatus.Text = string.IsNullOrEmpty(App.BlinkTrainer.LastError)
+                    ? "Could not start."
+                    : App.BlinkTrainer.LastError;
+            }
+        }
+
+        private void BtnWebcamDebugTrackerTest_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null)
+            {
+                AppendWebcamDebugLog("App.Webcam is null — service not initialized");
+                return;
+            }
+
+            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            {
+                AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                var consent = new WebcamConsentDialog { Owner = this };
+                var ok = consent.ShowDialog();
+                if (ok != true || !consent.ConsentGiven)
+                {
+                    AppendWebcamDebugLog("Consent declined.");
+                    return;
+                }
+            }
+
+            // Tracker test needs the service running so OnGazeMove fires, AND a
+            // calibration loaded so there's a homography to project through.
+            EnsureWebcamDebugSubscribed();
+            var startedHere = false;
+            if (!svc.IsRunning)
+            {
+                AppendWebcamDebugLog("Starting tracking for tracker test…");
+                if (!svc.Start())
+                {
+                    AppendWebcamDebugLog($"Couldn't start tracking. State={svc.State}.");
+                    return;
+                }
+                startedHere = true;
+                BtnWebcamDebugStart.Content = "Stop tracking";
+            }
+
+            if (svc.Calibration == null)
+            {
+                AppendWebcamDebugLog("No calibration loaded — run Calibrate (16-point) first.");
+                if (startedHere) { svc.Stop(); BtnWebcamDebugStart.Content = "Start tracking"; }
+                return;
+            }
+
+            AppendWebcamDebugLog("Opening tracker test window…");
+            var trackerDlg = new WebcamGazeTrackerWindow { Owner = this };
+            trackerDlg.ShowDialog();
+            AppendWebcamDebugLog("Tracker test closed.");
+
+            // Match calibration handler's lifetime: only auto-stop tracking if we
+            // were the ones that started it. If the user already had it running,
+            // leave it running.
+            if (startedHere)
+            {
+                svc.Stop();
+                BtnWebcamDebugStart.Content = "Start tracking";
+            }
+        }
+
+        private void BtnWebcamDebugQuickRecal_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null)
+            {
+                AppendWebcamDebugLog("Webcam service unavailable.");
+                return;
+            }
+
+            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            {
+                AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                var consent = new WebcamConsentDialog { Owner = this };
+                var ok = consent.ShowDialog();
+                if (ok != true || !consent.ConsentGiven)
+                {
+                    AppendWebcamDebugLog("Consent declined.");
+                    return;
+                }
+            }
+
+            EnsureWebcamDebugSubscribed();
+            var startedHere = false;
+            if (!svc.IsRunning)
+            {
+                AppendWebcamDebugLog("Starting tracking for quick recal…");
+                if (!svc.Start())
+                {
+                    AppendWebcamDebugLog($"Couldn't start tracking. State={svc.State}.");
+                    return;
+                }
+                startedHere = true;
+                BtnWebcamDebugStart.Content = "Stop tracking";
+            }
+
+            if (svc.Calibration == null)
+            {
+                AppendWebcamDebugLog("No calibration loaded — run Calibrate (16-point) first. Quick Recal only nudges an existing calibration.");
+                if (startedHere) { svc.Stop(); BtnWebcamDebugStart.Content = "Start tracking"; }
+                return;
+            }
+
+            AppendWebcamDebugLog("Opening quick-recal window…");
+            var recalDlg = new WebcamQuickRecalWindow { Owner = this };
+            var result = recalDlg.ShowDialog();
+            AppendWebcamDebugLog(result == true
+                ? $"Quick recal applied (offset {svc.Calibration.RuntimeOffset?.Dx:F0}, {svc.Calibration.RuntimeOffset?.Dy:F0} px)."
+                : "Quick recal cancelled.");
+
+            if (startedHere)
+            {
+                svc.Stop();
+                BtnWebcamDebugStart.Content = "Start tracking";
+            }
+        }
+
+        private void BtnWebcamReviewPrivacy_Click(object sender, RoutedEventArgs e)
+        {
+            // Re-open the consent flow for users who want to read the privacy
+            // contract again after they've already agreed. The dialog only
+            // overwrites WebcamConsentGiven when the user explicitly walks
+            // through the gates and clicks Enable — Cancel/close leaves the
+            // existing consent state alone, so this is safe to invoke any
+            // time as a "review only" path.
+            try
+            {
+                var dlg = new WebcamConsentDialog { Owner = this };
+                dlg.ShowDialog();
+                AppendWebcamDebugLog("Privacy info reviewed.");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Webcam review privacy dialog failed");
+            }
+        }
+
+        private void BtnWebcamRevokeConsent_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var result = MessageBox.Show(
+                    this,
+                    "Revoke webcam consent?\n\n" +
+                    "This will:\n" +
+                    "  • Stop webcam tracking immediately\n" +
+                    "  • Delete your calibration data\n" +
+                    "  • Disable Focus Gaze and any webcam triggers\n" +
+                    "  • Clear your consent record\n\n" +
+                    "You'll be re-prompted to consent and recalibrate the next time you enable a webcam feature.",
+                    "Revoke webcam consent",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.Cancel);
+
+                if (result != MessageBoxResult.OK) return;
+
+                App.Webcam?.RevokeConsent();
+                if (ChkWebcamDebugCursor != null) ChkWebcamDebugCursor.IsChecked = false;
+                AppendWebcamDebugLog("Consent revoked. Calibration deleted; webcam features disabled.");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Webcam revoke consent failed");
+            }
+        }
+
+        private void ChkWebcamDebugCursor_Changed(object sender, RoutedEventArgs e)
+        {
+            if (ChkWebcamDebugCursor == null) return;
+            if (ChkWebcamDebugCursor.IsChecked == true)
+            {
+                App.GazeCursor?.Show("debug-toggle");
+                AppendWebcamDebugLog("Debug cursor enabled. Tracking must be running + calibrated for the dot to appear.");
+            }
+            else
+            {
+                App.GazeCursor?.Hide("debug-toggle");
+                AppendWebcamDebugLog("Debug cursor hidden.");
+            }
+        }
+
+        private void AppendWebcamDebugLog(string line)
+        {
+            if (TxtWebcamDebugLog == null) return;
+            var stamp = DateTime.Now.ToString("HH:mm:ss");
+            var existing = TxtWebcamDebugLog.Text;
+            if (existing == "(events will appear here)") existing = "";
+            var lines = (existing + (existing.Length > 0 ? "\n" : "") + $"[{stamp}] {line}")
+                .Split('\n');
+            if (lines.Length > 12) lines = lines[(lines.Length - 12)..];
+            TxtWebcamDebugLog.Text = string.Join("\n", lines);
+        }
+
         private void BtnPatreonExclusives_Click(object sender, RoutedEventArgs e)
         {
             // The Exclusives tab no longer exists — this button is now purely a
@@ -4191,7 +4869,7 @@ namespace ConditioningControlPanel
                     BtnOpenAssetsTop.Style = activeStyle;
                     RefreshAssetTree();
                     InitializeAssetPresets();
-                    _ = RefreshPacksAsync();
+                    if (PacksSectionEnabled) _ = RefreshPacksAsync();
                     break;
 
                 case "discord":
@@ -5188,6 +5866,11 @@ namespace ConditioningControlPanel
                 var idleInterval = App.Settings?.Current?.IdleGiggleIntervalSeconds ?? 120;
                 SliderIdleIntervalCompanion.Value = idleInterval;
                 TxtIdleIntervalCompanion.Text = $"{idleInterval}s";
+
+                // Sync bubble persistence duration
+                var bubbleDuration = App.Settings?.Current?.BubbleDurationSeconds ?? 2.0;
+                SliderBubbleDurationCompanion.Value = bubbleDuration;
+                TxtBubbleDurationCompanion.Text = $"{(int)bubbleDuration}s";
 
                 // Sync detach status
                 var isDetached = _avatarTubeWindow?.IsDetached == true;
@@ -6627,6 +7310,8 @@ namespace ConditioningControlPanel
             ChkAiChat.IsChecked = settings.AiChatEnabled;
             SliderIdleIntervalCompanion.Value = settings.IdleGiggleIntervalSeconds;
             TxtIdleIntervalCompanion.Text = $"{settings.IdleGiggleIntervalSeconds}s";
+            SliderBubbleDurationCompanion.Value = settings.BubbleDurationSeconds;
+            TxtBubbleDurationCompanion.Text = $"{(int)settings.BubbleDurationSeconds}s";
 
             // Awareness Mode settings (free for all users)
             var awarenessAvailable = true;
@@ -6704,6 +7389,50 @@ namespace ConditioningControlPanel
             UpdateCommunityPromptsUI();
         }
 
+        private void BtnResetCompanionMemory_Click(object sender, RoutedEventArgs e)
+        {
+            var confirm = System.Windows.MessageBox.Show(
+                this,
+                "Wipe the companion's chat memory?\n\nThis clears the AI's conversation history both in memory and on disk, plus the chat log shown in the avatar bubble. " +
+                "Useful when she's stuck in an old pattern (e.g. skipping links). She'll start fresh on the next message.\n\nThis can't be undone.",
+                "Reset Companion Memory",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No);
+
+            if (confirm != MessageBoxResult.Yes) return;
+
+            try
+            {
+                // Cloud provider is stateless, so this only does work for local Ollama users.
+                // App.Ai is typed as the IAiService interface; ClearLocalHistory lives on
+                // the concrete strategy (which is what's always assigned).
+                (App.Ai as Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
+
+                // Drop the on-screen history too (the data store the avatar window binds to).
+                _avatarTubeWindow?.ChatHistory.Clear();
+
+                App.Logger?.Information("Companion memory reset by user");
+
+                System.Windows.MessageBox.Show(
+                    this,
+                    "Done — the companion's memory is clear. Send her a new message and she'll respond with no prior context.",
+                    "Reset Companion Memory",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to reset companion memory");
+                System.Windows.MessageBox.Show(
+                    this,
+                    "Couldn't fully reset the companion's memory: " + ex.Message,
+                    "Reset Companion Memory",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+
         private void BtnManagePhrases_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new CompanionPhraseEditorDialog { Owner = this };
@@ -6734,6 +7463,17 @@ namespace ConditioningControlPanel
             var value = (int)(slider?.Value ?? 120);
             TxtIdleIntervalCompanion.Text = $"{value}s";
             App.Settings.Current.IdleGiggleIntervalSeconds = value;
+            App.Settings.Save();
+        }
+
+        private void SliderBubbleDuration_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading || TxtBubbleDurationCompanion == null) return;
+
+            var slider = sender as Slider;
+            var value = slider?.Value ?? 2.0;
+            TxtBubbleDurationCompanion.Text = $"{(int)value}s";
+            App.Settings.Current.BubbleDurationSeconds = value;
             App.Settings.Save();
         }
 
@@ -9398,9 +10138,16 @@ namespace ConditioningControlPanel
 
                 if (connected)
                 {
-                    // Stop any in-progress local session so the remote controller
-                    // has clean state to drive.
-                    try { _sessionEngine?.StopSession(completed: false); } catch { }
+                    // Only stop the local session on the FIRST controller of this remote
+                    // session. On a takeover (controller A leaves, B joins), connected
+                    // briefly transitions true→false→true; without this guard, B's connect
+                    // would re-stop a session that A or the sub had running, even when
+                    // B hasn't sent any command yet (bug report #166).
+                    if (!_remoteSessionHasTakenLocal)
+                    {
+                        _remoteSessionHasTakenLocal = true;
+                        try { _sessionEngine?.StopSession(completed: false); } catch { }
+                    }
 
                     ShowRemoteControlOverlay();
                     NotifyRemoteControllerJoined();
@@ -9411,6 +10158,11 @@ namespace ConditioningControlPanel
                 }
             });
         }
+
+        // Set true once the first controller of the active remote-control session has
+        // claimed control. Reset when the remote session ends so a future remote session
+        // re-applies the take-over-local-session step on its first controller.
+        private bool _remoteSessionHasTakenLocal;
 
         private void OnRemoteControllerIdleChanged(object? sender, EventArgs e)
         {
@@ -9430,6 +10182,7 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                _remoteSessionHasTakenLocal = false;
                 HideRemoteControlOverlay();
                 UpdateStartButtonForRemoteControl(false);
                 _isLoading = true;
@@ -12118,6 +12871,9 @@ namespace ConditioningControlPanel
 
             // Lab tab
             SetHelpContent(HelpBtnQuiz, "Quiz");
+            SetHelpContent(HelpBtnWebcamGames, "WebcamGames");
+            SetHelpContent(HelpBtnGazeMinigame, "GazeMinigame");
+            SetHelpContent(HelpBtnFocusGaze, "FocusGaze");
             SetHelpContent(HelpBtnKeywordTriggers, "KeywordTriggers");
             SetHelpContent(HelpBtnScreenOcr, "ScreenOcr");
             SetHelpContent(HelpBtnRemoteControl, "RemoteControl");
@@ -14543,13 +15299,19 @@ namespace ConditioningControlPanel
 
             // Wire one-shot autoplay handler. BrowserService raises NavigationCompleted
             // for the start-URL load, so this catches it without us having to issue a
-            // second Navigate.
+            // second Navigate. BambiCloud playlists need a different injection (audio,
+            // no <video> element) — mirror the branch in NavigateToUrlInBrowser so the
+            // first-ever click on a playlist link auto-plays just like subsequent ones.
             if (autoPlayFullscreen)
             {
+                var isBambiCloudPlaylist = lowerUrl.Contains("bambicloud.com/playlist/");
                 void OnNavCompleted(object? s, string completedUrl)
                 {
                     _browser.NavigationCompleted -= OnNavCompleted;
-                    _ = AutoPlayAndFullscreenVideoAsync();
+                    if (isBambiCloudPlaylist)
+                        _ = AutoPlayBambiCloudPlaylistAsync();
+                    else
+                        _ = AutoPlayAndFullscreenVideoAsync();
                 }
                 _browser.NavigationCompleted += OnNavCompleted;
             }
@@ -14656,17 +15418,23 @@ namespace ConditioningControlPanel
 
                 _browser.ZoomFactor = 0.5;
 
-                // If auto-play fullscreen requested, set up handler for when navigation completes
+                // If auto-play fullscreen requested, set up handler for when navigation completes.
+                // BambiCloud playlists are audio (no <video> element, no fullscreen) — they need a
+                // different injection that clicks the playlist's main play button.
                 if (autoPlayFullscreen && _browser.WebView?.CoreWebView2 != null)
                 {
+                    var isBambiCloudPlaylist = lowerUrl.Contains("bambicloud.com/playlist/");
+
                     void OnNavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
                     {
                         _browser.WebView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
 
                         if (e.IsSuccess)
                         {
-                            // Inject script to auto-play and fullscreen the video after a short delay
-                            _ = AutoPlayAndFullscreenVideoAsync();
+                            if (isBambiCloudPlaylist)
+                                _ = AutoPlayBambiCloudPlaylistAsync();
+                            else
+                                _ = AutoPlayAndFullscreenVideoAsync();
                         }
                     }
 
@@ -14768,9 +15536,17 @@ namespace ConditioningControlPanel
                                 }
                             }, { once: true });
 
+                            // Notify C# that playback has actually begun so the autonomy
+                            // watchdog (30s) can be cancelled — long videos must NOT free
+                            // up _webVideoActive while still on screen.
+                            const notifyVideoStarted = () => {
+                                window.chrome.webview.postMessage({ type: 'videoStarted' });
+                            };
+
                             // Start playing and go fullscreen
                             video.muted = false;
                             video.play().then(() => {
+                                notifyVideoStarted();
                                 if (video.requestFullscreen) {
                                     video.requestFullscreen();
                                 } else if (video.webkitRequestFullscreen) {
@@ -14778,7 +15554,12 @@ namespace ConditioningControlPanel
                                 } else if (video.msRequestFullscreen) {
                                     video.msRequestFullscreen();
                                 }
-                            }).catch(e => console.log('Autoplay blocked:', e));
+                            }).catch(e => {
+                                console.log('Autoplay blocked:', e);
+                                // Still notify so the watchdog doesn't fire mid-playback if
+                                // the user manually unblocks/plays the video later.
+                                video.addEventListener('playing', notifyVideoStarted, { once: true });
+                            });
                         } else {
                             console.log('No video element found after retries');
                             window.chrome.webview.postMessage({ type: 'videoEnded', reason: 'noVideoElement' });
@@ -14792,6 +15573,80 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to auto-play/fullscreen video");
+            }
+        }
+
+        /// <summary>
+        /// BambiCloud playlists are audio (no &lt;video&gt; element). The page renders a single
+        /// .play-action button that starts the whole playlist; we click it once it hydrates,
+        /// then post videoStarted/videoEnded messages so AutonomyService treats the playlist
+        /// like a fullscreen video for blocking purposes.
+        /// </summary>
+        private async Task AutoPlayBambiCloudPlaylistAsync()
+        {
+            if (_browser?.WebView?.CoreWebView2 == null) return;
+
+            try
+            {
+                // Wait for React hydration before looking for the button.
+                await Task.Delay(1500);
+
+                var script = @"
+                    (async function() {
+                        // Poll for the .play-action button - SPA hydration can take a few seconds.
+                        let btn = document.querySelector('button.play-action');
+                        for (let i = 0; i < 20 && !btn; i++) {
+                            await new Promise(r => setTimeout(r, 250));
+                            btn = document.querySelector('button.play-action');
+                        }
+                        if (!btn) {
+                            window.chrome.webview.postMessage({ type: 'videoEnded', reason: 'noPlayButton' });
+                            return;
+                        }
+
+                        let notified = false;
+                        const notifyStarted = () => {
+                            if (!notified) {
+                                notified = true;
+                                window.chrome.webview.postMessage({ type: 'videoStarted' });
+                            }
+                        };
+                        const notifyEnded = (reason) => {
+                            window.chrome.webview.postMessage({ type: 'videoEnded', reason: reason });
+                        };
+
+                        // Bind to any current/future <audio> element so we know when the
+                        // playlist actually plays and when the last track ends.
+                        const bindAudio = (audio) => {
+                            if (!audio || audio.__bcBound) return;
+                            audio.__bcBound = true;
+                            audio.addEventListener('playing', notifyStarted);
+                            audio.addEventListener('ended', () => notifyEnded('ended'));
+                        };
+                        document.querySelectorAll('audio').forEach(bindAudio);
+
+                        // Also watch for audio elements added later (each track may swap one in).
+                        const obs = new MutationObserver(() => {
+                            document.querySelectorAll('audio').forEach(bindAudio);
+                        });
+                        obs.observe(document.body, { childList: true, subtree: true });
+
+                        // Click the play button. Browser autoplay policies usually allow this
+                        // because navigation-from-app counts as a user gesture in WebView2.
+                        btn.click();
+
+                        // Fallback: if no <audio> 'playing' fires within 3s, assume click took
+                        // effect anyway and notify, so the autonomy watchdog doesn't fire.
+                        setTimeout(notifyStarted, 3000);
+                    })();
+                ";
+
+                await _browser.WebView.CoreWebView2.ExecuteScriptAsync(script);
+                App.Logger?.Debug("BambiCloud playlist auto-play script injected");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to auto-play BambiCloud playlist");
             }
         }
 
@@ -14821,7 +15676,14 @@ namespace ConditioningControlPanel
                 }
 
                 // Parse the JSON message
-                if (message.Contains("\"type\":\"videoEnded\""))
+                if (message.Contains("\"type\":\"videoStarted\""))
+                {
+                    // Playback confirmed - cancel the autonomy load-failure watchdog so
+                    // long videos can't have _webVideoActive flipped off mid-stream.
+                    App.Logger?.Information("Web video playback started");
+                    App.Autonomy?.OnWebVideoStarted();
+                }
+                else if (message.Contains("\"type\":\"videoEnded\""))
                 {
                     // Video ended or fullscreen exited - notify AutonomyService
                     App.Logger?.Information("Web video playback ended");
@@ -17816,7 +18678,8 @@ namespace ConditioningControlPanel
                 showCompanion: () => ShowTab("companion"),
                 // Exclusives tab eliminated — route tutorial's "patreon" step to the
                 // App Info & Data popup which hosts the login/data sections.
-                showPatreon: () => ShowAppInfoPopup()
+                showPatreon: () => ShowAppInfoPopup(),
+                showAwareness: () => ShowTab("awareness")
             );
 
             App.Tutorial.Start(type);
@@ -17887,6 +18750,55 @@ namespace ConditioningControlPanel
             StartTutorial(TutorialType.Avatar);
         }
 
+        private void BtnTutorialAwareness_Click(object sender, RoutedEventArgs e)
+        {
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Visible;
+            StartAwarenessTutorial();
+        }
+
+        // Same tour, but launched directly from the in-tab "Tutorial" button rather
+        // than via the help-menu overlay (so we don't toggle MainTutorialOverlay).
+        private void BtnAwarenessTutorial_Click(object sender, RoutedEventArgs e)
+        {
+            StartAwarenessTutorial();
+        }
+
+        private void BtnCompanionTutorial_Click(object sender, RoutedEventArgs e)
+        {
+            StartTutorial(TutorialType.Companion);
+        }
+
+        private void StartAwarenessTutorial()
+        {
+            // One-shot: when the Awareness tour finishes naturally (user reached the
+            // last step), pop the Puppy preset editor so they have something concrete
+            // to play with while the walkthrough is fresh. Skipping mid-tour does not
+            // open the editor — skip means "I'm done with this".
+            EventHandler? onCompleted = null;
+            onCompleted = (s, args) =>
+            {
+                App.Tutorial.TutorialCompleted -= onCompleted;
+                if (App.Tutorial.CurrentTutorialType != TutorialType.Awareness) return;
+                if (App.Tutorial.CurrentStepIndex != App.Tutorial.TotalSteps - 1) return;
+
+                try
+                {
+                    var puppy = App.KeywordPresets?.GetPreset("builtin.puppy");
+                    if (puppy == null) return;
+                    var dlg = new AwarenessPresetDetailDialog(puppy) { Owner = this };
+                    dlg.Show();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Awareness tutorial editor-open failed: {Error}", ex.Message);
+                }
+            };
+            App.Tutorial.TutorialCompleted += onCompleted;
+
+            StartTutorial(TutorialType.Awareness);
+        }
+
         private void BtnTutorialModding_Click(object sender, RoutedEventArgs e)
         {
             MainTutorialOverlay.Visibility = Visibility.Collapsed;
@@ -17951,9 +18863,15 @@ namespace ConditioningControlPanel
             TxtLevelLabel.Text = $"LVL {level}";
             TxtXP.Text = $"{(int)xp} / {(int)xpNeeded} XP";
 
-            // Update XP bar width
+            // Update XP bar width.
+            // XPBar.Parent is the wrapping Grid (not the outer Border with rounded corners),
+            // so we read the container's ActualWidth directly. Casting Parent to Border made
+            // the expression always null, falling back to 100 px regardless of progress —
+            // visible bug: bar appeared frozen at 100 px after install.
             var progress = Math.Min(1.0, xp / xpNeeded);
-            XPBar.Width = progress * (XPBar.Parent as Border)?.ActualWidth ?? 100;
+            var container = XPBar.Parent as FrameworkElement;
+            var available = container?.ActualWidth ?? 0;
+            if (available > 0) XPBar.Width = progress * available;
 
             // Update title based on level
             var rankTitle = level switch
@@ -20637,6 +21555,11 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnGetPacks_Click(object sender, RoutedEventArgs e)
+        {
+            BtnCreatorDiscord_Click(sender, e);
+        }
+
         private void PacksScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             // Enable horizontal scrolling with mouse wheel
@@ -21219,6 +22142,10 @@ namespace ConditioningControlPanel
 
                     // Sync thumbnail checkboxes with current DisabledAssetPaths state
                     RefreshThumbnailCheckboxes();
+
+                    // FlashService caches its file listing for 60s — invalidate so the
+                    // folder-level toggle takes effect on the very next flash (#130).
+                    App.Flash?.ClearFileCache();
                 }
                 finally
                 {
@@ -21441,6 +22368,11 @@ namespace ConditioningControlPanel
             {
                 App.Settings.Current.DisabledAssetPaths.Add(file.RelativePath);
             }
+
+            // FlashService caches its file listing for 60s — without this the toggle has
+            // no effect for up to a minute, which users perceive as "unchecking does
+            // nothing" (#130).
+            App.Flash?.ClearFileCache();
 
             // Update parent folder state - set flag to prevent FolderCheckBox_Changed from
             // propagating changes to all children when the folder's IsChecked changes
@@ -22939,7 +23871,15 @@ namespace ConditioningControlPanel
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 ChkWinStart.IsChecked = StartupManager.IsRegistered();
+                App.Settings.Current.RunOnStartup = ChkWinStart.IsChecked ?? false;
+                App.Settings.Save();
+                return;
             }
+
+            // Persist to settings so any subsequent LoadSettings() (e.g. from saving a
+            // preset) doesn't reset the checkbox to a stale value (#150).
+            App.Settings.Current.RunOnStartup = isEnabled;
+            App.Settings.Save();
         }
 
         private void ChkStartHidden_Click(object sender, RoutedEventArgs e)
@@ -23076,6 +24016,21 @@ namespace ConditioningControlPanel
                     App.KeywordTriggers?.Dispose();
                     App.KeywordHighlight?.Dispose();
                     App.Overlay?.Dispose();
+                }
+                catch { }
+
+                // Stop the webcam pipeline immediately on close. Critical: the
+                // gaze debug cursor is an unowned visible window that keeps WPF
+                // alive past MainWindow close — if we don't tear this down here,
+                // App.OnExit never runs, the capture loop keeps holding the
+                // camera handle, and the cursor keeps moving with the app
+                // "closed". Order matters: stop dependents (cursor + focus
+                // gaze) before stopping Webcam, then kill the camera handle.
+                try
+                {
+                    App.GazeFocus?.Dispose();
+                    App.GazeCursor?.Dispose();
+                    App.Webcam?.Dispose();
                 }
                 catch { }
             }

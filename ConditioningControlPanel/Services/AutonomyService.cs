@@ -1252,11 +1252,38 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Called by MainWindow when the injected JS confirms a web video has actually begun
+        /// playing. Cancels the load-failure watchdog so it can't reset _webVideoActive while
+        /// the video is still on screen, and ensures the flag is set even when the navigation
+        /// was triggered by a user-clicked link rather than by autonomy itself.
+        /// </summary>
+        public void OnWebVideoStarted()
+        {
+            // Bump generation so any pending Task.Delay watchdog from TriggerWebVideoFullscreen
+            // becomes a no-op when it fires.
+            _webVideoWatchdogGeneration++;
+
+            if (!_webVideoActive)
+            {
+                _webVideoActive = true;
+                App.Logger?.Information("AutonomyService: Web video started (external trigger), blocking autonomy actions");
+            }
+            else
+            {
+                App.Logger?.Debug("AutonomyService: Web video confirmed playing, watchdog cancelled");
+            }
+        }
+
+        /// <summary>
         /// Called by MainWindow when a web video finishes or exits fullscreen.
         /// Resets the web video active state to allow other autonomy actions.
         /// </summary>
         public void OnWebVideoEnded()
         {
+            // Also bump the watchdog generation - if a stale watchdog is still pending,
+            // we don't want it firing later and overwriting state for a new video.
+            _webVideoWatchdogGeneration++;
+
             if (_webVideoActive)
             {
                 _webVideoActive = false;

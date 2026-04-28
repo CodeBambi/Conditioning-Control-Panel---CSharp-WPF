@@ -1,0 +1,56 @@
+<Window x:Class="ConditioningControlPanel.WebcamGazeTrackerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Gaze Tracker Test"
+        Background="#000000"
+        WindowStyle="None"
+        WindowState="Maximized"
+        ResizeMode="NoResize"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterScreen"
+        KeyDown="Window_KeyDown"
+        Loaded="Window_Loaded"
+        Closed="Window_Closed">
+    <Grid>
+        <Canvas x:Name="DotCanvas">
+            <Ellipse x:Name="Dot" Width="36" Height="36" Visibility="Collapsed">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#FF80E0FF" Offset="0"/>
+                        <GradientStop Color="#FF00B0FF" Offset="0.6"/>
+                        <GradientStop Color="#FF005080" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+                <Ellipse.Effect>
+                    <DropShadowEffect Color="#00B0FF" BlurRadius="30" ShadowDepth="0" Opacity="0.9"/>
+                </Ellipse.Effect>
+            </Ellipse>
+        </Canvas>
+
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
+            <TextBlock Text="Gaze Tracker Test" Foreground="White"
+                       FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock Text="Look around the screen. The cyan dot should follow your gaze. ESC to close."
+                       Foreground="#AAAAAA" FontSize="13" Margin="0,8,0,0" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="TxtCoords" Text="" Foreground="#00B0FF" FontSize="12"
+                       Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas"/>
+        </StackPanel>
+
+        <Border x:Name="ErrorPanel" Visibility="Collapsed"
+                Background="#221A1A" BorderBrush="#FF4040" BorderThickness="2"
+                CornerRadius="10" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center"
+                MaxWidth="520">
+            <StackPanel>
+                <TextBlock Text="Tracker test unavailable" Foreground="#FF8080" FontSize="18"
+                           FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtErrorDetail" Text="" Foreground="White" FontSize="13"
+                           Margin="0,12,0,16" TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                <Button x:Name="BtnErrorClose" Content="Close" Padding="20,8"
+                        Background="#00B0FF" Foreground="Black" BorderThickness="0"
+                        FontWeight="Bold" Cursor="Hand" Click="BtnErrorClose_Click"
+                        HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -429,7 +429,7 @@ namespace ConditioningControlPanel.Services.AIService
             {
                 App.Logger?.Error(ex, "LocalAiService: chat call threw (host={Host}, model={Model})", _activeHost, model);
                 if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
-                return $"(Ollama call failed: {ex.Message})";
+                return DescribeChatException(ex, model);
             }
             finally
             {
@@ -475,6 +475,38 @@ namespace ConditioningControlPanel.Services.AIService
             }
             catch { }
             return string.Empty;
+        }
+
+        /// <summary>
+        /// Turn a chat-call exception into a user-facing line that points at the most likely
+        /// cause. Generic "(Ollama call failed: ...)" leaves users guessing — connection
+        /// refused almost always means Ollama isn't running, and a clear hint to start it
+        /// (or install it) cuts most "AI doesn't work" reports (#151).
+        /// </summary>
+        private string DescribeChatException(Exception ex, string model)
+        {
+            // Walk to the innermost exception — HttpRequestException usually wraps a
+            // SocketException whose message names the actual failure.
+            var inner = ex;
+            while (inner.InnerException != null) inner = inner.InnerException;
+            var msg = inner.Message ?? string.Empty;
+
+            bool refused = msg.Contains("actively refused", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("connection refused", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("No connection could be made", StringComparison.OrdinalIgnoreCase)
+                || ex is HttpRequestException && msg.Contains("connection", StringComparison.OrdinalIgnoreCase);
+            bool dnsFail = msg.Contains("No such host", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("name resolution", StringComparison.OrdinalIgnoreCase);
+            bool timeout = ex is TaskCanceledException || msg.Contains("timeout", StringComparison.OrdinalIgnoreCase);
+
+            if (refused)
+                return $"(Can't reach Ollama at {_activeHost} — looks like it isn't running. Start Ollama, or install it from https://ollama.com)";
+            if (dnsFail)
+                return $"(Can't reach Ollama host {_activeHost} — check the host setting in Companion → AI)";
+            if (timeout)
+                return $"(Ollama took too long to respond. The first request after launch can take ~30-60s as the model loads — try once more.)";
+
+            return $"(Ollama call failed: {ex.Message})";
         }
 
         private static string DescribeOllamaError(int status, string body, string model)
