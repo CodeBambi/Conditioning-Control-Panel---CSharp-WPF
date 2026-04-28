@@ -2697,9 +2697,23 @@ namespace ConditioningControlPanel
             if (string.IsNullOrEmpty(text))
                 return;
 
-            // Strip any markdown links the AI generates - keep only the link text, discard URLs
-            // This handles cases like [Naughty Bambi](https://youtube.com/...) -> Naughty Bambi
-            text = Regex.Replace(text, @"\[([^\]]+)\]\([^)]+\)", "$1");
+            // Pass 1: collapse markdown links into just their text BUT remember the (text, url)
+            // pairs so we can re-attach them as real Hyperlink inlines below. We used to drop
+            // URLs entirely, which meant the AI couldn't reliably surface clickable links —
+            // small models often produce correct URLs (copied verbatim from the prompt) but
+            // approximate the title text, so the URL is the more authoritative signal.
+            var mdLinks = new List<(string LinkText, string Url)>();
+            text = Regex.Replace(text, @"\[([^\]]+)\]\(([^)]+)\)", m =>
+            {
+                var linkText = m.Groups[1].Value;
+                var url = m.Groups[2].Value.Trim();
+                if (Uri.TryCreate(url, UriKind.Absolute, out var u) &&
+                    (u.Scheme == "https" || u.Scheme == "http"))
+                {
+                    mdLinks.Add((linkText, url));
+                }
+                return linkText; // collapse to plain text in the working buffer
+            });
 
             // Also clean up any malformed markdown like [Url] or (url)
             text = Regex.Replace(text, @"\s*\[Url\]|\s*\(url\)", "", RegexOptions.IgnoreCase);
@@ -2707,6 +2721,19 @@ namespace ConditioningControlPanel
             // Try to find known video names in the text and make them clickable
             var processedText = text;
             var linkPositions = new List<(int start, int length, string name, string url)>();
+
+            // Pass 2: re-find the markdown link texts (now plain) in the buffer and claim them
+            // as the highest-priority link source. Authoritative URL beats name-based guess.
+            foreach (var (linkText, url) in mdLinks)
+            {
+                var idx = processedText.IndexOf(linkText, StringComparison.Ordinal);
+                if (idx < 0) continue;
+                bool overlaps = linkPositions.Any(lp =>
+                    (idx >= lp.start && idx < lp.start + lp.length) ||
+                    (idx + linkText.Length > lp.start && idx + linkText.Length <= lp.start + lp.length));
+                if (!overlaps)
+                    linkPositions.Add((idx, linkText.Length, linkText, url));
+            }
 
             foreach (var kvp in KnownVideoLinks.OrderByDescending(k => k.Key.Length)) // Longest first to avoid partial matches
             {

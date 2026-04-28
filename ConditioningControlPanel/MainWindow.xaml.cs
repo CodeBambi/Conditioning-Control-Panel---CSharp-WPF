@@ -7303,6 +7303,50 @@ namespace ConditioningControlPanel
             UpdateCommunityPromptsUI();
         }
 
+        private void BtnResetCompanionMemory_Click(object sender, RoutedEventArgs e)
+        {
+            var confirm = System.Windows.MessageBox.Show(
+                this,
+                "Wipe the companion's chat memory?\n\nThis clears the AI's conversation history both in memory and on disk, plus the chat log shown in the avatar bubble. " +
+                "Useful when she's stuck in an old pattern (e.g. skipping links). She'll start fresh on the next message.\n\nThis can't be undone.",
+                "Reset Companion Memory",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No);
+
+            if (confirm != MessageBoxResult.Yes) return;
+
+            try
+            {
+                // Cloud provider is stateless, so this only does work for local Ollama users.
+                // App.Ai is typed as the IAiService interface; ClearLocalHistory lives on
+                // the concrete strategy (which is what's always assigned).
+                (App.Ai as Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
+
+                // Drop the on-screen history too (the data store the avatar window binds to).
+                _avatarTubeWindow?.ChatHistory.Clear();
+
+                App.Logger?.Information("Companion memory reset by user");
+
+                System.Windows.MessageBox.Show(
+                    this,
+                    "Done — the companion's memory is clear. Send her a new message and she'll respond with no prior context.",
+                    "Reset Companion Memory",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to reset companion memory");
+                System.Windows.MessageBox.Show(
+                    this,
+                    "Couldn't fully reset the companion's memory: " + ex.Message,
+                    "Reset Companion Memory",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+
         private void BtnManagePhrases_Click(object sender, RoutedEventArgs e)
         {
             var dialog = new CompanionPhraseEditorDialog { Owner = this };

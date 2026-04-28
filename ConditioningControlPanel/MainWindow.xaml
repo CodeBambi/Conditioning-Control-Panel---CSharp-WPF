@@ -5364,6 +5364,10 @@
                                                     <TextBlock x:Name="TxtCustomizePromptName" Text="{loc:Str label_default}" Foreground="#9370DB" FontWeight="SemiBold" Margin="4,0,0,0"/>
                                                 </StackPanel>
                                             </Button>
+                                            <Button x:Name="BtnResetCompanionMemory" Content="🧹 Reset Memory" Click="BtnResetCompanionMemory_Click"
+                                                    Background="{DynamicResource SurfaceBgBrush}" Foreground="White" BorderBrush="#FF8B5A" BorderThickness="1"
+                                                    Padding="12,6" FontSize="16" Cursor="Hand" Margin="4,2,4,2"
+                                                    ToolTip="Wipe the AI companion's conversation memory. Useful if she's stuck repeating an old pattern (like skipping links) — she'll start fresh on the next message."/>
                                             <StackPanel Orientation="Horizontal" Margin="4,2,4,2" VerticalAlignment="Center">
                                                 <TextBlock Text="{loc:Str label_show_companion}" Foreground="{DynamicResource TextDimBrush}" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
                                                 <CheckBox x:Name="ChkAvatarEnabledCompanion" Style="{StaticResource ToggleStyle}"
