@@ -755,7 +755,9 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             //          turns it into a saccade-filter dwell time). Gated on
             //          tickedWrong so the trivially-true "_wrongMs >= 0" can't
             //          fire from frame 1 before any wrong gaze happened.
-            //   Timeout = asset reaches its max display duration without either
+            //   Display cap = asset reached its max display duration without
+            //          either threshold firing. Resolved from accumulated dwell
+            //          (see below) — never emits a synthetic Timeout outcome.
             var passTimeMs = _settings.PassTimeSec * 1000.0;
             if (_correctMs >= passTimeMs)
             {
@@ -772,7 +774,18 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             var elapsedTotal = (DateTime.UtcNow - _roundStartedAt).TotalMilliseconds;
             if (elapsedTotal >= maxDisplayMs)
             {
-                CompleteRound(RoundOutcome.Timeout);
+                // Resolve from observed dwell instead of returning a third
+                // "no-decision" state. Defaults (5s image, 1s grace, 3s pass)
+                // give only 4s to accumulate 3s of correct-side gaze; the
+                // hysteresis center band + blinks routinely shave that thin,
+                // so a steady stare can run out the clock with _correctMs
+                // below threshold but well above _wrongMs. Lenient on ties
+                // (both zero → user never glanced at noise → Correct).
+                var resolved = _correctMs >= _wrongMs ? RoundOutcome.Correct : RoundOutcome.Wrong;
+                App.Logger?.Information(
+                    "GazeMinigame: round {Idx} hit display cap, resolved to {Outcome} (correct={Correct:F0}ms wrong={Wrong:F0}ms passNeeded={Pass:F0}ms)",
+                    _currentRoundIdx, resolved, _correctMs, _wrongMs, passTimeMs);
+                CompleteRound(resolved);
             }
         }
 
@@ -1148,7 +1161,12 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             int correct = _results.Count(r => r.Outcome == RoundOutcome.Correct);
             int wrong   = _results.Count(r => r.Outcome == RoundOutcome.Wrong);
             int timeout = _results.Count(r => r.Outcome == RoundOutcome.Timeout);
-            TxtResultsHeadline.Text = $"{correct} correct  ·  {wrong} wrong  ·  {timeout} no-decision";
+            // Display-cap rounds now resolve to Correct/Wrong by dwell time, so
+            // the no-decision bucket should be empty in practice. Keep it
+            // visible only if some path ever surfaces one.
+            TxtResultsHeadline.Text = timeout > 0
+                ? $"{correct} correct  ·  {wrong} wrong  ·  {timeout} no-decision"
+                : $"{correct} correct  ·  {wrong} wrong";
 
             for (int i = 0; i < _results.Count; i++)
             {
