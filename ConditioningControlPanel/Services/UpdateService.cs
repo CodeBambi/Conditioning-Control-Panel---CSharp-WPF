@@ -26,21 +26,21 @@ namespace ConditioningControlPanel.Services
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.9.0 — All Eyes On Me
+        public const string CurrentPatchNotes = @"v5.9.0 - All Eyes On Me
 
-*Before anyone reads it as a flex — the title's just an homage to my fav artist, someone who actually helped me out a lot this last year. I turned 30 recently. Who knows, knows.*
+*Before anyone reads it as a flex - the title's just an homage to my fav artist, someone who actually helped me out a lot this last year. I turned 30 recently. Who knows, knows.*
 
 🧪 PRE-RELEASE BUILD
-This is an opt-in pre-release. The big new feature — Webcam Eye Tracking — works well on most setups but accuracy varies by webcam, lighting, and monitor combo. Feedback in Discord or GitHub issues helps tune the next build. Existing v5.8.4 installs are NOT auto-prompted to update to this version.
+This is an opt-in pre-release. The big new feature - Webcam Eye Tracking - works well on most setups but accuracy varies by webcam, lighting, and monitor combo. Feedback in Discord or GitHub issues helps tune the next build. Existing v5.8.4 installs are NOT auto-prompted to update to this version.
 
 ✨ HEADLINE
-• Webcam Eye Tracking — a fully local, on-device gaze pipeline. BlazeFace + FaceMesh + Iris ONNX models, runs on CPU. Frames never leave your machine, never written to disk.
+• Webcam Eye Tracking - a fully local, on-device gaze pipeline. BlazeFace + FaceMesh + Iris ONNX models, runs on CPU. Frames never leave your machine, never written to disk.
 • 25-point calibration with adaptive ridge polynomial fit, mouth/tongue validation gates, and a 1-dot Quick Recal that nudges the cursor back on-target without re-doing the full grid.
-• Multi-monitor aware — calibration is bound to the monitor it ran on.
+• Multi-monitor aware - calibration is bound to the monitor it ran on.
 
 🎮 NEW LAB BOX: WEBCAM GAMES
-• Focus Gaze — a free-form gaze cursor on top of your sessions.
-• Gaze Minigame — dwell-resolved rounds, entry sparkles, feedback buffer, configurable asset packs, sfx.
+• Focus Gaze - a free-form gaze cursor on top of your sessions.
+• Gaze Minigame - dwell-resolved rounds, entry sparkles, feedback buffer, configurable asset packs, sfx.
 • Standalone debug cursor toggle, Review-Privacy-Info shortcut on the card.
 
 🥽 NEW LAB BOX: BLINK TRAINER
@@ -69,7 +69,7 @@ This is an opt-in pre-release. The big new feature — Webcam Eye Tracking — w
 
 🔒 PRIVACY
 • All webcam frames stay on your device. The pipeline runs offline. No network calls, no disk writes of frame data, no telemetry.
-• Revoke consent any time from the Webcam Lab card — it stops tracking, deletes your calibration, and clears the consent record.
+• Revoke consent any time from the Webcam Lab card - it stops tracking, deletes your calibration, and clears the consent record.
 
 ⚠️ KNOWN ISSUES (this build)
 • Multi-monitor + Focus Gaze: if you calibrated on one monitor and use Focus Gaze on a different monitor, the gaze cursor can land on the wrong screen. Workaround: calibrate on the monitor you'll use Focus Gaze on. A coordinate-translation fix is queued for v5.9.1.";
