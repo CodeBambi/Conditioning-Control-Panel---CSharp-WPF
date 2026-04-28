@@ -8180,6 +8180,11 @@
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,2,0,0"/>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="BtnAwarenessTutorial" Content="🎓 Tutorial"
+                                    Style="{StaticResource SmallPinkButton}"
+                                    VerticalAlignment="Center" Margin="0,0,16,0"
+                                    Click="BtnAwarenessTutorial_Click"
+                                    ToolTip="Walk through the Awareness Engine — sources, cooldowns, presets, and the editor."/>
                             <Ellipse x:Name="AwarenessStatusDot" Width="8" Height="8" Fill="#606060" Margin="0,0,8,0"/>
                             <TextBlock x:Name="TxtAwarenessStatus" Text="Off" Foreground="#A0A0A0"
                                        FontSize="12" VerticalAlignment="Center" Margin="0,0,14,0"/>
@@ -10184,6 +10189,24 @@
                                             <TextBlock Text="{loc:Str label_ai_chat_window_awareness_slut_mode_and_premiu}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <Button Grid.Column="2" Content="{loc:Str btn_start_guide}" Click="BtnTutorialPatreon_Click"
+                                                Style="{StaticResource SmallPinkButton}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Awareness Engine -->
+                                <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="8" Padding="12" Margin="0,0,0,8" Cursor="Hand">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="👁" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{loc:Str label_awareness_engine}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{loc:Str label_awareness_engine_desc}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="2" Content="{loc:Str btn_start_guide}" Click="BtnTutorialAwareness_Click"
                                                 Style="{StaticResource SmallPinkButton}" VerticalAlignment="Center"/>
                                     </Grid>
                                 </Border>

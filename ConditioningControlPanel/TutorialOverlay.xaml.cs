@@ -91,6 +91,13 @@ namespace ConditioningControlPanel
                 var targetElement = FindElementByName(_targetWindow, step.TargetElementName);
                 if (targetElement != null)
                 {
+                    // Scroll the target into view if it's inside a ScrollViewer that's
+                    // currently scrolled past it. Without this, off-screen targets (e.g.
+                    // sliders below the fold on long tabs) get a spotlight at the wrong
+                    // position or none at all.
+                    try { targetElement.BringIntoView(); } catch { }
+                    _targetWindow.UpdateLayout();
+
                     var bounds = GetElementBounds(targetElement);
 
                     // If bounds are at origin (0,0), element might not be laid out yet - retry after delay

@@ -18,7 +18,8 @@ namespace ConditioningControlPanel.Services
         Companion,      // Companion tab
         Patreon,        // Patreon exclusives tab
         Avatar,         // Avatar companion
-        Modding         // Mod creation guide
+        Modding,        // Mod creation guide
+        Awareness       // Awareness Engine (keyword triggers + OCR)
     }
 
     public class TutorialService
@@ -34,6 +35,7 @@ namespace ConditioningControlPanel.Services
         private Action? _showAchievements;
         private Action? _showCompanion;
         private Action? _showPatreon;
+        private Action? _showAwareness;
 
         public event EventHandler<TutorialStep>? StepChanged;
         public event EventHandler? TutorialStarted;
@@ -66,7 +68,8 @@ namespace ConditioningControlPanel.Services
             Action showProgression,
             Action showAchievements,
             Action showCompanion,
-            Action showPatreon)
+            Action showPatreon,
+            Action? showAwareness = null)
         {
             _showSettings = showSettings;
             _showPresets = showPresets;
@@ -74,6 +77,7 @@ namespace ConditioningControlPanel.Services
             _showAchievements = showAchievements;
             _showCompanion = showCompanion;
             _showPatreon = showPatreon;
+            _showAwareness = showAwareness;
         }
 
         /// <summary>
@@ -93,6 +97,7 @@ namespace ConditioningControlPanel.Services
                 TutorialType.Patreon => CreatePatreonSteps(),
                 TutorialType.Avatar => CreateAvatarSteps(),
                 TutorialType.Modding => CreateModdingSteps(),
+                TutorialType.Awareness => CreateAwarenessSteps(),
                 _ => CreateFullTourSteps()
             };
         }
@@ -132,7 +137,7 @@ namespace ConditioningControlPanel.Services
                 // Apply callbacks based on step requirements
                 if (step.RequiresTab != null)
                 {
-                    step.OnActivate = step.RequiresTab switch
+                    var tabAction = step.RequiresTab switch
                     {
                         "settings" => _showSettings,
                         "presets" => _showPresets,
@@ -140,8 +145,24 @@ namespace ConditioningControlPanel.Services
                         "achievements" => _showAchievements,
                         "companion" => _showCompanion,
                         "patreon" => _showPatreon,
+                        "awareness" => _showAwareness,
                         _ => null
                     };
+
+                    // Compose with any custom OnActivate the step set in its constructor
+                    // (e.g. demo-fire steps that need the tab switch AND a side-effect).
+                    if (tabAction != null)
+                    {
+                        var existingActivate = step.OnActivate;
+                        if (existingActivate == null)
+                        {
+                            step.OnActivate = tabAction;
+                        }
+                        else
+                        {
+                            step.OnActivate = () => { tabAction(); existingActivate(); };
+                        }
+                    }
                 }
             }
         }
@@ -933,6 +954,222 @@ namespace ConditioningControlPanel.Services
                     Title = "Export Your Mod",
                     Description = "When you're done, click 'Export as .ccpmod' at the bottom. Your mod is packaged into a single file ready to share!\n\n" +
                                   "You can also load an existing .ccpmod to edit it using the 'Load .ccpmod' button.",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        // Awareness Engine tutorial \u2014 narrated around setting up a "good boy" clicker
+        // so each section has a concrete reason to exist in the user's head, not just
+        // a description. The script is intentionally non-technical: the engine, OCR,
+        // cooldowns, scroll dedup, and the action editor are all explained in plain
+        // language. Step 11 fires a synthetic trigger so users actually SEE the
+        // engine react instead of just being told what it would do.
+        private List<TutorialStep> CreateAwarenessSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "aw_intro",
+                    Icon = "\uD83D\uDC41",
+                    Title = "The Awareness Engine",
+                    Description = "The Awareness Engine watches your screen and your typing for keywords " +
+                                  "you choose, then reacts \u2014 a sound, a glow, a praise line from your companion, " +
+                                  "anything you want.\n\n" +
+                                  "Let's walk through it by setting up a simple \"good boy\" clicker.",
+                    RequiresTab = "awareness",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "aw_master",
+                    Icon = "\uD83D\uDD18",
+                    Title = "Master Switch",
+                    Description = "This is the master switch. Off = nothing happens at all.\n\n" +
+                                  "The dot turns green when the engine is on and listening.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "ChkAwarenessMaster",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "aw_pulse",
+                    Icon = "\uD83D\uDCE1",
+                    Title = "Live Pulse Feed",
+                    Description = "Every time a keyword fires, it lands here \u2014 your live receipt.\n\n" +
+                                  "If you're ever wondering \"did the engine actually catch that?\", " +
+                                  "this feed tells you in real time. We'll come back here in a moment.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "AwarenessPulseFeed",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "aw_sources_ocr",
+                    Icon = "\uD83D\uDDA5",
+                    Title = "Screen OCR",
+                    Description = "Screen OCR scans your monitors every few seconds and reads the text on them.\n\n" +
+                                  "This is how the engine catches words on web pages, chat windows, " +
+                                  "captions, anything visible \u2014 even if you didn't type it yourself.\n\n" +
+                                  "It runs entirely on your computer. Nothing is sent anywhere.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "ChkAwarenessOcr",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "aw_sources_keyboard",
+                    Icon = "\u2328",
+                    Title = "Keyboard Watching",
+                    Description = "Keyboard mode watches what you type, even outside this app.\n\n" +
+                                  "Either source works on its own \u2014 you can use OCR, keyboard, or both at once. " +
+                                  "Most people leave both on.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "ChkAwarenessKeyboard",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "aw_safety_ownui",
+                    Icon = "\uD83D\uDEE1",
+                    Title = "Ignore Own UI",
+                    Description = "This skips the app's own windows during OCR scans.\n\n" +
+                                  "Without it, the engine would read your settings text and trigger on it. Leave this on.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "ChkAwarenessIgnoreOwnUi",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "aw_safety_loop",
+                    Icon = "\uD83D\uDD01",
+                    Title = "Loop Protection",
+                    Description = "Some triggers flash the keyword back on screen. Without protection, " +
+                                  "OCR would re-read it and the trigger would fire forever.\n\n" +
+                                  "Loop Protection mutes a keyword for a few seconds after it fires, " +
+                                  "across all sources. Leave this on too.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "ChkAwarenessLoopProtection",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "aw_scroll_note",
+                    Icon = "\uD83D\uDCDC",
+                    Title = "What About Scrolling?",
+                    Description = "When you scroll a page, OCR sees the same words again \u2014 you might worry that " +
+                                  "scrolling would spam the engine with false fires.\n\n" +
+                                  "It doesn't. The engine waits for a word to stay in the same spot for two scans " +
+                                  "before counting it. Scrolling, redraws, and cursor movement are filtered out automatically.\n\n" +
+                                  "There's nothing here for you to configure \u2014 it just works.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "AwarenessPulseFeed",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "aw_cd_global",
+                    Icon = "\u23F1",
+                    Title = "Global Cooldown",
+                    Description = "Global cooldown = the gap between any two reactions, regardless of which keyword fired.\n\n" +
+                                  "If multiple words land at once and you'd rather feel one click than five, " +
+                                  "raise this slider. Most people start around 10 seconds and tune from there.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "SliderAwarenessGlobalCooldown",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "aw_cd_sameword",
+                    Icon = "\uD83D\uDD52",
+                    Title = "Same-Word Cooldown",
+                    Description = "Same-word cooldown = the gap before the same keyword can fire again.\n\n" +
+                                  "If \"good boy\" appears five times on a page, only the first one fires. " +
+                                  "Other keywords can still fire normally during that window.\n\n" +
+                                  "Crank both cooldowns up if you ever feel overloaded \u2014 it's the gentlest way to dial things back.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "SliderAwarenessSameWordCooldown",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "aw_demo_fire",
+                    Icon = "\u2728",
+                    Title = "Watch It Catch a Word",
+                    Description = "Watch the pulse feed \u2014 the engine just simulated a fire for the word \"good boy\".\n\n" +
+                                  "That's exactly what happens when OCR or your keyboard catches one of your keywords " +
+                                  "in real life. If your companion is attached, she may have said something too.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "AwarenessPulseFeed",
+                    TextPosition = TutorialStepPosition.Right,
+                    OnActivate = () =>
+                    {
+                        try { App.KeywordTriggers?.FireDemoTrigger("good boy", "Tutorial"); }
+                        catch { /* tutorial demo never blocks the tour */ }
+                    }
+                },
+                new TutorialStep
+                {
+                    Id = "aw_presets",
+                    Icon = "\uD83C\uDF81",
+                    Title = "Preset Packs",
+                    Description = "The easiest way to start: install a preset pack.\n\n" +
+                                  "Each pack bundles a set of keywords and the responses that fire when they're caught. " +
+                                  "The Puppy Pet pack already includes \"good boy\" with a clicker sound and a praise line \u2014 " +
+                                  "pick it if you want a one-click clicker setup, or browse the others.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "AwarenessPresetItems",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "aw_highlight",
+                    Icon = "\uD83C\uDFA8",
+                    Title = "Highlight Glow",
+                    Description = "When a keyword is caught on-screen, the engine paints a glow around it " +
+                                  "so you actually see the recognition happen.\n\n" +
+                                  "Pick a color you like \u2014 pink by default. The \"visible in screen capture\" toggle " +
+                                  "decides whether OBS / streaming software sees the glow too.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "AwarenessHighlightColorPanel",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "aw_advanced",
+                    Icon = "\uD83D\uDD27",
+                    Title = "Advanced Editor",
+                    Description = "When you want more control \u2014 swap the clicker sound, change the praise line, " +
+                                  "add XP per fire, send time to a Chaster lock \u2014 open the Advanced editor.\n\n" +
+                                  "Hit Next to peek inside.",
+                    RequiresTab = "awareness",
+                    TargetElementName = "LnkAwarenessAdvanced",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "aw_editor_open",
+                    Icon = "\uD83C\uDFAF",
+                    Title = "Inside the Editor",
+                    Description = "Each row in the editor is one keyword, with a stack of responses below it:\n\n" +
+                                  "\uD83D\uDD0A sound clip   \u2728 glow   \uD83D\uDCAC avatar line   \u2B50 XP\n" +
+                                  "\uD83D\uDCF3 haptic   \u23F1 extend session   \uD83D\uDD12 Chaster time\n\n" +
+                                  "Add, remove, retune any of them \u2014 your changes save the moment you close.\n\n" +
+                                  "We'll pop the editor open with the Puppy preset for you when you finish this tour.",
+                    RequiresTab = "awareness",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "aw_done",
+                    Icon = "\u2764",
+                    Title = "You're Set",
+                    Description = "That's the whole tour.\n\n" +
+                                  "\u2022 Privacy: nothing leaves your machine \u2014 OCR runs locally on Windows.\n" +
+                                  "\u2022 Feeling overloaded later? Raise the two cooldown sliders.\n" +
+                                  "\u2022 Want this tour again? It's in the ? button at the top right.\n\n" +
+                                  "Click Finish \u2014 the editor will open so you can play.",
                     TextPosition = TutorialStepPosition.Center
                 }
             };

@@ -18430,7 +18430,8 @@ namespace ConditioningControlPanel
                 showCompanion: () => ShowTab("companion"),
                 // Exclusives tab eliminated — route tutorial's "patreon" step to the
                 // App Info & Data popup which hosts the login/data sections.
-                showPatreon: () => ShowAppInfoPopup()
+                showPatreon: () => ShowAppInfoPopup(),
+                showAwareness: () => ShowTab("awareness")
             );
 
             App.Tutorial.Start(type);
@@ -18499,6 +18500,50 @@ namespace ConditioningControlPanel
             MainTutorialOverlay.Visibility = Visibility.Collapsed;
             if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Visible;
             StartTutorial(TutorialType.Avatar);
+        }
+
+        private void BtnTutorialAwareness_Click(object sender, RoutedEventArgs e)
+        {
+            MainTutorialOverlay.Visibility = Visibility.Collapsed;
+            if (BrowserContainer != null) BrowserContainer.Visibility = Visibility.Visible;
+            StartAwarenessTutorial();
+        }
+
+        // Same tour, but launched directly from the in-tab "Tutorial" button rather
+        // than via the help-menu overlay (so we don't toggle MainTutorialOverlay).
+        private void BtnAwarenessTutorial_Click(object sender, RoutedEventArgs e)
+        {
+            StartAwarenessTutorial();
+        }
+
+        private void StartAwarenessTutorial()
+        {
+            // One-shot: when the Awareness tour finishes naturally (user reached the
+            // last step), pop the Puppy preset editor so they have something concrete
+            // to play with while the walkthrough is fresh. Skipping mid-tour does not
+            // open the editor — skip means "I'm done with this".
+            EventHandler? onCompleted = null;
+            onCompleted = (s, args) =>
+            {
+                App.Tutorial.TutorialCompleted -= onCompleted;
+                if (App.Tutorial.CurrentTutorialType != TutorialType.Awareness) return;
+                if (App.Tutorial.CurrentStepIndex != App.Tutorial.TotalSteps - 1) return;
+
+                try
+                {
+                    var puppy = App.KeywordPresets?.GetPreset("builtin.puppy");
+                    if (puppy == null) return;
+                    var dlg = new AwarenessPresetDetailDialog(puppy) { Owner = this };
+                    dlg.Show();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("Awareness tutorial editor-open failed: {Error}", ex.Message);
+                }
+            };
+            App.Tutorial.TutorialCompleted += onCompleted;
+
+            StartTutorial(TutorialType.Awareness);
         }
 
         private void BtnTutorialModding_Click(object sender, RoutedEventArgs e)
