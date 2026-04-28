@@ -49,7 +49,7 @@
             </Ellipse>
         </Canvas>
 
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
+        <StackPanel x:Name="StatusPanel" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
             <TextBlock x:Name="TxtTitle" Text="Webcam Calibration" Foreground="White"
                        FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
             <TextBlock x:Name="TxtStatus" Text="Look at the pink dot. Press ESC to cancel."
@@ -57,6 +57,78 @@
             <TextBlock x:Name="TxtProgress" Text="" Foreground="#FF69B4" FontSize="13"
                        Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas"/>
         </StackPanel>
+
+        <Border x:Name="IntroPanel" Visibility="Collapsed"
+                Background="#181820" BorderBrush="#FF69B4" BorderThickness="2"
+                CornerRadius="14" Padding="36,28,36,28"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                MaxWidth="640">
+            <StackPanel>
+                <TextBlock Text="Webcam Calibration"
+                           Foreground="#FFFFFF" FontSize="26" FontWeight="Bold"
+                           HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                <TextBlock Text="Three short phases — about 75 seconds total."
+                           Foreground="#FFB6E1" FontSize="14"
+                           HorizontalAlignment="Center" Margin="0,0,0,22"/>
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="1." Foreground="#FF69B4"
+                               FontSize="15" FontWeight="Bold" VerticalAlignment="Top"/>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Dot grid (16 dots)" Foreground="#FFFFFF"
+                                   FontSize="15" FontWeight="SemiBold"/>
+                        <TextBlock Text="A pink dot moves around the screen. Look at it and hold your gaze until the ring around it fills up. ~35 seconds."
+                                   Foreground="#CCCCCC" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="2." Foreground="#FF69B4"
+                               FontSize="15" FontWeight="Bold" VerticalAlignment="Top"/>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Head movement check" Foreground="#FFFFFF"
+                                   FontSize="15" FontWeight="SemiBold"/>
+                        <TextBlock Text="Keep your eyes on the center dot while you slowly nod your head, then turn it left and right. ~6 seconds."
+                                   Foreground="#CCCCCC" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,0,0,18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="3." Foreground="#FF69B4"
+                               FontSize="15" FontWeight="Bold" VerticalAlignment="Top"/>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Quick checks" Foreground="#FFFFFF"
+                                   FontSize="15" FontWeight="SemiBold"/>
+                        <TextBlock Text="A few prompts to confirm tracking works: glance left and right, blink, open your mouth, stick your tongue out."
+                                   Foreground="#CCCCCC" FontSize="13" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Foreground="#888888" FontSize="12"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap" Margin="0,0,0,18">
+                    Sit comfortably, with even lighting on your face. ESC cancels at any time.
+                </TextBlock>
+
+                <Button x:Name="BtnIntroContinue" Content="Continue"
+                        Padding="32,10" Background="#FF69B4" Foreground="Black"
+                        BorderThickness="0" FontWeight="Bold" FontSize="15"
+                        Cursor="Hand" HorizontalAlignment="Center"
+                        Click="BtnIntroContinue_Click"/>
+            </StackPanel>
+        </Border>
 
         <Grid x:Name="ValidationPanel" Visibility="Collapsed">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">

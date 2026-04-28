@@ -3684,6 +3684,62 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnWebcamDebugQuickRecal_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null)
+            {
+                AppendWebcamDebugLog("Webcam service unavailable.");
+                return;
+            }
+
+            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            {
+                AppendWebcamDebugLog("Consent not given — opening consent dialog…");
+                var consent = new WebcamConsentDialog { Owner = this };
+                var ok = consent.ShowDialog();
+                if (ok != true || !consent.ConsentGiven)
+                {
+                    AppendWebcamDebugLog("Consent declined.");
+                    return;
+                }
+            }
+
+            EnsureWebcamDebugSubscribed();
+            var startedHere = false;
+            if (!svc.IsRunning)
+            {
+                AppendWebcamDebugLog("Starting tracking for quick recal…");
+                if (!svc.Start())
+                {
+                    AppendWebcamDebugLog($"Couldn't start tracking. State={svc.State}.");
+                    return;
+                }
+                startedHere = true;
+                BtnWebcamDebugStart.Content = "Stop tracking";
+            }
+
+            if (svc.Calibration == null)
+            {
+                AppendWebcamDebugLog("No calibration loaded — run Calibrate (16-point) first. Quick Recal only nudges an existing calibration.");
+                if (startedHere) { svc.Stop(); BtnWebcamDebugStart.Content = "Start tracking"; }
+                return;
+            }
+
+            AppendWebcamDebugLog("Opening quick-recal window…");
+            var recalDlg = new WebcamQuickRecalWindow { Owner = this };
+            var result = recalDlg.ShowDialog();
+            AppendWebcamDebugLog(result == true
+                ? $"Quick recal applied (offset {svc.Calibration.RuntimeOffset?.Dx:F0}, {svc.Calibration.RuntimeOffset?.Dy:F0} px)."
+                : "Quick recal cancelled.");
+
+            if (startedHere)
+            {
+                svc.Stop();
+                BtnWebcamDebugStart.Content = "Start tracking";
+            }
+        }
+
         private void BtnWebcamReviewPrivacy_Click(object sender, RoutedEventArgs e)
         {
             // Re-open the consent flow for users who want to read the privacy

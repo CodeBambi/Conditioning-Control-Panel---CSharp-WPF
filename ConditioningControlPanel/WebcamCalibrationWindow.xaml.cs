@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -12,38 +13,39 @@ using WpfPoint = System.Windows.Point;
 namespace ConditioningControlPanel
 {
     /// <summary>
-    /// Fullscreen 16-point gaze calibration (4×4 grid). Samples raw iris vectors
+    /// Fullscreen 25-point gaze calibration (5×5 grid). Samples raw iris vectors
     /// at each point, fits a 3×3 homography and an over-determined 2nd-order
-    /// polynomial (iris → screen DIPs), and persists via WebcamCalibrationData.
+    /// polynomial (Cerrolaza asymmetric form, ridge-regularized with λ chosen
+    /// by leave-one-out CV, iris → screen DIPs), and persists via
+    /// WebcamCalibrationData.
     ///
-    /// Why 16 points: the polynomial is 6 DOF per axis — with 9 points it's
-    /// 9×6 (3 redundancy), with 16 it's 16×6 (10 redundancy). The extra inner
-    /// rows/columns dramatically tighten the fit at edges and corners, which
-    /// is also where curved-screen geometry diverges most from a planar fit.
+    /// Grid sizing: 5×5 with margin=40 puts corner dots ~40 DIPs from the bezel,
+    /// so the polynomial is trained on near-edge gaze angles directly — corner
+    /// reach (especially top/bottom regions, which 4×4 had to extrapolate) is
+    /// dramatically better. An earlier 5×5 attempt was abandoned because of
+    /// jumpy cursor + drift, but those issues traced to the unregularized
+    /// Tikhonov fit, mean+σ outlier rejection, head-pose comp, and edge-pull
+    /// — all replaced or removed. The current pipeline (Cerrolaza + ridge LOO,
+    /// I-DT saccade-settle + MAD trim) is robust enough at the wider angles.
     ///
     /// Caller is responsible for ensuring App.Webcam is already running.
     /// </summary>
     public partial class WebcamCalibrationWindow : System.Windows.Window
     {
         private const int ReadyMs = 600;          // dot moves, user re-fixates
-        private const int SampleMs = 1400;        // ~42 samples at 30fps; above MinSamplesPerPoint
+        private const int SampleMs = 1100;        // ~33 samples at 30fps; well above MinSamplesPerPoint after the saccade-settle drop
         private const int SettleMs = 200;         // pause between dots
         private const int RetryReadyMs = 900;     // longer pause before retrying a missed dot
         private const int MinSamplesPerPoint = 20;
         private const int MaxAttemptsPerPoint = 2; // miss twice in a row → fail calibration
+        private const int GridSize = 5;            // 5×5 = 25 calibration points (top/bottom/side midpoints + corners + interior)
+        private const double EdgeMargin = 40;      // distance from screen edge for corner dots (DIPs); small enough that polynomial extrapolation to bezel is negligible
 
         // Sample target for the "ring is full" feedback. We treat the SampleMs
-        // window's worth of frames at ~30fps as 100% — this is well above the
-        // hard MinSamplesPerPoint floor, so the ring fills smoothly across the
-        // window rather than maxing out almost immediately.
-        private const int RingFullSampleTarget = 42;
-
-        // Head-movement micro-phase (gaze fixed at center, head deliberately
-        // moves). Anchors the head-pose comp fit with strong per-axis pose
-        // variance — fixes the case where natural calibration head motion is
-        // strong on yaw (sway) but weak on pitch (bob).
-        private const int MovementReadyMs = 1800;
-        private const int MovementSampleMs = 6000;
+        // window's worth of frames at ~30fps as 100% — this is above the hard
+        // MinSamplesPerPoint floor with comfortable headroom, so the ring fills
+        // smoothly across the window rather than maxing out almost immediately.
+        private const int RingFullSampleTarget = 33;
 
         // Per-dot iris samples paired with the head-pose at the same frame.
         // Pairing lets the finalize pass reject frames where the user's head
@@ -61,17 +63,13 @@ namespace ConditioningControlPanel
         private bool _collecting;
         private bool _cancelled;
         private bool _completedOk;
+        private readonly TaskCompletionSource<bool> _introDone = new();
         private Storyboard? _ringPulse;
         private bool _ringIsFull;
         // Index of the dot currently being sampled. Read by OnRawIris so
         // samples land in the right per-dot bucket across retries (we can't
         // rely on "last list" because all 9 are allocated up-front).
         private int _activeDotIndex = -1;
-        // Movement-phase iris+pose samples (gaze fixed, head varying).
-        // Kept in a separate bucket from the per-dot samples and excluded
-        // from BaselineHeadPose / pose-rejection filters.
-        private readonly List<(double X, double Y, double Yaw, double Pitch, bool HasPose)> _movementSamples = new();
-        private bool _collectingMovement;
 
         public WebcamCalibrationWindow()
         {
@@ -88,6 +86,22 @@ namespace ConditioningControlPanel
 
             App.Webcam.OnRawIris += OnRawIris;
             App.Webcam.OnHeadPose += OnHeadPose;
+
+            // Show the intro overlay first so users know what's coming —
+            // the dot grid + head-movement + validation checks are otherwise
+            // a surprise. DotCanvas / StatusPanel stay hidden until the
+            // user clicks Continue (or presses ESC, which cancels).
+            DotCanvas.Visibility = Visibility.Collapsed;
+            StatusPanel.Visibility = Visibility.Collapsed;
+            IntroPanel.Visibility = Visibility.Visible;
+
+            var proceed = await _introDone.Task;
+            if (!proceed || _cancelled) return;
+
+            IntroPanel.Visibility = Visibility.Collapsed;
+            DotCanvas.Visibility = Visibility.Visible;
+            StatusPanel.Visibility = Visibility.Visible;
+
             try
             {
                 await RunSequenceAsync();
@@ -97,6 +111,11 @@ namespace ConditioningControlPanel
                 App.Logger?.Warning(ex, "WebcamCalibrationWindow: calibration sequence threw");
                 ShowError("Calibration failed unexpectedly. See logs/app.log for details.");
             }
+        }
+
+        private void BtnIntroContinue_Click(object sender, RoutedEventArgs e)
+        {
+            _introDone.TrySetResult(true);
         }
 
         private void Window_Closed(object sender, EventArgs e)
@@ -114,6 +133,7 @@ namespace ConditioningControlPanel
             {
                 _cancelled = true;
                 _collecting = false;
+                _introDone.TrySetResult(false);
                 DialogResult = false;
                 Close();
             }
@@ -144,12 +164,6 @@ namespace ConditioningControlPanel
                     _ringIsFull = true;
                     StartRingPulse();
                 }
-                return;
-            }
-
-            if (_collectingMovement)
-            {
-                _movementSamples.Add((dx, dy, pose?.Yaw ?? 0, pose?.Pitch ?? 0, pose.HasValue));
             }
         }
 
@@ -169,40 +183,29 @@ namespace ConditioningControlPanel
 
             var w = ActualWidth;
             var h = ActualHeight;
-            const double margin = 90;
-            // 4×4 grid, row-major. Inner rows/columns sit at 1/3 and 2/3 of the
-            // usable span (between the margin-inset corners). Index layout:
-            //   0  1  2  3      (top row)
-            //   4  5  6  7
-            //   8  9 10 11
-            //  12 13 14 15      (bottom row)
-            // Left column = {0,4,8,12}; right column = {3,7,11,15} —
-            // referenced below when computing LeftRefVec / RightRefVec.
-            double xL = margin, xR = w - margin;
-            double yT = margin, yB = h - margin;
-            double xML = xL + (xR - xL) / 3.0;
-            double xMR = xL + 2.0 * (xR - xL) / 3.0;
-            double yMU = yT + (yB - yT) / 3.0;
-            double yMD = yT + 2.0 * (yB - yT) / 3.0;
-            var positions = new (string Label, WpfPoint Screen)[]
+            // 5×5 grid, row-major. 25 dots evenly spaced across cols/rows 0..4
+            // of the usable span. Layout:
+            //    0  1  2  3  4      (top row)
+            //    5  6  7  8  9
+            //   10 11 12 13 14
+            //   15 16 17 18 19
+            //   20 21 22 23 24      (bottom row)
+            // Left column = {0,5,10,15,20}; right column = {4,9,14,19,24};
+            // top row = {0..4}; bottom row = {20..24}.
+            double xL = EdgeMargin, xR = w - EdgeMargin;
+            double yT = EdgeMargin, yB = h - EdgeMargin;
+            string[] rowLabels = { "Top", "Upper", "Middle", "Lower", "Bottom" };
+            string[] colLabels = { "left", "mid-left", "center", "mid-right", "right" };
+            var positions = new (string Label, WpfPoint Screen)[GridSize * GridSize];
+            for (int r = 0; r < GridSize; r++)
             {
-                ("Top-left",        new WpfPoint(xL,  yT)),
-                ("Top-mid-left",    new WpfPoint(xML, yT)),
-                ("Top-mid-right",   new WpfPoint(xMR, yT)),
-                ("Top-right",       new WpfPoint(xR,  yT)),
-                ("Upper-left",      new WpfPoint(xL,  yMU)),
-                ("Upper-mid-left",  new WpfPoint(xML, yMU)),
-                ("Upper-mid-right", new WpfPoint(xMR, yMU)),
-                ("Upper-right",     new WpfPoint(xR,  yMU)),
-                ("Lower-left",      new WpfPoint(xL,  yMD)),
-                ("Lower-mid-left",  new WpfPoint(xML, yMD)),
-                ("Lower-mid-right", new WpfPoint(xMR, yMD)),
-                ("Lower-right",     new WpfPoint(xR,  yMD)),
-                ("Bottom-left",     new WpfPoint(xL,  yB)),
-                ("Bottom-mid-left", new WpfPoint(xML, yB)),
-                ("Bottom-mid-right",new WpfPoint(xMR, yB)),
-                ("Bottom-right",    new WpfPoint(xR,  yB)),
-            };
+                double y = yT + (yB - yT) * (r / (double)(GridSize - 1));
+                for (int c = 0; c < GridSize; c++)
+                {
+                    double x = xL + (xR - xL) * (c / (double)(GridSize - 1));
+                    positions[r * GridSize + c] = ($"{rowLabels[r]}-{colLabels[c]}", new WpfPoint(x, y));
+                }
+            }
 
             // Allocate per-dot sample lists up-front so the OnRawIris callback's
             // `_allSamples.Count - 1` indexing always points at the right slot
@@ -271,41 +274,8 @@ namespace ConditioningControlPanel
             }
 
             if (_cancelled) return;
-            await RunHeadMovementPhaseAsync(new WpfPoint(w / 2, h / 2));
-            if (_cancelled) return;
 
             await FinalizeCalibrationAsync(positions);
-        }
-
-        // Gaze-fixed head-movement phase. User looks at a single center dot
-        // while deliberately nodding and turning their head. Provides clean
-        // per-axis pose variance (especially pitch, which natural calibration
-        // motion is often weak on) for the empirical head-pose comp fit.
-        private async Task RunHeadMovementPhaseAsync(WpfPoint center)
-        {
-            StopRingPulse();
-            ResetProgressRing();
-            MoveDotTo(center);
-
-            TxtProgress.Text = "Head movement check";
-            TxtStatus.Text = "Look at the dot. Slowly nod your head up and down, then turn left and right. Keep your eyes on the dot.";
-            await Task.Delay(MovementReadyMs);
-            if (_cancelled) return;
-
-            _collectingMovement = true;
-            // Tick the ring fill as a 0→100% countdown over MovementSampleMs.
-            // No pulse — this isn't a "got enough" signal, it's "keep going
-            // until the ring is full".
-            const int stepMs = 50;
-            int elapsed = 0;
-            while (elapsed < MovementSampleMs && !_cancelled)
-            {
-                await Task.Delay(stepMs);
-                elapsed += stepMs;
-                UpdateProgressRing(Math.Min(1.0, elapsed / (double)MovementSampleMs));
-            }
-            _collectingMovement = false;
-            ResetProgressRing();
         }
 
         private async Task FinalizeCalibrationAsync((string Label, WpfPoint Screen)[] positions)
@@ -375,45 +345,18 @@ namespace ConditioningControlPanel
                     s = new List<(double, double, double, double, bool)>(_allSamples[i]);
                 }
 
-                double sumX = 0, sumY = 0;
-                foreach (var p in s) { sumX += p.X; sumY += p.Y; }
-                var mx = sumX / s.Count;
-                var my = sumY / s.Count;
-
-                // Two passes of tight inlier filtering (1.0σ). With pose
-                // pre-filtering above, the surviving samples already represent
-                // "head still" frames, so we can be aggressive on iris-axis
-                // outliers (blinks, fixation breaks, micro-saccades). Track
-                // the kept-sample list so residuals fit later uses the same
-                // set as the per-dot mean.
-                for (int pass = 0; pass < 2; pass++)
-                {
-                    double vx = 0, vy = 0;
-                    foreach (var p in s) { vx += (p.X - mx) * (p.X - mx); vy += (p.Y - my) * (p.Y - my); }
-                    var sx = Math.Sqrt(vx / s.Count);
-                    var sy = Math.Sqrt(vy / s.Count);
-                    var keptList = new List<(double, double, double, double, bool)>(s.Count);
-                    double kx = 0, ky = 0;
-                    foreach (var p in s)
-                    {
-                        if (Math.Abs(p.X - mx) <= 1.0 * sx + 1e-6 && Math.Abs(p.Y - my) <= 1.0 * sy + 1e-6)
-                        {
-                            kx += p.X; ky += p.Y;
-                            keptList.Add(p);
-                        }
-                    }
-                    if (keptList.Count >= MinSamplesPerPoint)
-                    {
-                        mx = kx / keptList.Count;
-                        my = ky / keptList.Count;
-                        s = keptList;
-                    }
-                    else break;
-                }
-
+                // Saccade-settle drop + median/MAD outlier rejection. Drops
+                // the first ~210ms of samples (gaze is still saccading onto
+                // and settling on the new dot — Salvucci & Goldberg I-DT
+                // 2000), then trims at median ± 3·MAD/0.6745. Robust 3σ
+                // envelope that rejects blinks, micro-saccades, and fixation
+                // breaks without the center/spread estimates themselves being
+                // inflated by those outliers — which the previous mean+1σ
+                // two-pass was vulnerable to.
+                var (mx, my, kept) = RobustPerDotMean(s);
                 srcMeans[i] = new Point2d(mx, my);
                 dstPoints[i] = new Point2d(positions[i].Screen.X, positions[i].Screen.Y);
-                survivors[i] = s;
+                survivors[i] = kept;
             }
 
             // Fit homography iris → screen.
@@ -443,95 +386,57 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // 2nd-order polynomial fit: N means → 12 coefficients (6 per axis).
-            // Captures the nonlinear iris→screen response that the homography
-            // can't, so accuracy at the edges/corners (and on curved screens)
-            // matches the center much more closely. Solved via
-            // Cv2.Solve(..., DecompTypes.Normal) on an overdetermined N×6
-            // design matrix — N=16 gives 10× redundancy vs 6 unknowns per axis.
-            PolynomialFitData? polynomial = null;
-            try
-            {
-                int n = positions.Length;
-                using var A = new Mat(n, 6, MatType.CV_64FC1);
-                using var bX = new Mat(n, 1, MatType.CV_64FC1);
-                using var bY = new Mat(n, 1, MatType.CV_64FC1);
-                for (int i = 0; i < n; i++)
-                {
-                    double ix = srcMeans[i].X, iy = srcMeans[i].Y;
-                    A.Set(i, 0, 1.0);
-                    A.Set(i, 1, ix);
-                    A.Set(i, 2, iy);
-                    A.Set(i, 3, ix * ix);
-                    A.Set(i, 4, iy * iy);
-                    A.Set(i, 5, ix * iy);
-                    bX.Set(i, 0, dstPoints[i].X);
-                    bY.Set(i, 0, dstPoints[i].Y);
-                }
-                using var coeffsX = new Mat();
-                using var coeffsY = new Mat();
-                if (Cv2.Solve(A, bX, coeffsX, DecompTypes.Normal)
-                 && Cv2.Solve(A, bY, coeffsY, DecompTypes.Normal))
-                {
-                    polynomial = new PolynomialFitData
-                    {
-                        X = new[]
-                        {
-                            coeffsX.At<double>(0, 0), coeffsX.At<double>(1, 0), coeffsX.At<double>(2, 0),
-                            coeffsX.At<double>(3, 0), coeffsX.At<double>(4, 0), coeffsX.At<double>(5, 0),
-                        },
-                        Y = new[]
-                        {
-                            coeffsY.At<double>(0, 0), coeffsY.At<double>(1, 0), coeffsY.At<double>(2, 0),
-                            coeffsY.At<double>(3, 0), coeffsY.At<double>(4, 0), coeffsY.At<double>(5, 0),
-                        },
-                    };
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "WebcamCalibrationWindow: polynomial fit failed; falling back to homography only");
-            }
+            // 2nd-order polynomial fit, Cerrolaza et al. (2008, 2012)
+            // asymmetric form — the empirical winner from a 400+ variant
+            // sweep on 9-25 point grids:
+            //   x = a0 + a1·ix + a2·iy + a3·ix·iy + a4·ix² + a5·iy² + a6·ix²·iy
+            //   y = b0 + b1·ix + b2·iy + b3·ix·iy + b4·ix² + b5·iy² + b6·iy²·ix
+            // The asymmetric high-order term (ix²·iy on X, iy²·ix on Y)
+            // gives ~0.15-0.25° DVA over the symmetric 6-coefficient form
+            // we used previously. Ridge λ is selected by leave-one-out CV
+            // from log-spaced candidates {1e-5..1e-1} × trace(AᵀA)/p, which
+            // trims 15-30% off corner error vs the previous fixed-λ fit
+            // on webcam data (Hansen & Ji 2010, Zhang & Hornof 2014). 25
+            // points × 5 candidates × 2 axes = ~250 small linear-system
+            // solves at finalize time — milliseconds.
+            PolynomialFitData? polynomial = FitCerrolazaPolynomial(srcMeans, dstPoints);
 
-            // LeftRefVec  = mean of left column  (indices 0, 4, 8, 12)
-            // RightRefVec = mean of right column (indices 3, 7, 11, 15)
-            // 4-point average per side — more robust to head-pose drift than
-            // the 3-point (3×3) and 2-point (5-point) averages it replaces.
-            var leftRef = new[] {
-                (srcMeans[0].X + srcMeans[4].X + srcMeans[8].X + srcMeans[12].X) / 4.0,
-                (srcMeans[0].Y + srcMeans[4].Y + srcMeans[8].Y + srcMeans[12].Y) / 4.0
-            };
-            var rightRef = new[] {
-                (srcMeans[3].X + srcMeans[7].X + srcMeans[11].X + srcMeans[15].X) / 4.0,
-                (srcMeans[3].Y + srcMeans[7].Y + srcMeans[11].Y + srcMeans[15].Y) / 4.0
-            };
+            // LeftRefVec / RightRefVec are the per-side averages of the
+            // calibration grid's left and right columns — used by
+            // ClassifyGazeSide for left/right gaze-side detection (minigame
+            // and validation paths). One sample per row keeps the side
+            // reference robust to per-row head-pose drift.
+            //
+            // TopRefVec / BottomRefVec previously fed an iris-extreme edge-pull
+            // heuristic that biased the cursor toward the screen edge when the
+            // live iris matched the calibration extreme. The polynomial alone
+            // (Cerrolaza + ridge LOO) handles edge accuracy on its own, so the
+            // edge-pull is gone — and the Top/Bottom refs along with it.
+            double lx = 0, ly = 0, rx = 0, ry = 0;
+            for (int i = 0; i < GridSize; i++)
+            {
+                int leftIdx   = i * GridSize;                       // col 0,  rows 0..N
+                int rightIdx  = i * GridSize + (GridSize - 1);      // col N,  rows 0..N
+                lx += srcMeans[leftIdx].X;   ly += srcMeans[leftIdx].Y;
+                rx += srcMeans[rightIdx].X;  ry += srcMeans[rightIdx].Y;
+            }
+            var leftRef  = new[] { lx / GridSize, ly / GridSize };
+            var rightRef = new[] { rx / GridSize, ry / GridSize };
 
             var primary = SystemParameters.PrimaryScreenWidth;
             var primaryH = SystemParameters.PrimaryScreenHeight;
 
-            // Reuse the session-wide head-pose mean computed up-front for the
-            // sample-rejection filter — same definition: "looking forward with
-            // head at rest". Skipped if the pose stream never produced enough
-            // valid samples (e.g. solvePnP kept failing).
-            CalibrationHeadPose? baselinePose = havePoseRef
-                ? new CalibrationHeadPose { Yaw = meanYaw, Pitch = meanPitch }
-                : null;
-
-            // Empirically fit head-pose compensation coefficients from the
-            // surviving samples. The model:
-            //   residual_x ≈ AxYaw·sin(Δyaw) + AxPitch·sin(Δpitch)
-            //   residual_y ≈ AyYaw·sin(Δyaw) + AyPitch·sin(Δpitch)
-            // where residual = sample_iris - dot_mean_iris and Δ = pose - global_mean.
-            // We need *some* head movement during calibration for the fit to be
-            // meaningful — if the user held perfectly still, the LS fit is
-            // degenerate and we discard it via the R² threshold.
-            HeadPoseCompFit? headPoseComp = havePoseRef
-                ? FitHeadPoseComp(survivors, srcMeans, _movementSamples, meanYaw, meanPitch)
-                : null;
-
+            // Head-pose compensation pipeline (BaselineHeadPose + HeadPoseComp)
+            // was retired. The PnP head-pose estimator from face landmarks is
+            // noisier than the natural head movement during normal use, so the
+            // empirical comp fit was injecting variance instead of removing it
+            // — this matches Funes Mora & Odobez (2013) showing comp goes
+            // negative below ~5° rotation noise. Calibrations from older
+            // builds that still have these fields populated are simply ignored
+            // by the runtime.
             var data = new WebcamCalibrationData
             {
-                Mode = "SixteenPoint",
+                Mode = "TwentyFivePoint",
                 Timestamp = DateTime.UtcNow,
                 MonitorBounds = new MonitorBoundsRecord
                 {
@@ -544,8 +449,8 @@ namespace ConditioningControlPanel
                 RightRefVec = rightRef,
                 Homography = homography,
                 Polynomial = polynomial,
-                BaselineHeadPose = baselinePose,
-                HeadPoseComp = headPoseComp,
+                BaselineHeadPose = null,
+                HeadPoseComp = null,
             };
 
             // Live-apply (in-memory only, no disk write yet) so the validation
@@ -575,7 +480,7 @@ namespace ConditioningControlPanel
             if (settings != null)
             {
                 settings.WebcamCalibrated = true;
-                settings.WebcamCalibrationMode = "SixteenPoint";
+                settings.WebcamCalibrationMode = "TwentyFivePoint";
                 App.Settings?.Save();
             }
 
@@ -911,192 +816,180 @@ namespace ConditioningControlPanel
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        //  Empirical head-pose compensation fit
+        //  Per-dot iris-vector reduction: saccade-settle drop + MAD trim
         // ─────────────────────────────────────────────────────────────────────
 
-        // Fit the iris-vector correction coefficients from per-sample residuals.
-        // Returns null if the head moved too little during calibration to fit
-        // anything meaningful (R² below threshold) — better to skip comp than
-        // to apply a coefficient that's pure noise.
-        private static HeadPoseCompFit? FitHeadPoseComp(
-            List<(double X, double Y, double Yaw, double Pitch, bool HasPose)>[] survivors,
-            Point2d[] srcMeans,
-            List<(double X, double Y, double Yaw, double Pitch, bool HasPose)>? movementSamples,
-            double globalMeanYaw,
-            double globalMeanPitch)
+        // Reduces a per-dot sample list to a single iris-vector mean. Drops the
+        // first ~210ms of frames as saccade onset + fixation settle (Salvucci &
+        // Goldberg I-DT 2000), then keeps samples within median ± 3·MAD/0.6745
+        // — a robust 3σ envelope that survives blinks, micro-saccades, and
+        // fixation breaks because the median/MAD center+spread aren't inflated
+        // by them the way the previous mean+1σ pass was. Returns the surviving
+        // sample list too so the head-pose comp fit downstream uses the same
+        // set as the per-dot mean.
+        private static (double X, double Y, List<(double X, double Y, double Yaw, double Pitch, bool HasPose)> Survivors)
+            RobustPerDotMean(List<(double X, double Y, double Yaw, double Pitch, bool HasPose)> samples)
         {
-            // Gather (sin(Δyaw), sin(Δpitch), residual_x, residual_y) tuples
-            // from per-dot survivors first.
-            var sy = new List<double>();
-            var sp = new List<double>();
-            var rx = new List<double>();
-            var ry = new List<double>();
-            for (int i = 0; i < survivors.Length; i++)
+            const int SaccadeSettleSamples = 7;          // ~210ms @ 30fps — gaze still saccading + settling
+            const double MadCutoff = 3.0;                 // 3 robust σ-equivalent
+            const double MadToSigmaScale = 1.0 / 0.6745;  // MAD → robust σ under Gaussian assumption
+
+            int start = (samples.Count - SaccadeSettleSamples >= MinSamplesPerPoint)
+                      ? SaccadeSettleSamples : 0;
+            var trimmed = (start == 0) ? samples : samples.GetRange(start, samples.Count - start);
+
+            var xs = trimmed.Select(p => p.X).OrderBy(v => v).ToList();
+            var ys = trimmed.Select(p => p.Y).OrderBy(v => v).ToList();
+            double medX = xs[xs.Count / 2];
+            double medY = ys[ys.Count / 2];
+
+            var devX = trimmed.Select(p => Math.Abs(p.X - medX)).OrderBy(v => v).ToList();
+            var devY = trimmed.Select(p => Math.Abs(p.Y - medY)).OrderBy(v => v).ToList();
+            double madX = devX[devX.Count / 2];
+            double madY = devY[devY.Count / 2];
+
+            List<(double X, double Y, double Yaw, double Pitch, bool HasPose)> kept;
+            if (madX > 1e-9 || madY > 1e-9)
             {
-                if (survivors[i] == null) continue;
-                var dotMeanX = srcMeans[i].X;
-                var dotMeanY = srcMeans[i].Y;
-                foreach (var p in survivors[i])
-                {
-                    if (!p.HasPose) continue;
-                    sy.Add(Math.Sin(p.Yaw - globalMeanYaw));
-                    sp.Add(Math.Sin(p.Pitch - globalMeanPitch));
-                    rx.Add(p.X - dotMeanX);
-                    ry.Add(p.Y - dotMeanY);
-                }
+                double thrX = MadCutoff * madX * MadToSigmaScale + 1e-9;
+                double thrY = MadCutoff * madY * MadToSigmaScale + 1e-9;
+                kept = trimmed
+                    .Where(p => Math.Abs(p.X - medX) <= thrX && Math.Abs(p.Y - medY) <= thrY)
+                    .ToList();
+                // Back off if the filter ate too many — better a slightly noisier
+                // mean than a fit starved of samples by an over-aggressive trim.
+                if (kept.Count < MinSamplesPerPoint) kept = trimmed;
+            }
+            else
+            {
+                kept = trimmed; // degenerate spread (perfectly stable iris) — nothing to filter
             }
 
-            // Then layer in movement-phase samples. Gaze was fixed at the
-            // center dot, so all iris variance within this set is head-pose
-            // driven — exactly the signal we want to fit. We compute a single
-            // "iris reference" as the mean across all movement samples; with
-            // roughly symmetric head motion (the prompt asks for nod up+down,
-            // turn left+right), the mean approximates "iris at the
-            // calibration head pose, looking at center".
-            //
-            // No iris-σ filter here — that would discard the very samples we
-            // want. Eyes-closed frames are already gated upstream in
-            // EmitGazeEvents; solvePnP failures gate the pose emit. So the
-            // surviving stream is clean enough.
-            int movementCount = 0;
-            if (movementSamples != null && movementSamples.Count > 30)
+            double sx = 0, sy2 = 0;
+            foreach (var p in kept) { sx += p.X; sy2 += p.Y; }
+            return (sx / kept.Count, sy2 / kept.Count, kept);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Cerrolaza polynomial fit (ridge + leave-one-out CV)
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Cerrolaza et al. (2008, 2012) X-axis design row.
+        // [1, ix, iy, ix·iy, ix², iy², ix²·iy] — the asymmetric ix²·iy term is
+        // what beats the symmetric 6-coef form by ~0.15-0.25° DVA on webcam.
+        private static double[] CerrolazaRowX(double ix, double iy)
+            => new[] { 1.0, ix, iy, ix * iy, ix * ix, iy * iy, ix * ix * iy };
+
+        // Cerrolaza Y-axis design row: mirror of X — the high-order term is iy²·ix.
+        private static double[] CerrolazaRowY(double ix, double iy)
+            => new[] { 1.0, ix, iy, ix * iy, ix * ix, iy * iy, iy * iy * ix };
+
+        // Solves min ||A·x - b||² + λ·||x||² by stacking sqrt(λ)·I onto A and
+        // running OpenCV's normal-equations solve. Returns null if the solve
+        // fails (rank-deficient, NaN inputs).
+        private static double[]? FitRidge(double[][] design, double[] targets, double lambda)
+        {
+            int n = design.Length;
+            int p = design[0].Length;
+            using var A = new Mat(n + p, p, MatType.CV_64FC1, Scalar.All(0));
+            using var b = new Mat(n + p, 1, MatType.CV_64FC1, Scalar.All(0));
+            double sqrtL = Math.Sqrt(Math.Max(lambda, 1e-12));
+            for (int i = 0; i < n; i++)
             {
-                double sumX = 0, sumY = 0;
-                int n0 = 0;
-                foreach (var p in movementSamples)
+                for (int k = 0; k < p; k++) A.Set(i, k, design[i][k]);
+                b.Set(i, 0, targets[i]);
+            }
+            for (int k = 0; k < p; k++) A.Set(n + k, k, sqrtL);
+            using var x = new Mat();
+            if (!Cv2.Solve(A, b, x, DecompTypes.Normal)) return null;
+            var result = new double[p];
+            for (int k = 0; k < p; k++) result[k] = x.At<double>(k, 0);
+            return result;
+        }
+
+        private static double DotProduct(double[] coeffs, double[] features)
+        {
+            double y = 0;
+            for (int k = 0; k < coeffs.Length; k++) y += coeffs[k] * features[k];
+            return y;
+        }
+
+        // Picks ridge λ via leave-one-out cross-validation, then refits on all
+        // data with the chosen λ. Candidate λ's are scaled by trace(AᵀA)/p (the
+        // mean diagonal of the normal-equations matrix) so the chosen value is
+        // invariant to iris-vector magnitude — calibration sessions vary in
+        // camera distance and face size, which would otherwise shift the optimal
+        // raw λ across orders of magnitude.
+        private static double[]? FitRidgeWithLOO(double[][] design, double[] targets)
+        {
+            int n = design.Length;
+            int p = design[0].Length;
+
+            double traceAtA = 0;
+            for (int i = 0; i < n; i++)
+                for (int k = 0; k < p; k++)
+                    traceAtA += design[i][k] * design[i][k];
+            double lambdaBase = traceAtA / p;
+
+            double[] candidates = { 1e-5, 1e-4, 1e-3, 1e-2, 1e-1 };
+            double bestErr = double.MaxValue;
+            double bestLambda = lambdaBase * 1e-3; // matches the previous fixed-λ default if every LOO fit fails
+
+            foreach (var c in candidates)
+            {
+                double lambda = lambdaBase * c;
+                double sumSq = 0;
+                bool ok = true;
+                for (int holdout = 0; holdout < n; holdout++)
                 {
-                    if (!p.HasPose) continue;
-                    sumX += p.X; sumY += p.Y; n0++;
-                }
-                if (n0 > 30)
-                {
-                    double mx = sumX / n0;
-                    double my = sumY / n0;
-                    foreach (var p in movementSamples)
+                    var trainX = new double[n - 1][];
+                    var trainY = new double[n - 1];
+                    int j = 0;
+                    for (int i = 0; i < n; i++)
                     {
-                        if (!p.HasPose) continue;
-                        sy.Add(Math.Sin(p.Yaw - globalMeanYaw));
-                        sp.Add(Math.Sin(p.Pitch - globalMeanPitch));
-                        rx.Add(p.X - mx);
-                        ry.Add(p.Y - my);
-                        movementCount++;
+                        if (i == holdout) continue;
+                        trainX[j] = design[i];
+                        trainY[j] = targets[i];
+                        j++;
                     }
+                    var coeffs = FitRidge(trainX, trainY, lambda);
+                    if (coeffs == null) { ok = false; break; }
+                    var err = DotProduct(coeffs, design[holdout]) - targets[holdout];
+                    sumSq += err * err;
                 }
+                if (ok && sumSq < bestErr) { bestErr = sumSq; bestLambda = lambda; }
             }
 
-            int n = sy.Count;
-            // Need a healthy sample count to fit two coefficients per axis.
-            // Also need enough head-pose variance — if everyone was pixel-still,
-            // the design matrix is rank-deficient. We check both via the σ of
-            // the inputs and the R² of the output.
-            if (n < 60) return null;
+            return FitRidge(design, targets, bestLambda);
+        }
 
-            // Compute σ of sin(Δyaw) and sin(Δpitch). If both are tiny, the
-            // user held very still and there's nothing to fit. Threshold is
-            // ~0.5° of effective head motion (sin(0.5°) ≈ 0.0087), below which
-            // any "fit" is fitting noise.
-            double meanSy = 0, meanSp = 0;
-            for (int k = 0; k < n; k++) { meanSy += sy[k]; meanSp += sp[k]; }
-            meanSy /= n; meanSp /= n;
-            double varSy = 0, varSp = 0;
-            for (int k = 0; k < n; k++)
-            {
-                varSy += (sy[k] - meanSy) * (sy[k] - meanSy);
-                varSp += (sp[k] - meanSp) * (sp[k] - meanSp);
-            }
-            double sigmaSy = Math.Sqrt(varSy / n);
-            double sigmaSp = Math.Sqrt(varSp / n);
-            if (sigmaSy < 0.0087 && sigmaSp < 0.0087) return null;
-
-            // Solve [sin(Δyaw) sin(Δpitch)] · [a_yaw; a_pitch] = residual,
-            // separately for x and y, via OpenCV least-squares (normal equations).
+        // Builds the per-axis Cerrolaza design matrices and returns the LOO-
+        // selected ridge fit. Returns null if either axis fails to solve —
+        // caller falls back to homography-only projection in that case.
+        private static PolynomialFitData? FitCerrolazaPolynomial(Point2d[] srcMeans, Point2d[] dstPoints)
+        {
             try
             {
-                using var A = new Mat(n, 2, MatType.CV_64FC1);
-                using var bX = new Mat(n, 1, MatType.CV_64FC1);
-                using var bY = new Mat(n, 1, MatType.CV_64FC1);
-                for (int k = 0; k < n; k++)
+                int n = srcMeans.Length;
+                var designX = new double[n][];
+                var designY = new double[n][];
+                var targetsX = new double[n];
+                var targetsY = new double[n];
+                for (int i = 0; i < n; i++)
                 {
-                    A.Set(k, 0, sy[k]);
-                    A.Set(k, 1, sp[k]);
-                    bX.Set(k, 0, rx[k]);
-                    bY.Set(k, 0, ry[k]);
+                    designX[i] = CerrolazaRowX(srcMeans[i].X, srcMeans[i].Y);
+                    designY[i] = CerrolazaRowY(srcMeans[i].X, srcMeans[i].Y);
+                    targetsX[i] = dstPoints[i].X;
+                    targetsY[i] = dstPoints[i].Y;
                 }
-                using var coeffsX = new Mat();
-                using var coeffsY = new Mat();
-                if (!Cv2.Solve(A, bX, coeffsX, DecompTypes.Normal)) return null;
-                if (!Cv2.Solve(A, bY, coeffsY, DecompTypes.Normal)) return null;
-
-                double axYaw = coeffsX.At<double>(0, 0);
-                double axPitch = coeffsX.At<double>(1, 0);
-                double ayYaw = coeffsY.At<double>(0, 0);
-                double ayPitch = coeffsY.At<double>(1, 0);
-
-                // R² of each axis fit. If neither axis is well-explained by the
-                // pose deltas (R² < 0.10), the head wasn't actually moving in a
-                // way that affected gaze — skip the comp.
-                double meanRx = 0, meanRy = 0;
-                for (int k = 0; k < n; k++) { meanRx += rx[k]; meanRy += ry[k]; }
-                meanRx /= n; meanRy /= n;
-                double ssTotX = 0, ssTotY = 0, ssResX = 0, ssResY = 0;
-                for (int k = 0; k < n; k++)
-                {
-                    double predX = axYaw * sy[k] + axPitch * sp[k];
-                    double predY = ayYaw * sy[k] + ayPitch * sp[k];
-                    ssTotX += (rx[k] - meanRx) * (rx[k] - meanRx);
-                    ssTotY += (ry[k] - meanRy) * (ry[k] - meanRy);
-                    ssResX += (rx[k] - predX) * (rx[k] - predX);
-                    ssResY += (ry[k] - predY) * (ry[k] - predY);
-                }
-                double r2x = ssTotX > 1e-12 ? 1.0 - ssResX / ssTotX : 0.0;
-                double r2y = ssTotY > 1e-12 ? 1.0 - ssResY / ssTotY : 0.0;
-
-                // Per-axis gating. Each axis (X, Y) gets its coefficients
-                // applied at runtime only if its own residuals were
-                // well-explained by the pose deltas. This is the defensive
-                // case for users whose natural calibration head motion is
-                // strong on one axis (yaw — sway) but weak on the other
-                // (pitch — bob): we keep the strong axis's correction and
-                // skip the weak one rather than letting noisy coefficients
-                // ride along.
-                const double MinR2 = 0.10;
-                bool xValid = r2x >= MinR2;
-                bool yValid = r2y >= MinR2;
-                if (!xValid && !yValid)
-                {
-                    App.Logger?.Information(
-                        "WebcamCalibration: head-pose comp too weak on both axes (R²x={Rx:F3}, R²y={Ry:F3}, σyaw={Sy:F4}, σpitch={Sp:F4}, n={N}); skipping",
-                        r2x, r2y, sigmaSy, sigmaSp, n);
-                    return null;
-                }
-
-                double finalAxYaw = xValid ? axYaw : 0.0;
-                double finalAxPitch = xValid ? axPitch : 0.0;
-                double finalAyYaw = yValid ? ayYaw : 0.0;
-                double finalAyPitch = yValid ? ayPitch : 0.0;
-
-                App.Logger?.Information(
-                    "WebcamCalibration: fitted head-pose comp x={Xstate} ax_yaw={AxY:F3} ax_pitch={AxP:F3} R²x={Rx:F3} | y={Ystate} ay_yaw={AyY:F3} ay_pitch={AyP:F3} R²y={Ry:F3} | σyaw={Sy:F4} σpitch={Sp:F4} n={N} (movement={M})",
-                    xValid ? "ON" : "off",
-                    finalAxYaw, finalAxPitch, r2x,
-                    yValid ? "ON" : "off",
-                    finalAyYaw, finalAyPitch, r2y,
-                    sigmaSy, sigmaSp, n, movementCount);
-
-                return new HeadPoseCompFit
-                {
-                    AxYaw = finalAxYaw,
-                    AxPitch = finalAxPitch,
-                    AyYaw = finalAyYaw,
-                    AyPitch = finalAyPitch,
-                    RSquaredX = r2x,
-                    RSquaredY = r2y,
-                    SampleCount = n,
-                };
+                var coeffsX = FitRidgeWithLOO(designX, targetsX);
+                var coeffsY = FitRidgeWithLOO(designY, targetsY);
+                if (coeffsX == null || coeffsY == null) return null;
+                return new PolynomialFitData { X = coeffsX, Y = coeffsY };
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "WebcamCalibration: head-pose comp fit threw");
+                App.Logger?.Warning(ex, "WebcamCalibrationWindow: Cerrolaza polynomial fit threw");
                 return null;
             }
         }

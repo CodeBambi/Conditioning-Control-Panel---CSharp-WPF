@@ -202,6 +202,20 @@ namespace ConditioningControlPanel.Services
         private const int IrisSmoothFrames = 12;             // rolling-mean window over raw iris vector (~400ms at ~30fps)
         private const int SideStabilityFrames = 3;           // consecutive frames of same classification before emitting (filters Center pass-through)
 
+        // One-Euro filter tunables for the cursor-projection path. The rolling-mean
+        // buffer above still feeds the gaze-side classifier (which has its own
+        // hysteresis and benefits from a smoother lagging signal). One-Euro is
+        // velocity-adaptive: tight cutoff at fixation kills jitter, loose cutoff
+        // during saccades avoids lag. Defaults from Casiez 2012 retuned for ~30 Hz
+        // gaze sampling — bump Beta if the cursor still feels laggy on fast eye
+        // movement; raise MinCutoff if it still wobbles when the user is fixating.
+        // MinCutoff at 1.4 Hz is on the smooth side of the Casiez sweet-spot
+        // because webcam iris detection has more frame-to-frame jitter than the
+        // touch-input scenarios the original paper targeted.
+        private const double OneEuroMinCutoff = 1.4;
+        private const double OneEuroBeta = 0.007;
+        private const double OneEuroDCutoff = 1.0;
+
         private readonly object _stateLock = new();
         private bool _disposed;
 
@@ -296,9 +310,15 @@ namespace ConditioningControlPanel.Services
 
         // Iris smoothing — rolling mean over raw irisDx/dy. Blunts the per-frame
         // jitter from Haar eye-box wobble that was causing Gaze side to flicker
-        // Left↔Right around the classifier midpoint.
+        // Left↔Right around the classifier midpoint. Feeds the side classifier;
+        // the cursor-projection path uses the One-Euro filters below.
         private readonly Queue<double> _irisDxSmoothBuffer = new();
         private readonly Queue<double> _irisDySmoothBuffer = new();
+
+        // Velocity-adaptive smoothing for the cursor-projection path. See
+        // OneEuroMinCutoff/Beta/DCutoff above for tuning notes.
+        private readonly OneEuroFilter _irisDxFilter = new(OneEuroMinCutoff, OneEuroBeta, OneEuroDCutoff);
+        private readonly OneEuroFilter _irisDyFilter = new(OneEuroMinCutoff, OneEuroBeta, OneEuroDCutoff);
 
         // Head-pose state — solvePnP-derived yaw/pitch (radians), smoothed to
         // match iris smoothing. Used to apply a geometric correction on the
@@ -638,6 +658,8 @@ namespace ConditioningControlPanel.Services
             _diagTongueFrames = 0;
             _irisDxSmoothBuffer.Clear();
             _irisDySmoothBuffer.Clear();
+            _irisDxFilter.Reset();
+            _irisDyFilter.Reset();
             _yawSmoothBuffer.Clear();
             _pitchSmoothBuffer.Clear();
             _headPoseValid = false;
@@ -966,19 +988,30 @@ namespace ConditioningControlPanel.Services
             // expect a per-frame event during sampling.
             Dispatch(() => OnRawIris?.Invoke(irisDx, irisDy));
 
-            // Smoothed iris vector — used by live classification. Per-frame iris
-            // estimates wobble by ~5% because Haar's eye box jitters; without
-            // smoothing, gaze-side flips Left↔Right every other frame whenever
-            // the user's actual gaze sits anywhere near the midpoint.
+            // Two-output smoothing split:
+            //   sideSmooth*  — rolling mean → ClassifyGazeSide. The side classifier
+            //                  has its own hysteresis (asymmetric enter/leave bands)
+            //                  and stability filter; lagging is fine here, what
+            //                  matters is suppressing the per-frame ~5% iris wobble
+            //                  so the midpoint flicker doesn't re-trigger.
+            //   cursorSmooth* — One-Euro filter → polynomial projection. Tight
+            //                   cutoff at fixation (kills jitter when the user is
+            //                   trying to hold a point), wider cutoff during fast
+            //                   eye movement (no lag on saccades). Without this
+            //                   the cursor wobbled visibly even when the user
+            //                   reported sitting perfectly still.
             EnqueueWithCap(_irisDxSmoothBuffer, irisDx, IrisSmoothFrames);
             EnqueueWithCap(_irisDySmoothBuffer, irisDy, IrisSmoothFrames);
             double sumX = 0, sumY = 0;
             foreach (var v in _irisDxSmoothBuffer) sumX += v;
             foreach (var v in _irisDySmoothBuffer) sumY += v;
-            var smoothDx = sumX / _irisDxSmoothBuffer.Count;
-            var smoothDy = sumY / _irisDySmoothBuffer.Count;
+            var sideSmoothDx = sumX / _irisDxSmoothBuffer.Count;
 
-            var classifiedSide = ClassifyGazeSide(smoothDx);
+            var nowTicks = Stopwatch.GetTimestamp();
+            var smoothDx = _irisDxFilter.Filter(irisDx, nowTicks);
+            var smoothDy = _irisDyFilter.Filter(irisDy, nowTicks);
+
+            var classifiedSide = ClassifyGazeSide(sideSmoothDx);
 
             // Stability filter: only switch the *confirmed* side after the new
             // classification has held for SideStabilityFrames consecutive frames.
@@ -1010,31 +1043,42 @@ namespace ConditioningControlPanel.Services
             var emit = _lastEmittedSide;
             Dispatch(() => OnGazeSide?.Invoke(emit));
 
-            // Apply head-pose compensation if the calibration recorded both a
-            // baseline pose AND empirically-fit comp coefficients. When the
-            // head turns off the calibration pose, the eyes counter-rotate to
-            // keep gaze on the same target — that shifts the iris-vs-corner
-            // geometry even though gaze didn't move. The comp cancels most
-            // of that shift before the polynomial fit consumes it.
-            // Old calibrations or "user held perfectly still" calibrations
-            // have HeadPoseComp=null → comp skipped (path is no worse than
-            // not having a fit).
-            double correctedDx = smoothDx;
-            double correctedDy = smoothDy;
-            if (_headPoseValid
-                && Calibration?.BaselineHeadPose is { } baseline
-                && Calibration?.HeadPoseComp is { } comp)
-            {
-                var sinDyaw = Math.Sin(LastYaw - baseline.Yaw);
-                var sinDpitch = Math.Sin(LastPitch - baseline.Pitch);
-                correctedDx += comp.AxYaw * sinDyaw + comp.AxPitch * sinDpitch;
-                correctedDy += comp.AyYaw * sinDyaw + comp.AyPitch * sinDpitch;
-            }
-
-            var screenPoint = ProjectGazeToScreen(correctedDx, correctedDy);
+            // Head-pose compensation was retired here. The PnP head-pose
+            // estimator from face landmarks is noisier than the natural head
+            // movement during normal use, so applying empirically-fit comp
+            // coefficients was injecting variance instead of removing it
+            // (consistent with Funes Mora & Odobez 2013, who observed the
+            // same below ~5° rotation noise). The polynomial fit is fed the
+            // raw smoothed iris vector. BaselineHeadPose / HeadPoseComp on
+            // legacy calibrations are simply ignored.
+            var screenPoint = ProjectGazeToScreen(smoothDx, smoothDy);
             if (screenPoint.HasValue)
             {
                 var p = screenPoint.Value;
+                // Quick-recal translational nudge — corrects whole-map drift
+                // captured after the user clicked "Quick Recal" on a center
+                // dot. Null on calibrations that haven't run quick-recal yet.
+                if (Calibration?.RuntimeOffset is { } off)
+                {
+                    p = new System.Windows.Point(p.X + off.Dx, p.Y + off.Dy);
+                }
+
+                // Clamp to monitor bounds so the cursor sticks at the edge
+                // rather than disappearing off-screen when the user glances
+                // past the bezel. Without this, looking at the wall above
+                // the monitor projects to negative Y and the cursor drops
+                // out of sight; the user can't tell whether tracking is
+                // still working or has lost the face. EdgePad keeps the
+                // cursor visualization (typically 14–36 DIP) wholly visible.
+                if (Calibration?.MonitorBounds is { } bounds && bounds.Width > 0 && bounds.Height > 0)
+                {
+                    const double EdgePad = 4.0;
+                    var maxX = bounds.Width - EdgePad;
+                    var maxY = bounds.Height - EdgePad;
+                    p = new System.Windows.Point(
+                        Math.Max(EdgePad, Math.Min(p.X, maxX)),
+                        Math.Max(EdgePad, Math.Min(p.Y, maxY)));
+                }
                 Dispatch(() => OnGazeMove?.Invoke(p));
                 UpdateLongStareHeuristic(p);
             }
@@ -1094,17 +1138,41 @@ namespace ConditioningControlPanel.Services
             // Prefer 2nd-order polynomial when present — captures the
             // nonlinear iris→screen response. Falls back to homography for
             // calibrations saved before the polynomial fit was added.
+            //
+            // Two polynomial forms are accepted for forward/backward compat:
+            //   7 coeffs (current): Cerrolaza asymmetric form — adds ix²·iy
+            //                       to X and iy²·ix to Y, ~0.15-0.25° better
+            //                       than the symmetric form on webcam grids.
+            //   6 coeffs (legacy): symmetric 2nd-order — projection still
+            //                       works, just lacks the asymmetric term.
             var poly = Calibration?.Polynomial;
             if (poly != null && poly.X != null && poly.Y != null
-                && poly.X.Length == 6 && poly.Y.Length == 6)
+                && poly.X.Length == poly.Y.Length
+                && (poly.X.Length == 6 || poly.X.Length == 7))
             {
                 var ix2 = irisDx * irisDx;
                 var iy2 = irisDy * irisDy;
                 var ixy = irisDx * irisDy;
-                var x = poly.X[0] + poly.X[1] * irisDx + poly.X[2] * irisDy
+                double x, y;
+                if (poly.X.Length == 7)
+                {
+                    // [1, ix, iy, ix·iy, ix², iy², ix²·iy] for X
+                    // [1, ix, iy, ix·iy, ix², iy², iy²·ix] for Y
+                    x = poly.X[0] + poly.X[1] * irisDx + poly.X[2] * irisDy
+                      + poly.X[3] * ixy + poly.X[4] * ix2 + poly.X[5] * iy2
+                      + poly.X[6] * ix2 * irisDy;
+                    y = poly.Y[0] + poly.Y[1] * irisDx + poly.Y[2] * irisDy
+                      + poly.Y[3] * ixy + poly.Y[4] * ix2 + poly.Y[5] * iy2
+                      + poly.Y[6] * iy2 * irisDx;
+                }
+                else
+                {
+                    // Legacy symmetric form: [1, ix, iy, ix², iy², ix·iy]
+                    x = poly.X[0] + poly.X[1] * irisDx + poly.X[2] * irisDy
                       + poly.X[3] * ix2 + poly.X[4] * iy2 + poly.X[5] * ixy;
-                var y = poly.Y[0] + poly.Y[1] * irisDx + poly.Y[2] * irisDy
+                    y = poly.Y[0] + poly.Y[1] * irisDx + poly.Y[2] * irisDy
                       + poly.Y[3] * ix2 + poly.Y[4] * iy2 + poly.Y[5] * ixy;
+                }
                 return new System.Windows.Point(x, y);
             }
 
@@ -1630,6 +1698,78 @@ namespace ConditioningControlPanel.Services
             _windowMaxTongueRatio = 0;
             _diagTongueSum = _diagTeethSum = _diagShadowSum = _diagOtherSum = 0;
             _diagTongueFrames = 0;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  One-Euro filter (Casiez 2012)
+        //  ────────────────────────────────────────────────────────────────────────
+        //  Velocity-adaptive low-pass: at low speed it tightens the cutoff (kills
+        //  jitter when fixating), at high speed it widens (no lag during saccades).
+        //  Two scalar tunables — MinCutoff sets the floor cutoff at zero speed,
+        //  Beta sets how aggressively cutoff scales with |dx/dt|. DCutoff smooths
+        //  the velocity estimate itself.
+        // ─────────────────────────────────────────────────────────────────────────
+        private sealed class OneEuroFilter
+        {
+            private readonly double _minCutoff;
+            private readonly double _beta;
+            private readonly double _dCutoff;
+            private double _xPrev;
+            private double _dxPrev;
+            private long _tPrevTicks;
+            private bool _initialized;
+
+            public OneEuroFilter(double minCutoff, double beta, double dCutoff)
+            {
+                _minCutoff = minCutoff;
+                _beta = beta;
+                _dCutoff = dCutoff;
+            }
+
+            public void Reset()
+            {
+                _initialized = false;
+                _xPrev = 0;
+                _dxPrev = 0;
+                _tPrevTicks = 0;
+            }
+
+            public double Filter(double x, long tTicks)
+            {
+                if (!_initialized)
+                {
+                    _initialized = true;
+                    _xPrev = x;
+                    _dxPrev = 0;
+                    _tPrevTicks = tTicks;
+                    return x;
+                }
+
+                double dt = (tTicks - _tPrevTicks) / (double)Stopwatch.Frequency;
+                // Sane fallback for clock anomalies / capture-thread stalls — don't
+                // let dt go to zero (alpha→1, signal collapses to raw input) or
+                // grow huge (alpha→0, output freezes).
+                if (dt <= 0 || dt > 1.0) dt = 1.0 / 30.0;
+
+                double dx = (x - _xPrev) / dt;
+                double aD = Alpha(dt, _dCutoff);
+                double dxHat = aD * dx + (1 - aD) * _dxPrev;
+
+                double cutoff = _minCutoff + _beta * Math.Abs(dxHat);
+                double a = Alpha(dt, cutoff);
+                double xHat = a * x + (1 - a) * _xPrev;
+
+                _xPrev = xHat;
+                _dxPrev = dxHat;
+                _tPrevTicks = tTicks;
+                return xHat;
+            }
+
+            private static double Alpha(double dt, double cutoff)
+            {
+                double tau = 1.0 / (2.0 * Math.PI * cutoff);
+                return 1.0 / (1.0 + tau / dt);
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────────

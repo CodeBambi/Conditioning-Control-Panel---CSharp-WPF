@@ -29,12 +29,24 @@ public class GazeFocusService : IDisposable
     private const int CooldownMs = 250;
     private const int TickMs = 33; // ~30 FPS
 
-    // Hit-test slack — how far outside a target's bounds the gaze can land
-    // and still count as a hit. Closest target within slack wins, so a
-    // generous slack mostly just means "always lock on to *something*
-    // nearby" rather than misfire on the wrong target.
-    private const double BubbleSlackDips = 120;
-    private const double FlashSlackDips = 40;
+    // Predictive target scoring — replaces the old hard-radius slack hit-test.
+    // For each candidate target we compute:
+    //   score = exp(-d² / 2σ²)  (Gaussian falloff with distance d from rect edge)
+    //         + StickyBonus     (if target is the one we were already dwelling on)
+    //         + FlashTypeBonus  (flashes outrank background bubbles, foreground intent)
+    // The single highest score above ScoreThreshold wins. The Gaussian replaces
+    // the binary "inside slack / outside slack" cliff with a soft falloff —
+    // small jitter at the boundary no longer toggles the lock. The sticky
+    // bonus prevents ping-pong when two targets are equidistant: noise has
+    // to push the cursor meaningfully closer to a *different* target before
+    // the lock switches. This is the "feels glued" behavior — the same trick
+    // iPhone keyboards use (bias the candidate set with a prior, don't just
+    // pick the literal hit point).
+    private const double BubbleScoreSigma = 100; // ≈ 2.45σ (≈245 dips) at threshold
+    private const double FlashScoreSigma = 60;
+    private const double StickyBonus = 0.20;
+    private const double FlashTypeBonus = 0.15;
+    private const double ScoreThreshold = 0.05;
 
     private DispatcherTimer? _timer;
     private Point? _lastGazePoint;
@@ -161,7 +173,7 @@ public class GazeFocusService : IDisposable
             if (DateTime.UtcNow < _cooldownUntil) return;
             if (_faceLost || !_lastGazePoint.HasValue) return;
 
-            var hit = FindClosestTarget(_lastGazePoint.Value);
+            var hit = FindBestTarget(_lastGazePoint.Value);
             if (hit == null) return;
 
             // Cancel any in-progress dwell scaling on a different target.
@@ -206,7 +218,7 @@ public class GazeFocusService : IDisposable
             }
 
             var p = _lastGazePoint.Value;
-            var hit = FindClosestTarget(p);
+            var hit = FindBestTarget(p);
 
             if (hit == null)
             {
@@ -233,19 +245,20 @@ public class GazeFocusService : IDisposable
     }
 
     /// <summary>
-    /// Picks the closest target to the gaze point within slack tolerance.
-    /// Flashes are checked first; if any flash contains the point (slack 0),
-    /// it wins. Otherwise the closest bubble within BubbleSlackDips wins.
-    /// Returns null when nothing is in range.
+    /// Picks the highest-scoring target across all candidates. Score is a
+    /// Gaussian distance falloff plus additive bonuses for sticky lock and
+    /// flash type. See the constant block at the top of the class for the
+    /// model. Returns null if no target clears ScoreThreshold.
     /// </summary>
-    private GazeHit? FindClosestTarget(Point p)
+    private GazeHit? FindBestTarget(Point p)
     {
-        // Flashes first — direct hits beat bubbles (foreground intent).
+        Bubble? bestBubble = null;
+        FlashWindow? bestFlash = null;
+        double bestScore = ScoreThreshold;
+
         var flashes = App.Flash?.GetGazeTargets();
         if (flashes != null)
         {
-            FlashWindow? bestFlash = null;
-            double bestDist = double.MaxValue;
             for (int i = flashes.Count - 1; i >= 0; i--)
             {
                 var fw = flashes[i];
@@ -253,36 +266,46 @@ public class GazeFocusService : IDisposable
                 try { rect = new Rect(fw.Left, fw.Top, fw.Width, fw.Height); }
                 catch { continue; }
                 var dist = DistanceFromRectEdge(rect, p);
-                if (dist <= FlashSlackDips && dist < bestDist)
+                var score = GaussianScore(dist, FlashScoreSigma) + FlashTypeBonus;
+                if (ReferenceEquals(_currentFlash, fw)) score += StickyBonus;
+                if (score > bestScore)
                 {
-                    bestDist = dist;
+                    bestScore = score;
                     bestFlash = fw;
+                    bestBubble = null;
                 }
             }
-            if (bestFlash != null) return new GazeHit(null, bestFlash);
         }
 
         var bubbles = App.Bubbles?.GetGazeTargets();
         if (bubbles != null)
         {
-            Bubble? bestBubble = null;
-            double bestDist = double.MaxValue;
             for (int i = bubbles.Count - 1; i >= 0; i--)
             {
                 var b = bubbles[i];
                 var rect = b.GetGazeBounds();
                 if (rect.IsEmpty) continue;
                 var dist = DistanceFromRectEdge(rect, p);
-                if (dist <= BubbleSlackDips && dist < bestDist)
+                var score = GaussianScore(dist, BubbleScoreSigma);
+                if (ReferenceEquals(_currentBubble, b)) score += StickyBonus;
+                if (score > bestScore)
                 {
-                    bestDist = dist;
+                    bestScore = score;
                     bestBubble = b;
+                    bestFlash = null;
                 }
             }
-            if (bestBubble != null) return new GazeHit(bestBubble, null);
         }
 
+        if (bestFlash != null) return new GazeHit(null, bestFlash);
+        if (bestBubble != null) return new GazeHit(bestBubble, null);
         return null;
+    }
+
+    private static double GaussianScore(double dist, double sigma)
+    {
+        var d = dist / sigma;
+        return Math.Exp(-0.5 * d * d);
     }
 
     /// <summary>

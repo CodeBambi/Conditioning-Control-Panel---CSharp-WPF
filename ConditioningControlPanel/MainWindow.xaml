@@ -7231,6 +7231,12 @@
                                             Background="#33333A" Foreground="White" BorderBrush="#00B0FF"
                                             BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
                                             Click="BtnWebcamDebugTrackerTest_Click"/>
+                                    <Button x:Name="BtnWebcamDebugQuickRecal" Content="Quick Recal"
+                                            ToolTip="One-dot drift correction. Stare at the pink center dot for ~2 s — a constant nudge is added to the cursor so it lands where you're looking, no full recalibration needed."
+                                            Padding="12,8" Margin="0,0,8,0"
+                                            Background="#33333A" Foreground="White" BorderBrush="#FF69B4"
+                                            BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
+                                            Click="BtnWebcamDebugQuickRecal_Click"/>
                                     <Button x:Name="BtnWebcamDebugStart" Content="Start tracking"
                                             ToolTip="{loc:Str tooltip_webcam_start_tracking}"
                                             Padding="14,8" Background="#FF8800" Foreground="Black" BorderThickness="0"
