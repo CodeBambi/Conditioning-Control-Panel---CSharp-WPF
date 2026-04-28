@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -31,6 +33,15 @@ public class BlinkTrainerService : IDisposable
     private int _lastIndex = -1;
     private DispatcherTimer? _durationTimer;
     private bool _subscribed;
+
+    // Mix-mode state. Aspect lookups are served from _aspectCache after a
+    // background warm-up; until then GetCompatibleImages falls back to
+    // _imagesAll so the first blinks still render.
+    private readonly object _cacheLock = new();
+    private readonly Dictionary<string, double> _aspectCache = new();
+    private List<string> _imagesAll = new();
+    private Dictionary<AspectBucket, List<string>> _imagesByBucket = NewEmptyBuckets();
+    private CancellationTokenSource? _cacheCts;
 
     public bool IsRunning { get; private set; }
     public string LastError { get; private set; } = "";
@@ -117,6 +128,21 @@ public class BlinkTrainerService : IDisposable
             _pool = pool;
             _lastIndex = -1;
 
+            // Pre-bucket the image pool by aspect so per-blink picks don't
+            // re-open files. Synchronous list of all non-video images is
+            // available immediately; per-bucket lists are populated by a
+            // background task as aspects are measured.
+            lock (_cacheLock)
+            {
+                _imagesAll = _pool.Where(p => !IsVideoExt(p)).ToList();
+                _imagesByBucket = NewEmptyBuckets();
+                _aspectCache.Clear();
+            }
+            _cacheCts = new CancellationTokenSource();
+            var cacheToken = _cacheCts.Token;
+            var imagesToWarm = _imagesAll;
+            _ = Task.Run(() => BuildAspectCache(imagesToWarm, cacheToken), cacheToken);
+
             App.Webcam.OnBlink += HandleBlink;
             _subscribed = true;
 
@@ -167,6 +193,10 @@ public class BlinkTrainerService : IDisposable
             _durationTimer = null;
         }
 
+        try { _cacheCts?.Cancel(); } catch { }
+        try { _cacheCts?.Dispose(); } catch { }
+        _cacheCts = null;
+
         foreach (var ov in _overlays)
         {
             try { TeardownHostChildren(ov.Host); } catch { }
@@ -175,6 +205,12 @@ public class BlinkTrainerService : IDisposable
         _overlays.Clear();
         _pool = new();
         _lastIndex = -1;
+        lock (_cacheLock)
+        {
+            _aspectCache.Clear();
+            _imagesAll = new();
+            _imagesByBucket = NewEmptyBuckets();
+        }
     }
 
     private void DurationTimer_Tick(object? sender, EventArgs e)
@@ -200,14 +236,93 @@ public class BlinkTrainerService : IDisposable
         var path = _pool[idx];
         var isVideo = IsVideoExt(path);
 
+        // Videos: single decoder on the primary overlay, secondaries mirror
+        // via VisualBrush. Two MediaElements for the same file race their
+        // decoders and the secondary visibly stalls on its first frame for a
+        // few seconds before catching up — same fix VideoService landed in
+        // bd628e8 ("Fix multi-monitor video sync").
+        if (isVideo)
+        {
+            try { ApplyVideoToAllOverlays(path); }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BlinkTrainer: failed to apply video {Path}", path);
+            }
+            return;
+        }
+
+        var mix = App.Settings?.Current?.BlinkTrainerMixImages == true;
         foreach (var ov in _overlays)
         {
-            try { ApplyAsset(ov, path, isVideo); }
+            try
+            {
+                if (mix) ApplyAssetMixed(ov, path);
+                else ApplyAsset(ov, path);
+            }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "BlinkTrainer: failed to apply asset {Path}", path);
             }
         }
+    }
+
+    /// <summary>
+    /// Plays a video on overlay[0]'s MediaElement and mirrors it onto every
+    /// other overlay via a VisualBrush. Single decoder, automatic frame-perfect
+    /// sync — no per-screen first-frame stall.
+    /// </summary>
+    private void ApplyVideoToAllOverlays(string path)
+    {
+        if (_overlays.Count == 0) return;
+
+        // Tear down all overlays first so the visual tree is clean.
+        foreach (var ov in _overlays)
+        {
+            try
+            {
+                TeardownHostChildren(ov.Host);
+                ov.Host.Children.Clear();
+            }
+            catch { }
+        }
+
+        var primary = _overlays[0];
+        var media = new MediaElement
+        {
+            LoadedBehavior = MediaState.Manual,
+            UnloadedBehavior = MediaState.Manual,
+            Stretch = Stretch.UniformToFill,
+            IsMuted = true,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Source = new Uri(path),
+        };
+        media.MediaEnded += (_, _) =>
+        {
+            try { media.Position = TimeSpan.Zero; media.Play(); } catch { }
+        };
+        primary.Host.Children.Add(media);
+
+        for (int i = 1; i < _overlays.Count; i++)
+        {
+            var sec = _overlays[i];
+            var brush = new VisualBrush
+            {
+                Visual = media,
+                Stretch = Stretch.UniformToFill,
+                AlignmentX = AlignmentX.Center,
+                AlignmentY = AlignmentY.Center,
+            };
+            var rect = new System.Windows.Shapes.Rectangle
+            {
+                Fill = brush,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+            };
+            sec.Host.Children.Add(rect);
+        }
+
+        try { media.Play(); } catch { }
     }
 
     private static bool IsVideoExt(string path)
@@ -217,40 +332,17 @@ public class BlinkTrainerService : IDisposable
     }
 
     /// <summary>
-     /// Replace the overlay's host content with the new asset, tiling N× when
-     /// the asset's aspect ratio doesn't match the screen so the whole screen
-     /// stays covered. A 9:16 portrait image on a 16:9 screen ends up as ~3
-     /// horizontal tiles; a square image on a 16:9 screen tiles 2×; aspects
-     /// that already match render as a single tile.
-     /// </summary>
-    private static void ApplyAsset(OverlayInstance ov, string path, bool isVideo)
+    /// Replace the overlay's host content with the new image asset, tiling N×
+    /// when the asset's aspect ratio doesn't match the screen so the whole
+    /// screen stays covered. A 9:16 portrait image on a 16:9 screen ends up
+    /// as ~3 horizontal tiles; a square image on a 16:9 screen tiles 2×;
+    /// aspects that already match render as a single tile. Videos take a
+    /// separate path (ApplyVideoToAllOverlays).
+    /// </summary>
+    private static void ApplyAsset(OverlayInstance ov, string path)
     {
         TeardownHostChildren(ov.Host);
         ov.Host.Children.Clear();
-
-        if (isVideo)
-        {
-            // One MediaElement per overlay — multiple decoders for the same
-            // file would burn CPU. UniformToFill accepts a slight crop on
-            // portrait videos in exchange for full-screen coverage.
-            var media = new MediaElement
-            {
-                LoadedBehavior = MediaState.Manual,
-                UnloadedBehavior = MediaState.Manual,
-                Stretch = Stretch.UniformToFill,
-                IsMuted = true,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                Source = new Uri(path),
-            };
-            media.MediaEnded += (_, _) =>
-            {
-                try { media.Position = TimeSpan.Zero; media.Play(); } catch { }
-            };
-            ov.Host.Children.Add(media);
-            try { media.Play(); } catch { }
-            return;
-        }
 
         var isGif = Path.GetExtension(path).Equals(".gif", StringComparison.OrdinalIgnoreCase);
         var imageAspect = MeasureImageAspect(path);
@@ -306,6 +398,73 @@ public class BlinkTrainerService : IDisposable
             tileGrid.Children.Add(BuildTile(path, isGif, shared, Stretch.UniformToFill));
         }
         ov.Host.Children.Add(tileGrid);
+    }
+
+    /// <summary>
+    /// Mix-mode variant of ApplyAsset: tile dimensions still come from the
+    /// lead image's aspect (so screen coverage math is unchanged), but each
+    /// cell shows a different image — preferring images from the lead's
+    /// aspect bucket so the per-cell UniformToFill crops stay coherent.
+    /// </summary>
+    private void ApplyAssetMixed(OverlayInstance ov, string leadPath)
+    {
+        TeardownHostChildren(ov.Host);
+        ov.Host.Children.Clear();
+
+        var leadAspect = MeasureImageAspectCached(leadPath);
+        var screenAspect = ov.Window.ActualWidth > 0 && ov.Window.ActualHeight > 0
+            ? ov.Window.ActualWidth / ov.Window.ActualHeight
+            : 16.0 / 9.0;
+
+        int cols = 1, rows = 1;
+        if (leadAspect > 0)
+        {
+            if (leadAspect < screenAspect * 0.95)
+                cols = Math.Min(MaxTiles, Math.Max(1, (int)Math.Ceiling(screenAspect / leadAspect)));
+            else if (leadAspect > screenAspect * 1.05)
+                rows = Math.Min(MaxTiles, Math.Max(1, (int)Math.Ceiling(leadAspect / screenAspect)));
+        }
+
+        // Single-tile path (aspects match): just show the lead with Uniform fit.
+        if (cols == 1 && rows == 1)
+        {
+            var leadIsGifSingle = Path.GetExtension(leadPath).Equals(".gif", StringComparison.OrdinalIgnoreCase);
+            ov.Host.Children.Add(BuildTile(leadPath, leadIsGifSingle, null, Stretch.Uniform));
+            return;
+        }
+
+        // Pick (cols*rows - 1) extra cells from the lead's aspect bucket.
+        // Sample without replacement when the bucket is large enough; allow
+        // repeats only as a last resort so a tiny pool still fills the grid.
+        var total = cols * rows;
+        var paths = new List<string>(total) { leadPath };
+        var bucket = GetCompatibleImages(AspectBucketOf(leadAspect));
+        var candidates = bucket.Where(p => !string.Equals(p, leadPath, StringComparison.OrdinalIgnoreCase)).ToList();
+        Shuffle(candidates);
+
+        for (int i = 0; i < total - 1; i++)
+        {
+            if (i < candidates.Count) paths.Add(candidates[i]);
+            else if (candidates.Count > 0) paths.Add(candidates[Random.Shared.Next(candidates.Count)]);
+            else paths.Add(leadPath);
+        }
+
+        var tileGrid = new UniformGrid { Columns = cols, Rows = rows };
+        foreach (var p in paths)
+        {
+            var pIsGif = Path.GetExtension(p).Equals(".gif", StringComparison.OrdinalIgnoreCase);
+            tileGrid.Children.Add(BuildTile(p, pIsGif, null, Stretch.UniformToFill));
+        }
+        ov.Host.Children.Add(tileGrid);
+    }
+
+    private static void Shuffle<T>(List<T> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int j = Random.Shared.Next(i + 1);
+            (list[i], list[j]) = (list[j], list[i]);
+        }
     }
 
     private static Image BuildTile(string path, bool isGif, BitmapImage? sharedBmp, Stretch stretch)
@@ -365,6 +524,74 @@ public class BlinkTrainerService : IDisposable
         return 1.0;
     }
 
+    private double MeasureImageAspectCached(string path)
+    {
+        lock (_cacheLock)
+        {
+            if (_aspectCache.TryGetValue(path, out var cached)) return cached;
+        }
+        var measured = MeasureImageAspect(path);
+        lock (_cacheLock)
+        {
+            _aspectCache[path] = measured;
+            // Drop into the right bucket so subsequent picks find it.
+            var bucket = AspectBucketOf(measured);
+            if (_imagesByBucket.TryGetValue(bucket, out var list) && !list.Contains(path))
+                list.Add(path);
+        }
+        return measured;
+    }
+
+    private void BuildAspectCache(List<string> paths, CancellationToken token)
+    {
+        foreach (var path in paths)
+        {
+            if (token.IsCancellationRequested) return;
+            double asp;
+            try { asp = MeasureImageAspect(path); }
+            catch { asp = 1.0; }
+            lock (_cacheLock)
+            {
+                _aspectCache[path] = asp;
+                var bucket = AspectBucketOf(asp);
+                if (_imagesByBucket.TryGetValue(bucket, out var list) && !list.Contains(path))
+                    list.Add(path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns a list of image paths whose aspect ratio is compatible with the
+    /// requested bucket. Falls back to the full image pool if the bucket isn't
+    /// populated yet (cache still warming) or contains too few images to
+    /// usefully fill a tile grid.
+    /// </summary>
+    private List<string> GetCompatibleImages(AspectBucket bucket)
+    {
+        lock (_cacheLock)
+        {
+            if (_imagesByBucket.TryGetValue(bucket, out var list) && list.Count >= 2)
+                return new List<string>(list);
+            return new List<string>(_imagesAll);
+        }
+    }
+
+    private static AspectBucket AspectBucketOf(double aspect)
+    {
+        if (aspect < 0.85) return AspectBucket.Portrait;
+        if (aspect > 1.15) return AspectBucket.Landscape;
+        return AspectBucket.Square;
+    }
+
+    private static Dictionary<AspectBucket, List<string>> NewEmptyBuckets() => new()
+    {
+        { AspectBucket.Portrait, new List<string>() },
+        { AspectBucket.Square, new List<string>() },
+        { AspectBucket.Landscape, new List<string>() },
+    };
+
+    private enum AspectBucket { Portrait, Square, Landscape }
+
     private static void TeardownHostChildren(Grid host)
     {
         foreach (var child in host.Children)
@@ -383,6 +610,17 @@ public class BlinkTrainerService : IDisposable
                         try { AnimationBehavior.SetSourceUri(inner, null!); inner.Source = null; } catch { }
                     }
                     ug.Children.Clear();
+                    break;
+                case System.Windows.Shapes.Rectangle rect:
+                    // Secondary-overlay video mirror — drop the VisualBrush's
+                    // reference to the primary MediaElement so it can be
+                    // collected when the primary tears down too.
+                    try
+                    {
+                        if (rect.Fill is VisualBrush vb) vb.Visual = null;
+                        rect.Fill = null;
+                    }
+                    catch { }
                     break;
             }
         }

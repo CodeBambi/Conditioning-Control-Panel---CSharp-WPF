@@ -2637,6 +2637,16 @@ namespace ConditioningControlPanel
             { "Deep Acceptance", "https://hypnotube.com/video/deep-acceptance-113157.html" },
             { "Eat Your Cum", "https://hypnotube.com/video/eat-your-cum-116026.html" },
             { "Trans Love Hypno - CrimsonPMV", "https://hypnotube.com/video/trans-love-hypno-crimsonpmv-121310.html" },
+
+            // BambiCloud playlists (audio, extracted 2026-04-28)
+            { "IQ Programming", "https://bambicloud.com/playlist/ff15f538-6e6b-433c-b68b-b4af5ee5d14d" },
+            { "Attitude Programming", "https://bambicloud.com/playlist/c0effdad-6002-4269-a982-479d676c8d46" },
+            { "Takeover Programming", "https://bambicloud.com/playlist/726403c2-567c-4c30-9f74-8fd750a82ef9" },
+            { "Cockslut Programming", "https://bambicloud.com/playlist/10091e87-2243-4f75-85d1-912c39951bc4" },
+            { "Uniform Programming", "https://bambicloud.com/playlist/39f0c016-abfb-4a53-a8d3-1c492a86635b" },
+            { "Maid Programming", "https://bambicloud.com/playlist/d244e2d6-be21-4e5b-bab1-b1268ade85ce" },
+            { "Deep Trance Programming", "https://bambicloud.com/playlist/648f16c8-865b-44e2-bba5-881fc499e0f7" },
+            { "Personality Programming", "https://bambicloud.com/playlist/ba1cf73a-5f3e-4ef8-bbc6-67ce2dcae774" },
         };
 
         // Cached copy of the built-in links for restoring when switching away from custom mods
@@ -2671,7 +2681,18 @@ namespace ConditioningControlPanel
 
         private void PopulateSpeechBubble(string text)
         {
-            TxtSpeech.Inlines.Clear();
+            BuildLinkedInlines(text, TxtSpeech.Inlines);
+        }
+
+        /// <summary>
+        /// Strips markdown link syntax, finds known video/playlist titles and raw URLs in
+        /// <paramref name="text"/>, and writes Run / Hyperlink inlines into <paramref name="target"/>.
+        /// Used by the live speech bubble AND the chat history items so both render the same
+        /// clickable pink hyperlinks.
+        /// </summary>
+        private void BuildLinkedInlines(string text, InlineCollection target)
+        {
+            target.Clear();
 
             if (string.IsNullOrEmpty(text))
                 return;
@@ -2724,7 +2745,7 @@ namespace ConditioningControlPanel
             if (linkPositions.Count == 0)
             {
                 // No known videos found - just show plain text
-                TxtSpeech.Inlines.Add(new Run(text));
+                target.Add(new Run(text));
                 return;
             }
 
@@ -2735,7 +2756,7 @@ namespace ConditioningControlPanel
                 // Add text before the link
                 if (start > lastIndex)
                 {
-                    TxtSpeech.Inlines.Add(new Run(text.Substring(lastIndex, start - lastIndex)));
+                    target.Add(new Run(text.Substring(lastIndex, start - lastIndex)));
                 }
 
                 // Get the actual text from the original (preserving case)
@@ -2750,12 +2771,12 @@ namespace ConditioningControlPanel
                         TextDecorations = TextDecorations.Underline
                     };
                     hyperlink.RequestNavigate += SpeechBubbleHyperlink_RequestNavigate;
-                    TxtSpeech.Inlines.Add(hyperlink);
+                    target.Add(hyperlink);
                     App.Logger?.Information("Auto-linked video: '{Name}' -> {Url}", actualText, url);
                 }
                 catch
                 {
-                    TxtSpeech.Inlines.Add(new Run(actualText));
+                    target.Add(new Run(actualText));
                 }
 
                 lastIndex = start + length;
@@ -2764,8 +2785,19 @@ namespace ConditioningControlPanel
             // Add remaining text
             if (lastIndex < text.Length)
             {
-                TxtSpeech.Inlines.Add(new Run(text.Substring(lastIndex)));
+                target.Add(new Run(text.Substring(lastIndex)));
             }
+        }
+
+        /// <summary>
+        /// Loaded handler for chat history TextBlocks. Pulls the message text from Tag
+        /// (we can't bind to Text because then we couldn't write Inlines) and renders it
+        /// through the same hyperlink builder used by the live bubble.
+        /// </summary>
+        private void ChatHistoryText_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is TextBlock tb && tb.Tag is string text)
+                BuildLinkedInlines(text, tb.Inlines);
         }
 
         /// <summary>

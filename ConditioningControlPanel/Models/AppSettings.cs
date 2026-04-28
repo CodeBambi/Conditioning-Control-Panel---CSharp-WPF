@@ -3279,6 +3279,13 @@ namespace ConditioningControlPanel.Models
             set { _blinkTrainerIncludeVideos = value; OnPropertyChanged(); }
         }
 
+        private bool _blinkTrainerMixImages;
+        public bool BlinkTrainerMixImages
+        {
+            get => _blinkTrainerMixImages;
+            set { _blinkTrainerMixImages = value; OnPropertyChanged(); }
+        }
+
         #endregion
     }
 }

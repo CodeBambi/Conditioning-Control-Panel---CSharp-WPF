@@ -3467,6 +3467,9 @@ namespace ConditioningControlPanel
 
                 if (ChkBlinkTrainerIncludeVideos != null)
                     ChkBlinkTrainerIncludeVideos.IsChecked = settings.BlinkTrainerIncludeVideos;
+
+                if (ChkBlinkTrainerMixImages != null)
+                    ChkBlinkTrainerMixImages.IsChecked = settings.BlinkTrainerMixImages;
             }
             finally { _blinkTrainerSyncing = false; }
 
@@ -3486,6 +3489,7 @@ namespace ConditioningControlPanel
             if (BtnBlinkTrainerRemoveFolder != null) BtnBlinkTrainerRemoveFolder.IsEnabled = !running;
             if (LstBlinkTrainerFolders != null) LstBlinkTrainerFolders.IsEnabled = !running;
             if (ChkBlinkTrainerIncludeVideos != null) ChkBlinkTrainerIncludeVideos.IsEnabled = !running;
+            if (ChkBlinkTrainerMixImages != null) ChkBlinkTrainerMixImages.IsEnabled = !running;
             if (SliderBlinkTrainerDuration != null) SliderBlinkTrainerDuration.IsEnabled = !running;
             if (SliderBlinkTrainerOpacity != null) SliderBlinkTrainerOpacity.IsEnabled = !running;
 
@@ -3580,6 +3584,14 @@ namespace ConditioningControlPanel
             if (_blinkTrainerSyncing) return;
             if (App.Settings?.Current != null)
                 App.Settings.Current.BlinkTrainerIncludeVideos = ChkBlinkTrainerIncludeVideos?.IsChecked == true;
+            App.Settings?.Save();
+        }
+
+        private void ChkBlinkTrainerMixImages_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_blinkTrainerSyncing) return;
+            if (App.Settings?.Current != null)
+                App.Settings.Current.BlinkTrainerMixImages = ChkBlinkTrainerMixImages?.IsChecked == true;
             App.Settings?.Save();
         }
 
@@ -15157,13 +15169,19 @@ namespace ConditioningControlPanel
 
             // Wire one-shot autoplay handler. BrowserService raises NavigationCompleted
             // for the start-URL load, so this catches it without us having to issue a
-            // second Navigate.
+            // second Navigate. BambiCloud playlists need a different injection (audio,
+            // no <video> element) — mirror the branch in NavigateToUrlInBrowser so the
+            // first-ever click on a playlist link auto-plays just like subsequent ones.
             if (autoPlayFullscreen)
             {
+                var isBambiCloudPlaylist = lowerUrl.Contains("bambicloud.com/playlist/");
                 void OnNavCompleted(object? s, string completedUrl)
                 {
                     _browser.NavigationCompleted -= OnNavCompleted;
-                    _ = AutoPlayAndFullscreenVideoAsync();
+                    if (isBambiCloudPlaylist)
+                        _ = AutoPlayBambiCloudPlaylistAsync();
+                    else
+                        _ = AutoPlayAndFullscreenVideoAsync();
                 }
                 _browser.NavigationCompleted += OnNavCompleted;
             }
@@ -15270,17 +15288,23 @@ namespace ConditioningControlPanel
 
                 _browser.ZoomFactor = 0.5;
 
-                // If auto-play fullscreen requested, set up handler for when navigation completes
+                // If auto-play fullscreen requested, set up handler for when navigation completes.
+                // BambiCloud playlists are audio (no <video> element, no fullscreen) — they need a
+                // different injection that clicks the playlist's main play button.
                 if (autoPlayFullscreen && _browser.WebView?.CoreWebView2 != null)
                 {
+                    var isBambiCloudPlaylist = lowerUrl.Contains("bambicloud.com/playlist/");
+
                     void OnNavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
                     {
                         _browser.WebView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
 
                         if (e.IsSuccess)
                         {
-                            // Inject script to auto-play and fullscreen the video after a short delay
-                            _ = AutoPlayAndFullscreenVideoAsync();
+                            if (isBambiCloudPlaylist)
+                                _ = AutoPlayBambiCloudPlaylistAsync();
+                            else
+                                _ = AutoPlayAndFullscreenVideoAsync();
                         }
                     }
 
@@ -15382,9 +15406,17 @@ namespace ConditioningControlPanel
                                 }
                             }, { once: true });
 
+                            // Notify C# that playback has actually begun so the autonomy
+                            // watchdog (30s) can be cancelled — long videos must NOT free
+                            // up _webVideoActive while still on screen.
+                            const notifyVideoStarted = () => {
+                                window.chrome.webview.postMessage({ type: 'videoStarted' });
+                            };
+
                             // Start playing and go fullscreen
                             video.muted = false;
                             video.play().then(() => {
+                                notifyVideoStarted();
                                 if (video.requestFullscreen) {
                                     video.requestFullscreen();
                                 } else if (video.webkitRequestFullscreen) {
@@ -15392,7 +15424,12 @@ namespace ConditioningControlPanel
                                 } else if (video.msRequestFullscreen) {
                                     video.msRequestFullscreen();
                                 }
-                            }).catch(e => console.log('Autoplay blocked:', e));
+                            }).catch(e => {
+                                console.log('Autoplay blocked:', e);
+                                // Still notify so the watchdog doesn't fire mid-playback if
+                                // the user manually unblocks/plays the video later.
+                                video.addEventListener('playing', notifyVideoStarted, { once: true });
+                            });
                         } else {
                             console.log('No video element found after retries');
                             window.chrome.webview.postMessage({ type: 'videoEnded', reason: 'noVideoElement' });
@@ -15406,6 +15443,80 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to auto-play/fullscreen video");
+            }
+        }
+
+        /// <summary>
+        /// BambiCloud playlists are audio (no &lt;video&gt; element). The page renders a single
+        /// .play-action button that starts the whole playlist; we click it once it hydrates,
+        /// then post videoStarted/videoEnded messages so AutonomyService treats the playlist
+        /// like a fullscreen video for blocking purposes.
+        /// </summary>
+        private async Task AutoPlayBambiCloudPlaylistAsync()
+        {
+            if (_browser?.WebView?.CoreWebView2 == null) return;
+
+            try
+            {
+                // Wait for React hydration before looking for the button.
+                await Task.Delay(1500);
+
+                var script = @"
+                    (async function() {
+                        // Poll for the .play-action button - SPA hydration can take a few seconds.
+                        let btn = document.querySelector('button.play-action');
+                        for (let i = 0; i < 20 && !btn; i++) {
+                            await new Promise(r => setTimeout(r, 250));
+                            btn = document.querySelector('button.play-action');
+                        }
+                        if (!btn) {
+                            window.chrome.webview.postMessage({ type: 'videoEnded', reason: 'noPlayButton' });
+                            return;
+                        }
+
+                        let notified = false;
+                        const notifyStarted = () => {
+                            if (!notified) {
+                                notified = true;
+                                window.chrome.webview.postMessage({ type: 'videoStarted' });
+                            }
+                        };
+                        const notifyEnded = (reason) => {
+                            window.chrome.webview.postMessage({ type: 'videoEnded', reason: reason });
+                        };
+
+                        // Bind to any current/future <audio> element so we know when the
+                        // playlist actually plays and when the last track ends.
+                        const bindAudio = (audio) => {
+                            if (!audio || audio.__bcBound) return;
+                            audio.__bcBound = true;
+                            audio.addEventListener('playing', notifyStarted);
+                            audio.addEventListener('ended', () => notifyEnded('ended'));
+                        };
+                        document.querySelectorAll('audio').forEach(bindAudio);
+
+                        // Also watch for audio elements added later (each track may swap one in).
+                        const obs = new MutationObserver(() => {
+                            document.querySelectorAll('audio').forEach(bindAudio);
+                        });
+                        obs.observe(document.body, { childList: true, subtree: true });
+
+                        // Click the play button. Browser autoplay policies usually allow this
+                        // because navigation-from-app counts as a user gesture in WebView2.
+                        btn.click();
+
+                        // Fallback: if no <audio> 'playing' fires within 3s, assume click took
+                        // effect anyway and notify, so the autonomy watchdog doesn't fire.
+                        setTimeout(notifyStarted, 3000);
+                    })();
+                ";
+
+                await _browser.WebView.CoreWebView2.ExecuteScriptAsync(script);
+                App.Logger?.Debug("BambiCloud playlist auto-play script injected");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to auto-play BambiCloud playlist");
             }
         }
 
@@ -15435,7 +15546,14 @@ namespace ConditioningControlPanel
                 }
 
                 // Parse the JSON message
-                if (message.Contains("\"type\":\"videoEnded\""))
+                if (message.Contains("\"type\":\"videoStarted\""))
+                {
+                    // Playback confirmed - cancel the autonomy load-failure watchdog so
+                    // long videos can't have _webVideoActive flipped off mid-stream.
+                    App.Logger?.Information("Web video playback started");
+                    App.Autonomy?.OnWebVideoStarted();
+                }
+                else if (message.Contains("\"type\":\"videoEnded\""))
                 {
                     // Video ended or fullscreen exited - notify AutonomyService
                     App.Logger?.Information("Web video playback ended");

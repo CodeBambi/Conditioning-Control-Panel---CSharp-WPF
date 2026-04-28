@@ -194,7 +194,8 @@
                                                     </Style>
                                                 </Border.Style>
                                                 <StackPanel>
-                                                    <TextBlock Text="{Binding Text}"
+                                                    <TextBlock Tag="{Binding Text}"
+                                                               Loaded="ChatHistoryText_Loaded"
                                                                Foreground="White"
                                                                FontSize="14"
                                                                TextWrapping="Wrap"/>
