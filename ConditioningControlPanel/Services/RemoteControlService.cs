@@ -188,6 +188,7 @@ namespace ConditioningControlPanel.Services
             _controllerAutoDisconnected = false;
             _lastStatusPushUtc = DateTime.MinValue;
             _statusBackoffUntil = DateTime.MinValue;
+            _engineStoppedForController = false;
             IsActive = false;
             SessionCode = null;
             ConnectPin = null;
@@ -224,6 +225,10 @@ namespace ConditioningControlPanel.Services
         private const double IdleAutoDisconnectSeconds = 120.0; // 2 minutes
         private DateTime _lastStatusPushUtc = DateTime.MinValue;
         private DateTime _statusBackoffUntil = DateTime.MinValue;
+        // Set true after the first controller of the active remote session caused the
+        // local engine to stop. Prevents a takeover (A leaves, B joins) from re-stopping
+        // an engine the second controller would otherwise inherit. Cleared in CleanupSession.
+        private bool _engineStoppedForController;
 
         private async Task PollForCommandsAsync()
         {
@@ -352,9 +357,16 @@ namespace ConditioningControlPanel.Services
                     ControllerConnected = connected;
                     if (connected)
                     {
-                        // Stop the engine so only the controller triggers effects
-                        if (MainWindowRef?.IsEngineRunning == true)
+                        // Only stop the engine on the FIRST controller of this remote
+                        // session. Takeovers (controller A leaves, B joins) trigger this
+                        // branch again as a false→true transition; without the guard we'd
+                        // re-stop a session/engine that the previous controller or sub had
+                        // running, even when B sent no command (#166).
+                        if (MainWindowRef?.IsEngineRunning == true && !_engineStoppedForController)
+                        {
+                            _engineStoppedForController = true;
                             MainWindowRef.StopEngine();
+                        }
 
                         // Ensure overlay service is ready for remote commands
                         EnsureOverlayRunning();

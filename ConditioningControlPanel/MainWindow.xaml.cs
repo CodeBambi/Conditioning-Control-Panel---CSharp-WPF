@@ -9996,9 +9996,16 @@ namespace ConditioningControlPanel
 
                 if (connected)
                 {
-                    // Stop any in-progress local session so the remote controller
-                    // has clean state to drive.
-                    try { _sessionEngine?.StopSession(completed: false); } catch { }
+                    // Only stop the local session on the FIRST controller of this remote
+                    // session. On a takeover (controller A leaves, B joins), connected
+                    // briefly transitions true→false→true; without this guard, B's connect
+                    // would re-stop a session that A or the sub had running, even when
+                    // B hasn't sent any command yet (bug report #166).
+                    if (!_remoteSessionHasTakenLocal)
+                    {
+                        _remoteSessionHasTakenLocal = true;
+                        try { _sessionEngine?.StopSession(completed: false); } catch { }
+                    }
 
                     ShowRemoteControlOverlay();
                     NotifyRemoteControllerJoined();
@@ -10009,6 +10016,11 @@ namespace ConditioningControlPanel
                 }
             });
         }
+
+        // Set true once the first controller of the active remote-control session has
+        // claimed control. Reset when the remote session ends so a future remote session
+        // re-applies the take-over-local-session step on its first controller.
+        private bool _remoteSessionHasTakenLocal;
 
         private void OnRemoteControllerIdleChanged(object? sender, EventArgs e)
         {
@@ -10028,6 +10040,7 @@ namespace ConditioningControlPanel
         {
             Dispatcher.Invoke(() =>
             {
+                _remoteSessionHasTakenLocal = false;
                 HideRemoteControlOverlay();
                 UpdateStartButtonForRemoteControl(false);
                 _isLoading = true;
@@ -18552,9 +18565,15 @@ namespace ConditioningControlPanel
             TxtLevelLabel.Text = $"LVL {level}";
             TxtXP.Text = $"{(int)xp} / {(int)xpNeeded} XP";
 
-            // Update XP bar width
+            // Update XP bar width.
+            // XPBar.Parent is the wrapping Grid (not the outer Border with rounded corners),
+            // so we read the container's ActualWidth directly. Casting Parent to Border made
+            // the expression always null, falling back to 100 px regardless of progress —
+            // visible bug: bar appeared frozen at 100 px after install.
             var progress = Math.Min(1.0, xp / xpNeeded);
-            XPBar.Width = progress * (XPBar.Parent as Border)?.ActualWidth ?? 100;
+            var container = XPBar.Parent as FrameworkElement;
+            var available = container?.ActualWidth ?? 0;
+            if (available > 0) XPBar.Width = progress * available;
 
             // Update title based on level
             var rankTitle = level switch
@@ -21825,6 +21844,10 @@ namespace ConditioningControlPanel
 
                     // Sync thumbnail checkboxes with current DisabledAssetPaths state
                     RefreshThumbnailCheckboxes();
+
+                    // FlashService caches its file listing for 60s — invalidate so the
+                    // folder-level toggle takes effect on the very next flash (#130).
+                    App.Flash?.ClearFileCache();
                 }
                 finally
                 {
@@ -22047,6 +22070,11 @@ namespace ConditioningControlPanel
             {
                 App.Settings.Current.DisabledAssetPaths.Add(file.RelativePath);
             }
+
+            // FlashService caches its file listing for 60s — without this the toggle has
+            // no effect for up to a minute, which users perceive as "unchecking does
+            // nothing" (#130).
+            App.Flash?.ClearFileCache();
 
             // Update parent folder state - set flag to prevent FolderCheckBox_Changed from
             // propagating changes to all children when the folder's IsChecked changes
@@ -23545,7 +23573,15 @@ namespace ConditioningControlPanel
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 ChkWinStart.IsChecked = StartupManager.IsRegistered();
+                App.Settings.Current.RunOnStartup = ChkWinStart.IsChecked ?? false;
+                App.Settings.Save();
+                return;
             }
+
+            // Persist to settings so any subsequent LoadSettings() (e.g. from saving a
+            // preset) doesn't reset the checkbox to a stale value (#150).
+            App.Settings.Current.RunOnStartup = isEnabled;
+            App.Settings.Save();
         }
 
         private void ChkStartHidden_Click(object sender, RoutedEventArgs e)

@@ -3185,7 +3185,7 @@
                             
                             <!-- Horizontal Scrolling Preset Cards -->
                             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
-                                          PreviewMouseWheel="HorizontalScrollViewer_PreviewMouseWheel">
+                                          PreviewMouseWheel="PacksScrollViewer_PreviewMouseWheel">
                                 <StackPanel Orientation="Horizontal">
                                     <!-- Preset Cards Container -->
                                     <StackPanel x:Name="PresetCardsPanel" Orientation="Horizontal">
