@@ -18,6 +18,16 @@ namespace ConditioningControlPanel
         public ModifierKeys CapturedModifiers { get; private set; }
         public bool ResetToDefault { get; private set; }
 
+        /// <summary>
+        /// State of the "activate from any app" checkbox at dialog close. Caller seeds it
+        /// from settings before <see cref="Window.ShowDialog"/> and reads it back after.
+        /// </summary>
+        public bool GlobalHotkey
+        {
+            get => ChkGlobal?.IsChecked == true;
+            set { if (ChkGlobal != null) ChkGlobal.IsChecked = value; }
+        }
+
         public ChatShortcutCaptureDialog()
         {
             InitializeComponent();

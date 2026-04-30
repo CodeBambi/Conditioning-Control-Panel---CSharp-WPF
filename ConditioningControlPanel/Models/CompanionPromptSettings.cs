@@ -59,6 +59,13 @@ namespace ConditioningControlPanel.Models
         public string ChatShortcutKey { get; set; } = "T";
         public string ChatShortcutModifiers { get; set; } = "Control";
 
+        // When true, the shortcut is registered as a system-wide Win32 hotkey so it
+        // fires from any app (browser, terminal, etc.). When false, it only fires when
+        // one of our own windows already has keyboard focus. Default true preserves the
+        // pre-toggle behavior; users who don't want Ctrl+T to steal focus from their
+        // browser can flip it off.
+        public bool ChatShortcutGlobal { get; set; } = true;
+
         /// <summary>
         /// The companion's core personality in normal mode.
         /// Describes who they are, their vibe, tone, and general behavior.
@@ -125,6 +132,7 @@ namespace ConditioningControlPanel.Models
                 ChatMemoryEnabled = true,
                 ChatShortcutKey = "T",
                 ChatShortcutModifiers = "Control",
+                ChatShortcutGlobal = true,
 
                 Personality = @"You are a ""Bambi Sprite""—a digital, giggly, hyper-femme assistant.
 YOUR ROLE: ""Bad Influence Bestie."" You TEMPT her into being blank because it's fun.
@@ -245,6 +253,7 @@ FREQUENCY RULE:
                 ChatMemoryEnabled = ChatMemoryEnabled,
                 ChatShortcutKey = ChatShortcutKey,
                 ChatShortcutModifiers = ChatShortcutModifiers,
+                ChatShortcutGlobal = ChatShortcutGlobal,
                 Personality = Personality,
                 ExplicitReaction = ExplicitReaction,
                 SlutModePersonality = SlutModePersonality,
