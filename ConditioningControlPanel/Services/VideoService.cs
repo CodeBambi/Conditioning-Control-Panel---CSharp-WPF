@@ -351,6 +351,20 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("VideoService: failed to subscribe to SessionSwitch — {Error}", ex.Message);
             }
 
+            // Sleep/wake doesn't always go through SessionSwitch (only fires if "lock on sleep"
+            // is enabled). Without this, suspending the PC mid-video leaves the final frame
+            // frozen on the desktop after wake, with the main window unreachable — users have
+            // to kill the app from the tray. Force-cleanup on Suspend.
+            try
+            {
+                Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+                Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoService: failed to subscribe to PowerModeChanged — {Error}", ex.Message);
+            }
+
             App.Logger.Information("VideoService started");
         }
 
@@ -364,6 +378,8 @@ namespace ConditioningControlPanel.Services
             _fallbackSafetyTimer = null;
 
             try { Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch; }
+            catch { }
+            try { Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged; }
             catch { }
 
             // Force cleanup of any playing video - use synchronous disposal during stop
@@ -408,6 +424,37 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Debug("VideoService: SessionSwitch dispatch failed — {Error}", ex.Message);
+            }
+        }
+
+        private void OnPowerModeChanged(object? sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+        {
+            // Suspend = the system is about to sleep. Resume = it just woke. We only act on
+            // Suspend: tear down any active video so the wake doesn't land on a frozen frame
+            // with no main window to interact with. (Resume normally fires SessionUnlock too,
+            // but only when the user has "lock on sleep" enabled — we can't rely on it.)
+            if (e.Mode != Microsoft.Win32.PowerModes.Suspend) return;
+            if (!_videoPlaying && _windows.Count == 0) return;
+
+            App.Logger?.Information("VideoService: System suspending while a video was active — force-cleaning to prevent frozen frame after wake");
+
+            try
+            {
+                if (Application.Current?.Dispatcher != null && !Application.Current.Dispatcher.HasShutdownStarted)
+                {
+                    Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try { ForceCleanup(); }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Warning(ex, "VideoService: ForceCleanup on suspend threw");
+                        }
+                    }));
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoService: PowerModeChanged dispatch failed — {Error}", ex.Message);
             }
         }
 
