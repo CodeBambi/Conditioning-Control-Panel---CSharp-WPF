@@ -1,0 +1,226 @@
+<Window x:Class="ConditioningControlPanel.Views.Deeper.DeeperEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
+        Title="Deeper"
+        Height="720" Width="1180"
+        MinHeight="560" MinWidth="980"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource DarkerBgBrush}"
+        Closing="Window_Closing">
+
+    <Window.Resources>
+        <Style x:Key="EditorMenuItem" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="10,6"/>
+        </Style>
+        <Style x:Key="EditorTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentTransparent40Brush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <Style x:Key="EditorLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- title bar / menu -->
+            <RowDefinition Height="*"/>    <!-- main content -->
+            <RowDefinition Height="Auto"/> <!-- validation strip -->
+        </Grid.RowDefinitions>
+
+        <!-- Title / menu bar -->
+        <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}"
+                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="0,0,0,1"
+                Padding="10,4">
+            <DockPanel LastChildFill="True">
+                <Menu DockPanel.Dock="Left" Background="Transparent" Foreground="{DynamicResource TextLightBrush}">
+                    <MenuItem Header="{loc:Str menu_file}" Style="{StaticResource EditorMenuItem}">
+                        <MenuItem Header="{loc:Str menu_file_save}" Click="MenuSave_Click" InputGestureText="Ctrl+S"/>
+                        <MenuItem Header="{loc:Str menu_file_save_as}" Click="MenuSaveAs_Click" InputGestureText="Ctrl+Shift+S"/>
+                        <Separator/>
+                        <MenuItem Header="{loc:Str menu_file_close}" Click="MenuClose_Click"/>
+                    </MenuItem>
+                </Menu>
+                <TextBlock x:Name="TxtTitle" DockPanel.Dock="Left" Margin="22,0,0,0"
+                           Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                           FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtDirty" DockPanel.Dock="Left" Margin="6,0,0,0" Text="●"
+                           Foreground="{DynamicResource DeeperAccentBrush}" Visibility="Collapsed"
+                           FontSize="14" VerticalAlignment="Center"
+                           ToolTip="{loc:Str deeper_editor_unsaved_marker}"/>
+                <TextBlock x:Name="TxtFilePath" Margin="0,0,12,0" HorizontalAlignment="Right"
+                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Main 2-column body -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="320"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: preview + timeline -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>      <!-- preview -->
+                    <RowDefinition Height="160"/>    <!-- timeline -->
+                </Grid.RowDefinitions>
+
+                <!-- Preview pane -->
+                <Border Grid.Row="0" Background="#0A0A14" Margin="10,10,10,5">
+                    <Grid x:Name="PreviewHost">
+                        <vlc:VideoView x:Name="VideoPreview" Visibility="Collapsed"/>
+
+                        <Canvas x:Name="WaveformCanvas" Visibility="Collapsed" Background="#10000020">
+                            <Path x:Name="WaveformPath" Stroke="{DynamicResource DeeperAccentBrush}"
+                                  StrokeThickness="1.2" Fill="{DynamicResource DeeperAccentTransparent40Brush}"/>
+                        </Canvas>
+
+                        <StackPanel x:Name="PreviewPlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Visibility="Collapsed">
+                            <TextBlock Text="🌐" FontSize="42" HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource DeeperAccentSoftBrush}" Margin="0,0,0,12"/>
+                            <TextBlock Text="{loc:Str deeper_editor_remote_preview_unavailable}"
+                                       Foreground="{DynamicResource TextLightBrush}" FontSize="14"
+                                       HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="380"
+                                       TextAlignment="Center"/>
+                            <TextBlock x:Name="TxtPlaceholderSource" Foreground="{DynamicResource TextDimBrush}"
+                                       FontSize="11" HorizontalAlignment="Center" TextAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="420" Margin="0,8,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Timeline -->
+                <Border Grid.Row="1" Background="{DynamicResource PanelBgBrush}"
+                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                        CornerRadius="6" Margin="10,5,10,10" Padding="10,8">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Transport row -->
+                        <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,6">
+                            <Button x:Name="BtnPlayPause" DockPanel.Dock="Left"
+                                    Content="▶" Click="BtnPlayPause_Click"
+                                    Width="34" Height="28" Padding="0" Cursor="Hand"
+                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                    Foreground="{DynamicResource DeeperAccentBrush}"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                                    FontSize="13"/>
+                            <TextBlock x:Name="TxtCurrentTime" DockPanel.Dock="Left"
+                                       Text="0:00" Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                            <TextBlock DockPanel.Dock="Left" Text="/" Foreground="{DynamicResource TextDimBrush}"
+                                       FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtTotalTime" DockPanel.Dock="Left"
+                                       Text="0:00" Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                            <TextBlock DockPanel.Dock="Right" Foreground="{DynamicResource TextDimBrush}"
+                                       FontSize="11" VerticalAlignment="Center"
+                                       Text="{loc:Str deeper_editor_scrub_hint}"/>
+                        </DockPanel>
+
+                        <!-- Timeline canvas (scrub area + lanes) -->
+                        <Canvas x:Name="TimelineCanvas" Grid.Row="1" Background="#15151F"
+                                Cursor="Hand" ClipToBounds="True"
+                                MouseLeftButtonDown="TimelineCanvas_MouseLeftButtonDown"
+                                MouseMove="TimelineCanvas_MouseMove"
+                                MouseLeftButtonUp="TimelineCanvas_MouseLeftButtonUp"
+                                SizeChanged="TimelineCanvas_SizeChanged">
+                            <!-- Playhead -->
+                            <Line x:Name="PlayheadLine" X1="0" X2="0" Y1="0" Y2="0"
+                                  Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="2"/>
+                        </Canvas>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Right: side panel -->
+            <Border Grid.Column="1" Background="{DynamicResource PanelBgBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,12">
+                    <StackPanel>
+                        <!-- Metadata -->
+                        <TextBlock Text="{loc:Str deeper_editor_section_metadata}"
+                                   Foreground="{DynamicResource DeeperAccentBrush}"
+                                   FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
+
+                        <TextBlock Text="{loc:Str deeper_editor_label_name}" Style="{StaticResource EditorLabel}"/>
+                        <TextBox x:Name="TxtMetaName" Style="{StaticResource EditorTextBox}"
+                                 TextChanged="MetadataField_TextChanged"/>
+
+                        <TextBlock Text="{loc:Str deeper_editor_label_creator}" Style="{StaticResource EditorLabel}"/>
+                        <TextBox x:Name="TxtMetaCreator" Style="{StaticResource EditorTextBox}"
+                                 TextChanged="MetadataField_TextChanged"/>
+
+                        <TextBlock Text="{loc:Str deeper_editor_label_description}" Style="{StaticResource EditorLabel}"/>
+                        <TextBox x:Name="TxtMetaDescription" Style="{StaticResource EditorTextBox}"
+                                 TextWrapping="Wrap" AcceptsReturn="True" Height="68"
+                                 TextChanged="MetadataField_TextChanged"/>
+
+                        <TextBlock Text="{loc:Str deeper_editor_label_tags}" Style="{StaticResource EditorLabel}"/>
+                        <TextBox x:Name="TxtMetaTags" Style="{StaticResource EditorTextBox}"
+                                 ToolTip="{loc:Str deeper_editor_tags_hint}"
+                                 TextChanged="MetadataField_TextChanged"/>
+
+                        <TextBlock Text="{loc:Str deeper_editor_label_license}" Style="{StaticResource EditorLabel}"/>
+                        <TextBox x:Name="TxtMetaLicense" Style="{StaticResource EditorTextBox}"
+                                 TextChanged="MetadataField_TextChanged"/>
+
+                        <Separator Margin="0,10,0,14"/>
+
+                        <TextBlock Text="{loc:Str deeper_editor_label_media_source}" Style="{StaticResource EditorLabel}"/>
+                        <TextBox x:Name="TxtMediaSource" Style="{StaticResource EditorTextBox}"
+                                 IsReadOnly="True" Foreground="{DynamicResource TextDimBrush}"/>
+
+                        <TextBlock Text="{loc:Str deeper_editor_label_media_type}" Style="{StaticResource EditorLabel}"/>
+                        <TextBlock x:Name="TxtMediaType" Foreground="{DynamicResource TextLightBrush}"
+                                   FontSize="12" Margin="0,0,0,8"/>
+
+                        <Separator Margin="0,10,0,14"/>
+
+                        <TextBlock Text="{loc:Str deeper_editor_section_selected}"
+                                   Foreground="{DynamicResource DeeperAccentBrush}"
+                                   FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <TextBlock Text="{loc:Str deeper_editor_section_selected_empty}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="11" FontStyle="Italic"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Validation strip -->
+        <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}"
+                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="0,1,0,0"
+                Padding="14,8">
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right" Content="{loc:Str btn_save}" Click="MenuSave_Click"
+                        Padding="14,6" Cursor="Hand" FontWeight="SemiBold"
+                        Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
+                        BorderThickness="0"/>
+                <TextBlock x:Name="TxtValidationSummary" Text="{loc:Str deeper_editor_validation_clean}"
+                           Foreground="{DynamicResource TextLightBrush}"
+                           FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0"
+                           ToolTip="{loc:Str deeper_editor_validation_tooltip}"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

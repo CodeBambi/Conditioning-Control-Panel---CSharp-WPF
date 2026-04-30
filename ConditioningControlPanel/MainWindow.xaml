@@ -8256,58 +8256,101 @@
             </Grid>
         </ContentControl>
 
-        <!-- Deeper Tab — universal media enhancement system (Phase 0: empty state only) -->
+        <!-- Deeper Tab — universal media enhancement system -->
         <ContentControl x:Name="DeeperTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
-            <Grid>
-                <Border HorizontalAlignment="Center" VerticalAlignment="Center"
-                        MaxWidth="640" Padding="40,32"
-                        Background="{DynamicResource ElevatedSurfaceBrush}"
-                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                        CornerRadius="16">
-                    <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="🌊" FontSize="56" HorizontalAlignment="Center"
-                                   Foreground="{DynamicResource DeeperAccentBrush}" Margin="0,0,0,12"/>
+            <Grid Margin="28,20,28,20" MaxWidth="1080" HorizontalAlignment="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/> <!-- Header -->
+                    <RowDefinition Height="Auto"/> <!-- Pitch -->
+                    <RowDefinition Height="*"/>    <!-- Library + Recent -->
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Grid Grid.Row="0" Margin="0,0,0,18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="🌊" FontSize="34"
+                               Foreground="{DynamicResource DeeperAccentBrush}"
+                               VerticalAlignment="Center" Margin="0,0,14,0"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{loc:Str deeper_empty_title}"
-                                   FontSize="28" FontWeight="Bold" HorizontalAlignment="Center"
-                                   Foreground="{DynamicResource DeeperAccentBrush}" Margin="0,0,0,10"/>
+                                   Foreground="{DynamicResource DeeperAccentBrush}"
+                                   FontSize="22" FontWeight="Bold"/>
                         <TextBlock Text="{loc:Str deeper_empty_pitch}"
-                                   FontSize="14" TextWrapping="Wrap" TextAlignment="Center"
-                                   Foreground="{DynamicResource TextLightBrush}" MaxWidth="500"
-                                   Margin="0,0,0,20"/>
-                        <TextBlock Text="{loc:Str deeper_empty_features}"
-                                   FontSize="12" TextWrapping="Wrap" TextAlignment="Center"
-                                   Foreground="{DynamicResource TextMutedBrush}" MaxWidth="480"
-                                   Margin="0,0,0,28"/>
-                        <Button x:Name="BtnDeeperNewEnhancement"
-                                Content="{loc:Str deeper_empty_cta}"
-                                IsEnabled="False"
-                                ToolTip="{loc:Str deeper_empty_cta_disabled_tooltip}"
-                                HorizontalAlignment="Center"
-                                Padding="22,10" FontSize="13" FontWeight="SemiBold"
-                                Foreground="White" BorderThickness="0" Cursor="Hand"
-                                Background="{DynamicResource DeeperAccentBrush}">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="border" CornerRadius="8" Padding="{TemplateBinding Padding}"
-                                            Background="{TemplateBinding Background}">
-                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsEnabled" Value="False">
-                                            <Setter TargetName="border" Property="Opacity" Value="0.45"/>
-                                        </Trigger>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="border" Property="Background" Value="{DynamicResource DeeperAccentSoftBrush}"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                        <TextBlock Margin="0,14,0,0" HorizontalAlignment="Center"
-                                   Foreground="{DynamicResource TextDimBrush}" FontSize="11"
-                                   Text="{loc:Str deeper_empty_coming_soon}"/>
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                   Margin="0,2,0,0" TextWrapping="Wrap" MaxWidth="700"
+                                   HorizontalAlignment="Left"/>
                     </StackPanel>
-                </Border>
+                    <Button Grid.Column="2" x:Name="BtnDeeperNewEnhancement"
+                            Content="{loc:Str deeper_empty_cta}"
+                            Click="BtnDeeperNewEnhancement_Click"
+                            VerticalAlignment="Center" Padding="22,10" FontSize="13" FontWeight="SemiBold"
+                            Foreground="White" BorderThickness="0" Cursor="Hand"
+                            Background="{DynamicResource DeeperAccentBrush}">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="border" CornerRadius="8" Padding="{TemplateBinding Padding}"
+                                        Background="{TemplateBinding Background}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="border" Property="Background" Value="{DynamicResource DeeperAccentSoftBrush}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </Grid>
+
+                <!-- Features blurb -->
+                <TextBlock Grid.Row="1" Text="{loc:Str deeper_empty_features}"
+                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                           TextWrapping="Wrap" Margin="0,0,0,20"/>
+
+                <!-- Library + Recent (two-column) -->
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Library -->
+                    <Border Grid.Column="0" Background="{DynamicResource SurfaceBgBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                            CornerRadius="10" Padding="18,14">
+                        <DockPanel LastChildFill="True">
+                            <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+                                <TextBlock Text="{loc:Str deeper_section_library}"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           FontSize="12" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtDeeperLibraryCount" HorizontalAlignment="Right"
+                                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
+                            </Grid>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="DeeperLibraryList"/>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Recent -->
+                    <Border Grid.Column="2" Background="{DynamicResource SurfaceBgBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                            CornerRadius="10" Padding="18,14">
+                        <DockPanel LastChildFill="True">
+                            <TextBlock DockPanel.Dock="Top" Text="{loc:Str deeper_section_recent}"
+                                       Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12" FontWeight="Bold" Margin="0,0,0,10"/>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="DeeperRecentList"/>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </Grid>
             </Grid>
         </ContentControl>
 

@@ -3300,6 +3300,21 @@ namespace ConditioningControlPanel.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool HasSeenDeeperTab { get; set; }
 
+        private List<string> _deeperRecentFiles = new();
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> DeeperRecentFiles
+        {
+            get => _deeperRecentFiles;
+            set { _deeperRecentFiles = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private string _deeperLastDirectory = "";
+        public string DeeperLastDirectory
+        {
+            get => _deeperLastDirectory;
+            set { _deeperLastDirectory = value ?? ""; OnPropertyChanged(); }
+        }
+
         #endregion
     }
 }

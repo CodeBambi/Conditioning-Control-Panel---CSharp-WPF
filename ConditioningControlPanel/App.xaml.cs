@@ -226,6 +226,7 @@ namespace ConditioningControlPanel
         public static GazeFocusService GazeFocus { get; private set; } = null!;
         public static GazeDebugCursorService GazeCursor { get; private set; } = null!;
         public static BlinkTrainerService BlinkTrainer { get; private set; } = null!;
+        public static Services.Deeper.EnhancementLibrary EnhancementLibrary { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -850,6 +851,11 @@ namespace ConditioningControlPanel
             GazeCursor = new GazeDebugCursorService();
             GazeFocus = new GazeFocusService();
             BlinkTrainer = new BlinkTrainerService();
+
+            // Deeper enhancement library — file ops, recent files, library scan.
+            // Eager-init: lightweight, just creates the folder and reads recent files
+            // from settings.
+            EnhancementLibrary = new Services.Deeper.EnhancementLibrary();
 
             // Initialize lockdown service (ephemeral — not persisted). Recover from a
             // prior run that was killed mid-lockdown so the panic key isn't stuck off.

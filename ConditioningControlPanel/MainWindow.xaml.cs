@@ -2157,6 +2157,189 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnDeeperNewEnhancement_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Views.Deeper.NewEnhancementDialog { Owner = this };
+            if (dialog.ShowDialog() != true) return;
+
+            var enhancement = App.EnhancementLibrary?.CreateBlank(dialog.SelectedMediaType, dialog.SelectedSource);
+            if (enhancement == null) return;
+
+            OpenDeeperEditor(enhancement, null);
+        }
+
+        private void OpenDeeperEditor(Models.Deeper.Enhancement enhancement, string? filePath)
+        {
+            try
+            {
+                var window = new Views.Deeper.DeeperEditorWindow(enhancement, filePath) { Owner = this };
+                window.Closed += (_, _) => RefreshDeeperLibraryUI();
+                window.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to open Deeper editor");
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void RefreshDeeperLibraryUI()
+        {
+            if (DeeperLibraryList == null || DeeperRecentList == null) return;
+            var library = App.EnhancementLibrary;
+            if (library == null) return;
+
+            var entries = library.ScanLibrary();
+            DeeperLibraryList.Children.Clear();
+            if (entries.Count == 0)
+            {
+                DeeperLibraryList.Children.Add(BuildDeeperEmptyHint(Loc.Get("deeper_library_empty")));
+            }
+            else
+            {
+                foreach (var entry in entries)
+                    DeeperLibraryList.Children.Add(BuildDeeperLibraryRow(entry));
+            }
+            if (TxtDeeperLibraryCount != null)
+                TxtDeeperLibraryCount.Text = string.Format(Loc.Get("deeper_library_count_fmt"), entries.Count);
+
+            DeeperRecentList.Children.Clear();
+            var recents = library.RecentFiles;
+            if (recents.Count == 0)
+            {
+                DeeperRecentList.Children.Add(BuildDeeperEmptyHint(Loc.Get("deeper_recent_empty")));
+            }
+            else
+            {
+                foreach (var path in recents)
+                    DeeperRecentList.Children.Add(BuildDeeperRecentRow(path));
+            }
+        }
+
+        private FrameworkElement BuildDeeperEmptyHint(string text)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
+                FontSize = 11,
+                FontStyle = FontStyles.Italic,
+                Margin = new Thickness(0, 6, 0, 0)
+            };
+        }
+
+        private Border BuildDeeperLibraryRow(Services.Deeper.EnhancementLibraryEntry entry)
+        {
+            var border = new Border
+            {
+                Background = (System.Windows.Media.Brush)FindResource("PanelBgBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent20Brush"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(0, 0, 0, 6),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Tag = entry.FilePath
+            };
+            border.MouseLeftButtonUp += (_, _) => OpenDeeperFile(entry.FilePath);
+
+            var stack = new StackPanel();
+            var titleRow = new DockPanel { LastChildFill = true };
+            var icon = new TextBlock
+            {
+                Text = entry.MediaType == Models.Deeper.MediaTypes.Audio ? "🎵" : "🎬",
+                FontSize = 14,
+                Margin = new Thickness(0, 0, 8, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            DockPanel.SetDock(icon, Dock.Left);
+            titleRow.Children.Add(icon);
+
+            var name = new TextBlock
+            {
+                Text = entry.Name,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                FontSize = 12, FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            titleRow.Children.Add(name);
+
+            stack.Children.Add(titleRow);
+            if (!string.IsNullOrEmpty(entry.Creator))
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = string.Format(Loc.Get("deeper_library_creator_fmt"), entry.Creator),
+                    Foreground = (System.Windows.Media.Brush)FindResource("TextDimBrush"),
+                    FontSize = 11, Margin = new Thickness(0, 2, 0, 0)
+                });
+            }
+            stack.Children.Add(new TextBlock
+            {
+                Text = System.IO.Path.GetFileName(entry.FilePath),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextDimBrush"),
+                FontSize = 10, Margin = new Thickness(0, 2, 0, 0),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+
+            border.Child = stack;
+            return border;
+        }
+
+        private Border BuildDeeperRecentRow(string path)
+        {
+            var border = new Border
+            {
+                Background = (System.Windows.Media.Brush)FindResource("PanelBgBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent20Brush"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(0, 0, 0, 6),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Tag = path
+            };
+            border.MouseLeftButtonUp += (_, _) => OpenDeeperFile(path);
+
+            var stack = new StackPanel();
+            stack.Children.Add(new TextBlock
+            {
+                Text = System.IO.Path.GetFileName(path),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                FontSize = 12, FontWeight = FontWeights.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = path,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextDimBrush"),
+                FontSize = 10, Margin = new Thickness(0, 2, 0, 0),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            border.Child = stack;
+            return border;
+        }
+
+        private void OpenDeeperFile(string path)
+        {
+            try
+            {
+                var enhancement = App.EnhancementLibrary?.Open(path);
+                if (enhancement == null) return;
+                OpenDeeperEditor(enhancement, path);
+            }
+            catch (Services.Deeper.EnhancementLoadException ex)
+            {
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to open Deeper file {Path}", path);
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
         private void BtnRerollDaily_Click(object sender, RoutedEventArgs e)
         {
             if (App.Quests?.RerollDailyQuest() == true)
@@ -4922,6 +5105,7 @@ namespace ConditioningControlPanel
                     {
                         DeeperTab.Visibility = Visibility.Visible;
                         AnimateTabIn(DeeperTab);
+                        RefreshDeeperLibraryUI();
                     }
                     if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeperActive") as Style;
                     break;
