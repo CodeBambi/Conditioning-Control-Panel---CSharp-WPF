@@ -921,7 +921,12 @@ namespace ConditioningControlPanel
                 ImgAvatarAnimated.LayoutTransform = null;
             }
 
-            if (_isAttached)
+            // When the mod only overrides the attached tube image, force the attached
+            // layout in detached state too — otherwise the avatar lands outside the
+            // chamber the mod author drew (bug report #172).
+            var useAttachedLayout = _isAttached || ModOverridesAttachedTubeOnly();
+
+            if (useAttachedLayout)
             {
                 var dx = App.Mods?.GetAvatarOffsetX() ?? 0;
                 var dy = App.Mods?.GetAvatarOffsetY() ?? 0;
@@ -1063,10 +1068,11 @@ namespace ConditioningControlPanel
 
                             // Reset bubble position to ensure correct placement after layout
                             // Anchored at bottom, grows upward. Margin = left, top, right, bottom
-                            var initDx = _isAttached
+                            var initUseAttached = _isAttached || ModOverridesAttachedTubeOnly();
+                            var initDx = initUseAttached
                                 ? (App.Mods?.GetAvatarOffsetX() ?? 0)
                                 : (App.Mods?.GetAvatarDetachedOffsetX() ?? 0);
-                            var initRight = _isAttached ? 125 - initDx : 425 - initDx;
+                            var initRight = initUseAttached ? 125 - initDx : 425 - initDx;
                             SpeechBubble.Margin = new Thickness(0, 0, initRight, 550);
                         }), System.Windows.Threading.DispatcherPriority.Loaded);
 
@@ -2567,10 +2573,11 @@ namespace ConditioningControlPanel
             SpeechScroller?.ScrollToTop();
 
             // Position bubble next to avatar — align with tube position based on attach state.
-            var bubbleDx = _isAttached
+            var bubbleUseAttached = _isAttached || ModOverridesAttachedTubeOnly();
+            var bubbleDx = bubbleUseAttached
                 ? (App.Mods?.GetAvatarOffsetX() ?? 0)
                 : (App.Mods?.GetAvatarDetachedOffsetX() ?? 0);
-            var bubbleRight = _isAttached ? 125 - bubbleDx : 425 - bubbleDx;
+            var bubbleRight = bubbleUseAttached ? 125 - bubbleDx : 425 - bubbleDx;
             SpeechBubble.Margin = new Thickness(0, 0, bubbleRight, 550);
         }
 
@@ -4952,15 +4959,33 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// True when the active mod overrides tube.png but not tube2.png. In that case
+        /// the detached state would otherwise mix the mod's avatar with the embedded
+        /// default tube2.png — leaving the avatar floating outside the mod's chamber.
+        /// We treat this as "use the mod's tube.png and the attached layout" so the
+        /// avatar lands inside the chamber the mod author actually drew.
+        /// </summary>
+        private static bool ModOverridesAttachedTubeOnly()
+        {
+            return Services.ModResourceResolver.HasModOverride("tube.png")
+                && !Services.ModResourceResolver.HasModOverride("tube2.png");
+        }
+
+        /// <summary>
         /// Switch between tube.png and tube2.png
         /// </summary>
         public void SetTubeStyle(bool useAlternative)
         {
             try
             {
+                // If the active mod only ships a tube.png override, use it in both states
+                // so the chamber stays consistent with the mod's art.
+                if (useAlternative && ModOverridesAttachedTubeOnly())
+                    useAlternative = false;
+
                 var tubeName = useAlternative ? "tube2.png" : "tube.png";
                 ImgTubeFrame.Source = Services.ModResourceResolver.ResolveImage(tubeName);
-                App.Logger?.Information("Tube style changed to: {Style}", useAlternative ? "tube2.png" : "tube.png");
+                App.Logger?.Information("Tube style changed to: {Style}", tubeName);
             }
             catch (Exception ex)
             {
