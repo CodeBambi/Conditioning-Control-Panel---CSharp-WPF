@@ -73,6 +73,14 @@ namespace ConditioningControlPanel.Views.Deeper
         private int _draggingCurveIndex = -1;
         private bool _suppressPatternSync;
 
+        // Rules
+        private EnhancementRule? _selectedRule;
+        private bool _suppressRuleSync;
+        private bool _gazePicking;
+        private double[]? _gazePickTargetRect;   // points at GazeTarget/GazeAvoid trigger's Rect array
+        private Point _gazePickStart;
+        private TextBox? _gazePickEchoTextBox;   // optional text box to update with rect coords on done
+
         public DeeperEditorWindow(Enhancement enhancement, string? filePath)
         {
             InitializeComponent();
@@ -173,6 +181,7 @@ namespace ConditioningControlPanel.Views.Deeper
             SelectNothing();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
+            RefreshRulesList();
         }
 
         private async Task InitializePreviewAsync()
@@ -593,9 +602,12 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedRegion = null;
             _selectedHaptic = null;
             _selectedHapticTrack = null;
+            _selectedRule = null;
+            EndGazePick(commit: false);
             UpdateSelectedSidePanel();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
+            RefreshRulesList();
         }
 
         private void SelectRegion(Region? region)
@@ -603,9 +615,12 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedRegion = region;
             _selectedHaptic = null;
             _selectedHapticTrack = null;
+            _selectedRule = null;
+            EndGazePick(commit: false);
             UpdateSelectedSidePanel();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
+            RefreshRulesList();
         }
 
         private void SelectHaptic(HapticTrack track, HapticEvent ev)
@@ -613,20 +628,37 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedRegion = null;
             _selectedHaptic = ev;
             _selectedHapticTrack = track;
+            _selectedRule = null;
+            EndGazePick(commit: false);
             UpdateSelectedSidePanel();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
+            RefreshRulesList();
+        }
+
+        private void SelectRule(EnhancementRule? rule)
+        {
+            _selectedRegion = null;
+            _selectedHaptic = null;
+            _selectedHapticTrack = null;
+            _selectedRule = rule;
+            EndGazePick(commit: false);
+            UpdateSelectedSidePanel();
+            RebuildRegionVisuals();
+            RebuildHapticVisuals();
+            RefreshRulesList();
         }
 
         private void UpdateSelectedSidePanel()
         {
-            if (SelectedPlaceholder == null || RegionEditor == null || HapticEventEditor == null) return;
+            if (SelectedPlaceholder == null || RegionEditor == null || HapticEventEditor == null || RuleEditor == null) return;
 
             if (_selectedRegion != null)
             {
                 SelectedPlaceholder.Visibility = Visibility.Collapsed;
                 RegionEditor.Visibility = Visibility.Visible;
                 HapticEventEditor.Visibility = Visibility.Collapsed;
+                RuleEditor.Visibility = Visibility.Collapsed;
 
                 _suppressDirty = true;
                 try
@@ -647,13 +679,25 @@ namespace ConditioningControlPanel.Views.Deeper
                 SelectedPlaceholder.Visibility = Visibility.Collapsed;
                 RegionEditor.Visibility = Visibility.Collapsed;
                 HapticEventEditor.Visibility = Visibility.Visible;
+                RuleEditor.Visibility = Visibility.Collapsed;
                 PopulateHapticEditor();
+                return;
+            }
+
+            if (_selectedRule != null)
+            {
+                SelectedPlaceholder.Visibility = Visibility.Collapsed;
+                RegionEditor.Visibility = Visibility.Collapsed;
+                HapticEventEditor.Visibility = Visibility.Collapsed;
+                RuleEditor.Visibility = Visibility.Visible;
+                PopulateRuleEditor();
                 return;
             }
 
             SelectedPlaceholder.Visibility = Visibility.Visible;
             RegionEditor.Visibility = Visibility.Collapsed;
             HapticEventEditor.Visibility = Visibility.Collapsed;
+            RuleEditor.Visibility = Visibility.Collapsed;
         }
 
         private void UpdateRegionColorSwatchPreview()
@@ -1157,6 +1201,764 @@ namespace ConditioningControlPanel.Views.Deeper
             MarkDirty();
             RebuildHapticVisuals();
             ScheduleValidation();
+        }
+
+        // -- Rules list -------------------------------------------------------
+
+        private void RefreshRulesList()
+        {
+            if (RulesList == null) return;
+            RulesList.Children.Clear();
+
+            var rules = _enhancement.Rules;
+            if (RulesEmptyHint != null)
+                RulesEmptyHint.Visibility = rules.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            for (int i = 0; i < rules.Count; i++)
+                RulesList.Children.Add(BuildRuleRow(rules[i], i));
+        }
+
+        private System.Windows.UIElement BuildRuleRow(EnhancementRule rule, int index)
+        {
+            var isSelected = _selectedRule == rule;
+            var border = new Border
+            {
+                Background = isSelected
+                    ? (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent20Brush")
+                    : (System.Windows.Media.Brush)FindResource("PanelAccentBrush"),
+                BorderBrush = isSelected
+                    ? (System.Windows.Media.Brush)FindResource("DeeperAccentBrush")
+                    : (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(8, 6, 6, 6),
+                Margin = new Thickness(0, 0, 0, 6),
+                Cursor = Cursors.Hand,
+                Tag = rule
+            };
+            border.MouseLeftButtonUp += (_, _) => SelectRule(rule);
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var idx = new TextBlock
+            {
+                Text = $"#{index + 1}",
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                FontSize = 10,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextDimBrush"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            Grid.SetColumn(idx, 0);
+            grid.Children.Add(idx);
+
+            var summary = new TextBlock
+            {
+                Text = SummarizeRule(rule),
+                FontSize = 11,
+                Foreground = rule.Enabled
+                    ? (System.Windows.Media.Brush)FindResource("TextLightBrush")
+                    : (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(summary, 1);
+            grid.Children.Add(summary);
+
+            var toggle = new CheckBox
+            {
+                IsChecked = rule.Enabled,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(6, 0, 0, 0),
+                ToolTip = Loc.Get("deeper_editor_rule_enabled")
+            };
+            toggle.Click += (_, e2) =>
+            {
+                rule.Enabled = toggle.IsChecked == true;
+                MarkDirty();
+                RefreshRulesList();
+                if (_selectedRule == rule) PopulateRuleEditor();
+                ScheduleValidation();
+                e2.Handled = true;
+            };
+            Grid.SetColumn(toggle, 2);
+            grid.Children.Add(toggle);
+
+            border.Child = grid;
+            return border;
+        }
+
+        private static string SummarizeRule(EnhancementRule rule)
+        {
+            var trig = rule.Trigger?.Type ?? "?";
+            var act = rule.Action?.Type ?? "?";
+            return $"{trig}  →  {act}";
+        }
+
+        private void BtnAddRule_Click(object sender, RoutedEventArgs e)
+        {
+            var isAudio = _enhancement.MediaType == MediaTypes.Audio;
+            EnhancementTrigger defaultTrigger = isAudio
+                ? new TimeReachedTrigger { Time = Math.Max(0, _currentSeconds) }
+                : new GazeTargetTrigger();
+            var rule = new EnhancementRule
+            {
+                Trigger = defaultTrigger,
+                Action = new TriggerHapticAction { PatternName = "Pulse" },
+                CooldownMs = 1000,
+                Enabled = true
+            };
+            _enhancement.Rules.Add(rule);
+            MarkDirty();
+            ScheduleValidation();
+            SelectRule(rule);
+        }
+
+        private void BtnDeleteRule_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedRule == null) return;
+            _enhancement.Rules.Remove(_selectedRule);
+            SelectNothing();
+            MarkDirty();
+            ScheduleValidation();
+        }
+
+        // -- Rule editor population -------------------------------------------
+
+        private static readonly string[] TriggerTypesForVideo =
+        {
+            TriggerTypes.GazeTarget, TriggerTypes.GazeAvoid, TriggerTypes.AttentionLost,
+            TriggerTypes.BlinkDetected, TriggerTypes.MouthOpen,
+            TriggerTypes.TimeReached, TriggerTypes.RegionEntered, TriggerTypes.RegionExited
+        };
+        private static readonly string[] TriggerTypesForAudio =
+        {
+            TriggerTypes.TimeReached, TriggerTypes.RegionEntered, TriggerTypes.RegionExited
+        };
+        private static readonly string[] AllActionTypes =
+        {
+            ActionTypes.Seek, ActionTypes.LoopRegion, ActionTypes.Pause,
+            ActionTypes.PlayAudio, ActionTypes.TriggerHaptic, ActionTypes.ScreenShake, ActionTypes.SetIntensity
+        };
+
+        private void PopulateRuleEditor()
+        {
+            if (_selectedRule == null) return;
+            _suppressRuleSync = true;
+            try
+            {
+                var idx = _enhancement.Rules.IndexOf(_selectedRule);
+                TxtRuleHeader.Text = idx >= 0 ? $"rule #{idx + 1}" : "rule";
+                ChkRuleEnabled.IsChecked = _selectedRule.Enabled;
+
+                // Trigger type combo (filtered by media_type).
+                var isAudio = _enhancement.MediaType == MediaTypes.Audio;
+                var triggerOptions = isAudio ? TriggerTypesForAudio : TriggerTypesForVideo;
+                CmbTriggerType.Items.Clear();
+                foreach (var opt in triggerOptions)
+                    CmbTriggerType.Items.Add(opt);
+                var currentTrig = _selectedRule.Trigger?.Type ?? "";
+                var trigIdx = Array.IndexOf(triggerOptions, currentTrig);
+                if (trigIdx < 0) trigIdx = 0;
+                CmbTriggerType.SelectedIndex = trigIdx;
+
+                // Action combo.
+                CmbActionType.Items.Clear();
+                foreach (var opt in AllActionTypes) CmbActionType.Items.Add(opt);
+                var actIdx = Array.IndexOf(AllActionTypes, _selectedRule.Action?.Type ?? "");
+                if (actIdx < 0) actIdx = 0;
+                CmbActionType.SelectedIndex = actIdx;
+
+                // Region constraint combo.
+                RebuildRegionConstraintCombo();
+
+                TxtRuleCooldown.Text = _selectedRule.CooldownMs.ToString(CultureInfo.InvariantCulture);
+
+                BuildTriggerFields();
+                BuildActionFields();
+            }
+            finally { _suppressRuleSync = false; }
+        }
+
+        private void RebuildRegionConstraintCombo()
+        {
+            CmbRuleRegion.Items.Clear();
+            CmbRuleRegion.Items.Add(Loc.Get("deeper_editor_rule_region_none"));
+            int selected = 0;
+            for (int i = 0; i < _enhancement.Regions.Count; i++)
+            {
+                var r = _enhancement.Regions[i];
+                CmbRuleRegion.Items.Add(string.IsNullOrEmpty(r.Label) ? r.Id : $"{r.Id} — {r.Label}");
+                if (_selectedRule?.RegionConstraint == r.Id) selected = i + 1;
+            }
+            CmbRuleRegion.SelectedIndex = selected;
+        }
+
+        private void ChkRuleEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_suppressRuleSync || _selectedRule == null) return;
+            _selectedRule.Enabled = ChkRuleEnabled.IsChecked == true;
+            MarkDirty();
+            RefreshRulesList();
+            ScheduleValidation();
+        }
+
+        private void CmbTriggerType_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressRuleSync || _selectedRule == null) return;
+            var picked = CmbTriggerType.SelectedItem as string;
+            if (string.IsNullOrEmpty(picked)) return;
+            if (_selectedRule.Trigger?.Type == picked) return;
+
+            _selectedRule.Trigger = picked switch
+            {
+                TriggerTypes.GazeTarget    => new GazeTargetTrigger(),
+                TriggerTypes.GazeAvoid     => new GazeAvoidTrigger(),
+                TriggerTypes.AttentionLost => new AttentionLostTrigger(),
+                TriggerTypes.BlinkDetected => new BlinkDetectedTrigger(),
+                TriggerTypes.MouthOpen     => new MouthOpenTrigger(),
+                TriggerTypes.TimeReached   => new TimeReachedTrigger { Time = Math.Max(0, _currentSeconds) },
+                TriggerTypes.RegionEntered => new RegionEnteredTrigger(),
+                TriggerTypes.RegionExited  => new RegionExitedTrigger(),
+                _                          => _selectedRule.Trigger
+            };
+            EndGazePick(commit: false);
+            BuildTriggerFields();
+            MarkDirty();
+            RefreshRulesList();
+            ScheduleValidation();
+        }
+
+        private void CmbActionType_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressRuleSync || _selectedRule == null) return;
+            var picked = CmbActionType.SelectedItem as string;
+            if (string.IsNullOrEmpty(picked)) return;
+            if (_selectedRule.Action?.Type == picked) return;
+
+            _selectedRule.Action = picked switch
+            {
+                ActionTypes.Seek          => new SeekAction { Target = SeekTargets.Time, Time = 0 },
+                ActionTypes.LoopRegion    => new LoopRegionAction(),
+                ActionTypes.Pause         => new PauseAction(),
+                ActionTypes.PlayAudio     => new PlayAudioAction(),
+                ActionTypes.TriggerHaptic => new TriggerHapticAction { PatternName = "Pulse" },
+                ActionTypes.ScreenShake   => new ScreenShakeAction(),
+                ActionTypes.SetIntensity  => new SetIntensityAction(),
+                _                         => _selectedRule.Action
+            };
+            BuildActionFields();
+            MarkDirty();
+            RefreshRulesList();
+            ScheduleValidation();
+        }
+
+        private void CmbRuleRegion_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressRuleSync || _selectedRule == null) return;
+            var idx = CmbRuleRegion.SelectedIndex;
+            if (idx <= 0)
+            {
+                _selectedRule.RegionConstraint = null;
+            }
+            else if (idx - 1 < _enhancement.Regions.Count)
+            {
+                _selectedRule.RegionConstraint = _enhancement.Regions[idx - 1].Id;
+            }
+            MarkDirty();
+            ScheduleValidation();
+        }
+
+        private void TxtRuleCooldown_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_suppressRuleSync || _selectedRule == null) return;
+            if (int.TryParse(TxtRuleCooldown.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var ms))
+                _selectedRule.CooldownMs = Math.Max(0, ms);
+            MarkDirty();
+            ScheduleValidation();
+        }
+
+        // -- Dynamic field builders (programmatic; one block per type) --------
+
+        private void BuildTriggerFields()
+        {
+            TriggerFields.Children.Clear();
+            if (_selectedRule?.Trigger == null) return;
+
+            switch (_selectedRule.Trigger)
+            {
+                case GazeTargetTrigger g:
+                    AddRectFields(TriggerFields, g.Rect, () => g.Rect);
+                    AddIntField(TriggerFields, Loc.Get("deeper_editor_trigger_min_dwell"),
+                        g.MinDwellMs, v => g.MinDwellMs = Math.Max(0, v));
+                    break;
+                case GazeAvoidTrigger g:
+                    AddRectFields(TriggerFields, g.Rect, () => g.Rect);
+                    AddIntField(TriggerFields, Loc.Get("deeper_editor_trigger_min_dwell"),
+                        g.MinDwellMs, v => g.MinDwellMs = Math.Max(0, v));
+                    break;
+                case AttentionLostTrigger a:
+                    AddIntField(TriggerFields, Loc.Get("deeper_editor_trigger_min_duration"),
+                        a.MinDurationMs, v => a.MinDurationMs = Math.Max(0, v));
+                    break;
+                case BlinkDetectedTrigger:
+                case MouthOpenTrigger:
+                    AddInfoText(TriggerFields, Loc.Get("deeper_editor_trigger_no_params"));
+                    break;
+                case TimeReachedTrigger tr:
+                    AddDoubleField(TriggerFields, Loc.Get("deeper_editor_trigger_time"),
+                        tr.Time, v => tr.Time = Math.Max(0, v));
+                    break;
+                case RegionEnteredTrigger re:
+                    AddRegionPicker(TriggerFields, re.RegionId, id => re.RegionId = id);
+                    break;
+                case RegionExitedTrigger rx:
+                    AddRegionPicker(TriggerFields, rx.RegionId, id => rx.RegionId = id);
+                    break;
+            }
+        }
+
+        private void BuildActionFields()
+        {
+            ActionFields.Children.Clear();
+            if (_selectedRule?.Action == null) return;
+
+            switch (_selectedRule.Action)
+            {
+                case SeekAction seek:
+                    AddSeekFields(seek);
+                    break;
+                case LoopRegionAction loop:
+                    AddRegionPicker(ActionFields, loop.RegionId ?? "",
+                        id => loop.RegionId = string.IsNullOrEmpty(id) ? null : id,
+                        allowNone: true);
+                    break;
+                case PauseAction:
+                    AddInfoText(ActionFields, Loc.Get("deeper_editor_action_pause_info"));
+                    break;
+                case PlayAudioAction pa:
+                    AddTextField(ActionFields, Loc.Get("deeper_editor_action_audio_path"),
+                        pa.Path, v => pa.Path = v);
+                    AddIntField(ActionFields, Loc.Get("deeper_editor_action_volume"),
+                        pa.Volume, v => pa.Volume = Math.Clamp(v, 0, 100));
+                    AddBoolField(ActionFields, Loc.Get("deeper_editor_action_duck"),
+                        pa.DuckOtherAudio, v => pa.DuckOtherAudio = v);
+                    break;
+                case TriggerHapticAction h:
+                    AddHapticActionFields(h);
+                    break;
+                case ScreenShakeAction ss:
+                    AddDoubleField(ActionFields, Loc.Get("deeper_editor_action_intensity"),
+                        ss.Intensity, v => ss.Intensity = Math.Clamp(v, 0, 1));
+                    AddIntField(ActionFields, Loc.Get("deeper_editor_action_duration_ms"),
+                        ss.DurationMs, v => ss.DurationMs = Math.Max(50, v));
+                    break;
+                case SetIntensityAction si:
+                    AddDoubleField(ActionFields, Loc.Get("deeper_editor_action_value_0_1"),
+                        si.Value, v => si.Value = Math.Clamp(v, 0, 1));
+                    break;
+            }
+        }
+
+        private void AddRectFields(Panel host, double[] rect, Func<double[]> getter)
+        {
+            var grid = new Grid();
+            for (int i = 0; i < 4; i++)
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            string[] labels = { "x", "y", "w", "h" };
+            for (int i = 0; i < 4; i++)
+            {
+                int captured = i;
+                var stack = new StackPanel { Margin = new Thickness(i == 0 ? 0 : 4, 0, 4, 0) };
+                stack.Children.Add(new TextBlock
+                {
+                    Text = labels[i],
+                    Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                    FontSize = 11, FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 4)
+                });
+                var tb = new TextBox
+                {
+                    Style = (Style)FindResource("EditorTextBox"),
+                    Text = rect.Length > i ? rect[i].ToString("0.##", CultureInfo.InvariantCulture) : "0"
+                };
+                tb.TextChanged += (_, _) =>
+                {
+                    if (_suppressRuleSync) return;
+                    var arr = getter();
+                    if (arr.Length > captured && double.TryParse(tb.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                    {
+                        arr[captured] = Math.Clamp(v, 0, 1);
+                        MarkDirty();
+                        ScheduleValidation();
+                    }
+                };
+                stack.Children.Add(tb);
+                Grid.SetColumn(stack, i);
+                grid.Children.Add(stack);
+            }
+            grid.Margin = new Thickness(0, 0, 0, 4);
+            host.Children.Add(new TextBlock
+            {
+                Text = Loc.Get("deeper_editor_trigger_rect"),
+                Style = (Style)FindResource("EditorLabel")
+            });
+            host.Children.Add(grid);
+
+            var pickBtn = new Button
+            {
+                Content = Loc.Get("deeper_editor_trigger_pick_on_video"),
+                Padding = new Thickness(10, 4, 10, 4),
+                Cursor = Cursors.Hand,
+                Background = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent20Brush"),
+                Foreground = (System.Windows.Media.Brush)FindResource("DeeperAccentBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentBrush"),
+                BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            pickBtn.Click += (_, _) => BeginGazePick(getter);
+            host.Children.Add(pickBtn);
+        }
+
+        private void AddSeekFields(SeekAction seek)
+        {
+            ActionFields.Children.Add(new TextBlock
+            {
+                Text = Loc.Get("deeper_editor_action_seek_target"),
+                Style = (Style)FindResource("EditorLabel")
+            });
+            var combo = new ComboBox
+            {
+                Background = (System.Windows.Media.Brush)FindResource("PanelBgBrush"),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            string[] targets = { SeekTargets.Time, SeekTargets.RegionStart, SeekTargets.RegionEnd };
+            foreach (var t in targets) combo.Items.Add(t);
+            var curIdx = Array.IndexOf(targets, seek.Target);
+            combo.SelectedIndex = curIdx >= 0 ? curIdx : 0;
+
+            var dynamicHost = new StackPanel();
+            void RebuildDynamic()
+            {
+                dynamicHost.Children.Clear();
+                if (seek.Target == SeekTargets.Time)
+                {
+                    AddDoubleField(dynamicHost, Loc.Get("deeper_editor_action_seek_time"),
+                        seek.Time ?? 0, v => seek.Time = Math.Max(0, v));
+                }
+                else
+                {
+                    AddRegionPicker(dynamicHost, seek.RegionId ?? "",
+                        id => seek.RegionId = string.IsNullOrEmpty(id) ? null : id);
+                }
+            }
+
+            combo.SelectionChanged += (_, _) =>
+            {
+                if (_suppressRuleSync) return;
+                seek.Target = (combo.SelectedItem as string) ?? SeekTargets.Time;
+                if (seek.Target == SeekTargets.Time && seek.Time == null) seek.Time = 0;
+                RebuildDynamic();
+                MarkDirty();
+                ScheduleValidation();
+            };
+
+            ActionFields.Children.Add(combo);
+            ActionFields.Children.Add(dynamicHost);
+            RebuildDynamic();
+        }
+
+        private void AddHapticActionFields(TriggerHapticAction h)
+        {
+            ActionFields.Children.Add(new TextBlock
+            {
+                Text = Loc.Get("deeper_editor_haptic_pattern"),
+                Style = (Style)FindResource("EditorLabel")
+            });
+            var combo = new ComboBox
+            {
+                Background = (System.Windows.Media.Brush)FindResource("PanelBgBrush"),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            foreach (var name in StockHapticPatterns.Names) combo.Items.Add(name);
+            // If a custom_pattern came from a hand-edited file, surface it as a read-only entry.
+            bool hasCustom = h.CustomPattern != null && h.CustomPattern.Count > 0;
+            if (hasCustom) combo.Items.Add(Loc.Get("deeper_editor_action_haptic_custom_readonly"));
+
+            int initialIdx = -1;
+            if (hasCustom) initialIdx = StockHapticPatterns.Names.Count;
+            else if (!string.IsNullOrEmpty(h.PatternName))
+            {
+                for (int i = 0; i < StockHapticPatterns.Names.Count; i++)
+                    if (StockHapticPatterns.Names[i] == h.PatternName) { initialIdx = i; break; }
+            }
+            combo.SelectedIndex = initialIdx >= 0 ? initialIdx : 0;
+
+            combo.SelectionChanged += (_, _) =>
+            {
+                if (_suppressRuleSync) return;
+                var idx = combo.SelectedIndex;
+                if (idx < 0) return;
+                if (idx < StockHapticPatterns.Names.Count)
+                {
+                    h.PatternName = StockHapticPatterns.Names[idx];
+                    h.CustomPattern = null;
+                }
+                // else: user re-selected the read-only "custom" entry; preserve as-is.
+                MarkDirty();
+                ScheduleValidation();
+            };
+
+            ActionFields.Children.Add(combo);
+
+            AddDoubleField(ActionFields, Loc.Get("deeper_editor_action_intensity"),
+                h.Intensity, v => h.Intensity = Math.Clamp(v, 0, 1));
+            AddIntField(ActionFields, Loc.Get("deeper_editor_action_duration_ms"),
+                h.DurationMs, v => h.DurationMs = Math.Max(50, v));
+
+            if (hasCustom)
+            {
+                ActionFields.Children.Add(new TextBlock
+                {
+                    Text = Loc.Get("deeper_editor_action_haptic_custom_note"),
+                    Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
+                    FontSize = 10, FontStyle = FontStyles.Italic,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 4, 0, 0)
+                });
+            }
+        }
+
+        // -- Tiny field helpers ------------------------------------------------
+
+        private void AddIntField(Panel host, string label, int value, Action<int> setter)
+        {
+            host.Children.Add(new TextBlock { Text = label, Style = (Style)FindResource("EditorLabel") });
+            var tb = new TextBox
+            {
+                Style = (Style)FindResource("EditorTextBox"),
+                Text = value.ToString(CultureInfo.InvariantCulture)
+            };
+            tb.TextChanged += (_, _) =>
+            {
+                if (_suppressRuleSync) return;
+                if (int.TryParse(tb.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v))
+                {
+                    setter(v); MarkDirty(); ScheduleValidation();
+                }
+            };
+            host.Children.Add(tb);
+        }
+
+        private void AddDoubleField(Panel host, string label, double value, Action<double> setter)
+        {
+            host.Children.Add(new TextBlock { Text = label, Style = (Style)FindResource("EditorLabel") });
+            var tb = new TextBox
+            {
+                Style = (Style)FindResource("EditorTextBox"),
+                Text = value.ToString("0.###", CultureInfo.InvariantCulture)
+            };
+            tb.TextChanged += (_, _) =>
+            {
+                if (_suppressRuleSync) return;
+                if (double.TryParse(tb.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                {
+                    setter(v); MarkDirty(); ScheduleValidation();
+                }
+            };
+            host.Children.Add(tb);
+        }
+
+        private void AddTextField(Panel host, string label, string value, Action<string> setter)
+        {
+            host.Children.Add(new TextBlock { Text = label, Style = (Style)FindResource("EditorLabel") });
+            var tb = new TextBox
+            {
+                Style = (Style)FindResource("EditorTextBox"),
+                Text = value ?? ""
+            };
+            tb.TextChanged += (_, _) =>
+            {
+                if (_suppressRuleSync) return;
+                setter(tb.Text ?? "");
+                MarkDirty();
+                ScheduleValidation();
+            };
+            host.Children.Add(tb);
+        }
+
+        private void AddBoolField(Panel host, string label, bool value, Action<bool> setter)
+        {
+            var cb = new CheckBox
+            {
+                Content = label,
+                IsChecked = value,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            cb.Click += (_, _) =>
+            {
+                if (_suppressRuleSync) return;
+                setter(cb.IsChecked == true);
+                MarkDirty();
+                ScheduleValidation();
+            };
+            host.Children.Add(cb);
+        }
+
+        private void AddInfoText(Panel host, string text)
+        {
+            host.Children.Add(new TextBlock
+            {
+                Text = text,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
+                FontSize = 11, FontStyle = FontStyles.Italic,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+        }
+
+        private void AddRegionPicker(Panel host, string currentId, Action<string> setter, bool allowNone = false)
+        {
+            host.Children.Add(new TextBlock
+            {
+                Text = Loc.Get("deeper_editor_rule_region_id"),
+                Style = (Style)FindResource("EditorLabel")
+            });
+            var combo = new ComboBox
+            {
+                Background = (System.Windows.Media.Brush)FindResource("PanelBgBrush"),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            int selected = -1;
+            if (allowNone) combo.Items.Add(Loc.Get("deeper_editor_rule_region_current"));
+            for (int i = 0; i < _enhancement.Regions.Count; i++)
+            {
+                var r = _enhancement.Regions[i];
+                combo.Items.Add(string.IsNullOrEmpty(r.Label) ? r.Id : $"{r.Id} — {r.Label}");
+                if (r.Id == currentId) selected = i + (allowNone ? 1 : 0);
+            }
+            if (selected < 0) selected = combo.Items.Count > 0 ? 0 : -1;
+            combo.SelectedIndex = selected;
+
+            combo.SelectionChanged += (_, _) =>
+            {
+                if (_suppressRuleSync) return;
+                var idx = combo.SelectedIndex;
+                if (allowNone && idx == 0) { setter(""); }
+                else if (idx >= 0)
+                {
+                    var regionIdx = allowNone ? idx - 1 : idx;
+                    if (regionIdx >= 0 && regionIdx < _enhancement.Regions.Count)
+                        setter(_enhancement.Regions[regionIdx].Id);
+                }
+                MarkDirty();
+                ScheduleValidation();
+            };
+            host.Children.Add(combo);
+        }
+
+        // -- Gaze rect picker overlay ----------------------------------------
+
+        private void BeginGazePick(Func<double[]> rectGetter)
+        {
+            _gazePickTargetRect = rectGetter();
+            _gazePicking = true;
+            GazePickerOverlay.Visibility = Visibility.Visible;
+            GazePickerRect.Visibility = Visibility.Collapsed;
+            // Pre-populate the rect from the current value if reasonable.
+            DrawGazePickRect(_gazePickTargetRect);
+        }
+
+        private void EndGazePick(bool commit)
+        {
+            if (!_gazePicking) return;
+            _gazePicking = false;
+            if (GazePickerOverlay != null) GazePickerOverlay.Visibility = Visibility.Collapsed;
+            _gazePickTargetRect = null;
+            if (commit)
+            {
+                MarkDirty();
+                if (_selectedRule != null) BuildTriggerFields();
+                ScheduleValidation();
+            }
+        }
+
+        private void BtnGazePickDone_Click(object sender, RoutedEventArgs e) => EndGazePick(commit: true);
+
+        private void GazePickerCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!_gazePicking || _gazePickTargetRect == null) return;
+            _gazePickStart = e.GetPosition(GazePickerCanvas);
+            UpdateGazePickRectFromDrag(_gazePickStart);
+            GazePickerCanvas.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void GazePickerCanvas_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_gazePicking || _gazePickTargetRect == null) return;
+            if (e.LeftButton != MouseButtonState.Pressed) return;
+            UpdateGazePickRectFromDrag(e.GetPosition(GazePickerCanvas));
+        }
+
+        private void GazePickerCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_gazePicking) return;
+            GazePickerCanvas.ReleaseMouseCapture();
+        }
+
+        private void GazePickerCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => DrawGazePickRect(_gazePickTargetRect);
+
+        private void UpdateGazePickRectFromDrag(Point pt)
+        {
+            if (_gazePickTargetRect == null) return;
+            var w = GazePickerCanvas.ActualWidth;
+            var h = GazePickerCanvas.ActualHeight;
+            if (w <= 0 || h <= 0) return;
+
+            var x0 = Math.Clamp(_gazePickStart.X / w, 0, 1);
+            var y0 = Math.Clamp(_gazePickStart.Y / h, 0, 1);
+            var x1 = Math.Clamp(pt.X / w, 0, 1);
+            var y1 = Math.Clamp(pt.Y / h, 0, 1);
+
+            var rx = Math.Min(x0, x1);
+            var ry = Math.Min(y0, y1);
+            var rw = Math.Max(0.001, Math.Abs(x1 - x0));
+            var rh = Math.Max(0.001, Math.Abs(y1 - y0));
+
+            _gazePickTargetRect[0] = rx;
+            _gazePickTargetRect[1] = ry;
+            _gazePickTargetRect[2] = rw;
+            _gazePickTargetRect[3] = rh;
+            DrawGazePickRect(_gazePickTargetRect);
+        }
+
+        private void DrawGazePickRect(double[]? rect)
+        {
+            if (GazePickerCanvas == null || GazePickerRect == null) return;
+            var w = GazePickerCanvas.ActualWidth;
+            var h = GazePickerCanvas.ActualHeight;
+            if (rect == null || rect.Length < 4 || w <= 0 || h <= 0)
+            {
+                GazePickerRect.Visibility = Visibility.Collapsed;
+                return;
+            }
+            GazePickerRect.Visibility = Visibility.Visible;
+            GazePickerRect.Width = Math.Max(2, rect[2] * w);
+            GazePickerRect.Height = Math.Max(2, rect[3] * h);
+            Canvas.SetLeft(GazePickerRect, rect[0] * w);
+            Canvas.SetTop(GazePickerRect, rect[1] * h);
         }
 
         // -- Metadata sync -----------------------------------------------------

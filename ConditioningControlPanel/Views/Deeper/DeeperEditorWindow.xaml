@@ -102,6 +102,35 @@
                                        FontSize="11" HorizontalAlignment="Center" TextAlignment="Center"
                                        TextTrimming="CharacterEllipsis" MaxWidth="420" Margin="0,8,0,0"/>
                         </StackPanel>
+
+                        <!-- Gaze rect picker overlay: drag to draw a target region for gaze_target / gaze_avoid triggers. -->
+                        <Grid x:Name="GazePickerOverlay" Visibility="Collapsed">
+                            <Canvas x:Name="GazePickerCanvas" Background="#30000000"
+                                    Cursor="Cross"
+                                    MouseLeftButtonDown="GazePickerCanvas_MouseLeftButtonDown"
+                                    MouseMove="GazePickerCanvas_MouseMove"
+                                    MouseLeftButtonUp="GazePickerCanvas_MouseLeftButtonUp"
+                                    SizeChanged="GazePickerCanvas_SizeChanged">
+                                <Rectangle x:Name="GazePickerRect"
+                                           Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="2"
+                                           Fill="{DynamicResource DeeperAccentTransparent40Brush}"
+                                           Visibility="Collapsed" IsHitTestVisible="False"/>
+                            </Canvas>
+                            <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,8,0,0"
+                                    Background="#D01C1C35" Padding="10,6" CornerRadius="4"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1">
+                                <DockPanel LastChildFill="False">
+                                    <TextBlock DockPanel.Dock="Left" Text="{loc:Str deeper_editor_gaze_pick_hint}"
+                                               Foreground="{DynamicResource TextLightBrush}" FontSize="11"
+                                               VerticalAlignment="Center"/>
+                                    <Button DockPanel.Dock="Right" Content="{loc:Str deeper_editor_gaze_pick_done}"
+                                            Click="BtnGazePickDone_Click" Margin="12,0,0,0"
+                                            Padding="10,4" Cursor="Hand" FontSize="11"
+                                            Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
+                                            BorderThickness="0"/>
+                                </DockPanel>
+                            </Border>
+                        </Grid>
                     </Grid>
                 </Border>
 
@@ -203,6 +232,28 @@
                         <TextBlock Text="{loc:Str deeper_editor_label_media_type}" Style="{StaticResource EditorLabel}"/>
                         <TextBlock x:Name="TxtMediaType" Foreground="{DynamicResource TextLightBrush}"
                                    FontSize="12" Margin="0,0,0,8"/>
+
+                        <Separator Margin="0,10,0,14"/>
+
+                        <DockPanel Margin="0,0,0,8" LastChildFill="True">
+                            <TextBlock DockPanel.Dock="Left" Text="{loc:Str deeper_editor_section_rules}"
+                                       Foreground="{DynamicResource DeeperAccentBrush}"
+                                       FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <Button DockPanel.Dock="Right" Content="+" Click="BtnAddRule_Click"
+                                    Width="22" Height="22" Padding="0,0,0,2" Cursor="Hand"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                    Foreground="{DynamicResource DeeperAccentBrush}"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                                    FontWeight="Bold" FontSize="13"
+                                    ToolTip="{loc:Str deeper_editor_rules_add_tooltip}"/>
+                            <TextBlock/>
+                        </DockPanel>
+                        <TextBlock x:Name="RulesEmptyHint"
+                                   Text="{loc:Str deeper_editor_rules_empty}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11" FontStyle="Italic" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                        <StackPanel x:Name="RulesList" Margin="0,0,0,0"/>
 
                         <Separator Margin="0,10,0,14"/>
 
@@ -348,6 +399,56 @@
                                         Background="{DynamicResource DangerBrush}" Foreground="White"
                                         BorderThickness="0" Padding="10,6" Cursor="Hand"/>
                             </Grid>
+                        </StackPanel>
+
+                        <StackPanel x:Name="RuleEditor" Visibility="Collapsed">
+                            <DockPanel Margin="0,0,0,10" LastChildFill="True">
+                                <TextBlock x:Name="TxtRuleHeader" DockPanel.Dock="Left"
+                                           Foreground="{DynamicResource TextDimBrush}"
+                                           FontSize="11" FontFamily="Consolas" VerticalAlignment="Center"/>
+                                <Button DockPanel.Dock="Right" Content="{loc:Str deeper_editor_rule_delete}"
+                                        Click="BtnDeleteRule_Click"
+                                        Background="{DynamicResource DangerBrush}" Foreground="White"
+                                        BorderThickness="0" Padding="8,4" Cursor="Hand" FontSize="11"
+                                        HorizontalAlignment="Right"/>
+                                <TextBlock/>
+                            </DockPanel>
+
+                            <CheckBox x:Name="ChkRuleEnabled"
+                                      Content="{loc:Str deeper_editor_rule_enabled}"
+                                      Click="ChkRuleEnabled_Changed"
+                                      Foreground="{DynamicResource TextLightBrush}"
+                                      Margin="0,0,0,10"/>
+
+                            <TextBlock Text="{loc:Str deeper_editor_rule_trigger}" Style="{StaticResource EditorLabel}"/>
+                            <ComboBox x:Name="CmbTriggerType"
+                                      SelectionChanged="CmbTriggerType_SelectionChanged"
+                                      Background="{DynamicResource PanelBgBrush}"
+                                      Foreground="{DynamicResource TextLightBrush}"
+                                      BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                      Margin="0,0,0,8"/>
+                            <StackPanel x:Name="TriggerFields"/>
+
+                            <TextBlock Text="{loc:Str deeper_editor_rule_action}" Style="{StaticResource EditorLabel}" Margin="0,4,0,4"/>
+                            <ComboBox x:Name="CmbActionType"
+                                      SelectionChanged="CmbActionType_SelectionChanged"
+                                      Background="{DynamicResource PanelBgBrush}"
+                                      Foreground="{DynamicResource TextLightBrush}"
+                                      BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                      Margin="0,0,0,8"/>
+                            <StackPanel x:Name="ActionFields"/>
+
+                            <TextBlock Text="{loc:Str deeper_editor_rule_region_constraint}" Style="{StaticResource EditorLabel}" Margin="0,4,0,4"/>
+                            <ComboBox x:Name="CmbRuleRegion"
+                                      SelectionChanged="CmbRuleRegion_SelectionChanged"
+                                      Background="{DynamicResource PanelBgBrush}"
+                                      Foreground="{DynamicResource TextLightBrush}"
+                                      BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                      Margin="0,0,0,8"/>
+
+                            <TextBlock Text="{loc:Str deeper_editor_rule_cooldown}" Style="{StaticResource EditorLabel}"/>
+                            <TextBox x:Name="TxtRuleCooldown" Style="{StaticResource EditorTextBox}"
+                                     TextChanged="TxtRuleCooldown_TextChanged"/>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
