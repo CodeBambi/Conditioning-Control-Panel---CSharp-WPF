@@ -137,13 +137,23 @@
                                        Text="{loc:Str deeper_editor_scrub_hint}"/>
                         </DockPanel>
 
-                        <!-- Timeline canvas (scrub area + lanes) -->
+                        <!-- Timeline canvas (scrub area + lanes: regions on top half, haptics on bottom half) -->
                         <Canvas x:Name="TimelineCanvas" Grid.Row="1" Background="#15151F"
                                 Cursor="Hand" ClipToBounds="True"
                                 MouseLeftButtonDown="TimelineCanvas_MouseLeftButtonDown"
                                 MouseMove="TimelineCanvas_MouseMove"
                                 MouseLeftButtonUp="TimelineCanvas_MouseLeftButtonUp"
                                 SizeChanged="TimelineCanvas_SizeChanged">
+                            <Line x:Name="LaneDivider" X1="0" X2="0" Y1="0" Y2="0"
+                                  Stroke="{DynamicResource DeeperAccentTransparent40Brush}"
+                                  StrokeThickness="1" StrokeDashArray="2,3"
+                                  IsHitTestVisible="False"/>
+                            <TextBlock x:Name="LaneLabelRegions" Text="R" Canvas.Left="4" Canvas.Top="2"
+                                       Foreground="{DynamicResource TextDimBrush}" FontSize="10"
+                                       FontFamily="Consolas" IsHitTestVisible="False"/>
+                            <TextBlock x:Name="LaneLabelHaptics" Text="H" Canvas.Left="4"
+                                       Foreground="{DynamicResource DeeperAccentSoftBrush}" FontSize="10"
+                                       FontFamily="Consolas" IsHitTestVisible="False"/>
                             <!-- Playhead -->
                             <Line x:Name="PlayheadLine" X1="0" X2="0" Y1="0" Y2="0"
                                   Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="2"/>
@@ -252,6 +262,92 @@
                                     Background="{DynamicResource DangerBrush}" Foreground="White"
                                     BorderThickness="0" Padding="10,6" Cursor="Hand"
                                     HorizontalAlignment="Left" Margin="0,4,0,0"/>
+                        </StackPanel>
+
+                        <StackPanel x:Name="HapticEventEditor" Visibility="Collapsed">
+                            <TextBlock Text="{loc:Str deeper_editor_haptic_event}" Style="{StaticResource EditorLabel}"/>
+                            <TextBlock x:Name="TxtHapticTrackId" Foreground="{DynamicResource TextDimBrush}"
+                                       FontSize="11" FontFamily="Consolas" Margin="0,0,0,8"/>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Str deeper_editor_haptic_start}" Style="{StaticResource EditorLabel}"/>
+                                    <TextBox x:Name="TxtHapticStart" Style="{StaticResource EditorTextBox}"
+                                             TextChanged="HapticField_TextChanged"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{loc:Str deeper_editor_haptic_duration}" Style="{StaticResource EditorLabel}"/>
+                                    <TextBox x:Name="TxtHapticDuration" Style="{StaticResource EditorTextBox}"
+                                             TextChanged="HapticField_TextChanged"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="{loc:Str deeper_editor_haptic_intensity}" Style="{StaticResource EditorLabel}"/>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="44"/>
+                                </Grid.ColumnDefinitions>
+                                <Slider x:Name="SliderHapticIntensity" Grid.Column="0"
+                                        Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.1"
+                                        TickFrequency="0.1" IsSnapToTickEnabled="False"
+                                        Foreground="{DynamicResource DeeperAccentBrush}"
+                                        ValueChanged="SliderHapticIntensity_ValueChanged"
+                                        VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtHapticIntensityValue" Grid.Column="1"
+                                           Text="100%" Foreground="{DynamicResource TextLightBrush}"
+                                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           FontFamily="Consolas" FontSize="11"/>
+                            </Grid>
+
+                            <TextBlock Text="{loc:Str deeper_editor_haptic_pattern}" Style="{StaticResource EditorLabel}"/>
+                            <ComboBox x:Name="CmbHapticPattern" Margin="0,0,0,8"
+                                      SelectionChanged="CmbHapticPattern_SelectionChanged"
+                                      Background="{DynamicResource PanelBgBrush}"
+                                      Foreground="{DynamicResource TextLightBrush}"
+                                      BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"/>
+
+                            <StackPanel x:Name="CurveEditorPanel" Visibility="Collapsed" Margin="0,4,0,8">
+                                <TextBlock Text="{loc:Str deeper_editor_haptic_curve}"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           FontSize="11" Margin="0,0,0,4"/>
+                                <Border Background="#10000020"
+                                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                        BorderThickness="1" CornerRadius="3">
+                                    <Canvas x:Name="CurveCanvas" Height="120" Background="Transparent"
+                                            ClipToBounds="True"
+                                            SizeChanged="CurveCanvas_SizeChanged"/>
+                                </Border>
+                                <Button Content="{loc:Str deeper_editor_haptic_curve_reset}"
+                                        Click="BtnResetCurve_Click"
+                                        HorizontalAlignment="Left" Margin="0,4,0,0"
+                                        Padding="8,4" Cursor="Hand" FontSize="11"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextLightBrush}"
+                                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"/>
+                            </StackPanel>
+
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Content="{loc:Str deeper_editor_haptic_test}"
+                                        Click="BtnTestHaptic_Click"
+                                        Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
+                                        BorderThickness="0" Padding="10,6" Cursor="Hand"
+                                        FontWeight="SemiBold"/>
+                                <Button Grid.Column="2" Content="{loc:Str deeper_editor_haptic_delete}"
+                                        Click="BtnDeleteHaptic_Click"
+                                        Background="{DynamicResource DangerBrush}" Foreground="White"
+                                        BorderThickness="0" Padding="10,6" Cursor="Hand"/>
+                            </Grid>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>

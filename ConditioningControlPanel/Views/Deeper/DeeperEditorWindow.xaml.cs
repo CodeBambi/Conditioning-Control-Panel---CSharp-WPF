@@ -51,10 +51,27 @@ namespace ConditioningControlPanel.Views.Deeper
         };
         private Region? _selectedRegion;
         private readonly List<System.Windows.Shapes.Rectangle> _regionVisuals = new();
-        private enum DragMode { None, Scrub, CreateRegion }
+        private enum DragMode { None, Scrub, CreateRegion, ShiftHapticEvent }
         private DragMode _dragMode = DragMode.None;
         private double _dragCreateStartSec;
         private System.Windows.Shapes.Rectangle? _dragCreatePreview;
+
+        // Haptic events
+        private const string DefaultTrackId = "primary";
+        private HapticEvent? _selectedHaptic;
+        private HapticTrack? _selectedHapticTrack;
+        private readonly List<System.Windows.Shapes.Rectangle> _hapticVisuals = new();
+        private double _hapticDragStartSec;
+        private double _hapticDragOffsetSec;
+        private HapticEvent? _draggedHaptic;
+        private HapticTrack? _draggedHapticTrack;
+
+        // Curve editor
+        private const int CurveKeyframeCount = 5;
+        private System.Windows.Shapes.Path? _curvePath;
+        private readonly List<System.Windows.Shapes.Ellipse> _curveHandles = new();
+        private int _draggingCurveIndex = -1;
+        private bool _suppressPatternSync;
 
         public DeeperEditorWindow(Enhancement enhancement, string? filePath)
         {
@@ -69,7 +86,16 @@ namespace ConditioningControlPanel.Views.Deeper
             _playheadTimer.Tick += PlayheadTimer_Tick;
 
             BuildColorSwatches();
+            BuildPatternCombo();
             LoadEnhancement(enhancement, filePath);
+        }
+
+        private void BuildPatternCombo()
+        {
+            CmbHapticPattern.Items.Clear();
+            foreach (var name in StockHapticPatterns.Names)
+                CmbHapticPattern.Items.Add(name);
+            CmbHapticPattern.Items.Add("Custom…");
         }
 
         private void BuildColorSwatches()
@@ -144,8 +170,9 @@ namespace ConditioningControlPanel.Views.Deeper
 
             UpdateTitle();
             RefreshValidation();
-            SelectRegion(null);
+            SelectNothing();
             RebuildRegionVisuals();
+            RebuildHapticVisuals();
         }
 
         private async Task InitializePreviewAsync()
@@ -389,7 +416,9 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             UpdatePlayheadPosition();
             UpdateWaveformPath();
+            UpdateLaneDivider();
             RebuildRegionVisuals();
+            RebuildHapticVisuals();
         }
 
         private void TimelineCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -406,7 +435,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
 
             // Plain click on empty area deselects + scrubs.
-            SelectRegion(null);
+            SelectNothing();
             _dragMode = DragMode.Scrub;
             _isScrubbing = true;
             TimelineCanvas.CaptureMouse();
@@ -420,6 +449,16 @@ namespace ConditioningControlPanel.Views.Deeper
                 UpdateDragCreatePreview(MouseToSeconds(e));
                 return;
             }
+            if (_dragMode == DragMode.ShiftHapticEvent && _draggedHaptic != null)
+            {
+                var newStart = MouseToSeconds(e) - _hapticDragOffsetSec;
+                newStart = Math.Max(0, Math.Min(newStart, Math.Max(0, _totalSeconds - _draggedHaptic.Duration)));
+                _draggedHaptic.Start = newStart;
+                MarkDirty();
+                RebuildHapticVisuals();
+                if (_selectedHaptic == _draggedHaptic) PopulateHapticEditor();
+                return;
+            }
             if (_dragMode == DragMode.Scrub && _isScrubbing) ApplyScrubFromMouse(e);
         }
 
@@ -431,6 +470,15 @@ namespace ConditioningControlPanel.Views.Deeper
                 FinishDragCreate(endSec);
                 TimelineCanvas.ReleaseMouseCapture();
                 _dragMode = DragMode.None;
+                return;
+            }
+            if (_dragMode == DragMode.ShiftHapticEvent)
+            {
+                _draggedHaptic = null;
+                _draggedHapticTrack = null;
+                _dragMode = DragMode.None;
+                TimelineCanvas.ReleaseMouseCapture();
+                ScheduleValidation();
                 return;
             }
             if (_dragMode == DragMode.Scrub)
@@ -486,7 +534,7 @@ namespace ConditioningControlPanel.Views.Deeper
             var rightX = (hi / _totalSeconds) * w;
 
             _dragCreatePreview.Width = Math.Max(0, rightX - leftX);
-            _dragCreatePreview.Height = h;
+            _dragCreatePreview.Height = h / 2.0;
             Canvas.SetLeft(_dragCreatePreview, leftX);
             Canvas.SetTop(_dragCreatePreview, 0);
         }
@@ -540,37 +588,72 @@ namespace ConditioningControlPanel.Views.Deeper
             return RegionPalette[_enhancement.Regions.Count % RegionPalette.Length];
         }
 
+        private void SelectNothing()
+        {
+            _selectedRegion = null;
+            _selectedHaptic = null;
+            _selectedHapticTrack = null;
+            UpdateSelectedSidePanel();
+            RebuildRegionVisuals();
+            RebuildHapticVisuals();
+        }
+
         private void SelectRegion(Region? region)
         {
             _selectedRegion = region;
+            _selectedHaptic = null;
+            _selectedHapticTrack = null;
             UpdateSelectedSidePanel();
             RebuildRegionVisuals();
+            RebuildHapticVisuals();
+        }
+
+        private void SelectHaptic(HapticTrack track, HapticEvent ev)
+        {
+            _selectedRegion = null;
+            _selectedHaptic = ev;
+            _selectedHapticTrack = track;
+            UpdateSelectedSidePanel();
+            RebuildRegionVisuals();
+            RebuildHapticVisuals();
         }
 
         private void UpdateSelectedSidePanel()
         {
-            if (SelectedPlaceholder == null || RegionEditor == null) return;
-            if (_selectedRegion == null)
+            if (SelectedPlaceholder == null || RegionEditor == null || HapticEventEditor == null) return;
+
+            if (_selectedRegion != null)
             {
-                SelectedPlaceholder.Visibility = Visibility.Visible;
-                RegionEditor.Visibility = Visibility.Collapsed;
+                SelectedPlaceholder.Visibility = Visibility.Collapsed;
+                RegionEditor.Visibility = Visibility.Visible;
+                HapticEventEditor.Visibility = Visibility.Collapsed;
+
+                _suppressDirty = true;
+                try
+                {
+                    TxtRegionId.Text = _selectedRegion.Id;
+                    TxtRegionLabel.Text = _selectedRegion.Label;
+                    TxtRegionStart.Text = _selectedRegion.Start.ToString("0.##", CultureInfo.InvariantCulture);
+                    TxtRegionEnd.Text = _selectedRegion.End.ToString("0.##", CultureInfo.InvariantCulture);
+                    TxtRegionColor.Text = _selectedRegion.Color;
+                    UpdateRegionColorSwatchPreview();
+                }
+                finally { _suppressDirty = false; }
                 return;
             }
 
-            SelectedPlaceholder.Visibility = Visibility.Collapsed;
-            RegionEditor.Visibility = Visibility.Visible;
-
-            _suppressDirty = true;
-            try
+            if (_selectedHaptic != null && _selectedHapticTrack != null)
             {
-                TxtRegionId.Text = _selectedRegion.Id;
-                TxtRegionLabel.Text = _selectedRegion.Label;
-                TxtRegionStart.Text = _selectedRegion.Start.ToString("0.##", CultureInfo.InvariantCulture);
-                TxtRegionEnd.Text = _selectedRegion.End.ToString("0.##", CultureInfo.InvariantCulture);
-                TxtRegionColor.Text = _selectedRegion.Color;
-                UpdateRegionColorSwatchPreview();
+                SelectedPlaceholder.Visibility = Visibility.Collapsed;
+                RegionEditor.Visibility = Visibility.Collapsed;
+                HapticEventEditor.Visibility = Visibility.Visible;
+                PopulateHapticEditor();
+                return;
             }
-            finally { _suppressDirty = false; }
+
+            SelectedPlaceholder.Visibility = Visibility.Visible;
+            RegionEditor.Visibility = Visibility.Collapsed;
+            HapticEventEditor.Visibility = Visibility.Collapsed;
         }
 
         private void UpdateRegionColorSwatchPreview()
@@ -601,7 +684,7 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             if (_selectedRegion == null) return;
             _enhancement.Regions.Remove(_selectedRegion);
-            SelectRegion(null);
+            SelectNothing();
             MarkDirty();
             RebuildRegionVisuals();
             ScheduleValidation();
@@ -639,6 +722,7 @@ namespace ConditioningControlPanel.Views.Deeper
             var h = TimelineCanvas.ActualHeight;
             if (w <= 0 || _totalSeconds <= 0) return null;
 
+            var laneH = h / 2.0;
             var startX = Math.Max(0, (region.Start / _totalSeconds) * w);
             var endX = Math.Min(w, (region.End / _totalSeconds) * w);
             var width = Math.Max(0, endX - startX);
@@ -650,7 +734,7 @@ namespace ConditioningControlPanel.Views.Deeper
             var rect = new System.Windows.Shapes.Rectangle
             {
                 Width = width,
-                Height = h,
+                Height = laneH,
                 Fill = new System.Windows.Media.SolidColorBrush(fill),
                 Stroke = new System.Windows.Media.SolidColorBrush(color),
                 StrokeThickness = isSelected ? 2.0 : 1.0,
@@ -666,9 +750,26 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void EnsurePlayheadOnTop()
         {
-            if (PlayheadLine == null) return;
-            TimelineCanvas.Children.Remove(PlayheadLine);
-            TimelineCanvas.Children.Add(PlayheadLine);
+            // Keep static overlays in front of all the dynamically inserted lane visuals.
+            foreach (var item in new System.Windows.UIElement?[] { LaneDivider, LaneLabelRegions, LaneLabelHaptics, PlayheadLine })
+            {
+                if (item == null) continue;
+                if (TimelineCanvas.Children.Contains(item))
+                    TimelineCanvas.Children.Remove(item);
+                TimelineCanvas.Children.Add(item);
+            }
+        }
+
+        private void UpdateLaneDivider()
+        {
+            if (TimelineCanvas == null || LaneDivider == null) return;
+            var w = TimelineCanvas.ActualWidth;
+            var h = TimelineCanvas.ActualHeight;
+            LaneDivider.X1 = 0;
+            LaneDivider.X2 = w;
+            LaneDivider.Y1 = h / 2.0;
+            LaneDivider.Y2 = h / 2.0;
+            if (LaneLabelHaptics != null) Canvas.SetTop(LaneLabelHaptics, h / 2.0 + 2);
         }
 
         private void RegionRect_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -678,6 +779,384 @@ namespace ConditioningControlPanel.Views.Deeper
                 SelectRegion(region);
                 e.Handled = true;
             }
+        }
+
+        // -- Haptic events: rendering + interaction ---------------------------
+
+        private HapticTrack EnsureDefaultTrack()
+        {
+            if (_enhancement.HapticTracks.Count == 0)
+                _enhancement.HapticTracks.Add(new HapticTrack { Id = DefaultTrackId });
+            return _enhancement.HapticTracks[0];
+        }
+
+        private void CreateHapticEventAtPlayhead()
+        {
+            if (_totalSeconds <= 0) return;
+            var track = EnsureDefaultTrack();
+            var start = _currentSeconds;
+            var duration = 1.0;
+            // Avoid overlapping: if would overlap, nudge to first free slot after current events.
+            foreach (var existing in track.Events.OrderBy(x => x.Start))
+            {
+                if (start < existing.Start + existing.Duration && start + duration > existing.Start)
+                    start = existing.Start + existing.Duration + 0.05;
+            }
+            if (start + duration > _totalSeconds) start = Math.Max(0, _totalSeconds - duration);
+
+            var ev = new HapticEvent
+            {
+                Start = start,
+                Duration = duration,
+                Intensity = 1.0,
+                PatternName = "Pulse"
+            };
+            track.Events.Add(ev);
+            MarkDirty();
+            RebuildHapticVisuals();
+            SelectHaptic(track, ev);
+            ScheduleValidation();
+        }
+
+        private void RebuildHapticVisuals()
+        {
+            if (TimelineCanvas == null) return;
+            foreach (var v in _hapticVisuals) TimelineCanvas.Children.Remove(v);
+            _hapticVisuals.Clear();
+
+            if (_totalSeconds <= 0 || TimelineCanvas.ActualWidth <= 0)
+            {
+                EnsurePlayheadOnTop();
+                return;
+            }
+
+            foreach (var track in _enhancement.HapticTracks)
+            {
+                foreach (var ev in track.Events)
+                {
+                    var rect = BuildHapticVisual(track, ev);
+                    if (rect != null)
+                    {
+                        TimelineCanvas.Children.Insert(0, rect);
+                        _hapticVisuals.Add(rect);
+                    }
+                }
+            }
+            EnsurePlayheadOnTop();
+        }
+
+        private System.Windows.Shapes.Rectangle? BuildHapticVisual(HapticTrack track, HapticEvent ev)
+        {
+            var w = TimelineCanvas.ActualWidth;
+            var h = TimelineCanvas.ActualHeight;
+            if (w <= 0 || _totalSeconds <= 0) return null;
+
+            var laneTop = h / 2.0 + 2;
+            var laneH = Math.Max(0, h / 2.0 - 4);
+            var startX = Math.Max(0, (ev.Start / _totalSeconds) * w);
+            var endX = Math.Min(w, ((ev.Start + ev.Duration) / _totalSeconds) * w);
+            var width = Math.Max(0, endX - startX);
+
+            var isSelected = _selectedHaptic == ev;
+            var accent = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF7B5CFF");
+            var fill = System.Windows.Media.Color.FromArgb(isSelected ? (byte)180 : (byte)130, accent.R, accent.G, accent.B);
+
+            var rect = new System.Windows.Shapes.Rectangle
+            {
+                Width = width,
+                Height = laneH,
+                Fill = new System.Windows.Media.SolidColorBrush(fill),
+                Stroke = new System.Windows.Media.SolidColorBrush(accent),
+                StrokeThickness = isSelected ? 2.0 : 1.0,
+                Cursor = Cursors.SizeAll,
+                Tag = (track, ev),
+                ToolTip = string.IsNullOrEmpty(ev.PatternName)
+                    ? $"{track.Id} · custom · {ev.Duration:0.##}s"
+                    : $"{track.Id} · {ev.PatternName} · {ev.Duration:0.##}s"
+            };
+            Canvas.SetLeft(rect, startX);
+            Canvas.SetTop(rect, laneTop);
+            rect.MouseLeftButtonDown += HapticRect_MouseLeftButtonDown;
+            return rect;
+        }
+
+        private void HapticRect_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not System.Windows.Shapes.Rectangle r || r.Tag is not ValueTuple<HapticTrack, HapticEvent> tuple)
+                return;
+
+            var (track, ev) = tuple;
+            SelectHaptic(track, ev);
+
+            // Begin drag-shift on pointer hold (no Shift modifier — that's region-create).
+            if ((Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
+            {
+                _dragMode = DragMode.ShiftHapticEvent;
+                _draggedHaptic = ev;
+                _draggedHapticTrack = track;
+                _hapticDragStartSec = ev.Start;
+                _hapticDragOffsetSec = MouseToSeconds(e) - ev.Start;
+                TimelineCanvas.CaptureMouse();
+            }
+            e.Handled = true;
+        }
+
+        // -- Haptic side panel + curve editor ---------------------------------
+
+        private void PopulateHapticEditor()
+        {
+            if (_selectedHaptic == null || _selectedHapticTrack == null) return;
+
+            _suppressDirty = true;
+            _suppressPatternSync = true;
+            try
+            {
+                TxtHapticTrackId.Text = _selectedHapticTrack.Id;
+                TxtHapticStart.Text = _selectedHaptic.Start.ToString("0.##", CultureInfo.InvariantCulture);
+                TxtHapticDuration.Text = _selectedHaptic.Duration.ToString("0.##", CultureInfo.InvariantCulture);
+                SliderHapticIntensity.Value = Math.Clamp(_selectedHaptic.Intensity, 0.0, 1.0);
+                TxtHapticIntensityValue.Text = $"{(int)(SliderHapticIntensity.Value * 100)}%";
+
+                var isCustom = _selectedHaptic.CustomPattern != null && _selectedHaptic.CustomPattern.Count > 0;
+                if (isCustom)
+                {
+                    CmbHapticPattern.SelectedIndex = StockHapticPatterns.Names.Count; // "Custom…"
+                    CurveEditorPanel.Visibility = Visibility.Visible;
+                    EnsureCurveSeed();
+                    RebuildCurveEditor();
+                }
+                else
+                {
+                    var idx = -1;
+                    if (!string.IsNullOrEmpty(_selectedHaptic.PatternName))
+                    {
+                        for (int i = 0; i < StockHapticPatterns.Names.Count; i++)
+                            if (StockHapticPatterns.Names[i] == _selectedHaptic.PatternName) { idx = i; break; }
+                    }
+                    CmbHapticPattern.SelectedIndex = idx >= 0 ? idx : 0;
+                    CurveEditorPanel.Visibility = Visibility.Collapsed;
+                }
+            }
+            finally
+            {
+                _suppressDirty = false;
+                _suppressPatternSync = false;
+            }
+        }
+
+        private void HapticField_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_suppressDirty || _selectedHaptic == null) return;
+            if (double.TryParse(TxtHapticStart.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var s))
+                _selectedHaptic.Start = Math.Max(0, s);
+            if (double.TryParse(TxtHapticDuration.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
+                _selectedHaptic.Duration = Math.Max(0.05, d);
+            MarkDirty();
+            RebuildHapticVisuals();
+            ScheduleValidation();
+        }
+
+        private void SliderHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtHapticIntensityValue != null)
+                TxtHapticIntensityValue.Text = $"{(int)(SliderHapticIntensity.Value * 100)}%";
+            if (_suppressDirty || _selectedHaptic == null) return;
+            _selectedHaptic.Intensity = Math.Clamp(SliderHapticIntensity.Value, 0.0, 1.0);
+            MarkDirty();
+            ScheduleValidation();
+        }
+
+        private void CmbHapticPattern_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressPatternSync || _selectedHaptic == null) return;
+            var idx = CmbHapticPattern.SelectedIndex;
+            if (idx < 0) return;
+
+            if (idx >= StockHapticPatterns.Names.Count)
+            {
+                // Custom...
+                _selectedHaptic.CustomPattern ??= StockHapticPatterns.SeedCustomFrom(_selectedHaptic.PatternName);
+                _selectedHaptic.PatternName = null;
+                CurveEditorPanel.Visibility = Visibility.Visible;
+                EnsureCurveSeed();
+                RebuildCurveEditor();
+            }
+            else
+            {
+                _selectedHaptic.CustomPattern = null;
+                _selectedHaptic.PatternName = StockHapticPatterns.Names[idx];
+                CurveEditorPanel.Visibility = Visibility.Collapsed;
+            }
+            MarkDirty();
+            RebuildHapticVisuals();
+            ScheduleValidation();
+        }
+
+        private void EnsureCurveSeed()
+        {
+            if (_selectedHaptic == null) return;
+            if (_selectedHaptic.CustomPattern == null || _selectedHaptic.CustomPattern.Count < 2)
+                _selectedHaptic.CustomPattern = StockHapticPatterns.SeedCustomFrom(_selectedHaptic.PatternName);
+        }
+
+        private void CurveCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => RebuildCurveEditor();
+
+        private void RebuildCurveEditor()
+        {
+            if (CurveCanvas == null) return;
+            CurveCanvas.Children.Clear();
+            _curvePath = null;
+            _curveHandles.Clear();
+
+            if (_selectedHaptic?.CustomPattern == null || _selectedHaptic.CustomPattern.Count == 0) return;
+            var w = CurveCanvas.ActualWidth;
+            var h = CurveCanvas.ActualHeight;
+            if (w <= 0 || h <= 0) return;
+
+            // Background grid
+            for (int i = 1; i <= 3; i++)
+            {
+                var y = h * i / 4.0;
+                var line = new System.Windows.Shapes.Line
+                {
+                    X1 = 0, X2 = w, Y1 = y, Y2 = y,
+                    Stroke = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 255, 255, 255)),
+                    StrokeThickness = 0.5,
+                    IsHitTestVisible = false
+                };
+                CurveCanvas.Children.Add(line);
+            }
+
+            // Polyline through the keyframes
+            var pts = _selectedHaptic.CustomPattern;
+            var geom = new System.Windows.Media.StreamGeometry();
+            using (var ctx = geom.Open())
+            {
+                ctx.BeginFigure(KeyframeToCanvas(pts[0], w, h), false, false);
+                for (int i = 1; i < pts.Count; i++)
+                    ctx.LineTo(KeyframeToCanvas(pts[i], w, h), true, false);
+            }
+            geom.Freeze();
+            _curvePath = new System.Windows.Shapes.Path
+            {
+                Data = geom,
+                Stroke = (System.Windows.Media.Brush)FindResource("DeeperAccentBrush"),
+                StrokeThickness = 1.6,
+                IsHitTestVisible = false
+            };
+            CurveCanvas.Children.Add(_curvePath);
+
+            // Handles (5 fixed-X dots, drag intensity vertically)
+            for (int i = 0; i < pts.Count; i++)
+            {
+                var pt = KeyframeToCanvas(pts[i], w, h);
+                var dot = new System.Windows.Shapes.Ellipse
+                {
+                    Width = 10, Height = 10,
+                    Fill = (System.Windows.Media.Brush)FindResource("DeeperAccentBrush"),
+                    Stroke = System.Windows.Media.Brushes.White,
+                    StrokeThickness = 1.2,
+                    Cursor = Cursors.SizeNS,
+                    Tag = i
+                };
+                Canvas.SetLeft(dot, pt.X - 5);
+                Canvas.SetTop(dot, pt.Y - 5);
+                dot.MouseLeftButtonDown += CurveHandle_MouseDown;
+                dot.MouseMove += CurveHandle_MouseMove;
+                dot.MouseLeftButtonUp += CurveHandle_MouseUp;
+                CurveCanvas.Children.Add(dot);
+                _curveHandles.Add(dot);
+            }
+        }
+
+        private static Point KeyframeToCanvas(double[] kf, double w, double h)
+        {
+            var t = Math.Clamp(kf.Length > 0 ? kf[0] : 0, 0, 1);
+            var v = Math.Clamp(kf.Length > 1 ? kf[1] : 0, 0, 1);
+            return new Point(t * w, h - (v * h));
+        }
+
+        private void CurveHandle_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is System.Windows.Shapes.Ellipse el && el.Tag is int idx)
+            {
+                _draggingCurveIndex = idx;
+                el.CaptureMouse();
+                e.Handled = true;
+            }
+        }
+
+        private void CurveHandle_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (_draggingCurveIndex < 0 || _selectedHaptic?.CustomPattern == null) return;
+            if (sender is not System.Windows.Shapes.Ellipse el) return;
+            var pt = e.GetPosition(CurveCanvas);
+            var h = CurveCanvas.ActualHeight;
+            if (h <= 0) return;
+            var v = Math.Clamp(1.0 - (pt.Y / h), 0.0, 1.0);
+            var kf = _selectedHaptic.CustomPattern[_draggingCurveIndex];
+            kf[1] = v;
+            MarkDirty();
+            RebuildCurveEditor();
+            ScheduleValidation();
+        }
+
+        private void CurveHandle_MouseUp(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is System.Windows.Shapes.Ellipse el) el.ReleaseMouseCapture();
+            _draggingCurveIndex = -1;
+        }
+
+        private void BtnResetCurve_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedHaptic == null) return;
+            _selectedHaptic.CustomPattern = StockHapticPatterns.SeedCustomFrom(null);
+            MarkDirty();
+            RebuildCurveEditor();
+            ScheduleValidation();
+        }
+
+        private async void BtnTestHaptic_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedHaptic == null) return;
+
+            IList<double[]>? kf = null;
+            if (_selectedHaptic.CustomPattern != null && _selectedHaptic.CustomPattern.Count > 0)
+                kf = _selectedHaptic.CustomPattern;
+            else if (!string.IsNullOrEmpty(_selectedHaptic.PatternName)
+                     && StockHapticPatterns.TryGet(_selectedHaptic.PatternName, out var named) && named != null)
+                kf = named;
+
+            if (kf == null) return;
+            var durationMs = (int)Math.Max(50, _selectedHaptic.Duration * 1000);
+            var samples = StockHapticPatterns.Sample(kf, _selectedHaptic.Intensity, durationMs);
+            try
+            {
+                if (App.Haptics == null || !App.Haptics.IsConnected)
+                {
+                    TxtValidationSummary.Text = Loc.Get("deeper_editor_haptic_test_no_device");
+                    TxtValidationSummary.Foreground = (System.Windows.Media.Brush)FindResource("PinkSoftBrush");
+                    return;
+                }
+                await App.Haptics.SetSyncPatternAsync(samples, durationMs);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "DeeperEditor: haptic test failed");
+            }
+        }
+
+        private void BtnDeleteHaptic_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedHaptic == null || _selectedHapticTrack == null) return;
+            _selectedHapticTrack.Events.Remove(_selectedHaptic);
+            // Remove now-empty default track to keep file clean.
+            if (_selectedHapticTrack.Events.Count == 0 && _selectedHapticTrack.Id == DefaultTrackId)
+                _enhancement.HapticTracks.Remove(_selectedHapticTrack);
+            SelectNothing();
+            MarkDirty();
+            RebuildHapticVisuals();
+            ScheduleValidation();
         }
 
         // -- Metadata sync -----------------------------------------------------
@@ -830,14 +1309,24 @@ namespace ConditioningControlPanel.Views.Deeper
                 CreateRegion(start, end);
                 e.Handled = true;
             }
+            else if (e.Key == Key.H && !inTextBox && _totalSeconds > 0)
+            {
+                CreateHapticEventAtPlayhead();
+                e.Handled = true;
+            }
             else if (e.Key == Key.Delete && !inTextBox && _selectedRegion != null)
             {
                 BtnDeleteRegion_Click(this, new RoutedEventArgs());
                 e.Handled = true;
             }
-            else if (e.Key == Key.Escape && !inTextBox && _selectedRegion != null)
+            else if (e.Key == Key.Delete && !inTextBox && _selectedHaptic != null)
             {
-                SelectRegion(null);
+                BtnDeleteHaptic_Click(this, new RoutedEventArgs());
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape && !inTextBox && (_selectedRegion != null || _selectedHaptic != null))
+            {
+                SelectNothing();
                 e.Handled = true;
             }
             else if (e.Key == Key.S && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
