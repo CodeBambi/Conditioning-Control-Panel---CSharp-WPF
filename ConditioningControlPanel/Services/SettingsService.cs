@@ -425,7 +425,10 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                App.Logger?.Information("Settings.Save: ActivePackIds BEFORE serialize: [{Ids}]",
+                // Debug-level: this fires every time settings change during normal play (XP
+                // ticks, achievement progress, etc.) and at Information level it floods
+                // bug-report activity logs with hundreds of identical lines per minute.
+                App.Logger?.Debug("Settings.Save: ActivePackIds BEFORE serialize: [{Ids}]",
                     string.Join(", ", Current.ActivePackIds ?? new List<string>()));
 
                 var json = JsonConvert.SerializeObject(Current, Formatting.Indented);
@@ -436,7 +439,7 @@ namespace ConditioningControlPanel.Services
                 File.WriteAllText(tempPath, json);
                 File.Move(tempPath, _settingsPath, overwrite: true);
 
-                App.Logger?.Information("Settings saved to {Path} (Triggers: {TriggerCount}, ActivePacks: {PackCount})",
+                App.Logger?.Debug("Settings saved to {Path} (Triggers: {TriggerCount}, ActivePacks: {PackCount})",
                     _settingsPath, Current.CustomTriggers?.Count ?? 0, Current.ActivePackIds?.Count ?? 0);
 
                 // Auto-backup settings to cloud (fire-and-forget, debounced)
