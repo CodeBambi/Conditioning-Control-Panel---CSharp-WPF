@@ -87,7 +87,7 @@
 
                         <Canvas x:Name="WaveformCanvas" Visibility="Collapsed" Background="#10000020">
                             <Path x:Name="WaveformPath" Stroke="{DynamicResource DeeperAccentBrush}"
-                                  StrokeThickness="1.2" Fill="{DynamicResource DeeperAccentTransparent40Brush}"/>
+                                  StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                         </Canvas>
 
                         <StackPanel x:Name="PreviewPlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -199,9 +199,60 @@
                         <TextBlock Text="{loc:Str deeper_editor_section_selected}"
                                    Foreground="{DynamicResource DeeperAccentBrush}"
                                    FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
-                        <TextBlock Text="{loc:Str deeper_editor_section_selected_empty}"
+
+                        <TextBlock x:Name="SelectedPlaceholder"
+                                   Text="{loc:Str deeper_editor_section_selected_empty}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11" FontStyle="Italic"
                                    TextWrapping="Wrap"/>
+
+                        <StackPanel x:Name="RegionEditor" Visibility="Collapsed">
+                            <TextBlock Text="{loc:Str deeper_editor_region_id}" Style="{StaticResource EditorLabel}"/>
+                            <TextBlock x:Name="TxtRegionId" Foreground="{DynamicResource TextDimBrush}"
+                                       FontSize="11" FontFamily="Consolas" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="{loc:Str deeper_editor_region_label}" Style="{StaticResource EditorLabel}"/>
+                            <TextBox x:Name="TxtRegionLabel" Style="{StaticResource EditorTextBox}"
+                                     TextChanged="RegionField_TextChanged"/>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Str deeper_editor_region_start}" Style="{StaticResource EditorLabel}"/>
+                                    <TextBox x:Name="TxtRegionStart" Style="{StaticResource EditorTextBox}"
+                                             TextChanged="RegionField_TextChanged"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{loc:Str deeper_editor_region_end}" Style="{StaticResource EditorLabel}"/>
+                                    <TextBox x:Name="TxtRegionEnd" Style="{StaticResource EditorTextBox}"
+                                             TextChanged="RegionField_TextChanged"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="{loc:Str deeper_editor_region_color}" Style="{StaticResource EditorLabel}"/>
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="RegionColorSwatch" Grid.Column="0"
+                                        Width="24" Height="24" Margin="0,0,8,0" CornerRadius="4"
+                                        Background="{DynamicResource DeeperAccentBrush}"
+                                        BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"/>
+                                <TextBox x:Name="TxtRegionColor" Grid.Column="1" Style="{StaticResource EditorTextBox}"
+                                         TextChanged="RegionField_TextChanged" Margin="0"/>
+                            </Grid>
+                            <WrapPanel x:Name="RegionColorSwatches" Margin="0,4,0,12"/>
+
+                            <Button Content="{loc:Str deeper_editor_region_delete}"
+                                    Click="BtnDeleteRegion_Click"
+                                    Background="{DynamicResource DangerBrush}" Foreground="White"
+                                    BorderThickness="0" Padding="10,6" Cursor="Hand"
+                                    HorizontalAlignment="Left" Margin="0,4,0,0"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </Border>

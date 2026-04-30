@@ -20,7 +20,7 @@ namespace ConditioningControlPanel.Services.Deeper
     /// </summary>
     public static class AudioWaveformCache
     {
-        private const string CacheMagic = "DPK1";
+        private const string CacheMagic = "DPK2";
 
         public static string CacheFolder => Path.Combine(App.UserDataPath, "deeper-cache");
 
@@ -71,7 +71,7 @@ namespace ConditioningControlPanel.Services.Deeper
             var sampleRate = reader.WaveFormat.SampleRate;
             var durationSec = reader.TotalTime.TotalSeconds;
 
-            int peakCount = Math.Clamp((int)(durationSec * 2), 32, 4096);
+            int peakCount = Math.Clamp((int)(durationSec * 6), 64, 4096);
             var peaks = new float[peakCount];
 
             if (durationSec <= 0 || sampleRate <= 0 || channels <= 0)
