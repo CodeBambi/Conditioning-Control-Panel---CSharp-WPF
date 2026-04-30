@@ -59,4 +59,10 @@
     <!-- New: quaternary text -->
     <SolidColorBrush x:Key="TextDimBrush" Color="{DynamicResource TextDim}"/>
 
+    <!-- Deeper tab accent brushes -->
+    <SolidColorBrush x:Key="DeeperAccentBrush" Color="{DynamicResource DeeperAccent}"/>
+    <SolidColorBrush x:Key="DeeperAccentSoftBrush" Color="{DynamicResource DeeperAccentSoft}"/>
+    <SolidColorBrush x:Key="DeeperAccentTransparent20Brush" Color="{DynamicResource DeeperAccentTransparent20}"/>
+    <SolidColorBrush x:Key="DeeperAccentTransparent40Brush" Color="{DynamicResource DeeperAccentTransparent40}"/>
+
 </ResourceDictionary>

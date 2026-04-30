@@ -58,4 +58,11 @@
     <!-- New: quaternary text -->
     <Color x:Key="TextDim">#FF505068</Color>
 
+    <!-- Deeper tab accent (universal media enhancement system) — distinct violet
+         that contrasts the pink primary while staying inside the dark/violet palette. -->
+    <Color x:Key="DeeperAccent">#FF7B5CFF</Color>
+    <Color x:Key="DeeperAccentSoft">#FFB7A5FF</Color>
+    <Color x:Key="DeeperAccentTransparent20">#207B5CFF</Color>
+    <Color x:Key="DeeperAccentTransparent40">#407B5CFF</Color>
+
 </ResourceDictionary>

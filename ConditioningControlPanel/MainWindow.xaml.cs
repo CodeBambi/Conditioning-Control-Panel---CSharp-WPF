@@ -1762,6 +1762,25 @@ namespace ConditioningControlPanel
             // Initialize scrolling marquee banner
             InitializeMarqueeBanner();
 
+            // Deeper tab first-launch pulse — draw the eye to the new tab once,
+            // unless the user has already opened it (HasSeenDeeperTab) or disabled it.
+            var deeperSettings = App.Settings?.Current;
+            if (deeperSettings != null && deeperSettings.EnableDeeper && !deeperSettings.HasSeenDeeperTab)
+            {
+                _ = Dispatcher.InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(1200);
+                        StartDeeperTabPulse();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to start Deeper tab pulse");
+                    }
+                });
+            }
+
             // Check if any authenticated user needs to complete registration (choose display name)
             // This handles users who had cached tokens but cancelled the registration dialog previously
             _ = CheckPendingRegistrationAsync();
@@ -2070,6 +2089,72 @@ namespace ConditioningControlPanel
         private void BtnEnhancements_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("enhancements");
+        }
+
+        private void BtnDeeper_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("deeper");
+            if (App.Settings?.Current is { } s && !s.HasSeenDeeperTab)
+            {
+                s.HasSeenDeeperTab = true;
+                StopDeeperTabPulse();
+                App.Settings?.Save();
+            }
+        }
+
+        private void ChkEnableDeeper_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var enabled = ChkEnableDeeper.IsChecked ?? true;
+            if (App.Settings?.Current is { } s) s.EnableDeeper = enabled;
+            if (BtnDeeper != null) BtnDeeper.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+            // If the user just disabled Deeper while it's the active tab, fall back to Settings.
+            if (!enabled && DeeperTab?.Visibility == Visibility.Visible) ShowTab("settings");
+            App.Settings?.Save();
+        }
+
+        private bool _deeperPulseRunning;
+
+        private void StartDeeperTabPulse()
+        {
+            if (BtnDeeperScale == null || _deeperPulseRunning) return;
+            _deeperPulseRunning = true;
+            var anim = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                From = 1.0,
+                To = 1.12,
+                Duration = TimeSpan.FromMilliseconds(700),
+                AutoReverse = true,
+                RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(4),
+                EasingFunction = new System.Windows.Media.Animation.SineEase
+                {
+                    EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut
+                }
+            };
+            anim.Completed += (_, _) =>
+            {
+                _deeperPulseRunning = false;
+                if (BtnDeeperScale != null)
+                {
+                    BtnDeeperScale.ScaleX = 1.0;
+                    BtnDeeperScale.ScaleY = 1.0;
+                }
+            };
+            BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, anim);
+            BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, anim);
+        }
+
+        private void StopDeeperTabPulse()
+        {
+            if (!_deeperPulseRunning && BtnDeeperScale == null) return;
+            _deeperPulseRunning = false;
+            if (BtnDeeperScale != null)
+            {
+                BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
+                BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, null);
+                BtnDeeperScale.ScaleX = 1.0;
+                BtnDeeperScale.ScaleY = 1.0;
+            }
         }
 
         private void BtnRerollDaily_Click(object sender, RoutedEventArgs e)
@@ -4769,6 +4854,7 @@ namespace ConditioningControlPanel
             AssetsTab.Visibility = Visibility.Collapsed;
             DiscordTab.Visibility = Visibility.Collapsed;
             EnhancementsTab.Visibility = Visibility.Collapsed;
+            if (DeeperTab != null) DeeperTab.Visibility = Visibility.Collapsed;
             LabTab.Visibility = Visibility.Collapsed;
             AwarenessTab.Visibility = Visibility.Collapsed;
             if (RemoteControlTab != null) RemoteControlTab.Visibility = Visibility.Collapsed;
@@ -4783,6 +4869,7 @@ namespace ConditioningControlPanel
             BtnPresets.Style = inactiveStyle;
             BtnQuests.Style = inactiveStyle;
             BtnEnhancements.Style = inactiveStyle;
+            if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeper") as Style;
             BtnAchievements.Style = inactiveStyle;
             BtnCompanion.Style = inactiveStyle;
             BtnLeaderboard.Style = inactiveStyle;
@@ -4828,6 +4915,15 @@ namespace ConditioningControlPanel
                     AnimateTabIn(EnhancementsTab);
                     BtnEnhancements.Style = activeStyle;
                     RefreshEnhancementsUI();
+                    break;
+
+                case "deeper":
+                    if (DeeperTab != null)
+                    {
+                        DeeperTab.Visibility = Visibility.Visible;
+                        AnimateTabIn(DeeperTab);
+                    }
+                    if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeperActive") as Style;
                     break;
 
                 case "achievements":
@@ -14564,12 +14660,16 @@ namespace ConditioningControlPanel
         /// </summary>
         private void BtnChatShortcut_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new ChatShortcutCaptureDialog { Owner = this };
-            var ok = dlg.ShowDialog();
-            if (ok != true) return;
-
             var settings = App.Settings?.Current?.CompanionPrompt;
             if (settings == null) return;
+
+            var dlg = new ChatShortcutCaptureDialog
+            {
+                Owner = this,
+                GlobalHotkey = settings.ChatShortcutGlobal,
+            };
+            var ok = dlg.ShowDialog();
+            if (ok != true) return;
 
             if (dlg.ResetToDefault)
             {
@@ -14581,13 +14681,14 @@ namespace ConditioningControlPanel
                 settings.ChatShortcutKey = dlg.CapturedKey.ToString();
                 settings.ChatShortcutModifiers = AvatarTubeWindow.SerializeModifiers(dlg.CapturedModifiers);
             }
+            settings.ChatShortcutGlobal = dlg.GlobalHotkey;
             App.Settings?.Save();
 
             // Re-apply on both windows so the new shortcut takes effect immediately.
             AvatarTubeWindow.ApplyChatShortcutTo(this);
             if (App.AvatarWindow != null) AvatarTubeWindow.ApplyChatShortcutTo(App.AvatarWindow);
 
-            // Re-arm the system-wide hotkey too, so the new combo works from any app.
+            // Re-arm (or unregister) the system-wide hotkey based on the toggle.
             ApplyGlobalChatHotkey();
 
             RefreshChatShortcutLabel();
@@ -14600,6 +14701,17 @@ namespace ConditioningControlPanel
         private void ApplyGlobalChatHotkey()
         {
             var s = App.Settings?.Current?.CompanionPrompt;
+
+            // Honor the user's toggle. When off, we still rely on the in-window KeyBinding
+            // (registered by AvatarTubeWindow.ApplyChatShortcutTo) so the shortcut works
+            // when one of our windows has focus — but it won't steal focus from a browser
+            // or other foreground app.
+            if (s?.ChatShortcutGlobal == false)
+            {
+                Services.GlobalHotkeyService.Unregister();
+                return;
+            }
+
             var keyName = string.IsNullOrWhiteSpace(s?.ChatShortcutKey) ? "T" : s!.ChatShortcutKey;
             var modsName = s?.ChatShortcutModifiers ?? "Control";
 
@@ -18116,6 +18228,10 @@ namespace ConditioningControlPanel
             ChkOfflineMode.IsChecked = s.OfflineMode;
             ChkStopEffectsOnRemoteDisconnect.IsChecked = s.StopEffectsOnRemoteDisconnect;
 
+            // Deeper
+            if (ChkEnableDeeper != null) ChkEnableDeeper.IsChecked = s.EnableDeeper;
+            if (BtnDeeper != null) BtnDeeper.Visibility = s.EnableDeeper ? Visibility.Visible : Visibility.Collapsed;
+
             // Update UI for offline mode state (disable login buttons, browser, etc.)
             if (s.OfflineMode)
             {
@@ -18460,6 +18576,9 @@ namespace ConditioningControlPanel
             s.StartMinimized = ChkStartHidden.IsChecked ?? false;
             s.PanicKeyEnabled = !(ChkNoPanic.IsChecked ?? false);
             s.OfflineMode = ChkOfflineMode.IsChecked ?? false;
+
+            // Deeper
+            if (ChkEnableDeeper != null) s.EnableDeeper = ChkEnableDeeper.IsChecked ?? true;
 
             // Audio
             s.MasterVolume = (int)SliderMaster.Value;

@@ -3287,5 +3287,19 @@ namespace ConditioningControlPanel.Models
         }
 
         #endregion
+
+        #region Deeper
+
+        private bool _enableDeeper = true;
+        public bool EnableDeeper
+        {
+            get => _enableDeeper;
+            set { _enableDeeper = value; OnPropertyChanged(); }
+        }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenDeeperTab { get; set; }
+
+        #endregion
     }
 }
