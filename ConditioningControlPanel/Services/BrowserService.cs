@@ -70,6 +70,16 @@ namespace ConditioningControlPanel.Services
             "bounceexchange.com", "bouncex.net"
         };
 
+        /// <summary>
+        /// Sites we have a partnership with - ad blocking is fully bypassed
+        /// on these domains and their subdomains so we don't suppress their
+        /// ad revenue inside the embedded browser.
+        /// </summary>
+        private static readonly HashSet<string> _partnerSites = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "hypnotube.com",
+        };
+
         public event EventHandler? BrowserReady;
         public event EventHandler<string>? NavigationCompleted;
         public event EventHandler<string>? TitleChanged;
@@ -227,6 +237,14 @@ namespace ConditioningControlPanel.Services
             // Block popups - handle them internally
             _webView.CoreWebView2.NewWindowRequested += (s, e) =>
             {
+                // Partner pages: let popups through (still routed in-window, never a new OS window).
+                if (IsOnPartnerSite())
+                {
+                    e.Handled = true;
+                    _webView.CoreWebView2.Navigate(e.Uri);
+                    return;
+                }
+
                 // Check if it's an ad popup (no user gesture or suspicious URL)
                 if (IsAdUrl(e.Uri))
                 {
@@ -265,6 +283,9 @@ namespace ConditioningControlPanel.Services
                 {
                     try
                     {
+                        // Partner pages get full pass-through so we don't suppress their ad revenue.
+                        if (IsOnPartnerSite()) return;
+
                         var uri = new Uri(e.Request.Uri);
                         var host = uri.Host.ToLowerInvariant();
 
@@ -310,6 +331,42 @@ namespace ConditioningControlPanel.Services
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Check if a host belongs to a partner site (or any of its subdomains).
+        /// </summary>
+        private static bool IsPartnerSite(string host)
+        {
+            if (_partnerSites.Contains(host))
+                return true;
+
+            foreach (var partner in _partnerSites)
+            {
+                if (host.EndsWith("." + partner, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// True if the current top-level document belongs to a partner site.
+        /// Reads CoreWebView2.Source so iframe / sub-resource requests are
+        /// gated by the page the user is actually viewing.
+        /// </summary>
+        private bool IsOnPartnerSite()
+        {
+            try
+            {
+                var src = _webView?.CoreWebView2?.Source;
+                if (string.IsNullOrEmpty(src)) return false;
+                return IsPartnerSite(new Uri(src).Host.ToLowerInvariant());
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -1023,7 +1080,7 @@ namespace ConditioningControlPanel.Services
 
         private async void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
         {
-            if (e.IsSuccess)
+            if (e.IsSuccess && !IsOnPartnerSite())
             {
                 await InjectAdBlockingCssAsync();
             }
