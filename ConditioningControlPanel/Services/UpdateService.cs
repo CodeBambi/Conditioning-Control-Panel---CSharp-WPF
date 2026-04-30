@@ -20,18 +20,17 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.9.0";
+        public const string AppVersion = "5.9.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.9.0 - All Eyes On Me
+        public const string CurrentPatchNotes = @"v5.9.1 - Eyes Wide Open
+
+v5.9.0 was a pre-release that never went final. v5.9.1 ships the same feature set with a few follow-up fixes appended at the bottom. Existing 5.9.0 pre-release installs WILL be prompted to update.
 
 *Before anyone reads it as a flex - the title's just an homage to my fav artist, someone who actually helped me out a lot this last year. I turned 30 recently. Who knows, knows.*
-
-🧪 PRE-RELEASE BUILD
-This is an opt-in pre-release. The big new feature - Webcam Eye Tracking - works well on most setups but accuracy varies by webcam, lighting, and monitor combo. Feedback in Discord or GitHub issues helps tune the next build. Existing v5.8.4 installs are NOT auto-prompted to update to this version.
 
 ✨ HEADLINE
 • Webcam Eye Tracking - a fully local, on-device gaze pipeline. BlazeFace + FaceMesh + Iris ONNX models, runs on CPU. Frames never leave your machine, never written to disk.
@@ -71,8 +70,21 @@ This is an opt-in pre-release. The big new feature - Webcam Eye Tracking - works
 • All webcam frames stay on your device. The pipeline runs offline. No network calls, no disk writes of frame data, no telemetry.
 • Revoke consent any time from the Webcam Lab card - it stops tracking, deletes your calibration, and clears the consent record.
 
-⚠️ KNOWN ISSUES (this build)
-• Multi-monitor + Focus Gaze: if you calibrated on one monitor and use Focus Gaze on a different monitor, the gaze cursor can land on the wrong screen. Workaround: calibrate on the monitor you'll use Focus Gaze on. A coordinate-translation fix is queued for v5.9.1.";
+────────────────────────────────
+v5.9.1 APPENDIX (post-pre-release fixes)
+────────────────────────────────
+
+🔧 BUG FIXES
+• Hypnotube + partner sites: ads are no longer blocked in the embedded browser. The ad-blocker now skips partner domains so collab creators don't lose revenue.
+• Video: playback is torn down on system suspend so resuming from sleep no longer leaves a frozen frame.
+• Avatar: mods that only override tube.png are now respected.
+
+✨ FEATURES
+• Chat shortcut: toggle between system-wide and in-app hotkey.
+• Haptics: VPN-broken connections are detected and surfaced with a clear error instead of silently failing.
+
+⚡ PERFORMANCE & STABILITY
+• Settings: per-save log lines demoted to Debug to stop log-spam.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
