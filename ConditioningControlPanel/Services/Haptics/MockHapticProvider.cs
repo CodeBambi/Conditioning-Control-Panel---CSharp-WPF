@@ -60,6 +60,8 @@ namespace ConditioningControlPanel.Services.Haptics
             return Task.CompletedTask;
         }
 
+        public Task<bool> PingAsync() => Task.FromResult(IsConnected);
+
         public Task StopAsync()
         {
             if (!IsConnected) return Task.CompletedTask;

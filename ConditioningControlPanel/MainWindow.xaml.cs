@@ -8269,7 +8269,19 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            await App.Haptics.TestAsync();
+            var result = await App.Haptics.TestAsync();
+            if (result == Services.HapticTestResult.Unreachable)
+            {
+                MessageBox.Show(
+                    Loc.Get("msg_haptic_test_failed_vpn"),
+                    Loc.Get("label_test_failed"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+            else if (result == Services.HapticTestResult.NotConnected)
+            {
+                MessageBox.Show(Loc.Get("msg_connect_to_a_device_first"), Loc.Get("label_not_connected"), MessageBoxButton.OK, MessageBoxImage.Information);
+            }
         }
         private void TxtHapticUrl_TextChanged(object sender, TextChangedEventArgs e)
         {

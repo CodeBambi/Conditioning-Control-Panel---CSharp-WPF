@@ -146,6 +146,13 @@ namespace ConditioningControlPanel.Services.Haptics
             ConnectionChanged?.Invoke(this, false);
         }
 
+        public Task<bool> PingAsync()
+        {
+            // Buttplug fires ServerDisconnect when the WS drops, so the cached state is reliable.
+            // VPN tunnels rarely break localhost routing anyway.
+            return Task.FromResult(_client?.Connected == true && _activeDevices.Count > 0);
+        }
+
         public async Task DisconnectAsync()
         {
             try

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 
@@ -157,6 +158,31 @@ namespace ConditioningControlPanel.Services.Haptics
             _toyId = "";
             ConnectionChanged?.Invoke(this, false);
             return Task.CompletedTask;
+        }
+
+        public async Task<bool> PingAsync()
+        {
+            if (!IsConnected) return false;
+            // Short timeout so VPN-blocked routes fail fast instead of waiting the full 5s
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(1500));
+            try
+            {
+                if (_mode == LovenseConnectionMode.Lan)
+                {
+                    var json = new StringContent("{\"command\":\"GetToys\"}", Encoding.UTF8, "application/json");
+                    var response = await _client.PostAsync($"{_baseUrl}/command", json, cts.Token);
+                    return response.IsSuccessStatusCode;
+                }
+                else
+                {
+                    var response = await _client.GetAsync($"{_baseUrl}/command?command=GetToys", cts.Token);
+                    return response.IsSuccessStatusCode;
+                }
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public async Task VibrateAsync(double intensity, int durationMs)

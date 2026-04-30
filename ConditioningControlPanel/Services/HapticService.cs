@@ -8,6 +8,13 @@ using Serilog;
 
 namespace ConditioningControlPanel.Services
 {
+    public enum HapticTestResult
+    {
+        Success,
+        NotConnected,
+        Unreachable
+    }
+
     public class HapticService : IDisposable
     {
         private readonly MockHapticProvider _mockProvider;
@@ -16,6 +23,8 @@ namespace ConditioningControlPanel.Services
         private IHapticProvider? _activeProvider;
         private bool _disposed;
         private string? _currentEventType;
+        private System.Threading.Timer? _pingTimer;
+        private static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(30);
 
         public event EventHandler<bool>? ConnectionChanged;
         public event EventHandler<string>? DeviceDiscovered;
@@ -127,16 +136,50 @@ namespace ConditioningControlPanel.Services
             {
                 // Auto-enable haptics when successfully connected
                 Settings.Enabled = true;
+                StartPingTimer();
             }
             return result;
         }
 
         public async Task DisconnectAsync()
         {
+            StopPingTimer();
             if (_activeProvider != null)
             {
                 await _activeProvider.DisconnectAsync();
                 _activeProvider = null;
+            }
+        }
+
+        private void StartPingTimer()
+        {
+            _pingTimer?.Dispose();
+            _pingTimer = new System.Threading.Timer(_ => _ = PingTickAsync(), null, PingInterval, PingInterval);
+        }
+
+        private void StopPingTimer()
+        {
+            _pingTimer?.Dispose();
+            _pingTimer = null;
+        }
+
+        private async Task PingTickAsync()
+        {
+            try
+            {
+                var provider = _activeProvider;
+                if (provider == null || !provider.IsConnected) return;
+
+                var ok = await provider.PingAsync();
+                if (!ok && provider == _activeProvider)
+                {
+                    App.Logger?.Warning("Haptic ping failed - device unreachable (VPN routing change?), marking disconnected");
+                    await provider.DisconnectAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug(ex, "Haptic ping tick error (non-fatal)");
             }
         }
 
@@ -282,30 +325,43 @@ namespace ConditioningControlPanel.Services
             _currentEventType = null;
         }
 
-        public async Task TestAsync()
+        public async Task<HapticTestResult> TestAsync()
         {
-            if (_activeProvider == null || !_activeProvider.IsConnected)
+            var provider = _activeProvider;
+            if (provider == null || !provider.IsConnected)
             {
                 App.Logger?.Warning("TestAsync: Not connected - provider={Provider}, connected={Connected}",
-                    _activeProvider?.Name ?? "null", _activeProvider?.IsConnected);
+                    provider?.Name ?? "null", provider?.IsConnected);
                 Error?.Invoke(this, "Not connected to any device");
-                return;
+                return HapticTestResult.NotConnected;
             }
 
-            App.Logger?.Information("TestAsync: Starting test pattern on {Provider}", _activeProvider.Name);
+            // Verify the device is actually reachable. IsConnected can stay true after a VPN flip
+            // breaks routing, so without this check the test would silently fail with no feedback.
+            var reachable = await provider.PingAsync();
+            if (!reachable)
+            {
+                App.Logger?.Warning("TestAsync: Device unreachable on {Provider} - likely VPN/network change", provider.Name);
+                await provider.DisconnectAsync();
+                Error?.Invoke(this, "Device unreachable");
+                return HapticTestResult.Unreachable;
+            }
+
+            App.Logger?.Information("TestAsync: Starting test pattern on {Provider}", provider.Name);
 
             // Run a test pattern at fixed levels (use longer duration to trigger timeSec mode)
             // Level 6, 12, 20 out of 20
-            await _activeProvider.VibrateAsync(0.3, 500);
+            await provider.VibrateAsync(0.3, 500);
             await Task.Delay(600);
-            await _activeProvider.VibrateAsync(0.6, 500);
+            await provider.VibrateAsync(0.6, 500);
             await Task.Delay(600);
-            await _activeProvider.VibrateAsync(1.0, 800);
+            await provider.VibrateAsync(1.0, 800);
             await Task.Delay(900);
 
             // Stop after test
-            await _activeProvider.StopAsync();
+            await provider.StopAsync();
             App.Logger?.Information("TestAsync: Test pattern completed");
+            return HapticTestResult.Success;
         }
 
         public async Task StopAsync()
@@ -816,6 +872,7 @@ namespace ConditioningControlPanel.Services
             _flashDecayCts?.Dispose();
             _videoVibeCts?.Cancel();
             _videoVibeCts?.Dispose();
+            StopPingTimer();
             DisconnectAsync().Wait(1000);
         }
     }
