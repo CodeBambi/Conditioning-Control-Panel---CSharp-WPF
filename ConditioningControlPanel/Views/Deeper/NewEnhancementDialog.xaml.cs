@@ -35,6 +35,31 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
+        // Pulls the first TikTok-named entry out of AvatarTubeWindow.KnownVideoLinks
+        // (the embedded video knowledge base) and pre-fills it as the source. The
+        // user gets a working URL to immediately exercise the WebView2 preview
+        // without having to find or paste one. Falls back to a hardcoded URL if
+        // the dictionary is empty / unreachable for any reason.
+        private void BtnTryTikTok_Click(object sender, RoutedEventArgs e)
+        {
+            string url = "https://hypnotube.com/video/bambis-naughty-tiktok-collection-117314.html";
+            try
+            {
+                foreach (var kvp in AvatarTubeWindow.KnownVideoLinks)
+                {
+                    if (kvp.Key.IndexOf("tiktok", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        url = kvp.Value;
+                        break;
+                    }
+                }
+            }
+            catch { /* fall back to default */ }
+
+            RbVideo.IsChecked = true;
+            TxtSource.Text = url;
+        }
+
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
         {
             DialogResult = false;

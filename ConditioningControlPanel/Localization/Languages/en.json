@@ -41,6 +41,8 @@
   "deeper_dialog_create": "Create",
   "deeper_dialog_pick_video": "Pick a video file",
   "deeper_dialog_pick_audio": "Pick an audio file",
+  "deeper_dialog_try_tiktok": "🎬  Try with a HypnoTube TikTok",
+  "deeper_dialog_try_tiktok_tooltip": "Pre-fills the URL of a known HypnoTube TikTok video so you can immediately test the in-editor browser preview. The editor embeds the page in WebView2 and the timeline scrubs the actual <video> element.",
   "menu_file": "_File",
   "menu_file_save": "_Save",
   "menu_file_save_as": "Save _As...",

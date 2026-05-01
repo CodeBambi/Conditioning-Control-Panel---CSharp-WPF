@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         Title="{loc:Str deeper_dialog_new_title}"
-        Height="320" Width="500"
+        Height="360" Width="500"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource DarkerBgBrush}"
         ResizeMode="NoResize"
@@ -68,6 +68,19 @@
             <TextBlock Grid.Row="6" Text="{loc:Str deeper_dialog_source_hint}"
                        Foreground="{DynamicResource TextDimBrush}" FontSize="11"
                        Margin="0,6,0,0" TextWrapping="Wrap"/>
+
+            <!-- Quick-fill: a known HypnoTube TikTok video, picks Video media type
+                 and pastes the URL into the source field. Useful first-test target
+                 since we already know the URL works in the WebView2 preview. -->
+            <Button x:Name="BtnTryTikTok" Grid.Row="7" HorizontalAlignment="Left"
+                    Content="{loc:Str deeper_dialog_try_tiktok}"
+                    ToolTip="{loc:Str deeper_dialog_try_tiktok_tooltip}"
+                    Click="BtnTryTikTok_Click"
+                    Padding="10,4" Margin="0,8,0,0" Cursor="Hand" FontSize="11"
+                    Background="Transparent"
+                    Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                    BorderThickness="1"/>
 
             <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
                 <Button Content="{loc:Str btn_cancel}" Width="90" Padding="10,8" Margin="0,0,10,0"

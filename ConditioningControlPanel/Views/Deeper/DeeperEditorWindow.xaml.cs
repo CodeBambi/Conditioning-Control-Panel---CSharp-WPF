@@ -37,6 +37,12 @@ namespace ConditioningControlPanel.Views.Deeper
         private AudioFileReader? _audioReader;
         private AudioWaveformResult? _waveformData;
 
+        // Browser preview (HypnoTube etc.). Owns the WebView2's lifetime for
+        // this editor window — separate from the main Browser tab so closing
+        // the editor doesn't kill the user's browse session.
+        private BrowserVideoTimeSource? _browserSource;
+        private bool _browserInitInFlight;
+
         // Common
         private double _totalSeconds;
         private double _currentSeconds;
@@ -81,6 +87,11 @@ namespace ConditioningControlPanel.Views.Deeper
         // Preview mode (Phase 7)
         private EnhancementEngine? _previewEngine;
         private EditorPreviewTimeSource? _previewSource;
+        // Whichever IPlaybackTimeSource is feeding the preview engine right now —
+        // either _previewSource (LibVLC/NAudio) or _browserSource (WebView2). The
+        // engine doesn't care which; PreviewStateTimer_Tick reads from this so it
+        // doesn't have to know either.
+        private IPlaybackTimeSource? _activePreviewSource;
         private RecordingActionDispatcher? _previewRecorder;
         private readonly System.Collections.ObjectModel.ObservableCollection<string> _previewActions = new();
         private DispatcherTimer? _previewStateTimer;
@@ -239,6 +250,19 @@ namespace ConditioningControlPanel.Views.Deeper
             try
             {
                 var source = _enhancement.MediaSource;
+
+                // Remote http(s):// URL → WebView2 preview. VLC chokes on HT
+                // (signed HLS, anti-hotlink), so for any remote video source
+                // the editor embeds a real browser and drives the timeline
+                // through BrowserVideoTimeSource. Audio remote sources still
+                // hit the placeholder — there's no useful authoring surface
+                // for streamed audio that we don't host.
+                if (IsRemoteVideoUrl(source))
+                {
+                    await InitializeBrowserAsync(source);
+                    return;
+                }
+
                 if (!IsLocalFile(source))
                 {
                     ShowPlaceholder();
@@ -255,6 +279,82 @@ namespace ConditioningControlPanel.Views.Deeper
                 App.Logger?.Warning(ex, "DeeperEditor: preview init failed");
                 ShowPlaceholder();
             }
+        }
+
+        private bool IsRemoteVideoUrl(string source)
+        {
+            if (string.IsNullOrWhiteSpace(source)) return false;
+            if (_enhancement.MediaType != MediaTypes.Video) return false;
+            return source.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || source.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task InitializeBrowserAsync(string url)
+        {
+            if (_browserInitInFlight) return;
+            _browserInitInFlight = true;
+            try
+            {
+                VideoPreview.Visibility = Visibility.Collapsed;
+                WaveformCanvas.Visibility = Visibility.Collapsed;
+                PreviewPlaceholder.Visibility = Visibility.Collapsed;
+                BrowserPreview.Visibility = Visibility.Visible;
+
+                // Reuse the main browser's user-data folder so the user's HT
+                // login and cookies carry over — no second login required.
+                var userDataFolder = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "ConditioningControlPanel",
+                    "browser_data");
+                System.IO.Directory.CreateDirectory(userDataFolder);
+
+                var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(
+                    userDataFolder: userDataFolder).ConfigureAwait(true);
+                await BrowserPreview.EnsureCoreWebView2Async(env).ConfigureAwait(true);
+                if (BrowserPreview.CoreWebView2 == null) { ShowPlaceholder(); return; }
+
+                BrowserPreview.CoreWebView2.Navigate(url);
+
+                _browserSource = new BrowserVideoTimeSource(BrowserPreview);
+                _browserSource.Attach();
+                _browserSource.PlaybackTimeChanged += OnBrowserTimeChanged;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "DeeperEditor: browser preview init failed");
+                BrowserPreview.Visibility = Visibility.Collapsed;
+                ShowPlaceholder();
+            }
+            finally
+            {
+                _browserInitInFlight = false;
+            }
+        }
+
+        private void OnBrowserTimeChanged(double seconds)
+        {
+            // BrowserVideoTimeSource fires on its own poll timer; marshal to
+            // the UI thread to update the playhead + duration. Skip while
+            // the user is mid-scrub on the timeline.
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action<double>(OnBrowserTimeChanged), seconds);
+                return;
+            }
+            if (_isScrubbing) return;
+            if (_browserSource == null) return;
+            var dur = _browserSource.GetDurationSeconds();
+            if (dur > 0 && Math.Abs(dur - _totalSeconds) > 0.5)
+            {
+                _totalSeconds = dur;
+                TxtTotalTime.Text = FormatTime(_totalSeconds);
+                RebuildRegionVisuals();
+                RebuildHapticVisuals();
+            }
+            _currentSeconds = Math.Max(0, seconds);
+            TxtCurrentTime.Text = FormatTime(_currentSeconds);
+            UpdatePlayheadPosition();
+            BtnPlayPause.Content = _browserSource.IsPlaying ? "⏸" : "▶";
         }
 
         private void InitializeVideo(string path)
@@ -417,6 +517,14 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void BtnPlayPause_Click(object sender, RoutedEventArgs e)
         {
+            if (_browserSource != null)
+            {
+                // Browser source updates BtnPlayPause.Content from its poll loop
+                // (OnBrowserTimeChanged), so we don't flip it manually here.
+                if (_browserSource.IsPlaying) _browserSource.Pause();
+                else _browserSource.Play();
+                return;
+            }
             if (_mediaPlayer != null)
             {
                 if (_mediaPlayer.IsPlaying)
@@ -469,7 +577,11 @@ namespace ConditioningControlPanel.Views.Deeper
             frac = Math.Clamp(frac, 0, 1);
             _currentSeconds = frac * _totalSeconds;
             TxtCurrentTime.Text = FormatTime(_currentSeconds);
-            if (_mediaPlayer != null && _totalSeconds > 0)
+            if (_browserSource != null && _totalSeconds > 0)
+            {
+                _browserSource.Seek(_currentSeconds);
+            }
+            else if (_mediaPlayer != null && _totalSeconds > 0)
             {
                 _mediaPlayer.SeekTo(TimeSpan.FromSeconds(_currentSeconds));
             }
@@ -2146,26 +2258,37 @@ namespace ConditioningControlPanel.Views.Deeper
                 _previewRecorder = new RecordingActionDispatcher(inner);
                 _previewRecorder.ActionLogged += OnPreviewActionLogged;
 
-                _previewSource = new EditorPreviewTimeSource(
-                    videoPlayer: _mediaPlayer,
-                    audioTimeFn: () => _audioReader?.CurrentTime.TotalSeconds ?? 0,
-                    audioDurationFn: () => _totalSeconds,
-                    audioIsPlayingFn: () => _waveOut?.PlaybackState == NAudio.Wave.PlaybackState.Playing,
-                    audioSeekFn: s =>
-                    {
-                        if (_audioReader != null)
-                            _audioReader.CurrentTime = TimeSpan.FromSeconds(Math.Max(0, s));
-                    },
-                    audioPauseFn: () => _waveOut?.Pause(),
-                    audioPlayFn: () => _waveOut?.Play(),
-                    videoRectFn: GetPreviewScreenRect,
-                    dispatcher: Dispatcher);
-                _previewSource.Attach();
+                // Pick the active time source. Browser preview gets its own
+                // BrowserVideoTimeSource (owns the WebView's clock), so we skip
+                // the EditorPreviewTimeSource construction entirely in that case.
+                if (_browserSource != null)
+                {
+                    _activePreviewSource = _browserSource;
+                }
+                else
+                {
+                    _previewSource = new EditorPreviewTimeSource(
+                        videoPlayer: _mediaPlayer,
+                        audioTimeFn: () => _audioReader?.CurrentTime.TotalSeconds ?? 0,
+                        audioDurationFn: () => _totalSeconds,
+                        audioIsPlayingFn: () => _waveOut?.PlaybackState == NAudio.Wave.PlaybackState.Playing,
+                        audioSeekFn: s =>
+                        {
+                            if (_audioReader != null)
+                                _audioReader.CurrentTime = TimeSpan.FromSeconds(Math.Max(0, s));
+                        },
+                        audioPauseFn: () => _waveOut?.Pause(),
+                        audioPlayFn: () => _waveOut?.Play(),
+                        videoRectFn: GetPreviewScreenRect,
+                        dispatcher: Dispatcher);
+                    _previewSource.Attach();
+                    _activePreviewSource = _previewSource;
+                }
 
                 // Give the engine real webcam events when the camera is up,
                 // mouse-as-gaze fallback otherwise.
                 var webcam = (App.Webcam?.IsRunning ?? false) ? App.Webcam : null;
-                _previewEngine = new EnhancementEngine(_enhancement, _previewSource, _previewRecorder, webcam);
+                _previewEngine = new EnhancementEngine(_enhancement, _activePreviewSource, _previewRecorder, webcam);
                 _previewEngine.Start();
 
                 _previewActions.Clear();
@@ -2205,8 +2328,12 @@ namespace ConditioningControlPanel.Views.Deeper
                 _previewEngine?.Dispose();
                 _previewEngine = null;
 
+                // Only dispose _previewSource — _browserSource is owned by the
+                // editor's overall playback (lives across preview start/stop)
+                // so don't tear it down here.
                 _previewSource?.Dispose();
                 _previewSource = null;
+                _activePreviewSource = null;
 
                 if (_previewRecorder != null)
                     _previewRecorder.ActionLogged -= OnPreviewActionLogged;
@@ -2222,8 +2349,8 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void PreviewStateTimer_Tick(object? sender, EventArgs e)
         {
-            if (_previewEngine == null || _previewSource == null) return;
-            var t = _previewSource.GetCurrentTimeSeconds();
+            if (_previewEngine == null || _activePreviewSource == null) return;
+            var t = _activePreviewSource.GetCurrentTimeSeconds();
             var region = FindPreviewRegion(t);
             TxtPreviewState.Text = string.Format(System.Globalization.CultureInfo.InvariantCulture,
                 Loc.Get("deeper_editor_preview_state_fmt"), t, region ?? "—");
@@ -2573,6 +2700,14 @@ namespace ConditioningControlPanel.Views.Deeper
                 _waveOut = null;
                 _audioReader?.Dispose();
                 _audioReader = null;
+
+                if (_browserSource != null)
+                {
+                    _browserSource.PlaybackTimeChanged -= OnBrowserTimeChanged;
+                    _browserSource.Dispose();
+                    _browserSource = null;
+                }
+                try { BrowserPreview?.Dispose(); } catch { }
             }
             catch (Exception ex)
             {

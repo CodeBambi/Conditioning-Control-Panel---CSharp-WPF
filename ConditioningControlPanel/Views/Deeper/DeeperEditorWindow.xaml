@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Deeper"
         Height="720" Width="1180"
         MinHeight="560" MinWidth="980"
@@ -109,6 +110,11 @@
                 <Border Grid.Row="0" Background="#0A0A14" Margin="10,10,10,5">
                     <Grid x:Name="PreviewHost">
                         <vlc:VideoView x:Name="VideoPreview" Visibility="Collapsed"/>
+
+                        <!-- WebView2 preview for remote http(s):// sources (HypnoTube etc). VLC can't
+                             play HT URLs reliably (signed HLS); WebView2 renders the real page so
+                             the timeline can scrub the actual <video> element via JS. -->
+                        <wv2:WebView2 x:Name="BrowserPreview" Visibility="Collapsed"/>
 
                         <Canvas x:Name="WaveformCanvas" Visibility="Collapsed" Background="#10000020">
                             <Path x:Name="WaveformPath" Stroke="{DynamicResource DeeperAccentBrush}"
