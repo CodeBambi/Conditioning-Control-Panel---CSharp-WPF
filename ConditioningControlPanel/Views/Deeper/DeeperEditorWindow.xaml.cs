@@ -158,6 +158,51 @@ namespace ConditioningControlPanel.Views.Deeper
         private void DeeperEditorWindow_Loaded(object sender, RoutedEventArgs e)
         {
             _ = InitializePreviewAsync();
+
+            // First-run editor coachmarks. Auto-launch once; the user can re-run
+            // anytime via the "?" button. Wrap in a try so a tutorial failure
+            // never blocks the editor itself.
+            try
+            {
+                var settings = App.Settings?.Current;
+                if (settings != null && !settings.HasSeenDeeperEditorIntro)
+                {
+                    settings.HasSeenDeeperEditorIntro = true;
+                    App.Settings?.Save();
+                    // Defer slightly so the layout is fully settled before the
+                    // overlay tries to compute spotlight bounds.
+                    Dispatcher.BeginInvoke(new Action(StartEditorTutorial),
+                        System.Windows.Threading.DispatcherPriority.Loaded);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: auto-launch tutorial skipped: {Error}", ex.Message);
+            }
+        }
+
+        private ConditioningControlPanel.TutorialOverlay? _editorTutorialOverlay;
+
+        private void BtnEditorHelp_Click(object sender, RoutedEventArgs e)
+        {
+            StartEditorTutorial();
+        }
+
+        private void StartEditorTutorial()
+        {
+            if (_editorTutorialOverlay != null) return;
+            try
+            {
+                App.Tutorial.Start(TutorialType.DeeperEditor);
+                _editorTutorialOverlay = new ConditioningControlPanel.TutorialOverlay(this, App.Tutorial);
+                _editorTutorialOverlay.Closed += (_, _) => _editorTutorialOverlay = null;
+                _editorTutorialOverlay.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: failed to start tutorial: {Error}", ex.Message);
+                _editorTutorialOverlay = null;
+            }
         }
 
         private void LoadEnhancement(Enhancement enhancement, string? filePath)

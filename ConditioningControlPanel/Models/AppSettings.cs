@@ -3303,6 +3303,12 @@ namespace ConditioningControlPanel.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool HasSeededDeeperDemos { get; set; }
 
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenDeeperWelcome { get; set; }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenDeeperEditorIntro { get; set; }
+
         private List<string> _deeperRecentFiles = new();
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<string> DeeperRecentFiles

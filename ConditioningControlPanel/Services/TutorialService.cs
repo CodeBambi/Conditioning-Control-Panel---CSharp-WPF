@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Windows;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services
@@ -20,7 +21,9 @@ namespace ConditioningControlPanel.Services
         Patreon,        // Patreon exclusives tab
         Avatar,         // Avatar companion
         Modding,        // Mod creation guide
-        Awareness       // Awareness Engine (keyword triggers + OCR)
+        Awareness,      // Awareness Engine (keyword triggers + OCR)
+        Deeper,         // Deeper tab (universal media enhancement)
+        DeeperEditor    // Deeper editor coachmarks (targets the editor window)
     }
 
     public class TutorialService
@@ -37,6 +40,7 @@ namespace ConditioningControlPanel.Services
         private Action? _showCompanion;
         private Action? _showPatreon;
         private Action? _showAwareness;
+        private Action? _showDeeper;
 
         public event EventHandler<TutorialStep>? StepChanged;
         public event EventHandler? TutorialStarted;
@@ -70,7 +74,8 @@ namespace ConditioningControlPanel.Services
             Action showAchievements,
             Action showCompanion,
             Action showPatreon,
-            Action? showAwareness = null)
+            Action? showAwareness = null,
+            Action? showDeeper = null)
         {
             _showSettings = showSettings;
             _showPresets = showPresets;
@@ -79,6 +84,7 @@ namespace ConditioningControlPanel.Services
             _showCompanion = showCompanion;
             _showPatreon = showPatreon;
             _showAwareness = showAwareness;
+            _showDeeper = showDeeper;
         }
 
         /// <summary>
@@ -99,6 +105,8 @@ namespace ConditioningControlPanel.Services
                 TutorialType.Avatar => CreateAvatarSteps(),
                 TutorialType.Modding => CreateModdingSteps(),
                 TutorialType.Awareness => CreateAwarenessSteps(),
+                TutorialType.Deeper => CreateDeeperSteps(),
+                TutorialType.DeeperEditor => CreateDeeperEditorSteps(),
                 _ => CreateFullTourSteps()
             };
         }
@@ -147,6 +155,7 @@ namespace ConditioningControlPanel.Services
                         "companion" => _showCompanion,
                         "patreon" => _showPatreon,
                         "awareness" => _showAwareness,
+                        "deeper" => _showDeeper,
                         _ => null
                     };
 
@@ -1364,6 +1373,154 @@ namespace ConditioningControlPanel.Services
                                   "\u2022 Feeling overloaded later? Raise the two cooldown sliders.\n" +
                                   "\u2022 Want this tour again? It's in the ? button at the top right.\n\n" +
                                   "Click Finish \u2014 the editor will open so you can play.",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        // Deeper tab tour. Targets element names in the Deeper tab; the
+        // RequiresTab="deeper" flips into the tab via the showDeeper callback.
+        private List<TutorialStep> CreateDeeperSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "dp_intro",
+                    Icon = "\ud83c\udf0a",
+                    Title = Loc.Get("deeper_tut_tab_intro_title"),
+                    Description = Loc.Get("deeper_tut_tab_intro_body"),
+                    RequiresTab = "deeper",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "dp_player",
+                    Icon = "\u25b6",
+                    Title = Loc.Get("deeper_tut_tab_player_title"),
+                    Description = Loc.Get("deeper_tut_tab_player_body"),
+                    RequiresTab = "deeper",
+                    TargetElementName = "BtnDeeperOpenPlayer",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "dp_new",
+                    Icon = "\u2728",
+                    Title = Loc.Get("deeper_tut_tab_new_title"),
+                    Description = Loc.Get("deeper_tut_tab_new_body"),
+                    RequiresTab = "deeper",
+                    TargetElementName = "BtnDeeperNewEnhancement",
+                    TextPosition = TutorialStepPosition.Bottom
+                },
+                new TutorialStep
+                {
+                    Id = "dp_library",
+                    Icon = "\ud83d\udcda",
+                    Title = Loc.Get("deeper_tut_tab_library_title"),
+                    Description = Loc.Get("deeper_tut_tab_library_body"),
+                    RequiresTab = "deeper",
+                    TargetElementName = "DeeperLibraryCard",
+                    TextPosition = TutorialStepPosition.Right
+                },
+                new TutorialStep
+                {
+                    Id = "dp_recent",
+                    Icon = "\ud83d\udd52",
+                    Title = Loc.Get("deeper_tut_tab_recent_title"),
+                    Description = Loc.Get("deeper_tut_tab_recent_body"),
+                    RequiresTab = "deeper",
+                    TargetElementName = "DeeperRecentCard",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "dp_done",
+                    Icon = "\u2764",
+                    Title = Loc.Get("deeper_tut_tab_done_title"),
+                    Description = Loc.Get("deeper_tut_tab_done_body"),
+                    RequiresTab = "deeper",
+                    TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        // Deeper editor coachmarks. These steps target element names that live
+        // inside the editor *window*, so the consumer must construct the
+        // TutorialOverlay against the editor window (not MainWindow). No
+        // RequiresTab \u2014 the editor is its own surface.
+        private List<TutorialStep> CreateDeeperEditorSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "de_intro",
+                    Icon = "\ud83c\udfa8",
+                    Title = Loc.Get("deeper_tut_ed_intro_title"),
+                    Description = Loc.Get("deeper_tut_ed_intro_body"),
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
+                    Id = "de_timeline",
+                    Icon = "\u23f1",
+                    Title = Loc.Get("deeper_tut_ed_timeline_title"),
+                    Description = Loc.Get("deeper_tut_ed_timeline_body"),
+                    TargetElementName = "TimelineCanvas",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "de_preview",
+                    Icon = "\ud83d\udc41",
+                    Title = Loc.Get("deeper_tut_ed_preview_title"),
+                    Description = Loc.Get("deeper_tut_ed_preview_body"),
+                    TargetElementName = "BtnPreview",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "de_metadata",
+                    Icon = "\ud83d\udcdd",
+                    Title = Loc.Get("deeper_tut_ed_metadata_title"),
+                    Description = Loc.Get("deeper_tut_ed_metadata_body"),
+                    TargetElementName = "TxtMetaName",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "de_rules",
+                    Icon = "\ud83d\udd17",
+                    Title = Loc.Get("deeper_tut_ed_rules_title"),
+                    Description = Loc.Get("deeper_tut_ed_rules_body"),
+                    TargetElementName = "RulesList",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "de_selected",
+                    Icon = "\ud83d\udc49",
+                    Title = Loc.Get("deeper_tut_ed_selected_title"),
+                    Description = Loc.Get("deeper_tut_ed_selected_body"),
+                    TargetElementName = "SelectedPlaceholder",
+                    TextPosition = TutorialStepPosition.Left
+                },
+                new TutorialStep
+                {
+                    Id = "de_save",
+                    Icon = "\ud83d\udcbe",
+                    Title = Loc.Get("deeper_tut_ed_save_title"),
+                    Description = Loc.Get("deeper_tut_ed_save_body"),
+                    TargetElementName = "TxtValidationSummary",
+                    TextPosition = TutorialStepPosition.Top
+                },
+                new TutorialStep
+                {
+                    Id = "de_done",
+                    Icon = "\u2764",
+                    Title = Loc.Get("deeper_tut_ed_done_title"),
+                    Description = Loc.Get("deeper_tut_ed_done_body"),
                     TextPosition = TutorialStepPosition.Center
                 }
             };

@@ -77,6 +77,14 @@
                            Foreground="{DynamicResource DeeperAccentBrush}" Visibility="Collapsed"
                            FontSize="14" VerticalAlignment="Center"
                            ToolTip="{loc:Str deeper_editor_unsaved_marker}"/>
+                <Button x:Name="BtnEditorHelp" DockPanel.Dock="Right" Margin="0,0,0,0"
+                        Content="{loc:Str deeper_editor_help_btn}"
+                        ToolTip="{loc:Str deeper_editor_help_tooltip}"
+                        Click="BtnEditorHelp_Click"
+                        Width="26" Height="22" Padding="0" Cursor="Hand" FontSize="13" FontWeight="Bold"
+                        Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                        Foreground="{DynamicResource DeeperAccentBrush}"
+                        BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
                 <TextBlock x:Name="TxtFilePath" Margin="0,0,12,0" HorizontalAlignment="Right"
                            Foreground="{DynamicResource TextDimBrush}" FontSize="11"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
@@ -174,6 +182,7 @@
                         <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,6">
                             <Button x:Name="BtnPlayPause" DockPanel.Dock="Left"
                                     Content="▶" Click="BtnPlayPause_Click"
+                                    ToolTip="{loc:Str deeper_editor_tt_play}"
                                     Width="34" Height="28" Padding="0" Cursor="Hand"
                                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                                     Foreground="{DynamicResource DeeperAccentBrush}"
@@ -189,6 +198,7 @@
                                        FontSize="12" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             <ToggleButton x:Name="BtnPreview" DockPanel.Dock="Right"
                                           Content="{loc:Str deeper_editor_preview_off}"
+                                          ToolTip="{loc:Str deeper_editor_tt_preview}"
                                           Click="BtnPreview_Click" Cursor="Hand"
                                           Padding="12,4" Margin="8,0,0,0" FontSize="11" FontWeight="SemiBold"
                                           Background="{DynamicResource DeeperAccentTransparent20Brush}"
@@ -202,6 +212,7 @@
                         <!-- Timeline canvas (scrub area + lanes: regions on top half, haptics on bottom half) -->
                         <Canvas x:Name="TimelineCanvas" Grid.Row="1" Background="#15151F"
                                 Cursor="Hand" ClipToBounds="True"
+                                ToolTip="{loc:Str deeper_editor_tt_timeline}"
                                 MouseLeftButtonDown="TimelineCanvas_MouseLeftButtonDown"
                                 MouseMove="TimelineCanvas_MouseMove"
                                 MouseLeftButtonUp="TimelineCanvas_MouseLeftButtonUp"
@@ -236,39 +247,46 @@
 
                         <TextBlock Text="{loc:Str deeper_editor_label_name}" Style="{StaticResource EditorLabel}"/>
                         <TextBox x:Name="TxtMetaName" Style="{StaticResource EditorTextBox}"
+                                 ToolTip="{loc:Str deeper_editor_tt_meta_name}"
                                  TextChanged="MetadataField_TextChanged"/>
 
                         <TextBlock Text="{loc:Str deeper_editor_label_creator}" Style="{StaticResource EditorLabel}"/>
                         <TextBox x:Name="TxtMetaCreator" Style="{StaticResource EditorTextBox}"
+                                 ToolTip="{loc:Str deeper_editor_tt_meta_creator}"
                                  TextChanged="MetadataField_TextChanged"/>
 
                         <TextBlock Text="{loc:Str deeper_editor_label_description}" Style="{StaticResource EditorLabel}"/>
                         <TextBox x:Name="TxtMetaDescription" Style="{StaticResource EditorTextBox}"
+                                 ToolTip="{loc:Str deeper_editor_tt_meta_description}"
                                  TextWrapping="Wrap" AcceptsReturn="True" Height="68"
                                  TextChanged="MetadataField_TextChanged"/>
 
                         <TextBlock Text="{loc:Str deeper_editor_label_tags}" Style="{StaticResource EditorLabel}"/>
                         <TextBox x:Name="TxtMetaTags" Style="{StaticResource EditorTextBox}"
-                                 ToolTip="{loc:Str deeper_editor_tags_hint}"
+                                 ToolTip="{loc:Str deeper_editor_tt_meta_tags}"
                                  TextChanged="MetadataField_TextChanged"/>
 
                         <TextBlock Text="{loc:Str deeper_editor_label_license}" Style="{StaticResource EditorLabel}"/>
                         <TextBox x:Name="TxtMetaLicense" Style="{StaticResource EditorTextBox}"
+                                 ToolTip="{loc:Str deeper_editor_tt_meta_license}"
                                  TextChanged="MetadataField_TextChanged"/>
 
                         <Separator Margin="0,10,0,14"/>
 
                         <TextBlock Text="{loc:Str deeper_editor_label_media_source}" Style="{StaticResource EditorLabel}"/>
                         <TextBox x:Name="TxtMediaSource" Style="{StaticResource EditorTextBox}"
+                                 ToolTip="{loc:Str deeper_editor_tt_media_source}"
                                  IsReadOnly="True" Foreground="{DynamicResource TextDimBrush}"/>
 
                         <TextBlock Text="{loc:Str deeper_editor_label_media_type}" Style="{StaticResource EditorLabel}"/>
                         <TextBlock x:Name="TxtMediaType" Foreground="{DynamicResource TextLightBrush}"
+                                   ToolTip="{loc:Str deeper_editor_tt_media_type}"
                                    FontSize="12" Margin="0,0,0,8"/>
 
                         <Separator Margin="0,10,0,14"/>
 
-                        <DockPanel Margin="0,0,0,8" LastChildFill="True">
+                        <DockPanel Margin="0,0,0,8" LastChildFill="True"
+                                   ToolTip="{loc:Str deeper_editor_tt_rules_section}">
                             <TextBlock DockPanel.Dock="Left" Text="{loc:Str deeper_editor_section_rules}"
                                        Foreground="{DynamicResource DeeperAccentBrush}"
                                        FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
@@ -306,6 +324,7 @@
 
                             <TextBlock Text="{loc:Str deeper_editor_region_label}" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtRegionLabel" Style="{StaticResource EditorTextBox}"
+                                     ToolTip="{loc:Str deeper_editor_tt_region_label}"
                                      TextChanged="RegionField_TextChanged"/>
 
                             <Grid Margin="0,0,0,4">
@@ -317,11 +336,13 @@
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Text="{loc:Str deeper_editor_region_start}" Style="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtRegionStart" Style="{StaticResource EditorTextBox}"
+                                             ToolTip="{loc:Str deeper_editor_tt_region_start}"
                                              TextChanged="RegionField_TextChanged"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="{loc:Str deeper_editor_region_end}" Style="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtRegionEnd" Style="{StaticResource EditorTextBox}"
+                                             ToolTip="{loc:Str deeper_editor_tt_region_end}"
                                              TextChanged="RegionField_TextChanged"/>
                                 </StackPanel>
                             </Grid>
@@ -337,6 +358,7 @@
                                         Background="{DynamicResource DeeperAccentBrush}"
                                         BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"/>
                                 <TextBox x:Name="TxtRegionColor" Grid.Column="1" Style="{StaticResource EditorTextBox}"
+                                         ToolTip="{loc:Str deeper_editor_tt_region_color}"
                                          TextChanged="RegionField_TextChanged" Margin="0"/>
                             </Grid>
                             <WrapPanel x:Name="RegionColorSwatches" Margin="0,4,0,12"/>
@@ -362,17 +384,19 @@
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Text="{loc:Str deeper_editor_haptic_start}" Style="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtHapticStart" Style="{StaticResource EditorTextBox}"
+                                             ToolTip="{loc:Str deeper_editor_tt_haptic_start}"
                                              TextChanged="HapticField_TextChanged"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="{loc:Str deeper_editor_haptic_duration}" Style="{StaticResource EditorLabel}"/>
                                     <TextBox x:Name="TxtHapticDuration" Style="{StaticResource EditorTextBox}"
+                                             ToolTip="{loc:Str deeper_editor_tt_haptic_duration}"
                                              TextChanged="HapticField_TextChanged"/>
                                 </StackPanel>
                             </Grid>
 
                             <TextBlock Text="{loc:Str deeper_editor_haptic_intensity}" Style="{StaticResource EditorLabel}"/>
-                            <Grid Margin="0,0,0,8">
+                            <Grid Margin="0,0,0,8" ToolTip="{loc:Str deeper_editor_tt_haptic_intensity}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="44"/>
@@ -392,6 +416,7 @@
                             <TextBlock Text="{loc:Str deeper_editor_haptic_pattern}" Style="{StaticResource EditorLabel}"/>
                             <ComboBox x:Name="CmbHapticPattern" Style="{StaticResource EditorComboBox}"
                                       ItemContainerStyle="{StaticResource EditorComboBoxItem}"
+                                      ToolTip="{loc:Str deeper_editor_tt_haptic_pattern}"
                                       SelectionChanged="CmbHapticPattern_SelectionChanged"/>
 
                             <StackPanel x:Name="CurveEditorPanel" Visibility="Collapsed" Margin="0,4,0,8">
@@ -422,6 +447,7 @@
                                 </Grid.ColumnDefinitions>
                                 <Button Grid.Column="0" Content="{loc:Str deeper_editor_haptic_test}"
                                         Click="BtnTestHaptic_Click"
+                                        ToolTip="{loc:Str deeper_editor_tt_haptic_test}"
                                         Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
                                         BorderThickness="0" Padding="10,6" Cursor="Hand"
                                         FontWeight="SemiBold"/>
@@ -447,6 +473,7 @@
 
                             <CheckBox x:Name="ChkRuleEnabled"
                                       Content="{loc:Str deeper_editor_rule_enabled}"
+                                      ToolTip="{loc:Str deeper_editor_tt_rule_enabled}"
                                       Click="ChkRuleEnabled_Changed"
                                       Foreground="{DynamicResource TextLightBrush}"
                                       Margin="0,0,0,10"/>
@@ -454,22 +481,26 @@
                             <TextBlock Text="{loc:Str deeper_editor_rule_trigger}" Style="{StaticResource EditorLabel}"/>
                             <ComboBox x:Name="CmbTriggerType" Style="{StaticResource EditorComboBox}"
                                       ItemContainerStyle="{StaticResource EditorComboBoxItem}"
+                                      ToolTip="{loc:Str deeper_editor_tt_rule_trigger}"
                                       SelectionChanged="CmbTriggerType_SelectionChanged"/>
                             <StackPanel x:Name="TriggerFields"/>
 
                             <TextBlock Text="{loc:Str deeper_editor_rule_action}" Style="{StaticResource EditorLabel}" Margin="0,4,0,4"/>
                             <ComboBox x:Name="CmbActionType" Style="{StaticResource EditorComboBox}"
                                       ItemContainerStyle="{StaticResource EditorComboBoxItem}"
+                                      ToolTip="{loc:Str deeper_editor_tt_rule_action}"
                                       SelectionChanged="CmbActionType_SelectionChanged"/>
                             <StackPanel x:Name="ActionFields"/>
 
                             <TextBlock Text="{loc:Str deeper_editor_rule_region_constraint}" Style="{StaticResource EditorLabel}" Margin="0,4,0,4"/>
                             <ComboBox x:Name="CmbRuleRegion" Style="{StaticResource EditorComboBox}"
                                       ItemContainerStyle="{StaticResource EditorComboBoxItem}"
+                                      ToolTip="{loc:Str deeper_editor_tt_rule_region}"
                                       SelectionChanged="CmbRuleRegion_SelectionChanged"/>
 
                             <TextBlock Text="{loc:Str deeper_editor_rule_cooldown}" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtRuleCooldown" Style="{StaticResource EditorTextBox}"
+                                     ToolTip="{loc:Str deeper_editor_tt_rule_cooldown}"
                                      TextChanged="TxtRuleCooldown_TextChanged"/>
                         </StackPanel>
                     </StackPanel>
@@ -483,13 +514,14 @@
                 Padding="14,8">
             <DockPanel LastChildFill="True">
                 <Button DockPanel.Dock="Right" Content="{loc:Str btn_save}" Click="MenuSave_Click"
+                        ToolTip="{loc:Str deeper_editor_tt_save}"
                         Padding="14,6" Cursor="Hand" FontWeight="SemiBold"
                         Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
                         BorderThickness="0"/>
                 <TextBlock x:Name="TxtValidationSummary" Text="{loc:Str deeper_editor_validation_clean}"
                            Foreground="{DynamicResource TextLightBrush}"
                            FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0"
-                           ToolTip="{loc:Str deeper_editor_validation_tooltip}"/>
+                           ToolTip="{loc:Str deeper_editor_tt_validation}"/>
             </DockPanel>
         </Border>
     </Grid>

@@ -8274,6 +8274,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/> <!-- Header -->
                     <RowDefinition Height="Auto"/> <!-- Pitch -->
+                    <RowDefinition Height="Auto"/> <!-- Welcome card (first-run) -->
                     <RowDefinition Height="*"/>    <!-- Library + Recent -->
                 </Grid.RowDefinitions>
 
@@ -8297,8 +8298,18 @@
                                    HorizontalAlignment="Left"/>
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BtnDeeperTutorial"
+                                Content="{loc:Str deeper_tab_tutorial_btn}"
+                                ToolTip="{loc:Str deeper_tab_tutorial_tooltip}"
+                                Click="BtnDeeperTutorial_Click"
+                                Padding="14,10" FontSize="12" Cursor="Hand"
+                                Background="Transparent"
+                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                                Margin="0,0,8,0"/>
                         <Button x:Name="BtnDeeperOpenPlayer"
                                 Content="{loc:Str deeper_tab_open_player}"
+                                ToolTip="{loc:Str deeper_tab_open_player_tooltip}"
                                 Click="BtnDeeperOpenPlayer_Click"
                                 Padding="16,10" FontSize="12" Cursor="Hand"
                                 Background="{DynamicResource DeeperAccentTransparent20Brush}"
@@ -8307,6 +8318,7 @@
                                 Margin="0,0,8,0"/>
                         <Button x:Name="BtnDeeperNewEnhancement"
                                 Content="{loc:Str deeper_empty_cta}"
+                                ToolTip="{loc:Str deeper_tab_new_enh_tooltip}"
                                 Click="BtnDeeperNewEnhancement_Click"
                                 Padding="22,10" FontSize="13" FontWeight="SemiBold"
                                 Foreground="White" BorderThickness="0" Cursor="Hand"
@@ -8333,8 +8345,57 @@
                            Foreground="{DynamicResource TextDimBrush}" FontSize="11"
                            TextWrapping="Wrap" Margin="0,0,0,20"/>
 
+                <!-- First-run welcome card. Visibility flipped to Collapsed in code
+                     once the user clicks Tour, Open Demo, or Got it. -->
+                <Border x:Name="DeeperWelcomeCard" Grid.Row="2" Visibility="Collapsed"
+                        Background="{DynamicResource SurfaceBgBrush}"
+                        BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                        CornerRadius="10" Padding="22,18" Margin="0,0,0,18">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="✨" FontSize="34"
+                                   Foreground="{DynamicResource DeeperAccentBrush}"
+                                   VerticalAlignment="Top" Margin="0,0,18,0"/>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="{loc:Str deeper_welcome_card_title}"
+                                       Foreground="{DynamicResource DeeperAccentBrush}"
+                                       FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+                            <TextBlock Text="{loc:Str deeper_welcome_card_body}"
+                                       Foreground="{DynamicResource TextLightBrush}" FontSize="12"
+                                       TextWrapping="Wrap" Margin="0,0,0,14"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="BtnDeeperWelcomeTour"
+                                        Content="{loc:Str deeper_welcome_card_take_tour}"
+                                        Click="BtnDeeperWelcomeTour_Click"
+                                        Padding="14,7" Cursor="Hand" FontWeight="SemiBold"
+                                        Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
+                                        BorderThickness="0" Margin="0,0,8,0"/>
+                                <Button x:Name="BtnDeeperWelcomeDemo"
+                                        Content="{loc:Str deeper_welcome_card_open_demo}"
+                                        Click="BtnDeeperWelcomeDemo_Click"
+                                        Padding="14,7" Cursor="Hand"
+                                        Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                        Foreground="{DynamicResource DeeperAccentBrush}"
+                                        BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                                        Margin="0,0,8,0"/>
+                                <Button x:Name="BtnDeeperWelcomeDismiss"
+                                        Content="{loc:Str deeper_welcome_card_dismiss}"
+                                        Click="BtnDeeperWelcomeDismiss_Click"
+                                        Padding="14,7" Cursor="Hand"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextMutedBrush}"
+                                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                        BorderThickness="1"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
                 <!-- Library + Recent (two-column) -->
-                <Grid Grid.Row="2">
+                <Grid Grid.Row="3">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="20"/>
@@ -8342,9 +8403,10 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- Library -->
-                    <Border Grid.Column="0" Background="{DynamicResource SurfaceBgBrush}"
+                    <Border x:Name="DeeperLibraryCard" Grid.Column="0" Background="{DynamicResource SurfaceBgBrush}"
                             BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                            CornerRadius="10" Padding="18,14">
+                            CornerRadius="10" Padding="18,14"
+                            ToolTip="{loc:Str deeper_tab_library_tooltip}">
                         <DockPanel LastChildFill="True">
                             <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
                                 <TextBlock Text="{loc:Str deeper_section_library}"
@@ -8360,9 +8422,10 @@
                     </Border>
 
                     <!-- Recent -->
-                    <Border Grid.Column="2" Background="{DynamicResource SurfaceBgBrush}"
+                    <Border x:Name="DeeperRecentCard" Grid.Column="2" Background="{DynamicResource SurfaceBgBrush}"
                             BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                            CornerRadius="10" Padding="18,14">
+                            CornerRadius="10" Padding="18,14"
+                            ToolTip="{loc:Str deeper_tab_recent_tooltip}">
                         <DockPanel LastChildFill="True">
                             <TextBlock DockPanel.Dock="Top" Text="{loc:Str deeper_section_recent}"
                                        Foreground="{DynamicResource TextLightBrush}"

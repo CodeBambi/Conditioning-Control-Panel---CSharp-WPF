@@ -2107,6 +2107,81 @@ namespace ConditioningControlPanel
                 StopDeeperTabPulse();
                 App.Settings?.Save();
             }
+            UpdateDeeperWelcomeCardVisibility();
+        }
+
+        private void UpdateDeeperWelcomeCardVisibility()
+        {
+            if (DeeperWelcomeCard == null) return;
+            var seen = App.Settings?.Current?.HasSeenDeeperWelcome ?? true;
+            DeeperWelcomeCard.Visibility = seen ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private void DismissDeeperWelcomeCard()
+        {
+            if (App.Settings?.Current is { } s && !s.HasSeenDeeperWelcome)
+            {
+                s.HasSeenDeeperWelcome = true;
+                App.Settings?.Save();
+            }
+            if (DeeperWelcomeCard != null) DeeperWelcomeCard.Visibility = Visibility.Collapsed;
+        }
+
+        private void BtnDeeperWelcomeTour_Click(object sender, RoutedEventArgs e)
+        {
+            DismissDeeperWelcomeCard();
+            StartDeeperTabTutorial();
+        }
+
+        private void BtnDeeperWelcomeDemo_Click(object sender, RoutedEventArgs e)
+        {
+            DismissDeeperWelcomeCard();
+            OpenDeeperBundledDemo();
+        }
+
+        private void BtnDeeperWelcomeDismiss_Click(object sender, RoutedEventArgs e)
+        {
+            DismissDeeperWelcomeCard();
+        }
+
+        private void BtnDeeperTutorial_Click(object sender, RoutedEventArgs e)
+        {
+            StartDeeperTabTutorial();
+        }
+
+        // The bundled "Welcome to Deeper" demo is seeded into the user's library
+        // on first run. Match by the literal filename rather than a hardcoded
+        // path so we follow the user's library folder if they moved it.
+        private void OpenDeeperBundledDemo()
+        {
+            try
+            {
+                var lib = App.EnhancementLibrary;
+                if (lib == null) return;
+                var match = lib.ScanLibrary()
+                    .FirstOrDefault(e =>
+                        string.Equals(System.IO.Path.GetFileName(e.FilePath), "welcome.ccpenh.json",
+                            StringComparison.OrdinalIgnoreCase));
+                if (match == null)
+                {
+                    MessageBox.Show(this,
+                        "The bundled demo couldn't be found in your library — try restarting the app.",
+                        "Deeper", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                OpenDeeperFile(match.FilePath);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Open bundled Deeper demo failed: {Error}", ex.Message);
+            }
+        }
+
+        private void StartDeeperTabTutorial()
+        {
+            ShowTab("deeper");
+            UpdateDeeperWelcomeCardVisibility(); // keep the card consistent with state
+            StartTutorial(TutorialType.Deeper);
         }
 
         private void ChkEnableDeeper_Changed(object sender, RoutedEventArgs e)
@@ -2301,7 +2376,8 @@ namespace ConditioningControlPanel
                 Padding = new Thickness(12, 8, 12, 8),
                 Margin = new Thickness(0, 0, 0, 6),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                Tag = entry.FilePath
+                Tag = entry.FilePath,
+                ToolTip = Loc.Get("deeper_tab_library_item_tooltip")
             };
             border.MouseLeftButtonUp += (_, _) => OpenDeeperFile(entry.FilePath);
 
@@ -2360,7 +2436,8 @@ namespace ConditioningControlPanel
                 Padding = new Thickness(12, 8, 12, 8),
                 Margin = new Thickness(0, 0, 0, 6),
                 Cursor = System.Windows.Input.Cursors.Hand,
-                Tag = path
+                Tag = path,
+                ToolTip = Loc.Get("deeper_tab_library_item_tooltip")
             };
             border.MouseLeftButtonUp += (_, _) => OpenDeeperFile(path);
 
@@ -19070,7 +19147,8 @@ namespace ConditioningControlPanel
                 // Exclusives tab eliminated — route tutorial's "patreon" step to the
                 // App Info & Data popup which hosts the login/data sections.
                 showPatreon: () => ShowAppInfoPopup(),
-                showAwareness: () => ShowTab("awareness")
+                showAwareness: () => ShowTab("awareness"),
+                showDeeper: () => ShowTab("deeper")
             );
 
             App.Tutorial.Start(type);
