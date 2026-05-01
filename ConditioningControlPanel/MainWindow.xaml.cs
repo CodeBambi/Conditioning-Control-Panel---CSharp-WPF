@@ -426,6 +426,13 @@ namespace ConditioningControlPanel
             // Initialize browser when window is loaded
             Loaded += MainWindow_Loaded;
 
+            // Phase 10: live-refresh the Deeper tab on library changes
+            // (FileSystemWatcher fires through dispatcher.BeginInvoke, debounced
+            // 300ms). Detached on window close so a closed window doesn't keep
+            // reacting to file drops.
+            if (App.EnhancementLibrary != null)
+                App.EnhancementLibrary.LibraryChanged += OnDeeperLibraryChanged;
+
             // Close the Exclusives submenu popup on Alt+Tab / focus loss.
             // MouseLeave doesn't fire during Alt+Tab, so without this the popup
             // stays pinned on top of whatever app the user switched to.
@@ -2222,6 +2229,20 @@ namespace ConditioningControlPanel
                 App.Logger?.Warning(ex, "Failed to open Deeper editor");
                 MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        private void OnDeeperLibraryChanged(object? sender, EventArgs e)
+        {
+            // Library change events arrive on the dispatcher thread already
+            // (EnhancementLibrary marshals via Application.Current.Dispatcher),
+            // but only refresh if the tab is actually visible — a hidden tab
+            // would just throw the work away on the next ShowTab.
+            try
+            {
+                if (DeeperTab?.Visibility == Visibility.Visible)
+                    RefreshDeeperLibraryUI();
+            }
+            catch (Exception ex) { App.Logger?.Debug("Deeper library refresh error: {Error}", ex.Message); }
         }
 
         private void RefreshDeeperLibraryUI()

@@ -69,6 +69,7 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Text="{loc:Str deeper_player_enh_label}"
                        Foreground="{DynamicResource TextLightBrush}"
@@ -84,7 +85,13 @@
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                     Foreground="{DynamicResource DeeperAccentBrush}"
                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
-            <Button Grid.Column="3" x:Name="BtnUnloadEnhancement"
+            <Button Grid.Column="3" Content="{loc:Str deeper_player_load_url}"
+                    Click="BtnLoadUrl_Click"
+                    Padding="10,4" Cursor="Hand" FontSize="11" Margin="6,0,0,0"
+                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                    Foreground="{DynamicResource DeeperAccentBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
+            <Button Grid.Column="4" x:Name="BtnUnloadEnhancement"
                     Content="{loc:Str deeper_player_unload}"
                     Click="BtnUnloadEnhancement_Click"
                     Padding="8,4" Cursor="Hand" FontSize="11" Margin="6,0,0,0"

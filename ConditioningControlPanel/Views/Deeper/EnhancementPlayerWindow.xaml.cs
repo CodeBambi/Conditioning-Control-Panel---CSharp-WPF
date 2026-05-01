@@ -77,18 +77,50 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void BtnUnloadEnhancement_Click(object sender, RoutedEventArgs e) => _host.Unload();
 
+        private async void BtnLoadUrl_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new UrlPromptDialog { Owner = this };
+            if (dlg.ShowDialog() != true || string.IsNullOrEmpty(dlg.Result)) return;
+
+            TxtStatus.Text = Loc.Get("deeper_player_status_fetching_url");
+            try
+            {
+                var enh = await App.DeeperFetcher.FetchAsync(dlg.Result).ConfigureAwait(true);
+                if (enh == null)
+                {
+                    TxtStatus.Text = Loc.Get("deeper_player_status_url_failed");
+                    return;
+                }
+                _host.LoadFromMemory(enh, dlg.Result);
+                TxtStatus.Text = Loc.Get("deeper_player_status_url_loaded");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Player URL load error: {Error}", ex.Message);
+                TxtStatus.Text = Loc.Get("deeper_player_status_url_failed");
+            }
+        }
+
         private void TryAutoLoadEnhancement(string audioPath)
         {
-            // Look for an enhancement next to the audio file with the same
-            // base name (foo.mp3 → foo.ccpenh.json). Silent if not found —
-            // user can pick manually.
+            // 1) Side-by-side: foo.mp3 → foo.ccpenh.json next to it.
+            // 2) Library lookup by media_source pattern (Phase 10).
             try
             {
                 var dir = Path.GetDirectoryName(audioPath);
                 var baseName = Path.GetFileNameWithoutExtension(audioPath);
-                if (string.IsNullOrEmpty(dir) || string.IsNullOrEmpty(baseName)) return;
-                var candidate = Path.Combine(dir, baseName + ".ccpenh.json");
-                if (File.Exists(candidate)) _host.LoadFromFile(candidate);
+                if (!string.IsNullOrEmpty(dir) && !string.IsNullOrEmpty(baseName))
+                {
+                    var candidate = Path.Combine(dir, baseName + ".ccpenh.json");
+                    if (File.Exists(candidate))
+                    {
+                        _host.LoadFromFile(candidate);
+                        return;
+                    }
+                }
+
+                var match = App.EnhancementLibrary?.FindMatch(audioPath, Models.Deeper.MediaTypes.Audio);
+                if (match != null) _host.LoadFromFile(match.FilePath);
             }
             catch { }
         }

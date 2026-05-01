@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Windows.Threading;
 using ConditioningControlPanel.Models.Deeper;
 
 namespace ConditioningControlPanel.Services.Deeper
@@ -20,20 +21,130 @@ namespace ConditioningControlPanel.Services.Deeper
     /// Manages on-disk enhancement files and the recent-files list.
     /// All ops are silent on failure — the library never throws past the boundary.
     /// </summary>
-    public class EnhancementLibrary
+    public class EnhancementLibrary : IDisposable
     {
         public const string FileSuffix = ".ccpenh.json";
         private const int MaxRecentFiles = 10;
+        // FileSystemWatcher commonly fires multiple events for one logical
+        // change (Office-style atomic save = delete + create + change in
+        // <100 ms). Coalesce by waiting this long for events to settle.
+        private const int DebounceMs = 300;
 
         public string LibraryFolder { get; }
 
         public event EventHandler? LibraryChanged;
+
+        private FileSystemWatcher? _watcher;
+        private DispatcherTimer? _debounceTimer;
+        private bool _disposed;
 
         public EnhancementLibrary()
         {
             LibraryFolder = Path.Combine(App.UserDataPath, "enhancements");
             try { Directory.CreateDirectory(LibraryFolder); }
             catch (Exception ex) { App.Logger?.Warning(ex, "EnhancementLibrary: could not create library folder {Path}", LibraryFolder); }
+            StartWatching();
+        }
+
+        // -- Hot-reload via FileSystemWatcher ---------------------------------
+
+        private void StartWatching()
+        {
+            try
+            {
+                if (!Directory.Exists(LibraryFolder)) return;
+
+                _watcher = new FileSystemWatcher(LibraryFolder, "*" + FileSuffix)
+                {
+                    NotifyFilter = NotifyFilters.FileName
+                                 | NotifyFilters.LastWrite
+                                 | NotifyFilters.Size,
+                    IncludeSubdirectories = false,
+                    EnableRaisingEvents = true
+                };
+                _watcher.Created += OnFsEvent;
+                _watcher.Deleted += OnFsEvent;
+                _watcher.Changed += OnFsEvent;
+                _watcher.Renamed += OnFsRenamed;
+                _watcher.Error += OnFsError;
+                App.Logger?.Information("EnhancementLibrary: watching {Path}", LibraryFolder);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementLibrary: could not start watcher");
+                _watcher = null;
+            }
+        }
+
+        private void OnFsEvent(object sender, FileSystemEventArgs e) => ScheduleChangeNotification();
+        private void OnFsRenamed(object sender, RenamedEventArgs e) => ScheduleChangeNotification();
+        private void OnFsError(object sender, ErrorEventArgs e)
+        {
+            App.Logger?.Warning(e.GetException(), "EnhancementLibrary: watcher error");
+            // Tear down + try to restart so a transient FS error (e.g. drive
+            // disconnect on a network share) doesn't permanently kill hot-reload.
+            try
+            {
+                _watcher?.Dispose();
+                _watcher = null;
+                StartWatching();
+            }
+            catch { }
+        }
+
+        private void ScheduleChangeNotification()
+        {
+            // Debounce on the WPF dispatcher so subscribers receive the
+            // event on the UI thread (UI code can rebuild lists directly).
+            try
+            {
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.HasShutdownStarted)
+                {
+                    LibraryChanged?.Invoke(this, EventArgs.Empty);
+                    return;
+                }
+                dispatcher.BeginInvoke(() =>
+                {
+                    if (_disposed) return;
+                    if (_debounceTimer == null)
+                    {
+                        _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(DebounceMs) };
+                        _debounceTimer.Tick += (_, _) =>
+                        {
+                            _debounceTimer?.Stop();
+                            try { LibraryChanged?.Invoke(this, EventArgs.Empty); }
+                            catch (Exception ex) { App.Logger?.Debug("LibraryChanged subscriber error: {Error}", ex.Message); }
+                        };
+                    }
+                    _debounceTimer.Stop();
+                    _debounceTimer.Start();
+                });
+            }
+            catch { }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            try
+            {
+                if (_watcher != null)
+                {
+                    _watcher.EnableRaisingEvents = false;
+                    _watcher.Created -= OnFsEvent;
+                    _watcher.Deleted -= OnFsEvent;
+                    _watcher.Changed -= OnFsEvent;
+                    _watcher.Renamed -= OnFsRenamed;
+                    _watcher.Error -= OnFsError;
+                    _watcher.Dispose();
+                }
+            }
+            catch { }
+            try { _debounceTimer?.Stop(); } catch { }
+            _watcher = null;
+            _debounceTimer = null;
         }
 
         public List<string> RecentFiles
@@ -51,6 +162,57 @@ namespace ConditioningControlPanel.Services.Deeper
                 var d = App.Settings?.Current?.DeeperLastDirectory;
                 if (!string.IsNullOrEmpty(d) && Directory.Exists(d)) return d;
                 return LibraryFolder;
+            }
+        }
+
+        /// <summary>
+        /// Finds the best library entry whose media_source matches
+        /// <paramref name="audioOrUrl"/>. Match order: exact path, same-name
+        /// (basename), substring of media_source pattern (with trailing *
+        /// stripped). Returns null if nothing matches; ignores enhancements
+        /// of the wrong media_type when supplied.
+        /// </summary>
+        public EnhancementLibraryEntry? FindMatch(string audioOrUrl, string? mediaTypeFilter = null)
+        {
+            if (string.IsNullOrEmpty(audioOrUrl)) return null;
+            try
+            {
+                var entries = ScanLibrary();
+                var baseName = Path.GetFileNameWithoutExtension(audioOrUrl);
+
+                EnhancementLibraryEntry? best = null;
+                foreach (var entry in entries)
+                {
+                    if (mediaTypeFilter != null && entry.MediaType != mediaTypeFilter) continue;
+                    var pattern = entry.MediaSource ?? "";
+
+                    // Exact / suffix match wins immediately.
+                    if (string.Equals(pattern, audioOrUrl, StringComparison.OrdinalIgnoreCase))
+                        return entry;
+
+                    // Basename of pattern matches basename of audioOrUrl.
+                    var patternBase = Path.GetFileNameWithoutExtension(pattern.TrimEnd('*'));
+                    if (!string.IsNullOrEmpty(patternBase)
+                        && string.Equals(patternBase, baseName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (best == null) best = entry;
+                    }
+
+                    // Substring (lowest priority).
+                    var pTrimmed = pattern.TrimEnd('*');
+                    if (best == null
+                        && pTrimmed.Length >= 4 // avoid "*" or single chars matching everything
+                        && audioOrUrl.Contains(pTrimmed, StringComparison.OrdinalIgnoreCase))
+                    {
+                        best = entry;
+                    }
+                }
+                return best;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementLibrary.FindMatch error: {Error}", ex.Message);
+                return null;
             }
         }
 
