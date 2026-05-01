@@ -810,7 +810,11 @@ namespace ConditioningControlPanel.Services
                     if (processedFrames % 300 == 0)
                     {
                         var fps = processedFrames / sw.Elapsed.TotalSeconds;
-                        App.Logger?.Information("WebcamTrackingService: {Frames} frames processed, ~{Fps:F1} fps", processedFrames, fps);
+                        // Debug, not Information — fires every ~10s during capture so it
+                        // would otherwise dominate app-.log and ride along on bug reports
+                        // (LogScrubber doesn't strip webcam telemetry). Lifecycle entries
+                        // (started/stopped/exited) stay at Information.
+                        App.Logger?.Debug("WebcamTrackingService: {Frames} frames processed, ~{Fps:F1} fps", processedFrames, fps);
                     }
                 }
             }
@@ -1463,7 +1467,11 @@ namespace ConditioningControlPanel.Services
                     fired = true;
                     Dispatch(() => OnBlink?.Invoke());
                 }
-                App.Logger?.Information(
+                // Debug, not Information — per-event blink data is behavioral
+                // biometric correlate (eye-aspect-ratio, closure timing). Keeping
+                // it out of persisted logs / bug reports honors the privacy
+                // contract at the top of this file.
+                App.Logger?.Debug(
                     "WebcamTrackingService: blink {Outcome} (closed for {Ms:F0}ms, baseline EAR={Base:F3}, min EAR during closure={Min:F3}, ratio={Ratio:F2}× baseline)",
                     fired ? $"#{_blinkCount} FIRED" : "rejected",
                     closedMs, _earBaseline, _minEarThisClosure, _minEarThisClosure / _earBaseline);
@@ -1494,7 +1502,10 @@ namespace ConditioningControlPanel.Services
             double openThreshold = _earBaseline * EarOpenRatio;
             double winMinRatio = _earBaseline > 0 ? _windowMinEar / _earBaseline : 0;
             double winMaxRatio = _earBaseline > 0 ? _windowMaxEar / _earBaseline : 0;
-            App.Logger?.Information(
+            // Debug, not Information — periodic EAR baseline diagnostics are
+            // tuning aids, not lifecycle events. Same privacy reasoning as the
+            // per-blink log above.
+            App.Logger?.Debug(
                 "WebcamTrackingService: blink-diag baseline={Base:F3} closedThr={CT:F3} openThr={OT:F3} winMin={WMin:F3}({WMinR:P0}) winMax={WMax:F3}({WMaxR:P0}) nearMiss={NM} state={State} blinks={N} samples={S}",
                 _earBaseline, closedThreshold, openThreshold,
                 _windowMinEar, winMinRatio, _windowMaxEar, winMaxRatio,
@@ -1583,7 +1594,8 @@ namespace ConditioningControlPanel.Services
                         _lastMouthOpenAt = now;
                         _mouthOpenCount++;
                         Dispatch(() => OnMouthOpen?.Invoke());
-                        App.Logger?.Information(
+                        // Debug, not Information — see blink fire log above for reasoning.
+                        App.Logger?.Debug(
                             "WebcamTrackingService: mouth-open #{N} FIRED (open for {Ms:F0}ms, baseline MAR={Base:F3}, max MAR during open={Max:F3}, ratio={Ratio:F2}× baseline)",
                             _mouthOpenCount, openMs, _marBaseline, _maxMarThisOpening,
                             _maxMarThisOpening / _marBaseline);
@@ -1608,7 +1620,8 @@ namespace ConditioningControlPanel.Services
             double openThreshold = _marBaseline * MarOpenRatio;
             double closeThreshold = _marBaseline * MarCloseRatio;
             double winMaxRatio = _marBaseline > 0 ? _windowMaxMar / _marBaseline : 0;
-            App.Logger?.Information(
+            // Debug, not Information — see blink-diag for reasoning.
+            App.Logger?.Debug(
                 "WebcamTrackingService: mouth-diag baseline={Base:F3} openThr={OT:F3} closeThr={CT:F3} winMin={WMin:F3} winMax={WMax:F3}({WMaxR:P0}) state={State} mouthOpens={N} samples={S}",
                 _marBaseline, openThreshold, closeThreshold,
                 _windowMinMar, _windowMaxMar, winMaxRatio,
@@ -1676,7 +1689,8 @@ namespace ConditioningControlPanel.Services
                         _lastTongueOutAt = now;
                         _tongueOutCount++;
                         Dispatch(() => OnTongueOut?.Invoke());
-                        App.Logger?.Information(
+                        // Debug, not Information — see blink fire log for reasoning.
+                        App.Logger?.Debug(
                             "WebcamTrackingService: tongue-out #{N} FIRED (visible for {Ms:F0}ms, max ratio={Max:P0})",
                             _tongueOutCount, outMs, _maxTongueRatioThisFire);
                     }
@@ -1779,7 +1793,8 @@ namespace ConditioningControlPanel.Services
             double shadowPct = classified > 0 ? (double)_diagShadowSum / classified : 0;
             double otherPct  = classified > 0 ? (double)_diagOtherSum  / classified : 0;
 
-            App.Logger?.Information(
+            // Debug, not Information — see blink-diag for reasoning.
+            App.Logger?.Debug(
                 "WebcamTrackingService: tongue-diag winMaxRatio={Max:P0} state={State} fires={N} frames={F} | per-class share: tongue={T:P0} teeth={E:P0} shadow={S:P0} other={O:P0}",
                 _windowMaxTongueRatio, _tongueOut ? "OUT" : "in", _tongueOutCount,
                 _diagTongueFrames, tonguePct, teethPct, shadowPct, otherPct);
