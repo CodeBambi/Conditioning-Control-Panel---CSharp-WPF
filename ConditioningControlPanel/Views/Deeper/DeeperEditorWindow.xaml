@@ -117,9 +117,10 @@
 
                         <StackPanel x:Name="PreviewPlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center"
                                     Visibility="Collapsed">
-                            <TextBlock Text="🌐" FontSize="42" HorizontalAlignment="Center"
+                            <TextBlock x:Name="TxtPlaceholderIcon" Text="🌐" FontSize="42" HorizontalAlignment="Center"
                                        Foreground="{DynamicResource DeeperAccentSoftBrush}" Margin="0,0,0,12"/>
-                            <TextBlock Text="{loc:Str deeper_editor_remote_preview_unavailable}"
+                            <TextBlock x:Name="TxtPlaceholderTitle"
+                                       Text="{loc:Str deeper_editor_remote_preview_unavailable}"
                                        Foreground="{DynamicResource TextLightBrush}" FontSize="14"
                                        HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="380"
                                        TextAlignment="Center"/>

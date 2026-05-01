@@ -351,7 +351,25 @@ namespace ConditioningControlPanel.Views.Deeper
             VideoPreview.Visibility = Visibility.Collapsed;
             WaveformCanvas.Visibility = Visibility.Collapsed;
             PreviewPlaceholder.Visibility = Visibility.Visible;
-            TxtPlaceholderSource.Text = _enhancement.MediaSource;
+
+            var src = _enhancement.MediaSource ?? "";
+            // "*" or empty source = wildcard binding ("works on any media").
+            // The editor can't preview wildcard sources because there's no
+            // media file to load — but the file is perfectly valid; the user
+            // just needs to test it via the Deeper Player. Same goes for HT/
+            // remote URLs — VLC can't preview those reliably so we route the
+            // user to the Browser tab.
+            if (string.IsNullOrWhiteSpace(src) || src.Contains('*'))
+            {
+                TxtPlaceholderIcon.Text = "✱";
+                TxtPlaceholderTitle.Text = Loc.Get("deeper_editor_wildcard_preview_unavailable");
+            }
+            else
+            {
+                TxtPlaceholderIcon.Text = "🌐";
+                TxtPlaceholderTitle.Text = Loc.Get("deeper_editor_remote_preview_unavailable");
+            }
+            TxtPlaceholderSource.Text = src;
         }
 
         private static bool IsLocalFile(string source)

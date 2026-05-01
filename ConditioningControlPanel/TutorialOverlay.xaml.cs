@@ -275,9 +275,15 @@ namespace ConditioningControlPanel
         {
             try
             {
-                var transform = element.TransformToAncestor(_targetWindow);
-                var topLeft = transform.Transform(new Point(0, 0));
-                return new Rect(topLeft, new Size(element.ActualWidth, element.ActualHeight));
+                // Convert element-local (0,0) to screen, then back to overlay-local
+                // coordinates. TransformToAncestor returns content-area coords, but
+                // the overlay window sits at the *outer* window position (Window.Left/
+                // Top includes title bar + borders for default-chrome windows like
+                // DeeperEditor). Going through screen space sidesteps the chrome
+                // offset for any window style.
+                var screenTopLeft = element.PointToScreen(new Point(0, 0));
+                var overlayLocal = PointFromScreen(screenTopLeft);
+                return new Rect(overlayLocal, new Size(element.ActualWidth, element.ActualHeight));
             }
             catch
             {
