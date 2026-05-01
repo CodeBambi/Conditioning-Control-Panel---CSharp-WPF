@@ -541,7 +541,10 @@ namespace ConditioningControlPanel.Services.Deeper
                 if (item.Trigger is not TTrigger trig) continue;
                 if (idSelector(trig) != regionId) continue;
                 if (!PassesRuleGate(item, t)) continue;
-                DispatchSafely(item.Action!, t);
+                // Pin the band id explicitly so loop_region / seek with no
+                // RegionId still resolves on RegionExited (where the playhead
+                // has just left the band, so _currentRegionId is null).
+                DispatchSafely(item.Action!, t, regionId);
             }
         }
 
@@ -579,12 +582,12 @@ namespace ConditioningControlPanel.Services.Deeper
             return true;
         }
 
-        private async void DispatchSafely(EnhancementAction action, double t)
+        private async void DispatchSafely(EnhancementAction action, double t, string? explicitRegionId = null)
         {
             var ct = _runCts?.Token ?? CancellationToken.None;
             try
             {
-                var ctx = new EnhancementDispatchContext(_enhancement, _source, t, _currentRegionId);
+                var ctx = new EnhancementDispatchContext(_enhancement, _source, t, explicitRegionId ?? _currentRegionId);
                 await _dispatcher.DispatchAsync(action, ctx, ct);
             }
             catch (OperationCanceledException) { /* engine stopped mid-dispatch */ }

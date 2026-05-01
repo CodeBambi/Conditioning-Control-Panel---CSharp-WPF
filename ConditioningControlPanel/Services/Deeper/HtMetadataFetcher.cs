@@ -32,12 +32,19 @@ namespace ConditioningControlPanel.Services.Deeper
         private const int FetcherTimeoutMs = 3000;        // separate from HTTP timeout
         private const int MaxRedirects = 5;
         private const int MaxCacheEntries = 64;
+        // Per-field caps applied before cache insert. Without these a 64-entry
+        // cache could pin tens of MB if HT ever returns abusive metadata.
+        private const int MaxTitleChars = 256;
+        private const int MaxUploaderChars = 128;
+        private const int MaxDescriptionChars = 4096;
+        private const int MaxTagCount = 32;
+        private const int MaxTagChars = 64;
         private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(10);
 
         // Manual redirect handling so the host + IP allowlist is re-checked on
         // every hop. Auto-redirect would let a 302 from a legitimate host
         // ferry the request into 169.254.169.254 / 127.0.0.1 / a UNC share.
-        private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false })
+        private static readonly HttpClient Http = new(UrlSafety.CreateGuardedHandler())
         {
             Timeout = HttpTimeout
         };
@@ -108,6 +115,7 @@ namespace ConditioningControlPanel.Services.Deeper
                     var meta = Parse(html);
                     if (meta != null)
                     {
+                        TruncateFields(meta);
                         lock (CacheLock)
                         {
                             if (!Cache.ContainsKey(url))
@@ -130,6 +138,25 @@ namespace ConditioningControlPanel.Services.Deeper
             {
                 App.Logger?.Debug("HtMetadataFetcher: {Error}", ex.Message);
                 return null;
+            }
+        }
+
+        private static void TruncateFields(HtVideoMetadata m)
+        {
+            if (m.Title != null && m.Title.Length > MaxTitleChars)
+                m.Title = m.Title.Substring(0, MaxTitleChars);
+            if (m.Uploader != null && m.Uploader.Length > MaxUploaderChars)
+                m.Uploader = m.Uploader.Substring(0, MaxUploaderChars);
+            if (m.Description != null && m.Description.Length > MaxDescriptionChars)
+                m.Description = m.Description.Substring(0, MaxDescriptionChars);
+            if (m.Tags != null)
+            {
+                if (m.Tags.Count > MaxTagCount) m.Tags = m.Tags.Take(MaxTagCount).ToList();
+                for (int i = 0; i < m.Tags.Count; i++)
+                {
+                    if (m.Tags[i] != null && m.Tags[i].Length > MaxTagChars)
+                        m.Tags[i] = m.Tags[i].Substring(0, MaxTagChars);
+                }
             }
         }
 

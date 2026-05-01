@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
@@ -135,6 +137,62 @@ namespace ConditioningControlPanel.Services.Deeper
 
             // Unknown family — fail closed.
             return true;
+        }
+
+        /// <summary>
+        /// Build a SocketsHttpHandler whose ConnectCallback resolves the target
+        /// host inside the connect step and rejects any IP that fails
+        /// <see cref="IsPrivateOrReservedIp"/>. This collapses the DNS-rebind
+        /// window: even if a hostile DNS server returns a public IP at
+        /// pre-flight validation time and 127.0.0.1 a millisecond later, the
+        /// connect-time resolve catches it before any bytes leave the box.
+        ///
+        /// Caller still controls AllowAutoRedirect on the returned handler;
+        /// the existing fetchers do manual redirect handling so each hop's
+        /// host re-runs through this connect-time guard.
+        /// </summary>
+        public static SocketsHttpHandler CreateGuardedHandler()
+        {
+            var handler = new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                AutomaticDecompression = System.Net.DecompressionMethods.All,
+                ConnectTimeout = TimeSpan.FromSeconds(10),
+                PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+            };
+            handler.ConnectCallback = async (ctx, ct) =>
+            {
+                var ep = ctx.DnsEndPoint;
+                IPAddress[] addrs;
+                if (IPAddress.TryParse(ep.Host, out var literal))
+                {
+                    addrs = new[] { literal };
+                }
+                else
+                {
+                    addrs = await Dns.GetHostAddressesAsync(ep.Host, ct).ConfigureAwait(false);
+                }
+                if (addrs == null || addrs.Length == 0)
+                    throw new IOException($"DNS resolution failed for {ep.Host}.");
+                foreach (var ip in addrs)
+                {
+                    if (IsPrivateOrReservedIp(ip))
+                        throw new IOException($"Refusing to connect to private/reserved IP {ip} for {ep.Host}.");
+                }
+
+                var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+                try
+                {
+                    await socket.ConnectAsync(addrs, ep.Port, ct).ConfigureAwait(false);
+                    return new NetworkStream(socket, ownsSocket: true);
+                }
+                catch
+                {
+                    socket.Dispose();
+                    throw;
+                }
+            };
+            return handler;
         }
 
         /// <summary>True when <paramref name="path"/> is a relative, well-formed local

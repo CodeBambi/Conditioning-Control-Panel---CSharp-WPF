@@ -453,21 +453,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 var current = JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone());
                 _redo.Push(current);
                 var snapshot = _undo.Pop();
-                _suppressUndoSnapshot = true;
-                try
-                {
-                    var restored = JsonConvert.DeserializeObject<Enhancement>(snapshot, EnhancementSerializer.JsonReadSettingsForClone())
-                                  ?? new Enhancement();
-                    _enhancement = restored;
-                    SelectNothing();
-                    MarkDirty();
-                    RebuildRegionVisuals();
-                    RebuildHapticVisuals();
-                    RebuildEffectVisuals();
-                    RefreshRulesList();
-                    ScheduleValidation();
-                }
-                finally { _suppressUndoSnapshot = false; }
+                ApplyHistorySnapshot(snapshot);
             }
             catch (Exception ex)
             {
@@ -483,25 +469,127 @@ namespace ConditioningControlPanel.Views.Deeper
                 var current = JsonConvert.SerializeObject(_enhancement, EnhancementSerializer.JsonReadSettingsForClone());
                 _undo.Push(current);
                 var snapshot = _redo.Pop();
-                _suppressUndoSnapshot = true;
-                try
-                {
-                    var restored = JsonConvert.DeserializeObject<Enhancement>(snapshot, EnhancementSerializer.JsonReadSettingsForClone())
-                                  ?? new Enhancement();
-                    _enhancement = restored;
-                    SelectNothing();
-                    MarkDirty();
-                    RebuildRegionVisuals();
-                    RebuildHapticVisuals();
-                    RebuildEffectVisuals();
-                    RefreshRulesList();
-                    ScheduleValidation();
-                }
-                finally { _suppressUndoSnapshot = false; }
+                ApplyHistorySnapshot(snapshot);
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("DeeperEditor: Redo error: {Error}", ex.Message);
+            }
+        }
+
+        // Common Undo/Redo body: capture selection by id, swap in the snapshot,
+        // then re-resolve the selection against the new object identities so
+        // the side-panel editor stays open on the same item the user was
+        // editing instead of collapsing to "no selection".
+        private void ApplyHistorySnapshot(string snapshot)
+        {
+            var sel = CaptureSelectionIds();
+            _suppressUndoSnapshot = true;
+            try
+            {
+                var restored = JsonConvert.DeserializeObject<Enhancement>(snapshot, EnhancementSerializer.JsonReadSettingsForClone())
+                              ?? new Enhancement();
+                _enhancement = restored;
+                SelectNothing();
+                MarkDirty();
+                RebuildRegionVisuals();
+                RebuildHapticVisuals();
+                RebuildEffectVisuals();
+                RefreshRulesList();
+                RestoreSelectionIds(sel);
+                ScheduleValidation();
+            }
+            finally { _suppressUndoSnapshot = false; }
+        }
+
+        // Object identity is lost across the JSON round-trip in ApplyHistorySnapshot,
+        // so we capture id-based handles here and re-resolve them against the
+        // restored Enhancement's TimelineItems / Regions / HapticTracks.
+        private struct SelectionIds
+        {
+            public List<string> Regions;
+            public List<string> TimelineItems;
+            // (TrackId, Start, Duration) — HapticEvent has no id field but the
+            // tuple is unique within an enhancement in practice.
+            public List<(string TrackId, double Start, double Duration)> HapticEvents;
+            public string? PrimaryRegionId;
+            public string? PrimaryTimelineItemId;
+        }
+
+        private SelectionIds CaptureSelectionIds()
+        {
+            var sel = new SelectionIds
+            {
+                Regions = new List<string>(),
+                TimelineItems = new List<string>(),
+                HapticEvents = new List<(string, double, double)>(),
+                PrimaryRegionId = _selectedRegion?.Id,
+                PrimaryTimelineItemId = _selectedEffect?.Id,
+            };
+            foreach (var item in _selectionSet)
+            {
+                switch (item)
+                {
+                    case Region r when !string.IsNullOrEmpty(r.Id):
+                        sel.Regions.Add(r.Id);
+                        break;
+                    case TimelineItem ti when !string.IsNullOrEmpty(ti.Id):
+                        sel.TimelineItems.Add(ti.Id);
+                        break;
+                    case HapticEvent ev:
+                        var trackId = _enhancement.HapticTracks
+                            .FirstOrDefault(t => t?.Events?.Contains(ev) == true)?.Id ?? "";
+                        sel.HapticEvents.Add((trackId, ev.Start, ev.Duration));
+                        break;
+                }
+            }
+            return sel;
+        }
+
+        private void RestoreSelectionIds(SelectionIds sel)
+        {
+            try
+            {
+                if (sel.Regions != null)
+                {
+                    foreach (var id in sel.Regions)
+                    {
+                        var r = _enhancement.Regions.FirstOrDefault(x => x?.Id == id);
+                        if (r != null) _selectionSet.Add(r);
+                    }
+                }
+                if (sel.TimelineItems != null)
+                {
+                    foreach (var id in sel.TimelineItems)
+                    {
+                        var ti = _enhancement.TimelineItems.FirstOrDefault(x => x?.Id == id);
+                        if (ti != null) _selectionSet.Add(ti);
+                    }
+                }
+                if (sel.HapticEvents != null)
+                {
+                    foreach (var (trackId, start, dur) in sel.HapticEvents)
+                    {
+                        var track = _enhancement.HapticTracks.FirstOrDefault(t => t?.Id == trackId);
+                        if (track?.Events == null) continue;
+                        var ev = track.Events.FirstOrDefault(e => e != null
+                            && Math.Abs(e.Start - start) < 0.0005
+                            && Math.Abs(e.Duration - dur) < 0.0005);
+                        if (ev != null) _selectionSet.Add(ev);
+                    }
+                }
+                if (!string.IsNullOrEmpty(sel.PrimaryRegionId))
+                    _selectedRegion = _enhancement.Regions.FirstOrDefault(r => r?.Id == sel.PrimaryRegionId);
+                if (!string.IsNullOrEmpty(sel.PrimaryTimelineItemId))
+                    _selectedEffect = _enhancement.TimelineItems.FirstOrDefault(t => t?.Id == sel.PrimaryTimelineItemId);
+                UpdateSelectedSidePanel();
+                RebuildRegionVisuals();
+                RebuildHapticVisuals();
+                RebuildEffectVisuals();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: RestoreSelectionIds error: {Error}", ex.Message);
             }
         }
 

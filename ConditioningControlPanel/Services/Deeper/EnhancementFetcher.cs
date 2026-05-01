@@ -33,8 +33,10 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             // Manual redirect handling — every hop is re-validated against the
             // SSRF guard so a 302 on an attacker-controlled host can't ferry
-            // the request into a private IP / cloud metadata endpoint.
-            var handler = new HttpClientHandler { AllowAutoRedirect = false };
+            // the request into a private IP / cloud metadata endpoint. The
+            // handler additionally enforces the safety check inside its
+            // ConnectCallback to close the DNS-rebind window.
+            var handler = UrlSafety.CreateGuardedHandler();
             _http = new HttpClient(handler)
             {
                 Timeout = FetchTimeout
