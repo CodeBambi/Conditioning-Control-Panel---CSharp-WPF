@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Windows;
 using ConditioningControlPanel.Models.Deeper;
 
@@ -50,6 +51,11 @@ namespace ConditioningControlPanel.Services.Deeper
 
         private bool _running;
         private bool _disposed;
+
+        // Token source canceled by Stop so in-flight DispatchSafely calls
+        // (haptic patterns, audio playback chains) can short-circuit instead
+        // of running on after the user pressed stop.
+        private CancellationTokenSource? _runCts;
 
         public bool IsRunning => _running;
         public Enhancement Enhancement => _enhancement;
@@ -238,6 +244,7 @@ namespace ConditioningControlPanel.Services.Deeper
             _firedInCurrentEntry.Clear();
             _gazeDwellSince.Clear();
             _faceLostSince = null;
+            _runCts = new CancellationTokenSource();
 
             // Prime the cursor to the current playback position so events that
             // already passed before Start don't fire in a burst on the first tick.
@@ -282,6 +289,10 @@ namespace ConditioningControlPanel.Services.Deeper
                 _webcam.OnFaceLost -= OnFaceLost;
                 _webcam.OnFaceFound -= OnFaceFound;
             }
+
+            try { _runCts?.Cancel(); } catch { }
+            _runCts?.Dispose();
+            _runCts = null;
 
             _running = false;
             App.Logger?.Information("EnhancementEngine stopped: {Name}", _enhancement.Metadata?.Name);
@@ -570,11 +581,13 @@ namespace ConditioningControlPanel.Services.Deeper
 
         private async void DispatchSafely(EnhancementAction action, double t)
         {
+            var ct = _runCts?.Token ?? CancellationToken.None;
             try
             {
                 var ctx = new EnhancementDispatchContext(_enhancement, _source, t, _currentRegionId);
-                await _dispatcher.DispatchAsync(action, ctx);
+                await _dispatcher.DispatchAsync(action, ctx, ct);
             }
+            catch (OperationCanceledException) { /* engine stopped mid-dispatch */ }
             catch (Exception ex)
             {
                 App.Logger?.Debug("EnhancementEngine dispatch error: {Error}", ex.Message);

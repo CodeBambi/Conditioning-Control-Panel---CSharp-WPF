@@ -48,8 +48,7 @@ namespace ConditioningControlPanel.Services.Deeper
                     return false;
                 }
 
-                var json = File.ReadAllText(path);
-                var enh = EnhancementSerializer.Load(json);
+                var enh = EnhancementSerializer.LoadFromFile(path);
                 var issues = EnhancementValidator.Validate(enh);
                 // Hard errors block loading; warnings (unknown types etc) are
                 // surfaced by the validator but don't fail load - they just

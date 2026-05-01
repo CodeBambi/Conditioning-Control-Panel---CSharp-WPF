@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using ConditioningControlPanel.Models.Deeper;
 using Newtonsoft.Json;
@@ -38,6 +39,30 @@ namespace ConditioningControlPanel.Services.Deeper
         /// EnhancementTrigger / EnhancementAction base classes).
         /// </summary>
         public static JsonSerializerSettings JsonReadSettingsForClone() => ReadSettings;
+
+        /// <summary>
+        /// Hard cap on .ccpenh.json file size. Realistic enhancements (full
+        /// timeline, haptic patterns, descriptions) max out around 80 KB; the
+        /// 1 MB cap is generous headroom and a tight ceiling against
+        /// JObject.Parse-amplification DoS from a hostile shared file.
+        /// </summary>
+        public const long MaxFileSizeBytes = 1_000_000;
+
+        /// <summary>
+        /// Reads a .ccpenh.json file from disk with a size cap and parses it.
+        /// Throws <see cref="EnhancementLoadException"/> on size overrun in
+        /// addition to the usual schema/parse failures.
+        /// </summary>
+        public static Enhancement LoadFromFile(string path)
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists)
+                throw new EnhancementLoadException($"File not found: {path}");
+            if (info.Length > MaxFileSizeBytes)
+                throw new EnhancementLoadException(
+                    $"Enhancement file is too large ({info.Length} bytes, max {MaxFileSizeBytes}).");
+            return Load(File.ReadAllText(path));
+        }
 
         /// <summary>
         /// Loads an Enhancement from JSON. Throws <see cref="EnhancementLoadException"/>

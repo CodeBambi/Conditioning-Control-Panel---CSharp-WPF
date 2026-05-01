@@ -58,7 +58,7 @@ namespace ConditioningControlPanel.Services.Deeper
             // Strict host allowlist on the parsed URI — substring matching
             // ("hypnotube" anywhere in the host) is bypassable via
             // hypnotube.evil.com or evil.com?x=hypnotube.
-            if (!UrlSafety.HostMatches(uri, "hypnotube.com")) return null;
+            if (!UrlSafety.HostMatches(uri, DeeperConfig.MetadataScrapeAllowlist)) return null;
 
             lock (CacheLock)
             {
@@ -94,7 +94,7 @@ namespace ConditioningControlPanel.Services.Deeper
                             ? resp.Headers.Location
                             : new Uri(current, resp.Headers.Location);
                         if (next.Scheme != Uri.UriSchemeHttps) return null;
-                        if (!UrlSafety.HostMatches(next, "hypnotube.com")) return null;
+                        if (!UrlSafety.HostMatches(next, DeeperConfig.MetadataScrapeAllowlist)) return null;
                         current = next;
                         continue;
                     }

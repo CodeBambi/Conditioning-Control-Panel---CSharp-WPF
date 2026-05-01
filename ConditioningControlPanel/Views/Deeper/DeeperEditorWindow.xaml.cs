@@ -459,7 +459,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private static bool IsAllowedPreviewHost(Uri uri)
         {
-            return UrlSafety.HostMatches(uri, "hypnotube.com", "tiktok.com");
+            return UrlSafety.HostMatches(uri, DeeperConfig.PreviewHostAllowlist);
         }
 
         private void OnBrowserNavigationStarting(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationStartingEventArgs e)

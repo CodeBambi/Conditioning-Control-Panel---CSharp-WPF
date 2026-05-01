@@ -106,7 +106,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 if (!match.Success) return;
 
                 var refUrl = match.Groups["url"].Value.TrimEnd(',', '.', ')', ']');
-                App.Logger?.Information("Deeper auto-discovery: found ccp ref {Url} on {Page}", refUrl, url);
+                App.Logger?.Information("Deeper auto-discovery: found ccp ref {Url} on {Page}", UrlSafety.RedactUrl(refUrl), UrlSafety.RedactUrl(url));
 
                 var enh = await _fetcher.FetchAsync(refUrl, ct).ConfigureAwait(true);
                 if (enh == null || ct.IsCancellationRequested) return;
@@ -208,7 +208,7 @@ namespace ConditioningControlPanel.Services.Deeper
             // discovery + auto-binding pipeline).
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
             if (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp) return false;
-            if (!UrlSafety.HostMatches(uri, "hypnotube.com")) return false;
+            if (!UrlSafety.HostMatches(uri, DeeperConfig.MetadataScrapeAllowlist)) return false;
             // HT video pages contain "/video/" in the path; the homepage and
             // category pages don't, so this avoids scraping when there's
             // nothing to bind to.

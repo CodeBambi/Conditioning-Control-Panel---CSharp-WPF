@@ -95,7 +95,7 @@ namespace ConditioningControlPanel.Services.Deeper
 
                 _currentBoundFilePath = match.FilePath;
                 MatchChanged?.Invoke(match);
-                App.Logger?.Information("BrowserEnhancementBridge: bound {Name} for {Url}", match.Name, url);
+                App.Logger?.Information("BrowserEnhancementBridge: bound {Name} for {Url}", match.Name, UrlSafety.RedactUrl(url));
             }
             catch (Exception ex)
             {

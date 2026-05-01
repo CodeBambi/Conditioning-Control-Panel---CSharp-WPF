@@ -157,8 +157,7 @@ namespace ConditioningControlPanel.Services.Deeper
                     break;
 
                 case EffectTypes.Subliminal:
-                    if (string.IsNullOrWhiteSpace(item.EffectText))
-                        errors.Add(new ValidationError { Path = path, Message = "Subliminal effect requires non-empty text." });
+                    ValidateSubliminalText(item.EffectText, $"{path}.effect_text", errors);
                     break;
 
                 case EffectTypes.Overlay:
@@ -584,9 +583,9 @@ namespace ConditioningControlPanel.Services.Deeper
                         if (!string.IsNullOrEmpty(te.ImagePath) && IsUnsafeAssetPath(te.ImagePath))
                             errors.Add(new ValidationError { Path = $"{path}.image_path", Message = AssetPathRejectMessage, Severity = ValidationSeverity.Error });
                     }
-                    else if (te.EffectType == EffectTypes.Subliminal && string.IsNullOrWhiteSpace(te.Text))
+                    else if (te.EffectType == EffectTypes.Subliminal)
                     {
-                        errors.Add(new ValidationError { Path = path, Message = "Subliminal trigger_effect requires non-empty text." });
+                        ValidateSubliminalText(te.Text, $"{path}.text", errors);
                     }
                     else if (te.EffectType == EffectTypes.Overlay)
                     {
@@ -618,6 +617,45 @@ namespace ConditioningControlPanel.Services.Deeper
                         errors.Add(new ValidationError { Path = path, Message = $"value must be in [0, 1] (got {si.Value})." });
                     break;
             }
+        }
+
+        // Subliminal text appears flashed onscreen and is sourced from shared
+        // .ccpenh.json files. Cap length so an oversized payload can't blow up
+        // a flash render, and reject bidi-override / control codepoints that
+        // would let a malicious file mask its actual rendered content.
+        private const int MaxSubliminalTextLength = 256;
+        private static void ValidateSubliminalText(string? text, string path, List<ValidationError> errors)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                errors.Add(new ValidationError { Path = path, Message = "Subliminal text cannot be empty." });
+                return;
+            }
+            if (text.Length > MaxSubliminalTextLength)
+            {
+                errors.Add(new ValidationError
+                {
+                    Path = path,
+                    Message = $"Subliminal text is too long ({text.Length} chars, max {MaxSubliminalTextLength}).",
+                    Severity = ValidationSeverity.Error
+                });
+            }
+            foreach (char c in text)
+            {
+                // Control chars (excluding tab, LF, CR which are harmless here).
+                if ((c < 0x20 && c != '\t' && c != '\n' && c != '\r') || (c >= 0x7F && c < 0xA0))
+                {
+                    errors.Add(new ValidationError { Path = path, Message = "Subliminal text contains a control character.", Severity = ValidationSeverity.Error });
+                    return;
+                }
+                // Bidi override / embedding controls. These can re-order the
+                // displayed text against what's stored, masking actual content.
+                if (c >= 0x202A && c <= 0x202E) goto bidi;
+                if (c >= 0x2066 && c <= 0x2069) goto bidi;
+            }
+            return;
+        bidi:
+            errors.Add(new ValidationError { Path = path, Message = "Subliminal text contains bidirectional override characters.", Severity = ValidationSeverity.Error });
         }
 
         private static void ValidateRect(double[] rect, string path, List<ValidationError> errors)

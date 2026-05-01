@@ -238,6 +238,16 @@ namespace ConditioningControlPanel.Views.Deeper
                             {
                                 if (rule.RegionConstraint == r.Id) rule.RegionConstraint = null;
                             }
+                            // Remove the paired Rule-kind TimelineItem the loader
+                            // projected for this region, otherwise BackProject on
+                            // save resurrects the deleted region from the orphan.
+                            if (!string.IsNullOrEmpty(r.Id))
+                            {
+                                _enhancement.TimelineItems.RemoveAll(ti =>
+                                    ti != null
+                                    && ti.Kind == TimelineItemKind.Rule
+                                    && ti.Id == r.Id);
+                            }
                             break;
                         case HapticEvent ev:
                             foreach (var track in _enhancement.HapticTracks)

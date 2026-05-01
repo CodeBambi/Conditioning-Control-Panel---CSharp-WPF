@@ -640,7 +640,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private static bool IsAllowedPlayerHost(Uri uri)
         {
-            return UrlSafety.HostMatches(uri, "hypnotube.com", "tiktok.com");
+            return UrlSafety.HostMatches(uri, DeeperConfig.PreviewHostAllowlist);
         }
 
         private void OnVideoNavStarting(object? sender,

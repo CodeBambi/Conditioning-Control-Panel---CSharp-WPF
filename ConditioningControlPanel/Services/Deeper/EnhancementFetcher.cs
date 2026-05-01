@@ -72,7 +72,7 @@ namespace ConditioningControlPanel.Services.Deeper
             {
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
                 {
-                    App.Logger?.Debug("EnhancementFetcher: malformed url ({Url})", url);
+                    App.Logger?.Debug("EnhancementFetcher: malformed url ({Url})", UrlSafety.RedactUrl(url));
                     return null;
                 }
 
@@ -81,7 +81,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 // host their ccpenh.json on https hosts (gist, github pages, etc.).
                 if (uri.Scheme != Uri.UriSchemeHttps)
                 {
-                    App.Logger?.Debug("EnhancementFetcher: rejecting non-https url ({Url})", url);
+                    App.Logger?.Debug("EnhancementFetcher: rejecting non-https url ({Url})", UrlSafety.RedactUrl(url));
                     return null;
                 }
 
@@ -119,14 +119,14 @@ namespace ConditioningControlPanel.Services.Deeper
                 using var _resp = finalResp;
                 if (!_resp.IsSuccessStatusCode)
                 {
-                    App.Logger?.Debug("EnhancementFetcher: HTTP {Status} for {Url}", (int)_resp.StatusCode, url);
+                    App.Logger?.Debug("EnhancementFetcher: HTTP {Status} for {Url}", (int)_resp.StatusCode, UrlSafety.RedactUrl(url));
                     return null;
                 }
 
                 var contentLength = _resp.Content.Headers.ContentLength;
                 if (contentLength.HasValue && contentLength.Value > MaxResponseBytes)
                 {
-                    App.Logger?.Debug("EnhancementFetcher: response too large ({Size} bytes) for {Url}", contentLength.Value, url);
+                    App.Logger?.Debug("EnhancementFetcher: response too large ({Size} bytes) for {Url}", contentLength.Value, UrlSafety.RedactUrl(url));
                     return null;
                 }
 
@@ -143,7 +143,7 @@ namespace ConditioningControlPanel.Services.Deeper
                     }
                     if (read > MaxResponseBytes)
                     {
-                        App.Logger?.Debug("EnhancementFetcher: response exceeded {Cap} bytes (truncated read) for {Url}", MaxResponseBytes, url);
+                        App.Logger?.Debug("EnhancementFetcher: response exceeded {Cap} bytes (truncated read) for {Url}", MaxResponseBytes, UrlSafety.RedactUrl(url));
                         return null;
                     }
                     json = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
@@ -153,7 +153,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 // (some HT users embed arbitrary URLs in descriptions).
                 if (!json.Contains(Enhancement.SchemaTag, StringComparison.OrdinalIgnoreCase))
                 {
-                    App.Logger?.Debug("EnhancementFetcher: schema sniff failed for {Url}", url);
+                    App.Logger?.Debug("EnhancementFetcher: schema sniff failed for {Url}", UrlSafety.RedactUrl(url));
                     return null;
                 }
 
@@ -161,18 +161,18 @@ namespace ConditioningControlPanel.Services.Deeper
                 var issues = EnhancementValidator.Validate(enh);
                 if (issues.Exists(i => i.Severity == ValidationSeverity.Error))
                 {
-                    App.Logger?.Debug("EnhancementFetcher: validation failed for {Url}", url);
+                    App.Logger?.Debug("EnhancementFetcher: validation failed for {Url}", UrlSafety.RedactUrl(url));
                     return null;
                 }
 
                 lock (_gate) _cache[url] = enh;
-                App.Logger?.Information("EnhancementFetcher: cached '{Name}' from {Url}", enh.Metadata?.Name, url);
+                App.Logger?.Information("EnhancementFetcher: cached '{Name}' from {Url}", enh.Metadata?.Name, UrlSafety.RedactUrl(url));
                 return enh;
             }
             catch (TaskCanceledException) { return null; }
             catch (Exception ex)
             {
-                App.Logger?.Debug("EnhancementFetcher: fetch failed for {Url} - {Error}", url, ex.Message);
+                App.Logger?.Debug("EnhancementFetcher: fetch failed for {Url} - {Error}", UrlSafety.RedactUrl(url), ex.Message);
                 return null;
             }
         }

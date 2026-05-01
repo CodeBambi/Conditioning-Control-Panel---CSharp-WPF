@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models.Deeper;
 
@@ -30,7 +31,10 @@ namespace ConditioningControlPanel.Services.Deeper
 
     public interface IActionDispatcher
     {
-        Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx);
+        // ct fires when the engine that owns the dispatcher is stopped; used so
+        // long-running multi-step dispatches (haptic patterns, audio) abort
+        // instead of running on after the user pressed stop.
+        Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx, CancellationToken ct = default);
     }
 
     /// <summary>
@@ -52,8 +56,9 @@ namespace ConditioningControlPanel.Services.Deeper
 
         public event Action<string>? ActionLogged;
 
-        public Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx)
+        public Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx, CancellationToken ct = default)
         {
+            if (ct.IsCancellationRequested) return Task.CompletedTask;
             var line = $"t={ctx.CurrentTimeSeconds:0.00}s  {DescribeAction(action)}";
             lock (_gate)
             {
@@ -124,10 +129,11 @@ namespace ConditioningControlPanel.Services.Deeper
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         }
 
-        public async Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx)
+        public async Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx, CancellationToken ct = default)
         {
+            if (ct.IsCancellationRequested) return;
             var line = $"t={ctx.CurrentTimeSeconds:0.00}s  {LoggingActionDispatcher.DescribeAction(action)}";
-            try { await _inner.DispatchAsync(action, ctx); }
+            try { await _inner.DispatchAsync(action, ctx, ct); }
             finally
             {
                 lock (_gate)
@@ -153,8 +159,9 @@ namespace ConditioningControlPanel.Services.Deeper
     /// </summary>
     public sealed class RealActionDispatcher : IActionDispatcher
     {
-        public async Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx)
+        public async Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx, CancellationToken ct = default)
         {
+            if (ct.IsCancellationRequested) return;
             try
             {
                 switch (action)

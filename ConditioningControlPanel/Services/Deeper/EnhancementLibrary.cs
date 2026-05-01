@@ -284,8 +284,7 @@ namespace ConditioningControlPanel.Services.Deeper
 
         public Enhancement Open(string path)
         {
-            var json = File.ReadAllText(path);
-            var enhancement = EnhancementSerializer.Load(json);
+            var enhancement = EnhancementSerializer.LoadFromFile(path);
             TouchRecent(path);
             return enhancement;
         }
@@ -356,8 +355,7 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             try
             {
-                var json = File.ReadAllText(path);
-                var enhancement = EnhancementSerializer.Load(json);
+                var enhancement = EnhancementSerializer.LoadFromFile(path);
                 return new EnhancementLibraryEntry
                 {
                     FilePath = path,

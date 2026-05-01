@@ -35,6 +35,21 @@ namespace ConditioningControlPanel.Services.Deeper
             return false;
         }
 
+        /// <summary>Returns "host/path" with the query string and fragment removed.
+        /// Used for log lines so signed URLs (with ?token= etc) don't end up in
+        /// crash.log per the project's PII purge policy. On parse failure
+        /// returns "[invalid url]" so callers don't accidentally fall back to
+        /// the raw string.</summary>
+        public static string RedactUrl(string? url)
+        {
+            if (string.IsNullOrEmpty(url)) return "";
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return "[invalid url]";
+            var host = uri.Host;
+            var path = uri.AbsolutePath;
+            if (string.IsNullOrEmpty(path) || path == "/") return host;
+            return host + path;
+        }
+
         /// <summary>Rejects non-https URLs and any host that resolves to a loopback,
         /// link-local, private, or unique-local-address. Cloud metadata
         /// (169.254.169.254) is blocked by the link-local check. Returns true
