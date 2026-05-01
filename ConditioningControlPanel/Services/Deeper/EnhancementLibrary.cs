@@ -43,7 +43,51 @@ namespace ConditioningControlPanel.Services.Deeper
             LibraryFolder = Path.Combine(App.UserDataPath, "enhancements");
             try { Directory.CreateDirectory(LibraryFolder); }
             catch (Exception ex) { App.Logger?.Warning(ex, "EnhancementLibrary: could not create library folder {Path}", LibraryFolder); }
+            SeedBundledDemos();
             StartWatching();
+        }
+
+        // Copy bundled .ccpenh.json files from Resources/DeeperDemos into the
+        // user's library on first launch. Gated by AppSettings.HasSeededDeeperDemos
+        // so the user can delete a demo without it returning. We do NOT
+        // overwrite an existing file with the same name — if the user already
+        // has a "welcome.ccpenh.json", their copy wins (they may have edited it).
+        private void SeedBundledDemos()
+        {
+            try
+            {
+                if (App.Settings?.Current?.HasSeededDeeperDemos == true) return;
+
+                var demoSource = Path.Combine(AppContext.BaseDirectory, "Resources", "DeeperDemos");
+                if (!Directory.Exists(demoSource))
+                {
+                    App.Logger?.Debug("EnhancementLibrary: no bundled demos folder at {Path}", demoSource);
+                    return;
+                }
+
+                var sources = Directory.GetFiles(demoSource, "*" + FileSuffix, SearchOption.TopDirectoryOnly);
+                int copied = 0;
+                foreach (var src in sources)
+                {
+                    var name = Path.GetFileName(src);
+                    var dst = Path.Combine(LibraryFolder, name);
+                    if (File.Exists(dst)) continue; // respect user-edited copy
+                    try { File.Copy(src, dst, overwrite: false); copied++; }
+                    catch (Exception ex) { App.Logger?.Debug("EnhancementLibrary: failed to copy demo {Name}: {Error}", name, ex.Message); }
+                }
+
+                if (App.Settings?.Current is { } s)
+                {
+                    s.HasSeededDeeperDemos = true;
+                    App.Settings?.Save();
+                }
+                if (copied > 0)
+                    App.Logger?.Information("EnhancementLibrary: seeded {Count} demo enhancement(s) into {Path}", copied, LibraryFolder);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementLibrary: SeedBundledDemos failed");
+            }
         }
 
         // -- Hot-reload via FileSystemWatcher ---------------------------------

@@ -31,6 +31,9 @@ namespace ConditioningControlPanel.Views.Deeper
         private float[]? _peaks;
         private bool _isScrubbing;
         private bool _suppressVolumeSync;
+        // Sticky audio path so the user can press Play again after Stop
+        // (the underlying player nulls its CurrentPath on Stop, by design).
+        private string? _lastAudioPath;
 
         public EnhancementPlayerWindow(EnhancementAudioPlayer player, EnhancementHostService host)
         {
@@ -132,6 +135,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // Stop any in-flight playback so the new file replaces it cleanly.
             UnbindEngineIfRunning();
             _player.Stop();
+            _lastAudioPath = path;
 
             TxtAudioPath.Text = path;
             TxtStatus.Text = Loc.Get("deeper_player_status_loading_audio");
@@ -185,6 +189,12 @@ namespace ConditioningControlPanel.Views.Deeper
                 _player.Play(_player.CurrentPath);
                 BtnPlayPause.Content = "⏸";
                 BindEngineIfReady();
+            }
+            else if (!string.IsNullOrEmpty(_lastAudioPath))
+            {
+                // Resume after Stop: the underlying player cleared its handle,
+                // but we kept the path so the user can hit Play to start over.
+                LoadAudio(_lastAudioPath);
             }
             else
             {

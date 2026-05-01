@@ -1496,6 +1496,8 @@ namespace ConditioningControlPanel.Views.Deeper
             TriggerFields.Children.Clear();
             if (_selectedRule?.Trigger == null) return;
 
+            AddTypeDescription(TriggerFields, TriggerDescriptionKey(_selectedRule.Trigger.Type));
+
             switch (_selectedRule.Trigger)
             {
                 case GazeTargetTrigger g:
@@ -1533,6 +1535,8 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             ActionFields.Children.Clear();
             if (_selectedRule?.Action == null) return;
+
+            AddTypeDescription(ActionFields, ActionDescriptionKey(_selectedRule.Action.Type));
 
             switch (_selectedRule.Action)
             {
@@ -1969,6 +1973,57 @@ namespace ConditioningControlPanel.Views.Deeper
                 Margin = new Thickness(0, 0, 0, 8)
             });
         }
+
+        // Renders the localized one-line description for the currently-picked
+        // trigger or action type. Updates each time BuildTriggerFields /
+        // BuildActionFields runs, so the user sees what each type does the
+        // moment they pick it.
+        private void AddTypeDescription(Panel host, string locKey)
+        {
+            var text = Loc.Get(locKey);
+            if (string.IsNullOrEmpty(text) || text == locKey) return; // no key = skip
+            host.Children.Add(new Border
+            {
+                Background = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent20Brush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
+                BorderThickness = new Thickness(0, 0, 0, 1),
+                Padding = new Thickness(8, 6, 8, 6),
+                Margin = new Thickness(0, 0, 0, 8),
+                CornerRadius = new CornerRadius(3),
+                Child = new TextBlock
+                {
+                    Text = text,
+                    Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                    FontSize = 11,
+                    TextWrapping = TextWrapping.Wrap
+                }
+            });
+        }
+
+        private static string TriggerDescriptionKey(string type) => type switch
+        {
+            TriggerTypes.GazeTarget    => "deeper_desc_trigger_gaze_target",
+            TriggerTypes.GazeAvoid     => "deeper_desc_trigger_gaze_avoid",
+            TriggerTypes.AttentionLost => "deeper_desc_trigger_attention_lost",
+            TriggerTypes.BlinkDetected => "deeper_desc_trigger_blink_detected",
+            TriggerTypes.MouthOpen     => "deeper_desc_trigger_mouth_open",
+            TriggerTypes.TimeReached   => "deeper_desc_trigger_time_reached",
+            TriggerTypes.RegionEntered => "deeper_desc_trigger_region_entered",
+            TriggerTypes.RegionExited  => "deeper_desc_trigger_region_exited",
+            _                          => ""
+        };
+
+        private static string ActionDescriptionKey(string type) => type switch
+        {
+            ActionTypes.Seek          => "deeper_desc_action_seek",
+            ActionTypes.LoopRegion    => "deeper_desc_action_loop_region",
+            ActionTypes.Pause         => "deeper_desc_action_pause",
+            ActionTypes.PlayAudio     => "deeper_desc_action_play_audio",
+            ActionTypes.TriggerHaptic => "deeper_desc_action_trigger_haptic",
+            ActionTypes.ScreenShake   => "deeper_desc_action_screen_shake",
+            ActionTypes.SetIntensity  => "deeper_desc_action_set_intensity",
+            _                         => ""
+        };
 
         private void AddRegionPicker(Panel host, string currentId, Action<string> setter, bool allowNone = false)
         {

@@ -268,6 +268,12 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Deeper demo enhancements (seeded into user's library on first launch) -->
+    <Content Include="Resources\DeeperDemos\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- Webcam tracking ONNX models (offline-only, no network calls).
          README.md documents required files; .onnx binaries dropped in by build process. -->
     <Content Include="Resources\Models\**\*">
@@ -293,11 +299,13 @@
       <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" />
       <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
       <AwarenessPresetFiles Include="$(ProjectDir)Resources\AwarenessPresets\**\*" />
+      <DeeperDemoFiles Include="$(ProjectDir)Resources\DeeperDemos\**\*" />
       <SpiralFiles Include="$(ProjectDir)Spirals\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(SoundFiles)" DestinationFolder="$(PublishDir)Resources\sounds\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SubAudioFiles)" DestinationFolder="$(PublishDir)Resources\sub_audio\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(AwarenessPresetFiles)" DestinationFolder="$(PublishDir)Resources\AwarenessPresets\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(DeeperDemoFiles)" DestinationFolder="$(PublishDir)Resources\DeeperDemos\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SpiralFiles)" DestinationFolder="$(PublishDir)Spirals\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Message Importance="High" Text="Copied content files to publish folder" />
   </Target>
