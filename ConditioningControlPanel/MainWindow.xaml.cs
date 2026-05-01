@@ -2168,6 +2168,19 @@ namespace ConditioningControlPanel
             OpenDeeperEditor(enhancement, null);
         }
 
+        private void BtnDeeperOpenPlayer_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new Views.Deeper.EnhancementPlayerWindow(App.DeeperPlayer, App.DeeperHost) { Owner = this };
+                win.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open Deeper player");
+            }
+        }
+
         private void OpenDeeperEditor(Models.Deeper.Enhancement enhancement, string? filePath)
         {
             try

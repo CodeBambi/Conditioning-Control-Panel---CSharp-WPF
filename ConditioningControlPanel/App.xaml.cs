@@ -227,6 +227,8 @@ namespace ConditioningControlPanel
         public static GazeDebugCursorService GazeCursor { get; private set; } = null!;
         public static BlinkTrainerService BlinkTrainer { get; private set; } = null!;
         public static Services.Deeper.EnhancementLibrary EnhancementLibrary { get; private set; } = null!;
+        public static Services.Deeper.EnhancementAudioPlayer DeeperPlayer { get; private set; } = null!;
+        public static Services.Deeper.EnhancementHostService DeeperHost { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -856,6 +858,12 @@ namespace ConditioningControlPanel
             // Eager-init: lightweight, just creates the folder and reads recent files
             // from settings.
             EnhancementLibrary = new Services.Deeper.EnhancementLibrary();
+
+            // Deeper end-user runtime: long-form audio player + host orchestrator
+            // (Phase 8). Both are cheap to construct; resources only open on
+            // first Play / first Bind.
+            DeeperPlayer = new Services.Deeper.EnhancementAudioPlayer();
+            DeeperHost = new Services.Deeper.EnhancementHostService();
 
             // Initialize lockdown service (ephemeral — not persisted). Recover from a
             // prior run that was killed mid-lockdown so the panic key isn't stuck off.
