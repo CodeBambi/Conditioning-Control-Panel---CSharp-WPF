@@ -181,7 +181,10 @@ namespace ConditioningControlPanel.Services.Deeper
                 _engine?.Stop();
                 _engine?.Dispose();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementHostService.UnbindEngine error: {Error}", ex.Message);
+            }
             _engine = null;
             if (_activeRecorder != null)
             {

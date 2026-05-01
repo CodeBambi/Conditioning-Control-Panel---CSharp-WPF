@@ -229,7 +229,10 @@ namespace ConditioningControlPanel.Views.Deeper
                 var match = App.EnhancementLibrary?.FindMatch(mediaPath, mediaType);
                 if (match != null) _host.LoadFromFile(match.FilePath);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementPlayer: auto-load enhancement failed: {Error}", ex.Message);
+            }
         }
 
         // -- Audio loading -----------------------------------------------------
@@ -481,7 +484,10 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (Dispatcher.CheckAccess()) HandlePlayerEnded();
                 else Dispatcher.BeginInvoke(HandlePlayerEnded);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementPlayer: OnPlayerEnded marshal failed: {Error}", ex.Message);
+            }
         }
 
         private void HandlePlayerEnded()
@@ -498,7 +504,10 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (Dispatcher.CheckAccess()) UpdateHostUi(enh, path);
                 else Dispatcher.BeginInvoke(() => UpdateHostUi(enh, path));
             }
-            catch { }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementPlayer: OnHostLoaded marshal failed: {Error}", ex.Message);
+            }
         }
 
         private void UpdateHostUi(Models.Deeper.Enhancement? enh, string? path)

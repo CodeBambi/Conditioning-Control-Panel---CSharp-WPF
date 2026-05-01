@@ -407,7 +407,22 @@ namespace ConditioningControlPanel.Services.Deeper
         private static void ValidateRules(Enhancement e, List<ValidationError> errors, HashSet<EnhancementTrigger>? skipTrigger = null)
         {
             bool isAudio = e.MediaType == MediaTypes.Audio;
+            // Resolve band ids from BOTH the legacy Regions list AND the
+            // unified TimelineItems (Rule kind, finite duration). The engine
+            // resolves either at runtime; without this, rules referencing a
+            // band id during unsaved editor sessions (where TimelineItems
+            // lead and Regions haven't been back-projected yet) get false
+            // "unknown region" errors that the engine wouldn't actually hit.
             var regionIds = e.Regions.Select(r => r.Id).ToHashSet();
+            foreach (var ti in e.TimelineItems)
+            {
+                if (ti?.Kind == TimelineItemKind.Rule
+                    && ti.Duration > 0 && ti.Duration < double.MaxValue
+                    && !string.IsNullOrEmpty(ti.Id))
+                {
+                    regionIds.Add(ti.Id);
+                }
+            }
 
             for (int i = 0; i < e.Rules.Count; i++)
             {

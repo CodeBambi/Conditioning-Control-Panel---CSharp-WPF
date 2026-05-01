@@ -3236,8 +3236,9 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (App.DeeperPlayer == null || App.DeeperHost == null)
                 {
                     MessageBox.Show(this,
-                        "DeeperPlayer/DeeperHost not initialized.",
-                        "Preview", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        Loc.Get("deeper_editor_preview_not_initialized"),
+                        Loc.Get("deeper_editor_preview_title"),
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
                 var win = new EnhancementPlayerWindow(
@@ -3249,8 +3250,9 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 App.Logger?.Error(ex, "Deeper editor: opening Player from Preview failed");
                 MessageBox.Show(this,
-                    $"Couldn't open Player:\n\n{ex.GetType().Name}: {ex.Message}",
-                    "Preview failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                    string.Format(Loc.Get("deeper_editor_preview_open_failed_fmt"), $"{ex.GetType().Name}: {ex.Message}"),
+                    Loc.Get("deeper_editor_preview_failed_title"),
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
