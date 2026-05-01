@@ -51,11 +51,14 @@ namespace ConditioningControlPanel
 
             // Snapshot any prior offset and clear it so we sample raw projection
             // output. If the user cancels, we restore. On success, the new
-            // offset replaces the old one outright.
+            // offset replaces the old one outright. SetRuntimeOffset swaps the
+            // whole calibration instance atomically — direct mutation would
+            // race the capture thread, which reads the offset every frame.
             _savedOffset = App.Webcam.Calibration.RuntimeOffset;
-            App.Webcam.Calibration.RuntimeOffset = null;
+            App.Webcam.SetRuntimeOffset(null, persist: false);
 
             App.Webcam.OnGazeMove += OnGazeMove;
+            App.Webcam.OnTrackingStateChanged += OnWebcamStateChanged;
             try
             {
                 await RunSequenceAsync();
@@ -69,13 +72,31 @@ namespace ConditioningControlPanel
 
         private void Window_Closed(object sender, EventArgs e)
         {
-            if (App.Webcam != null) App.Webcam.OnGazeMove -= OnGazeMove;
+            if (App.Webcam != null)
+            {
+                App.Webcam.OnGazeMove -= OnGazeMove;
+                App.Webcam.OnTrackingStateChanged -= OnWebcamStateChanged;
+            }
 
             // Restore the prior offset on cancel — never strand the user with
             // a cleared calibration after they bailed out of recal.
-            if (!_completedOk && App.Webcam?.Calibration != null && App.Webcam.Calibration.RuntimeOffset == null)
+            if (!_completedOk)
             {
-                App.Webcam.Calibration.RuntimeOffset = _savedOffset;
+                App.Webcam?.SetRuntimeOffset(_savedOffset, persist: false);
+            }
+        }
+
+        private void OnWebcamStateChanged(WebcamTrackingState state)
+        {
+            // Quick recal samples live OnGazeMove output. If tracking ends mid-flow,
+            // close so subscriptions tear down and the saved offset gets restored.
+            if (state == WebcamTrackingState.Stopped || state == WebcamTrackingState.Error
+                || state == WebcamTrackingState.CameraInUse || state == WebcamTrackingState.CameraDenied)
+            {
+                _cancelled = true;
+                _collecting = false;
+                if (DialogResult == null) DialogResult = false;
+                Close();
             }
         }
 
@@ -146,13 +167,12 @@ namespace ConditioningControlPanel
             double dx = targetX - meanX;
             double dy = targetY - meanY;
 
-            App.Webcam!.Calibration!.RuntimeOffset = new RuntimeOffsetData
+            App.Webcam!.SetRuntimeOffset(new RuntimeOffsetData
             {
                 Dx = dx,
                 Dy = dy,
                 CapturedAt = DateTime.UtcNow,
-            };
-            App.Webcam.Calibration.Save();
+            }, persist: true);
             App.Logger?.Information(
                 "WebcamQuickRecalWindow: offset captured dx={Dx:F1} dy={Dy:F1} from {N} samples (mean=({Mx:F1},{My:F1}), target=({Tx:F1},{Ty:F1}))",
                 dx, dy, _samples.Count, meanX, meanY, targetX, targetY);

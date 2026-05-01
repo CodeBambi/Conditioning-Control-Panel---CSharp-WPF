@@ -347,7 +347,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
         {
             // Webcam preconditions, in order. Each failure stays on Ready with
             // a friendly banner — no modal interruption mid-flow.
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 var dlg = new WebcamConsentDialog { Owner = this };
                 var ok = dlg.ShowDialog();
@@ -460,25 +460,35 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
 
         private async void BeginCountdown()
         {
-            // True fullscreen for the duration of gameplay so the gaze
-            // half-mapping is unambiguous (window covers the whole monitor,
-            // taskbar included → left half of window == left half of screen).
-            // F11 toggles back during gameplay if the user wants windowed.
-            EnterFullscreen();
-
-            ShowScreen(CountdownScreen);
-            EnsureWebcamSubscribed();
-
-            foreach (var label in new[] { "3", "2", "1", "GO" })
+            // async void: top-level try/catch so a post-await exception (e.g.
+            // dispatcher shutdown mid-delay, window closed, control disposed)
+            // doesn't bubble to DispatcherUnhandledException as a crash.
+            try
             {
-                TxtCountdown.Text = label;
-                await System.Threading.Tasks.Task.Delay(700);
-            }
+                // True fullscreen for the duration of gameplay so the gaze
+                // half-mapping is unambiguous (window covers the whole monitor,
+                // taskbar included → left half of window == left half of screen).
+                // F11 toggles back during gameplay if the user wants windowed.
+                EnterFullscreen();
 
-            _results.Clear();
-            _currentRoundIdx = -1;
-            ShowScreen(GameplayScreen);
-            AdvanceRound();
+                ShowScreen(CountdownScreen);
+                EnsureWebcamSubscribed();
+
+                foreach (var label in new[] { "3", "2", "1", "GO" })
+                {
+                    TxtCountdown.Text = label;
+                    await System.Threading.Tasks.Task.Delay(700);
+                }
+
+                _results.Clear();
+                _currentRoundIdx = -1;
+                ShowScreen(GameplayScreen);
+                AdvanceRound();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "GazeMinigame: BeginCountdown threw");
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -791,52 +801,62 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
 
         private async void CompleteRound(RoundOutcome outcome)
         {
-            _gameRunning = false;
-            StopRoundTicker();
-
-            var spec = _rounds[_currentRoundIdx];
-            _results.Add(new RoundResult
+            // async void: see BeginCountdown for reasoning. Top-level catch
+            // keeps a post-await crash (window closed mid-feedback animation,
+            // dispatcher shutdown) out of DispatcherUnhandledException.
+            try
             {
-                Index = _currentRoundIdx,
-                Type = spec.Type,
-                Outcome = outcome,
-                CorrectMs = _correctMs,
-                WrongMs = _wrongMs,
-            });
+                _gameRunning = false;
+                StopRoundTicker();
 
-            // Tear down assets BEFORE animating the feedback card in: gives a
-            // clean black backdrop AND avoids the LibVLC airspace problem
-            // (native VideoView HWND would paint over any in-window WPF text).
-            // Reward effects / shake fire first, while assets are still
-            // visible — the visceral cue reads against the asset, then blackout.
-            switch (outcome)
-            {
-                case RoundOutcome.Correct:
-                    FireRewardEffect(_settings.RewardEffect);
-                    if (_settings.VibrationMode == GazeVibrationMode.OnCorrect) FireVibration("reward");
-                    DisposeCurrentRoundPlayers();
-                    LeftPane.Children.Clear();
-                    RightPane.Children.Clear();
-                    PlayJingle();
-                    await ShowFullscreenFeedbackAsync("GOOD GIRL", Color.FromRgb(0xFF, 0x69, 0xB4));
-                    break;
-                case RoundOutcome.Wrong:
-                    if (_settings.VibrationMode == GazeVibrationMode.OnWrong) FireVibration("punish");
-                    await ShakeGameplayAsync();
-                    DisposeCurrentRoundPlayers();
-                    LeftPane.Children.Clear();
-                    RightPane.Children.Clear();
-                    await ShowFullscreenFeedbackAsync("WRONG", Color.FromRgb(0xFF, 0x40, 0x40));
-                    break;
-                case RoundOutcome.Timeout:
-                    DisposeCurrentRoundPlayers();
-                    LeftPane.Children.Clear();
-                    RightPane.Children.Clear();
-                    await System.Threading.Tasks.Task.Delay(500);   // silent buffer
-                    break;
+                var spec = _rounds[_currentRoundIdx];
+                _results.Add(new RoundResult
+                {
+                    Index = _currentRoundIdx,
+                    Type = spec.Type,
+                    Outcome = outcome,
+                    CorrectMs = _correctMs,
+                    WrongMs = _wrongMs,
+                });
+
+                // Tear down assets BEFORE animating the feedback card in: gives a
+                // clean black backdrop AND avoids the LibVLC airspace problem
+                // (native VideoView HWND would paint over any in-window WPF text).
+                // Reward effects / shake fire first, while assets are still
+                // visible — the visceral cue reads against the asset, then blackout.
+                switch (outcome)
+                {
+                    case RoundOutcome.Correct:
+                        FireRewardEffect(_settings.RewardEffect);
+                        if (_settings.VibrationMode == GazeVibrationMode.OnCorrect) FireVibration("reward");
+                        DisposeCurrentRoundPlayers();
+                        LeftPane.Children.Clear();
+                        RightPane.Children.Clear();
+                        PlayJingle();
+                        await ShowFullscreenFeedbackAsync("GOOD GIRL", Color.FromRgb(0xFF, 0x69, 0xB4));
+                        break;
+                    case RoundOutcome.Wrong:
+                        if (_settings.VibrationMode == GazeVibrationMode.OnWrong) FireVibration("punish");
+                        await ShakeGameplayAsync();
+                        DisposeCurrentRoundPlayers();
+                        LeftPane.Children.Clear();
+                        RightPane.Children.Clear();
+                        await ShowFullscreenFeedbackAsync("WRONG", Color.FromRgb(0xFF, 0x40, 0x40));
+                        break;
+                    case RoundOutcome.Timeout:
+                        DisposeCurrentRoundPlayers();
+                        LeftPane.Children.Clear();
+                        RightPane.Children.Clear();
+                        await System.Threading.Tasks.Task.Delay(500);   // silent buffer
+                        break;
+                }
+
+                AdvanceRound();
             }
-
-            AdvanceRound();
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "GazeMinigame: CompleteRound threw");
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────

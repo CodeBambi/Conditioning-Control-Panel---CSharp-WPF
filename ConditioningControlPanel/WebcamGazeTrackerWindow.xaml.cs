@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Input;
+using ConditioningControlPanel.Services;
 using WpfPoint = System.Windows.Point;
 
 namespace ConditioningControlPanel
@@ -41,11 +42,30 @@ namespace ConditioningControlPanel
             }
 
             App.Webcam.OnGazeMove += OnGazeMove;
+            App.Webcam.OnTrackingStateChanged += OnWebcamStateChanged;
         }
 
         private void Window_Closed(object sender, EventArgs e)
         {
-            if (App.Webcam != null) App.Webcam.OnGazeMove -= OnGazeMove;
+            if (App.Webcam != null)
+            {
+                App.Webcam.OnGazeMove -= OnGazeMove;
+                App.Webcam.OnTrackingStateChanged -= OnWebcamStateChanged;
+            }
+        }
+
+        private void OnWebcamStateChanged(WebcamTrackingState state)
+        {
+            // Tracker test is pure visualization on top of the live stream — if
+            // the service stops for any reason, close the window so subscriptions
+            // tear down and we don't sit alive waiting for events that won't fire.
+            if (state == WebcamTrackingState.Stopped
+                || state == WebcamTrackingState.Error
+                || state == WebcamTrackingState.CameraInUse
+                || state == WebcamTrackingState.CameraDenied)
+            {
+                Close();
+            }
         }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)

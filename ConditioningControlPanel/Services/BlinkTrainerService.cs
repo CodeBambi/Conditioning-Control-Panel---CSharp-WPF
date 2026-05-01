@@ -38,7 +38,10 @@ public class BlinkTrainerService : IDisposable
     // background warm-up; until then GetCompatibleImages falls back to
     // _imagesAll so the first blinks still render.
     private readonly object _cacheLock = new();
-    private readonly Dictionary<string, double> _aspectCache = new();
+    // Replaced (not cleared in place) on each Start so a still-draining
+    // background warm-up from the previous Start can't accidentally
+    // populate the new run's cache with stale aspect entries.
+    private Dictionary<string, double> _aspectCache = new();
     private List<string> _imagesAll = new();
     private Dictionary<AspectBucket, List<string>> _imagesByBucket = NewEmptyBuckets();
     private CancellationTokenSource? _cacheCts;
@@ -98,7 +101,7 @@ public class BlinkTrainerService : IDisposable
 
             // Webcam: must have consent + be running.
             if (App.Webcam == null) { LastError = "Webcam service not initialized."; return false; }
-            if (settings.WebcamConsentGiven != true) { LastError = "Enable webcam consent first."; return false; }
+            if (!WebcamTrackingService.IsConsentCurrent()) { LastError = "Enable webcam consent first."; return false; }
             if (!App.Webcam.IsRunning && !App.Webcam.Start())
             {
                 LastError = $"Could not start webcam ({App.Webcam.State}).";
@@ -136,7 +139,7 @@ public class BlinkTrainerService : IDisposable
             {
                 _imagesAll = _pool.Where(p => !IsVideoExt(p)).ToList();
                 _imagesByBucket = NewEmptyBuckets();
-                _aspectCache.Clear();
+                _aspectCache = new Dictionary<string, double>();
             }
             _cacheCts = new CancellationTokenSource();
             var cacheToken = _cacheCts.Token;
@@ -207,7 +210,7 @@ public class BlinkTrainerService : IDisposable
         _lastIndex = -1;
         lock (_cacheLock)
         {
-            _aspectCache.Clear();
+            _aspectCache = new Dictionary<string, double>();
             _imagesAll = new();
             _imagesByBucket = NewEmptyBuckets();
         }

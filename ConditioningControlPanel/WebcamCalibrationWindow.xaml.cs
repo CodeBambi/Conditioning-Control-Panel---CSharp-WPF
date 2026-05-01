@@ -63,7 +63,15 @@ namespace ConditioningControlPanel
         private bool _collecting;
         private bool _cancelled;
         private bool _completedOk;
-        private readonly TaskCompletionSource<bool> _introDone = new();
+        // RunContinuationsAsynchronously: without this, TrySetResult continues
+        // the awaiting state machine inline on the dispatcher thread that
+        // raised the event, which can re-enter the multicast delegate while
+        // it's still being invoked (e.g. the unsubscribe in the finally of an
+        // outer await firing during the same OnGazeSide invocation list).
+        // Async continuations get posted instead of inlined — same semantics,
+        // no re-entrancy.
+        private readonly TaskCompletionSource<bool> _introDone =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         private Storyboard? _ringPulse;
         private bool _ringIsFull;
         // Index of the dot currently being sampled. Read by OnRawIris so
@@ -86,6 +94,11 @@ namespace ConditioningControlPanel
 
             App.Webcam.OnRawIris += OnRawIris;
             App.Webcam.OnHeadPose += OnHeadPose;
+            // Auto-close if tracking ends mid-flow (consent revoked from another
+            // window, panic key, camera unplugged, fatal error). Without this
+            // the dialog sits alive with stale subscriptions waiting for events
+            // that will never fire.
+            App.Webcam.OnTrackingStateChanged += OnWebcamStateChanged;
 
             // Show the intro overlay first so users know what's coming —
             // the dot grid + head-movement + validation checks are otherwise
@@ -131,6 +144,19 @@ namespace ConditioningControlPanel
             {
                 App.Webcam.OnRawIris -= OnRawIris;
                 App.Webcam.OnHeadPose -= OnHeadPose;
+                App.Webcam.OnTrackingStateChanged -= OnWebcamStateChanged;
+            }
+        }
+
+        private void OnWebcamStateChanged(WebcamTrackingState state)
+        {
+            if (state == WebcamTrackingState.Stopped || state == WebcamTrackingState.Error
+                || state == WebcamTrackingState.CameraInUse || state == WebcamTrackingState.CameraDenied)
+            {
+                _cancelled = true;
+                _introDone.TrySetResult(false);
+                if (DialogResult == null) DialogResult = false;
+                Close();
             }
         }
 
@@ -719,7 +745,7 @@ namespace ConditioningControlPanel
         private async Task<bool> WaitForGazeSideAsync(GazeSide target, int holdMs, int timeoutMs, Action<int, int> onProgress)
         {
             if (App.Webcam == null) return false;
-            var tcs = new TaskCompletionSource<bool>();
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             DateTime? holdStart = null;
 
             void Handler(GazeSide side)
@@ -757,7 +783,7 @@ namespace ConditioningControlPanel
         private async Task<bool> WaitForBlinksAsync(int needed, int timeoutMs, Action<int> onProgress)
         {
             if (App.Webcam == null) return false;
-            var tcs = new TaskCompletionSource<bool>();
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             int count = 0;
 
             void Handler()
@@ -782,7 +808,7 @@ namespace ConditioningControlPanel
         private async Task<bool> WaitForMouthOpensAsync(int needed, int timeoutMs, Action<int> onProgress)
         {
             if (App.Webcam == null) return false;
-            var tcs = new TaskCompletionSource<bool>();
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             int count = 0;
 
             void Handler()
@@ -807,7 +833,7 @@ namespace ConditioningControlPanel
         private async Task<bool> WaitForTongueOutsAsync(int needed, int timeoutMs, Action<int> onProgress)
         {
             if (App.Webcam == null) return false;
-            var tcs = new TaskCompletionSource<bool>();
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             int count = 0;
 
             void Handler()
@@ -831,9 +857,23 @@ namespace ConditioningControlPanel
 
         private async Task CloseAfterDelayAsync()
         {
-            await Task.Delay(1600);
-            DialogResult = true;
-            Close();
+            try
+            {
+                await Task.Delay(1600);
+                // Dispatcher may have begun shutting down between the delay
+                // starting and finishing — touching DialogResult/Close after
+                // shutdown throws TaskCanceledException up to the unhandled
+                // dispatcher handler. Guard mirrors the pattern in CLAUDE.md
+                // for fire-and-forget Task.Delay continuations.
+                if (Application.Current?.Dispatcher == null
+                    || Application.Current.Dispatcher.HasShutdownStarted) return;
+                DialogResult = true;
+                Close();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "WebcamCalibrationWindow: CloseAfterDelayAsync threw");
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────

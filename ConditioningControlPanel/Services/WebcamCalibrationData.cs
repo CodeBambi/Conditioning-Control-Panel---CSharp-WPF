@@ -128,6 +128,34 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Warning(ex, "WebcamCalibrationData: failed to delete");
             }
         }
+
+        /// <summary>
+        /// Returns a shallow clone of this calibration with <see cref="RuntimeOffset"/>
+        /// replaced. Use this (and re-publish via <see cref="WebcamTrackingService.SetRuntimeOffset"/>)
+        /// instead of mutating the live instance — the capture thread reads
+        /// <see cref="RuntimeOffset"/> every frame, and writes to fields of an already-
+        /// published instance race against those reads. Reference assignment of the
+        /// whole calibration is atomic, so swapping the instance is safe.
+        /// </summary>
+        public WebcamCalibrationData WithRuntimeOffset(RuntimeOffsetData? offset)
+        {
+            return new WebcamCalibrationData
+            {
+                Mode = this.Mode,
+                Timestamp = this.Timestamp,
+                MonitorBounds = this.MonitorBounds,
+                PrimaryDeviceId = this.PrimaryDeviceId,
+                LeftRefVec = this.LeftRefVec,
+                RightRefVec = this.RightRefVec,
+                TopRefVec = this.TopRefVec,
+                BottomRefVec = this.BottomRefVec,
+                Homography = this.Homography,
+                Polynomial = this.Polynomial,
+                BaselineHeadPose = this.BaselineHeadPose,
+                HeadPoseComp = this.HeadPoseComp,
+                RuntimeOffset = offset,
+            };
+        }
     }
 
     public class MonitorBoundsRecord

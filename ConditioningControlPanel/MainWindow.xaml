@@ -1391,7 +1391,28 @@
                     <TextBlock Text="💗" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
                     <TextBlock x:Name="TxtTitleBarVersion" Text="{loc:Str app_title}" Foreground="White" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
                 </StackPanel>
-                
+
+                <!-- Camera-active indicator — visible whenever WebcamTrackingService.IsRunning is true.
+                     Lives in the title bar so it's visible from every tab; click to stop tracking. -->
+                <Border x:Name="WebcamActivePill" Grid.Column="1"
+                        Visibility="Collapsed"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Background="#882B2B" CornerRadius="12" Padding="10,4"
+                        Margin="0,0,12,0"
+                        Cursor="Hand"
+                        MouseLeftButtonDown="WebcamActivePill_Click"
+                        ToolTip="Webcam tracking is active. Click to stop.">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse Width="8" Height="8" Fill="#FF4444" Margin="0,0,6,0" VerticalAlignment="Center">
+                            <Ellipse.Effect>
+                                <DropShadowEffect Color="#FF4444" BlurRadius="6" ShadowDepth="0" Opacity="0.8"/>
+                            </Ellipse.Effect>
+                        </Ellipse>
+                        <TextBlock Text="Camera active" Foreground="White" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- Window Control Buttons -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <Button x:Name="BtnTitleBarBugReport" Content="🐛" Width="46" Height="36"
@@ -7184,9 +7205,9 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- [DEBUG] Webcam Smoke Test card — TEMPORARY, remove once real Lab Box 1 UI lands -->
+                    <!-- Webcam Tracking card -->
                     <Border CornerRadius="12" Margin="6,12,6,6" Padding="15"
-                            Background="#1A1A2E" BorderBrush="#FF8800" BorderThickness="2">
+                            Background="#1A1A2E" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
                         <StackPanel>
                             <Grid Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
@@ -7194,8 +7215,8 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="[DEBUG] Webcam Smoke Test" Foreground="#FF8800" FontWeight="Bold" FontSize="16"/>
-                                    <TextBlock Text="Temp UI for verifying capture loop. Remove before merge."
+                                    <TextBlock Text="Webcam Tracking" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="16"/>
+                                    <TextBlock Text="Calibration, tracker test, quick recal, and live diagnostics."
                                                Foreground="#888888" FontSize="11" Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">

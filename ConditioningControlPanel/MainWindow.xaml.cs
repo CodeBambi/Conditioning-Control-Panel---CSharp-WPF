@@ -1606,6 +1606,9 @@ namespace ConditioningControlPanel
             // Update panic key button
             UpdatePanicKeyButton();
 
+            // Title-bar camera-active indicator
+            WireWebcamActivePill();
+
             // Load custom sessions from disk (so they persist across restarts)
             if (_sessionManager == null)
                 InitializeSessionManager();
@@ -3157,6 +3160,53 @@ namespace ConditioningControlPanel
         private bool _webcamDebugLastGazeSet;
         private string _webcamDebugFaceLabel = "—";
 
+        // Stored delegate refs so EnsureWebcamDebugSubscribed's six lambdas can
+        // actually be unhooked from App.Webcam in OnClosing — the pre-existing
+        // _webcamDebugSubscribed flag only blocked re-subscription, it didn't
+        // tear down. Without these the lambdas (which capture `this`) hold a
+        // reference to MainWindow forever.
+        private Action<WebcamTrackingState>? _onDebugStateChanged;
+        private Action? _onDebugFaceFound;
+        private Action? _onDebugFaceLost;
+        private Action? _onDebugBlink;
+        private Action? _onDebugMouthOpen;
+        private Action? _onDebugTongueOut;
+        private Action<GazeSide>? _onDebugGazeSide;
+
+        // Camera-active pill in the title bar — visible whenever any webcam
+        // feature has the capture loop running. Stored handler so we can
+        // unhook in OnClosing alongside the debug subscriptions above.
+        private Action<WebcamTrackingState>? _onPillStateChanged;
+
+        private void WireWebcamActivePill()
+        {
+            if (App.Webcam == null || _onPillStateChanged != null) return;
+
+            void Update(WebcamTrackingState s)
+            {
+                if (WebcamActivePill == null) return;
+                WebcamActivePill.Visibility = (s == WebcamTrackingState.Tracking || s == WebcamTrackingState.FaceLost)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+
+            _onPillStateChanged = Update;
+            App.Webcam.OnTrackingStateChanged += _onPillStateChanged;
+            // Reflect current state on wire-up — service may already be running
+            // if we got here after a previous Stop/Start cycle.
+            Update(App.Webcam.State);
+        }
+
+        private void WebcamActivePill_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Click is the panic-stop affordance. Stops every consumer that
+            // shares App.Webcam — Webcam Triggers, Focus Gaze, Blink Trainer,
+            // Gaze Minigame all release together when the service stops.
+            try { App.GazeFocus?.Stop(); } catch { }
+            try { App.BlinkTrainer?.Stop(); } catch { }
+            try { App.Webcam?.Stop(); } catch { }
+        }
+
         private void BtnWebcamDebugStart_Click(object sender, RoutedEventArgs e)
         {
             var svc = App.Webcam;
@@ -3174,7 +3224,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 AppendWebcamDebugLog("Consent not given — opening consent dialog…");
                 var dlg = new WebcamConsentDialog { Owner = this };
@@ -3212,7 +3262,7 @@ namespace ConditioningControlPanel
             if (_webcamDebugSubscribed || App.Webcam == null) return;
             _webcamDebugSubscribed = true;
 
-            App.Webcam.OnTrackingStateChanged += s =>
+            _onDebugStateChanged = s =>
             {
                 if (TxtWebcamDebugStatus != null) TxtWebcamDebugStatus.Text = s.ToString();
                 AppendWebcamDebugLog($"State → {s}");
@@ -3222,35 +3272,35 @@ namespace ConditioningControlPanel
                     if (BtnWebcamDebugStart != null) BtnWebcamDebugStart.Content = "Start tracking";
                 }
             };
-            App.Webcam.OnFaceFound += () =>
+            _onDebugFaceFound = () =>
             {
                 _webcamDebugFaceLabel = "yes";
                 UpdateWebcamDebugCounters();
                 AppendWebcamDebugLog("Face FOUND");
             };
-            App.Webcam.OnFaceLost += () =>
+            _onDebugFaceLost = () =>
             {
                 _webcamDebugFaceLabel = "lost";
                 UpdateWebcamDebugCounters();
                 AppendWebcamDebugLog("Face LOST");
             };
-            App.Webcam.OnBlink += () =>
+            _onDebugBlink = () =>
             {
                 _webcamDebugBlinkCount++;
                 UpdateWebcamDebugCounters();
                 AppendWebcamDebugLog($"Blink #{_webcamDebugBlinkCount}");
             };
-            App.Webcam.OnMouthOpen += () =>
+            _onDebugMouthOpen = () =>
             {
                 _webcamDebugMouthOpenCount++;
                 AppendWebcamDebugLog($"Mouth-open #{_webcamDebugMouthOpenCount}");
             };
-            App.Webcam.OnTongueOut += () =>
+            _onDebugTongueOut = () =>
             {
                 _webcamDebugTongueOutCount++;
                 AppendWebcamDebugLog($"Tongue-out #{_webcamDebugTongueOutCount}");
             };
-            App.Webcam.OnGazeSide += side =>
+            _onDebugGazeSide = side =>
             {
                 // Only log on CHANGE — gaze side fires every frame and would
                 // otherwise drown out blinks and face events.
@@ -3264,6 +3314,27 @@ namespace ConditioningControlPanel
                 UpdateWebcamDebugCounters();
                 AppendWebcamDebugLog($"Gaze → {side}");
             };
+
+            App.Webcam.OnTrackingStateChanged += _onDebugStateChanged;
+            App.Webcam.OnFaceFound += _onDebugFaceFound;
+            App.Webcam.OnFaceLost += _onDebugFaceLost;
+            App.Webcam.OnBlink += _onDebugBlink;
+            App.Webcam.OnMouthOpen += _onDebugMouthOpen;
+            App.Webcam.OnTongueOut += _onDebugTongueOut;
+            App.Webcam.OnGazeSide += _onDebugGazeSide;
+        }
+
+        private void UnsubscribeWebcamDebug()
+        {
+            if (!_webcamDebugSubscribed || App.Webcam == null) return;
+            if (_onDebugStateChanged != null) App.Webcam.OnTrackingStateChanged -= _onDebugStateChanged;
+            if (_onDebugFaceFound    != null) App.Webcam.OnFaceFound -= _onDebugFaceFound;
+            if (_onDebugFaceLost     != null) App.Webcam.OnFaceLost  -= _onDebugFaceLost;
+            if (_onDebugBlink        != null) App.Webcam.OnBlink     -= _onDebugBlink;
+            if (_onDebugMouthOpen    != null) App.Webcam.OnMouthOpen -= _onDebugMouthOpen;
+            if (_onDebugTongueOut    != null) App.Webcam.OnTongueOut -= _onDebugTongueOut;
+            if (_onDebugGazeSide     != null) App.Webcam.OnGazeSide  -= _onDebugGazeSide;
+            _webcamDebugSubscribed = false;
         }
 
         private void UpdateWebcamDebugCounters()
@@ -3282,7 +3353,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 AppendWebcamDebugLog("Consent not given — opening consent dialog…");
                 var consent = new WebcamConsentDialog { Owner = this };
@@ -3380,7 +3451,7 @@ namespace ConditioningControlPanel
             var on = ChkFocusGaze.IsChecked == true;
             if (on)
             {
-                if (App.Settings?.Current?.WebcamConsentGiven != true)
+                if (!WebcamTrackingService.IsConsentCurrent())
                 {
                     var dlg = new WebcamConsentDialog { Owner = this };
                     var ok = dlg.ShowDialog();
@@ -3605,7 +3676,7 @@ namespace ConditioningControlPanel
             }
 
             // Webcam consent gate (mirrors Focus Gaze flow)
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 var dlg = new WebcamConsentDialog { Owner = this };
                 var ok = dlg.ShowDialog();
@@ -3634,7 +3705,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 AppendWebcamDebugLog("Consent not given — opening consent dialog…");
                 var consent = new WebcamConsentDialog { Owner = this };
@@ -3693,7 +3764,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 AppendWebcamDebugLog("Consent not given — opening consent dialog…");
                 var consent = new WebcamConsentDialog { Owner = this };
@@ -23962,6 +24033,12 @@ namespace ConditioningControlPanel
                 _conditioningTimeSyncTimer?.Stop();
 
                 // Unsubscribe service events to allow GC of this window
+                UnsubscribeWebcamDebug();
+                if (_onPillStateChanged != null && App.Webcam != null)
+                {
+                    App.Webcam.OnTrackingStateChanged -= _onPillStateChanged;
+                    _onPillStateChanged = null;
+                }
                 if (App.Progression != null)
                 {
                     App.Progression.XPChanged -= OnXPChanged;

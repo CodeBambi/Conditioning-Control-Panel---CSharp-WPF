@@ -96,6 +96,22 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public const string ConsentVersion = "1.0";
 
+        /// <summary>
+        /// True when the user has granted consent AND the recorded consent
+        /// version matches the current contract version. A version mismatch
+        /// is treated as "not granted" so callers re-prompt — that is the
+        /// whole point of the version field, and the only mechanism that
+        /// makes bumping <see cref="ConsentVersion"/> actually re-consent
+        /// existing users when the privacy contract changes.
+        /// </summary>
+        public static bool IsConsentCurrent()
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return false;
+            if (!s.WebcamConsentGiven) return false;
+            return s.WebcamConsentVersion == ConsentVersion;
+        }
+
         // Capture parameters
         private const int CaptureWidth = 640;
         private const int CaptureHeight = 480;
@@ -217,10 +233,16 @@ namespace ConditioningControlPanel.Services
         private const double OneEuroDCutoff = 1.0;
 
         private readonly object _stateLock = new();
-        private bool _disposed;
+        private volatile bool _disposed;
 
-        public WebcamTrackingState State { get; private set; } = WebcamTrackingState.Stopped;
-        public bool IsRunning => State == WebcamTrackingState.Tracking || State == WebcamTrackingState.FaceLost;
+        // Backed by a volatile field so the capture thread's IsRunning checks
+        // and other readers across threads see writes from Start/Stop without
+        // having to take _stateLock on every poll. The state-machine writes
+        // themselves still go through SetState while _stateLock is held by
+        // Start/Stop, so the value never tears between visible snapshots.
+        private volatile WebcamTrackingState _state = WebcamTrackingState.Stopped;
+        public WebcamTrackingState State => _state;
+        public bool IsRunning => _state == WebcamTrackingState.Tracking || _state == WebcamTrackingState.FaceLost;
         public WebcamCalibrationData? Calibration { get; private set; }
 
         public event Action? OnBlink;
@@ -391,9 +413,10 @@ namespace ConditioningControlPanel.Services
             lock (_stateLock)
             {
                 if (_disposed) return false;
-                if (App.Settings?.Current?.WebcamConsentGiven != true)
+                if (!IsConsentCurrent())
                 {
-                    App.Logger?.Information("WebcamTrackingService: Start() refused — consent not given");
+                    App.Logger?.Information("WebcamTrackingService: Start() refused — consent not current (granted={Granted}, storedVersion={Stored}, currentVersion={Current})",
+                        App.Settings?.Current?.WebcamConsentGiven, App.Settings?.Current?.WebcamConsentVersion, ConsentVersion);
                     return false;
                 }
                 if (IsRunning) return true;
@@ -446,9 +469,28 @@ namespace ConditioningControlPanel.Services
                 thread = _captureThread;
             }
 
-            if (thread != null && !thread.Join(TimeSpan.FromSeconds(2)))
+            // Wait for the capture thread to exit before releasing any native
+            // handle it might still be using. Disposing _capture or the ONNX
+            // InferenceSessions while the thread is inside VideoCapture.Read
+            // or InferenceSession.Run is a guaranteed native AV. If the thread
+            // is wedged (driver hang, USB stall, slow inference), we'd rather
+            // leak the handles than crash — the process will free them on
+            // exit, and the user gets an Error state instead of a dialog.
+            if (thread != null)
             {
-                App.Logger?.Warning("WebcamTrackingService: capture thread did not exit within 2s");
+                if (!thread.Join(TimeSpan.FromSeconds(2)))
+                {
+                    App.Logger?.Warning("WebcamTrackingService: capture thread did not exit within 2s — extending wait");
+                    if (!thread.Join(TimeSpan.FromSeconds(3)))
+                    {
+                        App.Logger?.Error("WebcamTrackingService: capture thread did not exit within 5s total — leaving native handles alive to avoid disposal race");
+                        lock (_stateLock)
+                        {
+                            SetState(WebcamTrackingState.Error);
+                        }
+                        return;
+                    }
+                }
             }
 
             lock (_stateLock)
@@ -488,6 +530,27 @@ namespace ConditioningControlPanel.Services
             WebcamCalibrationData.DeleteIfExists();
             Calibration = null;
             App.Logger?.Information("WebcamTrackingService: calibration cleared");
+        }
+
+        /// <summary>
+        /// Atomically replace the live calibration's <see cref="WebcamCalibrationData.RuntimeOffset"/>
+        /// (the post-projection nudge captured by Quick Recal) with a new value.
+        /// Mutating the live instance in place would race the capture thread,
+        /// which reads the offset every frame; this clones the calibration so
+        /// readers always see a consistent snapshot. Pass null to clear.
+        /// </summary>
+        public void SetRuntimeOffset(RuntimeOffsetData? offset, bool persist)
+        {
+            lock (_stateLock)
+            {
+                var current = Calibration;
+                if (current == null) return;
+                var updated = current.WithRuntimeOffset(offset);
+                if (persist) updated.Save();
+                Calibration = updated;
+            }
+            App.Logger?.Information("WebcamTrackingService: runtime offset {State} (persist={Persist})",
+                offset == null ? "cleared" : "set", persist);
         }
 
         public void RevokeConsent()
@@ -589,17 +652,33 @@ namespace ConditioningControlPanel.Services
 
         private bool TryLoadModels(string faceModelPath, string faceAnchorsPath, string meshModelPath, string irisModelPath)
         {
+            // Build into locals first and only publish to fields once all three
+            // detectors construct successfully. If the second or third ctor
+            // throws, the partially-constructed earlier ones get disposed in
+            // the catch — otherwise their ONNX InferenceSessions and Mat
+            // buffers leak until process exit (Start's caller calls
+            // ReleaseCapture but not ReleaseModels on this failure path).
+            BlazeFaceDetector? face = null;
+            FaceMeshDetector? mesh = null;
+            IrisDetector? iris = null;
             try
             {
-                _faceDetector = new BlazeFaceDetector(faceModelPath, faceAnchorsPath);
-                _faceMesh = new FaceMeshDetector(meshModelPath);
-                _irisDetector = new IrisDetector(irisModelPath);
+                face = new BlazeFaceDetector(faceModelPath, faceAnchorsPath);
+                mesh = new FaceMeshDetector(meshModelPath);
+                iris = new IrisDetector(irisModelPath);
+
+                _faceDetector = face;
+                _faceMesh = mesh;
+                _irisDetector = iris;
                 App.Logger?.Information("WebcamTrackingService: BlazeFace + FaceMesh + Iris loaded");
                 return true;
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "WebcamTrackingService: failed to load detection models");
+                try { face?.Dispose(); } catch { }
+                try { mesh?.Dispose(); } catch { }
+                try { iris?.Dispose(); } catch { }
                 return false;
             }
         }
@@ -689,9 +768,19 @@ namespace ConditioningControlPanel.Services
             {
                 while (!_stopRequested)
                 {
-                    if (_capture == null || _faceDetector == null || _faceMesh == null || _irisDetector == null) break;
+                    // Snapshot field references locally so a stray Stop/Dispose
+                    // ordering bug or future code change can't null them out
+                    // between the check and the dereference. Stop() now waits
+                    // for this thread to exit before calling ReleaseCapture /
+                    // ReleaseModels, so in normal flow these stay non-null for
+                    // the entire iteration; the snapshot is defense in depth.
+                    var capture = _capture;
+                    var faceDet = _faceDetector;
+                    var faceMesh = _faceMesh;
+                    var irisDet = _irisDetector;
+                    if (capture == null || faceDet == null || faceMesh == null || irisDet == null) break;
 
-                    if (!_capture.Read(frame) || frame.Empty())
+                    if (!capture.Read(frame) || frame.Empty())
                     {
                         consecutiveReadFails++;
                         if (consecutiveReadFails >= MaxConsecutiveReadFails)
@@ -721,7 +810,11 @@ namespace ConditioningControlPanel.Services
                     if (processedFrames % 300 == 0)
                     {
                         var fps = processedFrames / sw.Elapsed.TotalSeconds;
-                        App.Logger?.Information("WebcamTrackingService: {Frames} frames processed, ~{Fps:F1} fps", processedFrames, fps);
+                        // Debug, not Information — fires every ~10s during capture so it
+                        // would otherwise dominate app-.log and ride along on bug reports
+                        // (LogScrubber doesn't strip webcam telemetry). Lifecycle entries
+                        // (started/stopped/exited) stay at Information.
+                        App.Logger?.Debug("WebcamTrackingService: {Frames} frames processed, ~{Fps:F1} fps", processedFrames, fps);
                     }
                 }
             }
@@ -1241,8 +1334,8 @@ namespace ConditioningControlPanel.Services
 
         private void SetState(WebcamTrackingState state)
         {
-            if (State == state) return;
-            State = state;
+            if (_state == state) return;
+            _state = state;
             Dispatch(() => OnTrackingStateChanged?.Invoke(state));
         }
 
@@ -1374,7 +1467,11 @@ namespace ConditioningControlPanel.Services
                     fired = true;
                     Dispatch(() => OnBlink?.Invoke());
                 }
-                App.Logger?.Information(
+                // Debug, not Information — per-event blink data is behavioral
+                // biometric correlate (eye-aspect-ratio, closure timing). Keeping
+                // it out of persisted logs / bug reports honors the privacy
+                // contract at the top of this file.
+                App.Logger?.Debug(
                     "WebcamTrackingService: blink {Outcome} (closed for {Ms:F0}ms, baseline EAR={Base:F3}, min EAR during closure={Min:F3}, ratio={Ratio:F2}× baseline)",
                     fired ? $"#{_blinkCount} FIRED" : "rejected",
                     closedMs, _earBaseline, _minEarThisClosure, _minEarThisClosure / _earBaseline);
@@ -1405,7 +1502,10 @@ namespace ConditioningControlPanel.Services
             double openThreshold = _earBaseline * EarOpenRatio;
             double winMinRatio = _earBaseline > 0 ? _windowMinEar / _earBaseline : 0;
             double winMaxRatio = _earBaseline > 0 ? _windowMaxEar / _earBaseline : 0;
-            App.Logger?.Information(
+            // Debug, not Information — periodic EAR baseline diagnostics are
+            // tuning aids, not lifecycle events. Same privacy reasoning as the
+            // per-blink log above.
+            App.Logger?.Debug(
                 "WebcamTrackingService: blink-diag baseline={Base:F3} closedThr={CT:F3} openThr={OT:F3} winMin={WMin:F3}({WMinR:P0}) winMax={WMax:F3}({WMaxR:P0}) nearMiss={NM} state={State} blinks={N} samples={S}",
                 _earBaseline, closedThreshold, openThreshold,
                 _windowMinEar, winMinRatio, _windowMaxEar, winMaxRatio,
@@ -1494,7 +1594,8 @@ namespace ConditioningControlPanel.Services
                         _lastMouthOpenAt = now;
                         _mouthOpenCount++;
                         Dispatch(() => OnMouthOpen?.Invoke());
-                        App.Logger?.Information(
+                        // Debug, not Information — see blink fire log above for reasoning.
+                        App.Logger?.Debug(
                             "WebcamTrackingService: mouth-open #{N} FIRED (open for {Ms:F0}ms, baseline MAR={Base:F3}, max MAR during open={Max:F3}, ratio={Ratio:F2}× baseline)",
                             _mouthOpenCount, openMs, _marBaseline, _maxMarThisOpening,
                             _maxMarThisOpening / _marBaseline);
@@ -1519,7 +1620,8 @@ namespace ConditioningControlPanel.Services
             double openThreshold = _marBaseline * MarOpenRatio;
             double closeThreshold = _marBaseline * MarCloseRatio;
             double winMaxRatio = _marBaseline > 0 ? _windowMaxMar / _marBaseline : 0;
-            App.Logger?.Information(
+            // Debug, not Information — see blink-diag for reasoning.
+            App.Logger?.Debug(
                 "WebcamTrackingService: mouth-diag baseline={Base:F3} openThr={OT:F3} closeThr={CT:F3} winMin={WMin:F3} winMax={WMax:F3}({WMaxR:P0}) state={State} mouthOpens={N} samples={S}",
                 _marBaseline, openThreshold, closeThreshold,
                 _windowMinMar, _windowMaxMar, winMaxRatio,
@@ -1587,7 +1689,8 @@ namespace ConditioningControlPanel.Services
                         _lastTongueOutAt = now;
                         _tongueOutCount++;
                         Dispatch(() => OnTongueOut?.Invoke());
-                        App.Logger?.Information(
+                        // Debug, not Information — see blink fire log for reasoning.
+                        App.Logger?.Debug(
                             "WebcamTrackingService: tongue-out #{N} FIRED (visible for {Ms:F0}ms, max ratio={Max:P0})",
                             _tongueOutCount, outMs, _maxTongueRatioThisFire);
                     }
@@ -1690,7 +1793,8 @@ namespace ConditioningControlPanel.Services
             double shadowPct = classified > 0 ? (double)_diagShadowSum / classified : 0;
             double otherPct  = classified > 0 ? (double)_diagOtherSum  / classified : 0;
 
-            App.Logger?.Information(
+            // Debug, not Information — see blink-diag for reasoning.
+            App.Logger?.Debug(
                 "WebcamTrackingService: tongue-diag winMaxRatio={Max:P0} state={State} fires={N} frames={F} | per-class share: tongue={T:P0} teeth={E:P0} shadow={S:P0} other={O:P0}",
                 _windowMaxTongueRatio, _tongueOut ? "OUT" : "in", _tongueOutCount,
                 _diagTongueFrames, tonguePct, teethPct, shadowPct, otherPct);
@@ -1807,6 +1911,11 @@ namespace ConditioningControlPanel.Services
 
             // Reusable buffers (capture-thread-only access; no locking needed).
             private readonly float[] _inputBuffer = new float[InputSize * InputSize * 3];
+            // Cached byte staging buffer for the BGR→RGB float conversion in
+            // FillInputBufferFromBgr — at ~49KB per BlazeFace frame this would
+            // otherwise allocate fresh each frame. Caching it drops Gen0
+            // pressure noticeably across the three detectors.
+            private readonly byte[] _byteBuffer = new byte[InputSize * InputSize * 3];
             private Mat? _resizeBuffer;       // 128×96 (or whatever the aspect-preserving size is)
             private Mat? _paddedBuffer;       // 128×128
 
@@ -1877,7 +1986,7 @@ namespace ConditioningControlPanel.Services
 
                 // BGR → RGB and normalize to [-1, 1] in channel-last order.
                 // We avoid an extra Mat allocation by walking the padded buffer directly.
-                FillInputBufferFromBgr(_paddedBuffer, _inputBuffer);
+                FillInputBufferFromBgr(_paddedBuffer, _inputBuffer, _byteBuffer);
 
                 var inputTensor = new DenseTensor<float>(_inputBuffer, new[] { 1, InputSize, InputSize, 3 });
                 using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(_inputName, inputTensor) });
@@ -1932,7 +2041,7 @@ namespace ConditioningControlPanel.Services
                 return new CvRect(rx, ry, rw, rh);
             }
 
-            private static void FillInputBufferFromBgr(Mat bgr128, float[] dst)
+            private static void FillInputBufferFromBgr(Mat bgr128, float[] dst, byte[] bytes)
             {
                 // bgr128 is contiguous CV_8UC3, 128×128. Copy raw bytes once, then
                 // rearrange in place: BGR → RGB and uint8 → float in [-1,1].
@@ -1940,8 +2049,7 @@ namespace ConditioningControlPanel.Services
                     throw new InvalidOperationException("FillInputBufferFromBgr: expected 128×128 CV_8UC3");
 
                 int total = InputSize * InputSize;
-                var bytes = new byte[total * 3];
-                System.Runtime.InteropServices.Marshal.Copy(bgr128.Data, bytes, 0, bytes.Length);
+                System.Runtime.InteropServices.Marshal.Copy(bgr128.Data, bytes, 0, total * 3);
                 const float kScale = 2f / 255f;
                 for (int i = 0; i < total; i++)
                 {
@@ -1990,6 +2098,9 @@ namespace ConditioningControlPanel.Services
             private readonly InferenceSession _session;
             private readonly string _inputName;
             private readonly float[] _inputBuffer = new float[InputSize * InputSize * 3];
+            // Cached byte staging buffer — see BlazeFaceDetector for reasoning.
+            // 192×192×3 = ~110KB, the largest of the three detectors.
+            private readonly byte[] _byteBuffer = new byte[InputSize * InputSize * 3];
             private Mat? _croppedBuffer;            // square crop with black padding
             private Mat? _resizedBuffer;            // 192×192 resized
             private int _lastSide = -1;
@@ -2050,7 +2161,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 Cv2.Resize(_croppedBuffer, _resizedBuffer, new CvSize(InputSize, InputSize), 0, 0, InterpolationFlags.Linear);
-                FillInputBufferFromBgr(_resizedBuffer, _inputBuffer);
+                FillInputBufferFromBgr(_resizedBuffer, _inputBuffer, _byteBuffer);
 
                 var inputTensor = new DenseTensor<float>(_inputBuffer, new[] { 1, InputSize, InputSize, 3 });
                 using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(_inputName, inputTensor) });
@@ -2086,14 +2197,13 @@ namespace ConditioningControlPanel.Services
                 return output;
             }
 
-            private static void FillInputBufferFromBgr(Mat bgr192, float[] dst)
+            private static void FillInputBufferFromBgr(Mat bgr192, float[] dst, byte[] bytes)
             {
                 if (bgr192.Width != InputSize || bgr192.Height != InputSize || bgr192.Type() != MatType.CV_8UC3)
                     throw new InvalidOperationException("FaceMesh.FillInputBufferFromBgr: expected 192×192 CV_8UC3");
 
                 int total = InputSize * InputSize;
-                var bytes = new byte[total * 3];
-                System.Runtime.InteropServices.Marshal.Copy(bgr192.Data, bytes, 0, bytes.Length);
+                System.Runtime.InteropServices.Marshal.Copy(bgr192.Data, bytes, 0, total * 3);
                 const float kScale = 1f / 255f;
                 for (int i = 0; i < total; i++)
                 {
@@ -2146,6 +2256,10 @@ namespace ConditioningControlPanel.Services
             private readonly InferenceSession _session;
             private readonly string _inputName;
             private readonly float[] _inputBuffer = new float[InputSize * InputSize * 3];
+            // Cached byte staging buffer — see BlazeFaceDetector for reasoning.
+            // 64×64×3 = 12KB; called twice per frame (once per eye) so the
+            // saving here doubles up.
+            private readonly byte[] _byteBuffer = new byte[InputSize * InputSize * 3];
             private Mat? _croppedBuffer;
             private Mat? _resizedBuffer;
             private Mat? _flippedBuffer;
@@ -2214,7 +2328,7 @@ namespace ConditioningControlPanel.Services
                     fed = _flippedBuffer;
                 }
 
-                FillInputBufferFromBgr(fed, _inputBuffer);
+                FillInputBufferFromBgr(fed, _inputBuffer, _byteBuffer);
 
                 var inputTensor = new DenseTensor<float>(_inputBuffer, new[] { 1, InputSize, InputSize, 3 });
                 using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(_inputName, inputTensor) });
@@ -2256,14 +2370,13 @@ namespace ConditioningControlPanel.Services
                 return new EyeLandmarks { IrisCenter = (irisX, irisY), Contour = contour };
             }
 
-            private static void FillInputBufferFromBgr(Mat bgr64, float[] dst)
+            private static void FillInputBufferFromBgr(Mat bgr64, float[] dst, byte[] bytes)
             {
                 if (bgr64.Width != InputSize || bgr64.Height != InputSize || bgr64.Type() != MatType.CV_8UC3)
                     throw new InvalidOperationException("IrisDetector.FillInputBufferFromBgr: expected 64×64 CV_8UC3");
 
                 int total = InputSize * InputSize;
-                var bytes = new byte[total * 3];
-                System.Runtime.InteropServices.Marshal.Copy(bgr64.Data, bytes, 0, bytes.Length);
+                System.Runtime.InteropServices.Marshal.Copy(bgr64.Data, bytes, 0, total * 3);
                 const float kScale = 1f / 255f;
                 for (int i = 0; i < total; i++)
                 {
