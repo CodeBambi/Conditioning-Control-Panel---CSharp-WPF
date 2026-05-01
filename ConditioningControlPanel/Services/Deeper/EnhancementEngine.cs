@@ -65,6 +65,10 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             var entries = new List<TimelineEntry>();
             var reactive = new List<TimelineItem>();
+            // Trigger references already represented by a TimelineItem so we
+            // can skip the legacy fallback for items that round-tripped
+            // through the loader's projection.
+            var seenTriggers = new HashSet<EnhancementTrigger>();
 
             foreach (var item in _enhancement.TimelineItems)
             {
@@ -85,13 +89,72 @@ namespace ConditioningControlPanel.Services.Deeper
                         entries.Add(new TimelineEntry(tr.Time, item.Action, ownerItem: item));
                     else
                         reactive.Add(item);
+                    seenTriggers.Add(item.Trigger);
                 }
+            }
+
+            // Editor preview path: rules added via right-click → AddRuleAt land
+            // in _enhancement.Rules (legacy) without a matching TimelineItem
+            // (back-projection only happens at save). Synthesize transient
+            // TimelineItems for any unseen rules so preview compiles them too.
+            foreach (var rule in _enhancement.Rules)
+            {
+                if (rule == null || !rule.Enabled) continue;
+                if (rule.Trigger == null || rule.Action == null) continue;
+                if (seenTriggers.Contains(rule.Trigger)) continue;
+
+                var synth = SynthesizeLegacyRuleItem(rule);
+                if (synth == null) continue;
+
+                if (synth.Trigger is TimeReachedTrigger tr)
+                    entries.Add(new TimelineEntry(tr.Time, synth.Action!, ownerItem: synth));
+                else
+                    reactive.Add(synth);
             }
 
             entries.Sort((a, b) => a.Time.CompareTo(b.Time));
             _timeline = entries;
             _reactiveRules = reactive;
             _lastFiredIndex = -1;
+        }
+
+        /// <summary>Build a transient Rule TimelineItem from a legacy
+        /// EnhancementRule. RegionConstraint is resolved against
+        /// <see cref="Enhancement.Regions"/> so band-style rules fire inside
+        /// their region span like a saved-and-reloaded file would.</summary>
+        private TimelineItem? SynthesizeLegacyRuleItem(EnhancementRule rule)
+        {
+            double start = 0;
+            double duration = double.MaxValue;
+            string id = TimelineItem.NewId();
+
+            if (rule.Trigger is TimeReachedTrigger tr)
+            {
+                start = Math.Max(0, tr.Time);
+                duration = 0;
+            }
+            else if (!string.IsNullOrEmpty(rule.RegionConstraint))
+            {
+                var region = _enhancement.Regions.FirstOrDefault(r => r.Id == rule.RegionConstraint);
+                if (region != null)
+                {
+                    start = region.Start;
+                    duration = Math.Max(0, region.End - region.Start);
+                    id = region.Id;
+                }
+            }
+
+            return new TimelineItem
+            {
+                Id = id,
+                Kind = TimelineItemKind.Rule,
+                Start = start,
+                Duration = duration,
+                Trigger = rule.Trigger,
+                Action = rule.Action,
+                CooldownMs = rule.CooldownMs,
+                Enabled = rule.Enabled
+            };
         }
 
         private static EnhancementAction? SynthesizeEffectAction(TimelineItem item)
@@ -288,6 +351,15 @@ namespace ConditioningControlPanel.Services.Deeper
                 if (item.Duration <= 0 || double.IsInfinity(item.Duration)) continue;
                 if (item.Duration >= double.MaxValue) continue;
                 if (t >= item.Start && t < item.Start + item.Duration) return item.Id;
+            }
+            // Editor preview fallback: legacy regions live in _enhancement.Regions
+            // and only get projected into TimelineItems on save. Walk them so
+            // region_entered / region_exited triggers fire correctly during
+            // unsaved editor preview sessions.
+            foreach (var region in _enhancement.Regions)
+            {
+                if (region == null || string.IsNullOrEmpty(region.Id)) continue;
+                if (t >= region.Start && t < region.End) return region.Id;
             }
             return null;
         }

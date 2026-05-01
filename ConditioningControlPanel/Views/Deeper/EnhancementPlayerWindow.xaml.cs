@@ -38,6 +38,7 @@ namespace ConditioningControlPanel.Views.Deeper
         // Sticky audio path so the user can press Play again after Stop
         // (the underlying player nulls its CurrentPath on Stop, by design).
         private string? _lastAudioPath;
+        private bool _loadInProgress;
 
         // Live event log (last N actions the engine fired). Newest first.
         private const int MaxEventLogEntries = 30;
@@ -242,25 +243,39 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private async void LoadAudio(string path)
         {
-            // Stop any in-flight playback so the new file replaces it cleanly.
-            UnbindEngineIfRunning();
-            _player.Stop();
-            _lastAudioPath = path;
-
-            TxtAudioPath.Text = path;
-            TxtStatus.Text = Loc.Get("deeper_player_status_loading_audio");
-            await LoadWaveformAsync(path);
-
-            if (!_player.Play(path))
+            // Re-entrancy guard: BtnPlayPause's "replay-after-stop" branch
+            // calls LoadAudio synchronously from the click handler, and a
+            // second click while LoadWaveformAsync is awaiting would race a
+            // second _player.Stop() / Play() pair against the first, which
+            // can leave NAudio's WaveOutEvent in an undefined state.
+            if (_loadInProgress) return;
+            _loadInProgress = true;
+            try
             {
-                TxtStatus.Text = Loc.Get("deeper_player_status_audio_failed");
-                return;
-            }
+                // Stop any in-flight playback so the new file replaces it cleanly.
+                UnbindEngineIfRunning();
+                _player.Stop();
+                _lastAudioPath = path;
 
-            TxtTotal.Text = FormatTime(_player.DurationMs / 1000.0);
-            BtnPlayPause.Content = "⏸";
-            BindEngineIfReady();
-            TxtStatus.Text = Loc.Get("deeper_player_status_playing");
+                TxtAudioPath.Text = path;
+                TxtStatus.Text = Loc.Get("deeper_player_status_loading_audio");
+                await LoadWaveformAsync(path);
+
+                if (!_player.Play(path))
+                {
+                    TxtStatus.Text = Loc.Get("deeper_player_status_audio_failed");
+                    return;
+                }
+
+                TxtTotal.Text = FormatTime(_player.DurationMs / 1000.0);
+                BtnPlayPause.Content = "⏸";
+                BindEngineIfReady();
+                TxtStatus.Text = Loc.Get("deeper_player_status_playing");
+            }
+            finally
+            {
+                _loadInProgress = false;
+            }
         }
 
         private async Task LoadWaveformAsync(string path)

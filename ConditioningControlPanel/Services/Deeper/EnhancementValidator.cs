@@ -28,16 +28,26 @@ namespace ConditioningControlPanel.Services.Deeper
             ValidateMediaType(e, errors);
             ValidateTimelineItems(e, errors);
 
-            // Legacy validation only when the unified model is empty (e.g. an
-            // Enhancement constructed directly in code without going through Load).
-            // For loaded files, TimelineItems is always populated by the loader's
-            // projection pass, and legacy collections may have intentional
-            // overlaps from band-stacking that legacy validation would flag.
+            // Legacy rule validation always runs. The editor adds band-style
+            // rules directly to _enhancement.Rules + _enhancement.Regions and
+            // only back-projects into TimelineItems on save, so a session
+            // that hasn't saved has user state living only in the legacy
+            // collections. Skip rules already represented in TimelineItems so
+            // Load-projected files don't fire duplicate errors.
+            var representedTriggers = new HashSet<EnhancementTrigger>();
+            foreach (var item in e.TimelineItems)
+            {
+                if (item?.Trigger != null) representedTriggers.Add(item.Trigger);
+            }
+            ValidateRules(e, errors, skipTrigger: representedTriggers);
+
+            // Region/haptic legacy validation only when TimelineItems is empty
+            // — projected files have intentional overlaps from band-stacking
+            // that the legacy region overlap check would flag as errors.
             if (e.TimelineItems.Count == 0)
             {
                 ValidateRegions(e, errors);
                 ValidateHapticTracks(e, errors);
-                ValidateRules(e, errors);
             }
 
             return errors;
@@ -377,7 +387,7 @@ namespace ConditioningControlPanel.Services.Deeper
             }
         }
 
-        private static void ValidateRules(Enhancement e, List<ValidationError> errors)
+        private static void ValidateRules(Enhancement e, List<ValidationError> errors, HashSet<EnhancementTrigger>? skipTrigger = null)
         {
             bool isAudio = e.MediaType == MediaTypes.Audio;
             var regionIds = e.Regions.Select(r => r.Id).ToHashSet();
@@ -385,6 +395,8 @@ namespace ConditioningControlPanel.Services.Deeper
             for (int i = 0; i < e.Rules.Count; i++)
             {
                 var rule = e.Rules[i];
+                if (skipTrigger != null && rule.Trigger != null && skipTrigger.Contains(rule.Trigger))
+                    continue;
                 var path = $"rules[{i}]";
 
                 if (rule.Trigger is NeverFiringTrigger nft && nft.OriginalType != TriggerTypes.Never)

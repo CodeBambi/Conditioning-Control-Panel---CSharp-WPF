@@ -28,9 +28,13 @@ namespace ConditioningControlPanel.Services.Deeper
         /// Loads peaks for the given audio file, using a disk cache when available.
         /// Throws on decode failure (callers should catch and fall back to a flat strip).
         /// </summary>
-        public static async Task<AudioWaveformResult> LoadAsync(string audioPath)
+        public static Task<AudioWaveformResult> LoadAsync(string audioPath)
         {
-            return await Task.Run(() => Load(audioPath)).ConfigureAwait(false);
+            // No ConfigureAwait(false) — the only callers are WPF UI code that
+            // assigns the result to DependencyObjects (WaveformPath.Data) on
+            // the awaiting thread. Forcing the continuation off the UI thread
+            // here previously caused intermittent cross-thread exceptions.
+            return Task.Run(() => Load(audioPath));
         }
 
         public static AudioWaveformResult Load(string audioPath)

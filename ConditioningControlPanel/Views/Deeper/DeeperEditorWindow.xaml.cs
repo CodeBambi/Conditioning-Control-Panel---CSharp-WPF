@@ -3378,6 +3378,21 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             try
             {
+                // Force a synchronous validation pass so we don't ship the
+                // user a file we know is broken. Errors get a "save anyway?"
+                // prompt; warnings pass silently (already shown in the
+                // editor's validation strip).
+                var issues = EnhancementValidator.Validate(_enhancement);
+                int errorCount = issues.Count(i => i.Severity == ValidationSeverity.Error);
+                if (errorCount > 0)
+                {
+                    var result = MessageBox.Show(this,
+                        string.Format(Loc.Get("deeper_editor_save_invalid_prompt_fmt"), errorCount),
+                        Loc.Get("deeper_editor_save_invalid_title"),
+                        MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (result != MessageBoxResult.Yes) return;
+                }
+
                 App.EnhancementLibrary?.Save(_enhancement, path);
                 _filePath = path;
                 _isDirty = false;
@@ -3552,6 +3567,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
 
             EndGazePick(commit: false);
+            try { _htFetchCts?.Cancel(); _htFetchCts?.Dispose(); _htFetchCts = null; } catch { }
             DisposePlayback();
         }
 

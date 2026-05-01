@@ -71,6 +71,8 @@
   "deeper_editor_validation_tooltip": "Validation runs automatically on every change.",
   "deeper_editor_save_dialog_title": "Save Enhancement",
   "deeper_editor_save_failed_fmt": "Save failed: {0}",
+  "deeper_editor_save_invalid_prompt_fmt": "This enhancement has {0} validation error(s). Saving may produce a file the player can't run.\n\nSave anyway?",
+  "deeper_editor_save_invalid_title": "Save with errors?",
   "deeper_editor_untitled": "Untitled",
   "deeper_editor_unsaved": "(unsaved)",
   "deeper_editor_close_unsaved_prompt": "You have unsaved changes. Save before closing?",

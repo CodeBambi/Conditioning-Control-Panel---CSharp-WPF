@@ -128,8 +128,28 @@ namespace ConditioningControlPanel.Services.Deeper
             // When the new editor is the source of truth, rebuild the legacy
             // collections from TimelineItems so files saved by this build still
             // load on older CCP versions that only know about regions/rules/haptic_tracks.
+            // Snapshot + restore so the in-memory enhancement is untouched —
+            // back-projection used to replace the live Regions/Rules/HapticTracks
+            // lists, breaking the editor's selection identity (a UI control bound
+            // to _selectedRegion suddenly pointed at an orphaned Region the
+            // collection no longer contained).
             if (e.TimelineItems.Count > 0)
-                BackProjectTimelineToLegacy(e);
+            {
+                var savedRegions = e.Regions;
+                var savedRules = e.Rules;
+                var savedHaptics = e.HapticTracks;
+                try
+                {
+                    BackProjectTimelineToLegacy(e);
+                    return JsonConvert.SerializeObject(e, WriteSettings);
+                }
+                finally
+                {
+                    e.Regions = savedRegions;
+                    e.Rules = savedRules;
+                    e.HapticTracks = savedHaptics;
+                }
+            }
 
             return JsonConvert.SerializeObject(e, WriteSettings);
         }

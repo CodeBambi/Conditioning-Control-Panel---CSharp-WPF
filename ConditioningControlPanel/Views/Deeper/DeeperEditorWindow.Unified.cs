@@ -663,10 +663,17 @@ namespace ConditioningControlPanel.Views.Deeper
             if (string.IsNullOrWhiteSpace(source)) return;
             try
             {
-                _htFetchCts?.Cancel();
+                // Cancel + dispose the previous CTS so back-to-back URL pastes
+                // don't accumulate orphaned token sources holding kernel handles.
+                var oldCts = _htFetchCts;
                 _htFetchCts = new CancellationTokenSource();
+                try { oldCts?.Cancel(); oldCts?.Dispose(); } catch { }
+
                 var meta = await HtMetadataFetcher.FetchAsync(source!, _htFetchCts.Token);
                 if (meta == null) return;
+                // Window may have closed during the network round-trip; touching
+                // the TextBoxes after teardown throws.
+                if (!IsLoaded || Dispatcher.HasShutdownStarted) return;
                 ApplyHtMetadata(meta);
             }
             catch (Exception ex)
@@ -677,25 +684,38 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void ApplyHtMetadata(HtVideoMetadata meta)
         {
+            // Don't suppress the dirty flag — if auto-fill actually changes
+            // metadata, the user should see the * marker and get the
+            // unsaved-changes prompt on close. Without this, silent metadata
+            // mutations were lost when users closed the editor without an
+            // explicit save.
+            bool changed = false;
             try
             {
-                _suppressDirty = true;
-                if (!string.IsNullOrEmpty(meta.Uploader))
+                // Creator: only fill if empty (mirrors Name/Description below).
+                // The previous code unconditionally overwrote whatever the user
+                // typed AND auto-locked the field, so editing the URL silently
+                // clobbered hand-entered credits.
+                if (!string.IsNullOrEmpty(meta.Uploader)
+                    && string.IsNullOrWhiteSpace(TxtMetaCreator.Text))
                 {
                     TxtMetaCreator.Text = meta.Uploader;
                     _enhancement.Metadata.Creator = meta.Uploader;
                     _creatorLocked = true;
                     UpdateCreatorLockUi();
+                    changed = true;
                 }
                 if (string.IsNullOrWhiteSpace(TxtMetaName.Text) && !string.IsNullOrEmpty(meta.Title))
                 {
                     TxtMetaName.Text = meta.Title;
                     _enhancement.Metadata.Name = meta.Title;
+                    changed = true;
                 }
                 if (string.IsNullOrWhiteSpace(TxtMetaDescription.Text) && !string.IsNullOrEmpty(meta.Description))
                 {
                     TxtMetaDescription.Text = meta.Description;
                     _enhancement.Metadata.Description = meta.Description;
+                    changed = true;
                 }
                 if (meta.Tags != null && meta.Tags.Count > 0)
                 {
@@ -712,11 +732,15 @@ namespace ConditioningControlPanel.Views.Deeper
                     {
                         TxtMetaTags.Text = merged;
                         _enhancement.Metadata.Tags = existing;
+                        changed = true;
                     }
                 }
                 UpdateTitle();
             }
-            finally { _suppressDirty = false; }
+            finally
+            {
+                if (changed) MarkDirty();
+            }
         }
 
         // -- Helpers --------------------------------------------------------------
