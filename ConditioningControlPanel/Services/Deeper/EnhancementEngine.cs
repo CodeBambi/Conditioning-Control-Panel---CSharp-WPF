@@ -223,6 +223,27 @@ namespace ConditioningControlPanel.Services.Deeper
             return null;
         }
 
+        // -- Editor preview injection ------------------------------------------
+        // Public entry points that mirror the webcam handlers so editor preview
+        // can drive the engine from keyboard / mouse without a real camera.
+        // Safe to call from the UI thread on a stopped engine (no-op).
+
+        public void InjectBlink() => OnBlink();
+        public void InjectMouthOpen() => OnMouthOpen();
+        public void InjectGaze(System.Windows.Point screenPoint) => OnGazeMove(screenPoint);
+
+        /// <summary>
+        /// Simulate an attention-lost gap of the given duration. Mirrors the
+        /// face-lost → face-found pattern (rules fire on "found" if the gap
+        /// satisfied their MinDurationMs).
+        /// </summary>
+        public void InjectAttentionLost(int gapMs)
+        {
+            if (!_running) return;
+            _faceLostSince = DateTime.UtcNow.AddMilliseconds(-Math.Max(0, gapMs));
+            OnFaceFound();
+        }
+
         // -- Webcam handlers ---------------------------------------------------
 
         private void OnBlink()

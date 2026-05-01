@@ -78,6 +78,13 @@ namespace ConditioningControlPanel.Views.Deeper
         private bool _suppressRuleSync;
         private GazePickerWindow? _gazePickerWindow;
 
+        // Preview mode (Phase 7)
+        private EnhancementEngine? _previewEngine;
+        private EditorPreviewTimeSource? _previewSource;
+        private RecordingActionDispatcher? _previewRecorder;
+        private readonly System.Collections.ObjectModel.ObservableCollection<string> _previewActions = new();
+        private DispatcherTimer? _previewStateTimer;
+
         public DeeperEditorWindow(Enhancement enhancement, string? filePath)
         {
             InitializeComponent();
@@ -92,6 +99,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
             BuildColorSwatches();
             BuildPatternCombo();
+            LstPreviewActions.ItemsSource = _previewActions;
             LoadEnhancement(enhancement, filePath);
         }
 
@@ -386,6 +394,9 @@ namespace ConditioningControlPanel.Views.Deeper
                 _currentSeconds = _audioReader.CurrentTime.TotalSeconds;
                 TxtCurrentTime.Text = FormatTime(_currentSeconds);
                 UpdatePlayheadPosition();
+                // Audio playback has no native TimeChanged event; pump the
+                // engine manually if preview is running on an audio enhancement.
+                _previewSource?.EmitTick(_currentSeconds);
             }
             // Video time updates come via MediaPlayer.TimeChanged event already.
         }
@@ -1999,6 +2010,150 @@ namespace ConditioningControlPanel.Views.Deeper
             host.Children.Add(combo);
         }
 
+        // -- Preview mode (Phase 7) -------------------------------------------
+
+        private void BtnPreview_Click(object sender, RoutedEventArgs e)
+        {
+            if (_previewEngine == null) StartPreview();
+            else StopPreview();
+        }
+
+        private void StartPreview()
+        {
+            try
+            {
+                // Compose: RealActionDispatcher does the real work, the recorder
+                // wraps it so the overlay can show last-N actions firing.
+                var inner = new RealActionDispatcher();
+                _previewRecorder = new RecordingActionDispatcher(inner);
+                _previewRecorder.ActionLogged += OnPreviewActionLogged;
+
+                _previewSource = new EditorPreviewTimeSource(
+                    videoPlayer: _mediaPlayer,
+                    audioTimeFn: () => _audioReader?.CurrentTime.TotalSeconds ?? 0,
+                    audioDurationFn: () => _totalSeconds,
+                    audioIsPlayingFn: () => _waveOut?.PlaybackState == NAudio.Wave.PlaybackState.Playing,
+                    audioSeekFn: s =>
+                    {
+                        if (_audioReader != null)
+                            _audioReader.CurrentTime = TimeSpan.FromSeconds(Math.Max(0, s));
+                    },
+                    audioPauseFn: () => _waveOut?.Pause(),
+                    audioPlayFn: () => _waveOut?.Play(),
+                    videoRectFn: GetPreviewScreenRect,
+                    dispatcher: Dispatcher);
+                _previewSource.Attach();
+
+                // Give the engine real webcam events when the camera is up,
+                // mouse-as-gaze fallback otherwise.
+                var webcam = (App.Webcam?.IsRunning ?? false) ? App.Webcam : null;
+                _previewEngine = new EnhancementEngine(_enhancement, _previewSource, _previewRecorder, webcam);
+                _previewEngine.Start();
+
+                _previewActions.Clear();
+                PreviewDebugOverlay.Visibility = Visibility.Visible;
+                BtnPreview.Content = Loc.Get("deeper_editor_preview_on");
+                BtnPreview.IsChecked = true;
+
+                _previewStateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+                _previewStateTimer.Tick += PreviewStateTimer_Tick;
+                _previewStateTimer.Start();
+
+                if (webcam == null)
+                {
+                    PreviewHost.MouseMove += PreviewHost_MouseMoveForGaze;
+                    AppendPreviewAction(Loc.Get("deeper_editor_preview_no_camera"));
+                }
+
+                App.Logger?.Information("Deeper preview started ({Mode})", webcam == null ? "mouse-gaze" : "webcam");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Deeper StartPreview failed");
+                StopPreview();
+            }
+        }
+
+        private void StopPreview()
+        {
+            try
+            {
+                _previewStateTimer?.Stop();
+                _previewStateTimer = null;
+
+                PreviewHost.MouseMove -= PreviewHost_MouseMoveForGaze;
+
+                _previewEngine?.Stop();
+                _previewEngine?.Dispose();
+                _previewEngine = null;
+
+                _previewSource?.Dispose();
+                _previewSource = null;
+
+                if (_previewRecorder != null)
+                    _previewRecorder.ActionLogged -= OnPreviewActionLogged;
+                _previewRecorder = null;
+            }
+            finally
+            {
+                PreviewDebugOverlay.Visibility = Visibility.Collapsed;
+                BtnPreview.Content = Loc.Get("deeper_editor_preview_off");
+                BtnPreview.IsChecked = false;
+            }
+        }
+
+        private void PreviewStateTimer_Tick(object? sender, EventArgs e)
+        {
+            if (_previewEngine == null || _previewSource == null) return;
+            var t = _previewSource.GetCurrentTimeSeconds();
+            var region = FindPreviewRegion(t);
+            TxtPreviewState.Text = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                Loc.Get("deeper_editor_preview_state_fmt"), t, region ?? "—");
+        }
+
+        private string? FindPreviewRegion(double t)
+        {
+            foreach (var r in _enhancement.Regions)
+                if (t >= r.Start && t < r.End) return r.Id;
+            return null;
+        }
+
+        private void OnPreviewActionLogged(string line)
+        {
+            // RecordingActionDispatcher fires this from whatever thread the
+            // dispatch happened on; marshal back to UI for the ObservableCollection.
+            try
+            {
+                if (Dispatcher.CheckAccess()) AppendPreviewAction(line);
+                else Dispatcher.BeginInvoke(() => AppendPreviewAction(line));
+            }
+            catch { }
+        }
+
+        private void AppendPreviewAction(string line)
+        {
+            _previewActions.Insert(0, line);
+            while (_previewActions.Count > 10) _previewActions.RemoveAt(_previewActions.Count - 1);
+        }
+
+        private void PreviewHost_MouseMoveForGaze(object sender, MouseEventArgs e)
+        {
+            if (_previewEngine == null) return;
+            try { _previewEngine.InjectGaze(PointToScreen(e.GetPosition(this))); }
+            catch { }
+        }
+
+        private Rect GetPreviewScreenRect()
+        {
+            try
+            {
+                var origin = PreviewHost.PointToScreen(new Point(0, 0));
+                var far = PreviewHost.PointToScreen(new Point(PreviewHost.ActualWidth, PreviewHost.ActualHeight));
+                return new Rect(origin.X, origin.Y, Math.Max(0, far.X - origin.X), Math.Max(0, far.Y - origin.Y));
+            }
+            catch { return Rect.Empty; }
+        }
+
         // -- Gaze rect picker --------------------------------------------------
         // Picker lives in a separate transparent Window because LibVLC's
         // VideoView renders in a native child HWND that wins WPF airspace; an
@@ -2248,6 +2403,14 @@ namespace ConditioningControlPanel.Views.Deeper
                     MenuSave_Click(this, new RoutedEventArgs());
                 e.Handled = true;
             }
+            // Preview-mode manual injection. Only active while preview is on
+            // and the editor isn't taking text input.
+            else if (_previewEngine != null && !inTextBox)
+            {
+                if (e.Key == Key.B) { _previewEngine.InjectBlink(); e.Handled = true; }
+                else if (e.Key == Key.M) { _previewEngine.InjectMouthOpen(); e.Handled = true; }
+                else if (e.Key == Key.A) { _previewEngine.InjectAttentionLost(2000); e.Handled = true; }
+            }
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -2268,6 +2431,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
 
             EndGazePick(commit: false);
+            StopPreview();
             DisposePlayback();
         }
 

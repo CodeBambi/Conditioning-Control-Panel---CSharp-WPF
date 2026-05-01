@@ -54,7 +54,7 @@ namespace ConditioningControlPanel.Services.Deeper
 
         public Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx)
         {
-            var line = $"t={ctx.CurrentTimeSeconds:0.00}s  {Describe(action)}";
+            var line = $"t={ctx.CurrentTimeSeconds:0.00}s  {DescribeAction(action)}";
             lock (_gate)
             {
                 _recent.Enqueue(line);
@@ -71,7 +71,7 @@ namespace ConditioningControlPanel.Services.Deeper
             lock (_gate) _recent.Clear();
         }
 
-        private static string Describe(EnhancementAction a) => a switch
+        internal static string DescribeAction(EnhancementAction a) => a switch
         {
             SeekAction s when s.Target == SeekTargets.Time => $"seek → {s.Time ?? 0:0.00}s",
             SeekAction s => $"seek → {s.Target} of {s.RegionId ?? "?"}",
@@ -84,6 +84,55 @@ namespace ConditioningControlPanel.Services.Deeper
             NoOpEnhancementAction nop => $"<unknown action: {nop.OriginalType}>",
             _ => a.GetType().Name
         };
+    }
+
+    /// <summary>
+    /// Decorator that records every action it forwards to an inner dispatcher.
+    /// Used by editor preview mode to drive real devices via
+    /// <see cref="RealActionDispatcher"/> while still surfacing the "last N
+    /// fired actions" overlay that LoggingActionDispatcher provides for
+    /// dry-run preview. RecentActions is capped at 50; ActionLogged fires
+    /// after the inner dispatcher returns.
+    /// </summary>
+    public sealed class RecordingActionDispatcher : IActionDispatcher
+    {
+        private const int MaxRecent = 50;
+        private readonly IActionDispatcher _inner;
+        private readonly Queue<string> _recent = new();
+        private readonly object _gate = new();
+
+        public IReadOnlyList<string> RecentActions
+        {
+            get { lock (_gate) return _recent.ToArray(); }
+        }
+
+        public event Action<string>? ActionLogged;
+
+        public RecordingActionDispatcher(IActionDispatcher inner)
+        {
+            _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        }
+
+        public async Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx)
+        {
+            var line = $"t={ctx.CurrentTimeSeconds:0.00}s  {LoggingActionDispatcher.DescribeAction(action)}";
+            try { await _inner.DispatchAsync(action, ctx); }
+            finally
+            {
+                lock (_gate)
+                {
+                    _recent.Enqueue(line);
+                    while (_recent.Count > MaxRecent) _recent.Dequeue();
+                }
+                try { ActionLogged?.Invoke(line); }
+                catch (Exception ex) { App.Logger?.Debug("RecordingActionDispatcher subscriber error: {Error}", ex.Message); }
+            }
+        }
+
+        public void Clear()
+        {
+            lock (_gate) _recent.Clear();
+        }
     }
 
     /// <summary>
