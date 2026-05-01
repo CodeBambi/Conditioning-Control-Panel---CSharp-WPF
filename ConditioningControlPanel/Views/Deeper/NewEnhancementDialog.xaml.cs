@@ -18,9 +18,29 @@ namespace ConditioningControlPanel.Views.Deeper
         // clicks one of the three "walk me through" buttons below.
         private TutorialType? _pendingPart2Tutorial;
 
+        // Reference to the Part-1 overlay we spawned from this dialog. Held
+        // so we can close it on Cancel / X — without this, the static
+        // TutorialEventBus.Event subscription pinned the overlay forever
+        // when the user dismissed the dialog without proceeding to the editor.
+        private ConditioningControlPanel.TutorialOverlay? _activeTutorialOverlay;
+
         public NewEnhancementDialog()
         {
             InitializeComponent();
+            Closed += OnDialogClosed;
+        }
+
+        private void OnDialogClosed(object? sender, System.EventArgs e)
+        {
+            // On a successful Create, leave the overlay alive — it retargets
+            // to the editor on WindowLoaded:DeeperEditorWindow. On Cancel / X
+            // / failed Create, close it so its Closed teardown unsubscribes
+            // from the static TutorialEventBus.
+            if (DialogResult != true)
+            {
+                try { _activeTutorialOverlay?.Close(); } catch { }
+            }
+            _activeTutorialOverlay = null;
         }
 
         private void BtnBrowse_Click(object sender, RoutedEventArgs e)
@@ -152,8 +172,11 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (App.Tutorial == null) return;
                 if (App.Tutorial.IsActive) App.Tutorial.Skip();
                 App.Tutorial.Start(part1);
-                var overlay = new ConditioningControlPanel.TutorialOverlay(this, App.Tutorial);
-                overlay.Show();
+                // Close any prior overlay first (defensive — should be null
+                // since we don't restart Part 1 mid-flow).
+                try { _activeTutorialOverlay?.Close(); } catch { }
+                _activeTutorialOverlay = new ConditioningControlPanel.TutorialOverlay(this, App.Tutorial);
+                _activeTutorialOverlay.Show();
             }
             catch (System.Exception ex)
             {

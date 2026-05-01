@@ -31,6 +31,11 @@ namespace ConditioningControlPanel.Views.Deeper
 
         // Video playback
         private VlcMediaPlayer? _mediaPlayer;
+        private VlcMedia? _vlcMedia;
+        private EventHandler<LibVLCSharp.Shared.MediaPlayerLengthChangedEventArgs>? _vlcLengthChanged;
+        private EventHandler<LibVLCSharp.Shared.MediaPlayerTimeChangedEventArgs>? _vlcTimeChanged;
+        private EventHandler<EventArgs>? _vlcEndReached;
+        private EventHandler<NAudio.Wave.StoppedEventArgs>? _waveOutStopped;
 
         // Audio playback
         private WaveOutEvent? _waveOut;
@@ -517,38 +522,23 @@ namespace ConditioningControlPanel.Views.Deeper
             _mediaPlayer = new VlcMediaPlayer(VideoService.SharedLibVLC);
             VideoPreview.MediaPlayer = _mediaPlayer;
 
-            using var media = new VlcMedia(VideoService.SharedLibVLC, path, FromType.FromPath);
-            _mediaPlayer.Media = media;
+            // Hold the Media as a field instead of `using var`. Assigning a
+            // disposed Media to MediaPlayer.Media is undefined behavior in
+            // LibVLCSharp; the editor was previously getting away with it
+            // because LibVLC reads the source eagerly during Play(), but it's
+            // not contractual.
+            _vlcMedia = new VlcMedia(VideoService.SharedLibVLC, path, FromType.FromPath);
+            _mediaPlayer.Media = _vlcMedia;
 
-            _mediaPlayer.LengthChanged += (_, args) =>
-            {
-                Dispatcher.InvokeAsync(() =>
-                {
-                    _totalSeconds = args.Length / 1000.0;
-                    TxtTotalTime.Text = FormatTime(_totalSeconds);
-                    UpdatePlayheadPosition();
-                    RebuildRegionVisuals();
-                    RebuildHapticVisuals();
-                    RebuildEffectVisuals();
-                });
-            };
-            _mediaPlayer.TimeChanged += (_, args) =>
-            {
-                Dispatcher.InvokeAsync(() =>
-                {
-                    if (_isScrubbing) return;
-                    _currentSeconds = args.Time / 1000.0;
-                    TxtCurrentTime.Text = FormatTime(_currentSeconds);
-                    UpdatePlayheadPosition();
-                });
-            };
-            _mediaPlayer.EndReached += (_, _) =>
-            {
-                Dispatcher.InvokeAsync(() =>
-                {
-                    BtnPlayPause.Content = "▶";
-                });
-            };
+            // Named handlers so DisposePlayback can detach them. Anonymous
+            // lambdas can't be -=ed, which would leave the lambdas (closing
+            // over `this`) rooted in LibVLC's internal callback queue.
+            _vlcLengthChanged = OnVlcLengthChanged;
+            _vlcTimeChanged = OnVlcTimeChanged;
+            _vlcEndReached = OnVlcEndReached;
+            _mediaPlayer.LengthChanged += _vlcLengthChanged;
+            _mediaPlayer.TimeChanged += _vlcTimeChanged;
+            _mediaPlayer.EndReached += _vlcEndReached;
 
             // We need Play() to fire LengthChanged + render the first frame,
             // but we want the editor to open paused so the user can scrub /
@@ -573,6 +563,58 @@ namespace ConditioningControlPanel.Views.Deeper
 
             _mediaPlayer.Play();
             BtnPlayPause.Content = "▶";
+        }
+
+        private void OnVlcLengthChanged(object? sender, LibVLCSharp.Shared.MediaPlayerLengthChangedEventArgs args)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                if (Dispatcher.HasShutdownStarted) return;
+                _totalSeconds = args.Length / 1000.0;
+                TxtTotalTime.Text = FormatTime(_totalSeconds);
+                UpdatePlayheadPosition();
+                RebuildRegionVisuals();
+                RebuildHapticVisuals();
+                RebuildEffectVisuals();
+            });
+        }
+
+        private void OnVlcTimeChanged(object? sender, LibVLCSharp.Shared.MediaPlayerTimeChangedEventArgs args)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                if (Dispatcher.HasShutdownStarted) return;
+                if (_isScrubbing) return;
+                _currentSeconds = args.Time / 1000.0;
+                TxtCurrentTime.Text = FormatTime(_currentSeconds);
+                UpdatePlayheadPosition();
+            });
+        }
+
+        private void OnWaveOutPlaybackStopped(object? sender, NAudio.Wave.StoppedEventArgs args)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                if (Dispatcher.HasShutdownStarted) return;
+                BtnPlayPause.Content = "▶";
+            });
+        }
+
+        private void OnVlcEndReached(object? sender, EventArgs args)
+        {
+            // After EndReached, LibVLC parks the player at end-of-stream and a
+            // bare Play() is a no-op. Stop()+seek-to-zero means the next Play
+            // (whether from Space or BtnPlayPause) actually replays — the
+            // "replay-after-stop" promise from bb6f503.
+            try { _mediaPlayer?.Stop(); } catch { }
+            Dispatcher.InvokeAsync(() =>
+            {
+                if (Dispatcher.HasShutdownStarted) return;
+                _currentSeconds = 0;
+                TxtCurrentTime.Text = FormatTime(_currentSeconds);
+                UpdatePlayheadPosition();
+                BtnPlayPause.Content = "▶";
+            });
         }
 
         private async Task InitializeAudioAsync(string path)
@@ -601,10 +643,8 @@ namespace ConditioningControlPanel.Views.Deeper
                 _audioReader = new AudioFileReader(path);
                 _waveOut = new WaveOutEvent();
                 _waveOut.Init(_audioReader);
-                _waveOut.PlaybackStopped += (_, _) =>
-                {
-                    Dispatcher.InvokeAsync(() => BtnPlayPause.Content = "▶");
-                };
+                _waveOutStopped = OnWaveOutPlaybackStopped;
+                _waveOut.PlaybackStopped += _waveOutStopped;
             }
             catch (Exception ex)
             {
@@ -3568,6 +3608,11 @@ namespace ConditioningControlPanel.Views.Deeper
 
             EndGazePick(commit: false);
             try { _htFetchCts?.Cancel(); _htFetchCts?.Dispose(); _htFetchCts = null; } catch { }
+            // Force the tutorial overlay closed so its OnClosed teardown runs;
+            // otherwise its static TutorialEventBus.Event subscription would
+            // outlive the editor and pin the closed window.
+            try { _editorTutorialOverlay?.Close(); } catch { }
+            _editorTutorialOverlay = null;
             DisposePlayback();
         }
 
@@ -3581,14 +3626,30 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (_mediaPlayer != null)
                 {
                     if (VideoPreview != null) VideoPreview.MediaPlayer = null;
+                    try { if (_vlcLengthChanged != null) _mediaPlayer.LengthChanged -= _vlcLengthChanged; } catch { }
+                    try { if (_vlcTimeChanged != null) _mediaPlayer.TimeChanged -= _vlcTimeChanged; } catch { }
+                    try { if (_vlcEndReached != null) _mediaPlayer.EndReached -= _vlcEndReached; } catch { }
+                    _vlcLengthChanged = null;
+                    _vlcTimeChanged = null;
+                    _vlcEndReached = null;
                     _mediaPlayer.Stop();
                     _mediaPlayer.Dispose();
                     _mediaPlayer = null;
                 }
+                if (_vlcMedia != null)
+                {
+                    try { _vlcMedia.Dispose(); } catch { }
+                    _vlcMedia = null;
+                }
 
-                _waveOut?.Stop();
-                _waveOut?.Dispose();
-                _waveOut = null;
+                if (_waveOut != null)
+                {
+                    try { if (_waveOutStopped != null) _waveOut.PlaybackStopped -= _waveOutStopped; } catch { }
+                    _waveOutStopped = null;
+                    try { _waveOut.Stop(); } catch { }
+                    _waveOut.Dispose();
+                    _waveOut = null;
+                }
                 _audioReader?.Dispose();
                 _audioReader = null;
 

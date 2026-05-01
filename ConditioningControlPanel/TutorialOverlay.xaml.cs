@@ -36,6 +36,12 @@ namespace ConditioningControlPanel
         // affect a successor tutorial running on the same _tutorialService.
         private bool _thisOverlayCompleted;
 
+        // Retry timer used by UpdateSpotlight when the target's bounds aren't
+        // measured yet. Held so consecutive UpdateSpotlight calls can cancel
+        // the prior tick (otherwise they pile up and fire stale layouts) and
+        // so DetachAllSubscriptions stops it on close.
+        private System.Windows.Threading.DispatcherTimer? _spotlightDelayTimer;
+
         public TutorialOverlay(Window targetWindow, TutorialService tutorialService)
         {
             InitializeComponent();
@@ -147,11 +153,29 @@ namespace ConditioningControlPanel
         // MainWindow had closed — visible only as a zombie in Task Manager.
         private void ForceShutdown()
         {
+            DetachAllSubscriptions();
+            // Mark service inactive (it may already be).
+            try { if (_tutorialService.IsActive) _tutorialService.Skip(); } catch { }
+            // Stop any running animations on this window so Close() doesn't
+            // leave the dispatcher pumping a fade that's already moot.
+            try { BeginAnimation(OpacityProperty, null); } catch { }
+            try { Close(); } catch { }
+        }
+
+        // Idempotent teardown: removes every event subscription this overlay
+        // owns. Called from ForceShutdown, OnTutorialCompleted, AND OnClosed
+        // so the static TutorialEventBus.Event subscription can never outlive
+        // the window — closing the overlay via the host window's X button
+        // (which doesn't run TutorialCompleted) used to leave the handler
+        // pinned, holding the closed window forever.
+        private void DetachAllSubscriptions()
+        {
             _thisOverlayCompleted = true;
+            try { _spotlightDelayTimer?.Stop(); } catch { }
+            _spotlightDelayTimer = null;
             UnsubscribeAdvanceTrigger();
             try { TutorialEventBus.Event -= OnBusEvent; } catch { }
             try { _tutorialService.StepChanged -= OnStepChanged; } catch { }
-            // Unsub TutorialCompleted BEFORE Skip so the fade-out doesn't run.
             try { _tutorialService.TutorialCompleted -= OnTutorialCompleted; } catch { }
             try { DetachFromTarget(_targetWindow); } catch { }
             try
@@ -165,12 +189,12 @@ namespace ConditioningControlPanel
                 }
             }
             catch { }
-            // Mark service inactive (it may already be).
-            try { if (_tutorialService.IsActive) _tutorialService.Skip(); } catch { }
-            // Stop any running animations on this window so Close() doesn't
-            // leave the dispatcher pumping a fade that's already moot.
-            try { BeginAnimation(OpacityProperty, null); } catch { }
-            try { Close(); } catch { }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            try { DetachAllSubscriptions(); } catch { }
+            base.OnClosed(e);
         }
 
         private void OnKeyDown(object sender, KeyEventArgs e)
@@ -525,6 +549,12 @@ namespace ConditioningControlPanel
 
         private void UpdateSpotlight(TutorialStep step)
         {
+            // Cancel any retry from a previous step — otherwise rapid
+            // StepChanged events queue up overlapping ticks that paint stale
+            // bounds over the new step's layout.
+            try { _spotlightDelayTimer?.Stop(); } catch { }
+            _spotlightDelayTimer = null;
+
             SpotlightCanvas.Children.Clear();
 
             // Click-through hole only when the step is gated on a specific element interaction.
@@ -557,13 +587,16 @@ namespace ConditioningControlPanel
             if (bounds.X == 0 && bounds.Y == 0 && bounds.Width <= 100)
             {
                 var currentStep = step;
-                var delayTimer = new System.Windows.Threading.DispatcherTimer
+                _spotlightDelayTimer = new System.Windows.Threading.DispatcherTimer
                 {
                     Interval = TimeSpan.FromMilliseconds(120)
                 };
-                delayTimer.Tick += (s, e) =>
+                _spotlightDelayTimer.Tick += (s, e) =>
                 {
-                    delayTimer.Stop();
+                    var t = _spotlightDelayTimer;
+                    try { t?.Stop(); } catch { }
+                    if (t == _spotlightDelayTimer) _spotlightDelayTimer = null;
+                    if (_thisOverlayCompleted) return;
                     if (_tutorialService.CurrentStep == currentStep)
                     {
                         var retryBounds = GetElementBounds(targetElement);
@@ -572,7 +605,7 @@ namespace ConditioningControlPanel
                         PositionTextPanel(retryBounds, currentStep.TextPosition);
                     }
                 };
-                delayTimer.Start();
+                _spotlightDelayTimer.Start();
                 DrawFullOverlay(step.BlockBackgroundClicks);
                 CenterTextPanel();
             }
@@ -1196,26 +1229,8 @@ namespace ConditioningControlPanel
 
         private void OnTutorialCompleted(object? sender, EventArgs e)
         {
-            _thisOverlayCompleted = true;
-            UnsubscribeAdvanceTrigger();
-            try { TutorialEventBus.Event -= OnBusEvent; } catch { }
-            try { _tutorialService.StepChanged -= OnStepChanged; } catch { }
-            try { _tutorialService.TutorialCompleted -= OnTutorialCompleted; } catch { }
-            try { DetachFromTarget(_targetWindow); } catch { }
+            DetachAllSubscriptions();
             try { Deactivated -= OnOverlayDeactivated; } catch { }
-            try
-            {
-                if (Application.Current != null)
-                {
-                    Application.Current.Exit -= OnAppExit;
-                    Application.Current.SessionEnding -= OnAppSessionEnding;
-                    if (Application.Current.MainWindow != null)
-                    {
-                        Application.Current.MainWindow.Closed -= OnMainWindowClosed;
-                    }
-                }
-            }
-            catch { }
 
             var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(200));
             fadeOut.Completed += (s, args) =>
