@@ -20,6 +20,8 @@
   "deeper_empty_title": "Deeper",
   "deeper_empty_pitch": "Enhance any video or audio with haptics, gaze tracking, and smart loops. Author once, share with anyone running CCP.",
   "deeper_empty_features": "Haptic tracks synced to a media timeline · Loop and seek rules · Gaze, blink, and attention triggers (video) · Portable JSON files",
+  "deeper_beta_badge": "BETA",
+  "deeper_beta_notice": "Deeper is in beta — expect rough edges, breaking changes between versions, and the occasional crash. Please report bugs and ideas on Discord.",
   "deeper_empty_cta": "New Enhancement",
   "deeper_empty_cta_disabled_tooltip": "Coming in the next update.",
   "deeper_empty_coming_soon": "Authoring tools arrive in an upcoming update.",

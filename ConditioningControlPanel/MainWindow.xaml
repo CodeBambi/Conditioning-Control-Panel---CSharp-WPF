@@ -8313,9 +8313,21 @@
                                Foreground="{DynamicResource DeeperAccentBrush}"
                                VerticalAlignment="Center" Margin="0,0,14,0"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str deeper_empty_title}"
-                                   Foreground="{DynamicResource DeeperAccentBrush}"
-                                   FontSize="22" FontWeight="Bold"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Str deeper_empty_title}"
+                                       Foreground="{DynamicResource DeeperAccentBrush}"
+                                       FontSize="22" FontWeight="Bold"/>
+                            <Border Margin="10,4,0,0" Padding="7,2"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                                    CornerRadius="4"
+                                    ToolTip="{loc:Str deeper_beta_notice}">
+                                <TextBlock Text="{loc:Str deeper_beta_badge}"
+                                           Foreground="{DynamicResource DeeperAccentBrush}"
+                                           FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
                         <TextBlock Text="{loc:Str deeper_empty_pitch}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                                    Margin="0,2,0,0" TextWrapping="Wrap" MaxWidth="700"
@@ -8364,10 +8376,20 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Features blurb -->
-                <TextBlock Grid.Row="1" Text="{loc:Str deeper_empty_features}"
-                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"
-                           TextWrapping="Wrap" Margin="0,0,0,20"/>
+                <!-- Features blurb + BETA notice -->
+                <StackPanel Grid.Row="1" Margin="0,0,0,20">
+                    <TextBlock Text="{loc:Str deeper_empty_features}"
+                               Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                               TextWrapping="Wrap"/>
+                    <Border Margin="0,10,0,0" Padding="10,7"
+                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                            CornerRadius="6">
+                        <TextBlock Text="{loc:Str deeper_beta_notice}"
+                                   Foreground="{DynamicResource DeeperAccentBrush}"
+                                   FontSize="11" TextWrapping="Wrap"/>
+                    </Border>
+                </StackPanel>
 
                 <!-- First-run welcome card. Visibility flipped to Collapsed in code
                      once the user clicks Tour, Open Demo, or Got it. -->
