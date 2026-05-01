@@ -149,6 +149,8 @@ namespace ConditioningControlPanel.Views.Deeper
                     return;
                 }
 
+                PushUndoSnapshot();
+
                 var defaultDurationMs = effectType switch
                 {
                     EffectTypes.Bubble => 5000,
@@ -187,6 +189,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void AddHapticEventAt(double seconds)
         {
+            PushUndoSnapshot();
             // Reuse the existing haptic track / event flow.
             var track = _enhancement.HapticTracks.FirstOrDefault();
             if (track == null)
@@ -231,6 +234,8 @@ namespace ConditioningControlPanel.Views.Deeper
                 double bandDuration = triggerType == TriggerTypes.TimeReached ? 0.0 : 5.0;
                 if (_totalSeconds > 0 && bandDuration > 0)
                     bandDuration = Math.Min(bandDuration, Math.Max(0.5, _totalSeconds - seconds));
+
+                PushUndoSnapshot();
 
                 // Use existing region+rule scaffolding so the side-panel rule editor
                 // (BuildTriggerFields/BuildActionFields) can stay unchanged.
@@ -353,13 +358,14 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             var brush = TryParseBrush(EffectColors.TryGetValue(item.EffectType ?? "", out var c) ? c : "#FFFFFF")
                         ?? Brushes.White;
+            var isSelected = item == _selectedEffect || IsInSelectionSet(item);
             var dot = new System.Windows.Shapes.Ellipse
             {
                 Width = 12,
                 Height = 12,
                 Fill = brush,
-                Stroke = item == _selectedEffect ? Brushes.White : Brushes.Transparent,
-                StrokeThickness = item == _selectedEffect ? 2 : 0,
+                Stroke = isSelected ? Brushes.White : Brushes.Transparent,
+                StrokeThickness = isSelected ? 2 : 0,
                 Cursor = Cursors.Hand,
                 Tag = item,
                 ToolTip = $"{item.EffectType} @ {item.Start:0.##}s"
@@ -373,6 +379,7 @@ namespace ConditioningControlPanel.Views.Deeper
             dot.MouseLeftButtonDown += (s, e) =>
             {
                 e.Handled = true;
+                HandleSelectionClick(item);
                 SelectEffect(item);
             };
 
@@ -386,7 +393,7 @@ namespace ConditioningControlPanel.Views.Deeper
             var color = TryParseColor(EffectColors.TryGetValue(item.EffectType ?? "", out var c) ? c : "#FFFFFF")
                         ?? Colors.White;
             var fill = System.Windows.Media.Color.FromArgb(140, color.R, color.G, color.B);
-            var isSelected = item == _selectedEffect;
+            var isSelected = item == _selectedEffect || IsInSelectionSet(item);
 
             // Segment width tracks Duration; minimum 8px so a near-zero segment
             // is still clickable for selection.
@@ -440,6 +447,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // returns ~(0,0) and trips the left-edge resize check unconditionally.
             var pos = e.GetPosition(r);
             var rectWidth = r.ActualWidth;
+            HandleSelectionClick(item);
             SelectEffect(item);
 
             _draggedEffect = item;
@@ -607,6 +615,7 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_selectedEffect == null) return;
             try
             {
+                PushUndoSnapshot();
                 _enhancement.TimelineItems.Remove(_selectedEffect);
                 _selectedEffect = null;
                 MarkDirty();

@@ -30,6 +30,16 @@ namespace ConditioningControlPanel.Services.Deeper
         };
 
         /// <summary>
+        /// Settings the editor's clipboard / undo system uses for JSON-clone
+        /// round-trips on individual TimelineItems / Regions / HapticEvents
+        /// and full Enhancements. Matches the loader settings so every shape
+        /// the on-disk format permits round-trips identically (including the
+        /// custom polymorphic converters wired up via attributes on the
+        /// EnhancementTrigger / EnhancementAction base classes).
+        /// </summary>
+        public static JsonSerializerSettings JsonReadSettingsForClone() => ReadSettings;
+
+        /// <summary>
         /// Loads an Enhancement from JSON. Throws <see cref="EnhancementLoadException"/>
         /// on schema mismatch, version-too-new, or malformed JSON.
         /// Unknown fields are preserved via <c>[JsonExtensionData]</c> for round-trip safety.

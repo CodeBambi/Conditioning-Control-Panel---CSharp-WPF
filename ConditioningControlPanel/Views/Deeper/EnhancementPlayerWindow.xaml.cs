@@ -43,6 +43,13 @@ namespace ConditioningControlPanel.Views.Deeper
         private const int MaxEventLogEntries = 30;
         private readonly System.Collections.ObjectModel.ObservableCollection<string> _events = new();
 
+        // Fullscreen state for the embedded video. Mirrors MainWindow's browser-fullscreen
+        // path: when HT (or any HTML5 video) requests fullscreen via the WebView2 API, we
+        // pop the WebView out into a borderless topmost window covering the whole monitor.
+        private Window? _videoFullscreenWindow;
+        private bool _isVideoFullscreen;
+        private bool _isPlayerDualMonitorActive;
+
         public EnhancementPlayerWindow(EnhancementAudioPlayer player, EnhancementHostService host)
         {
             InitializeComponent();
@@ -491,6 +498,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     }
                     _videoBrowserReady = true;
                     VideoBrowser.CoreWebView2.NavigationCompleted += OnVideoNavCompleted;
+                    VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged += OnVideoFullscreenChanged;
                 }
 
                 _pendingVideoUrl = url;
@@ -531,6 +539,208 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
+        // -- Real fullscreen for the embedded video --------------------------
+        // The WebView2 raises ContainsFullScreenElementChanged when the user clicks
+        // the fullscreen button on the embedded HTML5 video. By default the WebView
+        // would just expand the <video> inside our window's bounds, which leaves the
+        // Player chrome (transport, event log, etc.) visible. To match the main
+        // browser's behavior, we reparent the WebView into a borderless topmost
+        // window covering the Player's monitor for the duration of fullscreen.
+
+        private void OnVideoFullscreenChanged(object? sender, object? e)
+        {
+            try
+            {
+                var contains = VideoBrowser?.CoreWebView2?.ContainsFullScreenElement ?? false;
+                if (contains == _isVideoFullscreen) return;
+
+                if (contains)
+                {
+                    // Mirror primary across all monitors when the user opted in.
+                    var screens = App.GetAllScreensCached();
+                    if (App.Settings?.Current?.DualMonitorEnabled == true && screens.Length > 1)
+                    {
+                        _isPlayerDualMonitorActive = App.ScreenMirror?.EnableMirror() ?? false;
+                    }
+                    EnterVideoFullscreen();
+                }
+                else
+                {
+                    if (_isPlayerDualMonitorActive)
+                    {
+                        try { App.ScreenMirror?.DisableMirror(); } catch { }
+                        _isPlayerDualMonitorActive = false;
+                    }
+                    ExitVideoFullscreen();
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementPlayer: fullscreen toggle failed");
+            }
+        }
+
+        private void EnterVideoFullscreen()
+        {
+            if (_isVideoFullscreen || VideoBrowser == null) return;
+            try
+            {
+                _isVideoFullscreen = true;
+
+                // Find which monitor this Player is currently on so the fullscreen
+                // window lands on the same screen the user was looking at.
+                var screen = System.Windows.Forms.Screen.FromHandle(
+                    new System.Windows.Interop.WindowInteropHelper(this).Handle);
+
+                // Detach the WebView from its current parent. Player layout uses a
+                // Grid inside VideoPane (Border > Grid > WebView), so we walk up to
+                // the Grid and remove it from there.
+                if (VideoBrowser.Parent is System.Windows.Controls.Panel panel)
+                {
+                    panel.Children.Remove(VideoBrowser);
+                }
+
+                // Build the fullscreen window with borderless properties up front
+                // (matches MainWindow.EnterBrowserFullscreen at MainWindow.xaml.cs:17675).
+                _videoFullscreenWindow = new Window
+                {
+                    WindowStyle = WindowStyle.None,
+                    ResizeMode = ResizeMode.NoResize,
+                    ShowInTaskbar = false,
+                    Topmost = true,
+                    Background = Brushes.Black,
+                    WindowStartupLocation = WindowStartupLocation.Manual,
+                    Left = screen.Bounds.X + 100,
+                    Top = screen.Bounds.Y + 100,
+                    Width = 400,
+                    Height = 300,
+                    Content = VideoBrowser
+                };
+
+                // Esc and F11 in the fullscreen window exit fullscreen (also clears
+                // HTML5 fullscreen state on the page so the toggle round-trips).
+                _videoFullscreenWindow.KeyDown += (_, args) =>
+                {
+                    if (args.Key == Key.Escape || args.Key == Key.F11)
+                    {
+                        ExitFullscreenViaScript();
+                        args.Handled = true;
+                    }
+                };
+
+                _videoFullscreenWindow.Closing += (_, _) =>
+                {
+                    if (_videoFullscreenWindow != null)
+                        _videoFullscreenWindow.Content = null;
+                };
+
+                _videoFullscreenWindow.Closed += (_, _) =>
+                {
+                    // Return the WebView to the Player's VideoPane.
+                    try
+                    {
+                        if (VideoBrowser != null && VideoPane.Child is Grid grid && !grid.Children.Contains(VideoBrowser))
+                        {
+                            grid.Children.Insert(0, VideoBrowser);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("EnhancementPlayer: WebView re-parent on close failed: {Error}", ex.Message);
+                    }
+                    _videoFullscreenWindow = null;
+                };
+
+                // Show small first, pump render queue, then maximize — matches the
+                // pattern in MainWindow.EnterBrowserFullscreen which avoids a sizing
+                // glitch on per-monitor DPI displays.
+                _videoFullscreenWindow.Show();
+                _videoFullscreenWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
+                _videoFullscreenWindow.WindowState = WindowState.Maximized;
+
+                // After the reparent the page can lose its HTML5 fullscreen state
+                // (the WebView sees a layout reset). Re-request on the <video>
+                // element so the page renders the same way it did before the move.
+                _ = ReRequestVideoFullscreenAsync();
+
+                App.Logger?.Information("EnhancementPlayer: entered fullscreen on {Screen}", screen.DeviceName);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "EnhancementPlayer: failed to enter fullscreen");
+                ExitVideoFullscreen();
+            }
+        }
+
+        private void ExitVideoFullscreen()
+        {
+            if (!_isVideoFullscreen) return;
+            try
+            {
+                _isVideoFullscreen = false;
+                if (_videoFullscreenWindow != null)
+                {
+                    try { _videoFullscreenWindow.Close(); }
+                    catch (Exception ex) { App.Logger?.Debug("EnhancementPlayer: fullscreen window close failed: {Error}", ex.Message); }
+                }
+                App.Logger?.Information("EnhancementPlayer: exited fullscreen");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "EnhancementPlayer: failed to exit fullscreen");
+            }
+        }
+
+        private void ExitFullscreenViaScript()
+        {
+            // Driving exitFullscreen from the page side fires
+            // ContainsFullScreenElementChanged again, which routes through
+            // OnVideoFullscreenChanged → ExitVideoFullscreen and keeps the page
+            // and window in sync (vs closing the window first and leaving the
+            // page in fullscreen state).
+            try
+            {
+                if (VideoBrowser?.CoreWebView2 != null)
+                {
+                    _ = VideoBrowser.CoreWebView2.ExecuteScriptAsync(
+                        "(function(){if(document.fullscreenElement)document.exitFullscreen();})();");
+                }
+                else
+                {
+                    ExitVideoFullscreen();
+                }
+            }
+            catch
+            {
+                ExitVideoFullscreen();
+            }
+        }
+
+        private async Task ReRequestVideoFullscreenAsync()
+        {
+            if (VideoBrowser?.CoreWebView2 == null) return;
+            try
+            {
+                await Task.Delay(300);
+                await VideoBrowser.CoreWebView2.ExecuteScriptAsync(@"
+                    (function() {
+                        var video = document.querySelector('video');
+                        if (video) {
+                            if (video.requestFullscreen) {
+                                video.requestFullscreen();
+                            } else if (video.webkitRequestFullscreen) {
+                                video.webkitRequestFullscreen();
+                            }
+                        }
+                    })();
+                ");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug(ex, "EnhancementPlayer: re-request fullscreen failed");
+            }
+        }
+
         private void OnHostActionLogged(string line)
         {
             try
@@ -563,6 +773,16 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             try
             {
+                // Force-exit fullscreen first so we don't leak a topmost borderless
+                // window after the Player is gone, and so display topology gets
+                // restored if mirroring was active.
+                if (_isVideoFullscreen) ExitVideoFullscreen();
+                if (_isPlayerDualMonitorActive)
+                {
+                    try { App.ScreenMirror?.DisableMirror(); } catch { }
+                    _isPlayerDualMonitorActive = false;
+                }
+
                 _uiTimer?.Stop();
                 _uiTimer = null;
                 _player.Loaded -= OnPlayerLoaded;
@@ -576,7 +796,10 @@ namespace ConditioningControlPanel.Views.Deeper
                 try
                 {
                     if (_videoBrowserReady && VideoBrowser?.CoreWebView2 != null)
+                    {
                         VideoBrowser.CoreWebView2.NavigationCompleted -= OnVideoNavCompleted;
+                        VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged -= OnVideoFullscreenChanged;
+                    }
                 }
                 catch { }
                 try { _videoSource?.Dispose(); } catch { }

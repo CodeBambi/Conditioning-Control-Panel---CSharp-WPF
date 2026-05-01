@@ -62,7 +62,8 @@ namespace ConditioningControlPanel.Views.Deeper
             None, Scrub, CreateRegion,
             ShiftHapticEvent, ResizeHapticStart, ResizeHapticEnd,
             DragRegion, ResizeRegionStart, ResizeRegionEnd,
-            DragEffect, ResizeEffectStart, ResizeEffectEnd
+            DragEffect, ResizeEffectStart, ResizeEffectEnd,
+            RubberBand
         }
         private DragMode _dragMode = DragMode.None;
         private double _dragCreateStartSec;
@@ -779,7 +780,8 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void TimelineCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Shift+click+drag creates a region instead of scrubbing.
+            // Shift+click+drag creates a region instead of scrubbing — preserved
+            // as a power-user shortcut.
             if ((Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift && _totalSeconds > 0)
             {
                 _dragMode = DragMode.CreateRegion;
@@ -790,16 +792,24 @@ namespace ConditioningControlPanel.Views.Deeper
                 return;
             }
 
-            // Plain click on empty area deselects + scrubs.
-            SelectNothing();
-            _dragMode = DragMode.Scrub;
-            _isScrubbing = true;
+            // Plain click on empty area: enter rubber-band mode. Defer the
+            // scrub-or-deselect decision to MouseUp so a click without drag
+            // still scrubs (existing behavior), while a drag draws a selection
+            // rectangle. The threshold check inside UpdateRubberBand prevents
+            // a tiny jitter from triggering a selection.
+            _dragMode = DragMode.RubberBand;
+            StartRubberBand(e.GetPosition(TimelineCanvas));
             TimelineCanvas.CaptureMouse();
-            ApplyScrubFromMouse(e);
+            e.Handled = true;
         }
 
         private void TimelineCanvas_MouseMove(object sender, MouseEventArgs e)
         {
+            if (_dragMode == DragMode.RubberBand)
+            {
+                UpdateRubberBand(e.GetPosition(TimelineCanvas));
+                return;
+            }
             if (_dragMode == DragMode.CreateRegion)
             {
                 UpdateDragCreatePreview(MouseToSeconds(e));
@@ -807,6 +817,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             if (_dragMode == DragMode.ShiftHapticEvent && _draggedHaptic != null)
             {
+                PushDragSnapshotOnce();
                 var newStart = MouseToSeconds(e) - _hapticDragOffsetSec;
                 newStart = Math.Max(0, Math.Min(newStart, Math.Max(0, _totalSeconds - _draggedHaptic.Duration)));
                 _draggedHaptic.Start = newStart;
@@ -817,6 +828,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             if (_dragMode == DragMode.ResizeHapticStart && _draggedHaptic != null)
             {
+                PushDragSnapshotOnce();
                 var endSec = _hapticDragStartSec + _draggedHaptic.Duration;
                 var newStart = Math.Max(0, Math.Min(MouseToSeconds(e), endSec - 0.05));
                 _draggedHaptic.Duration = endSec - newStart;
@@ -828,6 +840,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             if (_dragMode == DragMode.ResizeHapticEnd && _draggedHaptic != null)
             {
+                PushDragSnapshotOnce();
                 var newEnd = Math.Min(_totalSeconds, Math.Max(MouseToSeconds(e), _draggedHaptic.Start + 0.05));
                 _draggedHaptic.Duration = newEnd - _draggedHaptic.Start;
                 MarkDirty();
@@ -837,6 +850,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             if (_dragMode == DragMode.DragRegion && _draggedRegion != null)
             {
+                PushDragSnapshotOnce();
                 var newStart = MouseToSeconds(e) - _regionDragOffsetSec;
                 newStart = Math.Max(0, Math.Min(newStart, Math.Max(0, _totalSeconds - _regionDragOriginalLength)));
                 _draggedRegion.Start = newStart;
@@ -848,6 +862,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             if (_dragMode == DragMode.ResizeRegionStart && _draggedRegion != null)
             {
+                PushDragSnapshotOnce();
                 var newStart = Math.Max(0, Math.Min(MouseToSeconds(e), _draggedRegion.End - 0.05));
                 _draggedRegion.Start = newStart;
                 MarkDirty();
@@ -857,6 +872,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             if (_dragMode == DragMode.ResizeRegionEnd && _draggedRegion != null)
             {
+                PushDragSnapshotOnce();
                 var newEnd = Math.Min(_totalSeconds, Math.Max(MouseToSeconds(e), _draggedRegion.Start + 0.05));
                 _draggedRegion.End = newEnd;
                 MarkDirty();
@@ -866,6 +882,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             if (_dragMode == DragMode.DragEffect && _draggedEffect != null)
             {
+                PushDragSnapshotOnce();
                 var newStart = MouseToSeconds(e) - _effectDragOffsetSec;
                 newStart = Math.Max(0, Math.Min(newStart, Math.Max(0, _totalSeconds - _effectDragOriginalDuration)));
                 _draggedEffect.Start = newStart;
@@ -876,6 +893,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             if (_dragMode == DragMode.ResizeEffectStart && _draggedEffect != null)
             {
+                PushDragSnapshotOnce();
                 var oldEnd = _draggedEffect.Start + Math.Max(0, _draggedEffect.Duration);
                 var newStart = Math.Max(0, Math.Min(MouseToSeconds(e), oldEnd - 0.05));
                 _draggedEffect.Duration = oldEnd - newStart;
@@ -888,6 +906,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             if (_dragMode == DragMode.ResizeEffectEnd && _draggedEffect != null)
             {
+                PushDragSnapshotOnce();
                 var newEnd = Math.Min(_totalSeconds, Math.Max(MouseToSeconds(e), _draggedEffect.Start + 0.05));
                 _draggedEffect.Duration = newEnd - _draggedEffect.Start;
                 _draggedEffect.EffectDurationMs = (int)Math.Max(50, _draggedEffect.Duration * 1000);
@@ -901,6 +920,20 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void TimelineCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
+            if (_dragMode == DragMode.RubberBand)
+            {
+                var actuallyDragged = FinishRubberBand(e.GetPosition(TimelineCanvas));
+                TimelineCanvas.ReleaseMouseCapture();
+                _dragMode = DragMode.None;
+                if (!actuallyDragged)
+                {
+                    // Click-without-drag preserves the prior single-click
+                    // behavior: deselect everything and scrub to the click point.
+                    SelectNothing();
+                    ApplyScrubFromMouse(e);
+                }
+                return;
+            }
             if (_dragMode == DragMode.CreateRegion)
             {
                 var endSec = MouseToSeconds(e);
@@ -916,6 +949,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _draggedHaptic = null;
                 _draggedHapticTrack = null;
                 _dragMode = DragMode.None;
+                _dragSnapshotPushed = false;
                 TimelineCanvas.ReleaseMouseCapture();
                 ScheduleValidation();
                 return;
@@ -926,6 +960,7 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 _draggedRegion = null;
                 _dragMode = DragMode.None;
+                _dragSnapshotPushed = false;
                 TimelineCanvas.ReleaseMouseCapture();
                 ScheduleValidation();
                 return;
@@ -936,6 +971,7 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 _draggedEffect = null;
                 _dragMode = DragMode.None;
+                _dragSnapshotPushed = false;
                 TimelineCanvas.ReleaseMouseCapture();
                 ScheduleValidation();
                 return;
@@ -1015,6 +1051,7 @@ namespace ConditioningControlPanel.Views.Deeper
             if (hi - lo < 0.1) return;
             if (_totalSeconds > 0) hi = Math.Min(hi, _totalSeconds);
             lo = Math.Max(0, lo);
+            PushUndoSnapshot();
 
             var region = new Region
             {
@@ -1054,6 +1091,7 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedHapticTrack = null;
             _selectedRule = null;
             _selectedEffect = null;
+            _selectionSet.Clear();
             EndGazePick(commit: false);
             UpdateSelectedSidePanel();
             RebuildRegionVisuals();
@@ -1194,6 +1232,7 @@ namespace ConditioningControlPanel.Views.Deeper
         private void BtnDeleteRegion_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedRegion == null) return;
+            PushUndoSnapshot();
             _enhancement.Regions.Remove(_selectedRegion);
             SelectNothing();
             MarkDirty();
@@ -1240,7 +1279,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
             var color = TryParseColor(region.Color) ?? Colors.MediumPurple;
             var fill = System.Windows.Media.Color.FromArgb(80, color.R, color.G, color.B);
-            var isSelected = _selectedRegion == region;
+            var isSelected = _selectedRegion == region || IsInSelectionSet(region);
 
             var rect = new System.Windows.Shapes.Rectangle
             {
@@ -1298,6 +1337,7 @@ namespace ConditioningControlPanel.Views.Deeper
             var pos = e.GetPosition(r);
             var rectWidth = r.ActualWidth;
 
+            HandleSelectionClick(region);
             SelectRegion(region);
 
             _draggedRegion = region;
@@ -1396,7 +1436,7 @@ namespace ConditioningControlPanel.Views.Deeper
             var endX = Math.Min(w, ((ev.Start + ev.Duration) / _totalSeconds) * w);
             var width = Math.Max(0, endX - startX);
 
-            var isSelected = _selectedHaptic == ev;
+            var isSelected = _selectedHaptic == ev || IsInSelectionSet(ev);
             var accent = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF7B5CFF");
             var fill = System.Windows.Media.Color.FromArgb(isSelected ? (byte)180 : (byte)130, accent.R, accent.G, accent.B);
 
@@ -1443,6 +1483,7 @@ namespace ConditioningControlPanel.Views.Deeper
             // returns ~(0,0) and trips the left-edge resize check unconditionally.
             var pos = e.GetPosition(r);
             var rectWidth = r.ActualWidth;
+            HandleSelectionClick(ev);
             SelectHaptic(track, ev);
 
             // Begin drag-shift on pointer hold (no Shift modifier — that's region-create).
@@ -1731,6 +1772,7 @@ namespace ConditioningControlPanel.Views.Deeper
         private void BtnDeleteHaptic_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedHaptic == null || _selectedHapticTrack == null) return;
+            PushUndoSnapshot();
             _selectedHapticTrack.Events.Remove(_selectedHaptic);
             // Remove now-empty default track to keep file clean.
             if (_selectedHapticTrack.Events.Count == 0 && _selectedHapticTrack.Id == DefaultTrackId)
@@ -1917,6 +1959,7 @@ namespace ConditioningControlPanel.Views.Deeper
         private void BtnDeleteRule_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedRule == null) return;
+            PushUndoSnapshot();
             _enhancement.Rules.Remove(_selectedRule);
             SelectNothing();
             MarkDirty();
@@ -3021,6 +3064,12 @@ namespace ConditioningControlPanel.Views.Deeper
                 CreateHapticEventAtPlayhead();
                 e.Handled = true;
             }
+            else if (e.Key == Key.Delete && !inTextBox && _selectionSet.Count > 1)
+            {
+                // Multi-select takes priority — bulk delete everything in the set.
+                DeleteSelection();
+                e.Handled = true;
+            }
             else if (e.Key == Key.Delete && !inTextBox && _selectedRegion != null)
             {
                 BtnDeleteRegion_Click(this, new RoutedEventArgs());
@@ -3031,9 +3080,51 @@ namespace ConditioningControlPanel.Views.Deeper
                 BtnDeleteHaptic_Click(this, new RoutedEventArgs());
                 e.Handled = true;
             }
-            else if (e.Key == Key.Escape && !inTextBox && (_selectedRegion != null || _selectedHaptic != null))
+            else if (e.Key == Key.Delete && !inTextBox && _selectedEffect != null)
+            {
+                BtnDeleteEffect_Click(this, new RoutedEventArgs());
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape && !inTextBox && (_selectedRegion != null || _selectedHaptic != null || _selectionSet.Count > 0))
             {
                 SelectNothing();
+                e.Handled = true;
+            }
+            // Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) — undo / redo. Editor-wide; the
+            // !inTextBox guard keeps standard text-box undo intact when typing.
+            else if (e.Key == Key.Z && !inTextBox && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                if ((Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
+                    Redo();
+                else
+                    Undo();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Y && !inTextBox && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                Redo();
+                e.Handled = true;
+            }
+            // Ctrl+C / Ctrl+X / Ctrl+V — clipboard ops on the current selection.
+            else if (e.Key == Key.C && !inTextBox && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && _selectionSet.Count > 0)
+            {
+                CopySelection();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.X && !inTextBox && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && _selectionSet.Count > 0)
+            {
+                CutSelection();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.V && !inTextBox && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                PasteFromClipboard();
+                e.Handled = true;
+            }
+            // Ctrl+A — select every region/haptic/effect on the timeline.
+            else if (e.Key == Key.A && !inTextBox && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                SelectAllOnTimeline();
                 e.Handled = true;
             }
             else if (e.Key == Key.S && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
