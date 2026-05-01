@@ -96,6 +96,22 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public const string ConsentVersion = "1.0";
 
+        /// <summary>
+        /// True when the user has granted consent AND the recorded consent
+        /// version matches the current contract version. A version mismatch
+        /// is treated as "not granted" so callers re-prompt — that is the
+        /// whole point of the version field, and the only mechanism that
+        /// makes bumping <see cref="ConsentVersion"/> actually re-consent
+        /// existing users when the privacy contract changes.
+        /// </summary>
+        public static bool IsConsentCurrent()
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return false;
+            if (!s.WebcamConsentGiven) return false;
+            return s.WebcamConsentVersion == ConsentVersion;
+        }
+
         // Capture parameters
         private const int CaptureWidth = 640;
         private const int CaptureHeight = 480;
@@ -397,9 +413,10 @@ namespace ConditioningControlPanel.Services
             lock (_stateLock)
             {
                 if (_disposed) return false;
-                if (App.Settings?.Current?.WebcamConsentGiven != true)
+                if (!IsConsentCurrent())
                 {
-                    App.Logger?.Information("WebcamTrackingService: Start() refused — consent not given");
+                    App.Logger?.Information("WebcamTrackingService: Start() refused — consent not current (granted={Granted}, storedVersion={Stored}, currentVersion={Current})",
+                        App.Settings?.Current?.WebcamConsentGiven, App.Settings?.Current?.WebcamConsentVersion, ConsentVersion);
                     return false;
                 }
                 if (IsRunning) return true;

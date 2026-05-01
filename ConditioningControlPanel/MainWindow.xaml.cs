@@ -3174,7 +3174,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 AppendWebcamDebugLog("Consent not given — opening consent dialog…");
                 var dlg = new WebcamConsentDialog { Owner = this };
@@ -3282,7 +3282,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 AppendWebcamDebugLog("Consent not given — opening consent dialog…");
                 var consent = new WebcamConsentDialog { Owner = this };
@@ -3380,7 +3380,7 @@ namespace ConditioningControlPanel
             var on = ChkFocusGaze.IsChecked == true;
             if (on)
             {
-                if (App.Settings?.Current?.WebcamConsentGiven != true)
+                if (!WebcamTrackingService.IsConsentCurrent())
                 {
                     var dlg = new WebcamConsentDialog { Owner = this };
                     var ok = dlg.ShowDialog();
@@ -3605,7 +3605,7 @@ namespace ConditioningControlPanel
             }
 
             // Webcam consent gate (mirrors Focus Gaze flow)
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 var dlg = new WebcamConsentDialog { Owner = this };
                 var ok = dlg.ShowDialog();
@@ -3634,7 +3634,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 AppendWebcamDebugLog("Consent not given — opening consent dialog…");
                 var consent = new WebcamConsentDialog { Owner = this };
@@ -3693,7 +3693,7 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 AppendWebcamDebugLog("Consent not given — opening consent dialog…");
                 var consent = new WebcamConsentDialog { Owner = this };

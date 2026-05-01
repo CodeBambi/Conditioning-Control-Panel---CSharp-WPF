@@ -347,7 +347,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
         {
             // Webcam preconditions, in order. Each failure stays on Ready with
             // a friendly banner — no modal interruption mid-flow.
-            if (App.Settings?.Current?.WebcamConsentGiven != true)
+            if (!WebcamTrackingService.IsConsentCurrent())
             {
                 var dlg = new WebcamConsentDialog { Owner = this };
                 var ok = dlg.ShowDialog();

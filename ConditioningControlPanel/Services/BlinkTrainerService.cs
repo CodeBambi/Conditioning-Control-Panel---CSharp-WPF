@@ -98,7 +98,7 @@ public class BlinkTrainerService : IDisposable
 
             // Webcam: must have consent + be running.
             if (App.Webcam == null) { LastError = "Webcam service not initialized."; return false; }
-            if (settings.WebcamConsentGiven != true) { LastError = "Enable webcam consent first."; return false; }
+            if (!WebcamTrackingService.IsConsentCurrent()) { LastError = "Enable webcam consent first."; return false; }
             if (!App.Webcam.IsRunning && !App.Webcam.Start())
             {
                 LastError = $"Could not start webcam ({App.Webcam.State}).";
