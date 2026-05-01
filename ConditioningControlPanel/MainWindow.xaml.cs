@@ -1606,6 +1606,9 @@ namespace ConditioningControlPanel
             // Update panic key button
             UpdatePanicKeyButton();
 
+            // Title-bar camera-active indicator
+            WireWebcamActivePill();
+
             // Load custom sessions from disk (so they persist across restarts)
             if (_sessionManager == null)
                 InitializeSessionManager();
@@ -3169,6 +3172,40 @@ namespace ConditioningControlPanel
         private Action? _onDebugMouthOpen;
         private Action? _onDebugTongueOut;
         private Action<GazeSide>? _onDebugGazeSide;
+
+        // Camera-active pill in the title bar — visible whenever any webcam
+        // feature has the capture loop running. Stored handler so we can
+        // unhook in OnClosing alongside the debug subscriptions above.
+        private Action<WebcamTrackingState>? _onPillStateChanged;
+
+        private void WireWebcamActivePill()
+        {
+            if (App.Webcam == null || _onPillStateChanged != null) return;
+
+            void Update(WebcamTrackingState s)
+            {
+                if (WebcamActivePill == null) return;
+                WebcamActivePill.Visibility = (s == WebcamTrackingState.Tracking || s == WebcamTrackingState.FaceLost)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+
+            _onPillStateChanged = Update;
+            App.Webcam.OnTrackingStateChanged += _onPillStateChanged;
+            // Reflect current state on wire-up — service may already be running
+            // if we got here after a previous Stop/Start cycle.
+            Update(App.Webcam.State);
+        }
+
+        private void WebcamActivePill_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Click is the panic-stop affordance. Stops every consumer that
+            // shares App.Webcam — Webcam Triggers, Focus Gaze, Blink Trainer,
+            // Gaze Minigame all release together when the service stops.
+            try { App.GazeFocus?.Stop(); } catch { }
+            try { App.BlinkTrainer?.Stop(); } catch { }
+            try { App.Webcam?.Stop(); } catch { }
+        }
 
         private void BtnWebcamDebugStart_Click(object sender, RoutedEventArgs e)
         {
@@ -23997,6 +24034,11 @@ namespace ConditioningControlPanel
 
                 // Unsubscribe service events to allow GC of this window
                 UnsubscribeWebcamDebug();
+                if (_onPillStateChanged != null && App.Webcam != null)
+                {
+                    App.Webcam.OnTrackingStateChanged -= _onPillStateChanged;
+                    _onPillStateChanged = null;
+                }
                 if (App.Progression != null)
                 {
                     App.Progression.XPChanged -= OnXPChanged;
