@@ -227,6 +227,7 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 TxtMetaName.Text = _enhancement.Metadata.Name;
                 TxtMetaCreator.Text = _enhancement.Metadata.Creator;
+                TxtMetaRemixer.Text = _enhancement.Metadata.Remixer ?? "";
                 TxtMetaDescription.Text = _enhancement.Metadata.Description;
                 TxtMetaTags.Text = string.Join(", ", _enhancement.Metadata.Tags);
                 TxtMetaLicense.Text = _enhancement.Metadata.License;
@@ -238,11 +239,17 @@ namespace ConditioningControlPanel.Views.Deeper
             finally { _suppressDirty = false; }
 
             UpdateTitle();
+            UpdateCreatorLockUi();
             RefreshValidation();
             SelectNothing();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
+            RebuildEffectVisuals();
             RefreshRulesList();
+
+            // Fire HT metadata auto-fill in the background. Hostname-gated inside
+            // the fetcher; non-HT URLs are silent no-ops.
+            _ = TryAutoFillFromHtAsync(_enhancement.MediaSource);
         }
 
         private async Task InitializePreviewAsync()
@@ -611,6 +618,7 @@ namespace ConditioningControlPanel.Views.Deeper
             UpdateLaneDivider();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
+            RebuildEffectVisuals();
         }
 
         private void TimelineCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -786,10 +794,12 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedHaptic = null;
             _selectedHapticTrack = null;
             _selectedRule = null;
+            _selectedEffect = null;
             EndGazePick(commit: false);
             UpdateSelectedSidePanel();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
+            RebuildEffectVisuals();
             RefreshRulesList();
         }
 
@@ -799,10 +809,12 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedHaptic = null;
             _selectedHapticTrack = null;
             _selectedRule = null;
+            _selectedEffect = null;
             EndGazePick(commit: false);
             UpdateSelectedSidePanel();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
+            RebuildEffectVisuals();
             RefreshRulesList();
         }
 
@@ -812,10 +824,12 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedHaptic = ev;
             _selectedHapticTrack = track;
             _selectedRule = null;
+            _selectedEffect = null;
             EndGazePick(commit: false);
             UpdateSelectedSidePanel();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
+            RebuildEffectVisuals();
             RefreshRulesList();
         }
 
@@ -825,16 +839,27 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedHaptic = null;
             _selectedHapticTrack = null;
             _selectedRule = rule;
+            _selectedEffect = null;
             EndGazePick(commit: false);
             UpdateSelectedSidePanel();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
+            RebuildEffectVisuals();
             RefreshRulesList();
         }
 
         private void UpdateSelectedSidePanel()
         {
             if (SelectedPlaceholder == null || RegionEditor == null || HapticEventEditor == null || RuleEditor == null) return;
+
+            // Always reset the unified-editor groups; the unified path repopulates if needed.
+            HideAllEditors();
+
+            if (_selectedEffect != null)
+            {
+                UpdateSelectedSidePanelForEffect();
+                return;
+            }
 
             if (_selectedRegion != null)
             {
@@ -977,26 +1002,20 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void EnsurePlayheadOnTop()
         {
-            // Keep static overlays in front of all the dynamically inserted lane visuals.
-            foreach (var item in new System.Windows.UIElement?[] { LaneDivider, LaneLabelRegions, LaneLabelHaptics, PlayheadLine })
-            {
-                if (item == null) continue;
-                if (TimelineCanvas.Children.Contains(item))
-                    TimelineCanvas.Children.Remove(item);
-                TimelineCanvas.Children.Add(item);
-            }
+            // Keep the playhead in front of dynamically inserted region/haptic/effect
+            // visuals. (Pre-redesign: LaneDivider + lane labels were also kept on top;
+            // those visual elements are gone now that the timeline is unified.)
+            if (PlayheadLine == null) return;
+            if (TimelineCanvas.Children.Contains(PlayheadLine))
+                TimelineCanvas.Children.Remove(PlayheadLine);
+            TimelineCanvas.Children.Add(PlayheadLine);
         }
 
         private void UpdateLaneDivider()
         {
-            if (TimelineCanvas == null || LaneDivider == null) return;
-            var w = TimelineCanvas.ActualWidth;
-            var h = TimelineCanvas.ActualHeight;
-            LaneDivider.X1 = 0;
-            LaneDivider.X2 = w;
-            LaneDivider.Y1 = h / 2.0;
-            LaneDivider.Y2 = h / 2.0;
-            if (LaneLabelHaptics != null) Canvas.SetTop(LaneLabelHaptics, h / 2.0 + 2);
+            // No-op: lanes were merged into a single unified timeline. The method
+            // remains as a stable hook for callers in case future split-lane modes
+            // are reintroduced.
         }
 
         private void RegionRect_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -1390,15 +1409,11 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void RefreshRulesList()
         {
-            if (RulesList == null) return;
-            RulesList.Children.Clear();
-
-            var rules = _enhancement.Rules;
-            if (RulesEmptyHint != null)
-                RulesEmptyHint.Visibility = rules.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-
-            for (int i = 0; i < rules.Count; i++)
-                RulesList.Children.Add(BuildRuleRow(rules[i], i));
+            // The standalone Rules section was removed in the unified-timeline
+            // redesign — rules are now created via right-click on the timeline
+            // and edited via the Selected Item panel when a band is selected.
+            // This method is kept as a stable hook so legacy callers don't
+            // need to be updated; it's a no-op now.
         }
 
         private System.Windows.UIElement BuildRuleRow(EnhancementRule rule, int index)
@@ -2477,6 +2492,7 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_suppressDirty) return;
             _enhancement.Metadata.Name = TxtMetaName.Text ?? "";
             _enhancement.Metadata.Creator = TxtMetaCreator.Text ?? "";
+            _enhancement.Metadata.Remixer = string.IsNullOrWhiteSpace(TxtMetaRemixer?.Text) ? null : TxtMetaRemixer.Text;
             _enhancement.Metadata.Description = TxtMetaDescription.Text ?? "";
             _enhancement.Metadata.Tags = (TxtMetaTags.Text ?? "")
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

@@ -26,11 +26,160 @@ namespace ConditioningControlPanel.Services.Deeper
             var errors = new List<ValidationError>();
 
             ValidateMediaType(e, errors);
-            ValidateRegions(e, errors);
-            ValidateHapticTracks(e, errors);
-            ValidateRules(e, errors);
+            ValidateTimelineItems(e, errors);
+
+            // Legacy validation only when the unified model is empty (e.g. an
+            // Enhancement constructed directly in code without going through Load).
+            // For loaded files, TimelineItems is always populated by the loader's
+            // projection pass, and legacy collections may have intentional
+            // overlaps from band-stacking that legacy validation would flag.
+            if (e.TimelineItems.Count == 0)
+            {
+                ValidateRegions(e, errors);
+                ValidateHapticTracks(e, errors);
+                ValidateRules(e, errors);
+            }
 
             return errors;
+        }
+
+        private static void ValidateTimelineItems(Enhancement e, List<ValidationError> errors)
+        {
+            bool isAudio = e.MediaType == MediaTypes.Audio;
+            var itemIds = new HashSet<string>();
+            // TimelineItem ids form the namespace that region_entered/region_exited/seek/loop
+            // triggers and actions reference, so we collect them up-front.
+            var bandIds = new HashSet<string>();
+            foreach (var item in e.TimelineItems)
+            {
+                if (item == null) continue;
+                if (item.Kind == TimelineItemKind.Rule && item.Duration > 0 && item.Duration < double.MaxValue)
+                    bandIds.Add(item.Id);
+            }
+
+            for (int i = 0; i < e.TimelineItems.Count; i++)
+            {
+                var item = e.TimelineItems[i];
+                if (item == null) continue;
+                var path = $"timeline_items[{i}]";
+
+                if (string.IsNullOrWhiteSpace(item.Id))
+                {
+                    errors.Add(new ValidationError { Path = path, Message = "Item id cannot be empty." });
+                }
+                else if (!itemIds.Add(item.Id))
+                {
+                    errors.Add(new ValidationError { Path = path, Message = $"Duplicate timeline item id \"{item.Id}\"." });
+                }
+
+                if (item.Start < 0)
+                    errors.Add(new ValidationError { Path = path, Message = $"start must be >= 0 (got {item.Start})." });
+
+                if (item.Duration < 0)
+                    errors.Add(new ValidationError { Path = path, Message = $"duration must be >= 0 (got {item.Duration})." });
+
+                if (item.CooldownMs < 0)
+                    errors.Add(new ValidationError { Path = path, Message = $"cooldown_ms must be >= 0 (got {item.CooldownMs})." });
+
+                if (item.Kind == TimelineItemKind.Effect)
+                {
+                    ValidateEffectPayload(item, path, errors);
+                }
+                else // Rule
+                {
+                    if (item.Trigger == null)
+                    {
+                        if (item.Action != null)
+                            errors.Add(new ValidationError { Path = $"{path}.trigger", Message = "Rule has an action but no trigger." });
+                        // No trigger + no action = decorative band, allowed.
+                    }
+                    else if (isAudio && item.Trigger.IsVideoOnly)
+                    {
+                        errors.Add(new ValidationError
+                        {
+                            Path = $"{path}.trigger",
+                            Message = $"Trigger \"{item.Trigger.Type}\" is video-only and cannot be used on an audio enhancement."
+                        });
+                    }
+                    else if (item.Trigger is NeverFiringTrigger nft && nft.OriginalType != TriggerTypes.Never)
+                    {
+                        errors.Add(new ValidationError
+                        {
+                            Path = $"{path}.trigger",
+                            Message = $"Unknown trigger type \"{nft.OriginalType}\" — rule will never fire.",
+                            Severity = ValidationSeverity.Warning
+                        });
+                    }
+                    else
+                    {
+                        ValidateTriggerSpecific(item.Trigger, $"{path}.trigger", bandIds, errors);
+                    }
+
+                    if (item.Action != null)
+                        ValidateActionSpecific(item.Action, $"{path}.action", bandIds, errors);
+                }
+            }
+        }
+
+        private static void ValidateEffectPayload(TimelineItem item, string path, List<ValidationError> errors)
+        {
+            if (string.IsNullOrEmpty(item.EffectType))
+            {
+                errors.Add(new ValidationError { Path = path, Message = "Effect items must set effect_type." });
+                return;
+            }
+
+            if (item.EffectIntensity < 0 || item.EffectIntensity > 1)
+                errors.Add(new ValidationError { Path = path, Message = $"effect_intensity must be in [0, 1] (got {item.EffectIntensity})." });
+            if (item.EffectDurationMs <= 0)
+                errors.Add(new ValidationError { Path = path, Message = $"effect_duration_ms must be > 0 (got {item.EffectDurationMs})." });
+
+            switch (item.EffectType)
+            {
+                case EffectTypes.Haptic:
+                    bool hasNamed = !string.IsNullOrEmpty(item.EffectPatternName);
+                    bool hasCustom = item.EffectCustomPattern != null && item.EffectCustomPattern.Count > 0;
+                    if (hasNamed && hasCustom)
+                        errors.Add(new ValidationError { Path = path, Message = "Set exactly one of pattern_name or custom_pattern, not both." });
+                    else if (!hasNamed && !hasCustom)
+                        errors.Add(new ValidationError { Path = path, Message = "Haptic effect must set pattern_name or custom_pattern." });
+                    if (hasCustom) ValidateCustomPattern(item.EffectCustomPattern!, path, errors);
+                    break;
+
+                case EffectTypes.Subliminal:
+                    if (string.IsNullOrWhiteSpace(item.EffectText))
+                        errors.Add(new ValidationError { Path = path, Message = "Subliminal effect requires non-empty text." });
+                    break;
+
+                case EffectTypes.Overlay:
+                    if (item.EffectOverlayKind != OverlayKinds.PinkFilter
+                        && item.EffectOverlayKind != OverlayKinds.Spiral
+                        && item.EffectOverlayKind != OverlayKinds.BrainDrain)
+                    {
+                        errors.Add(new ValidationError { Path = path, Message = $"Unknown overlay kind \"{item.EffectOverlayKind}\"." });
+                    }
+                    if (item.EffectOpacity < 0 || item.EffectOpacity > 1)
+                        errors.Add(new ValidationError { Path = path, Message = $"effect_opacity must be in [0, 1] (got {item.EffectOpacity})." });
+                    break;
+
+                case EffectTypes.Bubble:
+                    if (item.EffectMaxBubbles < 1 || item.EffectMaxBubbles > 50)
+                        errors.Add(new ValidationError { Path = path, Message = $"effect_max_bubbles must be in [1, 50] (got {item.EffectMaxBubbles})." });
+                    break;
+
+                case EffectTypes.Flash:
+                    // image_path is optional (null = random); play_sound is bool.
+                    break;
+
+                default:
+                    errors.Add(new ValidationError
+                    {
+                        Path = path,
+                        Message = $"Unknown effect_type \"{item.EffectType}\" — effect will be skipped at runtime.",
+                        Severity = ValidationSeverity.Warning
+                    });
+                    break;
+            }
         }
 
         private static void ValidateMediaType(Enhancement e, List<ValidationError> errors)
@@ -327,6 +476,45 @@ namespace ConditioningControlPanel.Services.Deeper
                         errors.Add(new ValidationError { Path = path, Message = $"intensity must be in [0, 1] (got {h.Intensity})." });
                     if (h.DurationMs <= 0)
                         errors.Add(new ValidationError { Path = path, Message = $"duration_ms must be > 0 (got {h.DurationMs})." });
+                    break;
+
+                case TriggerEffectAction te:
+                    if (string.IsNullOrEmpty(te.EffectType))
+                        errors.Add(new ValidationError { Path = path, Message = "trigger_effect requires effect_type." });
+                    if (te.Intensity < 0 || te.Intensity > 1)
+                        errors.Add(new ValidationError { Path = path, Message = $"intensity must be in [0, 1] (got {te.Intensity})." });
+                    if (te.DurationMs <= 0)
+                        errors.Add(new ValidationError { Path = path, Message = $"duration_ms must be > 0 (got {te.DurationMs})." });
+                    if (te.EffectType == EffectTypes.Haptic)
+                    {
+                        bool hn = !string.IsNullOrEmpty(te.PatternName);
+                        bool hc = te.CustomPattern != null && te.CustomPattern.Count > 0;
+                        if (hn && hc)
+                            errors.Add(new ValidationError { Path = path, Message = "Set exactly one of pattern_name or custom_pattern, not both." });
+                        else if (!hn && !hc)
+                            errors.Add(new ValidationError { Path = path, Message = "Haptic trigger_effect must set pattern_name or custom_pattern." });
+                        if (hc) ValidateCustomPattern(te.CustomPattern!, path, errors);
+                    }
+                    else if (te.EffectType == EffectTypes.Subliminal && string.IsNullOrWhiteSpace(te.Text))
+                    {
+                        errors.Add(new ValidationError { Path = path, Message = "Subliminal trigger_effect requires non-empty text." });
+                    }
+                    else if (te.EffectType == EffectTypes.Overlay)
+                    {
+                        if (te.OverlayKind != OverlayKinds.PinkFilter
+                            && te.OverlayKind != OverlayKinds.Spiral
+                            && te.OverlayKind != OverlayKinds.BrainDrain)
+                        {
+                            errors.Add(new ValidationError { Path = path, Message = $"Unknown overlay kind \"{te.OverlayKind}\"." });
+                        }
+                        if (te.Opacity < 0 || te.Opacity > 1)
+                            errors.Add(new ValidationError { Path = path, Message = $"opacity must be in [0, 1] (got {te.Opacity})." });
+                    }
+                    else if (te.EffectType == EffectTypes.Bubble)
+                    {
+                        if (te.MaxBubbles < 1 || te.MaxBubbles > 50)
+                            errors.Add(new ValidationError { Path = path, Message = $"max_bubbles must be in [1, 50] (got {te.MaxBubbles})." });
+                    }
                     break;
 
                 case ScreenShakeAction ss:

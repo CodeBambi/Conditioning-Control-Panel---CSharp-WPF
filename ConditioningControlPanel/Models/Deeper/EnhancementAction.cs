@@ -12,6 +12,7 @@ namespace ConditioningControlPanel.Models.Deeper
         public const string Pause = "pause";
         public const string PlayAudio = "play_audio";
         public const string TriggerHaptic = "trigger_haptic";
+        public const string TriggerEffect = "trigger_effect";
         public const string ScreenShake = "screen_shake";
         public const string SetIntensity = "set_intensity";
         public const string NoOp = "noop";
@@ -95,6 +96,57 @@ namespace ConditioningControlPanel.Models.Deeper
         public int DurationMs { get; set; } = 1000;
     }
 
+    /// <summary>
+    /// Generic effect-firing action used by Rules whose Action is one of the five
+    /// CCP effect types (haptic, flash, bubble, subliminal, overlay). The flat
+    /// fields mirror <see cref="TimelineItem"/>'s effect payload so the editor's
+    /// effect-settings UI can bind against either without branching on type.
+    /// Validator/dispatcher route by <see cref="EffectType"/>.
+    /// </summary>
+    public class TriggerEffectAction : EnhancementAction
+    {
+        public override string Type => ActionTypes.TriggerEffect;
+
+        // One of EffectTypes.Haptic / Flash / Bubble / Subliminal / Overlay.
+        [JsonProperty("effect_type")]
+        public string EffectType { get; set; } = EffectTypes.Haptic;
+
+        [JsonProperty("intensity")]
+        public double Intensity { get; set; } = 1.0;
+
+        [JsonProperty("duration_ms")]
+        public int DurationMs { get; set; } = 1000;
+
+        // Haptic.
+        [JsonProperty("pattern_name", NullValueHandling = NullValueHandling.Ignore)]
+        public string? PatternName { get; set; }
+
+        [JsonProperty("custom_pattern", NullValueHandling = NullValueHandling.Ignore)]
+        public List<double[]>? CustomPattern { get; set; }
+
+        // Flash.
+        [JsonProperty("image_path", NullValueHandling = NullValueHandling.Ignore)]
+        public string? ImagePath { get; set; }
+
+        [JsonProperty("play_sound")]
+        public bool PlaySound { get; set; } = true;
+
+        // Subliminal.
+        [JsonProperty("text", NullValueHandling = NullValueHandling.Ignore)]
+        public string? Text { get; set; }
+
+        // Overlay.
+        [JsonProperty("overlay_kind", NullValueHandling = NullValueHandling.Ignore)]
+        public string? OverlayKind { get; set; }
+
+        [JsonProperty("opacity")]
+        public double Opacity { get; set; } = 0.5;
+
+        // Bubble.
+        [JsonProperty("max_bubbles")]
+        public int MaxBubbles { get; set; } = 3;
+    }
+
     public class ScreenShakeAction : EnhancementAction
     {
         public override string Type => ActionTypes.ScreenShake;
@@ -148,6 +200,7 @@ namespace ConditioningControlPanel.Models.Deeper
                 ActionTypes.Pause         => new PauseAction(),
                 ActionTypes.PlayAudio     => new PlayAudioAction(),
                 ActionTypes.TriggerHaptic => new TriggerHapticAction(),
+                ActionTypes.TriggerEffect => new TriggerEffectAction(),
                 ActionTypes.ScreenShake   => new ScreenShakeAction(),
                 ActionTypes.SetIntensity  => new SetIntensityAction(),
                 _                         => new NoOpEnhancementAction { OriginalType = typeName ?? ActionTypes.NoOp }

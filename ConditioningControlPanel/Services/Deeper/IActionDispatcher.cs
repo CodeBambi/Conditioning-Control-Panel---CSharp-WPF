@@ -79,10 +79,21 @@ namespace ConditioningControlPanel.Services.Deeper
             PauseAction => "pause",
             PlayAudioAction pa => $"play_audio {Path.GetFileName(pa.Path)} vol={pa.Volume}{(pa.DuckOtherAudio ? " duck" : "")}",
             TriggerHapticAction h => $"haptic {(h.PatternName ?? "custom")} @ {h.Intensity:0.00} for {h.DurationMs}ms",
+            TriggerEffectAction te => DescribeTriggerEffect(te),
             ScreenShakeAction ss => $"screen_shake {ss.Intensity:0.00} for {ss.DurationMs}ms",
             SetIntensityAction si => $"set_intensity {si.Value:0.00}",
             NoOpEnhancementAction nop => $"<unknown action: {nop.OriginalType}>",
             _ => a.GetType().Name
+        };
+
+        private static string DescribeTriggerEffect(TriggerEffectAction te) => te.EffectType switch
+        {
+            EffectTypes.Haptic     => $"effect haptic {(te.PatternName ?? "custom")} @ {te.Intensity:0.00} for {te.DurationMs}ms",
+            EffectTypes.Flash      => $"effect flash {(te.ImagePath ?? "random")} for {te.DurationMs}ms",
+            EffectTypes.Bubble     => $"effect bubbles x{te.MaxBubbles} for {te.DurationMs}ms",
+            EffectTypes.Subliminal => $"effect subliminal \"{te.Text}\" for {te.DurationMs}ms",
+            EffectTypes.Overlay    => $"effect overlay {te.OverlayKind} @ {te.Opacity:0.00} for {te.DurationMs}ms",
+            _ => $"effect {te.EffectType}"
         };
     }
 
@@ -168,6 +179,10 @@ namespace ConditioningControlPanel.Services.Deeper
                         await DispatchHaptic(haptic);
                         break;
 
+                    case TriggerEffectAction effect:
+                        await DispatchTriggerEffect(effect);
+                        break;
+
                     case ScreenShakeAction:
                         // No screen-shake primitive exists yet; logged so missing
                         // capability is visible without crashing creator content.
@@ -193,11 +208,12 @@ namespace ConditioningControlPanel.Services.Deeper
 
         private static void DispatchSeek(SeekAction seek, EnhancementDispatchContext ctx)
         {
+            var resolved = ResolveBand(ctx, seek.RegionId);
             double? target = seek.Target switch
             {
                 SeekTargets.Time => seek.Time,
-                SeekTargets.RegionStart => ResolveRegion(ctx, seek.RegionId)?.Start,
-                SeekTargets.RegionEnd => ResolveRegion(ctx, seek.RegionId)?.End,
+                SeekTargets.RegionStart => resolved?.start,
+                SeekTargets.RegionEnd => resolved?.end,
                 _ => null
             };
             if (target.HasValue) ctx.Source.Seek(target.Value);
@@ -207,18 +223,33 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             var id = loop.RegionId ?? ctx.CurrentRegionId;
             if (id == null) return;
-            var region = ResolveRegion(ctx, id);
-            if (region == null) return;
+            var resolved = ResolveBand(ctx, id);
+            if (resolved == null) return;
             // Loop is implemented as a seek-back to region start; the engine
             // (not the dispatcher) is responsible for re-firing on the next
             // tick if it crosses the end again.
-            ctx.Source.Seek(region.Start);
+            ctx.Source.Seek(resolved.Value.start);
         }
 
-        private static Region? ResolveRegion(EnhancementDispatchContext ctx, string? id)
+        /// <summary>
+        /// Resolves a region/band by id. Prefers the unified TimelineItems
+        /// collection (always live during editor preview); falls back to the
+        /// legacy Regions list for backwards compatibility.
+        /// </summary>
+        private static (double start, double end)? ResolveBand(EnhancementDispatchContext ctx, string? id)
         {
             if (string.IsNullOrEmpty(id)) return null;
-            return ctx.Enhancement.Regions.FirstOrDefault(r => r.Id == id);
+
+            foreach (var item in ctx.Enhancement.TimelineItems)
+            {
+                if (item.Kind != TimelineItemKind.Rule) continue;
+                if (item.Duration <= 0 || item.Duration >= double.MaxValue) continue;
+                if (item.Id == id) return (item.Start, item.Start + item.Duration);
+            }
+
+            var region = ctx.Enhancement.Regions.FirstOrDefault(r => r.Id == id);
+            if (region != null) return (region.Start, region.End);
+            return null;
         }
 
         private static async Task DispatchPlayAudio(PlayAudioAction pa)
@@ -241,6 +272,80 @@ namespace ConditioningControlPanel.Services.Deeper
             catch (Exception ex)
             {
                 App.Logger?.Debug("Deeper play_audio error: {Error}", ex.Message);
+            }
+        }
+
+        private static async Task DispatchTriggerEffect(TriggerEffectAction effect)
+        {
+            try
+            {
+                switch (effect.EffectType)
+                {
+                    case EffectTypes.Haptic:
+                        // Reuse the existing haptic dispatch path so timeline synthesis
+                        // and rule-fired haptics share one code path.
+                        await DispatchHaptic(new TriggerHapticAction
+                        {
+                            PatternName = effect.PatternName,
+                            CustomPattern = effect.CustomPattern,
+                            Intensity = effect.Intensity,
+                            DurationMs = effect.DurationMs
+                        });
+                        break;
+
+                    case EffectTypes.Flash:
+                        App.Flash?.TriggerFlashOnceWithImage(effect.ImagePath, effect.DurationMs, effect.PlaySound);
+                        break;
+
+                    case EffectTypes.Bubble:
+                        DispatchBubbleBurst(effect.DurationMs, effect.MaxBubbles);
+                        break;
+
+                    case EffectTypes.Subliminal:
+                        if (!string.IsNullOrWhiteSpace(effect.Text))
+                            App.Subliminal?.FlashSubliminalCustom(effect.Text!);
+                        break;
+
+                    case EffectTypes.Overlay:
+                        App.Overlay?.ShowOverlayTimed(effect.OverlayKind ?? OverlayKinds.PinkFilter, effect.DurationMs, effect.Opacity);
+                        break;
+
+                    default:
+                        App.Logger?.Debug("Deeper trigger_effect: unknown effect_type \"{Type}\"", effect.EffectType);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Deeper trigger_effect dispatch error: {Error}", ex.Message);
+            }
+        }
+
+        private static void DispatchBubbleBurst(int durationMs, int maxBubbles)
+        {
+            // Bubbles have no per-event helper on the service; a brief Start/Stop
+            // window with the dispatcher-owned timer keeps the surface area small.
+            // DispatcherTimer (NOT Task.Delay) per CLAUDE.md known issue 6.
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null) return;
+            try
+            {
+                App.Bubbles?.Start();
+                var stopTimer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background)
+                {
+                    Interval = TimeSpan.FromMilliseconds(Math.Max(50, durationMs))
+                };
+                stopTimer.Tick += (_, _) =>
+                {
+                    stopTimer.Stop();
+                    try { App.Bubbles?.Stop(); }
+                    catch (Exception ex) { App.Logger?.Debug("DispatchBubbleBurst stop: {E}", ex.Message); }
+                };
+                stopTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DispatchBubbleBurst start: {E}", ex.Message);
             }
         }
 

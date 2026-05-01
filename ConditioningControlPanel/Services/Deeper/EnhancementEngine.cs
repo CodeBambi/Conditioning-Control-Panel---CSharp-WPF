@@ -7,14 +7,17 @@ using ConditioningControlPanel.Models.Deeper;
 namespace ConditioningControlPanel.Services.Deeper
 {
     /// <summary>
-    /// Runtime brain for a loaded Enhancement. Compiles haptic_tracks +
-    /// time_reached rules into one sorted timeline; reacts to webcam events
-    /// for gaze/blink/mouth/attention rules; tracks region transitions for
-    /// region_entered / region_exited; enforces per-rule cooldowns.
+    /// Runtime brain for a loaded Enhancement. Walks <see cref="Enhancement.TimelineItems"/>
+    /// to compile the firing schedule: Effect items synthesize their dispatcher action
+    /// at <c>Start</c>; Rule items with a <see cref="TimeReachedTrigger"/> are added
+    /// to the sorted point timeline; other Rule items are evaluated reactively against
+    /// webcam events and region transitions, gated by the band's
+    /// <c>[Start, Start+Duration)</c> firing window (which replaces v1's
+    /// <c>region_constraint</c>).
     ///
-    /// Lifecycle: eager construct (cheap, no subscriptions), call Start to
-    /// bind the time source + webcam subscriptions, Stop to release. Safe to
-    /// Start/Stop repeatedly.
+    /// Lifecycle: eager construct (cheap, no subscriptions), call Start to bind the
+    /// time source + webcam subscriptions, Stop to release. Safe to Start/Stop
+    /// repeatedly.
     /// </summary>
     public sealed class EnhancementEngine : IDisposable
     {
@@ -24,17 +27,18 @@ namespace ConditioningControlPanel.Services.Deeper
         private readonly Services.WebcamTrackingService? _webcam;
 
         private List<TimelineEntry> _timeline = new();
+        private List<TimelineItem> _reactiveRules = new();
         private int _lastFiredIndex = -1;
         private double _lastTickTime = -1;
         private string? _currentRegionId;
 
-        // Per-rule last-fired timestamps (DateTime.UtcNow ticks) for cooldown enforcement.
-        private readonly Dictionary<EnhancementRule, DateTime> _ruleLastFired = new();
+        // Per-item last-fired timestamps for cooldown enforcement.
+        private readonly Dictionary<TimelineItem, DateTime> _itemLastFired = new();
 
-        // Gaze dwell state — keyed by rule so target/avoid each get their own clock.
-        private readonly Dictionary<EnhancementRule, DateTime> _gazeDwellSince = new();
+        // Gaze dwell state — keyed by item so target/avoid each get their own clock.
+        private readonly Dictionary<TimelineItem, DateTime> _gazeDwellSince = new();
 
-        // Attention-lost dwell — single clock since attention_lost has no per-rule state.
+        // Attention-lost dwell — single clock since attention_lost has no per-item state.
         private DateTime? _faceLostSince;
 
         private bool _running;
@@ -60,35 +64,83 @@ namespace ConditioningControlPanel.Services.Deeper
         private void Compile()
         {
             var entries = new List<TimelineEntry>();
+            var reactive = new List<TimelineItem>();
 
-            // Haptic events → synthetic TriggerHapticAction at event start time.
-            foreach (var track in _enhancement.HapticTracks)
+            foreach (var item in _enhancement.TimelineItems)
             {
-                if (track?.Events == null) continue;
-                foreach (var ev in track.Events)
+                if (item == null) continue;
+
+                if (item.Kind == TimelineItemKind.Effect)
                 {
-                    if (ev == null) continue;
-                    var synthetic = new TriggerHapticAction
-                    {
-                        PatternName = ev.PatternName,
-                        CustomPattern = ev.CustomPattern,
-                        Intensity = ev.Intensity,
-                        DurationMs = (int)Math.Max(50, ev.Duration * 1000)
-                    };
-                    entries.Add(new TimelineEntry(ev.Start, synthetic, ownerRule: null));
+                    var action = SynthesizeEffectAction(item);
+                    if (action != null)
+                        entries.Add(new TimelineEntry(item.Start, action, ownerItem: item));
                 }
-            }
-
-            // time_reached rules.
-            foreach (var rule in _enhancement.Rules)
-            {
-                if (rule?.Trigger is TimeReachedTrigger tr && rule.Enabled)
-                    entries.Add(new TimelineEntry(tr.Time, rule.Action, ownerRule: rule));
+                else if (item.Kind == TimelineItemKind.Rule
+                         && item.Enabled
+                         && item.Trigger != null
+                         && item.Action != null)
+                {
+                    if (item.Trigger is TimeReachedTrigger tr)
+                        entries.Add(new TimelineEntry(tr.Time, item.Action, ownerItem: item));
+                    else
+                        reactive.Add(item);
+                }
             }
 
             entries.Sort((a, b) => a.Time.CompareTo(b.Time));
             _timeline = entries;
+            _reactiveRules = reactive;
             _lastFiredIndex = -1;
+        }
+
+        private static EnhancementAction? SynthesizeEffectAction(TimelineItem item)
+        {
+            int durationMs = item.Duration > 0
+                ? (int)Math.Max(50, item.Duration * 1000)
+                : Math.Max(50, item.EffectDurationMs);
+
+            return item.EffectType switch
+            {
+                EffectTypes.Haptic => new TriggerHapticAction
+                {
+                    PatternName = item.EffectPatternName,
+                    CustomPattern = item.EffectCustomPattern,
+                    Intensity = item.EffectIntensity,
+                    DurationMs = durationMs
+                },
+                EffectTypes.Flash => new TriggerEffectAction
+                {
+                    EffectType = EffectTypes.Flash,
+                    ImagePath = item.EffectImagePath,
+                    PlaySound = item.EffectPlaySound,
+                    DurationMs = durationMs,
+                    Intensity = item.EffectIntensity
+                },
+                EffectTypes.Bubble => new TriggerEffectAction
+                {
+                    EffectType = EffectTypes.Bubble,
+                    MaxBubbles = item.EffectMaxBubbles,
+                    DurationMs = durationMs,
+                    Intensity = item.EffectIntensity
+                },
+                EffectTypes.Subliminal => new TriggerEffectAction
+                {
+                    EffectType = EffectTypes.Subliminal,
+                    Text = item.EffectText,
+                    DurationMs = durationMs,
+                    Intensity = item.EffectIntensity
+                },
+                EffectTypes.Overlay => new TriggerEffectAction
+                {
+                    EffectType = EffectTypes.Overlay,
+                    OverlayKind = item.EffectOverlayKind,
+                    Opacity = item.EffectOpacity,
+                    DurationMs = durationMs,
+                    Intensity = item.EffectIntensity
+                },
+                _ => null
+            };
         }
 
         // -- Lifecycle ---------------------------------------------------------
@@ -99,7 +151,7 @@ namespace ConditioningControlPanel.Services.Deeper
             if (_running) return;
 
             Compile();
-            _ruleLastFired.Clear();
+            _itemLastFired.Clear();
             _gazeDwellSince.Clear();
             _faceLostSince = null;
 
@@ -129,8 +181,8 @@ namespace ConditioningControlPanel.Services.Deeper
             }
 
             _running = true;
-            App.Logger?.Information("EnhancementEngine started: {Name} ({Tl} timeline entries, {Rules} rules)",
-                _enhancement.Metadata?.Name, _timeline.Count, _enhancement.Rules.Count);
+            App.Logger?.Information("EnhancementEngine started: {Name} ({Tl} timeline entries, {Rules} reactive rules)",
+                _enhancement.Metadata?.Name, _timeline.Count, _reactiveRules.Count);
         }
 
         public void Stop()
@@ -189,8 +241,8 @@ namespace ConditioningControlPanel.Services.Deeper
                 {
                     _lastFiredIndex++;
                     var entry = _timeline[_lastFiredIndex];
-                    if (entry.OwnerRule != null && !PassesRuleGate(entry.OwnerRule, t)) continue;
-                    DispatchSafely(entry.Action, t, entry.OwnerRule);
+                    if (entry.OwnerItem != null && !PassesRuleGate(entry.OwnerItem, t)) continue;
+                    DispatchSafely(entry.Action, t);
                 }
 
                 _lastTickTime = t;
@@ -214,11 +266,15 @@ namespace ConditioningControlPanel.Services.Deeper
 
         private string? FindRegionAt(double t)
         {
-            // Inclusive-start, exclusive-end so adjacent regions don't double-fire.
-            // Validator guarantees no overlap so first-match wins.
-            foreach (var r in _enhancement.Regions)
+            // Inclusive-start, exclusive-end. First match wins (overlapping bands
+            // are allowed in the new model, but only the first hit drives
+            // region-entered/exited semantics — by file order).
+            foreach (var item in _enhancement.TimelineItems)
             {
-                if (t >= r.Start && t < r.End) return r.Id;
+                if (item.Kind != TimelineItemKind.Rule) continue;
+                if (item.Duration <= 0 || double.IsInfinity(item.Duration)) continue;
+                if (item.Duration >= double.MaxValue) continue;
+                if (t >= item.Start && t < item.Start + item.Duration) return item.Id;
             }
             return null;
         }
@@ -265,19 +321,18 @@ namespace ConditioningControlPanel.Services.Deeper
             if (videoRect.IsEmpty) return;
 
             var now = DateTime.UtcNow;
-            foreach (var rule in _enhancement.Rules)
+            foreach (var item in _reactiveRules)
             {
-                if (!rule.Enabled) continue;
-                if (rule.Trigger is GazeTargetTrigger gt)
+                if (item.Trigger is GazeTargetTrigger gt)
                 {
                     var hit = HitsRect(screenPoint, videoRect, gt.Rect);
-                    EvaluateGazeDwell(rule, hit, gt.MinDwellMs, now);
+                    EvaluateGazeDwell(item, hit, gt.MinDwellMs, now);
                 }
-                else if (rule.Trigger is GazeAvoidTrigger ga)
+                else if (item.Trigger is GazeAvoidTrigger ga)
                 {
                     var inRect = HitsRect(screenPoint, videoRect, ga.Rect);
                     // "Avoid" fires when the user keeps gaze OUTSIDE the rect for the dwell.
-                    EvaluateGazeDwell(rule, !inRect, ga.MinDwellMs, now);
+                    EvaluateGazeDwell(item, !inRect, ga.MinDwellMs, now);
                 }
             }
         }
@@ -301,29 +356,29 @@ namespace ConditioningControlPanel.Services.Deeper
             }
         }
 
-        private void EvaluateGazeDwell(EnhancementRule rule, bool conditionMet, int minDwellMs, DateTime now)
+        private void EvaluateGazeDwell(TimelineItem item, bool conditionMet, int minDwellMs, DateTime now)
         {
             if (conditionMet)
             {
-                if (!_gazeDwellSince.TryGetValue(rule, out var since))
+                if (!_gazeDwellSince.TryGetValue(item, out var since))
                 {
-                    _gazeDwellSince[rule] = now;
+                    _gazeDwellSince[item] = now;
                     return;
                 }
                 if ((now - since).TotalMilliseconds >= minDwellMs)
                 {
                     var t = _source.GetCurrentTimeSeconds();
-                    if (PassesRuleGate(rule, t))
+                    if (PassesRuleGate(item, t))
                     {
-                        DispatchSafely(rule.Action, t, rule);
+                        DispatchSafely(item.Action!, t);
                         // Reset dwell window so we don't immediately re-fire next frame.
-                        _gazeDwellSince[rule] = now;
+                        _gazeDwellSince[item] = now;
                     }
                 }
             }
             else
             {
-                _gazeDwellSince.Remove(rule);
+                _gazeDwellSince.Remove(item);
             }
         }
 
@@ -343,47 +398,50 @@ namespace ConditioningControlPanel.Services.Deeper
         private void FireWebcamRules<TTrigger>(Func<TTrigger, bool> predicate) where TTrigger : EnhancementTrigger
         {
             var t = _source.GetCurrentTimeSeconds();
-            foreach (var rule in _enhancement.Rules)
+            foreach (var item in _reactiveRules)
             {
-                if (!rule.Enabled) continue;
-                if (rule.Trigger is not TTrigger trig) continue;
+                if (item.Trigger is not TTrigger trig) continue;
                 if (!predicate(trig)) continue;
-                if (!PassesRuleGate(rule, t)) continue;
-                DispatchSafely(rule.Action, t, rule);
+                if (!PassesRuleGate(item, t)) continue;
+                DispatchSafely(item.Action!, t);
             }
         }
 
         private void FireRegionRules<TTrigger>(string regionId, double t, Func<TTrigger, string> idSelector)
             where TTrigger : EnhancementTrigger
         {
-            foreach (var rule in _enhancement.Rules)
+            foreach (var item in _reactiveRules)
             {
-                if (!rule.Enabled) continue;
-                if (rule.Trigger is not TTrigger trig) continue;
+                if (item.Trigger is not TTrigger trig) continue;
                 if (idSelector(trig) != regionId) continue;
-                if (!PassesRuleGate(rule, t)) continue;
-                DispatchSafely(rule.Action, t, rule);
+                if (!PassesRuleGate(item, t)) continue;
+                DispatchSafely(item.Action!, t);
             }
         }
 
-        private bool PassesRuleGate(EnhancementRule rule, double t)
+        private bool PassesRuleGate(TimelineItem item, double t)
         {
-            // Region constraint: rule only fires while playhead is in that region.
-            if (!string.IsNullOrEmpty(rule.RegionConstraint)
-                && rule.RegionConstraint != _currentRegionId)
-                return false;
+            // Band window: rule only fires while the playhead is inside its
+            // [Start, Start+Duration) span. Duration <= 0 is point-style (only
+            // exact-time matches via the sorted timeline). Duration == double.MaxValue
+            // is "anywhere" (used by the loader projection for v1 rules with no
+            // RegionConstraint and a non-time-reached trigger).
+            if (item.Duration > 0 && item.Duration < double.MaxValue)
+            {
+                if (t < item.Start || t >= item.Start + item.Duration) return false;
+            }
 
             // Cooldown.
             var now = DateTime.UtcNow;
-            if (_ruleLastFired.TryGetValue(rule, out var last))
+            if (_itemLastFired.TryGetValue(item, out var last))
             {
-                if ((now - last).TotalMilliseconds < rule.CooldownMs) return false;
+                if ((now - last).TotalMilliseconds < item.CooldownMs) return false;
             }
-            _ruleLastFired[rule] = now;
+            _itemLastFired[item] = now;
             return true;
         }
 
-        private async void DispatchSafely(EnhancementAction action, double t, EnhancementRule? owner)
+        private async void DispatchSafely(EnhancementAction action, double t)
         {
             try
             {
@@ -397,7 +455,7 @@ namespace ConditioningControlPanel.Services.Deeper
         }
 
         private bool HasActiveTrigger<TTrigger>() where TTrigger : EnhancementTrigger
-            => _enhancement.Rules.Any(r => r.Enabled && r.Trigger is TTrigger);
+            => _reactiveRules.Any(item => item.Trigger is TTrigger);
 
         // -- Compiled timeline entry ------------------------------------------
 
@@ -405,13 +463,13 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             public double Time { get; }
             public EnhancementAction Action { get; }
-            public EnhancementRule? OwnerRule { get; }
+            public TimelineItem? OwnerItem { get; }
 
-            public TimelineEntry(double time, EnhancementAction action, EnhancementRule? ownerRule)
+            public TimelineEntry(double time, EnhancementAction action, TimelineItem? ownerItem)
             {
                 Time = time;
                 Action = action;
-                OwnerRule = ownerRule;
+                OwnerItem = ownerItem;
             }
         }
     }

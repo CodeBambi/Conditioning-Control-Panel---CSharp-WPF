@@ -33,6 +33,13 @@ namespace ConditioningControlPanel.Models.Deeper
         [JsonProperty("rules")]
         public List<EnhancementRule> Rules { get; set; } = new();
 
+        // New unified timeline. Coexists with the legacy regions/haptic_tracks/rules
+        // collections during the additive-schema transition; the loader projects
+        // legacy → timeline_items if this list is empty, and the saver back-projects
+        // so older clients keep working.
+        [JsonProperty("timeline_items")]
+        public List<TimelineItem> TimelineItems { get; set; } = new();
+
         [JsonExtensionData]
         public IDictionary<string, JToken>? UnknownFields { get; set; }
     }
@@ -50,6 +57,12 @@ namespace ConditioningControlPanel.Models.Deeper
 
         [JsonProperty("creator")]
         public string Creator { get; set; } = "";
+
+        // Optional second credit slot — the local user who edited the rules/effects
+        // on top of the original Creator's media. Independent from Creator so HT
+        // auto-fill can lock the upstream uploader while leaving the remix slot free.
+        [JsonProperty("remixer", NullValueHandling = NullValueHandling.Ignore)]
+        public string? Remixer { get; set; }
 
         [JsonProperty("description")]
         public string Description { get; set; } = "";

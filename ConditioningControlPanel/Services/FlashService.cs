@@ -238,6 +238,81 @@ namespace ConditioningControlPanel.Services
             Task.Run(() => LoadAndShowImages(amount, duration, size));
         }
 
+        /// <summary>
+        /// One-shot flash that displays a specific image instead of picking randomly
+        /// from the cached image list. Used by Deeper enhancement Effect timeline
+        /// items that pin a particular image. <paramref name="imagePath"/> is
+        /// absolute or rooted under <c>App.EffectiveAssetsPath/images</c>; passing
+        /// null or empty falls back to <see cref="TriggerFlashOnce"/> behavior.
+        /// </summary>
+        public void TriggerFlashOnceWithImage(string? imagePath, int durationMs, bool playSound)
+        {
+            if (_isBusy)
+            {
+                App.Logger?.Debug("FlashService: TriggerFlashOnceWithImage skipped - busy");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(imagePath))
+            {
+                TriggerFlashOnce(amount: 1, duration: durationMs);
+                return;
+            }
+
+            string resolved = imagePath!;
+            if (!System.IO.Path.IsPathRooted(resolved))
+                resolved = System.IO.Path.Combine(App.EffectiveAssetsPath ?? "", "images", resolved);
+
+            if (!System.IO.File.Exists(resolved))
+            {
+                App.Logger?.Debug("FlashService: TriggerFlashOnceWithImage path not found ({Path}); falling back to random", resolved);
+                TriggerFlashOnce(amount: 1, duration: durationMs);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_imagesPath)) RefreshImagesPath();
+
+            _isBusy = true;
+            _oneShotActive = true;
+            _soundPlayingForCurrentFlash = false;
+            _heartbeatTimer?.Start();
+
+            Task.Run(() => LoadAndShowSpecificImage(resolved, durationMs, playSound));
+        }
+
+        private async void LoadAndShowSpecificImage(string imagePath, int durationMs, bool playSound)
+        {
+            try
+            {
+                var settings = App.Settings.Current;
+                var soundPath = playSound ? GetNextSound() : null;
+                var monitors = GetMonitors(settings.DualMonitorEnabled);
+                var scale = settings.ImageScale / 100.0;
+
+                var data = await LoadImageAsync(imagePath);
+                if (data == null)
+                {
+                    _isBusy = false;
+                    return;
+                }
+
+                var monitor = monitors[_random.Next(monitors.Count)];
+                var geometry = CalculateGeometry(data.Width, data.Height, monitor, scale);
+                data.Geometry = geometry;
+                data.Monitor = monitor;
+
+                await DispatcherHelper.RunOnUIAsync(() =>
+                {
+                    ShowImages(new List<LoadedImageData> { data }, soundPath, false, customDuration: durationMs);
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("FlashService: TriggerFlashOnceWithImage error: {Error}", ex.Message);
+                _isBusy = false;
+            }
+        }
+
         public void LoadAssets()
         {
             lock (_lockObj)

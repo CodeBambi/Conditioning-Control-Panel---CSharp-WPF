@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ConditioningControlPanel.Models.Deeper;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -76,6 +77,13 @@ namespace ConditioningControlPanel.Services.Deeper
             {
                 var enhancement = root.ToObject<Enhancement>(JsonSerializer.Create(ReadSettings))
                                   ?? throw new EnhancementLoadException("Deserialization returned null.");
+
+                // Additive-schema bridge: if the file pre-dates timeline_items but
+                // has legacy regions/rules/haptic_tracks, project them so the
+                // editor + engine can treat TimelineItems as authoritative.
+                if (enhancement.TimelineItems.Count == 0 && HasLegacyContent(enhancement))
+                    ProjectLegacyToTimeline(enhancement);
+
                 return enhancement;
             }
             catch (EnhancementLoadException) { throw; }
@@ -91,7 +99,231 @@ namespace ConditioningControlPanel.Services.Deeper
             // tampered with).
             e.Schema = Enhancement.SchemaTag;
             if (e.Version <= 0) e.Version = Enhancement.CurrentVersion;
+
+            // When the new editor is the source of truth, rebuild the legacy
+            // collections from TimelineItems so files saved by this build still
+            // load on older CCP versions that only know about regions/rules/haptic_tracks.
+            if (e.TimelineItems.Count > 0)
+                BackProjectTimelineToLegacy(e);
+
             return JsonConvert.SerializeObject(e, WriteSettings);
+        }
+
+        // -- Projection: legacy regions/rules/haptic_tracks → TimelineItems -------
+
+        private static bool HasLegacyContent(Enhancement e)
+        {
+            if (e.Regions.Count > 0) return true;
+            if (e.Rules.Count > 0) return true;
+            foreach (var t in e.HapticTracks)
+                if (t?.Events != null && t.Events.Count > 0) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Loader projection. Folds legacy regions+rules+haptic_tracks into the
+        /// unified TimelineItems collection so the new editor and engine have a
+        /// single authoritative source. The legacy collections are left in place
+        /// (additive schema); save will rebuild them from TimelineItems.
+        /// </summary>
+        public static void ProjectLegacyToTimeline(Enhancement e)
+        {
+            var items = new List<TimelineItem>();
+            var rulesByConstraint = e.Rules
+                .GroupBy(r => r.RegionConstraint ?? "")
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            // Regions become Rule TimelineItems. The first rule constrained to that
+            // region folds into the band; extra rules with the same constraint stack
+            // as same-span Rule items with fresh ids.
+            var consumedRules = new HashSet<EnhancementRule>();
+            foreach (var r in e.Regions)
+            {
+                rulesByConstraint.TryGetValue(r.Id, out var attached);
+                attached ??= new List<EnhancementRule>();
+
+                EnhancementRule? primary = attached.FirstOrDefault();
+                items.Add(BuildRuleItemFromRegion(r, primary));
+                if (primary != null) consumedRules.Add(primary);
+
+                for (int k = 1; k < attached.Count; k++)
+                {
+                    var stacked = attached[k];
+                    items.Add(BuildRuleItemFromRegion(r, stacked, freshId: true));
+                    consumedRules.Add(stacked);
+                }
+            }
+
+            // Rules with no region_constraint that didn't fold into a region.
+            // time_reached → point-style (Duration = 0); other triggers → spans
+            // the whole track so the rule fires anywhere it would have v1.
+            foreach (var rule in e.Rules)
+            {
+                if (consumedRules.Contains(rule)) continue;
+
+                if (rule.Trigger is TimeReachedTrigger tr)
+                {
+                    items.Add(new TimelineItem
+                    {
+                        Id = TimelineItem.NewId(),
+                        Kind = TimelineItemKind.Rule,
+                        Start = Math.Max(0, tr.Time),
+                        Duration = 0,
+                        Trigger = rule.Trigger,
+                        Action = rule.Action,
+                        CooldownMs = rule.CooldownMs,
+                        Enabled = rule.Enabled
+                    });
+                }
+                else
+                {
+                    items.Add(new TimelineItem
+                    {
+                        Id = TimelineItem.NewId(),
+                        Kind = TimelineItemKind.Rule,
+                        Start = 0,
+                        Duration = double.MaxValue,
+                        Trigger = rule.Trigger,
+                        Action = rule.Action,
+                        CooldownMs = rule.CooldownMs,
+                        Enabled = rule.Enabled
+                    });
+                }
+            }
+
+            // Haptic events become Effect TimelineItems with effect_type=haptic.
+            foreach (var track in e.HapticTracks)
+            {
+                if (track?.Events == null) continue;
+                foreach (var ev in track.Events)
+                {
+                    if (ev == null) continue;
+                    items.Add(new TimelineItem
+                    {
+                        Id = TimelineItem.NewId(),
+                        Kind = TimelineItemKind.Effect,
+                        Start = ev.Start,
+                        Duration = ev.Duration,
+                        EffectType = EffectTypes.Haptic,
+                        EffectIntensity = ev.Intensity,
+                        EffectDurationMs = (int)Math.Max(50, ev.Duration * 1000),
+                        EffectPatternName = ev.PatternName,
+                        EffectCustomPattern = ev.CustomPattern
+                    });
+                }
+            }
+
+            e.TimelineItems = items;
+        }
+
+        private static TimelineItem BuildRuleItemFromRegion(Region r, EnhancementRule? rule, bool freshId = false)
+        {
+            return new TimelineItem
+            {
+                Id = freshId ? TimelineItem.NewId() : (string.IsNullOrEmpty(r.Id) ? TimelineItem.NewId() : r.Id),
+                Kind = TimelineItemKind.Rule,
+                Start = r.Start,
+                Duration = Math.Max(0, r.End - r.Start),
+                Label = string.IsNullOrEmpty(r.Label) ? null : r.Label,
+                Color = string.IsNullOrEmpty(r.Color) ? null : r.Color,
+                Trigger = rule?.Trigger,
+                Action = rule?.Action,
+                CooldownMs = rule?.CooldownMs ?? 1000,
+                Enabled = rule?.Enabled ?? false
+            };
+        }
+
+        // -- Back-projection: TimelineItems → legacy collections ------------------
+
+        /// <summary>
+        /// Save back-projection. Rebuilds the v1 regions/rules/haptic_tracks
+        /// collections from TimelineItems so files saved by this build still load
+        /// on older CCP clients that only understand the legacy schema.
+        /// Non-haptic Effects (flash/bubble/subliminal/overlay) have no v1
+        /// equivalent — they only appear in <c>timeline_items</c>; older clients
+        /// silently skip them.
+        /// </summary>
+        public static void BackProjectTimelineToLegacy(Enhancement e)
+        {
+            var regions = new List<Region>();
+            var rules = new List<EnhancementRule>();
+            var hapticEvents = new List<HapticEvent>();
+            var seenRegionIds = new HashSet<string>();
+
+            foreach (var ti in e.TimelineItems)
+            {
+                if (ti == null) continue;
+
+                if (ti.Kind == TimelineItemKind.Rule)
+                {
+                    if (ti.Duration > 0 && ti.Duration < double.MaxValue)
+                    {
+                        // Band-style rule: emit a Region + (optional) Rule pointing at it.
+                        var regionId = ti.Id;
+                        if (string.IsNullOrEmpty(regionId) || !seenRegionIds.Add(regionId))
+                            regionId = TimelineItem.NewId();
+
+                        regions.Add(new Region
+                        {
+                            Id = regionId,
+                            Start = ti.Start,
+                            End = ti.Start + ti.Duration,
+                            Label = ti.Label ?? "",
+                            Color = ti.Color ?? "#7B5CFF"
+                        });
+
+                        if (ti.Trigger != null && ti.Action != null)
+                        {
+                            rules.Add(new EnhancementRule
+                            {
+                                Trigger = ti.Trigger,
+                                Action = ti.Action,
+                                RegionConstraint = regionId,
+                                CooldownMs = ti.CooldownMs,
+                                Enabled = ti.Enabled
+                            });
+                        }
+                    }
+                    else if (ti.Trigger != null && ti.Action != null)
+                    {
+                        // Point-style or unbounded rule: emit a free-standing Rule.
+                        rules.Add(new EnhancementRule
+                        {
+                            Trigger = ti.Trigger,
+                            Action = ti.Action,
+                            RegionConstraint = null,
+                            CooldownMs = ti.CooldownMs,
+                            Enabled = ti.Enabled
+                        });
+                    }
+                }
+                else if (ti.Kind == TimelineItemKind.Effect && ti.EffectType == EffectTypes.Haptic)
+                {
+                    hapticEvents.Add(new HapticEvent
+                    {
+                        Start = ti.Start,
+                        Duration = ti.Duration > 0 ? ti.Duration : Math.Max(0.05, ti.EffectDurationMs / 1000.0),
+                        Intensity = ti.EffectIntensity,
+                        PatternName = ti.EffectPatternName,
+                        CustomPattern = ti.EffectCustomPattern
+                    });
+                }
+                // Non-haptic Effects: no legacy shape — only timeline_items carries them.
+            }
+
+            e.Regions = regions;
+            e.Rules = rules;
+            if (hapticEvents.Count > 0)
+            {
+                e.HapticTracks = new List<HapticTrack>
+                {
+                    new() { Id = "primary", Events = hapticEvents }
+                };
+            }
+            else
+            {
+                e.HapticTracks = new List<HapticTrack>();
+            }
         }
 
         /// <summary>
@@ -124,6 +356,23 @@ namespace ConditioningControlPanel.Services.Deeper
                 if (fixture.Rules[i].Action.Type != roundTripped.Rules[i].Action.Type)
                     errors.Add($"rules[{i}].action.type mismatch: {fixture.Rules[i].Action.Type} vs {roundTripped.Rules[i].Action.Type}");
             }
+
+            // Additive-schema check: a v1-shaped fixture (legacy regions/rules/haptic_tracks
+            // populated, timeline_items empty) must come back from Load with TimelineItems
+            // populated by the projection pass.
+            if (roundTripped.TimelineItems.Count == 0)
+                errors.Add("TimelineItems was not populated by loader projection.");
+
+            // Effect TimelineItem round-trip: build a fixture using the new model only,
+            // round-trip it, and assert non-haptic effect fields survive.
+            var v2Fixture = BuildV2Fixture();
+            var v2Json = Save(v2Fixture);
+            var v2Loaded = Load(v2Json);
+            if (v2Loaded.TimelineItems.Count != v2Fixture.TimelineItems.Count)
+                errors.Add($"v2 timeline_items count mismatch: {v2Fixture.TimelineItems.Count} vs {v2Loaded.TimelineItems.Count}");
+            var flashItem = v2Loaded.TimelineItems.FirstOrDefault(t => t.EffectType == EffectTypes.Flash);
+            if (flashItem == null) errors.Add("v2 flash effect lost on round-trip.");
+            else if (flashItem.EffectImagePath != "stock:image1") errors.Add($"v2 flash image_path lost: {flashItem.EffectImagePath}");
 
             // Unknown-type round-trip: inject a hand-crafted action with an unknown type
             // and verify it survives a load → save cycle.
@@ -206,6 +455,67 @@ namespace ConditioningControlPanel.Services.Deeper
                             Action  = new LoopRegionAction { RegionId = "main" } },
                     new() { Trigger = new RegionExitedTrigger { RegionId = "main" },
                             Action  = new SeekAction { Target = SeekTargets.Time, Time = 0 } }
+                }
+            };
+        }
+
+        private static Enhancement BuildV2Fixture()
+        {
+            return new Enhancement
+            {
+                MediaType = MediaTypes.Video,
+                MediaSource = "https://hypnotube.com/video/example.html",
+                Metadata = new EnhancementMetadata
+                {
+                    Name = "v2 Self-Test",
+                    Creator = "HT-uploader",
+                    Remixer = "ccp-remixer",
+                    Description = "Round-trip fixture covering TimelineItem effects."
+                },
+                TimelineItems = new List<TimelineItem>
+                {
+                    new()
+                    {
+                        Id = "intro-band", Kind = TimelineItemKind.Rule,
+                        Start = 0, Duration = 10, Color = "#7B5CFF", Label = "Intro",
+                        Trigger = new BlinkDetectedTrigger(),
+                        Action = new TriggerEffectAction { EffectType = EffectTypes.Flash, ImagePath = "stock:image1", DurationMs = 800 }
+                    },
+                    new()
+                    {
+                        Id = "haptic-dot", Kind = TimelineItemKind.Effect,
+                        Start = 5, Duration = 2,
+                        EffectType = EffectTypes.Haptic, EffectIntensity = 0.7,
+                        EffectDurationMs = 2000, EffectPatternName = "Pulse"
+                    },
+                    new()
+                    {
+                        Id = "flash-dot", Kind = TimelineItemKind.Effect,
+                        Start = 7, Duration = 0,
+                        EffectType = EffectTypes.Flash, EffectImagePath = "stock:image1",
+                        EffectDurationMs = 600, EffectPlaySound = true
+                    },
+                    new()
+                    {
+                        Id = "subliminal-dot", Kind = TimelineItemKind.Effect,
+                        Start = 12, Duration = 0,
+                        EffectType = EffectTypes.Subliminal, EffectText = "obey",
+                        EffectDurationMs = 200
+                    },
+                    new()
+                    {
+                        Id = "overlay-dot", Kind = TimelineItemKind.Effect,
+                        Start = 20, Duration = 0,
+                        EffectType = EffectTypes.Overlay, EffectOverlayKind = OverlayKinds.PinkFilter,
+                        EffectDurationMs = 4000, EffectOpacity = 0.4
+                    },
+                    new()
+                    {
+                        Id = "bubble-dot", Kind = TimelineItemKind.Effect,
+                        Start = 28, Duration = 0,
+                        EffectType = EffectTypes.Bubble, EffectMaxBubbles = 5,
+                        EffectDurationMs = 5000, EffectIntensity = 0.8
+                    }
                 }
             };
         }
