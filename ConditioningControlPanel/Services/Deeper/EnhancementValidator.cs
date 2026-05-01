@@ -229,12 +229,12 @@ namespace ConditioningControlPanel.Services.Deeper
             {
                 var item = e.TimelineItems[i];
                 if (item == null) continue;
-                if (!string.IsNullOrEmpty(item.EffectImagePath) && IsUncOrExtendedPath(item.EffectImagePath))
+                if (!string.IsNullOrEmpty(item.EffectImagePath) && IsUnsafeAssetPath(item.EffectImagePath))
                 {
                     errors.Add(new ValidationError
                     {
                         Path = $"timeline_items[{i}].effect_image_path",
-                        Message = "UNC and extended-length paths are not allowed.",
+                        Message = AssetPathRejectMessage,
                         Severity = ValidationSeverity.Error
                     });
                 }
@@ -248,6 +248,24 @@ namespace ConditioningControlPanel.Services.Deeper
             if (path.StartsWith("//", System.StringComparison.Ordinal)) return true;
             return false;
         }
+
+        // Asset paths in actions (play_audio.path, trigger_effect.image_path,
+        // timeline_items[].effect_image_path) must resolve relative to the
+        // user's assets folder. Absolute paths in shared files would let a
+        // creator point at an arbitrary local file on the recipient's disk
+        // (private recordings, system files); UNC paths additionally leak the
+        // user's NTLM hash on first access. Reject both at validation.
+        private static bool IsUnsafeAssetPath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            if (IsUncOrExtendedPath(path)) return true;
+            try { if (System.IO.Path.IsPathRooted(path)) return true; }
+            catch { return true; }
+            return false;
+        }
+
+        private const string AssetPathRejectMessage =
+            "Path must be relative to the assets folder. Absolute and UNC paths are not allowed.";
 
         private static void ValidateRegions(Enhancement e, List<ValidationError> errors)
         {
@@ -399,6 +417,22 @@ namespace ConditioningControlPanel.Services.Deeper
                     continue;
                 var path = $"rules[{i}]";
 
+                // The Newtonsoft converter returns null for explicit "trigger": null
+                // even though the model default is non-null. Reject the file here
+                // rather than NRE-ing further down and aborting the whole validation.
+                if (rule.Trigger == null)
+                {
+                    errors.Add(new ValidationError
+                    {
+                        Path = $"{path}.trigger",
+                        Message = "Trigger cannot be null. Use \"type\": \"never\" if the rule should not fire.",
+                        Severity = ValidationSeverity.Error
+                    });
+                    if (rule.Action != null)
+                        ValidateActionSpecific(rule.Action, $"{path}.action", regionIds, errors);
+                    continue;
+                }
+
                 if (rule.Trigger is NeverFiringTrigger nft && nft.OriginalType != TriggerTypes.Never)
                 {
                     errors.Add(new ValidationError
@@ -507,6 +541,8 @@ namespace ConditioningControlPanel.Services.Deeper
                 case PlayAudioAction pa:
                     if (string.IsNullOrEmpty(pa.Path))
                         errors.Add(new ValidationError { Path = path, Message = "play_audio requires a path." });
+                    else if (IsUnsafeAssetPath(pa.Path))
+                        errors.Add(new ValidationError { Path = $"{path}.path", Message = AssetPathRejectMessage, Severity = ValidationSeverity.Error });
                     if (pa.Volume < 0 || pa.Volume > 100)
                         errors.Add(new ValidationError { Path = path, Message = $"volume must be in [0, 100] (got {pa.Volume})." });
                     break;
@@ -542,6 +578,11 @@ namespace ConditioningControlPanel.Services.Deeper
                         else if (!hn && !hc)
                             errors.Add(new ValidationError { Path = path, Message = "Haptic trigger_effect must set pattern_name or custom_pattern." });
                         if (hc) ValidateCustomPattern(te.CustomPattern!, path, errors);
+                    }
+                    else if (te.EffectType == EffectTypes.Flash)
+                    {
+                        if (!string.IsNullOrEmpty(te.ImagePath) && IsUnsafeAssetPath(te.ImagePath))
+                            errors.Add(new ValidationError { Path = $"{path}.image_path", Message = AssetPathRejectMessage, Severity = ValidationSeverity.Error });
                     }
                     else if (te.EffectType == EffectTypes.Subliminal && string.IsNullOrWhiteSpace(te.Text))
                     {

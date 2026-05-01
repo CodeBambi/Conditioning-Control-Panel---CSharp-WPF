@@ -35,6 +35,11 @@ namespace ConditioningControlPanel.Views.Deeper
         private bool _suppressVolumeSync;
         private bool _videoBrowserReady;
         private string? _pendingVideoUrl;
+        // Exactly one file:// URL we just asked the WebView2 to navigate to from
+        // a user-picked local video. NavigationStarting allows this URL once,
+        // then clears it. Any other file:// nav (e.g. hostile redirect from a
+        // shared .ccpenh.json) is rejected by the host allowlist.
+        private string? _initialAllowedFileUrl;
         // Sticky audio path so the user can press Play again after Stop
         // (the underlying player nulls its CurrentPath on Stop, by design).
         private string? _lastAudioPath;
@@ -142,30 +147,18 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtVideoStatus.Text = Loc.Get("deeper_player_video_loading");
                 TxtVideoStatus.Visibility = Visibility.Visible;
 
-                if (!_videoBrowserReady)
+                if (!await EnsureVideoBrowserReadyAsync())
                 {
-                    var userDataFolder = System.IO.Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "ConditioningControlPanel",
-                        "browser_data");
-                    System.IO.Directory.CreateDirectory(userDataFolder);
-                    var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment
-                        .CreateAsync(userDataFolder: userDataFolder).ConfigureAwait(true);
-                    await VideoBrowser.EnsureCoreWebView2Async(env).ConfigureAwait(true);
-                    if (VideoBrowser.CoreWebView2 == null)
-                    {
-                        TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
-                        return;
-                    }
-                    _videoBrowserReady = true;
-                    VideoBrowser.CoreWebView2.NavigationCompleted += OnVideoNavCompleted;
-                    VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged += OnVideoFullscreenChanged;
+                    TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
+                    return;
                 }
 
                 // file:/// URL navigation - WebView2 wraps a local media file in
                 // its default media-viewer page with a real <video> element.
+                // Authorize this exact file:// URL through NavigationStarting once.
                 var fileUri = new Uri(path).AbsoluteUri;
                 _pendingVideoUrl = fileUri;
+                _initialAllowedFileUrl = fileUri;
                 VideoBrowser.CoreWebView2.Navigate(fileUri);
             }
             catch (Exception ex)
@@ -576,26 +569,23 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtVideoStatus.Text = Loc.Get("deeper_player_video_loading");
                 TxtVideoStatus.Visibility = Visibility.Visible;
 
-                if (!_videoBrowserReady)
+                // Pre-validate the URL against the same allowlist NavigationStarting
+                // enforces, so a hostile MediaSource in a shared .ccpenh.json never
+                // reaches the WebView2 in the first place.
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var initialUri)
+                    || initialUri.Scheme != Uri.UriSchemeHttps
+                    || !IsAllowedPlayerHost(initialUri))
                 {
-                    // Reuse the main browser's user-data folder so HT cookies
-                    // carry over (same pattern as DeeperEditorWindow.InitializeBrowserAsync).
-                    var userDataFolder = System.IO.Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "ConditioningControlPanel",
-                        "browser_data");
-                    System.IO.Directory.CreateDirectory(userDataFolder);
-                    var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment
-                        .CreateAsync(userDataFolder: userDataFolder).ConfigureAwait(true);
-                    await VideoBrowser.EnsureCoreWebView2Async(env).ConfigureAwait(true);
-                    if (VideoBrowser.CoreWebView2 == null)
-                    {
-                        TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
-                        return;
-                    }
-                    _videoBrowserReady = true;
-                    VideoBrowser.CoreWebView2.NavigationCompleted += OnVideoNavCompleted;
-                    VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged += OnVideoFullscreenChanged;
+                    App.Logger?.Warning(
+                        "EnhancementPlayer: rejected video MediaSource {Host}", initialUri?.Host);
+                    TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
+                    return;
+                }
+
+                if (!await EnsureVideoBrowserReadyAsync())
+                {
+                    TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
+                    return;
                 }
 
                 _pendingVideoUrl = url;
@@ -605,6 +595,78 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 App.Logger?.Warning(ex, "EnhancementPlayer: video load failed");
                 TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
+            }
+        }
+
+        // Single hardened WebView2 init for the Player. Mirrors
+        // DeeperEditorWindow.InitializeBrowserAsync: separate user-data folder
+        // (no cookie sharing with the main browser tab), Settings hardening,
+        // and a NavigationStarting allowlist that blocks anything off-list.
+        private async Task<bool> EnsureVideoBrowserReadyAsync()
+        {
+            if (_videoBrowserReady) return VideoBrowser.CoreWebView2 != null;
+
+            // Separate user-data folder from the main browser tab. The Player
+            // navigates URLs sourced from .ccpenh.json files that may be shared
+            // between users; sharing cookies/storage with the main tab would
+            // let a hostile page read the user's signed-in HT cookies via
+            // document.cookie / authenticated fetch.
+            var userDataFolder = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ConditioningControlPanel",
+                "browser_data_deeper_player");
+            System.IO.Directory.CreateDirectory(userDataFolder);
+            var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment
+                .CreateAsync(userDataFolder: userDataFolder).ConfigureAwait(true);
+            await VideoBrowser.EnsureCoreWebView2Async(env).ConfigureAwait(true);
+            if (VideoBrowser.CoreWebView2 == null) return false;
+
+            // Settings hardening — JS stays on (BrowserVideoTimeSource needs it
+            // to drive the <video> element) but every other surface is off.
+            var settings = VideoBrowser.CoreWebView2.Settings;
+            settings.AreDevToolsEnabled = false;
+            settings.AreDefaultContextMenusEnabled = false;
+            settings.IsStatusBarEnabled = false;
+            settings.AreBrowserAcceleratorKeysEnabled = false;
+            settings.IsZoomControlEnabled = false;
+            settings.IsBuiltInErrorPageEnabled = false;
+
+            _videoBrowserReady = true;
+            VideoBrowser.CoreWebView2.NavigationStarting += OnVideoNavStarting;
+            VideoBrowser.CoreWebView2.NavigationCompleted += OnVideoNavCompleted;
+            VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged += OnVideoFullscreenChanged;
+            return true;
+        }
+
+        private static bool IsAllowedPlayerHost(Uri uri)
+        {
+            return UrlSafety.HostMatches(uri, "hypnotube.com", "tiktok.com");
+        }
+
+        private void OnVideoNavStarting(object? sender,
+            Microsoft.Web.WebView2.Core.CoreWebView2NavigationStartingEventArgs e)
+        {
+            try
+            {
+                // One-shot file:// permit for a user-picked local video.
+                if (!string.IsNullOrEmpty(_initialAllowedFileUrl)
+                    && string.Equals(e.Uri, _initialAllowedFileUrl, StringComparison.Ordinal))
+                {
+                    _initialAllowedFileUrl = null;
+                    return;
+                }
+
+                if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri)
+                    || uri.Scheme != Uri.UriSchemeHttps
+                    || !IsAllowedPlayerHost(uri))
+                {
+                    e.Cancel = true;
+                    App.Logger?.Debug("EnhancementPlayer: blocked nav to {Url}", e.Uri);
+                }
+            }
+            catch
+            {
+                e.Cancel = true;
             }
         }
 
@@ -894,6 +956,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 {
                     if (_videoBrowserReady && VideoBrowser?.CoreWebView2 != null)
                     {
+                        VideoBrowser.CoreWebView2.NavigationStarting -= OnVideoNavStarting;
                         VideoBrowser.CoreWebView2.NavigationCompleted -= OnVideoNavCompleted;
                         VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged -= OnVideoFullscreenChanged;
                     }

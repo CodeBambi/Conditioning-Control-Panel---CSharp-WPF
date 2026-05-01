@@ -84,19 +84,42 @@ namespace ConditioningControlPanel.Services.Deeper
 
         /// <summary>
         /// Variant of <see cref="LoadFromFile"/> that takes an already-parsed
-        /// enhancement (used by browser auto-discovery, where the fetcher has
-        /// already done schema sniff + validate). <paramref name="sourceTag"/>
-        /// is a free-form string for diagnostics (URL, "memory", etc).
+        /// enhancement (used by browser auto-discovery and the editor's
+        /// preview button). <paramref name="sourceTag"/> is a free-form string
+        /// for diagnostics (URL, "memory", etc).
+        ///
+        /// Defense-in-depth: validates even though the fetcher already did,
+        /// because the editor preview path bypasses the fetcher entirely and
+        /// would otherwise let mid-edit garbage reach the engine.
         /// </summary>
-        public void LoadFromMemory(Enhancement enhancement, string sourceTag)
+        public bool LoadFromMemory(Enhancement enhancement, string sourceTag)
         {
-            if (enhancement == null) return;
+            if (enhancement == null) return false;
+
+            try
+            {
+                var issues = EnhancementValidator.Validate(enhancement);
+                var firstError = issues.Find(i => i.Severity == ValidationSeverity.Error);
+                if (firstError != null)
+                {
+                    LoadFailed?.Invoke($"Validation failed: {firstError.Message}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementHostService.LoadFromMemory validation failed");
+                LoadFailed?.Invoke(ex.Message);
+                return false;
+            }
+
             Unload();
             LoadedEnhancement = enhancement;
             LoadedFilePath = sourceTag;
             try { Loaded?.Invoke(enhancement, sourceTag); } catch { }
             App.Logger?.Information("Deeper host loaded from memory: {Name} ({Tag})",
                 enhancement.Metadata?.Name ?? "(untitled)", sourceTag);
+            return true;
         }
 
         public void Unload()
