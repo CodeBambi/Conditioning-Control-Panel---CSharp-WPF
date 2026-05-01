@@ -103,7 +103,7 @@ namespace ConditioningControlPanel.Views.Deeper
             CmbHapticPattern.Items.Clear();
             foreach (var name in StockHapticPatterns.Names)
                 CmbHapticPattern.Items.Add(name);
-            CmbHapticPattern.Items.Add("Custom…");
+            CmbHapticPattern.Items.Add(Loc.Get("deeper_editor_haptic_pattern_custom"));
         }
 
         private void BuildColorSwatches()
@@ -1689,12 +1689,20 @@ namespace ConditioningControlPanel.Views.Deeper
                 Margin = new Thickness(0, 0, 0, 8)
             };
             foreach (var name in StockHapticPatterns.Names) combo.Items.Add(name);
-            // If a custom_pattern came from a hand-edited file, surface it as a read-only entry.
-            bool hasCustom = h.CustomPattern != null && h.CustomPattern.Count > 0;
-            if (hasCustom) combo.Items.Add(Loc.Get("deeper_editor_action_haptic_custom_readonly"));
+            combo.Items.Add(Loc.Get("deeper_editor_haptic_pattern_custom"));
+
+            var curveHost = new StackPanel { Margin = new Thickness(0, 4, 0, 8) };
+
+            void SyncCurveVisibility()
+            {
+                bool isCustom = h.CustomPattern != null && h.CustomPattern.Count > 0;
+                curveHost.Children.Clear();
+                if (isCustom) BuildCurveEditor(curveHost, h);
+            }
 
             int initialIdx = -1;
-            if (hasCustom) initialIdx = StockHapticPatterns.Names.Count;
+            bool initialCustom = h.CustomPattern != null && h.CustomPattern.Count > 0;
+            if (initialCustom) initialIdx = StockHapticPatterns.Names.Count;
             else if (!string.IsNullOrEmpty(h.PatternName))
             {
                 for (int i = 0; i < StockHapticPatterns.Names.Count; i++)
@@ -1712,29 +1720,161 @@ namespace ConditioningControlPanel.Views.Deeper
                     h.PatternName = StockHapticPatterns.Names[idx];
                     h.CustomPattern = null;
                 }
-                // else: user re-selected the read-only "custom" entry; preserve as-is.
+                else
+                {
+                    h.CustomPattern ??= StockHapticPatterns.SeedCustomFrom(h.PatternName);
+                    h.PatternName = null;
+                }
+                SyncCurveVisibility();
                 MarkDirty();
                 ScheduleValidation();
             };
 
             ActionFields.Children.Add(combo);
+            ActionFields.Children.Add(curveHost);
+            SyncCurveVisibility();
 
             AddDoubleField(ActionFields, Loc.Get("deeper_editor_action_intensity"),
                 h.Intensity, v => h.Intensity = Math.Clamp(v, 0, 1));
             AddIntField(ActionFields, Loc.Get("deeper_editor_action_duration_ms"),
                 h.DurationMs, v => h.DurationMs = Math.Max(50, v));
+        }
 
-            if (hasCustom)
+        // Self-contained curve editor for any IHapticPatternTarget. Builds its
+        // own canvas + handles + reset button into <paramref name="host"/>; safe
+        // to use independently of the haptic-event editor's XAML CurveCanvas.
+        private void BuildCurveEditor(Panel host, IHapticPatternTarget target)
+        {
+            host.Children.Add(new TextBlock
             {
-                ActionFields.Children.Add(new TextBlock
+                Text = Loc.Get("deeper_editor_haptic_curve"),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
+                FontSize = 11,
+                Margin = new Thickness(0, 0, 0, 4)
+            });
+
+            var border = new Border
+            {
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x10, 0, 0, 0x20)),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(3)
+            };
+            var canvas = new Canvas
+            {
+                Height = 100,
+                Background = System.Windows.Media.Brushes.Transparent,
+                ClipToBounds = true
+            };
+            border.Child = canvas;
+            host.Children.Add(border);
+
+            int draggingIdx = -1;
+
+            void Render()
+            {
+                canvas.Children.Clear();
+                if (target.CustomPattern == null || target.CustomPattern.Count == 0) return;
+                var w = canvas.ActualWidth;
+                var hgt = canvas.ActualHeight;
+                if (w <= 0 || hgt <= 0) return;
+
+                for (int i = 1; i <= 3; i++)
                 {
-                    Text = Loc.Get("deeper_editor_action_haptic_custom_note"),
-                    Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
-                    FontSize = 10, FontStyle = FontStyles.Italic,
-                    TextWrapping = TextWrapping.Wrap,
-                    Margin = new Thickness(0, 4, 0, 0)
+                    var y = hgt * i / 4.0;
+                    canvas.Children.Add(new System.Windows.Shapes.Line
+                    {
+                        X1 = 0, X2 = w, Y1 = y, Y2 = y,
+                        Stroke = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 255, 255, 255)),
+                        StrokeThickness = 0.5,
+                        IsHitTestVisible = false
+                    });
+                }
+
+                var pts = target.CustomPattern;
+                var geom = new System.Windows.Media.StreamGeometry();
+                using (var ctx = geom.Open())
+                {
+                    ctx.BeginFigure(KeyframeToCanvas(pts[0], w, hgt), false, false);
+                    for (int i = 1; i < pts.Count; i++)
+                        ctx.LineTo(KeyframeToCanvas(pts[i], w, hgt), true, false);
+                }
+                geom.Freeze();
+                canvas.Children.Add(new System.Windows.Shapes.Path
+                {
+                    Data = geom,
+                    Stroke = (System.Windows.Media.Brush)FindResource("DeeperAccentBrush"),
+                    StrokeThickness = 1.6,
+                    IsHitTestVisible = false
                 });
+
+                for (int i = 0; i < pts.Count; i++)
+                {
+                    var pt = KeyframeToCanvas(pts[i], w, hgt);
+                    var dot = new System.Windows.Shapes.Ellipse
+                    {
+                        Width = 10, Height = 10,
+                        Fill = (System.Windows.Media.Brush)FindResource("DeeperAccentBrush"),
+                        Stroke = System.Windows.Media.Brushes.White,
+                        StrokeThickness = 1.2,
+                        Cursor = Cursors.SizeNS,
+                        Tag = i
+                    };
+                    Canvas.SetLeft(dot, pt.X - 5);
+                    Canvas.SetTop(dot, pt.Y - 5);
+                    dot.MouseLeftButtonDown += (s, ev) =>
+                    {
+                        if (s is System.Windows.Shapes.Ellipse el && el.Tag is int idx)
+                        {
+                            draggingIdx = idx;
+                            el.CaptureMouse();
+                            ev.Handled = true;
+                        }
+                    };
+                    dot.MouseMove += (s, ev) =>
+                    {
+                        if (draggingIdx < 0 || target.CustomPattern == null) return;
+                        var hh = canvas.ActualHeight;
+                        if (hh <= 0) return;
+                        var pos = ev.GetPosition(canvas);
+                        var v = Math.Clamp(1.0 - (pos.Y / hh), 0.0, 1.0);
+                        target.CustomPattern[draggingIdx][1] = v;
+                        MarkDirty();
+                        Render();
+                        ScheduleValidation();
+                    };
+                    dot.MouseLeftButtonUp += (s, ev) =>
+                    {
+                        if (s is System.Windows.Shapes.Ellipse el) el.ReleaseMouseCapture();
+                        draggingIdx = -1;
+                    };
+                    canvas.Children.Add(dot);
+                }
             }
+
+            canvas.SizeChanged += (_, _) => Render();
+            Render();
+
+            var resetBtn = new Button
+            {
+                Content = Loc.Get("deeper_editor_haptic_curve_reset"),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 4, 0, 0),
+                Padding = new Thickness(8, 4, 8, 4),
+                Cursor = Cursors.Hand,
+                FontSize = 11,
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush")
+            };
+            resetBtn.Click += (_, _) =>
+            {
+                target.CustomPattern = StockHapticPatterns.SeedCustomFrom(null);
+                MarkDirty();
+                Render();
+                ScheduleValidation();
+            };
+            host.Children.Add(resetBtn);
         }
 
         // -- Tiny field helpers ------------------------------------------------

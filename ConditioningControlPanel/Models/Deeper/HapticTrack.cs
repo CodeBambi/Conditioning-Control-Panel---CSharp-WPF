@@ -4,6 +4,17 @@ using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Models.Deeper
 {
+    /// <summary>
+    /// Shared shape for anything carrying a stock-or-custom haptic pattern
+    /// (haptic events on a track, trigger_haptic actions on rules). Lets the
+    /// editor's curve UI bind against either without knowing the concrete type.
+    /// </summary>
+    public interface IHapticPatternTarget
+    {
+        string? PatternName { get; set; }
+        List<double[]>? CustomPattern { get; set; }
+    }
+
     public class HapticTrack
     {
         [JsonProperty("id")]
@@ -16,7 +27,7 @@ namespace ConditioningControlPanel.Models.Deeper
         public IDictionary<string, JToken>? UnknownFields { get; set; }
     }
 
-    public class HapticEvent
+    public class HapticEvent : IHapticPatternTarget
     {
         [JsonProperty("start")]
         public double Start { get; set; }

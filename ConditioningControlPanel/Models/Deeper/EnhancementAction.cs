@@ -77,7 +77,7 @@ namespace ConditioningControlPanel.Models.Deeper
         public bool DuckOtherAudio { get; set; } = true;
     }
 
-    public class TriggerHapticAction : EnhancementAction
+    public class TriggerHapticAction : EnhancementAction, IHapticPatternTarget
     {
         public override string Type => ActionTypes.TriggerHaptic;
 
