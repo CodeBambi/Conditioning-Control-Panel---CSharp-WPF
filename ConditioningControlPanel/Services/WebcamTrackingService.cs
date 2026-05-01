@@ -217,10 +217,16 @@ namespace ConditioningControlPanel.Services
         private const double OneEuroDCutoff = 1.0;
 
         private readonly object _stateLock = new();
-        private bool _disposed;
+        private volatile bool _disposed;
 
-        public WebcamTrackingState State { get; private set; } = WebcamTrackingState.Stopped;
-        public bool IsRunning => State == WebcamTrackingState.Tracking || State == WebcamTrackingState.FaceLost;
+        // Backed by a volatile field so the capture thread's IsRunning checks
+        // and other readers across threads see writes from Start/Stop without
+        // having to take _stateLock on every poll. The state-machine writes
+        // themselves still go through SetState while _stateLock is held by
+        // Start/Stop, so the value never tears between visible snapshots.
+        private volatile WebcamTrackingState _state = WebcamTrackingState.Stopped;
+        public WebcamTrackingState State => _state;
+        public bool IsRunning => _state == WebcamTrackingState.Tracking || _state == WebcamTrackingState.FaceLost;
         public WebcamCalibrationData? Calibration { get; private set; }
 
         public event Action? OnBlink;
@@ -446,9 +452,28 @@ namespace ConditioningControlPanel.Services
                 thread = _captureThread;
             }
 
-            if (thread != null && !thread.Join(TimeSpan.FromSeconds(2)))
+            // Wait for the capture thread to exit before releasing any native
+            // handle it might still be using. Disposing _capture or the ONNX
+            // InferenceSessions while the thread is inside VideoCapture.Read
+            // or InferenceSession.Run is a guaranteed native AV. If the thread
+            // is wedged (driver hang, USB stall, slow inference), we'd rather
+            // leak the handles than crash — the process will free them on
+            // exit, and the user gets an Error state instead of a dialog.
+            if (thread != null)
             {
-                App.Logger?.Warning("WebcamTrackingService: capture thread did not exit within 2s");
+                if (!thread.Join(TimeSpan.FromSeconds(2)))
+                {
+                    App.Logger?.Warning("WebcamTrackingService: capture thread did not exit within 2s — extending wait");
+                    if (!thread.Join(TimeSpan.FromSeconds(3)))
+                    {
+                        App.Logger?.Error("WebcamTrackingService: capture thread did not exit within 5s total — leaving native handles alive to avoid disposal race");
+                        lock (_stateLock)
+                        {
+                            SetState(WebcamTrackingState.Error);
+                        }
+                        return;
+                    }
+                }
             }
 
             lock (_stateLock)
@@ -488,6 +513,27 @@ namespace ConditioningControlPanel.Services
             WebcamCalibrationData.DeleteIfExists();
             Calibration = null;
             App.Logger?.Information("WebcamTrackingService: calibration cleared");
+        }
+
+        /// <summary>
+        /// Atomically replace the live calibration's <see cref="WebcamCalibrationData.RuntimeOffset"/>
+        /// (the post-projection nudge captured by Quick Recal) with a new value.
+        /// Mutating the live instance in place would race the capture thread,
+        /// which reads the offset every frame; this clones the calibration so
+        /// readers always see a consistent snapshot. Pass null to clear.
+        /// </summary>
+        public void SetRuntimeOffset(RuntimeOffsetData? offset, bool persist)
+        {
+            lock (_stateLock)
+            {
+                var current = Calibration;
+                if (current == null) return;
+                var updated = current.WithRuntimeOffset(offset);
+                if (persist) updated.Save();
+                Calibration = updated;
+            }
+            App.Logger?.Information("WebcamTrackingService: runtime offset {State} (persist={Persist})",
+                offset == null ? "cleared" : "set", persist);
         }
 
         public void RevokeConsent()
@@ -589,17 +635,33 @@ namespace ConditioningControlPanel.Services
 
         private bool TryLoadModels(string faceModelPath, string faceAnchorsPath, string meshModelPath, string irisModelPath)
         {
+            // Build into locals first and only publish to fields once all three
+            // detectors construct successfully. If the second or third ctor
+            // throws, the partially-constructed earlier ones get disposed in
+            // the catch — otherwise their ONNX InferenceSessions and Mat
+            // buffers leak until process exit (Start's caller calls
+            // ReleaseCapture but not ReleaseModels on this failure path).
+            BlazeFaceDetector? face = null;
+            FaceMeshDetector? mesh = null;
+            IrisDetector? iris = null;
             try
             {
-                _faceDetector = new BlazeFaceDetector(faceModelPath, faceAnchorsPath);
-                _faceMesh = new FaceMeshDetector(meshModelPath);
-                _irisDetector = new IrisDetector(irisModelPath);
+                face = new BlazeFaceDetector(faceModelPath, faceAnchorsPath);
+                mesh = new FaceMeshDetector(meshModelPath);
+                iris = new IrisDetector(irisModelPath);
+
+                _faceDetector = face;
+                _faceMesh = mesh;
+                _irisDetector = iris;
                 App.Logger?.Information("WebcamTrackingService: BlazeFace + FaceMesh + Iris loaded");
                 return true;
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "WebcamTrackingService: failed to load detection models");
+                try { face?.Dispose(); } catch { }
+                try { mesh?.Dispose(); } catch { }
+                try { iris?.Dispose(); } catch { }
                 return false;
             }
         }
@@ -689,9 +751,19 @@ namespace ConditioningControlPanel.Services
             {
                 while (!_stopRequested)
                 {
-                    if (_capture == null || _faceDetector == null || _faceMesh == null || _irisDetector == null) break;
+                    // Snapshot field references locally so a stray Stop/Dispose
+                    // ordering bug or future code change can't null them out
+                    // between the check and the dereference. Stop() now waits
+                    // for this thread to exit before calling ReleaseCapture /
+                    // ReleaseModels, so in normal flow these stay non-null for
+                    // the entire iteration; the snapshot is defense in depth.
+                    var capture = _capture;
+                    var faceDet = _faceDetector;
+                    var faceMesh = _faceMesh;
+                    var irisDet = _irisDetector;
+                    if (capture == null || faceDet == null || faceMesh == null || irisDet == null) break;
 
-                    if (!_capture.Read(frame) || frame.Empty())
+                    if (!capture.Read(frame) || frame.Empty())
                     {
                         consecutiveReadFails++;
                         if (consecutiveReadFails >= MaxConsecutiveReadFails)
@@ -1241,8 +1313,8 @@ namespace ConditioningControlPanel.Services
 
         private void SetState(WebcamTrackingState state)
         {
-            if (State == state) return;
-            State = state;
+            if (_state == state) return;
+            _state = state;
             Dispatch(() => OnTrackingStateChanged?.Invoke(state));
         }
 
