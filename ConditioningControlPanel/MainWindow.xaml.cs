@@ -2181,6 +2181,34 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void OnDeeperBrowserBound(string pageUrl, Models.Deeper.Enhancement enhancement)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    DeeperBrowserBadge.Visibility = Visibility.Visible;
+                    var name = string.IsNullOrEmpty(enhancement.Metadata?.Name) ? "(untitled)" : enhancement.Metadata!.Name;
+                    TxtDeeperBrowserBadge.Text = $"🌊 {name}";
+                    DeeperBrowserBadge.Tag = $"{name}\n{pageUrl}";
+                }
+                catch { }
+            });
+        }
+
+        private void OnDeeperBrowserUnbound()
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    DeeperBrowserBadge.Visibility = Visibility.Collapsed;
+                    DeeperBrowserBadge.Tag = null;
+                }
+                catch { }
+            });
+        }
+
         private void OpenDeeperEditor(Models.Deeper.Enhancement enhancement, string? filePath)
         {
             try
@@ -15483,6 +15511,20 @@ namespace ConditioningControlPanel
                         {
                             _browser.WebView.CoreWebView2.WebMessageReceived += OnBrowserWebMessageReceived;
                             App.Logger?.Information("Browser WebMessageReceived handler attached");
+                        }
+
+                        // Phase 9: wire Deeper auto-discovery onto the WebView.
+                        // Discovery is a separate listener so it doesn't interfere
+                        // with audio-sync injection above. Bound/Unbound events
+                        // drive the inline badge in the browser status row.
+                        if (_browser?.WebView != null)
+                        {
+                            App.DeeperBrowserDiscovery?.Attach(_browser.WebView);
+                            if (App.DeeperBrowserDiscovery != null)
+                            {
+                                App.DeeperBrowserDiscovery.Bound += OnDeeperBrowserBound;
+                                App.DeeperBrowserDiscovery.Unbound += OnDeeperBrowserUnbound;
+                            }
                         }
                     });
                 };

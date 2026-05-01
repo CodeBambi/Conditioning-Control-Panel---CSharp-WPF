@@ -229,6 +229,8 @@ namespace ConditioningControlPanel
         public static Services.Deeper.EnhancementLibrary EnhancementLibrary { get; private set; } = null!;
         public static Services.Deeper.EnhancementAudioPlayer DeeperPlayer { get; private set; } = null!;
         public static Services.Deeper.EnhancementHostService DeeperHost { get; private set; } = null!;
+        public static Services.Deeper.EnhancementFetcher DeeperFetcher { get; private set; } = null!;
+        public static Services.Deeper.BrowserAutoDiscovery DeeperBrowserDiscovery { get; private set; } = null!;
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -864,6 +866,12 @@ namespace ConditioningControlPanel
             // first Play / first Bind.
             DeeperPlayer = new Services.Deeper.EnhancementAudioPlayer();
             DeeperHost = new Services.Deeper.EnhancementHostService();
+
+            // Phase 9: HT description auto-discovery. Fetcher caches in-memory
+            // per session; browser discovery wires onto the WebView2 once
+            // MainWindow creates the browser.
+            DeeperFetcher = new Services.Deeper.EnhancementFetcher();
+            DeeperBrowserDiscovery = new Services.Deeper.BrowserAutoDiscovery(DeeperFetcher, DeeperHost);
 
             // Initialize lockdown service (ephemeral — not persisted). Recover from a
             // prior run that was killed mid-lockdown so the panic key isn't stuck off.

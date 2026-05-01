@@ -73,6 +73,23 @@ namespace ConditioningControlPanel.Services.Deeper
             }
         }
 
+        /// <summary>
+        /// Variant of <see cref="LoadFromFile"/> that takes an already-parsed
+        /// enhancement (used by browser auto-discovery, where the fetcher has
+        /// already done schema sniff + validate). <paramref name="sourceTag"/>
+        /// is a free-form string for diagnostics (URL, "memory", etc).
+        /// </summary>
+        public void LoadFromMemory(Enhancement enhancement, string sourceTag)
+        {
+            if (enhancement == null) return;
+            Unload();
+            LoadedEnhancement = enhancement;
+            LoadedFilePath = sourceTag;
+            try { Loaded?.Invoke(enhancement, sourceTag); } catch { }
+            App.Logger?.Information("Deeper host loaded from memory: {Name} ({Tag})",
+                enhancement.Metadata?.Name ?? "(untitled)", sourceTag);
+        }
+
         public void Unload()
         {
             UnbindEngine();

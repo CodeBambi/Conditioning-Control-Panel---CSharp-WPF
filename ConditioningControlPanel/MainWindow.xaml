@@ -2799,6 +2799,18 @@
                             <TextBlock Grid.Column="3" x:Name="TxtBrowserStatus" Text="{loc:Str label_loading}"
                                        Foreground="{DynamicResource PinkBrush}" FontSize="10"
                                        VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <!-- Deeper auto-bind badge (Phase 9). Shows when an enhancement is active for the current page. -->
+                            <Border Grid.Column="3" x:Name="DeeperBrowserBadge" Visibility="Collapsed"
+                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                                    CornerRadius="3" Padding="6,1" Margin="0,0,8,0"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    ToolTip="{Binding ElementName=DeeperBrowserBadge, Path=Tag}">
+                                <TextBlock x:Name="TxtDeeperBrowserBadge"
+                                           Text="🌊 Deeper"
+                                           Foreground="{DynamicResource DeeperAccentBrush}"
+                                           FontSize="9" FontWeight="SemiBold"/>
+                            </Border>
                             <!-- Pop Out button -->
                             <Button Grid.Column="4" x:Name="BtnPopOutBrowser" Content="{loc:Str btn_pop_out}"
                                     Click="BtnPopOutBrowser_Click"
