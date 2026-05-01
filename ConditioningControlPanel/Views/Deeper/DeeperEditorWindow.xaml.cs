@@ -170,11 +170,79 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             _ = InitializePreviewAsync();
 
+            // Legacy bus event kept for any other listeners; HT tutorial now uses
+            // the StartHTPart2OnEditorLoad flag below instead.
+            try { TutorialEventBus.Emit("WindowLoaded:DeeperEditorWindow"); } catch { }
+
+            // HT interactive tutorial Part 2. The dialog finished Part 1 (clicked
+            // Create) and set the flag. Now that the editor is loaded and laid
+            // out, start Part 2 with a fresh overlay scoped to this window.
+            // Deferred at Loaded priority so element bounds are computed.
+            try
+            {
+                if (TutorialEventBus.StartHTPart2OnEditorLoad)
+                {
+                    TutorialEventBus.StartHTPart2OnEditorLoad = false;
+                    var thisWindow = this;
+                    // Wait ~800ms before starting Part 2:
+                    //   1) lets the editor's layout fully settle so spotlight
+                    //      bounds compute correctly on the very first step,
+                    //   2) lets any deferred lambdas from Part 1's overlay
+                    //      drain harmlessly while IsActive is still false
+                    //      (e.g. the Background-priority skip-check from
+                    //      OnTargetClosed) — otherwise they fire AFTER Part 2
+                    //      starts and call Skip() on the new tutorial.
+                    var startTimer = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(800)
+                    };
+                    startTimer.Tick += (ts, te) =>
+                    {
+                        startTimer.Stop();
+                        try
+                        {
+                            // Bail if the editor or app is closing — don't try to
+                            // create a new overlay against a window that's about
+                            // to disappear (would pin the dispatcher and zombie
+                            // the process).
+                            if (App.Tutorial == null) return;
+                            if (Application.Current == null) return;
+                            if (Application.Current.MainWindow == null) return;
+                            if (!thisWindow.IsLoaded) return;
+
+                            try { if (App.Tutorial.IsActive) App.Tutorial.Skip(); } catch { }
+                            App.Tutorial.Start(Services.TutorialType.DeeperEditorInteractiveHTPart2);
+                            var overlay = new ConditioningControlPanel.TutorialOverlay(thisWindow, App.Tutorial);
+                            overlay.Show();
+                        }
+                        catch (Exception ex2)
+                        {
+                            App.Logger?.Warning(ex2, "Failed to start HT interactive tutorial Part 2");
+                        }
+                    };
+                    // Stop the timer if the editor goes away before it fires —
+                    // covers the case where the user closes mid-delay.
+                    void StopIfEditorClosing(object? s, EventArgs ev) { try { startTimer.Stop(); } catch { } }
+                    thisWindow.Closing += (s, ev) => StopIfEditorClosing(s, ev);
+                    thisWindow.Closed += StopIfEditorClosing;
+                    startTimer.Start();
+                    return; // Don't auto-run editor coachmarks on top of Part 2.
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: HT Part 2 start skipped: {Error}", ex.Message);
+            }
+
             // First-run editor coachmarks. Auto-launch once; the user can re-run
             // anytime via the "?" button. Wrap in a try so a tutorial failure
             // never blocks the editor itself.
+            // Skipped when an interactive tutorial is already running so the two
+            // don't fight for the overlay.
             try
             {
+                if (App.Tutorial?.IsActive == true) return;
+
                 var settings = App.Settings?.Current;
                 if (settings != null && !settings.HasSeenDeeperEditorIntro)
                 {
@@ -1711,6 +1779,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 case TimeReachedTrigger tr:
                     AddDoubleField(TriggerFields, Loc.Get("deeper_editor_trigger_time"),
                         tr.Time, v => tr.Time = Math.Max(0, v));
+                    AssignNameToLastTextBox(TriggerFields, "TutorialTriggerTimeField");
                     break;
                 case RegionEnteredTrigger re:
                     AddRegionPicker(TriggerFields, re.RegionId, id => re.RegionId = id);
@@ -1755,6 +1824,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 case ScreenShakeAction ss:
                     AddDoubleField(ActionFields, Loc.Get("deeper_editor_action_intensity"),
                         ss.Intensity, v => ss.Intensity = Math.Clamp(v, 0, 1));
+                    AssignNameToLastTextBox(ActionFields, "TutorialActionIntensityField");
                     AddIntField(ActionFields, Loc.Get("deeper_editor_action_duration_ms"),
                         ss.DurationMs, v => ss.DurationMs = Math.Max(50, v));
                     break;
@@ -2150,6 +2220,21 @@ namespace ConditioningControlPanel.Views.Deeper
                 ScheduleValidation();
             };
             host.Children.Add(cb);
+        }
+
+        // Assigns x:Name to the most recently-added TextBox in a dynamic field
+        // host so the interactive tutorial can spotlight + gate on it. Safe to
+        // call even when the panel has no TextBox children (no-op).
+        private static void AssignNameToLastTextBox(Panel host, string name)
+        {
+            for (int i = host.Children.Count - 1; i >= 0; i--)
+            {
+                if (host.Children[i] is TextBox tb)
+                {
+                    tb.Name = name;
+                    return;
+                }
+            }
         }
 
         private void AddInfoText(Panel host, string text)
@@ -2583,6 +2668,15 @@ namespace ConditioningControlPanel.Views.Deeper
                 _isDirty = false;
                 TxtDirty.Visibility = Visibility.Collapsed;
                 UpdateTitle();
+
+                // Notify the interactive tutorial bus so the HT walkthrough can advance
+                // to its follow-up card and surface the saved path.
+                try
+                {
+                    TutorialEventBus.LastSavedEnhancementPath = path;
+                    TutorialEventBus.Emit("FileSaved");
+                }
+                catch { }
             }
             catch (Exception ex)
             {

@@ -3309,6 +3309,9 @@ namespace ConditioningControlPanel.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool HasSeenDeeperEditorIntro { get; set; }
 
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenDeeperHTInteractiveTutorial { get; set; }
+
         private List<string> _deeperRecentFiles = new();
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<string> DeeperRecentFiles

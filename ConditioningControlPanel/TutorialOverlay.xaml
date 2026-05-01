@@ -6,6 +6,7 @@
         AllowsTransparency="True"
         Background="Transparent"
         Topmost="True"
+        ShowActivated="False"
         ShowInTaskbar="False"
         WindowStartupLocation="Manual"
         ResizeMode="NoResize">
@@ -13,17 +14,20 @@
     <Window.Resources>
     </Window.Resources>
 
-    <Grid x:Name="RootGrid" MouseLeftButtonDown="RootGrid_MouseLeftButtonDown">
-        <!-- Click blocker - nearly transparent to block clicks through AllowsTransparency window -->
-        <Rectangle Fill="#01000000" IsHitTestVisible="True"/>
-        <Canvas x:Name="SpotlightCanvas" Background="Transparent" IsHitTestVisible="False"/>
+    <Grid x:Name="RootGrid">
+        <!-- SpotlightCanvas paints the dark overlay (with optional hole) and absorbs clicks where it covers.
+             IMPORTANT: NO Background here. A Canvas with Background="Transparent" is hit-testable across its full
+             area — that swallows clicks even in the spotlight hole. With no Background, only the child Path
+             catches clicks; the hole (where the Excluded geometry isn't drawn) lets clicks fall through to the
+             underlying window. -->
+        <Canvas x:Name="SpotlightCanvas" IsHitTestVisible="True"/>
 
         <Border x:Name="TextPanel"
                 Background="#F0252542"
                 CornerRadius="12"
                 BorderBrush="{StaticResource PinkBrush}"
                 BorderThickness="2"
-                MaxWidth="420"
+                MaxWidth="460"
                 Padding="20"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top">
@@ -33,6 +37,7 @@
 
             <Grid>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -103,10 +108,97 @@
                     </Button.Style>
                 </Button>
 
-                <Grid Grid.Row="4">
+                <!-- Follow-up card action buttons (3 max) shown only when step.IsFollowUpCard. -->
+                <StackPanel x:Name="FollowUpPanel" Grid.Row="4" Orientation="Vertical" Visibility="Collapsed" Margin="0,4,0,12">
+                    <Button x:Name="BtnFollowUp1" Click="BtnFollowUp1_Click" Margin="0,0,0,6"
+                            HorizontalAlignment="Stretch" Visibility="Collapsed">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                                <Setter Property="Padding" Value="14,9"/>
+                                <Setter Property="FontSize" Value="13"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{StaticResource DarkPinkBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button x:Name="BtnFollowUp2" Click="BtnFollowUp2_Click" Margin="0,0,0,6"
+                            HorizontalAlignment="Stretch" Visibility="Collapsed">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+                                <Setter Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Setter Property="Padding" Value="14,9"/>
+                                <Setter Property="FontSize" Value="13"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="#20FF69B4"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button x:Name="BtnFollowUp3" Click="BtnFollowUp3_Click"
+                            HorizontalAlignment="Stretch" Visibility="Collapsed">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Foreground" Value="#A0A0B0"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Padding" Value="14,9"/>
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+
+                <Grid Grid.Row="5">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
@@ -135,8 +227,39 @@
                         </Button.Template>
                     </Button>
 
-                    <Button x:Name="BtnPrevious"
+                    <Button x:Name="BtnSkipStep"
                             Grid.Column="2"
+                            Content="Skip step"
+                            Click="BtnSkipStep_Click"
+                            Margin="0,0,10,0"
+                            Visibility="Collapsed"
+                            Background="Transparent"
+                            Foreground="#A0A0B0"
+                            BorderBrush="#404060"
+                            BorderThickness="1"
+                            FontSize="11"
+                            Cursor="Hand">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="border"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="4"
+                                        Padding="10,4">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="border" Property="Background" Value="#20808090"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <Button x:Name="BtnPrevious"
+                            Grid.Column="3"
                             Content="Previous"
                             Click="BtnPrevious_Click"
                             Margin="0,0,10,0"
@@ -174,7 +297,7 @@
                     </Button>
 
                     <Button x:Name="BtnNext"
-                            Grid.Column="3"
+                            Grid.Column="4"
                             Content="Next"
                             Click="BtnNext_Click">
                         <Button.Style>

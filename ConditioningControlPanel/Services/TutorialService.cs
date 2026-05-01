@@ -23,7 +23,9 @@ namespace ConditioningControlPanel.Services
         Modding,        // Mod creation guide
         Awareness,      // Awareness Engine (keyword triggers + OCR)
         Deeper,         // Deeper tab (universal media enhancement)
-        DeeperEditor    // Deeper editor coachmarks (targets the editor window)
+        DeeperEditor,   // Deeper editor coachmarks (targets the editor window)
+        DeeperEditorInteractiveHT, // Interactive on-rails HypnoTube walkthrough — Part 1 (NewEnhancementDialog → click Create)
+        DeeperEditorInteractiveHTPart2 // Part 2 — runs in DeeperEditorWindow after dialog hands off
     }
 
     public class TutorialService
@@ -107,6 +109,8 @@ namespace ConditioningControlPanel.Services
                 TutorialType.Awareness => CreateAwarenessSteps(),
                 TutorialType.Deeper => CreateDeeperSteps(),
                 TutorialType.DeeperEditor => CreateDeeperEditorSteps(),
+                TutorialType.DeeperEditorInteractiveHT => CreateDeeperEditorInteractiveHTSteps(),
+                TutorialType.DeeperEditorInteractiveHTPart2 => CreateDeeperEditorInteractiveHTPart2Steps(),
                 _ => CreateFullTourSteps()
             };
         }
@@ -1522,6 +1526,259 @@ namespace ConditioningControlPanel.Services
                     Title = Loc.Get("deeper_tut_ed_done_title"),
                     Description = Loc.Get("deeper_tut_ed_done_body"),
                     TextPosition = TutorialStepPosition.Center
+                }
+            };
+        }
+
+        // Interactive on-rails HypnoTube walkthrough. Spans NewEnhancementDialog
+        // -> DeeperEditorWindow, gating on real user interactions and emitting
+        // events through TutorialEventBus. Produces a saved .ccpenh.json with
+        // 1 Haptic effect at 5s and 1 TimeReached -> ScreenShake rule at 15s.
+        // Part 1: lives entirely inside NewEnhancementDialog. One step that
+        // ends when the user clicks Create. The dialog then closes, the
+        // editor opens, and DeeperEditorWindow.Loaded starts Part 2 with a
+        // fresh overlay. Splitting avoids the cross-window state machine.
+        private List<TutorialStep> CreateDeeperEditorInteractiveHTSteps()
+        {
+            return new List<TutorialStep>
+            {
+                new TutorialStep
+                {
+                    Id = "iht_create",
+                    Icon = "\ud83c\udfac",
+                    Title = Loc.Get("deeper_itut_ht_step1_title"),
+                    Description = Loc.Get("deeper_itut_ht_step1_body"),
+                    TargetElementName = "BtnCreate",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick
+                }
+            };
+        }
+
+        // Part 2: runs in DeeperEditorWindow. Started by the editor's Loaded
+        // handler if TutorialEventBus.StartHTPart2OnEditorLoad is set. No step
+        // uses TargetWindowTypeName because everything lives in one window now.
+        private List<TutorialStep> CreateDeeperEditorInteractiveHTPart2Steps()
+        {
+            return new List<TutorialStep>
+            {
+                // Phase 2 - editor metadata + preview
+                new TutorialStep
+                {
+                    Id = "iht_metadata",
+                    Icon = "\ud83d\udcdd",
+                    Title = Loc.Get("deeper_itut_ht_step2_title"),
+                    Description = Loc.Get("deeper_itut_ht_step2_body"),
+                    TargetElementName = "TxtMetaName",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.Manual
+                },
+                new TutorialStep
+                {
+                    Id = "iht_lock",
+                    Icon = "\ud83d\udd12",
+                    Title = Loc.Get("deeper_itut_ht_step3_title"),
+                    Description = Loc.Get("deeper_itut_ht_step3_body"),
+                    TargetElementName = "BtnCreatorLockToggle",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.Manual
+                },
+                new TutorialStep
+                {
+                    Id = "iht_play",
+                    Icon = "\u25b6",
+                    Title = Loc.Get("deeper_itut_ht_step4_title"),
+                    Description = Loc.Get("deeper_itut_ht_step4_body"),
+                    TargetElementName = "BtnPlayPause",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+                new TutorialStep
+                {
+                    Id = "iht_pause",
+                    Icon = "\u23f8",
+                    Title = Loc.Get("deeper_itut_ht_step5_title"),
+                    Description = Loc.Get("deeper_itut_ht_step5_body"),
+                    TargetElementName = "BtnPlayPause",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+
+                // Phase 3 - Add Haptic effect
+                new TutorialStep
+                {
+                    Id = "iht_addeffect",
+                    Icon = "\u2728",
+                    Title = Loc.Get("deeper_itut_ht_step6_title"),
+                    Description = Loc.Get("deeper_itut_ht_step6_body"),
+                    TargetElementName = "BtnAddEffectHero",
+                    TextPosition = TutorialStepPosition.Bottom,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "EffectAdded"
+                },
+                new TutorialStep
+                {
+                    Id = "iht_intensity",
+                    Icon = "\ud83c\udf9a",
+                    Title = Loc.Get("deeper_itut_ht_step7_title"),
+                    Description = Loc.Get("deeper_itut_ht_step7_body"),
+                    TargetElementName = "SliderHapticIntensity",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSliderAtLeast,
+                    AdvanceMinValue = 0.3,
+                    AdvanceMaxValue = 0.7
+                },
+                new TutorialStep
+                {
+                    Id = "iht_pattern",
+                    Icon = "\ud83c\udf0a",
+                    Title = Loc.Get("deeper_itut_ht_step8_title"),
+                    Description = Loc.Get("deeper_itut_ht_step8_body"),
+                    TargetElementName = "CmbHapticPattern",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSelectionEquals,
+                    // Empty AdvanceValue \u2192 any pattern selection advances.
+                    // (Stock patterns don't visibly differ in the editor without
+                    // hitting Test, so demanding a specific name was a trap.)
+                    AllowManualSkip = true
+                },
+                new TutorialStep
+                {
+                    Id = "iht_test",
+                    Icon = "\ud83c\udfae",
+                    Title = Loc.Get("deeper_itut_ht_step9_title"),
+                    Description = Loc.Get("deeper_itut_ht_step9_body"),
+                    TargetElementName = "BtnTestHaptic",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick,
+                    AllowManualSkip = true
+                },
+
+                // Phase 4 - Add Rule
+                new TutorialStep
+                {
+                    Id = "iht_addrule",
+                    Icon = "\ud83d\udd17",
+                    Title = Loc.Get("deeper_itut_ht_step10_title"),
+                    Description = Loc.Get("deeper_itut_ht_step10_body"),
+                    TargetElementName = "BtnAddRuleHero",
+                    TextPosition = TutorialStepPosition.Bottom,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "RuleAdded"
+                },
+                new TutorialStep
+                {
+                    Id = "iht_ruletime",
+                    Icon = "\u23f1",
+                    Title = Loc.Get("deeper_itut_ht_step11_title"),
+                    Description = Loc.Get("deeper_itut_ht_step11_body"),
+                    TargetElementName = "TutorialTriggerTimeField",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnTextEquals,
+                    AdvanceValue = "15"
+                },
+                new TutorialStep
+                {
+                    Id = "iht_ruleaction",
+                    Icon = "\u26a1",
+                    Title = Loc.Get("deeper_itut_ht_step12_title"),
+                    Description = Loc.Get("deeper_itut_ht_step12_body"),
+                    TargetElementName = "CmbActionType",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnSelectionEquals,
+                    AdvanceValue = "screen_shake"
+                },
+                new TutorialStep
+                {
+                    Id = "iht_actionintensity",
+                    Icon = "\ud83c\udf9a",
+                    Title = Loc.Get("deeper_itut_ht_step13_title"),
+                    Description = Loc.Get("deeper_itut_ht_step13_body"),
+                    TargetElementName = "TutorialActionIntensityField",
+                    TextPosition = TutorialStepPosition.Left,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnTextEquals,
+                    AdvanceValue = "0.7"
+                },
+
+                // Phase 5 - Save
+                new TutorialStep
+                {
+                    Id = "iht_save",
+                    Icon = "\ud83d\udcbe",
+                    Title = Loc.Get("deeper_itut_ht_step14_title"),
+                    Description = Loc.Get("deeper_itut_ht_step14_body"),
+                    TargetElementName = "BtnEditorSave",
+                    TextPosition = TutorialStepPosition.Top,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnButtonClick
+                },
+                new TutorialStep
+                {
+                    Id = "iht_savedialog",
+                    Icon = "\ud83d\udcbe",
+                    Title = Loc.Get("deeper_itut_ht_step15_title"),
+                    Description = Loc.Get("deeper_itut_ht_step15_body"),
+                    TextPosition = TutorialStepPosition.Center,
+                    AdvanceTrigger = TutorialAdvanceTrigger.OnEvent,
+                    AdvanceEventName = "FileSaved",
+                    AllowManualSkip = true,
+                    // The OS save dialog is on top of the editor \u2014 let clicks
+                    // pass through the dim so the user can pick a filename and
+                    // hit Save without our overlay eating their input.
+                    BlockBackgroundClicks = false
+                },
+
+                // Phase 6 - Follow-up card
+                new TutorialStep
+                {
+                    Id = "iht_done",
+                    Icon = "\ud83c\udf89",
+                    Title = Loc.Get("deeper_itut_ht_step16_title"),
+                    Description = Loc.Get("deeper_itut_ht_step16_body"),
+                    TextPosition = TutorialStepPosition.Center,
+                    IsFollowUpCard = true,
+                    FollowUpButton1Text = Loc.Get("deeper_itut_ht_followup_open_folder"),
+                    FollowUpAction1 = step =>
+                    {
+                        try
+                        {
+                            var path = TutorialEventBus.LastSavedEnhancementPath;
+                            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                            {
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = "explorer.exe",
+                                    Arguments = $"/select,\"{path}\"",
+                                    UseShellExecute = true
+                                });
+                            }
+                        }
+                        catch { }
+                        try { App.Tutorial?.Skip(); } catch { }
+                    },
+                    FollowUpButton2Text = Loc.Get("deeper_itut_ht_followup_open_player"),
+                    FollowUpAction2 = step =>
+                    {
+                        try
+                        {
+                            if (App.DeeperPlayer != null && App.DeeperHost != null)
+                            {
+                                var owner = Application.Current?.MainWindow;
+                                var win = new ConditioningControlPanel.Views.Deeper.EnhancementPlayerWindow(
+                                    App.DeeperPlayer, App.DeeperHost);
+                                if (owner != null) win.Owner = owner;
+                                win.Show();
+                            }
+                        }
+                        catch { }
+                        try { App.Tutorial?.Skip(); } catch { }
+                    },
+                    FollowUpButton3Text = Loc.Get("deeper_itut_ht_followup_done"),
+                    FollowUpAction3 = step =>
+                    {
+                        try { App.Tutorial?.Skip(); } catch { }
+                    }
                 }
             };
         }

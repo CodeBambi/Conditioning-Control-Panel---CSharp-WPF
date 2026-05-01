@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         Title="{loc:Str deeper_dialog_new_title}"
-        Height="360" Width="500"
+        Height="410" Width="540"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource DarkerBgBrush}"
         ResizeMode="NoResize"
@@ -69,18 +69,44 @@
                        Foreground="{DynamicResource TextDimBrush}" FontSize="11"
                        Margin="0,6,0,0" TextWrapping="Wrap"/>
 
-            <!-- Quick-fill: a known HypnoTube TikTok video, picks Video media type
-                 and pastes the URL into the source field. Useful first-test target
-                 since we already know the URL works in the WebView2 preview. -->
-            <Button x:Name="BtnTryTikTok" Grid.Row="7" HorizontalAlignment="Left"
-                    Content="{loc:Str deeper_dialog_try_tiktok}"
-                    ToolTip="{loc:Str deeper_dialog_try_tiktok_tooltip}"
-                    Click="BtnTryTikTok_Click"
-                    Padding="10,4" Margin="0,8,0,0" Cursor="Hand" FontSize="11"
-                    Background="Transparent"
-                    Foreground="{DynamicResource DeeperAccentSoftBrush}"
-                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
-                    BorderThickness="1"/>
+            <!-- Three interactive on-rails tutorials: each walks the user through
+                 producing a finished .ccpenh.json file end-to-end. Replaces the
+                 single "Try TikTok" quick-fill button. The HypnoTube one is fully
+                 wired; Local Video / Local Audio are framework-ready stubs. -->
+            <StackPanel Grid.Row="7" Orientation="Vertical" Margin="0,12,0,0">
+                <TextBlock Text="{loc:Str deeper_tutorial_header}"
+                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                           Margin="0,0,0,6"/>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnLocalVideoTutorial"
+                            Content="{loc:Str deeper_tutorial_local_video_btn}"
+                            ToolTip="{loc:Str deeper_tutorial_local_video_tooltip}"
+                            Click="BtnLocalVideoTutorial_Click"
+                            Padding="10,6" Margin="0,0,8,0" Cursor="Hand" FontSize="11"
+                            Background="Transparent"
+                            Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                            BorderThickness="1"/>
+                    <Button x:Name="BtnLocalAudioTutorial"
+                            Content="{loc:Str deeper_tutorial_local_audio_btn}"
+                            ToolTip="{loc:Str deeper_tutorial_local_audio_tooltip}"
+                            Click="BtnLocalAudioTutorial_Click"
+                            Padding="10,6" Margin="0,0,8,0" Cursor="Hand" FontSize="11"
+                            Background="Transparent"
+                            Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                            BorderThickness="1"/>
+                    <Button x:Name="BtnTryHypnoTubeTutorial"
+                            Content="{loc:Str deeper_tutorial_ht_btn}"
+                            ToolTip="{loc:Str deeper_tutorial_ht_tooltip}"
+                            Click="BtnTryHypnoTubeTutorial_Click"
+                            Padding="10,6" Cursor="Hand" FontSize="11"
+                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                            Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentBrush}"
+                            BorderThickness="1"/>
+                </StackPanel>
+            </StackPanel>
 
             <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
                 <Button Content="{loc:Str btn_cancel}" Width="90" Padding="10,8" Margin="0,0,10,0"

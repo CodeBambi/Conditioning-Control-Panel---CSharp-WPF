@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using ConditioningControlPanel.Models.Deeper;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Deeper;
 using Microsoft.Win32;
 
@@ -63,6 +64,15 @@ namespace ConditioningControlPanel.Views.Deeper
                 {
                     var frac = Math.Clamp(_rightClickSeconds / _totalSeconds, 0, 1);
                     SeekToFraction(frac);
+                }
+                else
+                {
+                    // No duration yet (HT WebView2 hasn't reported length, or
+                    // the media isn't loaded). Move the playhead visually so
+                    // the user gets feedback that their click registered.
+                    var pt = e.GetPosition(TimelineCanvas);
+                    PlayheadLine.X1 = pt.X;
+                    PlayheadLine.X2 = pt.X;
                 }
 
                 // Attach (or re-attach) the context menu resource so the audio-
@@ -135,6 +145,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     // keep working unchanged. Back-projection on save round-trips
                     // them into TimelineItems for older clients.
                     AddHapticEventAt(seconds);
+                    try { TutorialEventBus.Emit("EffectAdded"); } catch { }
                     return;
                 }
 
@@ -165,6 +176,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 RebuildEffectVisuals();
                 SelectEffect(item);
                 ScheduleValidation();
+                try { TutorialEventBus.Emit("EffectAdded"); } catch { }
             }
             catch (Exception ex)
             {
@@ -257,6 +269,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     SelectRegion(region);
                 }
                 ScheduleValidation();
+                try { TutorialEventBus.Emit("RuleAdded"); } catch { }
             }
             catch (Exception ex)
             {

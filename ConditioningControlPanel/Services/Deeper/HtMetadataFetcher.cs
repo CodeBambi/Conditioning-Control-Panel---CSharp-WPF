@@ -136,19 +136,26 @@ namespace ConditioningControlPanel.Services.Deeper
                 }
             }
 
-            // 2) JSON-LD VideoObject for uploader.
-            meta.Uploader = TryExtractJsonLdAuthor(html);
+            // 2) HypnoTube-specific uploader link is the most accurate source —
+            // it points at the actual user who uploaded. JSON-LD author and the
+            // meta author tag often resolve to "Mechbunny.com" / the site itself
+            // rather than the uploader, so we prefer the /user/ link first.
+            var linkMatch = HtUploaderRegex.Match(html);
+            if (linkMatch.Success && linkMatch.Groups.Count > 1)
+            {
+                var uploader = WebDecode(linkMatch.Groups[1].Value).Trim();
+                // Strip any inner HTML (avatar img tags, spans, etc.)
+                uploader = Regex.Replace(uploader, "<[^>]+>", "").Trim();
+                if (!string.IsNullOrEmpty(uploader)) meta.Uploader = uploader;
+            }
 
-            // 3) Last-resort regexes for uploader.
+            // 3) JSON-LD VideoObject for uploader (fallback).
+            if (string.IsNullOrEmpty(meta.Uploader))
+                meta.Uploader = TryExtractJsonLdAuthor(html);
+
+            // 4) Last-resort regexes for uploader.
             if (string.IsNullOrEmpty(meta.Uploader))
                 meta.Uploader = ExtractMetaContent(html, "name", "author");
-
-            if (string.IsNullOrEmpty(meta.Uploader))
-            {
-                var m = HtUploaderRegex.Match(html);
-                if (m.Success && m.Groups.Count > 1)
-                    meta.Uploader = WebDecode(m.Groups[1].Value).Trim();
-            }
 
             // Trim and normalize.
             meta.Title = NormalizeWhitespace(meta.Title);
@@ -169,8 +176,10 @@ namespace ConditioningControlPanel.Services.Deeper
             @"<meta[^>]+property\s*=\s*[""']og:video:tag[""'][^>]+content\s*=\s*[""']([^""']+)[""']",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        // HypnoTube uses /user/ (singular) for profile URLs, e.g.
+        // /user/viatrixia-224012/. Match singular AND plural to be robust.
         private static readonly Regex HtUploaderRegex = new(
-            @"<a[^>]+href\s*=\s*[""']/users/[^""']+[""'][^>]*>(.*?)</a>",
+            @"<a[^>]+href\s*=\s*[""']/users?/[^""']+[""'][^>]*>(.*?)</a>",
             RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline);
 
         private static readonly Regex JsonLdRegex = new(
