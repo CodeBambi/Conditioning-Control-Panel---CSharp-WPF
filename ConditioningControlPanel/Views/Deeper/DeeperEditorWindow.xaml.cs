@@ -183,19 +183,20 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             _ = InitializePreviewAsync();
 
-            // Legacy bus event kept for any other listeners; HT tutorial now uses
-            // the StartHTPart2OnEditorLoad flag below instead.
+            // Legacy bus event kept for any other listeners; tutorial Part 2
+            // start is dispatched from PendingPart2Tutorial below.
             try { TutorialEventBus.Emit("WindowLoaded:DeeperEditorWindow"); } catch { }
 
-            // HT interactive tutorial Part 2. The dialog finished Part 1 (clicked
-            // Create) and set the flag. Now that the editor is loaded and laid
-            // out, start Part 2 with a fresh overlay scoped to this window.
-            // Deferred at Loaded priority so element bounds are computed.
+            // Interactive tutorial Part 2 dispatch. The dialog finished Part 1
+            // (clicked Create with a valid source) and queued a TutorialType to
+            // pick up here. Same machinery serves HT, Local Audio, and Local
+            // Video walkthroughs. Deferred ~800ms so element bounds are laid
+            // out before the first spotlight tries to compute its rect.
             try
             {
-                if (TutorialEventBus.StartHTPart2OnEditorLoad)
+                if (TutorialEventBus.PendingPart2Tutorial is Services.TutorialType pendingType)
                 {
-                    TutorialEventBus.StartHTPart2OnEditorLoad = false;
+                    TutorialEventBus.PendingPart2Tutorial = null;
                     var thisWindow = this;
                     // Wait ~800ms before starting Part 2:
                     //   1) lets the editor's layout fully settle so spotlight
@@ -224,13 +225,13 @@ namespace ConditioningControlPanel.Views.Deeper
                             if (!thisWindow.IsLoaded) return;
 
                             try { if (App.Tutorial.IsActive) App.Tutorial.Skip(); } catch { }
-                            App.Tutorial.Start(Services.TutorialType.DeeperEditorInteractiveHTPart2);
+                            App.Tutorial.Start(pendingType);
                             var overlay = new ConditioningControlPanel.TutorialOverlay(thisWindow, App.Tutorial);
                             overlay.Show();
                         }
                         catch (Exception ex2)
                         {
-                            App.Logger?.Warning(ex2, "Failed to start HT interactive tutorial Part 2");
+                            App.Logger?.Warning(ex2, "Failed to start interactive tutorial Part 2");
                         }
                     };
                     // Stop the timer if the editor goes away before it fires —
@@ -244,7 +245,7 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("DeeperEditor: HT Part 2 start skipped: {Error}", ex.Message);
+                App.Logger?.Debug("DeeperEditor: Part 2 start skipped: {Error}", ex.Message);
             }
 
             // First-run editor coachmarks. Auto-launch once; the user can re-run
@@ -494,8 +495,28 @@ namespace ConditioningControlPanel.Views.Deeper
                 });
             };
 
+            // We need Play() to fire LengthChanged + render the first frame,
+            // but we want the editor to open paused so the user can scrub /
+            // place effects without the clip playing on its own. The previous
+            // Play(); Pause(); pair was racy: LibVLC processes both asyncly,
+            // and Pause() right after Play() is a no-op when the player is
+            // still in Opening state — leaving the video to play on. Instead,
+            // hook the Playing event and pause as soon as the player actually
+            // reaches that state, then unhook so user-driven Play() works
+            // normally.
+            EventHandler<EventArgs>? pauseOnce = null;
+            pauseOnce = (_, _) =>
+            {
+                try { _mediaPlayer?.Pause(); } catch { }
+                Dispatcher.InvokeAsync(() =>
+                {
+                    try { BtnPlayPause.Content = "▶"; } catch { }
+                });
+                try { if (_mediaPlayer != null && pauseOnce != null) _mediaPlayer.Playing -= pauseOnce; } catch { }
+            };
+            _mediaPlayer.Playing += pauseOnce;
+
             _mediaPlayer.Play();
-            _mediaPlayer.Pause();
             BtnPlayPause.Content = "▶";
         }
 
@@ -1115,6 +1136,20 @@ namespace ConditioningControlPanel.Views.Deeper
             RefreshRulesList();
         }
 
+        // Finds the first rule whose RegionConstraint matches the given region
+        // id. Used by the band-click handler to route to the rule editor when
+        // the band represents a rule's spatial/temporal scope.
+        private EnhancementRule? FindRuleByRegionConstraint(string? regionId)
+        {
+            if (string.IsNullOrEmpty(regionId)) return null;
+            foreach (var rule in _enhancement.Rules)
+            {
+                if (rule != null && string.Equals(rule.RegionConstraint, regionId, StringComparison.Ordinal))
+                    return rule;
+            }
+            return null;
+        }
+
         private void SelectHaptic(HapticTrack track, HapticEvent ev)
         {
             _selectedRegion = null;
@@ -1338,7 +1373,21 @@ namespace ConditioningControlPanel.Views.Deeper
             var rectWidth = r.ActualWidth;
 
             HandleSelectionClick(region);
-            SelectRegion(region);
+            // If a rule constrains this region, treat the band as the rule's
+            // visual representation: select the Rule (so trigger / action /
+            // gaze rect / "Pick on video…" controls are reachable from a single
+            // click) and let the rule editor's region-details sub-panel handle
+            // label/color/start-end. Orphan regions still fall back to the
+            // standalone Region editor.
+            var attachedRule = FindRuleByRegionConstraint(region.Id);
+            if (attachedRule != null)
+            {
+                SelectRule(attachedRule);
+            }
+            else
+            {
+                SelectRegion(region);
+            }
 
             _draggedRegion = region;
             _regionDragOriginalLength = Math.Max(0, region.End - region.Start);
@@ -1896,6 +1945,7 @@ namespace ConditioningControlPanel.Views.Deeper
             ActionTypes.Pause         => Loc.Get("deeper_friendly_action_pause"),
             ActionTypes.PlayAudio     => Loc.Get("deeper_friendly_action_play_audio"),
             ActionTypes.TriggerHaptic => Loc.Get("deeper_friendly_action_trigger_haptic"),
+            ActionTypes.TriggerEffect => Loc.Get("deeper_friendly_action_trigger_effect"),
             ActionTypes.ScreenShake   => Loc.Get("deeper_friendly_action_screen_shake"),
             ActionTypes.SetIntensity  => Loc.Get("deeper_friendly_action_set_intensity"),
             _                         => string.IsNullOrEmpty(type) ? "?" : type
@@ -1981,7 +2031,8 @@ namespace ConditioningControlPanel.Views.Deeper
         private static readonly string[] AllActionTypes =
         {
             ActionTypes.Seek, ActionTypes.LoopRegion, ActionTypes.Pause,
-            ActionTypes.PlayAudio, ActionTypes.TriggerHaptic, ActionTypes.ScreenShake, ActionTypes.SetIntensity
+            ActionTypes.PlayAudio, ActionTypes.TriggerHaptic, ActionTypes.TriggerEffect,
+            ActionTypes.ScreenShake, ActionTypes.SetIntensity
         };
 
         private void PopulateRuleEditor()
@@ -2039,8 +2090,106 @@ namespace ConditioningControlPanel.Views.Deeper
 
                 BuildTriggerFields();
                 BuildActionFields();
+                PopulateRuleBandDetails();
             }
             finally { _suppressRuleSync = false; }
+        }
+
+        // Sync the rule editor's "Region details" sub-panel with whichever
+        // Region the current rule constrains to. Hidden when the rule has no
+        // RegionConstraint (e.g. TimeReached) or the constraint id doesn't
+        // resolve to a real region. Caller must hold _suppressRuleSync so the
+        // sync callbacks below don't bounce back during populate.
+        private void PopulateRuleBandDetails()
+        {
+            if (RuleRegionDetails == null) return;
+            var region = ResolveRuleConstrainedRegion();
+            if (region == null)
+            {
+                RuleRegionDetails.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            RuleRegionDetails.Visibility = Visibility.Visible;
+            TxtRuleBandLabel.Text = region.Label ?? "";
+            TxtRuleBandStart.Text = region.Start.ToString("0.##", CultureInfo.InvariantCulture) + " s";
+            TxtRuleBandEnd.Text = region.End.ToString("0.##", CultureInfo.InvariantCulture) + " s";
+            TxtRuleBandColor.Text = region.Color ?? "";
+            UpdateRuleBandColorSwatchPreview();
+            BuildRuleBandColorSwatches();
+        }
+
+        private Region? ResolveRuleConstrainedRegion()
+        {
+            var id = _selectedRule?.RegionConstraint;
+            if (string.IsNullOrEmpty(id)) return null;
+            foreach (var r in _enhancement.Regions)
+            {
+                if (r != null && string.Equals(r.Id, id, StringComparison.Ordinal)) return r;
+            }
+            return null;
+        }
+
+        private void RuleBandField_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_suppressRuleSync) return;
+            var region = ResolveRuleConstrainedRegion();
+            if (region == null) return;
+            try
+            {
+                if (sender == TxtRuleBandLabel)
+                {
+                    region.Label = TxtRuleBandLabel.Text;
+                }
+                else if (sender == TxtRuleBandColor)
+                {
+                    region.Color = TxtRuleBandColor.Text;
+                    UpdateRuleBandColorSwatchPreview();
+                }
+                MarkDirty();
+                RebuildRegionVisuals();
+                ScheduleValidation();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("RuleBandField sync error: {Error}", ex.Message);
+            }
+        }
+
+        private void UpdateRuleBandColorSwatchPreview()
+        {
+            if (RuleBandColorSwatch == null) return;
+            var brush = TryParseBrush(TxtRuleBandColor.Text) ?? Brushes.MediumPurple;
+            RuleBandColorSwatch.Background = brush;
+        }
+
+        private void BuildRuleBandColorSwatches()
+        {
+            if (RuleBandColorSwatches == null) return;
+            RuleBandColorSwatches.Children.Clear();
+            foreach (var hex in RegionPalette)
+            {
+                var brush = TryParseBrush(hex) ?? Brushes.MediumPurple;
+                var swatch = new Border
+                {
+                    Width = 22,
+                    Height = 22,
+                    Margin = new Thickness(0, 0, 6, 0),
+                    CornerRadius = new CornerRadius(4),
+                    Background = brush,
+                    BorderBrush = (System.Windows.Media.Brush)FindResource("GlassBorderBrush"),
+                    BorderThickness = new Thickness(1),
+                    Cursor = Cursors.Hand,
+                    Tag = hex,
+                    ToolTip = hex
+                };
+                swatch.MouseLeftButtonUp += (_, _) =>
+                {
+                    if (_selectedRule == null) return;
+                    TxtRuleBandColor.Text = hex;
+                };
+                RuleBandColorSwatches.Children.Add(swatch);
+            }
         }
 
         private void RebuildRegionConstraintCombo()
@@ -2108,6 +2257,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 ActionTypes.Pause         => new PauseAction(),
                 ActionTypes.PlayAudio     => new PlayAudioAction(),
                 ActionTypes.TriggerHaptic => new TriggerHapticAction { PatternName = "Pulse" },
+                ActionTypes.TriggerEffect => new TriggerEffectAction { EffectType = EffectTypes.Haptic, PatternName = "Pulse" },
                 ActionTypes.ScreenShake   => new ScreenShakeAction(),
                 ActionTypes.SetIntensity  => new SetIntensityAction(),
                 _                         => _selectedRule.Action
@@ -2216,6 +2366,9 @@ namespace ConditioningControlPanel.Views.Deeper
                     break;
                 case TriggerHapticAction h:
                     AddHapticActionFields(h);
+                    break;
+                case TriggerEffectAction te:
+                    AddTriggerEffectActionFields(te);
                     break;
                 case ScreenShakeAction ss:
                     AddDoubleField(ActionFields, Loc.Get("deeper_editor_action_intensity"),
@@ -2467,6 +2620,178 @@ namespace ConditioningControlPanel.Views.Deeper
                 h.Intensity, v => h.Intensity = Math.Clamp(v, 0, 1));
             AddIntField(ActionFields, Loc.Get("deeper_editor_action_duration_ms"),
                 h.DurationMs, v => h.DurationMs = Math.Max(50, v));
+        }
+
+        // Generic effect-firing action (TriggerEffect). Lets a rule fire any of
+        // the five effect types (haptic/flash/bubble/subliminal/overlay) with
+        // its own intensity / duration / type-specific settings - independent
+        // of any TimelineItem on the timeline. Mirrors the per-type editor
+        // panels so the user picks an effect kind and gets the matching
+        // controls, no surprises.
+        private void AddTriggerEffectActionFields(TriggerEffectAction te)
+        {
+            // Effect-type combo.
+            ActionFields.Children.Add(new TextBlock
+            {
+                Text = Loc.Get("deeper_editor_action_effect_type"),
+                Style = (Style)FindResource("EditorLabel")
+            });
+            var typeCombo = new ComboBox
+            {
+                Style = (Style)FindResource("EditorComboBox"),
+                ItemContainerStyle = (Style)FindResource("EditorComboBoxItem")
+            };
+            string[] effectTypes =
+            {
+                EffectTypes.Haptic, EffectTypes.Flash, EffectTypes.Bubble,
+                EffectTypes.Subliminal, EffectTypes.Overlay
+            };
+            foreach (var t in effectTypes)
+            {
+                typeCombo.Items.Add(new ComboBoxItem { Content = t, Tag = t });
+            }
+            var curIdx = Array.IndexOf(effectTypes, te.EffectType);
+            typeCombo.SelectedIndex = curIdx >= 0 ? curIdx : 0;
+            ActionFields.Children.Add(typeCombo);
+
+            // Per-type fields rebuild on type switch.
+            var typeFieldsHost = new StackPanel();
+            ActionFields.Children.Add(typeFieldsHost);
+
+            void RebuildTypeFields()
+            {
+                typeFieldsHost.Children.Clear();
+                switch (te.EffectType)
+                {
+                    case EffectTypes.Haptic:
+                        AddTriggerEffectHapticFields(typeFieldsHost, te);
+                        break;
+                    case EffectTypes.Flash:
+                        AddIntField(typeFieldsHost, Loc.Get("deeper_editor_action_duration_ms"),
+                            te.DurationMs, v => te.DurationMs = Math.Max(50, v));
+                        AddBoolField(typeFieldsHost, Loc.Get("deeper_editor_action_play_sound"),
+                            te.PlaySound, v => te.PlaySound = v);
+                        break;
+                    case EffectTypes.Bubble:
+                        AddIntField(typeFieldsHost, Loc.Get("deeper_editor_action_max_bubbles"),
+                            te.MaxBubbles, v => te.MaxBubbles = Math.Max(1, v));
+                        AddDoubleField(typeFieldsHost, Loc.Get("deeper_editor_action_intensity"),
+                            te.Intensity, v => te.Intensity = Math.Clamp(v, 0, 1));
+                        AddIntField(typeFieldsHost, Loc.Get("deeper_editor_action_duration_ms"),
+                            te.DurationMs, v => te.DurationMs = Math.Max(50, v));
+                        break;
+                    case EffectTypes.Subliminal:
+                        AddTextField(typeFieldsHost, Loc.Get("deeper_editor_action_subliminal_text"),
+                            te.Text ?? "", v => te.Text = v);
+                        AddIntField(typeFieldsHost, Loc.Get("deeper_editor_action_duration_ms"),
+                            te.DurationMs, v => te.DurationMs = Math.Max(50, v));
+                        break;
+                    case EffectTypes.Overlay:
+                        AddOverlayKindCombo(typeFieldsHost, te);
+                        AddDoubleField(typeFieldsHost, Loc.Get("deeper_editor_action_opacity"),
+                            te.Opacity, v => te.Opacity = Math.Clamp(v, 0, 1));
+                        AddIntField(typeFieldsHost, Loc.Get("deeper_editor_action_duration_ms"),
+                            te.DurationMs, v => te.DurationMs = Math.Max(50, v));
+                        break;
+                }
+            }
+            RebuildTypeFields();
+
+            typeCombo.SelectionChanged += (_, _) =>
+            {
+                if (_suppressRuleSync) return;
+                if (typeCombo.SelectedItem is ComboBoxItem cbi && cbi.Tag is string newType
+                    && newType != te.EffectType)
+                {
+                    te.EffectType = newType;
+                    // Reset stale type-specific fields so a Flash→Haptic switch
+                    // doesn't leak Flash defaults into the haptic interpretation.
+                    if (newType == EffectTypes.Haptic && string.IsNullOrEmpty(te.PatternName))
+                        te.PatternName = "Pulse";
+                    if (newType == EffectTypes.Overlay && string.IsNullOrEmpty(te.OverlayKind))
+                        te.OverlayKind = OverlayKinds.PinkFilter;
+                    RebuildTypeFields();
+                    MarkDirty();
+                    ScheduleValidation();
+                }
+            };
+        }
+
+        // Haptic sub-fields for TriggerEffect. Pattern combo + intensity +
+        // duration; mirrors AddHapticActionFields but bound to a
+        // TriggerEffectAction's flat fields instead of TriggerHapticAction.
+        private void AddTriggerEffectHapticFields(Panel host, TriggerEffectAction te)
+        {
+            host.Children.Add(new TextBlock
+            {
+                Text = Loc.Get("deeper_editor_haptic_pattern"),
+                Style = (Style)FindResource("EditorLabel")
+            });
+            var combo = new ComboBox
+            {
+                Style = (Style)FindResource("EditorComboBox"),
+                ItemContainerStyle = (Style)FindResource("EditorComboBoxItem")
+            };
+            foreach (var name in StockHapticPatterns.Names) combo.Items.Add(name);
+            int idx = -1;
+            if (!string.IsNullOrEmpty(te.PatternName))
+            {
+                for (int i = 0; i < StockHapticPatterns.Names.Count; i++)
+                    if (StockHapticPatterns.Names[i] == te.PatternName) { idx = i; break; }
+            }
+            combo.SelectedIndex = idx >= 0 ? idx : 0;
+            combo.SelectionChanged += (_, _) =>
+            {
+                if (_suppressRuleSync) return;
+                var i = combo.SelectedIndex;
+                if (i >= 0 && i < StockHapticPatterns.Names.Count)
+                {
+                    te.PatternName = StockHapticPatterns.Names[i];
+                    MarkDirty();
+                    ScheduleValidation();
+                }
+            };
+            host.Children.Add(combo);
+
+            AddDoubleField(host, Loc.Get("deeper_editor_action_intensity"),
+                te.Intensity, v => te.Intensity = Math.Clamp(v, 0, 1));
+            AddIntField(host, Loc.Get("deeper_editor_action_duration_ms"),
+                te.DurationMs, v => te.DurationMs = Math.Max(50, v));
+        }
+
+        // Overlay-kind combo for TriggerEffect. Pink Filter / Spiral / Brain
+        // Drain; matches the inline overlay editor's CmbOverlayKind.
+        private void AddOverlayKindCombo(Panel host, TriggerEffectAction te)
+        {
+            host.Children.Add(new TextBlock
+            {
+                Text = Loc.Get("deeper_editor_action_overlay_kind"),
+                Style = (Style)FindResource("EditorLabel")
+            });
+            var combo = new ComboBox
+            {
+                Style = (Style)FindResource("EditorComboBox"),
+                ItemContainerStyle = (Style)FindResource("EditorComboBoxItem")
+            };
+            string[] kinds = { OverlayKinds.PinkFilter, OverlayKinds.Spiral, OverlayKinds.BrainDrain };
+            foreach (var k in kinds)
+            {
+                combo.Items.Add(new ComboBoxItem { Content = k, Tag = k });
+            }
+            var curK = te.OverlayKind ?? OverlayKinds.PinkFilter;
+            var idx = Array.IndexOf(kinds, curK);
+            combo.SelectedIndex = idx >= 0 ? idx : 0;
+            combo.SelectionChanged += (_, _) =>
+            {
+                if (_suppressRuleSync) return;
+                if (combo.SelectedItem is ComboBoxItem cbi && cbi.Tag is string k)
+                {
+                    te.OverlayKind = k;
+                    MarkDirty();
+                    ScheduleValidation();
+                }
+            };
+            host.Children.Add(combo);
         }
 
         // Self-contained curve editor for any IHapticPatternTarget. Builds its
@@ -2756,6 +3081,7 @@ namespace ConditioningControlPanel.Views.Deeper
             ActionTypes.Pause         => "deeper_desc_action_pause",
             ActionTypes.PlayAudio     => "deeper_desc_action_play_audio",
             ActionTypes.TriggerHaptic => "deeper_desc_action_trigger_haptic",
+            ActionTypes.TriggerEffect => "deeper_desc_action_trigger_effect",
             ActionTypes.ScreenShake   => "deeper_desc_action_screen_shake",
             ActionTypes.SetIntensity  => "deeper_desc_action_set_intensity",
             _                         => ""

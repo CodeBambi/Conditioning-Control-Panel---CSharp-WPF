@@ -272,7 +272,14 @@ namespace ConditioningControlPanel.Views.Deeper
                     _enhancement.Rules.Add(rule);
                     MarkDirty();
                     RebuildRegionVisuals();
-                    SelectRegion(region);
+                    // Select the Rule (not the Region) so the user immediately
+                    // sees the rule editor - including the GazeTarget/GazeAvoid
+                    // rect inputs, 3x3 quick-region preset grid, and "Pick on
+                    // video…" picker button. Selecting the region first hid all
+                    // of that behind a band the user had to discover. They can
+                    // still click the band on the timeline later to edit
+                    // region details (label / color / drag-resize).
+                    SelectRule(rule);
                 }
                 ScheduleValidation();
                 try { TutorialEventBus.Emit("RuleAdded"); } catch { }

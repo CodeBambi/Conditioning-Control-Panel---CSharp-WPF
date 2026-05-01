@@ -634,6 +634,59 @@
                             <TextBox x:Name="TxtRuleCooldown" Style="{StaticResource EditorTextBox}"
                                      ToolTip="{loc:Str deeper_editor_tt_rule_cooldown}"
                                      TextChanged="TxtRuleCooldown_TextChanged"/>
+
+                            <!-- Region details sub-panel: surfaces label/color/start-end of
+                                 the band on the timeline that this rule constrains to.
+                                 Only visible when _selectedRule.RegionConstraint resolves
+                                 to a real region. Lets the user edit band metadata without
+                                 leaving the rule editor (no more click-the-band-and-lose-
+                                 your-rule-context dead end). -->
+                            <StackPanel x:Name="RuleRegionDetails" Visibility="Collapsed" Margin="0,12,0,0">
+                                <Separator Margin="0,0,0,10"/>
+                                <TextBlock Text="{loc:Str deeper_editor_rule_band_details}"
+                                           Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                                           FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8"/>
+
+                                <TextBlock Text="{loc:Str deeper_editor_region_label}" Style="{StaticResource EditorLabel}"/>
+                                <TextBox x:Name="TxtRuleBandLabel" Style="{StaticResource EditorTextBox}"
+                                         TextChanged="RuleBandField_TextChanged"/>
+
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="8"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="{loc:Str deeper_editor_region_start}" Style="{StaticResource EditorLabel}"/>
+                                        <TextBlock x:Name="TxtRuleBandStart" Foreground="{DynamicResource TextDimBrush}"
+                                                   FontFamily="Consolas" FontSize="11" Margin="0,0,0,8"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="{loc:Str deeper_editor_region_end}" Style="{StaticResource EditorLabel}"/>
+                                        <TextBlock x:Name="TxtRuleBandEnd" Foreground="{DynamicResource TextDimBrush}"
+                                                   FontFamily="Consolas" FontSize="11" Margin="0,0,0,8"/>
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Text="{loc:Str deeper_editor_rule_band_drag_hint}"
+                                           Foreground="{DynamicResource TextDimBrush}" FontSize="10"
+                                           TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                                <TextBlock Text="{loc:Str deeper_editor_region_color}" Style="{StaticResource EditorLabel}"/>
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border x:Name="RuleBandColorSwatch" Grid.Column="0"
+                                            Width="24" Height="24" Margin="0,0,8,0" CornerRadius="4"
+                                            Background="{DynamicResource DeeperAccentBrush}"
+                                            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"/>
+                                    <TextBox x:Name="TxtRuleBandColor" Grid.Column="1" Style="{StaticResource EditorTextBox}"
+                                             TextChanged="RuleBandField_TextChanged" Margin="0"/>
+                                </Grid>
+                                <WrapPanel x:Name="RuleBandColorSwatches" Margin="0,4,0,8"/>
+                            </StackPanel>
                         </StackPanel>
 
                         <!-- Effect editors for non-haptic Effect TimelineItems (haptic uses HapticEventEditor above). -->

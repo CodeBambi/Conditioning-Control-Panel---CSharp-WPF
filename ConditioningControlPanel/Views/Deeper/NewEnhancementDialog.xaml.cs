@@ -11,6 +11,13 @@ namespace ConditioningControlPanel.Views.Deeper
         public string SelectedMediaType { get; private set; } = MediaTypes.Video;
         public string SelectedSource { get; private set; } = "";
 
+        // What tutorial flow launched this dialog (if any). On a successful
+        // BtnCreate (validated source, dialog closing with DialogResult=true),
+        // we hand this off to TutorialEventBus.PendingPart2Tutorial so the
+        // editor's Loaded handler picks up Part 2. Stays null until the user
+        // clicks one of the three "walk me through" buttons below.
+        private TutorialType? _pendingPart2Tutorial;
+
         public NewEnhancementDialog()
         {
             InitializeComponent();
@@ -30,31 +37,69 @@ namespace ConditioningControlPanel.Views.Deeper
             var lastDir = App.EnhancementLibrary?.LastDirectory;
             if (!string.IsNullOrEmpty(lastDir)) dialog.InitialDirectory = lastDir;
 
-            if (dialog.ShowDialog() == true)
+            // The TutorialOverlay window is Topmost=true to stay over CCP
+            // siblings, but that also makes its dim+card render on top of
+            // the OS file picker - obscuring the file list and Open/Cancel
+            // buttons even with the picker properly owned by us. Toggling
+            // Topmost alone wasn't enough (the WPF Topmost change can race
+            // with ShowDialog's pump), so we collapse the overlay window
+            // entirely for the duration and restore on return. The tutorial
+            // service's state is unaffected; only the visual overlay blinks.
+            var overlaysToRestore = new System.Collections.Generic.List<Window>();
+            try
             {
-                TxtSource.Text = dialog.FileName;
+                if (Application.Current != null)
+                {
+                    foreach (Window w in Application.Current.Windows)
+                    {
+                        if (w is ConditioningControlPanel.TutorialOverlay && w.IsVisible)
+                        {
+                            w.Visibility = Visibility.Hidden;
+                            overlaysToRestore.Add(w);
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
+                // Owner = this dialog so the OS picker is anchored to
+                // NewEnhancementDialog (not the foreground window).
+                if (dialog.ShowDialog(this) == true)
+                {
+                    TxtSource.Text = dialog.FileName;
+                }
+            }
+            finally
+            {
+                foreach (var w in overlaysToRestore)
+                {
+                    try { w.Visibility = Visibility.Visible; } catch { }
+                }
             }
         }
 
-        // Stub: launches the (forthcoming) interactive Local Video tutorial. Until
-        // the step list is built, this just nudges the user toward Browse.
+        // Launches the interactive Local Video tutorial. The user picks any
+        // local video file via Browse; Part 1 ends when they click Create with
+        // a valid source, then Part 2 walks them through the editor.
         private void BtnLocalVideoTutorial_Click(object sender, RoutedEventArgs e)
         {
             RbVideo.IsChecked = true;
-            MessageBox.Show(this,
-                Loc.Get("deeper_tutorial_coming_soon_local_video"),
-                Loc.Get("deeper_dialog_new_title"),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            StartInteractiveTutorial(
+                TutorialType.DeeperEditorInteractiveLocalVideo,
+                TutorialType.DeeperEditorInteractiveLocalVideoPart2);
         }
 
-        // Stub: launches the (forthcoming) interactive Local Audio tutorial.
+        // Launches the interactive Local Audio tutorial. Identical shape to
+        // the Local Video flow but anchored on RbAudio + the audio-mode editor
+        // (waveform preview, audio-only triggers, etc).
         private void BtnLocalAudioTutorial_Click(object sender, RoutedEventArgs e)
         {
             RbAudio.IsChecked = true;
-            MessageBox.Show(this,
-                Loc.Get("deeper_tutorial_coming_soon_local_audio"),
-                Loc.Get("deeper_dialog_new_title"),
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            StartInteractiveTutorial(
+                TutorialType.DeeperEditorInteractiveLocalAudio,
+                TutorialType.DeeperEditorInteractiveLocalAudioPart2);
         }
 
         // Auto-fills the dialog with a known TikTok HT URL, then kicks off the
@@ -90,24 +135,29 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             catch { }
 
-            // Two-part tutorial. Part 1 is a single-step overlay that lives
-            // inside this dialog and ends when the user clicks Create. Setting
-            // the flag here tells DeeperEditorWindow.Loaded to spin up Part 2
-            // with a fresh overlay scoped to the editor — sidesteps the cross-
-            // window race entirely.
-            TutorialEventBus.StartHTPart2OnEditorLoad = true;
+            StartInteractiveTutorial(
+                TutorialType.DeeperEditorInteractiveHT,
+                TutorialType.DeeperEditorInteractiveHTPart2);
+        }
+
+        // Common Part 1 launcher. Records which Part 2 to queue (set on
+        // BtnCreate_Click only after validation succeeds), then starts the
+        // Part 1 overlay scoped to this dialog. Splitting the tutorial into
+        // two overlays sidesteps the cross-window state machine entirely.
+        private void StartInteractiveTutorial(TutorialType part1, TutorialType part2)
+        {
+            _pendingPart2Tutorial = part2;
             try
             {
-                App.Tutorial?.Start(TutorialType.DeeperEditorInteractiveHT);
-                if (App.Tutorial != null)
-                {
-                    var overlay = new ConditioningControlPanel.TutorialOverlay(this, App.Tutorial);
-                    overlay.Show();
-                }
+                if (App.Tutorial == null) return;
+                if (App.Tutorial.IsActive) App.Tutorial.Skip();
+                App.Tutorial.Start(part1);
+                var overlay = new ConditioningControlPanel.TutorialOverlay(this, App.Tutorial);
+                overlay.Show();
             }
             catch (System.Exception ex)
             {
-                App.Logger?.Warning(ex, "Failed to start HT interactive tutorial");
+                App.Logger?.Warning(ex, "Failed to start interactive tutorial Part 1");
             }
         }
 
@@ -128,6 +178,17 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             SelectedMediaType = RbVideo.IsChecked == true ? MediaTypes.Video : MediaTypes.Audio;
             SelectedSource = source;
+
+            // Validation passed - only NOW hand off Part 2 to the editor. If we
+            // queued the flag earlier and the user fumbled their first click
+            // (empty source), the flag would survive forever and ambush a later
+            // unrelated editor-open. Setting it here guarantees one-shot, on-
+            // success delivery.
+            if (_pendingPart2Tutorial.HasValue)
+            {
+                TutorialEventBus.PendingPart2Tutorial = _pendingPart2Tutorial.Value;
+            }
+
             DialogResult = true;
             Close();
         }

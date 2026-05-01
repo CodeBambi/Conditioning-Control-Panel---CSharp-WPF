@@ -94,14 +94,84 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void BtnPickAudio_Click(object sender, RoutedEventArgs e)
         {
+            // Method name is historical - the picker now accepts both audio
+            // and video. Dispatch on file extension below.
             var dlg = new OpenFileDialog
             {
-                Title = Loc.Get("deeper_player_pick_audio"),
-                Filter = "Audio (*.mp3;*.wav;*.m4a;*.aac)|*.mp3;*.wav;*.m4a;*.aac|All files (*.*)|*.*"
+                Title = Loc.Get("deeper_player_pick_media"),
+                Filter =
+                    "Media (audio + video)|*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg;*.mp4;*.webm;*.mkv;*.mov;*.avi;*.m4v"
+                    + "|Audio (*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg)|*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg"
+                    + "|Video (*.mp4;*.webm;*.mkv;*.mov;*.avi;*.m4v)|*.mp4;*.webm;*.mkv;*.mov;*.avi;*.m4v"
+                    + "|All files (*.*)|*.*"
             };
             if (dlg.ShowDialog(this) != true) return;
-            LoadAudio(dlg.FileName);
-            TryAutoLoadEnhancement(dlg.FileName);
+            var path = dlg.FileName;
+            if (IsLocalVideoFile(path))
+            {
+                _ = LoadLocalVideoAsync(path);
+            }
+            else
+            {
+                LoadAudio(path);
+            }
+            TryAutoLoadEnhancement(path);
+        }
+
+        private static bool IsLocalVideoFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+            return ext is ".mp4" or ".webm" or ".mkv" or ".mov" or ".avi" or ".m4v";
+        }
+
+        // Local video playback path: navigate the WebView2 directly to the
+        // file:// URL of the chosen file. Edge's built-in media viewer renders
+        // a <video> element, which BrowserVideoTimeSource's existing JS bridge
+        // already knows how to drive (querySelector('video') + currentTime).
+        // Mirrors LoadVideoUrlAsync but for local paths instead of remote URLs.
+        private async Task LoadLocalVideoAsync(string path)
+        {
+            try
+            {
+                UnbindEngineIfRunning();
+                _player.Stop();
+
+                ShowMediaPaneFor(MediaTypes.Video);
+                TxtVideoStatus.Text = Loc.Get("deeper_player_video_loading");
+                TxtVideoStatus.Visibility = Visibility.Visible;
+
+                if (!_videoBrowserReady)
+                {
+                    var userDataFolder = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "ConditioningControlPanel",
+                        "browser_data");
+                    System.IO.Directory.CreateDirectory(userDataFolder);
+                    var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment
+                        .CreateAsync(userDataFolder: userDataFolder).ConfigureAwait(true);
+                    await VideoBrowser.EnsureCoreWebView2Async(env).ConfigureAwait(true);
+                    if (VideoBrowser.CoreWebView2 == null)
+                    {
+                        TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
+                        return;
+                    }
+                    _videoBrowserReady = true;
+                    VideoBrowser.CoreWebView2.NavigationCompleted += OnVideoNavCompleted;
+                    VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged += OnVideoFullscreenChanged;
+                }
+
+                // file:/// URL navigation - WebView2 wraps a local media file in
+                // its default media-viewer page with a real <video> element.
+                var fileUri = new Uri(path).AbsoluteUri;
+                _pendingVideoUrl = fileUri;
+                VideoBrowser.CoreWebView2.Navigate(fileUri);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementPlayer: local video load failed");
+                TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
+            }
         }
 
         private void BtnPickEnhancement_Click(object sender, RoutedEventArgs e)
@@ -141,14 +211,14 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
-        private void TryAutoLoadEnhancement(string audioPath)
+        private void TryAutoLoadEnhancement(string mediaPath)
         {
             // 1) Side-by-side: foo.mp3 → foo.ccpenh.json next to it.
             // 2) Library lookup by media_source pattern (Phase 10).
             try
             {
-                var dir = Path.GetDirectoryName(audioPath);
-                var baseName = Path.GetFileNameWithoutExtension(audioPath);
+                var dir = Path.GetDirectoryName(mediaPath);
+                var baseName = Path.GetFileNameWithoutExtension(mediaPath);
                 if (!string.IsNullOrEmpty(dir) && !string.IsNullOrEmpty(baseName))
                 {
                     var candidate = Path.Combine(dir, baseName + ".ccpenh.json");
@@ -159,7 +229,10 @@ namespace ConditioningControlPanel.Views.Deeper
                     }
                 }
 
-                var match = App.EnhancementLibrary?.FindMatch(audioPath, Models.Deeper.MediaTypes.Audio);
+                var mediaType = IsLocalVideoFile(mediaPath)
+                    ? Models.Deeper.MediaTypes.Video
+                    : Models.Deeper.MediaTypes.Audio;
+                var match = App.EnhancementLibrary?.FindMatch(mediaPath, mediaType);
                 if (match != null) _host.LoadFromFile(match.FilePath);
             }
             catch { }
@@ -442,6 +515,15 @@ namespace ConditioningControlPanel.Views.Deeper
             if (enh.MediaType == MediaTypes.Video && IsRemoteVideoUrl(enh.MediaSource))
             {
                 _ = LoadVideoUrlAsync(enh.MediaSource);
+            }
+            else if (enh.MediaType == MediaTypes.Video
+                     && !string.IsNullOrEmpty(enh.MediaSource)
+                     && File.Exists(enh.MediaSource))
+            {
+                // Local-video enhancement: route through the file:// loader so
+                // the WebView2 picks up the chosen file. Mirrors the auto-load
+                // path the picker uses when the user picks a .mp4 directly.
+                _ = LoadLocalVideoAsync(enh.MediaSource);
             }
             else if (_player.IsPlaying)
             {

@@ -48,15 +48,15 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="{loc:Str deeper_player_audio_label}"
+            <TextBlock Grid.Column="0" Text="{loc:Str deeper_player_media_label}"
                        Foreground="{DynamicResource TextLightBrush}"
                        VerticalAlignment="Center"/>
             <TextBlock Grid.Column="1" x:Name="TxtAudioPath"
-                       Text="{loc:Str deeper_player_no_audio}"
+                       Text="{loc:Str deeper_player_no_media}"
                        Foreground="{DynamicResource TextMutedBrush}"
                        VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis"/>
-            <Button Grid.Column="2" Content="{loc:Str deeper_player_pick_audio}"
+            <Button Grid.Column="2" Content="{loc:Str deeper_player_pick_media}"
                     Click="BtnPickAudio_Click"
                     Padding="10,4" Cursor="Hand" FontSize="11"
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
