@@ -76,10 +76,7 @@ namespace ConditioningControlPanel.Views.Deeper
         // Rules
         private EnhancementRule? _selectedRule;
         private bool _suppressRuleSync;
-        private bool _gazePicking;
-        private double[]? _gazePickTargetRect;   // points at GazeTarget/GazeAvoid trigger's Rect array
-        private Point _gazePickStart;
-        private TextBox? _gazePickEchoTextBox;   // optional text box to update with rect coords on done
+        private GazePickerWindow? _gazePickerWindow;
 
         public DeeperEditorWindow(Enhancement enhancement, string? filePath)
         {
@@ -1633,10 +1630,8 @@ namespace ConditioningControlPanel.Views.Deeper
             });
             var combo = new ComboBox
             {
-                Background = (System.Windows.Media.Brush)FindResource("PanelBgBrush"),
-                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
-                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
-                Margin = new Thickness(0, 0, 0, 8)
+                Style = (Style)FindResource("EditorComboBox"),
+                ItemContainerStyle = (Style)FindResource("EditorComboBoxItem")
             };
             string[] targets = { SeekTargets.Time, SeekTargets.RegionStart, SeekTargets.RegionEnd };
             foreach (var t in targets) combo.Items.Add(t);
@@ -1683,10 +1678,8 @@ namespace ConditioningControlPanel.Views.Deeper
             });
             var combo = new ComboBox
             {
-                Background = (System.Windows.Media.Brush)FindResource("PanelBgBrush"),
-                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
-                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
-                Margin = new Thickness(0, 0, 0, 8)
+                Style = (Style)FindResource("EditorComboBox"),
+                ItemContainerStyle = (Style)FindResource("EditorComboBoxItem")
             };
             foreach (var name in StockHapticPatterns.Names) combo.Items.Add(name);
             combo.Items.Add(Loc.Get("deeper_editor_haptic_pattern_custom"));
@@ -1975,10 +1968,8 @@ namespace ConditioningControlPanel.Views.Deeper
             });
             var combo = new ComboBox
             {
-                Background = (System.Windows.Media.Brush)FindResource("PanelBgBrush"),
-                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
-                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
-                Margin = new Thickness(0, 0, 0, 8)
+                Style = (Style)FindResource("EditorComboBox"),
+                ItemContainerStyle = (Style)FindResource("EditorComboBoxItem")
             };
             int selected = -1;
             if (allowNone) combo.Items.Add(Loc.Get("deeper_editor_rule_region_current"));
@@ -2008,97 +1999,75 @@ namespace ConditioningControlPanel.Views.Deeper
             host.Children.Add(combo);
         }
 
-        // -- Gaze rect picker overlay ----------------------------------------
+        // -- Gaze rect picker --------------------------------------------------
+        // Picker lives in a separate transparent Window because LibVLC's
+        // VideoView renders in a native child HWND that wins WPF airspace; an
+        // inline overlay would render behind the video and be invisible.
 
         private void BeginGazePick(Func<double[]> rectGetter)
         {
-            _gazePickTargetRect = rectGetter();
-            _gazePicking = true;
-            GazePickerOverlay.Visibility = Visibility.Visible;
-            GazePickerRect.Visibility = Visibility.Collapsed;
-            // Pre-populate the rect from the current value if reasonable.
-            DrawGazePickRect(_gazePickTargetRect);
+            EndGazePick(commit: false);
+
+            var current = rectGetter();
+            if (current == null || current.Length < 4)
+                current = new[] { 0.25, 0.25, 0.5, 0.5 };
+
+            // Position the picker exactly over the editor's preview host so
+            // its normalized rect maps 1:1 to the video display rect.
+            try
+            {
+                var origin = PreviewHost.PointToScreen(new Point(0, 0));
+                var farCorner = PreviewHost.PointToScreen(new Point(PreviewHost.ActualWidth, PreviewHost.ActualHeight));
+                var dpi = VisualTreeHelper.GetDpi(this);
+
+                _gazePickerWindow = new GazePickerWindow(current)
+                {
+                    Owner = this,
+                    Left = origin.X / dpi.DpiScaleX,
+                    Top = origin.Y / dpi.DpiScaleY,
+                    Width = (farCorner.X - origin.X) / dpi.DpiScaleX,
+                    Height = (farCorner.Y - origin.Y) / dpi.DpiScaleY
+                };
+                _gazePickerWindow.Closed += (_, _) =>
+                {
+                    var w = _gazePickerWindow;
+                    _gazePickerWindow = null;
+                    if (w != null && w.Committed)
+                    {
+                        var result = w.ResultRect;
+                        // Write back into the trigger's rect array via the same
+                        // reference the caller handed us. Both arrays may be
+                        // distinct (Window cloned the input) so copy elementwise.
+                        var tgt = rectGetter();
+                        if (tgt != null && tgt.Length >= 4 && result.Length >= 4)
+                        {
+                            tgt[0] = result[0];
+                            tgt[1] = result[1];
+                            tgt[2] = result[2];
+                            tgt[3] = result[3];
+                        }
+                        MarkDirty();
+                        if (_selectedRule != null) BuildTriggerFields();
+                        ScheduleValidation();
+                    }
+                };
+                _gazePickerWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BeginGazePick failed: {Error}", ex.Message);
+            }
         }
 
         private void EndGazePick(bool commit)
         {
-            if (!_gazePicking) return;
-            _gazePicking = false;
-            if (GazePickerOverlay != null) GazePickerOverlay.Visibility = Visibility.Collapsed;
-            _gazePickTargetRect = null;
-            if (commit)
-            {
-                MarkDirty();
-                if (_selectedRule != null) BuildTriggerFields();
-                ScheduleValidation();
-            }
-        }
-
-        private void BtnGazePickDone_Click(object sender, RoutedEventArgs e) => EndGazePick(commit: true);
-
-        private void GazePickerCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if (!_gazePicking || _gazePickTargetRect == null) return;
-            _gazePickStart = e.GetPosition(GazePickerCanvas);
-            UpdateGazePickRectFromDrag(_gazePickStart);
-            GazePickerCanvas.CaptureMouse();
-            e.Handled = true;
-        }
-
-        private void GazePickerCanvas_MouseMove(object sender, MouseEventArgs e)
-        {
-            if (!_gazePicking || _gazePickTargetRect == null) return;
-            if (e.LeftButton != MouseButtonState.Pressed) return;
-            UpdateGazePickRectFromDrag(e.GetPosition(GazePickerCanvas));
-        }
-
-        private void GazePickerCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (!_gazePicking) return;
-            GazePickerCanvas.ReleaseMouseCapture();
-        }
-
-        private void GazePickerCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => DrawGazePickRect(_gazePickTargetRect);
-
-        private void UpdateGazePickRectFromDrag(Point pt)
-        {
-            if (_gazePickTargetRect == null) return;
-            var w = GazePickerCanvas.ActualWidth;
-            var h = GazePickerCanvas.ActualHeight;
-            if (w <= 0 || h <= 0) return;
-
-            var x0 = Math.Clamp(_gazePickStart.X / w, 0, 1);
-            var y0 = Math.Clamp(_gazePickStart.Y / h, 0, 1);
-            var x1 = Math.Clamp(pt.X / w, 0, 1);
-            var y1 = Math.Clamp(pt.Y / h, 0, 1);
-
-            var rx = Math.Min(x0, x1);
-            var ry = Math.Min(y0, y1);
-            var rw = Math.Max(0.001, Math.Abs(x1 - x0));
-            var rh = Math.Max(0.001, Math.Abs(y1 - y0));
-
-            _gazePickTargetRect[0] = rx;
-            _gazePickTargetRect[1] = ry;
-            _gazePickTargetRect[2] = rw;
-            _gazePickTargetRect[3] = rh;
-            DrawGazePickRect(_gazePickTargetRect);
-        }
-
-        private void DrawGazePickRect(double[]? rect)
-        {
-            if (GazePickerCanvas == null || GazePickerRect == null) return;
-            var w = GazePickerCanvas.ActualWidth;
-            var h = GazePickerCanvas.ActualHeight;
-            if (rect == null || rect.Length < 4 || w <= 0 || h <= 0)
-            {
-                GazePickerRect.Visibility = Visibility.Collapsed;
-                return;
-            }
-            GazePickerRect.Visibility = Visibility.Visible;
-            GazePickerRect.Width = Math.Max(2, rect[2] * w);
-            GazePickerRect.Height = Math.Max(2, rect[3] * h);
-            Canvas.SetLeft(GazePickerRect, rect[0] * w);
-            Canvas.SetTop(GazePickerRect, rect[1] * h);
+            // Force-close any open picker. The Closed handler reads Committed
+            // (set by the picker's own Done/Cancel/Esc/Enter handlers); calling
+            // Close here without committing leaves Committed=false → no apply.
+            if (_gazePickerWindow == null) return;
+            try { _gazePickerWindow.Close(); }
+            catch { }
+            _gazePickerWindow = null;
         }
 
         // -- Metadata sync -----------------------------------------------------
@@ -2298,6 +2267,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 }
             }
 
+            EndGazePick(commit: false);
             DisposePlayback();
         }
 

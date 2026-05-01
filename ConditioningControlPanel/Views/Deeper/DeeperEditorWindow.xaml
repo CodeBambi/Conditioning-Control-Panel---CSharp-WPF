@@ -31,6 +31,23 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,0,0,4"/>
         </Style>
+        <!-- ComboBox needs Black foreground for both the closed header and the
+             expanded popup items - WPF's default popup uses a near-white system
+             background, so light text becomes unreadable. Apply this style to
+             every ComboBox in the editor. -->
+        <Style x:Key="EditorComboBox" TargetType="ComboBox">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentTransparent40Brush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <Style x:Key="EditorComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Padding" Value="6,4"/>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -103,34 +120,9 @@
                                        TextTrimming="CharacterEllipsis" MaxWidth="420" Margin="0,8,0,0"/>
                         </StackPanel>
 
-                        <!-- Gaze rect picker overlay: drag to draw a target region for gaze_target / gaze_avoid triggers. -->
-                        <Grid x:Name="GazePickerOverlay" Visibility="Collapsed">
-                            <Canvas x:Name="GazePickerCanvas" Background="#30000000"
-                                    Cursor="Cross"
-                                    MouseLeftButtonDown="GazePickerCanvas_MouseLeftButtonDown"
-                                    MouseMove="GazePickerCanvas_MouseMove"
-                                    MouseLeftButtonUp="GazePickerCanvas_MouseLeftButtonUp"
-                                    SizeChanged="GazePickerCanvas_SizeChanged">
-                                <Rectangle x:Name="GazePickerRect"
-                                           Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="2"
-                                           Fill="{DynamicResource DeeperAccentTransparent40Brush}"
-                                           Visibility="Collapsed" IsHitTestVisible="False"/>
-                            </Canvas>
-                            <Border VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,8,0,0"
-                                    Background="#D01C1C35" Padding="10,6" CornerRadius="4"
-                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1">
-                                <DockPanel LastChildFill="False">
-                                    <TextBlock DockPanel.Dock="Left" Text="{loc:Str deeper_editor_gaze_pick_hint}"
-                                               Foreground="{DynamicResource TextLightBrush}" FontSize="11"
-                                               VerticalAlignment="Center"/>
-                                    <Button DockPanel.Dock="Right" Content="{loc:Str deeper_editor_gaze_pick_done}"
-                                            Click="BtnGazePickDone_Click" Margin="12,0,0,0"
-                                            Padding="10,4" Cursor="Hand" FontSize="11"
-                                            Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
-                                            BorderThickness="0"/>
-                                </DockPanel>
-                            </Border>
-                        </Grid>
+                        <!-- Gaze rect picker now lives in a separate transparent
+                             Window (GazePickerWindow). Inline overlay won't work
+                             because LibVLC's VideoView wins WPF airspace. -->
                     </Grid>
                 </Border>
 
@@ -357,11 +349,9 @@
                             </Grid>
 
                             <TextBlock Text="{loc:Str deeper_editor_haptic_pattern}" Style="{StaticResource EditorLabel}"/>
-                            <ComboBox x:Name="CmbHapticPattern" Margin="0,0,0,8"
-                                      SelectionChanged="CmbHapticPattern_SelectionChanged"
-                                      Background="{DynamicResource PanelBgBrush}"
-                                      Foreground="{DynamicResource TextLightBrush}"
-                                      BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"/>
+                            <ComboBox x:Name="CmbHapticPattern" Style="{StaticResource EditorComboBox}"
+                                      ItemContainerStyle="{StaticResource EditorComboBoxItem}"
+                                      SelectionChanged="CmbHapticPattern_SelectionChanged"/>
 
                             <StackPanel x:Name="CurveEditorPanel" Visibility="Collapsed" Margin="0,4,0,8">
                                 <TextBlock Text="{loc:Str deeper_editor_haptic_curve}"
@@ -421,30 +411,21 @@
                                       Margin="0,0,0,10"/>
 
                             <TextBlock Text="{loc:Str deeper_editor_rule_trigger}" Style="{StaticResource EditorLabel}"/>
-                            <ComboBox x:Name="CmbTriggerType"
-                                      SelectionChanged="CmbTriggerType_SelectionChanged"
-                                      Background="{DynamicResource PanelBgBrush}"
-                                      Foreground="{DynamicResource TextLightBrush}"
-                                      BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
-                                      Margin="0,0,0,8"/>
+                            <ComboBox x:Name="CmbTriggerType" Style="{StaticResource EditorComboBox}"
+                                      ItemContainerStyle="{StaticResource EditorComboBoxItem}"
+                                      SelectionChanged="CmbTriggerType_SelectionChanged"/>
                             <StackPanel x:Name="TriggerFields"/>
 
                             <TextBlock Text="{loc:Str deeper_editor_rule_action}" Style="{StaticResource EditorLabel}" Margin="0,4,0,4"/>
-                            <ComboBox x:Name="CmbActionType"
-                                      SelectionChanged="CmbActionType_SelectionChanged"
-                                      Background="{DynamicResource PanelBgBrush}"
-                                      Foreground="{DynamicResource TextLightBrush}"
-                                      BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
-                                      Margin="0,0,0,8"/>
+                            <ComboBox x:Name="CmbActionType" Style="{StaticResource EditorComboBox}"
+                                      ItemContainerStyle="{StaticResource EditorComboBoxItem}"
+                                      SelectionChanged="CmbActionType_SelectionChanged"/>
                             <StackPanel x:Name="ActionFields"/>
 
                             <TextBlock Text="{loc:Str deeper_editor_rule_region_constraint}" Style="{StaticResource EditorLabel}" Margin="0,4,0,4"/>
-                            <ComboBox x:Name="CmbRuleRegion"
-                                      SelectionChanged="CmbRuleRegion_SelectionChanged"
-                                      Background="{DynamicResource PanelBgBrush}"
-                                      Foreground="{DynamicResource TextLightBrush}"
-                                      BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
-                                      Margin="0,0,0,8"/>
+                            <ComboBox x:Name="CmbRuleRegion" Style="{StaticResource EditorComboBox}"
+                                      ItemContainerStyle="{StaticResource EditorComboBoxItem}"
+                                      SelectionChanged="CmbRuleRegion_SelectionChanged"/>
 
                             <TextBlock Text="{loc:Str deeper_editor_rule_cooldown}" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtRuleCooldown" Style="{StaticResource EditorTextBox}"
