@@ -201,6 +201,42 @@ namespace ConditioningControlPanel.Services.Deeper
                     Message = "Cannot be empty. Use \"*\" to match any media of this type."
                 });
             }
+            else if (IsUncOrExtendedPath(e.MediaSource))
+            {
+                // UNC paths in shared files would leak the user's NTLM hash on
+                // first File.Exists / open. No legitimate authoring case needs
+                // these, so reject hard.
+                errors.Add(new ValidationError
+                {
+                    Path = "media_source",
+                    Message = "UNC and extended-length paths are not allowed. Use a local drive path or a https URL.",
+                    Severity = ValidationSeverity.Error
+                });
+            }
+
+            // Walk effect items for image paths from shared files; same rule.
+            for (int i = 0; i < e.TimelineItems.Count; i++)
+            {
+                var item = e.TimelineItems[i];
+                if (item == null) continue;
+                if (!string.IsNullOrEmpty(item.EffectImagePath) && IsUncOrExtendedPath(item.EffectImagePath))
+                {
+                    errors.Add(new ValidationError
+                    {
+                        Path = $"timeline_items[{i}].effect_image_path",
+                        Message = "UNC and extended-length paths are not allowed.",
+                        Severity = ValidationSeverity.Error
+                    });
+                }
+            }
+        }
+
+        private static bool IsUncOrExtendedPath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            if (path.StartsWith("\\\\", System.StringComparison.Ordinal)) return true;
+            if (path.StartsWith("//", System.StringComparison.Ordinal)) return true;
+            return false;
         }
 
         private static void ValidateRegions(Enhancement e, List<ValidationError> errors)

@@ -112,7 +112,11 @@ namespace ConditioningControlPanel.Services.Deeper
                 EffectTypes.Flash => new TriggerEffectAction
                 {
                     EffectType = EffectTypes.Flash,
-                    ImagePath = item.EffectImagePath,
+                    // Defense in depth: validator already rejects UNC paths in
+                    // shared files, but if a hand-edited file slips through,
+                    // strip the path to avoid the NTLM-leak / arbitrary-host
+                    // probe at flash dispatch time.
+                    ImagePath = IsSafeImagePath(item.EffectImagePath) ? item.EffectImagePath : null,
                     PlaySound = item.EffectPlaySound,
                     DurationMs = durationMs,
                     Intensity = item.EffectIntensity
@@ -141,6 +145,15 @@ namespace ConditioningControlPanel.Services.Deeper
                 },
                 _ => null
             };
+        }
+
+        private static bool IsSafeImagePath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return true; // null is fine — flash falls back to default
+            if (path.StartsWith("stock:", System.StringComparison.OrdinalIgnoreCase)) return true;
+            if (path.StartsWith("\\\\", System.StringComparison.Ordinal)) return false;
+            if (path.StartsWith("//", System.StringComparison.Ordinal)) return false;
+            return true;
         }
 
         // -- Lifecycle ---------------------------------------------------------

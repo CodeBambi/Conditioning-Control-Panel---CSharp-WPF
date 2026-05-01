@@ -384,23 +384,55 @@ namespace ConditioningControlPanel.Views.Deeper
             _browserInitInFlight = true;
             try
             {
+                // Pre-validate the URL against the same allowlist NavigationStarting
+                // enforces, so a malformed/disallowed source never reaches the
+                // WebView2 in the first place.
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var initialUri)
+                    || initialUri.Scheme != Uri.UriSchemeHttps
+                    || !IsAllowedPreviewHost(initialUri))
+                {
+                    ShowPlaceholder();
+                    return;
+                }
+
                 VideoPreview.Visibility = Visibility.Collapsed;
                 WaveformCanvas.Visibility = Visibility.Collapsed;
                 PreviewPlaceholder.Visibility = Visibility.Collapsed;
                 BrowserPreview.Visibility = Visibility.Visible;
 
-                // Reuse the main browser's user-data folder so the user's HT
-                // login and cookies carry over — no second login required.
+                // Separate user-data folder from the main browser tab. The
+                // editor preview navigates user-pasted URLs that we don't fully
+                // trust; sharing cookies/storage with the main tab would let a
+                // hostile page (or HT phishing redirect) read the user's
+                // signed-in HT cookies via document.cookie / authenticated fetch.
                 var userDataFolder = System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "ConditioningControlPanel",
-                    "browser_data");
+                    "browser_data_deeper_editor");
                 System.IO.Directory.CreateDirectory(userDataFolder);
 
                 var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(
                     userDataFolder: userDataFolder).ConfigureAwait(true);
                 await BrowserPreview.EnsureCoreWebView2Async(env).ConfigureAwait(true);
                 if (BrowserPreview.CoreWebView2 == null) { ShowPlaceholder(); return; }
+
+                // Settings hardening — JS stays on (BrowserVideoTimeSource needs
+                // it to drive the <video> element) but we strip every other
+                // attack surface that has no business inside an editor preview.
+                var settings = BrowserPreview.CoreWebView2.Settings;
+                settings.AreDevToolsEnabled = false;
+                settings.AreDefaultContextMenusEnabled = false;
+                settings.IsStatusBarEnabled = false;
+                settings.AreBrowserAcceleratorKeysEnabled = false;
+                settings.IsZoomControlEnabled = false;
+                settings.IsBuiltInErrorPageEnabled = false;
+
+                // Allowlist navigations to https on the configured hosts only.
+                // Block any redirect / link / script-driven nav that tries to
+                // leave the allowlist (e.g. ad iframes, tracker beacons, a 302
+                // into evil.com).
+                BrowserPreview.CoreWebView2.NavigationStarting -= OnBrowserNavigationStarting;
+                BrowserPreview.CoreWebView2.NavigationStarting += OnBrowserNavigationStarting;
 
                 BrowserPreview.CoreWebView2.Navigate(url);
 
@@ -417,6 +449,29 @@ namespace ConditioningControlPanel.Views.Deeper
             finally
             {
                 _browserInitInFlight = false;
+            }
+        }
+
+        private static bool IsAllowedPreviewHost(Uri uri)
+        {
+            return UrlSafety.HostMatches(uri, "hypnotube.com", "tiktok.com");
+        }
+
+        private void OnBrowserNavigationStarting(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationStartingEventArgs e)
+        {
+            try
+            {
+                if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri)
+                    || uri.Scheme != Uri.UriSchemeHttps
+                    || !IsAllowedPreviewHost(uri))
+                {
+                    e.Cancel = true;
+                    App.Logger?.Debug("DeeperEditor: blocked preview navigation to {Url}", e.Uri);
+                }
+            }
+            catch
+            {
+                e.Cancel = true;
             }
         }
 
@@ -592,6 +647,11 @@ namespace ConditioningControlPanel.Views.Deeper
             if (string.IsNullOrWhiteSpace(source)) return false;
             if (source.Contains("://")) return false;
             if (source.Contains('*')) return false;
+            // Reject UNC and extended-length prefixes: a shared .ccpenh.json
+            // pointing at \\attacker-smb\share\beacon would leak the user's
+            // NTLM hash on first access. No legitimate authoring case needs
+            // these — users with network files map them to drive letters.
+            if (!UrlSafety.IsSafeLocalAbsolute(source)) return false;
             return File.Exists(source);
         }
 
@@ -3522,6 +3582,12 @@ namespace ConditioningControlPanel.Views.Deeper
                     _browserSource.Dispose();
                     _browserSource = null;
                 }
+                try
+                {
+                    if (BrowserPreview?.CoreWebView2 != null)
+                        BrowserPreview.CoreWebView2.NavigationStarting -= OnBrowserNavigationStarting;
+                }
+                catch { }
                 try { BrowserPreview?.Dispose(); } catch { }
             }
             catch (Exception ex)
