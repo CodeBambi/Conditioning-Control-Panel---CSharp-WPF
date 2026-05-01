@@ -30,25 +30,35 @@ namespace ConditioningControlPanel.Services.Deeper
     {
         private const int MaxBytes = 512 * 1024;          // pages have grown past 256 KB
         private const int FetcherTimeoutMs = 3000;        // separate from HTTP timeout
+        private const int MaxRedirects = 5;
+        private const int MaxCacheEntries = 64;
         private static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(10);
 
-        private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = true })
+        // Manual redirect handling so the host + IP allowlist is re-checked on
+        // every hop. Auto-redirect would let a 302 from a legitimate host
+        // ferry the request into 169.254.169.254 / 127.0.0.1 / a UNC share.
+        private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false })
         {
             Timeout = HttpTimeout
         };
 
         private static readonly Dictionary<string, HtVideoMetadata> Cache = new();
+        private static readonly Queue<string> CacheOrder = new();
         private static readonly object CacheLock = new();
 
         public static async Task<HtVideoMetadata?> FetchAsync(string url, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(url)) return null;
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
-            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return null;
 
-            // Hostname gate — never scrape non-HT.
-            if (!uri.Host.Contains("hypnotube", StringComparison.OrdinalIgnoreCase))
-                return null;
+            // https-only; HT redirects http→https anyway and SSRF guards rely on
+            // TLS to prevent a cleartext detour into an internal host.
+            if (uri.Scheme != Uri.UriSchemeHttps) return null;
+
+            // Strict host allowlist on the parsed URI — substring matching
+            // ("hypnotube" anywhere in the host) is bypassable via
+            // hypnotube.evil.com or evil.com?x=hypnotube.
+            if (!UrlSafety.HostMatches(uri, "hypnotube.com")) return null;
 
             lock (CacheLock)
             {
@@ -60,24 +70,61 @@ namespace ConditioningControlPanel.Services.Deeper
 
             try
             {
-                using var req = new HttpRequestMessage(HttpMethod.Get, uri);
-                // HT serves a leaner page to known browsers; mimic.
-                req.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) CCP/Deeper");
-                req.Headers.AcceptLanguage.ParseAdd("en-US,en;q=0.9");
-
-                using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, linked.Token);
-                if (!resp.IsSuccessStatusCode) return null;
-
-                using var stream = await resp.Content.ReadAsStreamAsync(linked.Token);
-                var html = await ReadCappedAsync(stream, MaxBytes, linked.Token);
-                if (string.IsNullOrEmpty(html)) return null;
-
-                var meta = Parse(html);
-                if (meta != null)
+                var current = uri;
+                for (int hop = 0; hop <= MaxRedirects; hop++)
                 {
-                    lock (CacheLock) Cache[url] = meta;
+                    if (!await UrlSafety.IsSafePublicHttpsAsync(current, linked.Token).ConfigureAwait(false))
+                    {
+                        App.Logger?.Debug("HtMetadataFetcher: rejecting unsafe host {Host}", current.Host);
+                        return null;
+                    }
+
+                    using var req = new HttpRequestMessage(HttpMethod.Get, current);
+                    // HT serves a leaner page to known browsers; mimic.
+                    req.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) CCP/Deeper");
+                    req.Headers.AcceptLanguage.ParseAdd("en-US,en;q=0.9");
+
+                    using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, linked.Token).ConfigureAwait(false);
+
+                    int code = (int)resp.StatusCode;
+                    if (code >= 300 && code < 400 && resp.Headers.Location != null)
+                    {
+                        if (hop >= MaxRedirects) return null;
+                        var next = resp.Headers.Location.IsAbsoluteUri
+                            ? resp.Headers.Location
+                            : new Uri(current, resp.Headers.Location);
+                        if (next.Scheme != Uri.UriSchemeHttps) return null;
+                        if (!UrlSafety.HostMatches(next, "hypnotube.com")) return null;
+                        current = next;
+                        continue;
+                    }
+
+                    if (!resp.IsSuccessStatusCode) return null;
+
+                    using var stream = await resp.Content.ReadAsStreamAsync(linked.Token).ConfigureAwait(false);
+                    var html = await ReadCappedAsync(stream, MaxBytes, linked.Token).ConfigureAwait(false);
+                    if (string.IsNullOrEmpty(html)) return null;
+
+                    var meta = Parse(html);
+                    if (meta != null)
+                    {
+                        lock (CacheLock)
+                        {
+                            if (!Cache.ContainsKey(url))
+                            {
+                                Cache[url] = meta;
+                                CacheOrder.Enqueue(url);
+                                while (CacheOrder.Count > MaxCacheEntries)
+                                {
+                                    var evict = CacheOrder.Dequeue();
+                                    Cache.Remove(evict);
+                                }
+                            }
+                        }
+                    }
+                    return meta;
                 }
-                return meta;
+                return null;
             }
             catch (Exception ex)
             {

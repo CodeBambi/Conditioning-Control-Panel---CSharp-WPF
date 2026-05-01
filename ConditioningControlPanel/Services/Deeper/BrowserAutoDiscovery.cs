@@ -202,11 +202,17 @@ namespace ConditioningControlPanel.Services.Deeper
         private static bool IsHypnoTubeVideoPage(string url)
         {
             if (string.IsNullOrEmpty(url)) return false;
+            // Parse the URL so we anchor the host check on the actual Uri.Host
+            // (not a substring of the raw URL — `https://evil.com/?x=hypnotube.com/video/`
+            // would otherwise sail through and hand attacker DOM access to the
+            // discovery + auto-binding pipeline).
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+            if (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp) return false;
+            if (!UrlSafety.HostMatches(uri, "hypnotube.com")) return false;
             // HT video pages contain "/video/" in the path; the homepage and
             // category pages don't, so this avoids scraping when there's
             // nothing to bind to.
-            return url.Contains("hypnotube.com", StringComparison.OrdinalIgnoreCase)
-                && url.Contains("/video/", StringComparison.OrdinalIgnoreCase);
+            return uri.AbsolutePath.Contains("/video/", StringComparison.OrdinalIgnoreCase);
         }
 
         public void Dispose()

@@ -21,6 +21,7 @@ namespace ConditioningControlPanel.Services.Deeper
     public sealed class EnhancementFetcher : IDisposable
     {
         private const int MaxResponseBytes = 256 * 1024;
+        private const int MaxRedirects = 5;
         private static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(10);
 
         private readonly HttpClient _http;
@@ -30,7 +31,11 @@ namespace ConditioningControlPanel.Services.Deeper
 
         public EnhancementFetcher()
         {
-            _http = new HttpClient
+            // Manual redirect handling — every hop is re-validated against the
+            // SSRF guard so a 302 on an attacker-controlled host can't ferry
+            // the request into a private IP / cloud metadata endpoint.
+            var handler = new HttpClientHandler { AllowAutoRedirect = false };
+            _http = new HttpClient(handler)
             {
                 Timeout = FetchTimeout
             };
@@ -65,21 +70,60 @@ namespace ConditioningControlPanel.Services.Deeper
 
             try
             {
-                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
-                    || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
                 {
-                    App.Logger?.Debug("EnhancementFetcher: rejecting non-http(s) url ({Url})", url);
+                    App.Logger?.Debug("EnhancementFetcher: malformed url ({Url})", url);
                     return null;
                 }
 
-                using var resp = await _http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-                if (!resp.IsSuccessStatusCode)
+                // https-only — `ccp:http://...` references in HT descriptions
+                // would otherwise allow a cleartext SSRF detour. Real creators
+                // host their ccpenh.json on https hosts (gist, github pages, etc.).
+                if (uri.Scheme != Uri.UriSchemeHttps)
                 {
-                    App.Logger?.Debug("EnhancementFetcher: HTTP {Status} for {Url}", (int)resp.StatusCode, url);
+                    App.Logger?.Debug("EnhancementFetcher: rejecting non-https url ({Url})", url);
                     return null;
                 }
 
-                var contentLength = resp.Content.Headers.ContentLength;
+                // Resolve once and reject loopback / private / link-local /
+                // ULA before issuing the GET; re-checked per hop on redirect.
+                if (!await UrlSafety.IsSafePublicHttpsAsync(uri, ct).ConfigureAwait(false))
+                {
+                    App.Logger?.Debug("EnhancementFetcher: rejecting unsafe host {Host}", uri.Host);
+                    return null;
+                }
+
+                HttpResponseMessage? finalResp = null;
+                var current = uri;
+                for (int hop = 0; hop <= MaxRedirects; hop++)
+                {
+                    var resp = await _http.GetAsync(current, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+                    int code = (int)resp.StatusCode;
+                    if (code >= 300 && code < 400 && resp.Headers.Location != null)
+                    {
+                        resp.Dispose();
+                        if (hop >= MaxRedirects) return null;
+                        var next = resp.Headers.Location.IsAbsoluteUri
+                            ? resp.Headers.Location
+                            : new Uri(current, resp.Headers.Location);
+                        if (next.Scheme != Uri.UriSchemeHttps) return null;
+                        if (!await UrlSafety.IsSafePublicHttpsAsync(next, ct).ConfigureAwait(false)) return null;
+                        current = next;
+                        continue;
+                    }
+                    finalResp = resp;
+                    break;
+                }
+                if (finalResp == null) return null;
+
+                using var _resp = finalResp;
+                if (!_resp.IsSuccessStatusCode)
+                {
+                    App.Logger?.Debug("EnhancementFetcher: HTTP {Status} for {Url}", (int)_resp.StatusCode, url);
+                    return null;
+                }
+
+                var contentLength = _resp.Content.Headers.ContentLength;
                 if (contentLength.HasValue && contentLength.Value > MaxResponseBytes)
                 {
                     App.Logger?.Debug("EnhancementFetcher: response too large ({Size} bytes) for {Url}", contentLength.Value, url);
@@ -87,7 +131,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 }
 
                 string json;
-                using (var stream = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
+                using (var stream = await _resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
                 {
                     var buffer = new byte[MaxResponseBytes + 1];
                     int read = 0;
