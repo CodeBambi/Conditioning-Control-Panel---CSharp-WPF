@@ -7239,6 +7239,32 @@
                                 </StackPanel>
                             </Grid>
 
+                            <!-- Camera selector — let users pick which capture device to use
+                                 (physical webcam vs. virtual cameras like OBS / Snap). The
+                                 selection is saved to App.Settings.Current.WebcamDeviceIndex
+                                 and applied on the next Start. -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Camera:" Foreground="#CCCCCC" FontSize="12"
+                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <ComboBox Grid.Column="1" x:Name="CmbWebcamDevice"
+                                          Foreground="Black" Background="White"
+                                          BorderBrush="#FF8800" BorderThickness="1"
+                                          ToolTip="Pick the capture device to use for blink / gaze tracking. If your physical webcam doesn't show its in-use light, you may have a virtual camera selected (OBS, Snap, etc.) — switch here, then hit Start."
+                                          SelectionChanged="CmbWebcamDevice_SelectionChanged"/>
+                                <Button Grid.Column="2" x:Name="BtnWebcamDeviceRefresh" Content="Refresh"
+                                        ToolTip="Re-scan connected video-capture devices."
+                                        Padding="10,4" Margin="8,0,0,0"
+                                        Background="#33333A" Foreground="White"
+                                        BorderBrush="#FF8800" BorderThickness="1"
+                                        FontSize="11" FontWeight="SemiBold" Cursor="Hand"
+                                        Click="BtnWebcamDeviceRefresh_Click"/>
+                            </Grid>
+
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
