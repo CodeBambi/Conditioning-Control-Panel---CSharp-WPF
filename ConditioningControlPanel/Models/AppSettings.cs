@@ -3140,6 +3140,26 @@ namespace ConditioningControlPanel.Models
             set { _webcamCalibrationMode = value ?? ""; OnPropertyChanged(); }
         }
 
+        // Index passed to OpenCV's VideoCapture. -1 means "not yet chosen", which
+        // the service treats as 0 (system default). Surfaced via the camera
+        // selector in the Lab tab so users with virtual cameras (OBS, Snap, etc.)
+        // can pick the physical webcam.
+        private int _webcamDeviceIndex = -1;
+        public int WebcamDeviceIndex
+        {
+            get => _webcamDeviceIndex;
+            set { _webcamDeviceIndex = value; OnPropertyChanged(); }
+        }
+
+        // Friendly name remembered alongside the index — purely for UI display
+        // and the "we picked the wrong one because the order shuffled" log line.
+        private string _webcamDeviceName = "";
+        public string WebcamDeviceName
+        {
+            get => _webcamDeviceName;
+            set { _webcamDeviceName = value ?? ""; OnPropertyChanged(); }
+        }
+
         // Box 1 — Webcam Triggers
         private bool _webcamTriggersEnabled;
         public bool WebcamTriggersEnabled

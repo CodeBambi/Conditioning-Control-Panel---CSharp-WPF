@@ -3805,6 +3805,75 @@ namespace ConditioningControlPanel
             }
         }
 
+        // Suppresses the SelectionChanged save while we programmatically
+        // (re)populate the ComboBox during enumeration / restore.
+        private bool _webcamDevicePopulating;
+
+        private void RefreshWebcamDeviceList()
+        {
+            if (CmbWebcamDevice == null) return;
+            if (App.Webcam == null) return;
+
+            _webcamDevicePopulating = true;
+            try
+            {
+                CmbWebcamDevice.Items.Clear();
+
+                var devices = App.Webcam.EnumerateDevices();
+                if (devices.Count == 0)
+                {
+                    CmbWebcamDevice.Items.Add(new ComboBoxItem
+                    {
+                        Content = "(no cameras detected)",
+                        Tag = -1,
+                        IsEnabled = false,
+                    });
+                    CmbWebcamDevice.SelectedIndex = 0;
+                    return;
+                }
+
+                foreach (var d in devices)
+                {
+                    CmbWebcamDevice.Items.Add(new ComboBoxItem
+                    {
+                        Content = $"[{d.Index}] {d.Name}",
+                        Tag = d.Index,
+                    });
+                }
+
+                int saved = App.Settings?.Current?.WebcamDeviceIndex ?? -1;
+                int target = saved >= 0 && saved < devices.Count ? saved : 0;
+                CmbWebcamDevice.SelectedIndex = target;
+            }
+            finally
+            {
+                _webcamDevicePopulating = false;
+            }
+        }
+
+        private void CmbWebcamDevice_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_webcamDevicePopulating) return;
+            if (CmbWebcamDevice?.SelectedItem is not ComboBoxItem item) return;
+            if (item.Tag is not int idx || idx < 0) return;
+
+            if (App.Settings?.Current is { } s)
+            {
+                if (s.WebcamDeviceIndex == idx) return;
+                s.WebcamDeviceIndex = idx;
+                s.WebcamDeviceName = item.Content?.ToString() ?? "";
+                App.Settings.Save();
+            }
+
+            AppendWebcamDebugLog($"Camera set to {item.Content}. {(App.Webcam?.IsRunning == true ? "Stop and Start tracking to apply." : "Will be used on next Start.")}");
+        }
+
+        private void BtnWebcamDeviceRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            RefreshWebcamDeviceList();
+            AppendWebcamDebugLog($"Re-scanned cameras: {(CmbWebcamDevice?.Items.Count ?? 0)} found.");
+        }
+
         private void AppendWebcamDebugLog(string line)
         {
             if (TxtWebcamDebugLog == null) return;
@@ -4850,6 +4919,7 @@ namespace ConditioningControlPanel
                     LabTab.Visibility = Visibility.Visible;
                     AnimateTabIn(LabTab);
                     BtnLab.Style = activeStyle;
+                    RefreshWebcamDeviceList();
                     break;
 
                 // Note: "patreon" case is handled at the top of ShowTab as a

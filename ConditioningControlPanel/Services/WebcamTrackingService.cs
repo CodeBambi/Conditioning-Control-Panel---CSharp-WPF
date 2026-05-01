@@ -544,19 +544,78 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>
+        /// Returns the connected video-capture devices in DirectShow's
+        /// enumeration order. The Index field is what gets passed to
+        /// VideoCapture; the Name field is the OS-reported FriendlyName,
+        /// useful for letting users disambiguate physical webcams from
+        /// virtual cameras (OBS, Snap, etc.).
+        /// </summary>
+        public IReadOnlyList<WebcamDeviceEnumerator.WebcamDevice> EnumerateDevices()
+        {
+            var devices = WebcamDeviceEnumerator.Enumerate();
+            if (devices.Count == 0)
+            {
+                App.Logger?.Information("WebcamTrackingService: no video-capture devices found via DirectShow enumeration");
+            }
+            else
+            {
+                App.Logger?.Information("WebcamTrackingService: {Count} video-capture device(s) detected: {Names}",
+                    devices.Count, string.Join(" | ", devices.Select(d => $"[{d.Index}] {d.Name}")));
+            }
+            return devices;
+        }
+
         private bool TryOpenCamera()
         {
             try
             {
-                var cap = new VideoCapture(0, VideoCaptureAPIs.MSMF);
+                int configured = App.Settings?.Current?.WebcamDeviceIndex ?? -1;
+                int deviceIndex = configured >= 0 ? configured : 0;
+
+                // Snapshot the current device list so we can log which physical
+                // device the configured index points at — and warn if the
+                // configured name no longer matches (USB reorder, virtual cam
+                // installed, etc.).
+                var devices = WebcamDeviceEnumerator.Enumerate();
+                string detectedName = "(unknown)";
+                if (devices.Count > 0)
+                {
+                    if (deviceIndex >= devices.Count)
+                    {
+                        App.Logger?.Warning(
+                            "WebcamTrackingService: configured device index {Configured} is out of range ({Count} devices present); falling back to 0",
+                            deviceIndex, devices.Count);
+                        deviceIndex = 0;
+                    }
+                    detectedName = devices[deviceIndex].Name;
+
+                    string savedName = App.Settings?.Current?.WebcamDeviceName ?? "";
+                    if (!string.IsNullOrEmpty(savedName) && !string.Equals(savedName, detectedName, StringComparison.Ordinal))
+                    {
+                        App.Logger?.Warning(
+                            "WebcamTrackingService: device at index {Index} is '{Detected}', but settings remembered '{Saved}' — enumeration order may have shifted",
+                            deviceIndex, detectedName, savedName);
+                    }
+                }
+                else if (configured >= 0)
+                {
+                    App.Logger?.Warning("WebcamTrackingService: no devices enumerated but settings remember index {Index} — opening anyway", configured);
+                }
+
+                App.Logger?.Information("WebcamTrackingService: opening device index {Index} ('{Name}') with MSMF", deviceIndex, detectedName);
+                var cap = new VideoCapture(deviceIndex, VideoCaptureAPIs.MSMF);
                 if (!cap.IsOpened())
                 {
                     cap.Dispose();
-                    cap = new VideoCapture(0, VideoCaptureAPIs.DSHOW);
+                    App.Logger?.Information("WebcamTrackingService: MSMF open failed for index {Index}, retrying with DSHOW", deviceIndex);
+                    cap = new VideoCapture(deviceIndex, VideoCaptureAPIs.DSHOW);
                     if (!cap.IsOpened())
                     {
                         cap.Dispose();
-                        App.Logger?.Warning("WebcamTrackingService: VideoCapture.Open returned false on both MSMF and DSHOW backends");
+                        App.Logger?.Warning(
+                            "WebcamTrackingService: VideoCapture.Open returned false on both MSMF and DSHOW for device index {Index} ('{Name}')",
+                            deviceIndex, detectedName);
                         SetState(WebcamTrackingState.CameraDenied);
                         return false;
                     }
@@ -571,12 +630,15 @@ namespace ConditioningControlPanel.Services
                 if (!cap.Read(probe) || probe.Empty())
                 {
                     cap.Dispose();
-                    App.Logger?.Warning("WebcamTrackingService: probe frame failed -- camera may be in use by another app");
+                    App.Logger?.Warning(
+                        "WebcamTrackingService: probe frame failed for device index {Index} ('{Name}') — camera may be in use by another app",
+                        deviceIndex, detectedName);
                     SetState(WebcamTrackingState.CameraInUse);
                     return false;
                 }
 
                 _capture = cap;
+                App.Logger?.Information("WebcamTrackingService: device {Index} ('{Name}') opened successfully", deviceIndex, detectedName);
                 return true;
             }
             catch (Exception ex)
