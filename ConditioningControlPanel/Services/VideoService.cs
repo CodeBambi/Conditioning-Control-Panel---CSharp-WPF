@@ -67,9 +67,80 @@ namespace ConditioningControlPanel.Services
         private readonly List<LibVLCSharp.Shared.MediaPlayer> _mediaPlayers = new();
         private readonly object _mediaPlayersLock = new();  // Thread-safe access to _mediaPlayers
 
+        // Primary-monitor refs for the Deeper enhancement engine. Set when the
+        // audio-bearing video window is created, cleared in CloseAll. Reading
+        // these from outside the playback flow is safe — null means "no video
+        // is currently the primary", which the engine treats as "do nothing".
+        private LibVLCSharp.Shared.MediaPlayer? _primaryMediaPlayer;
+        private Window? _primaryVideoWindow;
+
         public event EventHandler? VideoAboutToStart; // Fires 1.3s before video
         public event EventHandler? VideoStarted;
         public event EventHandler? VideoEnded;
+
+        /// <summary>
+        /// Primary (audio-bearing) media player, or null if no video is playing.
+        /// Exposed for the Deeper EnhancementEngine to read playback time and
+        /// drive Seek/Pause. Treat as read-only — the engine should not mutate
+        /// state outside of Seek/Pause/Play helpers below.
+        /// </summary>
+        public LibVLCSharp.Shared.MediaPlayer? PrimaryMediaPlayer => _primaryMediaPlayer;
+
+        /// <summary>
+        /// Primary video window (audio monitor), or null if no video is playing.
+        /// Used to compute screen-space video rect for gaze-target rules.
+        /// </summary>
+        public Window? PrimaryVideoWindow => _primaryVideoWindow;
+
+        /// <summary>
+        /// Current primary-player playback time in milliseconds, or -1 if none.
+        /// </summary>
+        public long GetCurrentPlaybackTimeMs()
+        {
+            try { return _primaryMediaPlayer?.Time ?? -1; }
+            catch { return -1; }
+        }
+
+        /// <summary>
+        /// Seek the primary player to the given absolute time. No-op if no
+        /// video is active or the player rejects the seek (LibVLC will silently
+        /// ignore for non-seekable streams).
+        /// </summary>
+        public void SeekPrimary(long ms)
+        {
+            try
+            {
+                var p = _primaryMediaPlayer;
+                if (p == null) return;
+                if (!p.IsSeekable) return;
+                p.Time = Math.Max(0, ms);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoService.SeekPrimary failed: {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>Pause the primary player. No-op if none.</summary>
+        public void PausePrimary()
+        {
+            try { _primaryMediaPlayer?.Pause(); }
+            catch (Exception ex) { App.Logger?.Debug("VideoService.PausePrimary failed: {Error}", ex.Message); }
+        }
+
+        /// <summary>Resume the primary player. No-op if none.</summary>
+        public void PlayPrimary()
+        {
+            try { _primaryMediaPlayer?.Play(); }
+            catch (Exception ex) { App.Logger?.Debug("VideoService.PlayPrimary failed: {Error}", ex.Message); }
+        }
+
+        /// <summary>
+        /// Fired when the primary player's playback position advances.
+        /// Argument is current time in milliseconds. Fires from LibVLC's
+        /// internal thread; subscribers must marshal to the UI thread.
+        /// </summary>
+        public event Action<long>? PrimaryPlaybackTimeMsChanged;
 
         /// <summary>
         /// Whether a video is currently playing
@@ -756,6 +827,15 @@ namespace ConditioningControlPanel.Services
 
             if (withAudio)
             {
+                _primaryMediaPlayer = mediaPlayer;
+                _primaryVideoWindow = win;
+
+                mediaPlayer.TimeChanged += (s, e) =>
+                {
+                    try { PrimaryPlaybackTimeMsChanged?.Invoke(e.Time); }
+                    catch (Exception ex) { App.Logger?.Debug("PrimaryPlaybackTimeMsChanged handler error: {Error}", ex.Message); }
+                };
+
                 mediaPlayer.EndReached += (s, e) =>
                 {
                     // CRITICAL: Detach from LibVLC thread immediately to prevent deadlocks
@@ -1074,6 +1154,15 @@ namespace ConditioningControlPanel.Services
             // Only the primary player handles events (to avoid duplicate triggers)
             if (withAudio)
             {
+                _primaryMediaPlayer = mediaPlayer;
+                _primaryVideoWindow = win;
+
+                mediaPlayer.TimeChanged += (s, e) =>
+                {
+                    try { PrimaryPlaybackTimeMsChanged?.Invoke(e.Time); }
+                    catch (Exception ex) { App.Logger?.Debug("PrimaryPlaybackTimeMsChanged handler error: {Error}", ex.Message); }
+                };
+
                 mediaPlayer.LengthChanged += (s, e) =>
                 {
                     _duration = e.Length / 1000.0; // Convert ms to seconds
@@ -2004,6 +2093,11 @@ namespace ConditioningControlPanel.Services
                     playersCopy = _mediaPlayers.ToList();
                     _mediaPlayers.Clear();
                 }
+
+                // Drop primary refs before tearing players down so any concurrent
+                // engine read sees null rather than a half-disposed handle.
+                _primaryMediaPlayer = null;
+                _primaryVideoWindow = null;
 
                 // Stop all players in parallel with timeout to prevent one hanging player from blocking others
                 if (playersCopy.Count > 0)
