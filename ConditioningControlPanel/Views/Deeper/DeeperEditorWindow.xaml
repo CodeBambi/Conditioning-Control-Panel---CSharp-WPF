@@ -323,23 +323,52 @@
                             <TextBlock DockPanel.Dock="Right" Foreground="{DynamicResource TextDimBrush}"
                                        FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
                                        Text="{loc:Str deeper_editor_scrub_hint}"/>
+                            <!-- Zoom controls (Ctrl+wheel on the timeline also works). -->
+                            <Button x:Name="BtnZoomOut" DockPanel.Dock="Right" Content="−"
+                                    Click="BtnZoomOut_Click"
+                                    ToolTip="Zoom out (Ctrl+Wheel)"
+                                    Width="24" Height="22" Padding="0" Margin="0,0,2,0" Cursor="Hand"
+                                    FontSize="13" FontWeight="Bold"
+                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                    Foreground="{DynamicResource DeeperAccentBrush}"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
+                            <TextBlock x:Name="TxtZoomLevel" DockPanel.Dock="Right" Text="100%"
+                                       Width="40" TextAlignment="Center"
+                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="BtnZoomIn" DockPanel.Dock="Right" Content="+"
+                                    Click="BtnZoomIn_Click"
+                                    ToolTip="Zoom in (Ctrl+Wheel)"
+                                    Width="24" Height="22" Padding="0" Margin="2,0,8,0" Cursor="Hand"
+                                    FontSize="13" FontWeight="Bold"
+                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                    Foreground="{DynamicResource DeeperAccentBrush}"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
                         </DockPanel>
 
-                        <!-- Timeline canvas (single unified surface: rules render as colored bands;
-                             effects render as colored dots; right-click opens the add menu). -->
-                        <Canvas x:Name="TimelineCanvas" Grid.Row="1" Background="#15151F"
-                                Cursor="Hand" ClipToBounds="True"
-                                ToolTip="{loc:Str deeper_editor_tt_timeline}"
-                                MouseLeftButtonDown="TimelineCanvas_MouseLeftButtonDown"
-                                MouseRightButtonDown="TimelineCanvas_MouseRightButtonDown"
-                                MouseMove="TimelineCanvas_MouseMove"
-                                MouseLeftButtonUp="TimelineCanvas_MouseLeftButtonUp"
-                                SizeChanged="TimelineCanvas_SizeChanged">
-                            <!-- Playhead -->
-                            <Line x:Name="PlayheadLine" X1="0" X2="0" Y1="0" Y2="0"
-                                  Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="2"
-                                  Panel.ZIndex="100"/>
-                        </Canvas>
+                        <!-- Timeline canvas inside a ScrollViewer so we can zoom horizontally
+                             (Ctrl+Wheel or the +/- buttons above). At zoom=1 the canvas
+                             fills the viewport; higher zoom widens it and shows a scrollbar. -->
+                        <ScrollViewer x:Name="TimelineScroll" Grid.Row="1"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      PanningMode="HorizontalOnly"
+                                      PreviewMouseWheel="TimelineScroll_PreviewMouseWheel"
+                                      SizeChanged="TimelineScroll_SizeChanged">
+                            <Canvas x:Name="TimelineCanvas" Background="#15151F"
+                                    Cursor="Hand" ClipToBounds="True"
+                                    ToolTip="{loc:Str deeper_editor_tt_timeline}"
+                                    MouseLeftButtonDown="TimelineCanvas_MouseLeftButtonDown"
+                                    MouseRightButtonDown="TimelineCanvas_MouseRightButtonDown"
+                                    MouseMove="TimelineCanvas_MouseMove"
+                                    MouseLeftButtonUp="TimelineCanvas_MouseLeftButtonUp"
+                                    SizeChanged="TimelineCanvas_SizeChanged">
+                                <!-- Playhead -->
+                                <Line x:Name="PlayheadLine" X1="0" X2="0" Y1="0" Y2="0"
+                                      Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="2"
+                                      Panel.ZIndex="100"/>
+                            </Canvas>
+                        </ScrollViewer>
                     </Grid>
                 </Border>
             </Grid>

@@ -986,8 +986,15 @@ namespace ConditioningControlPanel
                     if (target is Slider sl)
                     {
                         _subSlider = sl;
-                        sl.ValueChanged += OnSubSliderValueChanged;
-                        // Don't auto-advance on subscribe — the user must move the slider.
+                        // Advance on mouse release rather than on every ValueChanged.
+                        // Otherwise the very first click on the slider (which lands
+                        // somewhere along the track) can already satisfy the range
+                        // and skip the step before the user has actually chosen a
+                        // value. PreviewMouseLeftButtonUp tunnels first so we see
+                        // the release reliably; we also handle keyboard release
+                        // via LostMouseCapture as a safety net for arrow-key edits.
+                        sl.AddHandler(UIElement.PreviewMouseLeftButtonUpEvent,
+                            (MouseButtonEventHandler)OnSubSliderMouseUp, true);
                     }
                     break;
             }
@@ -1027,7 +1034,12 @@ namespace ConditioningControlPanel
             }
             if (_subSlider != null)
             {
-                try { _subSlider.ValueChanged -= OnSubSliderValueChanged; } catch { }
+                try
+                {
+                    _subSlider.RemoveHandler(UIElement.PreviewMouseLeftButtonUpEvent,
+                        (MouseButtonEventHandler)OnSubSliderMouseUp);
+                }
+                catch { }
                 _subSlider = null;
             }
             _subscribedStep = null;
@@ -1065,13 +1077,12 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void OnSubSliderValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private void OnSubSliderMouseUp(object sender, MouseButtonEventArgs e)
         {
             if (_subscribedStep is { } step && _subSlider != null)
             {
                 var v = _subSlider.Value;
                 if (v < step.AdvanceMinValue) return;
-                // Optional upper bound for "land in this range" gates (e.g. drag down from full).
                 if (!double.IsNaN(step.AdvanceMaxValue) && v > step.AdvanceMaxValue) return;
                 Advance();
             }

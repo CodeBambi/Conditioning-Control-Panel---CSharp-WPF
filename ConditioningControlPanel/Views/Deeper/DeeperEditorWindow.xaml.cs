@@ -57,10 +57,27 @@ namespace ConditioningControlPanel.Views.Deeper
         };
         private Region? _selectedRegion;
         private readonly List<System.Windows.Shapes.Rectangle> _regionVisuals = new();
-        private enum DragMode { None, Scrub, CreateRegion, ShiftHapticEvent }
+        private enum DragMode
+        {
+            None, Scrub, CreateRegion,
+            ShiftHapticEvent, ResizeHapticStart, ResizeHapticEnd,
+            DragRegion, ResizeRegionStart, ResizeRegionEnd
+        }
         private DragMode _dragMode = DragMode.None;
         private double _dragCreateStartSec;
         private System.Windows.Shapes.Rectangle? _dragCreatePreview;
+        // Region drag/resize state
+        private Region? _draggedRegion;
+        private double _regionDragOffsetSec;
+        private double _regionDragOriginalLength;
+        // Pixel band on left/right of a band where cursor switches to resize.
+        private const double EdgeResizePx = 6.0;
+        // Timeline zoom state. _zoomFactor of 1.0 = canvas fills the viewport
+        // (default). Higher = horizontally scaled, with the ScrollViewer
+        // showing a horizontal scrollbar.
+        private double _zoomFactor = 1.0;
+        private const double MinZoom = 1.0;
+        private const double MaxZoom = 16.0;
 
         // Haptic events
         private const string DefaultTrackId = "primary";
@@ -689,6 +706,79 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildEffectVisuals();
         }
 
+        // -- Timeline zoom -----------------------------------------------------
+
+        private void TimelineScroll_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            // Recompute Canvas.Width whenever the available viewport changes so
+            // zoom=1 keeps the canvas stretched to fill, and higher zooms
+            // proportionally expand it.
+            ApplyZoom();
+        }
+
+        private void ApplyZoom(double? anchorViewportX = null)
+        {
+            if (TimelineScroll == null || TimelineCanvas == null) return;
+            var viewportW = TimelineScroll.ViewportWidth;
+            if (viewportW <= 0) return;
+
+            // Capture the scroll-relative time of the anchor point (cursor X
+            // for wheel zoom) so we can re-anchor after resize for a CapCut-
+            // style "zoom centered on cursor" feel.
+            double? timeAnchor = null;
+            if (anchorViewportX is double ax && _totalSeconds > 0 && TimelineCanvas.ActualWidth > 0)
+            {
+                var contentX = TimelineScroll.HorizontalOffset + ax;
+                timeAnchor = (contentX / TimelineCanvas.ActualWidth) * _totalSeconds;
+            }
+
+            double newWidth = viewportW * _zoomFactor;
+            TimelineCanvas.Width = newWidth;
+
+            if (TxtZoomLevel != null)
+                TxtZoomLevel.Text = $"{(int)Math.Round(_zoomFactor * 100)}%";
+
+            // Defer the rebuild + re-anchor until after layout sees the new
+            // width, so ActualWidth reflects newWidth.
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                UpdatePlayheadPosition();
+                UpdateWaveformPath();
+                RebuildRegionVisuals();
+                RebuildHapticVisuals();
+                RebuildEffectVisuals();
+
+                if (timeAnchor is double ta && _totalSeconds > 0 && anchorViewportX is double ax2)
+                {
+                    var newContentX = (ta / _totalSeconds) * TimelineCanvas.ActualWidth;
+                    var newOffset = newContentX - ax2;
+                    TimelineScroll.ScrollToHorizontalOffset(Math.Max(0, newOffset));
+                }
+            }), System.Windows.Threading.DispatcherPriority.Render);
+        }
+
+        private void SetZoom(double newZoom, double? anchorViewportX = null)
+        {
+            newZoom = Math.Clamp(newZoom, MinZoom, MaxZoom);
+            if (Math.Abs(newZoom - _zoomFactor) < 0.001) return;
+            _zoomFactor = newZoom;
+            ApplyZoom(anchorViewportX);
+        }
+
+        private void BtnZoomIn_Click(object sender, RoutedEventArgs e) => SetZoom(_zoomFactor * 1.5);
+        private void BtnZoomOut_Click(object sender, RoutedEventArgs e) => SetZoom(_zoomFactor / 1.5);
+
+        private void TimelineScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if ((Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control) return;
+            // Anchor zoom on the cursor position within the viewport for a
+            // CapCut-style experience.
+            var pos = e.GetPosition(TimelineScroll);
+            var factor = e.Delta > 0 ? 1.2 : 1.0 / 1.2;
+            SetZoom(_zoomFactor * factor, pos.X);
+            e.Handled = true;
+        }
+
         private void TimelineCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             // Shift+click+drag creates a region instead of scrubbing.
@@ -727,6 +817,55 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (_selectedHaptic == _draggedHaptic) PopulateHapticEditor();
                 return;
             }
+            if (_dragMode == DragMode.ResizeHapticStart && _draggedHaptic != null)
+            {
+                var endSec = _hapticDragStartSec + _draggedHaptic.Duration;
+                var newStart = Math.Max(0, Math.Min(MouseToSeconds(e), endSec - 0.05));
+                _draggedHaptic.Duration = endSec - newStart;
+                _draggedHaptic.Start = newStart;
+                MarkDirty();
+                RebuildHapticVisuals();
+                if (_selectedHaptic == _draggedHaptic) PopulateHapticEditor();
+                return;
+            }
+            if (_dragMode == DragMode.ResizeHapticEnd && _draggedHaptic != null)
+            {
+                var newEnd = Math.Min(_totalSeconds, Math.Max(MouseToSeconds(e), _draggedHaptic.Start + 0.05));
+                _draggedHaptic.Duration = newEnd - _draggedHaptic.Start;
+                MarkDirty();
+                RebuildHapticVisuals();
+                if (_selectedHaptic == _draggedHaptic) PopulateHapticEditor();
+                return;
+            }
+            if (_dragMode == DragMode.DragRegion && _draggedRegion != null)
+            {
+                var newStart = MouseToSeconds(e) - _regionDragOffsetSec;
+                newStart = Math.Max(0, Math.Min(newStart, Math.Max(0, _totalSeconds - _regionDragOriginalLength)));
+                _draggedRegion.Start = newStart;
+                _draggedRegion.End = newStart + _regionDragOriginalLength;
+                MarkDirty();
+                RebuildRegionVisuals();
+                if (_selectedRegion == _draggedRegion) UpdateSelectedSidePanel();
+                return;
+            }
+            if (_dragMode == DragMode.ResizeRegionStart && _draggedRegion != null)
+            {
+                var newStart = Math.Max(0, Math.Min(MouseToSeconds(e), _draggedRegion.End - 0.05));
+                _draggedRegion.Start = newStart;
+                MarkDirty();
+                RebuildRegionVisuals();
+                if (_selectedRegion == _draggedRegion) UpdateSelectedSidePanel();
+                return;
+            }
+            if (_dragMode == DragMode.ResizeRegionEnd && _draggedRegion != null)
+            {
+                var newEnd = Math.Min(_totalSeconds, Math.Max(MouseToSeconds(e), _draggedRegion.Start + 0.05));
+                _draggedRegion.End = newEnd;
+                MarkDirty();
+                RebuildRegionVisuals();
+                if (_selectedRegion == _draggedRegion) UpdateSelectedSidePanel();
+                return;
+            }
             if (_dragMode == DragMode.Scrub && _isScrubbing) ApplyScrubFromMouse(e);
         }
 
@@ -740,10 +879,22 @@ namespace ConditioningControlPanel.Views.Deeper
                 _dragMode = DragMode.None;
                 return;
             }
-            if (_dragMode == DragMode.ShiftHapticEvent)
+            if (_dragMode == DragMode.ShiftHapticEvent ||
+                _dragMode == DragMode.ResizeHapticStart ||
+                _dragMode == DragMode.ResizeHapticEnd)
             {
                 _draggedHaptic = null;
                 _draggedHapticTrack = null;
+                _dragMode = DragMode.None;
+                TimelineCanvas.ReleaseMouseCapture();
+                ScheduleValidation();
+                return;
+            }
+            if (_dragMode == DragMode.DragRegion ||
+                _dragMode == DragMode.ResizeRegionStart ||
+                _dragMode == DragMode.ResizeRegionEnd)
+            {
+                _draggedRegion = null;
                 _dragMode = DragMode.None;
                 TimelineCanvas.ReleaseMouseCapture();
                 ScheduleValidation();
@@ -1065,7 +1216,18 @@ namespace ConditioningControlPanel.Views.Deeper
             Canvas.SetLeft(rect, startX);
             Canvas.SetTop(rect, 0);
             rect.MouseLeftButtonDown += RegionRect_MouseLeftButtonDown;
+            rect.MouseMove += RegionRect_MouseMove;
             return rect;
+        }
+
+        private void RegionRect_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (_dragMode != DragMode.None) return;
+            if (sender is not System.Windows.Shapes.Rectangle r) return;
+            var pos = e.GetPosition(r);
+            r.Cursor = (pos.X <= EdgeResizePx || pos.X >= r.ActualWidth - EdgeResizePx)
+                ? Cursors.SizeWE
+                : Cursors.SizeAll;
         }
 
         private void EnsurePlayheadOnTop()
@@ -1088,11 +1250,28 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void RegionRect_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (sender is System.Windows.Shapes.Rectangle r && r.Tag is Region region)
+            if (sender is not System.Windows.Shapes.Rectangle r || r.Tag is not Region region) return;
+            SelectRegion(region);
+
+            var pos = e.GetPosition(r);
+            _draggedRegion = region;
+            _regionDragOriginalLength = Math.Max(0, region.End - region.Start);
+
+            if (pos.X <= EdgeResizePx)
             {
-                SelectRegion(region);
-                e.Handled = true;
+                _dragMode = DragMode.ResizeRegionStart;
             }
+            else if (pos.X >= r.ActualWidth - EdgeResizePx)
+            {
+                _dragMode = DragMode.ResizeRegionEnd;
+            }
+            else
+            {
+                _dragMode = DragMode.DragRegion;
+                _regionDragOffsetSec = MouseToSeconds(e) - region.Start;
+            }
+            TimelineCanvas.CaptureMouse();
+            e.Handled = true;
         }
 
         // -- Haptic events: rendering + interaction ---------------------------
@@ -1191,7 +1370,20 @@ namespace ConditioningControlPanel.Views.Deeper
             Canvas.SetLeft(rect, startX);
             Canvas.SetTop(rect, laneTop);
             rect.MouseLeftButtonDown += HapticRect_MouseLeftButtonDown;
+            rect.MouseMove += HapticRect_MouseMove;
             return rect;
+        }
+
+        // Update cursor as the pointer hovers near edges so the user can tell
+        // resize from drag-move.
+        private void HapticRect_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (_dragMode != DragMode.None) return; // don't churn cursor mid-drag
+            if (sender is not System.Windows.Shapes.Rectangle r) return;
+            var pos = e.GetPosition(r);
+            r.Cursor = (pos.X <= EdgeResizePx || pos.X >= r.ActualWidth - EdgeResizePx)
+                ? Cursors.SizeWE
+                : Cursors.SizeAll;
         }
 
         private void HapticRect_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -1203,6 +1395,32 @@ namespace ConditioningControlPanel.Views.Deeper
             SelectHaptic(track, ev);
 
             // Begin drag-shift on pointer hold (no Shift modifier — that's region-create).
+            if ((Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
+            {
+                var pos = e.GetPosition(r);
+                if (pos.X <= EdgeResizePx)
+                {
+                    _dragMode = DragMode.ResizeHapticStart;
+                    _draggedHaptic = ev;
+                    _draggedHapticTrack = track;
+                    _hapticDragStartSec = ev.Start;
+                    TimelineCanvas.CaptureMouse();
+                    e.Handled = true;
+                    return;
+                }
+                if (pos.X >= r.ActualWidth - EdgeResizePx)
+                {
+                    _dragMode = DragMode.ResizeHapticEnd;
+                    _draggedHaptic = ev;
+                    _draggedHapticTrack = track;
+                    _hapticDragStartSec = ev.Start;
+                    TimelineCanvas.CaptureMouse();
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            // Fall through to existing middle-drag (shift-position) logic.
             if ((Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
             {
                 _dragMode = DragMode.ShiftHapticEvent;
@@ -2768,9 +2986,20 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
+        // Set by MainWindow.OnClosing to skip the unsaved-changes prompt during
+        // app shutdown. A user-initiated cancel there would block the whole
+        // app from exiting and zombie the process.
+        private bool _suppressDirtyPromptOnClose;
+
+        public void ForceClose()
+        {
+            _suppressDirtyPromptOnClose = true;
+            try { Close(); } catch { }
+        }
+
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            if (_isDirty)
+            if (_isDirty && !_suppressDirtyPromptOnClose)
             {
                 var result = MessageBox.Show(this,
                     Loc.Get("deeper_editor_close_unsaved_prompt"),

@@ -24471,6 +24471,25 @@ namespace ConditioningControlPanel
                 }
                 catch { }
 
+                // Close any open Deeper editors / players / overlays. WebView2,
+                // LibVLCSharp media players, and the on-rails tutorial overlay
+                // each pin the dispatcher (native handles + animations + event
+                // subscriptions), so the owner-cascade alone isn't enough to
+                // let the process exit. Force-close them here.
+                try
+                {
+                    foreach (var w in Application.Current.Windows
+                                          .OfType<Views.Deeper.DeeperEditorWindow>().ToList())
+                        w.ForceClose();
+                    foreach (var w in Application.Current.Windows
+                                          .OfType<Views.Deeper.EnhancementPlayerWindow>().ToList())
+                        w.Close();
+                    foreach (var w in Application.Current.Windows
+                                          .OfType<TutorialOverlay>().ToList())
+                        w.Close();
+                }
+                catch { }
+
                 // Stop and dispose session engine (closes corner GIF window)
                 try
                 {
