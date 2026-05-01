@@ -58,6 +58,7 @@ namespace ConditioningControlPanel
             App.Webcam.SetRuntimeOffset(null, persist: false);
 
             App.Webcam.OnGazeMove += OnGazeMove;
+            App.Webcam.OnTrackingStateChanged += OnWebcamStateChanged;
             try
             {
                 await RunSequenceAsync();
@@ -71,13 +72,31 @@ namespace ConditioningControlPanel
 
         private void Window_Closed(object sender, EventArgs e)
         {
-            if (App.Webcam != null) App.Webcam.OnGazeMove -= OnGazeMove;
+            if (App.Webcam != null)
+            {
+                App.Webcam.OnGazeMove -= OnGazeMove;
+                App.Webcam.OnTrackingStateChanged -= OnWebcamStateChanged;
+            }
 
             // Restore the prior offset on cancel — never strand the user with
             // a cleared calibration after they bailed out of recal.
             if (!_completedOk)
             {
                 App.Webcam?.SetRuntimeOffset(_savedOffset, persist: false);
+            }
+        }
+
+        private void OnWebcamStateChanged(WebcamTrackingState state)
+        {
+            // Quick recal samples live OnGazeMove output. If tracking ends mid-flow,
+            // close so subscriptions tear down and the saved offset gets restored.
+            if (state == WebcamTrackingState.Stopped || state == WebcamTrackingState.Error
+                || state == WebcamTrackingState.CameraInUse || state == WebcamTrackingState.CameraDenied)
+            {
+                _cancelled = true;
+                _collecting = false;
+                if (DialogResult == null) DialogResult = false;
+                Close();
             }
         }
 
