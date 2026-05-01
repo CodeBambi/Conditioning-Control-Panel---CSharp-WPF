@@ -2851,11 +2851,35 @@
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
 
+                                <!-- Deeper "Enhance if possible" toggle (always visible) -->
+                                <Border x:Name="BrowserEnhanceToolbar" Grid.Row="0"
+                                        Background="{DynamicResource PanelBgBrush}" Padding="8,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox x:Name="ToggleEnhanceIfPossible" Grid.Column="0"
+                                                  Content="{loc:Str browser_enhance_label}"
+                                                  Foreground="{DynamicResource TextLightBrush}" FontSize="11"
+                                                  VerticalAlignment="Center" Cursor="Hand"
+                                                  Checked="ToggleEnhanceIfPossible_Changed"
+                                                  Unchecked="ToggleEnhanceIfPossible_Changed"
+                                                  ToolTip="{loc:Str browser_enhance_tooltip}"/>
+                                        <TextBlock x:Name="TxtEnhanceMatchStatus" Grid.Column="1"
+                                                   Text="{loc:Str browser_enhance_match_none}"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                                   VerticalAlignment="Center"
+                                                   Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                    </Grid>
+                                </Border>
+
                                 <!-- Audio Sync Controls (shown when audio sync enabled) -->
-                                <Border x:Name="AudioSyncLatencyPanel" Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Padding="6,3" Visibility="Collapsed">
+                                <Border x:Name="AudioSyncLatencyPanel" Grid.Row="1" Background="{DynamicResource PanelBgBrush}" Padding="6,3" Visibility="Collapsed">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -2895,7 +2919,7 @@
                                     </Grid>
                                 </Border>
 
-                                <Grid x:Name="BrowserContainer" Grid.Row="1">
+                                <Grid x:Name="BrowserContainer" Grid.Row="2">
                                     <!-- WebView2 will be added here programmatically -->
                                     <TextBlock x:Name="BrowserLoadingText"
                                                Text="{loc:Str label_click_to_load_browser}"

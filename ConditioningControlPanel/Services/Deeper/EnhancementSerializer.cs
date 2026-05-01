@@ -84,6 +84,21 @@ namespace ConditioningControlPanel.Services.Deeper
                 if (enhancement.TimelineItems.Count == 0 && HasLegacyContent(enhancement))
                     ProjectLegacyToTimeline(enhancement);
 
+                // Effects-as-segments migration: items authored before effects had
+                // a visible duration on the timeline have Duration=0 + a positive
+                // EffectDurationMs. Project the latter into Duration so the editor
+                // can render them as segments and users can drag-resize.
+                foreach (var item in enhancement.TimelineItems)
+                {
+                    if (item != null
+                        && item.Kind == TimelineItemKind.Effect
+                        && item.Duration <= 0
+                        && item.EffectDurationMs > 0)
+                    {
+                        item.Duration = item.EffectDurationMs / 1000.0;
+                    }
+                }
+
                 return enhancement;
             }
             catch (EnhancementLoadException) { throw; }

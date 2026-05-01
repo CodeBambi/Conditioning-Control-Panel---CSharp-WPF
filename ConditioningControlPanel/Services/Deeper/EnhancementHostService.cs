@@ -19,6 +19,7 @@ namespace ConditioningControlPanel.Services.Deeper
         public string? LoadedFilePath { get; private set; }
 
         private EnhancementEngine? _engine;
+        private RecordingActionDispatcher? _activeRecorder;
         private IPlaybackTimeSource? _activeSource;
         private Action? _detachActiveSource;
 
@@ -26,6 +27,14 @@ namespace ConditioningControlPanel.Services.Deeper
 
         public event Action<Enhancement?, string?>? Loaded;   // null = unloaded
         public event Action<string>? LoadFailed;              // human-readable reason
+
+        /// <summary>
+        /// Fires (UI thread, via the dispatcher's caller) for every effect/rule
+        /// action the engine dispatches while bound. Format mirrors
+        /// RecordingActionDispatcher: "t=12.34s  effect flash for 2000ms".
+        /// Subscribers (e.g. the Player's event-log row) get one line per fire.
+        /// </summary>
+        public event Action<string>? ActionLogged;
 
         // -- Load / unload -----------------------------------------------------
 
@@ -123,9 +132,14 @@ namespace ConditioningControlPanel.Services.Deeper
                 _activeSource = source;
                 _detachActiveSource = detach;
 
-                var dispatcher = new RealActionDispatcher();
+                // Wrap the real dispatcher in a recorder so subscribers (like the
+                // Player's event log) can show a live feed of what the engine
+                // fired without us touching every effect path.
+                _activeRecorder = new RecordingActionDispatcher(new RealActionDispatcher());
+                _activeRecorder.ActionLogged += OnRecorderActionLogged;
+
                 var webcam = (App.Webcam?.IsRunning ?? false) ? App.Webcam : null;
-                _engine = new EnhancementEngine(LoadedEnhancement, source, dispatcher, webcam);
+                _engine = new EnhancementEngine(LoadedEnhancement, source, _activeRecorder, webcam);
                 _engine.Start();
                 App.Logger?.Information("Deeper engine bound and started");
                 return true;
@@ -147,9 +161,20 @@ namespace ConditioningControlPanel.Services.Deeper
             }
             catch { }
             _engine = null;
+            if (_activeRecorder != null)
+            {
+                try { _activeRecorder.ActionLogged -= OnRecorderActionLogged; } catch { }
+                _activeRecorder = null;
+            }
             try { _detachActiveSource?.Invoke(); } catch { }
             _detachActiveSource = null;
             _activeSource = null;
+        }
+
+        private void OnRecorderActionLogged(string line)
+        {
+            try { ActionLogged?.Invoke(line); }
+            catch (Exception ex) { App.Logger?.Debug("EnhancementHostService.ActionLogged subscriber error: {Error}", ex.Message); }
         }
 
         public void Dispose()

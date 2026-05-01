@@ -183,10 +183,8 @@ namespace ConditioningControlPanel.Services.Deeper
                         await DispatchTriggerEffect(effect);
                         break;
 
-                    case ScreenShakeAction:
-                        // No screen-shake primitive exists yet; logged so missing
-                        // capability is visible without crashing creator content.
-                        App.Logger?.Debug("Deeper: screen_shake action unsupported in v1");
+                    case ScreenShakeAction shake:
+                        App.ScreenShake?.Shake(shake.Intensity, shake.DurationMs);
                         break;
 
                     case SetIntensityAction:
@@ -294,16 +292,22 @@ namespace ConditioningControlPanel.Services.Deeper
                         break;
 
                     case EffectTypes.Flash:
-                        App.Flash?.TriggerFlashOnceWithImage(effect.ImagePath, effect.DurationMs, effect.PlaySound);
+                        // Inherit the user's CCP Flashes settings: image pool,
+                        // sound, scale, opacity all come from FlashService's
+                        // normal random-image path (passing null path = random).
+                        var flashSound = App.Settings?.Current?.FlashAudioEnabled ?? true;
+                        App.Flash?.TriggerFlashOnceWithImage(null, effect.DurationMs, flashSound);
                         break;
 
                     case EffectTypes.Bubble:
-                        DispatchBubbleBurst(effect.DurationMs, effect.MaxBubbles);
+                        // maxBubbles is no longer per-effect; derive a sensible
+                        // burst from the user's BubblesFrequency × segment width.
+                        DispatchBubbleBurst(effect.DurationMs);
                         break;
 
                     case EffectTypes.Subliminal:
                         if (!string.IsNullOrWhiteSpace(effect.Text))
-                            App.Subliminal?.FlashSubliminalCustom(effect.Text!);
+                            App.Subliminal?.FlashSubliminalCustom(effect.Text!, overrideDurationMs: effect.DurationMs);
                         break;
 
                     case EffectTypes.Overlay:
@@ -321,11 +325,14 @@ namespace ConditioningControlPanel.Services.Deeper
             }
         }
 
-        private static void DispatchBubbleBurst(int durationMs, int maxBubbles)
+        private static void DispatchBubbleBurst(int durationMs)
         {
             // Bubbles have no per-event helper on the service; a brief Start/Stop
             // window with the dispatcher-owned timer keeps the surface area small.
             // DispatcherTimer (NOT Task.Delay) per CLAUDE.md known issue 6.
+            // Density is governed by the user's CCP BubblesFrequency setting —
+            // BubbleService.Start() reads that itself, so we just gate the
+            // duration here.
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
             if (dispatcher == null) return;
             try

@@ -1620,6 +1620,14 @@ namespace ConditioningControlPanel
             // Initialize hypnotube links UI
             RefreshHypnotubeLinksUI();
 
+            // Initialize Deeper "Enhance if possible" toggle from settings
+            try
+            {
+                if (ToggleEnhanceIfPossible != null)
+                    ToggleEnhanceIfPossible.IsChecked = App.Settings?.Current?.BrowserEnhanceIfPossible ?? true;
+            }
+            catch { }
+
             // Apply mod-aware feature names to static XAML labels
             ApplyModFeatureNames();
             if (App.Mods != null)
@@ -2260,6 +2268,9 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Failed to open Deeper player");
+                MessageBox.Show(this,
+                    $"Couldn't open Deeper Player:\n\n{ex.GetType().Name}: {ex.Message}",
+                    "Open Player failed", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -2286,6 +2297,50 @@ namespace ConditioningControlPanel
                 {
                     DeeperBrowserBadge.Visibility = Visibility.Collapsed;
                     DeeperBrowserBadge.Tag = null;
+                }
+                catch { }
+            });
+        }
+
+        private void ToggleEnhanceIfPossible_Changed(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var newValue = ToggleEnhanceIfPossible?.IsChecked == true;
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.BrowserEnhanceIfPossible = newValue;
+                    App.Settings.Save();
+                }
+                App.BrowserEnhanceBridge?.Refresh();
+
+                // If just turned off, status text needs an immediate reset since
+                // Refresh() will fire MatchChanged(null) but we want to be explicit.
+                if (!newValue && TxtEnhanceMatchStatus != null)
+                    TxtEnhanceMatchStatus.Text = Loc.Get("browser_enhance_match_off");
+            }
+            catch (Exception ex) { App.Logger?.Debug("ToggleEnhanceIfPossible_Changed: {Error}", ex.Message); }
+        }
+
+        private void OnBrowserEnhanceMatchChanged(Services.Deeper.EnhancementLibraryEntry? match)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (TxtEnhanceMatchStatus == null) return;
+                    if (App.Settings?.Current?.BrowserEnhanceIfPossible == false)
+                    {
+                        TxtEnhanceMatchStatus.Text = Loc.Get("browser_enhance_match_off");
+                        return;
+                    }
+                    if (match == null)
+                    {
+                        TxtEnhanceMatchStatus.Text = Loc.Get("browser_enhance_match_none");
+                        return;
+                    }
+                    var name = string.IsNullOrEmpty(match.Name) ? "(untitled)" : match.Name;
+                    TxtEnhanceMatchStatus.Text = string.Format(Loc.Get("browser_enhance_match_fmt"), name);
                 }
                 catch { }
             });
@@ -15623,6 +15678,15 @@ namespace ConditioningControlPanel
                                 App.DeeperBrowserDiscovery.Bound += OnDeeperBrowserBound;
                                 App.DeeperBrowserDiscovery.Unbound += OnDeeperBrowserUnbound;
                             }
+                        }
+
+                        // Browser Enhancement Bridge: when the user navigates to
+                        // a URL we have a saved enhancement for, drive effects on
+                        // top of the browser. Toggle ON/OFF via the toolbar.
+                        if (_browser?.WebView != null && App.BrowserEnhanceBridge == null)
+                        {
+                            App.BrowserEnhanceBridge = new Services.Deeper.BrowserEnhancementBridge(_browser.WebView, _browser);
+                            App.BrowserEnhanceBridge.MatchChanged += OnBrowserEnhanceMatchChanged;
                         }
                     });
                 };

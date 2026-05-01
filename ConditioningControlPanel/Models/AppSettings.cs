@@ -3327,6 +3327,13 @@ namespace ConditioningControlPanel.Models
             set { _deeperLastDirectory = value ?? ""; OnPropertyChanged(); }
         }
 
+        private bool _browserEnhanceIfPossible = true;
+        public bool BrowserEnhanceIfPossible
+        {
+            get => _browserEnhanceIfPossible;
+            set { _browserEnhanceIfPossible = value; OnPropertyChanged(); }
+        }
+
         #endregion
     }
 }

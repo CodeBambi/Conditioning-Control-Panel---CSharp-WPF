@@ -177,6 +177,7 @@ namespace ConditioningControlPanel
         public static ProgressionService Progression { get; private set; } = null!;
         public static SubliminalService Subliminal { get; private set; } = null!;
         public static OverlayService Overlay { get; private set; } = null!;
+        public static ScreenShakeService ScreenShake { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
         public static LockCardService LockCard { get; private set; } = null!;
         public static PopQuizService PopQuiz { get; private set; } = null!;
@@ -231,6 +232,9 @@ namespace ConditioningControlPanel
         public static Services.Deeper.EnhancementHostService DeeperHost { get; private set; } = null!;
         public static Services.Deeper.EnhancementFetcher DeeperFetcher { get; private set; } = null!;
         public static Services.Deeper.BrowserAutoDiscovery DeeperBrowserDiscovery { get; private set; } = null!;
+        // Bridge that ties dashboard browser navigation to the local enhancement
+        // library; created lazily by MainWindow when the WebView2 spins up.
+        public static Services.Deeper.BrowserEnhancementBridge? BrowserEnhanceBridge { get; set; }
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -749,6 +753,7 @@ namespace ConditioningControlPanel
 
             Subliminal = new SubliminalService();
             Overlay = new OverlayService();
+            ScreenShake = new ScreenShakeService();
             Bubbles = new BubbleService();
             InteractionQueue = new InteractionQueueService();
             LockCard = new LockCardService();
@@ -2141,6 +2146,7 @@ Application State:
             Video?.Dispose();
             Subliminal?.Dispose();
             Overlay?.Dispose();
+            ScreenShake?.Dispose();
             Bubbles?.Dispose();
             LockCard?.Dispose();
             PopQuiz?.Dispose();
@@ -2176,6 +2182,7 @@ Application State:
             Haptics?.Dispose();
             AudioSync?.Dispose();
             Audio?.Dispose();
+            BrowserEnhanceBridge?.Dispose();
 
             // Terminate any `ollama serve` we spawned so it doesn't outlive the app.
             // (Servers started by the Ollama installer's auto-start or the user's tray

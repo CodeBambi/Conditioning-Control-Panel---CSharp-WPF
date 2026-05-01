@@ -29,6 +29,7 @@ namespace ConditioningControlPanel.Services.Deeper
         private readonly Dispatcher _dispatcher;
         private DispatcherTimer? _pollTimer;
         private double _lastTimeSeconds = -1;
+        private double _lastDurationSeconds = -1;
         private double _currentTimeSeconds;
         private double _durationSeconds;
         private bool _isPlaying;
@@ -105,9 +106,18 @@ namespace ConditioningControlPanel.Services.Deeper
                 _videoRectNormalized[2] = obj.Value<double?>("rw") ?? 1;
                 _videoRectNormalized[3] = obj.Value<double?>("rh") ?? 1;
 
-                if (Math.Abs(_currentTimeSeconds - _lastTimeSeconds) > 0.001)
+                // Fire on time change OR duration change. HT pages load paused
+                // with currentTime=0 and duration=NaN; once metadata loads,
+                // duration becomes a real number but currentTime stays 0, so
+                // a time-only check would never propagate "duration is now known"
+                // until the user pressed play. Subscribers (the editor's
+                // RebuildEffectVisuals) need to know about both.
+                bool timeChanged = Math.Abs(_currentTimeSeconds - _lastTimeSeconds) > 0.001;
+                bool durationChanged = Math.Abs(_durationSeconds - _lastDurationSeconds) > 0.001;
+                if (timeChanged || durationChanged)
                 {
                     _lastTimeSeconds = _currentTimeSeconds;
+                    _lastDurationSeconds = _durationSeconds;
                     try { PlaybackTimeChanged?.Invoke(_currentTimeSeconds); }
                     catch (Exception ex) { App.Logger?.Debug("BrowserVideoTimeSource subscriber error: {Error}", ex.Message); }
                 }

@@ -149,22 +149,23 @@ namespace ConditioningControlPanel.Views.Deeper
                     return;
                 }
 
+                var defaultDurationMs = effectType switch
+                {
+                    EffectTypes.Bubble => 5000,
+                    EffectTypes.Overlay => 3000,
+                    EffectTypes.Subliminal => 200,
+                    EffectTypes.Flash => 800,
+                    _ => 1000
+                };
                 var item = new TimelineItem
                 {
                     Id = TimelineItem.NewId(),
                     Kind = TimelineItemKind.Effect,
                     Start = seconds,
-                    Duration = 0,
+                    Duration = defaultDurationMs / 1000.0,
                     EffectType = effectType,
                     EffectIntensity = 1.0,
-                    EffectDurationMs = effectType switch
-                    {
-                        EffectTypes.Bubble => 5000,
-                        EffectTypes.Overlay => 3000,
-                        EffectTypes.Subliminal => 200,
-                        EffectTypes.Flash => 800,
-                        _ => 1000
-                    },
+                    EffectDurationMs = defaultDurationMs,
                     EffectMaxBubbles = 3,
                     EffectOpacity = 0.5,
                     EffectOverlayKind = OverlayKinds.PinkFilter,
@@ -333,9 +334,25 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void BuildEffectDot(TimelineItem item, double canvasWidth, double canvasHeight)
         {
+            // One-shot effects (Flash, Subliminal) render as a small dot — they
+            // don't have a meaningful on-screen duration the user would drag.
+            // Ongoing effects (Bubble, Overlay) render as draggable, resizable
+            // segments whose width matches their Duration. Haptic uses the
+            // legacy haptic-track lane and never reaches this method.
+            if (IsOneShotEffect(item.EffectType))
+                BuildEffectPointDot(item, canvasWidth, canvasHeight);
+            else
+                BuildEffectSegment(item, canvasWidth, canvasHeight);
+        }
+
+        private static bool IsOneShotEffect(string? effectType) =>
+            effectType == EffectTypes.Flash || effectType == EffectTypes.Subliminal;
+
+        // One-shot dot: small ellipse, click-to-select only (no drag/resize).
+        private void BuildEffectPointDot(TimelineItem item, double canvasWidth, double canvasHeight)
+        {
             var brush = TryParseBrush(EffectColors.TryGetValue(item.EffectType ?? "", out var c) ? c : "#FFFFFF")
                         ?? Brushes.White;
-
             var dot = new System.Windows.Shapes.Ellipse
             {
                 Width = 12,
@@ -347,9 +364,8 @@ namespace ConditioningControlPanel.Views.Deeper
                 Tag = item,
                 ToolTip = $"{item.EffectType} @ {item.Start:0.##}s"
             };
-
             double x = (item.Start / _totalSeconds) * canvasWidth - 6;
-            double y = canvasHeight - 18;          // bottom row of the canvas
+            double y = canvasHeight - 18;
             Canvas.SetLeft(dot, x);
             Canvas.SetTop(dot, y);
             Panel.SetZIndex(dot, 10);
@@ -362,6 +378,88 @@ namespace ConditioningControlPanel.Views.Deeper
 
             TimelineCanvas.Children.Add(dot);
             _effectVisuals.Add(dot);
+        }
+
+        // Ongoing segment: rectangle with width = Duration, draggable + resizable.
+        private void BuildEffectSegment(TimelineItem item, double canvasWidth, double canvasHeight)
+        {
+            var color = TryParseColor(EffectColors.TryGetValue(item.EffectType ?? "", out var c) ? c : "#FFFFFF")
+                        ?? Colors.White;
+            var fill = System.Windows.Media.Color.FromArgb(140, color.R, color.G, color.B);
+            var isSelected = item == _selectedEffect;
+
+            // Segment width tracks Duration; minimum 8px so a near-zero segment
+            // is still clickable for selection.
+            double startX = Math.Max(0, (item.Start / _totalSeconds) * canvasWidth);
+            double endX = Math.Min(canvasWidth, ((item.Start + Math.Max(0, item.Duration)) / _totalSeconds) * canvasWidth);
+            double width = Math.Max(8, endX - startX);
+            double y = canvasHeight - 22;          // dedicated effect lane near the bottom
+            double height = 18;
+
+            var rect = new System.Windows.Shapes.Rectangle
+            {
+                Width = width,
+                Height = height,
+                Fill = new System.Windows.Media.SolidColorBrush(fill),
+                Stroke = new System.Windows.Media.SolidColorBrush(color),
+                StrokeThickness = isSelected ? 2.0 : 1.0,
+                Cursor = Cursors.SizeAll,
+                Tag = item,
+                ToolTip = $"{item.EffectType} @ {item.Start:0.##}s · {item.Duration:0.##}s"
+            };
+
+            Canvas.SetLeft(rect, startX);
+            Canvas.SetTop(rect, y);
+            Panel.SetZIndex(rect, 10);
+
+            rect.MouseLeftButtonDown += EffectRect_MouseLeftButtonDown;
+            rect.MouseMove += EffectRect_MouseMove;
+
+            TimelineCanvas.Children.Add(rect);
+            _effectVisuals.Add(rect);
+        }
+
+        // Cursor feedback near segment edges so the user can tell resize from drag-move.
+        private void EffectRect_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (_dragMode != DragMode.None) return;
+            if (sender is not System.Windows.Shapes.Rectangle r) return;
+            var pos = e.GetPosition(r);
+            r.Cursor = (pos.X <= EdgeResizePx || pos.X >= r.ActualWidth - EdgeResizePx)
+                ? Cursors.SizeWE
+                : Cursors.SizeAll;
+        }
+
+        private void EffectRect_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not System.Windows.Shapes.Rectangle r || r.Tag is not TimelineItem item)
+                return;
+
+            // Snapshot pos + width BEFORE selecting — SelectEffect rebuilds visuals
+            // which detaches `r` from the visual tree, after which e.GetPosition(r)
+            // returns ~(0,0) and trips the left-edge resize check unconditionally.
+            var pos = e.GetPosition(r);
+            var rectWidth = r.ActualWidth;
+            SelectEffect(item);
+
+            _draggedEffect = item;
+            _effectDragOriginalDuration = Math.Max(0, item.Duration);
+
+            if (pos.X <= EdgeResizePx)
+            {
+                _dragMode = DragMode.ResizeEffectStart;
+            }
+            else if (pos.X >= rectWidth - EdgeResizePx)
+            {
+                _dragMode = DragMode.ResizeEffectEnd;
+            }
+            else
+            {
+                _dragMode = DragMode.DragEffect;
+                _effectDragOffsetSec = MouseToSeconds(e) - item.Start;
+            }
+            TimelineCanvas.CaptureMouse();
+            e.Handled = true;
         }
 
         // -- Selection (Effect TimelineItems) -------------------------------------
@@ -397,14 +495,11 @@ namespace ConditioningControlPanel.Views.Deeper
                 {
                     case EffectTypes.Flash:
                         FlashEffectEditor.Visibility = Visibility.Visible;
-                        TxtFlashImagePath.Text = _selectedEffect.EffectImagePath ?? "";
-                        ChkFlashSound.IsChecked = _selectedEffect.EffectPlaySound;
                         TxtFlashDuration.Text = _selectedEffect.EffectDurationMs.ToString(CultureInfo.InvariantCulture);
                         break;
                     case EffectTypes.Bubble:
                         BubbleEffectEditor.Visibility = Visibility.Visible;
                         TxtBubbleWindow.Text = (_selectedEffect.EffectDurationMs / 1000.0).ToString("0.##", CultureInfo.InvariantCulture);
-                        TxtBubbleMax.Text = _selectedEffect.EffectMaxBubbles.ToString(CultureInfo.InvariantCulture);
                         SliderBubbleIntensity.Value = _selectedEffect.EffectIntensity;
                         break;
                     case EffectTypes.Subliminal:
@@ -458,14 +553,10 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_suppressEffectFieldSync || _selectedEffect == null) return;
             try
             {
-                if (sender == TxtFlashImagePath)
-                    _selectedEffect.EffectImagePath = string.IsNullOrWhiteSpace(TxtFlashImagePath.Text) ? null : TxtFlashImagePath.Text;
-                else if (sender == TxtFlashDuration && TryParseInt(TxtFlashDuration.Text, out var fd))
+                if (sender == TxtFlashDuration && TryParseInt(TxtFlashDuration.Text, out var fd))
                     _selectedEffect.EffectDurationMs = Math.Max(50, fd);
                 else if (sender == TxtBubbleWindow && TryParseDouble(TxtBubbleWindow.Text, out var bw))
                     _selectedEffect.EffectDurationMs = (int)Math.Max(50, bw * 1000);
-                else if (sender == TxtBubbleMax && TryParseInt(TxtBubbleMax.Text, out var bm))
-                    _selectedEffect.EffectMaxBubbles = Math.Clamp(bm, 1, 50);
                 else if (sender == TxtSubliminalText)
                     _selectedEffect.EffectText = TxtSubliminalText.Text;
                 else if (sender == TxtSubliminalDuration && TryParseInt(TxtSubliminalDuration.Text, out var sd))
@@ -473,20 +564,17 @@ namespace ConditioningControlPanel.Views.Deeper
                 else if (sender == TxtOverlayDuration && TryParseInt(TxtOverlayDuration.Text, out var od))
                     _selectedEffect.EffectDurationMs = Math.Max(50, od);
 
+                // Mirror EffectDurationMs into Duration so the timeline segment
+                // width stays in sync with the textbox value.
+                _selectedEffect.Duration = _selectedEffect.EffectDurationMs / 1000.0;
                 MarkDirty();
+                RebuildEffectVisuals();
                 ScheduleValidation();
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("DeeperEditor: EffectField sync error: {Error}", ex.Message);
             }
-        }
-
-        private void ChkFlashSound_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_suppressEffectFieldSync || _selectedEffect == null) return;
-            _selectedEffect.EffectPlaySound = ChkFlashSound.IsChecked == true;
-            MarkDirty();
         }
 
         private void SliderBubbleIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -513,26 +601,6 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
-        private void BtnFlashImageBrowse_Click(object sender, RoutedEventArgs e)
-        {
-            if (_selectedEffect == null) return;
-            try
-            {
-                var dlg = new OpenFileDialog
-                {
-                    Filter = "Images|*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp|All files|*.*",
-                    Title = "Pick a flash image"
-                };
-                if (dlg.ShowDialog() == true)
-                {
-                    TxtFlashImagePath.Text = dlg.FileName;
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("DeeperEditor: image browse error: {Error}", ex.Message);
-            }
-        }
 
         private void BtnDeleteEffect_Click(object sender, RoutedEventArgs e)
         {

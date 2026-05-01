@@ -61,7 +61,8 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             None, Scrub, CreateRegion,
             ShiftHapticEvent, ResizeHapticStart, ResizeHapticEnd,
-            DragRegion, ResizeRegionStart, ResizeRegionEnd
+            DragRegion, ResizeRegionStart, ResizeRegionEnd,
+            DragEffect, ResizeEffectStart, ResizeEffectEnd
         }
         private DragMode _dragMode = DragMode.None;
         private double _dragCreateStartSec;
@@ -70,6 +71,10 @@ namespace ConditioningControlPanel.Views.Deeper
         private Region? _draggedRegion;
         private double _regionDragOffsetSec;
         private double _regionDragOriginalLength;
+        // Effect segment drag/resize state
+        private TimelineItem? _draggedEffect;
+        private double _effectDragOffsetSec;
+        private double _effectDragOriginalDuration;
         // Pixel band on left/right of a band where cursor switches to resize.
         private const double EdgeResizePx = 6.0;
         // Timeline zoom state. _zoomFactor of 1.0 = canvas fills the viewport
@@ -101,17 +106,8 @@ namespace ConditioningControlPanel.Views.Deeper
         private bool _suppressRuleSync;
         private GazePickerWindow? _gazePickerWindow;
 
-        // Preview mode (Phase 7)
-        private EnhancementEngine? _previewEngine;
-        private EditorPreviewTimeSource? _previewSource;
-        // Whichever IPlaybackTimeSource is feeding the preview engine right now —
-        // either _previewSource (LibVLC/NAudio) or _browserSource (WebView2). The
-        // engine doesn't care which; PreviewStateTimer_Tick reads from this so it
-        // doesn't have to know either.
-        private IPlaybackTimeSource? _activePreviewSource;
-        private RecordingActionDispatcher? _previewRecorder;
-        private readonly System.Collections.ObjectModel.ObservableCollection<string> _previewActions = new();
-        private DispatcherTimer? _previewStateTimer;
+        // Preview launches the standalone Deeper Player; the editor no longer
+        // runs the engine in-place.
 
         public DeeperEditorWindow(Enhancement enhancement, string? filePath)
         {
@@ -127,7 +123,6 @@ namespace ConditioningControlPanel.Views.Deeper
 
             BuildColorSwatches();
             BuildPatternCombo();
-            LstPreviewActions.ItemsSource = _previewActions;
             LoadEnhancement(enhancement, filePath);
         }
 
@@ -442,6 +437,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtTotalTime.Text = FormatTime(_totalSeconds);
                 RebuildRegionVisuals();
                 RebuildHapticVisuals();
+                RebuildEffectVisuals();
             }
             _currentSeconds = Math.Max(0, seconds);
             TxtCurrentTime.Text = FormatTime(_currentSeconds);
@@ -475,6 +471,8 @@ namespace ConditioningControlPanel.Views.Deeper
                     TxtTotalTime.Text = FormatTime(_totalSeconds);
                     UpdatePlayheadPosition();
                     RebuildRegionVisuals();
+                    RebuildHapticVisuals();
+                    RebuildEffectVisuals();
                 });
             };
             _mediaPlayer.TimeChanged += (_, args) =>
@@ -512,6 +510,9 @@ namespace ConditioningControlPanel.Views.Deeper
                 _totalSeconds = _waveformData.DurationSeconds;
                 TxtTotalTime.Text = FormatTime(_totalSeconds);
                 UpdateWaveformPath();
+                RebuildRegionVisuals();
+                RebuildHapticVisuals();
+                RebuildEffectVisuals();
             }
             catch (Exception ex)
             {
@@ -657,9 +658,6 @@ namespace ConditioningControlPanel.Views.Deeper
                 _currentSeconds = _audioReader.CurrentTime.TotalSeconds;
                 TxtCurrentTime.Text = FormatTime(_currentSeconds);
                 UpdatePlayheadPosition();
-                // Audio playback has no native TimeChanged event; pump the
-                // engine manually if preview is running on an audio enhancement.
-                _previewSource?.EmitTick(_currentSeconds);
             }
             // Video time updates come via MediaPlayer.TimeChanged event already.
         }
@@ -866,6 +864,38 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (_selectedRegion == _draggedRegion) UpdateSelectedSidePanel();
                 return;
             }
+            if (_dragMode == DragMode.DragEffect && _draggedEffect != null)
+            {
+                var newStart = MouseToSeconds(e) - _effectDragOffsetSec;
+                newStart = Math.Max(0, Math.Min(newStart, Math.Max(0, _totalSeconds - _effectDragOriginalDuration)));
+                _draggedEffect.Start = newStart;
+                MarkDirty();
+                RebuildEffectVisuals();
+                if (_selectedEffect == _draggedEffect) UpdateSelectedSidePanelForEffect();
+                return;
+            }
+            if (_dragMode == DragMode.ResizeEffectStart && _draggedEffect != null)
+            {
+                var oldEnd = _draggedEffect.Start + Math.Max(0, _draggedEffect.Duration);
+                var newStart = Math.Max(0, Math.Min(MouseToSeconds(e), oldEnd - 0.05));
+                _draggedEffect.Duration = oldEnd - newStart;
+                _draggedEffect.Start = newStart;
+                _draggedEffect.EffectDurationMs = (int)Math.Max(50, _draggedEffect.Duration * 1000);
+                MarkDirty();
+                RebuildEffectVisuals();
+                if (_selectedEffect == _draggedEffect) UpdateSelectedSidePanelForEffect();
+                return;
+            }
+            if (_dragMode == DragMode.ResizeEffectEnd && _draggedEffect != null)
+            {
+                var newEnd = Math.Min(_totalSeconds, Math.Max(MouseToSeconds(e), _draggedEffect.Start + 0.05));
+                _draggedEffect.Duration = newEnd - _draggedEffect.Start;
+                _draggedEffect.EffectDurationMs = (int)Math.Max(50, _draggedEffect.Duration * 1000);
+                MarkDirty();
+                RebuildEffectVisuals();
+                if (_selectedEffect == _draggedEffect) UpdateSelectedSidePanelForEffect();
+                return;
+            }
             if (_dragMode == DragMode.Scrub && _isScrubbing) ApplyScrubFromMouse(e);
         }
 
@@ -895,6 +925,16 @@ namespace ConditioningControlPanel.Views.Deeper
                 _dragMode == DragMode.ResizeRegionEnd)
             {
                 _draggedRegion = null;
+                _dragMode = DragMode.None;
+                TimelineCanvas.ReleaseMouseCapture();
+                ScheduleValidation();
+                return;
+            }
+            if (_dragMode == DragMode.DragEffect ||
+                _dragMode == DragMode.ResizeEffectStart ||
+                _dragMode == DragMode.ResizeEffectEnd)
+            {
+                _draggedEffect = null;
                 _dragMode = DragMode.None;
                 TimelineCanvas.ReleaseMouseCapture();
                 ScheduleValidation();
@@ -1251,9 +1291,15 @@ namespace ConditioningControlPanel.Views.Deeper
         private void RegionRect_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (sender is not System.Windows.Shapes.Rectangle r || r.Tag is not Region region) return;
+
+            // Snapshot pos + width BEFORE selecting — SelectRegion rebuilds visuals
+            // which detaches `r` from the visual tree, after which e.GetPosition(r)
+            // returns ~(0,0) and trips the left-edge resize check unconditionally.
+            var pos = e.GetPosition(r);
+            var rectWidth = r.ActualWidth;
+
             SelectRegion(region);
 
-            var pos = e.GetPosition(r);
             _draggedRegion = region;
             _regionDragOriginalLength = Math.Max(0, region.End - region.Start);
 
@@ -1261,7 +1307,7 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 _dragMode = DragMode.ResizeRegionStart;
             }
-            else if (pos.X >= r.ActualWidth - EdgeResizePx)
+            else if (pos.X >= rectWidth - EdgeResizePx)
             {
                 _dragMode = DragMode.ResizeRegionEnd;
             }
@@ -1392,12 +1438,16 @@ namespace ConditioningControlPanel.Views.Deeper
                 return;
 
             var (track, ev) = tuple;
+            // Snapshot pos + width BEFORE selecting — SelectHaptic rebuilds visuals
+            // which detaches `r` from the visual tree, after which e.GetPosition(r)
+            // returns ~(0,0) and trips the left-edge resize check unconditionally.
+            var pos = e.GetPosition(r);
+            var rectWidth = r.ActualWidth;
             SelectHaptic(track, ev);
 
             // Begin drag-shift on pointer hold (no Shift modifier — that's region-create).
             if ((Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
             {
-                var pos = e.GetPosition(r);
                 if (pos.X <= EdgeResizePx)
                 {
                     _dragMode = DragMode.ResizeHapticStart;
@@ -1408,7 +1458,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     e.Handled = true;
                     return;
                 }
-                if (pos.X >= r.ActualWidth - EdgeResizePx)
+                if (pos.X >= rectWidth - EdgeResizePx)
                 {
                     _dragMode = DragMode.ResizeHapticEnd;
                     _draggedHaptic = ev;
@@ -1777,9 +1827,72 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private static string SummarizeRule(EnhancementRule rule)
         {
-            var trig = rule.Trigger?.Type ?? "?";
-            var act = rule.Action?.Type ?? "?";
+            var trig = FriendlyTriggerName(rule.Trigger?.Type ?? "");
+            var act = FriendlyActionName(rule.Action?.Type ?? "");
             return $"{trig}  →  {act}";
+        }
+
+        // -- Friendly names for trigger / action types ------------------------
+
+        private static string FriendlyTriggerName(string type) => type switch
+        {
+            TriggerTypes.GazeTarget    => Loc.Get("deeper_friendly_trigger_gaze_target"),
+            TriggerTypes.GazeAvoid     => Loc.Get("deeper_friendly_trigger_gaze_avoid"),
+            TriggerTypes.AttentionLost => Loc.Get("deeper_friendly_trigger_attention_lost"),
+            TriggerTypes.BlinkDetected => Loc.Get("deeper_friendly_trigger_blink_detected"),
+            TriggerTypes.MouthOpen     => Loc.Get("deeper_friendly_trigger_mouth_open"),
+            TriggerTypes.TimeReached   => Loc.Get("deeper_friendly_trigger_time_reached"),
+            TriggerTypes.RegionEntered => Loc.Get("deeper_friendly_trigger_region_entered"),
+            TriggerTypes.RegionExited  => Loc.Get("deeper_friendly_trigger_region_exited"),
+            _                          => string.IsNullOrEmpty(type) ? "?" : type
+        };
+
+        private static string FriendlyActionName(string type) => type switch
+        {
+            ActionTypes.Seek          => Loc.Get("deeper_friendly_action_seek"),
+            ActionTypes.LoopRegion    => Loc.Get("deeper_friendly_action_loop_region"),
+            ActionTypes.Pause         => Loc.Get("deeper_friendly_action_pause"),
+            ActionTypes.PlayAudio     => Loc.Get("deeper_friendly_action_play_audio"),
+            ActionTypes.TriggerHaptic => Loc.Get("deeper_friendly_action_trigger_haptic"),
+            ActionTypes.ScreenShake   => Loc.Get("deeper_friendly_action_screen_shake"),
+            ActionTypes.SetIntensity  => Loc.Get("deeper_friendly_action_set_intensity"),
+            _                         => string.IsNullOrEmpty(type) ? "?" : type
+        };
+
+        // -- Help popups: list every trigger / action with its description ----
+
+        private void BtnTriggerHelp_Click(object sender, RoutedEventArgs e)
+        {
+            var isAudio = _enhancement?.MediaType == MediaTypes.Audio;
+            var types = isAudio ? TriggerTypesForAudio : TriggerTypesForVideo;
+            var sb = new System.Text.StringBuilder();
+            foreach (var t in types)
+            {
+                sb.Append("• ").AppendLine(FriendlyTriggerName(t));
+                var desc = Loc.Get(TriggerDescriptionKey(t));
+                if (!string.IsNullOrEmpty(desc) && desc != TriggerDescriptionKey(t))
+                    sb.Append("  ").AppendLine(desc);
+                sb.AppendLine();
+            }
+            MessageBox.Show(this, sb.ToString().TrimEnd(),
+                Loc.Get("deeper_editor_help_browse_triggers"),
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void BtnActionHelp_Click(object sender, RoutedEventArgs e)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var a in AllActionTypes)
+            {
+                sb.Append("• ").AppendLine(FriendlyActionName(a));
+                var desc = Loc.Get(ActionDescriptionKey(a));
+                if (!string.IsNullOrEmpty(desc) && desc != ActionDescriptionKey(a))
+                    sb.Append("  ").AppendLine(desc);
+                sb.AppendLine();
+            }
+            MessageBox.Show(this, sb.ToString().TrimEnd(),
+                Loc.Get("deeper_editor_help_browse_actions"),
+                MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void BtnAddRule_Click(object sender, RoutedEventArgs e)
@@ -1838,22 +1951,42 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtRuleHeader.Text = idx >= 0 ? $"rule #{idx + 1}" : "rule";
                 ChkRuleEnabled.IsChecked = _selectedRule.Enabled;
 
-                // Trigger type combo (filtered by media_type).
+                // Trigger type combo (filtered by media_type). ComboBoxItem so
+                // each entry shows a friendly name + a hover tooltip with the
+                // long description; raw enum string lives in Tag.
                 var isAudio = _enhancement.MediaType == MediaTypes.Audio;
                 var triggerOptions = isAudio ? TriggerTypesForAudio : TriggerTypesForVideo;
                 CmbTriggerType.Items.Clear();
-                foreach (var opt in triggerOptions)
-                    CmbTriggerType.Items.Add(opt);
-                var currentTrig = _selectedRule.Trigger?.Type ?? "";
-                var trigIdx = Array.IndexOf(triggerOptions, currentTrig);
-                if (trigIdx < 0) trigIdx = 0;
+                int trigIdx = 0;
+                for (int i = 0; i < triggerOptions.Length; i++)
+                {
+                    var rawType = triggerOptions[i];
+                    var item = new ComboBoxItem
+                    {
+                        Content = FriendlyTriggerName(rawType),
+                        Tag = rawType,
+                        ToolTip = Loc.Get(TriggerDescriptionKey(rawType))
+                    };
+                    CmbTriggerType.Items.Add(item);
+                    if (rawType == (_selectedRule.Trigger?.Type ?? "")) trigIdx = i;
+                }
                 CmbTriggerType.SelectedIndex = trigIdx;
 
-                // Action combo.
+                // Action combo (same pattern).
                 CmbActionType.Items.Clear();
-                foreach (var opt in AllActionTypes) CmbActionType.Items.Add(opt);
-                var actIdx = Array.IndexOf(AllActionTypes, _selectedRule.Action?.Type ?? "");
-                if (actIdx < 0) actIdx = 0;
+                int actIdx = 0;
+                for (int i = 0; i < AllActionTypes.Length; i++)
+                {
+                    var rawType = AllActionTypes[i];
+                    var item = new ComboBoxItem
+                    {
+                        Content = FriendlyActionName(rawType),
+                        Tag = rawType,
+                        ToolTip = Loc.Get(ActionDescriptionKey(rawType))
+                    };
+                    CmbActionType.Items.Add(item);
+                    if (rawType == (_selectedRule.Action?.Type ?? "")) actIdx = i;
+                }
                 CmbActionType.SelectedIndex = actIdx;
 
                 // Region constraint combo.
@@ -1893,7 +2026,9 @@ namespace ConditioningControlPanel.Views.Deeper
         private void CmbTriggerType_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_suppressRuleSync || _selectedRule == null) return;
-            var picked = CmbTriggerType.SelectedItem as string;
+            // Combo items are now ComboBoxItem with Content=friendly name and
+            // Tag=raw type; old code that read SelectedItem as string broke.
+            var picked = (CmbTriggerType.SelectedItem as ComboBoxItem)?.Tag as string;
             if (string.IsNullOrEmpty(picked)) return;
             if (_selectedRule.Trigger?.Type == picked) return;
 
@@ -1919,7 +2054,7 @@ namespace ConditioningControlPanel.Views.Deeper
         private void CmbActionType_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_suppressRuleSync || _selectedRule == null) return;
-            var picked = CmbActionType.SelectedItem as string;
+            var picked = (CmbActionType.SelectedItem as ComboBoxItem)?.Tag as string;
             if (string.IsNullOrEmpty(picked)) return;
             if (_selectedRule.Action?.Type == picked) return;
 
@@ -2097,6 +2232,71 @@ namespace ConditioningControlPanel.Views.Deeper
                 Style = (Style)FindResource("EditorLabel")
             });
             host.Children.Add(grid);
+
+            // Quick-pick presets: 3×3 grid of corner/edge regions so the user
+            // can say "bottom-left" with one click instead of dragging or
+            // typing four numbers. Each preset covers a third of the screen.
+            host.Children.Add(new TextBlock
+            {
+                Text = Loc.Get("deeper_editor_trigger_quick_region"),
+                Style = (Style)FindResource("EditorLabel")
+            });
+            var presetGrid = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+            for (int c = 0; c < 3; c++)
+                presetGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            for (int r = 0; r < 3; r++)
+                presetGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var presetLabels = new[,]
+            {
+                { "↖", "↑", "↗" },
+                { "←", "·",  "→" },
+                { "↙", "↓", "↘" }
+            };
+            var presetTooltips = new[,]
+            {
+                { "deeper_editor_quick_region_top_left",    "deeper_editor_quick_region_top",    "deeper_editor_quick_region_top_right"    },
+                { "deeper_editor_quick_region_left",        "deeper_editor_quick_region_center", "deeper_editor_quick_region_right"        },
+                { "deeper_editor_quick_region_bottom_left", "deeper_editor_quick_region_bottom", "deeper_editor_quick_region_bottom_right" }
+            };
+            for (int row = 0; row < 3; row++)
+            {
+                for (int col = 0; col < 3; col++)
+                {
+                    int capturedRow = row;
+                    int capturedCol = col;
+                    var b = new Button
+                    {
+                        Content = presetLabels[row, col],
+                        FontSize = 14,
+                        Padding = new Thickness(0, 4, 0, 4),
+                        Margin = new Thickness(col == 0 ? 0 : 2, row == 0 ? 0 : 2, 0, 0),
+                        Cursor = Cursors.Hand,
+                        Background = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent20Brush"),
+                        Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                        BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
+                        BorderThickness = new Thickness(1),
+                        ToolTip = Loc.Get(presetTooltips[row, col])
+                    };
+                    Grid.SetColumn(b, col);
+                    Grid.SetRow(b, row);
+                    b.Click += (_, _) =>
+                    {
+                        var arr = getter();
+                        if (arr == null || arr.Length < 4) return;
+                        // 0,0,0 = top-left; each cell is 1/3 of the screen.
+                        arr[0] = capturedCol / 3.0;
+                        arr[1] = capturedRow / 3.0;
+                        arr[2] = 1.0 / 3.0;
+                        arr[3] = 1.0 / 3.0;
+                        MarkDirty();
+                        if (_selectedRule != null) BuildTriggerFields();
+                        ScheduleValidation();
+                    };
+                    presetGrid.Children.Add(b);
+                }
+            }
+            host.Children.Add(presetGrid);
 
             var pickBtn = new Button
             {
@@ -2558,163 +2758,31 @@ namespace ConditioningControlPanel.Views.Deeper
             host.Children.Add(combo);
         }
 
-        // -- Preview mode (Phase 7) -------------------------------------------
+        // -- Preview: open standalone Deeper Player ---------------------------
 
         private void BtnPreview_Click(object sender, RoutedEventArgs e)
         {
-            if (_previewEngine == null) StartPreview();
-            else StopPreview();
-        }
-
-        private void StartPreview()
-        {
             try
             {
-                // Compose: RealActionDispatcher does the real work, the recorder
-                // wraps it so the overlay can show last-N actions firing.
-                var inner = new RealActionDispatcher();
-                _previewRecorder = new RecordingActionDispatcher(inner);
-                _previewRecorder.ActionLogged += OnPreviewActionLogged;
-
-                // Pick the active time source. Browser preview gets its own
-                // BrowserVideoTimeSource (owns the WebView's clock), so we skip
-                // the EditorPreviewTimeSource construction entirely in that case.
-                if (_browserSource != null)
+                if (App.DeeperPlayer == null || App.DeeperHost == null)
                 {
-                    _activePreviewSource = _browserSource;
+                    MessageBox.Show(this,
+                        "DeeperPlayer/DeeperHost not initialized.",
+                        "Preview", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
                 }
-                else
-                {
-                    _previewSource = new EditorPreviewTimeSource(
-                        videoPlayer: _mediaPlayer,
-                        audioTimeFn: () => _audioReader?.CurrentTime.TotalSeconds ?? 0,
-                        audioDurationFn: () => _totalSeconds,
-                        audioIsPlayingFn: () => _waveOut?.PlaybackState == NAudio.Wave.PlaybackState.Playing,
-                        audioSeekFn: s =>
-                        {
-                            if (_audioReader != null)
-                                _audioReader.CurrentTime = TimeSpan.FromSeconds(Math.Max(0, s));
-                        },
-                        audioPauseFn: () => _waveOut?.Pause(),
-                        audioPlayFn: () => _waveOut?.Play(),
-                        videoRectFn: GetPreviewScreenRect,
-                        dispatcher: Dispatcher);
-                    _previewSource.Attach();
-                    _activePreviewSource = _previewSource;
-                }
-
-                // Give the engine real webcam events when the camera is up,
-                // mouse-as-gaze fallback otherwise.
-                var webcam = (App.Webcam?.IsRunning ?? false) ? App.Webcam : null;
-                _previewEngine = new EnhancementEngine(_enhancement, _activePreviewSource, _previewRecorder, webcam);
-                _previewEngine.Start();
-
-                _previewActions.Clear();
-                PreviewDebugOverlay.Visibility = Visibility.Visible;
-                BtnPreview.Content = Loc.Get("deeper_editor_preview_on");
-                BtnPreview.IsChecked = true;
-
-                _previewStateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
-                _previewStateTimer.Tick += PreviewStateTimer_Tick;
-                _previewStateTimer.Start();
-
-                if (webcam == null)
-                {
-                    PreviewHost.MouseMove += PreviewHost_MouseMoveForGaze;
-                    AppendPreviewAction(Loc.Get("deeper_editor_preview_no_camera"));
-                }
-
-                App.Logger?.Information("Deeper preview started ({Mode})", webcam == null ? "mouse-gaze" : "webcam");
+                var win = new EnhancementPlayerWindow(
+                    App.DeeperPlayer, App.DeeperHost, _enhancement, "editor-preview")
+                { Owner = this };
+                win.Show();
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Deeper StartPreview failed");
-                StopPreview();
+                App.Logger?.Error(ex, "Deeper editor: opening Player from Preview failed");
+                MessageBox.Show(this,
+                    $"Couldn't open Player:\n\n{ex.GetType().Name}: {ex.Message}",
+                    "Preview failed", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-        }
-
-        private void StopPreview()
-        {
-            try
-            {
-                _previewStateTimer?.Stop();
-                _previewStateTimer = null;
-
-                PreviewHost.MouseMove -= PreviewHost_MouseMoveForGaze;
-
-                _previewEngine?.Stop();
-                _previewEngine?.Dispose();
-                _previewEngine = null;
-
-                // Only dispose _previewSource — _browserSource is owned by the
-                // editor's overall playback (lives across preview start/stop)
-                // so don't tear it down here.
-                _previewSource?.Dispose();
-                _previewSource = null;
-                _activePreviewSource = null;
-
-                if (_previewRecorder != null)
-                    _previewRecorder.ActionLogged -= OnPreviewActionLogged;
-                _previewRecorder = null;
-            }
-            finally
-            {
-                PreviewDebugOverlay.Visibility = Visibility.Collapsed;
-                BtnPreview.Content = Loc.Get("deeper_editor_preview_off");
-                BtnPreview.IsChecked = false;
-            }
-        }
-
-        private void PreviewStateTimer_Tick(object? sender, EventArgs e)
-        {
-            if (_previewEngine == null || _activePreviewSource == null) return;
-            var t = _activePreviewSource.GetCurrentTimeSeconds();
-            var region = FindPreviewRegion(t);
-            TxtPreviewState.Text = string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                Loc.Get("deeper_editor_preview_state_fmt"), t, region ?? "—");
-        }
-
-        private string? FindPreviewRegion(double t)
-        {
-            foreach (var r in _enhancement.Regions)
-                if (t >= r.Start && t < r.End) return r.Id;
-            return null;
-        }
-
-        private void OnPreviewActionLogged(string line)
-        {
-            // RecordingActionDispatcher fires this from whatever thread the
-            // dispatch happened on; marshal back to UI for the ObservableCollection.
-            try
-            {
-                if (Dispatcher.CheckAccess()) AppendPreviewAction(line);
-                else Dispatcher.BeginInvoke(() => AppendPreviewAction(line));
-            }
-            catch { }
-        }
-
-        private void AppendPreviewAction(string line)
-        {
-            _previewActions.Insert(0, line);
-            while (_previewActions.Count > 10) _previewActions.RemoveAt(_previewActions.Count - 1);
-        }
-
-        private void PreviewHost_MouseMoveForGaze(object sender, MouseEventArgs e)
-        {
-            if (_previewEngine == null) return;
-            try { _previewEngine.InjectGaze(PointToScreen(e.GetPosition(this))); }
-            catch { }
-        }
-
-        private Rect GetPreviewScreenRect()
-        {
-            try
-            {
-                var origin = PreviewHost.PointToScreen(new Point(0, 0));
-                var far = PreviewHost.PointToScreen(new Point(PreviewHost.ActualWidth, PreviewHost.ActualHeight));
-                return new Rect(origin.X, origin.Y, Math.Max(0, far.X - origin.X), Math.Max(0, far.Y - origin.Y));
-            }
-            catch { return Rect.Empty; }
         }
 
         // -- Gaze rect picker --------------------------------------------------
@@ -2976,14 +3044,6 @@ namespace ConditioningControlPanel.Views.Deeper
                     MenuSave_Click(this, new RoutedEventArgs());
                 e.Handled = true;
             }
-            // Preview-mode manual injection. Only active while preview is on
-            // and the editor isn't taking text input.
-            else if (_previewEngine != null && !inTextBox)
-            {
-                if (e.Key == Key.B) { _previewEngine.InjectBlink(); e.Handled = true; }
-                else if (e.Key == Key.M) { _previewEngine.InjectMouthOpen(); e.Handled = true; }
-                else if (e.Key == Key.A) { _previewEngine.InjectAttentionLost(2000); e.Handled = true; }
-            }
         }
 
         // Set by MainWindow.OnClosing to skip the unsaved-changes prompt during
@@ -3015,7 +3075,6 @@ namespace ConditioningControlPanel.Views.Deeper
             }
 
             EndGazePick(commit: false);
-            StopPreview();
             DisposePlayback();
         }
 

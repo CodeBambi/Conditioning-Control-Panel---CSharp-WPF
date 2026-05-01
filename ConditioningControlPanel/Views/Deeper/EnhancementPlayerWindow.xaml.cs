@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
+using ConditioningControlPanel.Models.Deeper;
 using ConditioningControlPanel.Services.Deeper;
 using Microsoft.Win32;
 
@@ -27,13 +28,20 @@ namespace ConditioningControlPanel.Views.Deeper
         private readonly EnhancementAudioPlayer _player;
         private readonly EnhancementHostService _host;
         private EnhancementAudioPlayerTimeSource? _timeSource;
+        private BrowserVideoTimeSource? _videoSource;
         private DispatcherTimer? _uiTimer;
         private float[]? _peaks;
         private bool _isScrubbing;
         private bool _suppressVolumeSync;
+        private bool _videoBrowserReady;
+        private string? _pendingVideoUrl;
         // Sticky audio path so the user can press Play again after Stop
         // (the underlying player nulls its CurrentPath on Stop, by design).
         private string? _lastAudioPath;
+
+        // Live event log (last N actions the engine fired). Newest first.
+        private const int MaxEventLogEntries = 30;
+        private readonly System.Collections.ObjectModel.ObservableCollection<string> _events = new();
 
         public EnhancementPlayerWindow(EnhancementAudioPlayer player, EnhancementHostService host)
         {
@@ -45,12 +53,34 @@ namespace ConditioningControlPanel.Views.Deeper
             _player.Ended += OnPlayerEnded;
             _host.Loaded += OnHostLoaded;
             _host.LoadFailed += OnHostLoadFailed;
+            _host.ActionLogged += OnHostActionLogged;
+
+            LstEvents.ItemsSource = _events;
 
             _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _uiTimer.Tick += UiTimer_Tick;
             _uiTimer.Start();
 
             UpdateVolumeFromPlayer();
+        }
+
+        /// <summary>
+        /// Convenience constructor: opens the Player with an in-memory enhancement
+        /// pre-loaded (used by the editor's Preview button). For video MediaType
+        /// the WebView2 auto-navigates to the enhancement's MediaSource on load.
+        /// </summary>
+        public EnhancementPlayerWindow(
+            EnhancementAudioPlayer player,
+            EnhancementHostService host,
+            Enhancement enhancement,
+            string sourceTag)
+            : this(player, host)
+        {
+            if (enhancement == null) return;
+            // Defer to Loaded so OnHostLoaded's UI-pane swap runs after the
+            // window's controls are instantiated. LoadFromMemory fires Loaded
+            // synchronously which then dispatches to the UI thread anyway.
+            Loaded += (_, _) => _host.LoadFromMemory(enhancement, sourceTag);
         }
 
         // -- File pickers ------------------------------------------------------
@@ -174,6 +204,22 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void BtnPlayPause_Click(object sender, RoutedEventArgs e)
         {
+            // Video mode: drive the WebView2's <video> via JS bridge.
+            if (_videoSource != null)
+            {
+                if (_videoSource.IsPlaying)
+                {
+                    _videoSource.Pause();
+                    BtnPlayPause.Content = "▶";
+                }
+                else
+                {
+                    _videoSource.Play();
+                    BtnPlayPause.Content = "⏸";
+                }
+                return;
+            }
+
             if (_player.IsPlaying)
             {
                 _player.Pause();
@@ -204,6 +250,15 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void BtnStop_Click(object sender, RoutedEventArgs e)
         {
+            if (_videoSource != null)
+            {
+                try { _videoSource.Pause(); _videoSource.Seek(0); } catch { }
+                BtnPlayPause.Content = "▶";
+                TxtCurrent.Text = "0:00";
+                TxtStatus.Text = Loc.Get("deeper_player_status_stopped");
+                return;
+            }
+
             UnbindEngineIfRunning();
             _player.Stop();
             BtnPlayPause.Content = "▶";
@@ -215,6 +270,9 @@ namespace ConditioningControlPanel.Views.Deeper
         private void SliderVolume_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_suppressVolumeSync) return;
+            // Fires during InitializeComponent when XAML applies Value="80",
+            // which is before the constructor reaches the _player assignment.
+            if (_player == null) return;
             _player.Volume = (int)e.NewValue;
         }
 
@@ -233,6 +291,17 @@ namespace ConditioningControlPanel.Views.Deeper
         private void UiTimer_Tick(object? sender, EventArgs e)
         {
             if (_isScrubbing) return;
+
+            if (_videoSource != null)
+            {
+                var t = _videoSource.GetCurrentTimeSeconds();
+                var d = _videoSource.GetDurationSeconds();
+                TxtCurrent.Text = FormatTime(t);
+                if (d > 0) TxtTotal.Text = FormatTime(d);
+                BtnPlayPause.Content = _videoSource.IsPlaying ? "⏸" : "▶";
+                return;
+            }
+
             var ms = _player.CurrentTimeMs;
             TxtCurrent.Text = FormatTime(ms / 1000.0);
             UpdatePlayhead(_player.DurationMs > 0 ? (double)ms / _player.DurationMs : 0);
@@ -296,6 +365,9 @@ namespace ConditioningControlPanel.Views.Deeper
         private void BindEngineIfReady()
         {
             if (_host.LoadedEnhancement == null) return;
+            // Don't double-bind: if we're already running on the video source,
+            // the audio path shouldn't take over.
+            if (_videoSource != null) return;
             // Audio host: build a fresh time source and let the host own its
             // attach/detach lifetime.
             _timeSource = new EnhancementAudioPlayerTimeSource(_player);
@@ -349,6 +421,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtEnhMetadata.Text = "";
                 BtnUnloadEnhancement.Visibility = Visibility.Collapsed;
                 UnbindEngineIfRunning();
+                ShowMediaPaneFor(MediaTypes.Audio); // default back to audio UI
                 return;
             }
             TxtEnhPath.Text = path ?? "";
@@ -357,8 +430,121 @@ namespace ConditioningControlPanel.Views.Deeper
             var counts = $"{enh.Regions.Count} regions, {enh.HapticTracks.Sum(t => t?.Events?.Count ?? 0)} haptic events, {enh.Rules.Count} rules";
             TxtEnhMetadata.Text = $"{name}{creator}  ·  {counts}";
             BtnUnloadEnhancement.Visibility = Visibility.Visible;
-            // If audio is already playing, attach the engine now.
-            if (_player.IsPlaying) BindEngineIfReady();
+
+            ShowMediaPaneFor(enh.MediaType);
+            if (enh.MediaType == MediaTypes.Video && IsRemoteVideoUrl(enh.MediaSource))
+            {
+                _ = LoadVideoUrlAsync(enh.MediaSource);
+            }
+            else if (_player.IsPlaying)
+            {
+                // Audio mode: if audio is already playing, attach the engine now.
+                BindEngineIfReady();
+            }
+        }
+
+        // -- Pane swap + video loading ----------------------------------------
+
+        private void ShowMediaPaneFor(string? mediaType)
+        {
+            var isVideo = string.Equals(mediaType, MediaTypes.Video, StringComparison.OrdinalIgnoreCase);
+            AudioFileRow.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
+            AudioPane.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
+            VideoPane.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
+            VolumePanel.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private static bool IsRemoteVideoUrl(string? source)
+        {
+            if (string.IsNullOrWhiteSpace(source)) return false;
+            return source.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || source.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task LoadVideoUrlAsync(string url)
+        {
+            try
+            {
+                // Stop any audio path that might be active (mode swap).
+                UnbindEngineIfRunning();
+                _player.Stop();
+
+                TxtVideoStatus.Text = Loc.Get("deeper_player_video_loading");
+                TxtVideoStatus.Visibility = Visibility.Visible;
+
+                if (!_videoBrowserReady)
+                {
+                    // Reuse the main browser's user-data folder so HT cookies
+                    // carry over (same pattern as DeeperEditorWindow.InitializeBrowserAsync).
+                    var userDataFolder = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "ConditioningControlPanel",
+                        "browser_data");
+                    System.IO.Directory.CreateDirectory(userDataFolder);
+                    var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment
+                        .CreateAsync(userDataFolder: userDataFolder).ConfigureAwait(true);
+                    await VideoBrowser.EnsureCoreWebView2Async(env).ConfigureAwait(true);
+                    if (VideoBrowser.CoreWebView2 == null)
+                    {
+                        TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
+                        return;
+                    }
+                    _videoBrowserReady = true;
+                    VideoBrowser.CoreWebView2.NavigationCompleted += OnVideoNavCompleted;
+                }
+
+                _pendingVideoUrl = url;
+                VideoBrowser.CoreWebView2.Navigate(url);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementPlayer: video load failed");
+                TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
+            }
+        }
+
+        private void OnVideoNavCompleted(object? sender,
+            Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+        {
+            try
+            {
+                if (_pendingVideoUrl == null) return;
+                _pendingVideoUrl = null;
+
+                // Build a fresh time source per navigation so seek/state is
+                // tied to the actual loaded page's <video>, not stale state.
+                _videoSource?.Dispose();
+                _videoSource = new BrowserVideoTimeSource(VideoBrowser);
+
+                var src = _videoSource;
+                _host.Bind(src,
+                    attach: () => src?.Attach(),
+                    detach: () => { try { src?.Detach(); } catch { } });
+
+                TxtVideoStatus.Visibility = Visibility.Collapsed;
+                BtnPlayPause.Content = "⏸";
+                TxtStatus.Text = Loc.Get("deeper_player_status_playing");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementPlayer: video bind failed");
+            }
+        }
+
+        private void OnHostActionLogged(string line)
+        {
+            try
+            {
+                if (Dispatcher.CheckAccess()) AppendEvent(line);
+                else Dispatcher.BeginInvoke(() => AppendEvent(line));
+            }
+            catch { }
+        }
+
+        private void AppendEvent(string line)
+        {
+            _events.Insert(0, line);
+            while (_events.Count > MaxEventLogEntries) _events.RemoveAt(_events.Count - 1);
         }
 
         private void OnHostLoadFailed(string reason)
@@ -383,8 +569,19 @@ namespace ConditioningControlPanel.Views.Deeper
                 _player.Ended -= OnPlayerEnded;
                 _host.Loaded -= OnHostLoaded;
                 _host.LoadFailed -= OnHostLoadFailed;
+                _host.ActionLogged -= OnHostActionLogged;
                 UnbindEngineIfRunning();
                 _player.Stop();
+
+                try
+                {
+                    if (_videoBrowserReady && VideoBrowser?.CoreWebView2 != null)
+                        VideoBrowser.CoreWebView2.NavigationCompleted -= OnVideoNavCompleted;
+                }
+                catch { }
+                try { _videoSource?.Dispose(); } catch { }
+                _videoSource = null;
+                try { VideoBrowser?.Dispose(); } catch { }
             }
             catch { }
         }
