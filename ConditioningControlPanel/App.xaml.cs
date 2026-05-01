@@ -2139,6 +2139,7 @@ Application State:
             ScreenMirror?.Dispose();
             Autonomy?.Dispose();
             Wallpaper?.Dispose();
+            BlinkTrainer?.Dispose();
             GazeFocus?.Dispose();
             GazeCursor?.Dispose();
             Webcam?.Dispose();

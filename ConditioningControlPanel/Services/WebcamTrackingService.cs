@@ -1911,6 +1911,11 @@ namespace ConditioningControlPanel.Services
 
             // Reusable buffers (capture-thread-only access; no locking needed).
             private readonly float[] _inputBuffer = new float[InputSize * InputSize * 3];
+            // Cached byte staging buffer for the BGR→RGB float conversion in
+            // FillInputBufferFromBgr — at ~49KB per BlazeFace frame this would
+            // otherwise allocate fresh each frame. Caching it drops Gen0
+            // pressure noticeably across the three detectors.
+            private readonly byte[] _byteBuffer = new byte[InputSize * InputSize * 3];
             private Mat? _resizeBuffer;       // 128×96 (or whatever the aspect-preserving size is)
             private Mat? _paddedBuffer;       // 128×128
 
@@ -1981,7 +1986,7 @@ namespace ConditioningControlPanel.Services
 
                 // BGR → RGB and normalize to [-1, 1] in channel-last order.
                 // We avoid an extra Mat allocation by walking the padded buffer directly.
-                FillInputBufferFromBgr(_paddedBuffer, _inputBuffer);
+                FillInputBufferFromBgr(_paddedBuffer, _inputBuffer, _byteBuffer);
 
                 var inputTensor = new DenseTensor<float>(_inputBuffer, new[] { 1, InputSize, InputSize, 3 });
                 using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(_inputName, inputTensor) });
@@ -2036,7 +2041,7 @@ namespace ConditioningControlPanel.Services
                 return new CvRect(rx, ry, rw, rh);
             }
 
-            private static void FillInputBufferFromBgr(Mat bgr128, float[] dst)
+            private static void FillInputBufferFromBgr(Mat bgr128, float[] dst, byte[] bytes)
             {
                 // bgr128 is contiguous CV_8UC3, 128×128. Copy raw bytes once, then
                 // rearrange in place: BGR → RGB and uint8 → float in [-1,1].
@@ -2044,8 +2049,7 @@ namespace ConditioningControlPanel.Services
                     throw new InvalidOperationException("FillInputBufferFromBgr: expected 128×128 CV_8UC3");
 
                 int total = InputSize * InputSize;
-                var bytes = new byte[total * 3];
-                System.Runtime.InteropServices.Marshal.Copy(bgr128.Data, bytes, 0, bytes.Length);
+                System.Runtime.InteropServices.Marshal.Copy(bgr128.Data, bytes, 0, total * 3);
                 const float kScale = 2f / 255f;
                 for (int i = 0; i < total; i++)
                 {
@@ -2094,6 +2098,9 @@ namespace ConditioningControlPanel.Services
             private readonly InferenceSession _session;
             private readonly string _inputName;
             private readonly float[] _inputBuffer = new float[InputSize * InputSize * 3];
+            // Cached byte staging buffer — see BlazeFaceDetector for reasoning.
+            // 192×192×3 = ~110KB, the largest of the three detectors.
+            private readonly byte[] _byteBuffer = new byte[InputSize * InputSize * 3];
             private Mat? _croppedBuffer;            // square crop with black padding
             private Mat? _resizedBuffer;            // 192×192 resized
             private int _lastSide = -1;
@@ -2154,7 +2161,7 @@ namespace ConditioningControlPanel.Services
                 }
 
                 Cv2.Resize(_croppedBuffer, _resizedBuffer, new CvSize(InputSize, InputSize), 0, 0, InterpolationFlags.Linear);
-                FillInputBufferFromBgr(_resizedBuffer, _inputBuffer);
+                FillInputBufferFromBgr(_resizedBuffer, _inputBuffer, _byteBuffer);
 
                 var inputTensor = new DenseTensor<float>(_inputBuffer, new[] { 1, InputSize, InputSize, 3 });
                 using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(_inputName, inputTensor) });
@@ -2190,14 +2197,13 @@ namespace ConditioningControlPanel.Services
                 return output;
             }
 
-            private static void FillInputBufferFromBgr(Mat bgr192, float[] dst)
+            private static void FillInputBufferFromBgr(Mat bgr192, float[] dst, byte[] bytes)
             {
                 if (bgr192.Width != InputSize || bgr192.Height != InputSize || bgr192.Type() != MatType.CV_8UC3)
                     throw new InvalidOperationException("FaceMesh.FillInputBufferFromBgr: expected 192×192 CV_8UC3");
 
                 int total = InputSize * InputSize;
-                var bytes = new byte[total * 3];
-                System.Runtime.InteropServices.Marshal.Copy(bgr192.Data, bytes, 0, bytes.Length);
+                System.Runtime.InteropServices.Marshal.Copy(bgr192.Data, bytes, 0, total * 3);
                 const float kScale = 1f / 255f;
                 for (int i = 0; i < total; i++)
                 {
@@ -2250,6 +2256,10 @@ namespace ConditioningControlPanel.Services
             private readonly InferenceSession _session;
             private readonly string _inputName;
             private readonly float[] _inputBuffer = new float[InputSize * InputSize * 3];
+            // Cached byte staging buffer — see BlazeFaceDetector for reasoning.
+            // 64×64×3 = 12KB; called twice per frame (once per eye) so the
+            // saving here doubles up.
+            private readonly byte[] _byteBuffer = new byte[InputSize * InputSize * 3];
             private Mat? _croppedBuffer;
             private Mat? _resizedBuffer;
             private Mat? _flippedBuffer;
@@ -2318,7 +2328,7 @@ namespace ConditioningControlPanel.Services
                     fed = _flippedBuffer;
                 }
 
-                FillInputBufferFromBgr(fed, _inputBuffer);
+                FillInputBufferFromBgr(fed, _inputBuffer, _byteBuffer);
 
                 var inputTensor = new DenseTensor<float>(_inputBuffer, new[] { 1, InputSize, InputSize, 3 });
                 using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(_inputName, inputTensor) });
@@ -2360,14 +2370,13 @@ namespace ConditioningControlPanel.Services
                 return new EyeLandmarks { IrisCenter = (irisX, irisY), Contour = contour };
             }
 
-            private static void FillInputBufferFromBgr(Mat bgr64, float[] dst)
+            private static void FillInputBufferFromBgr(Mat bgr64, float[] dst, byte[] bytes)
             {
                 if (bgr64.Width != InputSize || bgr64.Height != InputSize || bgr64.Type() != MatType.CV_8UC3)
                     throw new InvalidOperationException("IrisDetector.FillInputBufferFromBgr: expected 64×64 CV_8UC3");
 
                 int total = InputSize * InputSize;
-                var bytes = new byte[total * 3];
-                System.Runtime.InteropServices.Marshal.Copy(bgr64.Data, bytes, 0, bytes.Length);
+                System.Runtime.InteropServices.Marshal.Copy(bgr64.Data, bytes, 0, total * 3);
                 const float kScale = 1f / 255f;
                 for (int i = 0; i < total; i++)
                 {

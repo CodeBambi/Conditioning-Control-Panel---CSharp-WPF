@@ -857,9 +857,23 @@ namespace ConditioningControlPanel
 
         private async Task CloseAfterDelayAsync()
         {
-            await Task.Delay(1600);
-            DialogResult = true;
-            Close();
+            try
+            {
+                await Task.Delay(1600);
+                // Dispatcher may have begun shutting down between the delay
+                // starting and finishing — touching DialogResult/Close after
+                // shutdown throws TaskCanceledException up to the unhandled
+                // dispatcher handler. Guard mirrors the pattern in CLAUDE.md
+                // for fire-and-forget Task.Delay continuations.
+                if (Application.Current?.Dispatcher == null
+                    || Application.Current.Dispatcher.HasShutdownStarted) return;
+                DialogResult = true;
+                Close();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "WebcamCalibrationWindow: CloseAfterDelayAsync threw");
+            }
         }
 
         // ─────────────────────────────────────────────────────────────────────
