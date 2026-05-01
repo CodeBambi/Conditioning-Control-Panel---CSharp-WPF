@@ -1,0 +1,50 @@
+{
+  "$schema": "ccp-enhancement/v1",
+  "version": 1,
+  "media_type": "audio",
+  "media_source": "*",
+  "metadata": {
+    "name": "Welcome to Deeper",
+    "creator": "CCP",
+    "description": "A short demo enhancement that touches every editor surface: regions, haptic events on a track, and a couple of time-based rules. Open it in the editor to see how the pieces fit together. Bound to '*' so it runs on any audio you load in the player.",
+    "tags": ["demo", "tutorial"],
+    "license": "CC0"
+  },
+  "regions": [
+    { "id": "intro",  "start": 0.0,  "end": 30.0, "label": "Intro",  "color": "#7B5CFF" },
+    { "id": "deepen", "start": 30.0, "end": 90.0, "label": "Deepen", "color": "#FF69B4" },
+    { "id": "rest",   "start": 90.0, "end": 120.0, "label": "Rest",  "color": "#5CFFB7" }
+  ],
+  "haptic_tracks": [
+    {
+      "id": "primary",
+      "events": [
+        { "start": 5.0,  "duration": 4.0, "intensity": 0.5, "pattern_name": "Pulse" },
+        { "start": 15.0, "duration": 6.0, "intensity": 0.7, "pattern_name": "Wave" },
+        { "start": 35.0, "duration": 8.0, "intensity": 0.8, "pattern_name": "Throb" },
+        { "start": 60.0, "duration": 6.0, "intensity": 1.0, "custom_pattern": [[0.0, 0.0], [0.3, 0.6], [0.6, 0.3], [0.85, 1.0], [1.0, 0.4]] },
+        { "start": 95.0, "duration": 8.0, "intensity": 0.4, "pattern_name": "Steady" }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "trigger": { "type": "time_reached", "time": 28.0 },
+      "action":  { "type": "trigger_haptic", "pattern_name": "Climax", "intensity": 1.0, "duration_ms": 1500 },
+      "cooldown_ms": 2000,
+      "enabled": true
+    },
+    {
+      "trigger": { "type": "time_reached", "time": 88.0 },
+      "action":  { "type": "trigger_haptic", "pattern_name": "Tease", "intensity": 0.6, "duration_ms": 2000 },
+      "cooldown_ms": 2000,
+      "enabled": true
+    },
+    {
+      "trigger": { "type": "region_entered", "region_id": "rest" },
+      "action":  { "type": "set_intensity", "value": 0.2 },
+      "cooldown_ms": 1000,
+      "enabled": true
+    }
+  ]
+}

@@ -177,6 +177,7 @@ namespace ConditioningControlPanel
         public static ProgressionService Progression { get; private set; } = null!;
         public static SubliminalService Subliminal { get; private set; } = null!;
         public static OverlayService Overlay { get; private set; } = null!;
+        public static ScreenShakeService ScreenShake { get; private set; } = null!;
         public static BubbleService Bubbles { get; private set; } = null!;
         public static LockCardService LockCard { get; private set; } = null!;
         public static PopQuizService PopQuiz { get; private set; } = null!;
@@ -226,6 +227,14 @@ namespace ConditioningControlPanel
         public static GazeFocusService GazeFocus { get; private set; } = null!;
         public static GazeDebugCursorService GazeCursor { get; private set; } = null!;
         public static BlinkTrainerService BlinkTrainer { get; private set; } = null!;
+        public static Services.Deeper.EnhancementLibrary EnhancementLibrary { get; private set; } = null!;
+        public static Services.Deeper.EnhancementAudioPlayer DeeperPlayer { get; private set; } = null!;
+        public static Services.Deeper.EnhancementHostService DeeperHost { get; private set; } = null!;
+        public static Services.Deeper.EnhancementFetcher DeeperFetcher { get; private set; } = null!;
+        public static Services.Deeper.BrowserAutoDiscovery DeeperBrowserDiscovery { get; private set; } = null!;
+        // Bridge that ties dashboard browser navigation to the local enhancement
+        // library; created lazily by MainWindow when the WebView2 spins up.
+        public static Services.Deeper.BrowserEnhancementBridge? BrowserEnhanceBridge { get; set; }
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -744,6 +753,7 @@ namespace ConditioningControlPanel
 
             Subliminal = new SubliminalService();
             Overlay = new OverlayService();
+            ScreenShake = new ScreenShakeService();
             Bubbles = new BubbleService();
             InteractionQueue = new InteractionQueueService();
             LockCard = new LockCardService();
@@ -850,6 +860,23 @@ namespace ConditioningControlPanel
             GazeCursor = new GazeDebugCursorService();
             GazeFocus = new GazeFocusService();
             BlinkTrainer = new BlinkTrainerService();
+
+            // Deeper enhancement library — file ops, recent files, library scan.
+            // Eager-init: lightweight, just creates the folder and reads recent files
+            // from settings.
+            EnhancementLibrary = new Services.Deeper.EnhancementLibrary();
+
+            // Deeper end-user runtime: long-form audio player + host orchestrator
+            // (Phase 8). Both are cheap to construct; resources only open on
+            // first Play / first Bind.
+            DeeperPlayer = new Services.Deeper.EnhancementAudioPlayer();
+            DeeperHost = new Services.Deeper.EnhancementHostService();
+
+            // Phase 9: HT description auto-discovery. Fetcher caches in-memory
+            // per session; browser discovery wires onto the WebView2 once
+            // MainWindow creates the browser.
+            DeeperFetcher = new Services.Deeper.EnhancementFetcher();
+            DeeperBrowserDiscovery = new Services.Deeper.BrowserAutoDiscovery(DeeperFetcher, DeeperHost);
 
             // Initialize lockdown service (ephemeral — not persisted). Recover from a
             // prior run that was killed mid-lockdown so the panic key isn't stuck off.
@@ -2119,6 +2146,7 @@ Application State:
             Video?.Dispose();
             Subliminal?.Dispose();
             Overlay?.Dispose();
+            ScreenShake?.Dispose();
             Bubbles?.Dispose();
             LockCard?.Dispose();
             PopQuiz?.Dispose();
@@ -2155,6 +2183,7 @@ Application State:
             Haptics?.Dispose();
             AudioSync?.Dispose();
             Audio?.Dispose();
+            BrowserEnhanceBridge?.Dispose();
 
             // Terminate any `ollama serve` we spawned so it doesn't outlive the app.
             // (Servers started by the Ollama installer's auto-start or the user's tray

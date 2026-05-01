@@ -3307,5 +3307,53 @@ namespace ConditioningControlPanel.Models
         }
 
         #endregion
+
+        #region Deeper
+
+        private bool _enableDeeper = true;
+        public bool EnableDeeper
+        {
+            get => _enableDeeper;
+            set { _enableDeeper = value; OnPropertyChanged(); }
+        }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenDeeperTab { get; set; }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeededDeeperDemos { get; set; }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenDeeperWelcome { get; set; }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenDeeperEditorIntro { get; set; }
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenDeeperHTInteractiveTutorial { get; set; }
+
+        private List<string> _deeperRecentFiles = new();
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> DeeperRecentFiles
+        {
+            get => _deeperRecentFiles;
+            set { _deeperRecentFiles = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private string _deeperLastDirectory = "";
+        public string DeeperLastDirectory
+        {
+            get => _deeperLastDirectory;
+            set { _deeperLastDirectory = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private bool _browserEnhanceIfPossible = true;
+        public bool BrowserEnhanceIfPossible
+        {
+            get => _browserEnhanceIfPossible;
+            set { _browserEnhanceIfPossible = value; OnPropertyChanged(); }
+        }
+
+        #endregion
     }
 }

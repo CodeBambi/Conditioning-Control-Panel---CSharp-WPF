@@ -426,6 +426,13 @@ namespace ConditioningControlPanel
             // Initialize browser when window is loaded
             Loaded += MainWindow_Loaded;
 
+            // Phase 10: live-refresh the Deeper tab on library changes
+            // (FileSystemWatcher fires through dispatcher.BeginInvoke, debounced
+            // 300ms). Detached on window close so a closed window doesn't keep
+            // reacting to file drops.
+            if (App.EnhancementLibrary != null)
+                App.EnhancementLibrary.LibraryChanged += OnDeeperLibraryChanged;
+
             // Close the Exclusives submenu popup on Alt+Tab / focus loss.
             // MouseLeave doesn't fire during Alt+Tab, so without this the popup
             // stays pinned on top of whatever app the user switched to.
@@ -1616,6 +1623,14 @@ namespace ConditioningControlPanel
             // Initialize hypnotube links UI
             RefreshHypnotubeLinksUI();
 
+            // Initialize Deeper "Enhance if possible" toggle from settings
+            try
+            {
+                if (ToggleEnhanceIfPossible != null)
+                    ToggleEnhanceIfPossible.IsChecked = App.Settings?.Current?.BrowserEnhanceIfPossible ?? true;
+            }
+            catch { }
+
             // Apply mod-aware feature names to static XAML labels
             ApplyModFeatureNames();
             if (App.Mods != null)
@@ -1764,6 +1779,25 @@ namespace ConditioningControlPanel
 
             // Initialize scrolling marquee banner
             InitializeMarqueeBanner();
+
+            // Deeper tab first-launch pulse — draw the eye to the new tab once,
+            // unless the user has already opened it (HasSeenDeeperTab) or disabled it.
+            var deeperSettings = App.Settings?.Current;
+            if (deeperSettings != null && deeperSettings.EnableDeeper && !deeperSettings.HasSeenDeeperTab)
+            {
+                _ = Dispatcher.InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(1200);
+                        StartDeeperTabPulse();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to start Deeper tab pulse");
+                    }
+                });
+            }
 
             // Check if any authenticated user needs to complete registration (choose display name)
             // This handles users who had cached tokens but cancelled the registration dialog previously
@@ -2073,6 +2107,434 @@ namespace ConditioningControlPanel
         private void BtnEnhancements_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("enhancements");
+        }
+
+        private void BtnDeeper_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("deeper");
+            if (App.Settings?.Current is { } s && !s.HasSeenDeeperTab)
+            {
+                s.HasSeenDeeperTab = true;
+                StopDeeperTabPulse();
+                App.Settings?.Save();
+            }
+            UpdateDeeperWelcomeCardVisibility();
+        }
+
+        private void UpdateDeeperWelcomeCardVisibility()
+        {
+            if (DeeperWelcomeCard == null) return;
+            var seen = App.Settings?.Current?.HasSeenDeeperWelcome ?? true;
+            DeeperWelcomeCard.Visibility = seen ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private void DismissDeeperWelcomeCard()
+        {
+            if (App.Settings?.Current is { } s && !s.HasSeenDeeperWelcome)
+            {
+                s.HasSeenDeeperWelcome = true;
+                App.Settings?.Save();
+            }
+            if (DeeperWelcomeCard != null) DeeperWelcomeCard.Visibility = Visibility.Collapsed;
+        }
+
+        private void BtnDeeperWelcomeTour_Click(object sender, RoutedEventArgs e)
+        {
+            DismissDeeperWelcomeCard();
+            StartDeeperTabTutorial();
+        }
+
+        private void BtnDeeperWelcomeDemo_Click(object sender, RoutedEventArgs e)
+        {
+            DismissDeeperWelcomeCard();
+            OpenDeeperBundledDemo();
+        }
+
+        private void BtnDeeperWelcomeDismiss_Click(object sender, RoutedEventArgs e)
+        {
+            DismissDeeperWelcomeCard();
+        }
+
+        private void BtnDeeperTutorial_Click(object sender, RoutedEventArgs e)
+        {
+            StartDeeperTabTutorial();
+        }
+
+        // The bundled "Welcome to Deeper" demo is seeded into the user's library
+        // on first run. Match by the literal filename rather than a hardcoded
+        // path so we follow the user's library folder if they moved it.
+        private void OpenDeeperBundledDemo()
+        {
+            try
+            {
+                var lib = App.EnhancementLibrary;
+                if (lib == null) return;
+                var match = lib.ScanLibrary()
+                    .FirstOrDefault(e =>
+                        string.Equals(System.IO.Path.GetFileName(e.FilePath), "welcome.ccpenh.json",
+                            StringComparison.OrdinalIgnoreCase));
+                if (match == null)
+                {
+                    MessageBox.Show(this,
+                        "The bundled demo couldn't be found in your library — try restarting the app.",
+                        "Deeper", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                OpenDeeperFile(match.FilePath);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Open bundled Deeper demo failed: {Error}", ex.Message);
+            }
+        }
+
+        private void StartDeeperTabTutorial()
+        {
+            ShowTab("deeper");
+            UpdateDeeperWelcomeCardVisibility(); // keep the card consistent with state
+            StartTutorial(TutorialType.Deeper);
+        }
+
+        private void ChkEnableDeeper_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var enabled = ChkEnableDeeper.IsChecked ?? true;
+            if (App.Settings?.Current is { } s) s.EnableDeeper = enabled;
+            if (BtnDeeper != null) BtnDeeper.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+            // If the user just disabled Deeper while it's the active tab, fall back to Settings.
+            if (!enabled && DeeperTab?.Visibility == Visibility.Visible) ShowTab("settings");
+            App.Settings?.Save();
+        }
+
+        private bool _deeperPulseRunning;
+
+        private void StartDeeperTabPulse()
+        {
+            if (BtnDeeperScale == null || _deeperPulseRunning) return;
+            _deeperPulseRunning = true;
+            var anim = new System.Windows.Media.Animation.DoubleAnimation
+            {
+                From = 1.0,
+                To = 1.12,
+                Duration = TimeSpan.FromMilliseconds(700),
+                AutoReverse = true,
+                RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(4),
+                EasingFunction = new System.Windows.Media.Animation.SineEase
+                {
+                    EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut
+                }
+            };
+            anim.Completed += (_, _) =>
+            {
+                _deeperPulseRunning = false;
+                if (BtnDeeperScale != null)
+                {
+                    BtnDeeperScale.ScaleX = 1.0;
+                    BtnDeeperScale.ScaleY = 1.0;
+                }
+            };
+            BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, anim);
+            BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, anim);
+        }
+
+        private void StopDeeperTabPulse()
+        {
+            if (!_deeperPulseRunning && BtnDeeperScale == null) return;
+            _deeperPulseRunning = false;
+            if (BtnDeeperScale != null)
+            {
+                BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
+                BtnDeeperScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, null);
+                BtnDeeperScale.ScaleX = 1.0;
+                BtnDeeperScale.ScaleY = 1.0;
+            }
+        }
+
+        private void BtnDeeperNewEnhancement_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Views.Deeper.NewEnhancementDialog { Owner = this };
+            if (dialog.ShowDialog() != true) return;
+
+            var enhancement = App.EnhancementLibrary?.CreateBlank(dialog.SelectedMediaType, dialog.SelectedSource);
+            if (enhancement == null) return;
+
+            OpenDeeperEditor(enhancement, null);
+        }
+
+        private void BtnDeeperOpenPlayer_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var win = new Views.Deeper.EnhancementPlayerWindow(App.DeeperPlayer, App.DeeperHost) { Owner = this };
+                win.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open Deeper player");
+                MessageBox.Show(this,
+                    $"Couldn't open Deeper Player:\n\n{ex.GetType().Name}: {ex.Message}",
+                    "Open Player failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OnDeeperBrowserBound(string pageUrl, Models.Deeper.Enhancement enhancement)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    DeeperBrowserBadge.Visibility = Visibility.Visible;
+                    var name = string.IsNullOrEmpty(enhancement.Metadata?.Name) ? "(untitled)" : enhancement.Metadata!.Name;
+                    TxtDeeperBrowserBadge.Text = $"🌊 {name}";
+                    DeeperBrowserBadge.Tag = $"{name}\n{pageUrl}";
+                }
+                catch { }
+            });
+        }
+
+        private void OnDeeperBrowserUnbound()
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    DeeperBrowserBadge.Visibility = Visibility.Collapsed;
+                    DeeperBrowserBadge.Tag = null;
+                }
+                catch { }
+            });
+        }
+
+        private void ToggleEnhanceIfPossible_Changed(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var newValue = ToggleEnhanceIfPossible?.IsChecked == true;
+                if (App.Settings?.Current != null)
+                {
+                    App.Settings.Current.BrowserEnhanceIfPossible = newValue;
+                    App.Settings.Save();
+                }
+                App.BrowserEnhanceBridge?.Refresh();
+
+                // If just turned off, status text needs an immediate reset since
+                // Refresh() will fire MatchChanged(null) but we want to be explicit.
+                if (!newValue && TxtEnhanceMatchStatus != null)
+                    TxtEnhanceMatchStatus.Text = Loc.Get("browser_enhance_match_off");
+            }
+            catch (Exception ex) { App.Logger?.Debug("ToggleEnhanceIfPossible_Changed: {Error}", ex.Message); }
+        }
+
+        private void OnBrowserEnhanceMatchChanged(Services.Deeper.EnhancementLibraryEntry? match)
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    if (TxtEnhanceMatchStatus == null) return;
+                    if (App.Settings?.Current?.BrowserEnhanceIfPossible == false)
+                    {
+                        TxtEnhanceMatchStatus.Text = Loc.Get("browser_enhance_match_off");
+                        return;
+                    }
+                    if (match == null)
+                    {
+                        TxtEnhanceMatchStatus.Text = Loc.Get("browser_enhance_match_none");
+                        return;
+                    }
+                    var name = string.IsNullOrEmpty(match.Name) ? "(untitled)" : match.Name;
+                    TxtEnhanceMatchStatus.Text = string.Format(Loc.Get("browser_enhance_match_fmt"), name);
+                }
+                catch { }
+            });
+        }
+
+        private void OpenDeeperEditor(Models.Deeper.Enhancement enhancement, string? filePath)
+        {
+            try
+            {
+                var window = new Views.Deeper.DeeperEditorWindow(enhancement, filePath) { Owner = this };
+                window.Closed += (_, _) => RefreshDeeperLibraryUI();
+                window.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to open Deeper editor");
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void OnDeeperLibraryChanged(object? sender, EventArgs e)
+        {
+            // Library change events arrive on the dispatcher thread already
+            // (EnhancementLibrary marshals via Application.Current.Dispatcher),
+            // but only refresh if the tab is actually visible — a hidden tab
+            // would just throw the work away on the next ShowTab.
+            try
+            {
+                if (DeeperTab?.Visibility == Visibility.Visible)
+                    RefreshDeeperLibraryUI();
+            }
+            catch (Exception ex) { App.Logger?.Debug("Deeper library refresh error: {Error}", ex.Message); }
+        }
+
+        private void RefreshDeeperLibraryUI()
+        {
+            if (DeeperLibraryList == null || DeeperRecentList == null) return;
+            var library = App.EnhancementLibrary;
+            if (library == null) return;
+
+            var entries = library.ScanLibrary();
+            DeeperLibraryList.Children.Clear();
+            if (entries.Count == 0)
+            {
+                DeeperLibraryList.Children.Add(BuildDeeperEmptyHint(Loc.Get("deeper_library_empty")));
+            }
+            else
+            {
+                foreach (var entry in entries)
+                    DeeperLibraryList.Children.Add(BuildDeeperLibraryRow(entry));
+            }
+            if (TxtDeeperLibraryCount != null)
+                TxtDeeperLibraryCount.Text = string.Format(Loc.Get("deeper_library_count_fmt"), entries.Count);
+
+            DeeperRecentList.Children.Clear();
+            var recents = library.RecentFiles;
+            if (recents.Count == 0)
+            {
+                DeeperRecentList.Children.Add(BuildDeeperEmptyHint(Loc.Get("deeper_recent_empty")));
+            }
+            else
+            {
+                foreach (var path in recents)
+                    DeeperRecentList.Children.Add(BuildDeeperRecentRow(path));
+            }
+        }
+
+        private FrameworkElement BuildDeeperEmptyHint(string text)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
+                FontSize = 11,
+                FontStyle = FontStyles.Italic,
+                Margin = new Thickness(0, 6, 0, 0)
+            };
+        }
+
+        private Border BuildDeeperLibraryRow(Services.Deeper.EnhancementLibraryEntry entry)
+        {
+            var border = new Border
+            {
+                Background = (System.Windows.Media.Brush)FindResource("PanelBgBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent20Brush"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(0, 0, 0, 6),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Tag = entry.FilePath,
+                ToolTip = Loc.Get("deeper_tab_library_item_tooltip")
+            };
+            border.MouseLeftButtonUp += (_, _) => OpenDeeperFile(entry.FilePath);
+
+            var stack = new StackPanel();
+            var titleRow = new DockPanel { LastChildFill = true };
+            var icon = new TextBlock
+            {
+                Text = entry.MediaType == Models.Deeper.MediaTypes.Audio ? "🎵" : "🎬",
+                FontSize = 14,
+                Margin = new Thickness(0, 0, 8, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            DockPanel.SetDock(icon, Dock.Left);
+            titleRow.Children.Add(icon);
+
+            var name = new TextBlock
+            {
+                Text = entry.Name,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                FontSize = 12, FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            titleRow.Children.Add(name);
+
+            stack.Children.Add(titleRow);
+            if (!string.IsNullOrEmpty(entry.Creator))
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = string.Format(Loc.Get("deeper_library_creator_fmt"), entry.Creator),
+                    Foreground = (System.Windows.Media.Brush)FindResource("TextDimBrush"),
+                    FontSize = 11, Margin = new Thickness(0, 2, 0, 0)
+                });
+            }
+            stack.Children.Add(new TextBlock
+            {
+                Text = System.IO.Path.GetFileName(entry.FilePath),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextDimBrush"),
+                FontSize = 10, Margin = new Thickness(0, 2, 0, 0),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+
+            border.Child = stack;
+            return border;
+        }
+
+        private Border BuildDeeperRecentRow(string path)
+        {
+            var border = new Border
+            {
+                Background = (System.Windows.Media.Brush)FindResource("PanelBgBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent20Brush"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(0, 0, 0, 6),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Tag = path,
+                ToolTip = Loc.Get("deeper_tab_library_item_tooltip")
+            };
+            border.MouseLeftButtonUp += (_, _) => OpenDeeperFile(path);
+
+            var stack = new StackPanel();
+            stack.Children.Add(new TextBlock
+            {
+                Text = System.IO.Path.GetFileName(path),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush"),
+                FontSize = 12, FontWeight = FontWeights.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = path,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextDimBrush"),
+                FontSize = 10, Margin = new Thickness(0, 2, 0, 0),
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            border.Child = stack;
+            return border;
+        }
+
+        private void OpenDeeperFile(string path)
+        {
+            try
+            {
+                var enhancement = App.EnhancementLibrary?.Open(path);
+                if (enhancement == null) return;
+                OpenDeeperEditor(enhancement, path);
+            }
+            catch (Services.Deeper.EnhancementLoadException ex)
+            {
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to open Deeper file {Path}", path);
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         private void BtnRerollDaily_Click(object sender, RoutedEventArgs e)
@@ -4909,6 +5371,7 @@ namespace ConditioningControlPanel
             AssetsTab.Visibility = Visibility.Collapsed;
             DiscordTab.Visibility = Visibility.Collapsed;
             EnhancementsTab.Visibility = Visibility.Collapsed;
+            if (DeeperTab != null) DeeperTab.Visibility = Visibility.Collapsed;
             LabTab.Visibility = Visibility.Collapsed;
             AwarenessTab.Visibility = Visibility.Collapsed;
             if (RemoteControlTab != null) RemoteControlTab.Visibility = Visibility.Collapsed;
@@ -4923,6 +5386,7 @@ namespace ConditioningControlPanel
             BtnPresets.Style = inactiveStyle;
             BtnQuests.Style = inactiveStyle;
             BtnEnhancements.Style = inactiveStyle;
+            if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeper") as Style;
             BtnAchievements.Style = inactiveStyle;
             BtnCompanion.Style = inactiveStyle;
             BtnLeaderboard.Style = inactiveStyle;
@@ -4968,6 +5432,16 @@ namespace ConditioningControlPanel
                     AnimateTabIn(EnhancementsTab);
                     BtnEnhancements.Style = activeStyle;
                     RefreshEnhancementsUI();
+                    break;
+
+                case "deeper":
+                    if (DeeperTab != null)
+                    {
+                        DeeperTab.Visibility = Visibility.Visible;
+                        AnimateTabIn(DeeperTab);
+                        RefreshDeeperLibraryUI();
+                    }
+                    if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeperActive") as Style;
                     break;
 
                 case "achievements":
@@ -14705,12 +15179,16 @@ namespace ConditioningControlPanel
         /// </summary>
         private void BtnChatShortcut_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new ChatShortcutCaptureDialog { Owner = this };
-            var ok = dlg.ShowDialog();
-            if (ok != true) return;
-
             var settings = App.Settings?.Current?.CompanionPrompt;
             if (settings == null) return;
+
+            var dlg = new ChatShortcutCaptureDialog
+            {
+                Owner = this,
+                GlobalHotkey = settings.ChatShortcutGlobal,
+            };
+            var ok = dlg.ShowDialog();
+            if (ok != true) return;
 
             if (dlg.ResetToDefault)
             {
@@ -14722,13 +15200,14 @@ namespace ConditioningControlPanel
                 settings.ChatShortcutKey = dlg.CapturedKey.ToString();
                 settings.ChatShortcutModifiers = AvatarTubeWindow.SerializeModifiers(dlg.CapturedModifiers);
             }
+            settings.ChatShortcutGlobal = dlg.GlobalHotkey;
             App.Settings?.Save();
 
             // Re-apply on both windows so the new shortcut takes effect immediately.
             AvatarTubeWindow.ApplyChatShortcutTo(this);
             if (App.AvatarWindow != null) AvatarTubeWindow.ApplyChatShortcutTo(App.AvatarWindow);
 
-            // Re-arm the system-wide hotkey too, so the new combo works from any app.
+            // Re-arm (or unregister) the system-wide hotkey based on the toggle.
             ApplyGlobalChatHotkey();
 
             RefreshChatShortcutLabel();
@@ -14741,6 +15220,17 @@ namespace ConditioningControlPanel
         private void ApplyGlobalChatHotkey()
         {
             var s = App.Settings?.Current?.CompanionPrompt;
+
+            // Honor the user's toggle. When off, we still rely on the in-window KeyBinding
+            // (registered by AvatarTubeWindow.ApplyChatShortcutTo) so the shortcut works
+            // when one of our windows has focus — but it won't steal focus from a browser
+            // or other foreground app.
+            if (s?.ChatShortcutGlobal == false)
+            {
+                Services.GlobalHotkeyService.Unregister();
+                return;
+            }
+
             var keyName = string.IsNullOrWhiteSpace(s?.ChatShortcutKey) ? "T" : s!.ChatShortcutKey;
             var modsName = s?.ChatShortcutModifiers ?? "Control";
 
@@ -15315,6 +15805,29 @@ namespace ConditioningControlPanel
                         {
                             _browser.WebView.CoreWebView2.WebMessageReceived += OnBrowserWebMessageReceived;
                             App.Logger?.Information("Browser WebMessageReceived handler attached");
+                        }
+
+                        // Phase 9: wire Deeper auto-discovery onto the WebView.
+                        // Discovery is a separate listener so it doesn't interfere
+                        // with audio-sync injection above. Bound/Unbound events
+                        // drive the inline badge in the browser status row.
+                        if (_browser?.WebView != null)
+                        {
+                            App.DeeperBrowserDiscovery?.Attach(_browser.WebView);
+                            if (App.DeeperBrowserDiscovery != null)
+                            {
+                                App.DeeperBrowserDiscovery.Bound += OnDeeperBrowserBound;
+                                App.DeeperBrowserDiscovery.Unbound += OnDeeperBrowserUnbound;
+                            }
+                        }
+
+                        // Browser Enhancement Bridge: when the user navigates to
+                        // a URL we have a saved enhancement for, drive effects on
+                        // top of the browser. Toggle ON/OFF via the toolbar.
+                        if (_browser?.WebView != null && App.BrowserEnhanceBridge == null)
+                        {
+                            App.BrowserEnhanceBridge = new Services.Deeper.BrowserEnhancementBridge(_browser.WebView, _browser);
+                            App.BrowserEnhanceBridge.MatchChanged += OnBrowserEnhanceMatchChanged;
                         }
                     });
                 };
@@ -18257,6 +18770,10 @@ namespace ConditioningControlPanel
             ChkOfflineMode.IsChecked = s.OfflineMode;
             ChkStopEffectsOnRemoteDisconnect.IsChecked = s.StopEffectsOnRemoteDisconnect;
 
+            // Deeper
+            if (ChkEnableDeeper != null) ChkEnableDeeper.IsChecked = s.EnableDeeper;
+            if (BtnDeeper != null) BtnDeeper.Visibility = s.EnableDeeper ? Visibility.Visible : Visibility.Collapsed;
+
             // Update UI for offline mode state (disable login buttons, browser, etc.)
             if (s.OfflineMode)
             {
@@ -18602,6 +19119,9 @@ namespace ConditioningControlPanel
             s.PanicKeyEnabled = !(ChkNoPanic.IsChecked ?? false);
             s.OfflineMode = ChkOfflineMode.IsChecked ?? false;
 
+            // Deeper
+            if (ChkEnableDeeper != null) s.EnableDeeper = ChkEnableDeeper.IsChecked ?? true;
+
             // Audio
             s.MasterVolume = (int)SliderMaster.Value;
             s.AudioDuckingEnabled = ChkAudioDuck.IsChecked ?? true;
@@ -18832,7 +19352,8 @@ namespace ConditioningControlPanel
                 // Exclusives tab eliminated — route tutorial's "patreon" step to the
                 // App Info & Data popup which hosts the login/data sections.
                 showPatreon: () => ShowAppInfoPopup(),
-                showAwareness: () => ShowTab("awareness")
+                showAwareness: () => ShowTab("awareness"),
+                showDeeper: () => ShowTab("deeper")
             );
 
             App.Tutorial.Start(type);
@@ -24158,6 +24679,25 @@ namespace ConditioningControlPanel
                         quiz.Close();
                     foreach (var quiz in Application.Current.Windows.OfType<QuizWindow>().ToList())
                         quiz.Close();
+                }
+                catch { }
+
+                // Close any open Deeper editors / players / overlays. WebView2,
+                // LibVLCSharp media players, and the on-rails tutorial overlay
+                // each pin the dispatcher (native handles + animations + event
+                // subscriptions), so the owner-cascade alone isn't enough to
+                // let the process exit. Force-close them here.
+                try
+                {
+                    foreach (var w in Application.Current.Windows
+                                          .OfType<Views.Deeper.DeeperEditorWindow>().ToList())
+                        w.ForceClose();
+                    foreach (var w in Application.Current.Windows
+                                          .OfType<Views.Deeper.EnhancementPlayerWindow>().ToList())
+                        w.Close();
+                    foreach (var w in Application.Current.Windows
+                                          .OfType<TutorialOverlay>().ToList())
+                        w.Close();
                 }
                 catch { }
 

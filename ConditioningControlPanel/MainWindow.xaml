@@ -155,6 +155,53 @@
             </Setter>
         </Style>
 
+        <!-- Deeper Tab Button Styles — violet accent variant of TabButton/TabButtonActive
+             so the new Deeper tab carries a distinct visual identity in the tab strip. -->
+        <Style x:Key="TabButtonDeeper" TargetType="Button" BasedOn="{StaticResource TabButton}">
+            <Setter Property="Foreground" Value="{DynamicResource DeeperAccentBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="Transparent"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TabButtonDeeperActive" TargetType="Button" BasedOn="{StaticResource TabButtonActive}">
+            <Setter Property="Background" Value="{DynamicResource DeeperAccentBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bg" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource DeeperAccentSoftBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Small Pink Button Style (for tutorial guide buttons) -->
         <Style x:Key="SmallPinkButton" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
@@ -1528,6 +1575,17 @@
                             <TextBlock Text="{loc:Str tab_enhancements}" FontSize="11"/>
                         </StackPanel>
                     </Button>
+                    <Button x:Name="BtnDeeper" Tag="Deeper" Style="{StaticResource TabButtonDeeper}"
+                            Margin="3,0" Click="BtnDeeper_Click" ToolTip="{loc:Str tooltip_deeper}"
+                            RenderTransformOrigin="0.5,0.5">
+                        <Button.RenderTransform>
+                            <ScaleTransform x:Name="BtnDeeperScale" ScaleX="1" ScaleY="1"/>
+                        </Button.RenderTransform>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🌊" FontSize="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="{loc:Str tab_deeper}" FontSize="11"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource TabButton}"
                             Margin="3,0" Click="BtnAssets_Click" ToolTip="{loc:Str tooltip_assets_packs}">
                         <StackPanel Orientation="Horizontal">
@@ -2645,6 +2703,28 @@
                             </Grid>
                         </StackPanel>
                     </Border>
+
+                    <!-- Deeper Section -->
+                    <Border x:Name="DeeperSection" CornerRadius="12" Padding="10,7" Margin="0,0,0,6"
+                            Background="{DynamicResource ElevatedSurfaceBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1">
+                        <StackPanel>
+                            <Grid>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🌊" FontSize="14" Margin="0,0,6,0"
+                                               Foreground="{DynamicResource DeeperAccentBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_deeper}"
+                                               Foreground="{DynamicResource DeeperAccentBrush}"/>
+                                </StackPanel>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
+                                        ToolTip="{loc:Str tooltip_deeper_enable}">
+                                <CheckBox x:Name="ChkEnableDeeper" Style="{StaticResource ToggleStyle}"
+                                          Checked="ChkEnableDeeper_Changed" Unchecked="ChkEnableDeeper_Changed"/>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_deeper_enable}" Margin="6,0,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
             </Grid>
@@ -2740,6 +2820,18 @@
                             <TextBlock Grid.Column="3" x:Name="TxtBrowserStatus" Text="{loc:Str label_loading}"
                                        Foreground="{DynamicResource PinkBrush}" FontSize="10"
                                        VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <!-- Deeper auto-bind badge (Phase 9). Shows when an enhancement is active for the current page. -->
+                            <Border Grid.Column="3" x:Name="DeeperBrowserBadge" Visibility="Collapsed"
+                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                                    CornerRadius="3" Padding="6,1" Margin="0,0,8,0"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    ToolTip="{Binding ElementName=DeeperBrowserBadge, Path=Tag}">
+                                <TextBlock x:Name="TxtDeeperBrowserBadge"
+                                           Text="🌊 Deeper"
+                                           Foreground="{DynamicResource DeeperAccentBrush}"
+                                           FontSize="9" FontWeight="SemiBold"/>
+                            </Border>
                             <!-- Pop Out button -->
                             <Button Grid.Column="4" x:Name="BtnPopOutBrowser" Content="{loc:Str btn_pop_out}"
                                     Click="BtnPopOutBrowser_Click"
@@ -2780,11 +2872,35 @@
                             <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
 
+                                <!-- Deeper "Enhance if possible" toggle (always visible) -->
+                                <Border x:Name="BrowserEnhanceToolbar" Grid.Row="0"
+                                        Background="{DynamicResource PanelBgBrush}" Padding="8,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox x:Name="ToggleEnhanceIfPossible" Grid.Column="0"
+                                                  Content="{loc:Str browser_enhance_label}"
+                                                  Foreground="{DynamicResource TextLightBrush}" FontSize="11"
+                                                  VerticalAlignment="Center" Cursor="Hand"
+                                                  Checked="ToggleEnhanceIfPossible_Changed"
+                                                  Unchecked="ToggleEnhanceIfPossible_Changed"
+                                                  ToolTip="{loc:Str browser_enhance_tooltip}"/>
+                                        <TextBlock x:Name="TxtEnhanceMatchStatus" Grid.Column="1"
+                                                   Text="{loc:Str browser_enhance_match_none}"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                                   VerticalAlignment="Center"
+                                                   Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
+                                    </Grid>
+                                </Border>
+
                                 <!-- Audio Sync Controls (shown when audio sync enabled) -->
-                                <Border x:Name="AudioSyncLatencyPanel" Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Padding="6,3" Visibility="Collapsed">
+                                <Border x:Name="AudioSyncLatencyPanel" Grid.Row="1" Background="{DynamicResource PanelBgBrush}" Padding="6,3" Visibility="Collapsed">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -2824,7 +2940,7 @@
                                     </Grid>
                                 </Border>
 
-                                <Grid x:Name="BrowserContainer" Grid.Row="1">
+                                <Grid x:Name="BrowserContainer" Grid.Row="2">
                                     <!-- WebView2 will be added here programmatically -->
                                     <TextBlock x:Name="BrowserLoadingText"
                                                Text="{loc:Str label_click_to_load_browser}"
@@ -8220,6 +8336,199 @@
                                    TextAlignment="Center" TextWrapping="Wrap" MaxWidth="350"/>
                     </StackPanel>
                 </Border>
+            </Grid>
+        </ContentControl>
+
+        <!-- Deeper Tab — universal media enhancement system -->
+        <ContentControl x:Name="DeeperTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+            <Grid Margin="28,20,28,20" MaxWidth="1080" HorizontalAlignment="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/> <!-- Header -->
+                    <RowDefinition Height="Auto"/> <!-- Pitch -->
+                    <RowDefinition Height="Auto"/> <!-- Welcome card (first-run) -->
+                    <RowDefinition Height="*"/>    <!-- Library + Recent -->
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Grid Grid.Row="0" Margin="0,0,0,18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="🌊" FontSize="34"
+                               Foreground="{DynamicResource DeeperAccentBrush}"
+                               VerticalAlignment="Center" Margin="0,0,14,0"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Str deeper_empty_title}"
+                                       Foreground="{DynamicResource DeeperAccentBrush}"
+                                       FontSize="22" FontWeight="Bold"/>
+                            <Border Margin="10,4,0,0" Padding="7,2"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                                    CornerRadius="4"
+                                    ToolTip="{loc:Str deeper_beta_notice}">
+                                <TextBlock Text="{loc:Str deeper_beta_badge}"
+                                           Foreground="{DynamicResource DeeperAccentBrush}"
+                                           FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="{loc:Str deeper_empty_pitch}"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                   Margin="0,2,0,0" TextWrapping="Wrap" MaxWidth="700"
+                                   HorizontalAlignment="Left"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BtnDeeperTutorial"
+                                Content="{loc:Str deeper_tab_tutorial_btn}"
+                                ToolTip="{loc:Str deeper_tab_tutorial_tooltip}"
+                                Click="BtnDeeperTutorial_Click"
+                                Padding="14,10" FontSize="12" Cursor="Hand"
+                                Background="Transparent"
+                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                                Margin="0,0,8,0"/>
+                        <Button x:Name="BtnDeeperOpenPlayer"
+                                Content="{loc:Str deeper_tab_open_player}"
+                                ToolTip="{loc:Str deeper_tab_open_player_tooltip}"
+                                Click="BtnDeeperOpenPlayer_Click"
+                                Padding="16,10" FontSize="12" Cursor="Hand"
+                                Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                                Margin="0,0,8,0"/>
+                        <Button x:Name="BtnDeeperNewEnhancement"
+                                Content="{loc:Str deeper_empty_cta}"
+                                ToolTip="{loc:Str deeper_tab_new_enh_tooltip}"
+                                Click="BtnDeeperNewEnhancement_Click"
+                                Padding="22,10" FontSize="13" FontWeight="SemiBold"
+                                Foreground="White" BorderThickness="0" Cursor="Hand"
+                                Background="{DynamicResource DeeperAccentBrush}">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="border" CornerRadius="8" Padding="{TemplateBinding Padding}"
+                                            Background="{TemplateBinding Background}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="border" Property="Background" Value="{DynamicResource DeeperAccentSoftBrush}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Features blurb + BETA notice -->
+                <StackPanel Grid.Row="1" Margin="0,0,0,20">
+                    <TextBlock Text="{loc:Str deeper_empty_features}"
+                               Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                               TextWrapping="Wrap"/>
+                    <Border Margin="0,10,0,0" Padding="10,7"
+                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                            CornerRadius="6">
+                        <TextBlock Text="{loc:Str deeper_beta_notice}"
+                                   Foreground="{DynamicResource DeeperAccentBrush}"
+                                   FontSize="11" TextWrapping="Wrap"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- First-run welcome card. Visibility flipped to Collapsed in code
+                     once the user clicks Tour, Open Demo, or Got it. -->
+                <Border x:Name="DeeperWelcomeCard" Grid.Row="2" Visibility="Collapsed"
+                        Background="{DynamicResource SurfaceBgBrush}"
+                        BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                        CornerRadius="10" Padding="22,18" Margin="0,0,0,18">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="✨" FontSize="34"
+                                   Foreground="{DynamicResource DeeperAccentBrush}"
+                                   VerticalAlignment="Top" Margin="0,0,18,0"/>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="{loc:Str deeper_welcome_card_title}"
+                                       Foreground="{DynamicResource DeeperAccentBrush}"
+                                       FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+                            <TextBlock Text="{loc:Str deeper_welcome_card_body}"
+                                       Foreground="{DynamicResource TextLightBrush}" FontSize="12"
+                                       TextWrapping="Wrap" Margin="0,0,0,14"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="BtnDeeperWelcomeTour"
+                                        Content="{loc:Str deeper_welcome_card_take_tour}"
+                                        Click="BtnDeeperWelcomeTour_Click"
+                                        Padding="14,7" Cursor="Hand" FontWeight="SemiBold"
+                                        Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
+                                        BorderThickness="0" Margin="0,0,8,0"/>
+                                <Button x:Name="BtnDeeperWelcomeDemo"
+                                        Content="{loc:Str deeper_welcome_card_open_demo}"
+                                        Click="BtnDeeperWelcomeDemo_Click"
+                                        Padding="14,7" Cursor="Hand"
+                                        Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                        Foreground="{DynamicResource DeeperAccentBrush}"
+                                        BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                                        Margin="0,0,8,0"/>
+                                <Button x:Name="BtnDeeperWelcomeDismiss"
+                                        Content="{loc:Str deeper_welcome_card_dismiss}"
+                                        Click="BtnDeeperWelcomeDismiss_Click"
+                                        Padding="14,7" Cursor="Hand"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextMutedBrush}"
+                                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                        BorderThickness="1"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Library + Recent (two-column) -->
+                <Grid Grid.Row="3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Library -->
+                    <Border x:Name="DeeperLibraryCard" Grid.Column="0" Background="{DynamicResource SurfaceBgBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                            CornerRadius="10" Padding="18,14"
+                            ToolTip="{loc:Str deeper_tab_library_tooltip}">
+                        <DockPanel LastChildFill="True">
+                            <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+                                <TextBlock Text="{loc:Str deeper_section_library}"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           FontSize="12" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtDeeperLibraryCount" HorizontalAlignment="Right"
+                                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
+                            </Grid>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="DeeperLibraryList"/>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Recent -->
+                    <Border x:Name="DeeperRecentCard" Grid.Column="2" Background="{DynamicResource SurfaceBgBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                            CornerRadius="10" Padding="18,14"
+                            ToolTip="{loc:Str deeper_tab_recent_tooltip}">
+                        <DockPanel LastChildFill="True">
+                            <TextBlock DockPanel.Dock="Top" Text="{loc:Str deeper_section_recent}"
+                                       Foreground="{DynamicResource TextLightBrush}"
+                                       FontSize="12" FontWeight="Bold" Margin="0,0,0,10"/>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="DeeperRecentList"/>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </Grid>
             </Grid>
         </ContentControl>
 

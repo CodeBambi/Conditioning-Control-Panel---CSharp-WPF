@@ -1,0 +1,39 @@
+<Window x:Class="ConditioningControlPanel.Views.Deeper.UrlPromptDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str deeper_url_prompt_title}"
+        Height="190" Width="500" MinHeight="160" MinWidth="380"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource DarkerBgBrush}"
+        ShowInTaskbar="False">
+
+    <StackPanel Margin="20,16,20,16">
+        <TextBlock Text="{loc:Str deeper_url_prompt_label}"
+                   Foreground="{DynamicResource TextLightBrush}"
+                   FontSize="12" Margin="0,0,0,8" TextWrapping="Wrap"/>
+        <TextBox x:Name="TxtUrl"
+                 Background="White" Foreground="Black" FontSize="12"
+                 BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                 BorderThickness="1" Padding="8,6"
+                 KeyDown="TxtUrl_KeyDown"/>
+        <TextBlock x:Name="TxtError" Foreground="#FFFF6B6B" FontSize="11"
+                   Margin="0,6,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+        <DockPanel Margin="0,16,0,0" LastChildFill="False">
+            <Button DockPanel.Dock="Right" Content="{loc:Str deeper_url_prompt_load}"
+                    Click="BtnOk_Click"
+                    Padding="14,6" Cursor="Hand" FontSize="11" FontWeight="SemiBold"
+                    IsDefault="True"
+                    Background="{DynamicResource DeeperAccentBrush}"
+                    Foreground="White" BorderThickness="0" Margin="8,0,0,0"/>
+            <Button DockPanel.Dock="Right" Content="{loc:Str btn_cancel}"
+                    Click="BtnCancel_Click"
+                    Padding="14,6" Cursor="Hand" FontSize="11"
+                    IsCancel="True"
+                    Background="Transparent"
+                    Foreground="{DynamicResource TextLightBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"/>
+        </DockPanel>
+    </StackPanel>
+</Window>

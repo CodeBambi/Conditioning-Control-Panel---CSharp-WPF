@@ -395,6 +395,110 @@ public class OverlayService : IDisposable
         return App.Mods?.GetFilterColorRgb() ?? (255, 105, 180);
     }
 
+    /// <summary>
+    /// Ad-hoc one-shot overlay used by Deeper enhancement Effects. Bypasses the
+    /// per-overlay enabled/disabled settings flags so creator content can fire
+    /// any overlay regardless of how the user has the live overlay system
+    /// configured. Auto-dismisses after <paramref name="durationMs"/> via a
+    /// <see cref="DispatcherTimer"/> (NOT Task.Delay — see CLAUDE.md known
+    /// issue 6 about fire-and-forget Tasks at app shutdown).
+    /// </summary>
+    public void ShowOverlayTimed(string kind, int durationMs, double opacity)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+
+        int opacityPercent = (int)Math.Clamp(opacity * 100.0, 0, 100);
+        int safeDurationMs = Math.Max(50, durationMs);
+
+        Action? show = kind switch
+        {
+            "pink_filter" => () => ShowPinkFilterAdHoc(opacityPercent),
+            "spiral"      => () => ShowSpiralAdHoc(),
+            "braindrain"  => () => StartBrainDrainBlur(Math.Max(1, opacityPercent)),
+            _ => null
+        };
+
+        Action? hide = kind switch
+        {
+            "pink_filter" => () => StopPinkFilter(),
+            "spiral"      => () => StopSpiral(),
+            "braindrain"  => () => StopBrainDrainBlur(),
+            _ => null
+        };
+
+        if (show == null || hide == null)
+        {
+            App.Logger?.Debug("ShowOverlayTimed: unknown kind {Kind}", kind);
+            return;
+        }
+
+        Action runShow = () =>
+        {
+            try { show(); }
+            catch (Exception ex) { App.Logger?.Debug("ShowOverlayTimed show: {E}", ex.Message); }
+        };
+        if (dispatcher.CheckAccess()) runShow();
+        else dispatcher.Invoke(runShow);
+
+        var hideTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(safeDurationMs)
+        };
+        hideTimer.Tick += (_, _) =>
+        {
+            hideTimer.Stop();
+            try { hide(); }
+            catch (Exception ex) { App.Logger?.Debug("ShowOverlayTimed hide: {E}", ex.Message); }
+        };
+        hideTimer.Start();
+    }
+
+    private void ShowPinkFilterAdHoc(int opacityPercent)
+    {
+        if (_pinkFilterWindows.Count > 0) return;
+        try
+        {
+            var settings = App.Settings?.Current;
+            var screens = settings?.DualMonitorEnabled == true
+                ? App.GetAllScreensCached()
+                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+
+            foreach (var screen in screens)
+            {
+                var w = CreatePinkFilterForScreen(screen, opacityPercent);
+                if (w != null) _pinkFilterWindows.Add(w);
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ShowPinkFilterAdHoc: {E}", ex.Message);
+        }
+    }
+
+    private void ShowSpiralAdHoc()
+    {
+        // Spiral has heavier setup (GIF/video branching, frame timer); reuse the
+        // existing path. If settings have no spiral path configured, this is a
+        // no-op — Deeper logs at the dispatcher.
+        if (_spiralWindows.Count > 0) return;
+        try
+        {
+            var spiralPath = GetSpiralPath();
+            if (string.IsNullOrEmpty(spiralPath))
+            {
+                App.Logger?.Debug("ShowSpiralAdHoc: no spiral path configured; skipping");
+                return;
+            }
+            _spiralPath = spiralPath;
+            StartSpiral();
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ShowSpiralAdHoc: {E}", ex.Message);
+        }
+    }
+
     private void StartPinkFilter()
     {
         if (_pinkFilterWindows.Count > 0) return;
