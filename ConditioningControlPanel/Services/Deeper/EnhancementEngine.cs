@@ -35,6 +35,13 @@ namespace ConditioningControlPanel.Services.Deeper
         // Per-item last-fired timestamps for cooldown enforcement.
         private readonly Dictionary<TimelineItem, DateTime> _itemLastFired = new();
 
+        // Per-entry latch: items that have already fired since the playhead
+        // last entered their band. Without this, a webcam trigger with
+        // cooldown_ms <= 0 re-fires on every blink/face/gaze event while the
+        // playhead sits inside the band. Cleared when the playhead exits the
+        // band, on seek-back, and on Start/Stop.
+        private readonly HashSet<TimelineItem> _firedInCurrentEntry = new();
+
         // Gaze dwell state — keyed by item so target/avoid each get their own clock.
         private readonly Dictionary<TimelineItem, DateTime> _gazeDwellSince = new();
 
@@ -228,6 +235,7 @@ namespace ConditioningControlPanel.Services.Deeper
 
             Compile();
             _itemLastFired.Clear();
+            _firedInCurrentEntry.Clear();
             _gazeDwellSince.Clear();
             _faceLostSince = null;
 
@@ -291,12 +299,31 @@ namespace ConditioningControlPanel.Services.Deeper
         private void OnPlaybackTime(double t)
         {
             if (!_running) return;
+
+            // Suppress the metadata-load phantom tick from a WebView2 source.
+            // Browser pages emit a tick at t=0 the moment <video> metadata
+            // loads (currentTime is 0, but duration just became known) which
+            // would otherwise fire any entry at Time=0 before the user pressed
+            // play. After the first real tick has been processed (_lastTickTime
+            // set), normal flow resumes including legitimate t=0 entries on
+            // the first playing tick (where _source.IsPlaying becomes true).
+            if (_lastTickTime < 0 && t <= 0 && !_source.IsPlaying) return;
+
             try
             {
                 // Detect seek-back: rewind the cursor to the highest entry still
                 // strictly before t, so forward-progress fires re-arm correctly.
                 if (_lastTickTime >= 0 && t + 0.05 < _lastTickTime)
                     RewindCursor(t);
+
+                // Clear the per-entry latch for items whose band the playhead
+                // has now left, so re-entering them re-arms a single fire.
+                if (_firedInCurrentEntry.Count > 0)
+                {
+                    _firedInCurrentEntry.RemoveWhere(item =>
+                        !(item.Duration > 0 && item.Duration < double.MaxValue
+                          && t >= item.Start && t < item.Start + item.Duration));
+                }
 
                 // Region transition (computed before firing so region_entered
                 // rules see the new region as "current").
@@ -338,6 +365,9 @@ namespace ConditioningControlPanel.Services.Deeper
                 else break;
             }
             _lastFiredIndex = idx;
+            // Seek-back invalidates per-entry latches: a band the user just
+            // jumped back into should be able to fire its single shot again.
+            _firedInCurrentEntry.Clear();
         }
 
         private string? FindRegionAt(double t)
@@ -511,7 +541,8 @@ namespace ConditioningControlPanel.Services.Deeper
             // exact-time matches via the sorted timeline). Duration == double.MaxValue
             // is "anywhere" (used by the loader projection for v1 rules with no
             // RegionConstraint and a non-time-reached trigger).
-            if (item.Duration > 0 && item.Duration < double.MaxValue)
+            bool finiteBand = item.Duration > 0 && item.Duration < double.MaxValue;
+            if (finiteBand)
             {
                 if (t < item.Start || t >= item.Start + item.Duration) return false;
             }
@@ -522,6 +553,17 @@ namespace ConditioningControlPanel.Services.Deeper
             {
                 if ((now - last).TotalMilliseconds < item.CooldownMs) return false;
             }
+
+            // Per-entry latch: with cooldown_ms <= 0 on a finite band, fire at
+            // most once per band entry. Without this, high-frequency triggers
+            // (blink, gaze) would re-fire on every event while the playhead
+            // sits inside the band. The latch clears on band exit (see
+            // OnPlaybackTime) and on seek-back (see RewindCursor).
+            if (finiteBand && item.CooldownMs <= 0)
+            {
+                if (!_firedInCurrentEntry.Add(item)) return false;
+            }
+
             _itemLastFired[item] = now;
             return true;
         }

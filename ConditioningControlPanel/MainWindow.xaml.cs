@@ -24666,6 +24666,10 @@ namespace ConditioningControlPanel
                     App.Roadmap.StepCompleted -= OnRoadmapStepCompleted;
                     App.Roadmap.TrackUnlocked -= OnRoadmapTrackUnlocked;
                 }
+                if (App.EnhancementLibrary != null)
+                {
+                    App.EnhancementLibrary.LibraryChanged -= OnDeeperLibraryChanged;
+                }
 
                 _keyboardHook?.Dispose();
                 _trayIcon?.Dispose();

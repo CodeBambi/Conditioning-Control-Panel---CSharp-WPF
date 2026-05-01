@@ -2183,7 +2183,16 @@ Application State:
             Haptics?.Dispose();
             AudioSync?.Dispose();
             Audio?.Dispose();
+            // Deeper singletons (reverse init order). The bridge holds the
+            // browser/host pair; discovery owns a CTS + WebView2 nav handler;
+            // host owns the engine-bind state; player owns NAudio handles;
+            // fetcher owns an HttpClient; library owns a FileSystemWatcher.
             BrowserEnhanceBridge?.Dispose();
+            DeeperBrowserDiscovery?.Dispose();
+            DeeperHost?.Dispose();
+            DeeperPlayer?.Dispose();
+            DeeperFetcher?.Dispose();
+            EnhancementLibrary?.Dispose();
 
             // Terminate any `ollama serve` we spawned so it doesn't outlive the app.
             // (Servers started by the Ollama installer's auto-start or the user's tray
