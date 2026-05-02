@@ -20,15 +20,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.9.2";
+        public const string AppVersion = "5.9.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.9.2 - We Need To Go Deeper
+        public const string CurrentPatchNotes = @"v5.9.3 - We Need To Go Deeper
 
 This is a pre-release. Deeper is a brand new tab and a major feature in beta - please report anything you hit. Existing 5.9.1 installs will be prompted to update.
+
+🔊 AUDIO HOTFIX
+• Mandatory videos play sound again on Windows 11 builds where DirectSound was silently failing to bind to the audio device. LibVLC now auto-picks WASAPI (the modern Windows default).
+• If you still don't hear video audio, the new diagnostic log lists which audio modules your system exposes - paste it in Discord or open a bug report.
 
 ✨ HEADLINE: DEEPER
 • A whole new tab. Deeper lets you build and play multi-track hypnosis tapes - an editor with timeline, regions, audio/video, haptic curves, rule triggers, and an end-user player.

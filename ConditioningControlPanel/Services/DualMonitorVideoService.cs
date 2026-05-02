@@ -329,10 +329,11 @@ namespace ConditioningControlPanel.Services
                         Core.Initialize();
                     }
 
+                    // Don't force --aout: DirectSound silently fails to bind on some Win11 26200
+                    // setups (no audio). LibVLC auto-picks mmdevice/WASAPI on Win7+ which is reliable.
                     _libVLC = new LibVLC(
                         "--no-video-title-show",
                         "--no-osd",
-                        "--aout=directsound",
                         "--verbose=-1"
                     );
 

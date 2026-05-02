@@ -275,12 +275,13 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Information("LibVLC core initialized from default location");
                     }
 
-                    // Create LibVLC instance with audio and video options
+                    // Create LibVLC instance with audio and video options.
+                    // Don't force --aout: on Windows 11 the DirectSound module silently fails to
+                    // bind on some setups (Rose, build 26200) and produces no audio. Letting LibVLC
+                    // auto-pick selects mmdevice (WASAPI) on Win7+, which is the modern default.
                     _libVLC = new LibVLC(
                         "--no-video-title-show",  // Don't show filename
                         "--no-osd",               // No on-screen display
-                        "--aout=directsound",     // Use DirectSound for audio (most compatible on Windows)
-                        "--directx-volume=1.0",   // Full volume for DirectX audio
                         "--gain=1.0",             // Audio gain
                         "--no-disable-screensaver", // Don't interfere with screensaver
                         "--no-mouse-events",      // Prevent click-to-pause on video surface
@@ -289,6 +290,23 @@ namespace ConditioningControlPanel.Services
                     );
 
                     App.Logger?.Information("LibVLC initialized successfully (version {Version})", _libVLC.Version);
+
+                    // TODO(audio-diag): remove once Rose's no-audio bug (#197/#200/#201) is confirmed fixed.
+                    // Logs available aout modules so we can see which one LibVLC auto-picks on systems
+                    // with broken DirectSound binding.
+                    try
+                    {
+                        var outputs = _libVLC.AudioOutputs;
+                        if (outputs != null)
+                        {
+                            var names = string.Join(", ", outputs.Select(o => $"{o.Name} ({o.Description})"));
+                            App.Logger?.Information("LibVLC available aout modules: {Outputs}", names);
+                        }
+                    }
+                    catch (Exception aoutEx)
+                    {
+                        App.Logger?.Warning("LibVLC AudioOutputs enumeration failed: {Error}", aoutEx.Message);
+                    }
                 }
                 catch (Exception ex)
                 {
