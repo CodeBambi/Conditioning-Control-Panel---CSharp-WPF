@@ -1315,15 +1315,16 @@ namespace ConditioningControlPanel.Services
             // Play the media
             mediaPlayer.Play(media);
 
-            // Configure audio AFTER Play() - LibVLC sometimes ignores settings before playback
+            // Configure audio AFTER Play() - LibVLC sometimes ignores settings before playback.
+            // Don't call SetAudioTrack here: Play() is async and tracks aren't enumerated yet,
+            // so requesting a hardcoded track ID leaves the player stuck at -1 (audio disabled).
+            // LibVLC auto-selects the first audio track once the media is parsed.
             if (withAudio)
             {
-                // Ensure audio is not muted and volume is set using effective volume
                 mediaPlayer.Mute = false;
                 mediaPlayer.Volume = GetEffectiveVolume();
-                mediaPlayer.SetAudioTrack(1); // Select first audio track
-                App.Logger?.Information("LibVLC audio: Volume={Vol}, Mute={Mute}, AudioTrack={Track}",
-                    mediaPlayer.Volume, mediaPlayer.Mute, mediaPlayer.AudioTrack);
+                App.Logger?.Information("LibVLC audio: Volume={Vol}, Mute={Mute}",
+                    mediaPlayer.Volume, mediaPlayer.Mute);
             }
             else
             {
