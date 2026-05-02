@@ -53,7 +53,7 @@ public class QuestDefinitionService : IDisposable
         { 2, "Fucked-up February" },
         { 3, "Mindless March" },
         { 4, "Airhead April" },
-        { 5, "Mesmerize May" },
+        { 5, "Mooing May" },
         { 6, "Juicy June" },
         { 7, "Jizzly July" },
         { 8, "Ass-up August" },

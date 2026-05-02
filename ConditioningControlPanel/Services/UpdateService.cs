@@ -20,71 +20,53 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.9.1";
+        public const string AppVersion = "5.9.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.9.1 - Eyes Wide Open
+        public const string CurrentPatchNotes = @"v5.9.2 - We Need To Go Deeper
 
-v5.9.0 was a pre-release that never went final. v5.9.1 ships the same feature set with a few follow-up fixes appended at the bottom. Existing 5.9.0 pre-release installs WILL be prompted to update.
+This is a pre-release. Deeper is a brand new tab and a major feature in beta - please report anything you hit. Existing 5.9.1 installs will be prompted to update.
 
-*Before anyone reads it as a flex - the title's just an homage to my fav artist, someone who actually helped me out a lot this last year. I turned 30 recently. Who knows, knows.*
+✨ HEADLINE: DEEPER
+• A whole new tab. Deeper lets you build and play multi-track hypnosis tapes - an editor with timeline, regions, audio/video, haptic curves, rule triggers, and an end-user player.
+• Editor: timeline scrub + zoom, region/haptic resize, multi-select + clipboard + undo, preview mode (real device + recorder + overlay), HT description auto-discovery + WebView2 JS bridge, library hot-reload + media-source matching + URL paste, wildcard previews.
+• Rules: trigger/action editor, gaze rect picker, cooldowns, visual curve editing for haptic actions, end-of-band loop, t=0 phantom suppression, rule-fire latch.
+• Player: real fullscreen, browser bridge, replay-after-stop, audio + video tutorials, TriggerEffect surfaced, native media file export.
+• Tutorials: welcome card, tab/editor walkthroughs, on-rails overlay framework, media-export slide.
+• BETA badge + disclaimer banner on the tab.
 
-✨ HEADLINE
-• Webcam Eye Tracking - a fully local, on-device gaze pipeline. BlazeFace + FaceMesh + Iris ONNX models, runs on CPU. Frames never leave your machine, never written to disk.
-• 25-point calibration with adaptive ridge polynomial fit, mouth/tongue validation gates, and a 1-dot Quick Recal that nudges the cursor back on-target without re-doing the full grid.
-• Multi-monitor aware - calibration is bound to the monitor it ran on.
+🎮 SESSIONS
+• Post-session media log + a recent-sessions browser to retrace what played and when.
 
-🎮 NEW LAB BOX: WEBCAM GAMES
-• Focus Gaze - a free-form gaze cursor on top of your sessions.
-• Gaze Minigame - dwell-resolved rounds, entry sparkles, feedback buffer, configurable asset packs, sfx.
-• Standalone debug cursor toggle, Review-Privacy-Info shortcut on the card.
+📸 WEBCAM
+• Camera device selector - pick which physical (or virtual) camera the eye-tracker uses.
+• Title-bar camera-active pill replaces the prior [DEBUG] labeling on the tracking card.
 
-🥽 NEW LAB BOX: BLINK TRAINER
-• Folder-pool image overlay that swaps on detected blinks.
-• Smart tiling, multi-monitor video sync, mix-images toggle, BambiCloud playlist support.
-
-📚 INTERACTIVE TUTORIALS
-• Companion tab walkthrough.
-• Awareness Engine walkthrough.
-
-💖 COMPANION POLISH
-• Reset Memory button.
-• BambiCloud links open reliably first try.
-• Speech bubble persistence slider + chat history mode.
-• Avatar reacts when you finish a Lock Card or a mandatory video (the GetLockScreenReaction + GetVideoDoneReaction wire-up that was missed in the v5.8.4 Companion AI rework).
-
-🧰 LAB TAB RESHAPE
-• Three-column layout. Pop Quiz folded under Quiz Training. Webcam Games, Blink Trainer, AI Effects + Memory all surface as their own cards.
-• Lab AI card: (?) help icons for Effect control and Chat memory.
-
-🔧 BUG FIXES
-• 13 v5.8.4 bug reports addressed across MainWindow, remote takeover, and several services.
-• Browser container no longer clips the bottom 25px.
-• Assets tab: content packs UI hidden behind a single Get Packs link to declutter the empty state.
-• Remote Control 429 logs now identify which rate cap fired (per-account vs per-IP) and the count, for easier triage.
-
-🔒 PRIVACY
-• All webcam frames stay on your device. The pipeline runs offline. No network calls, no disk writes of frame data, no telemetry.
-• Revoke consent any time from the Webcam Lab card - it stops tracking, deletes your calibration, and clears the consent record.
-
-────────────────────────────────
-v5.9.1 APPENDIX (post-pre-release fixes)
-────────────────────────────────
-
-🔧 BUG FIXES
-• Hypnotube + partner sites: ads are no longer blocked in the embedded browser. The ad-blocker now skips partner domains so collab creators don't lose revenue.
-• Video: playback is torn down on system suspend so resuming from sleep no longer leaves a frozen frame.
-• Avatar: mods that only override tube.png are now respected.
-
-✨ FEATURES
-• Chat shortcut: toggle between system-wide and in-app hotkey.
-• Haptics: VPN-broken connections are detected and surfaced with a clear error instead of silently failing.
+🔒 SECURITY & PRIVACY
+• Deeper SSRF hardening on URL fetchers with a strict host allowlist.
+• DNS-rebind guard.
+• Player WebView2 lockdown - input-path hardening, validator gaps closed.
+• Webcam: enforced consent-version gate at every consent check.
+• Webcam: per-event telemetry demoted to Debug to keep biometric correlates out of logs.
 
 ⚡ PERFORMANCE & STABILITY
-• Settings: per-save log lines demoted to Debug to stop log-spam.";
+• Webcam: per-frame buffer caching, async-void crash guards, BlinkTrainer dispose.
+• Webcam: symmetric event-subscription teardown, async TCS continuations.
+• Webcam: lifecycle correctness - native disposal deferred until capture thread exits.
+• Deeper: leak/crash/correctness review pass + medium-tier review pass.
+• Deeper editor: lifecycle teardown pass + shutdown disposes.
+
+🔧 BUG FIXES
+• Deeper: rules/regions/haptics save fix, webcam wiring, player polish.
+• Deeper: validator alignment, localized preview messages, log breadcrumbs.
+• Lab Smokescreen card: clarified it's Prime Subjects testing, not all Patreon.
+
+🎨 UI/UX
+• Deeper: gaze picker as a separate window + dropdown legibility fix.
+• Deeper: dark File menu dropdown.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
