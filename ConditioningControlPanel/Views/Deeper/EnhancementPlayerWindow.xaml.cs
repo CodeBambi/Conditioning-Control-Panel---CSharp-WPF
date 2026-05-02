@@ -207,10 +207,22 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void TryAutoLoadEnhancement(string mediaPath)
         {
+            // 0) Embedded metadata bundled into the media file itself
+            //    (the export-as-media flow from the editor). Checked FIRST so
+            //    a self-contained file beats any stale sidecar that happens
+            //    to share a basename in the same folder.
             // 1) Side-by-side: foo.mp3 → foo.ccpenh.json next to it.
             // 2) Library lookup by media_source pattern (Phase 10).
             try
             {
+                if (EnhancementMediaBundler.IsSupportedExtension(mediaPath)
+                    && EnhancementMediaBundler.TryExtract(mediaPath, out var embedded, out _)
+                    && embedded != null)
+                {
+                    _host.LoadFromMemory(embedded, "embedded:" + Path.GetFileName(mediaPath));
+                    return;
+                }
+
                 var dir = Path.GetDirectoryName(mediaPath);
                 var baseName = Path.GetFileNameWithoutExtension(mediaPath);
                 if (!string.IsNullOrEmpty(dir) && !string.IsNullOrEmpty(baseName))

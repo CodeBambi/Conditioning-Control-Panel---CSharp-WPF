@@ -179,6 +179,8 @@
                         <MenuItem Header="{loc:Str menu_file_save}" Click="MenuSave_Click" InputGestureText="Ctrl+S"/>
                         <MenuItem Header="{loc:Str menu_file_save_as}" Click="MenuSaveAs_Click" InputGestureText="Ctrl+Shift+S"/>
                         <Separator/>
+                        <MenuItem Header="{loc:Str menu_file_export}" Click="MenuExportEnhanced_Click" InputGestureText="Ctrl+E"/>
+                        <Separator/>
                         <MenuItem Header="{loc:Str menu_file_close}" Click="MenuClose_Click"/>
                     </MenuItem>
                 </Menu>

@@ -3458,6 +3458,91 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
+        private void MenuExportEnhanced_Click(object sender, RoutedEventArgs e)
+        {
+            // Block on hard validation errors. The bundled file is meant to
+            // be shareable, so shipping a known-broken enhancement to other
+            // users would be worse than refusing the export.
+            var issues = EnhancementValidator.Validate(_enhancement);
+            int errorCount = issues.Count(i => i.Severity == ValidationSeverity.Error);
+            if (errorCount > 0)
+            {
+                MessageBox.Show(this,
+                    string.Format(Loc.Get("deeper_editor_export_validation_blocked_fmt"), errorCount),
+                    Loc.Get("deeper_editor_export_dialog_title"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var library = App.EnhancementLibrary;
+
+            var pickSrc = new OpenFileDialog
+            {
+                Title = Loc.Get("deeper_editor_export_pick_source_title"),
+                Filter = "Media files|*.mp4;*.m4v;*.mov;*.m4a;*.mp3;*.wav|All files|*.*",
+                CheckFileExists = true
+            };
+            var lastDir = library?.LastDirectory;
+            if (!string.IsNullOrEmpty(lastDir)) pickSrc.InitialDirectory = lastDir;
+            if (pickSrc.ShowDialog(this) != true) return;
+
+            var sourcePath = pickSrc.FileName;
+            if (!EnhancementMediaBundler.IsSupportedExtension(sourcePath))
+            {
+                MessageBox.Show(this,
+                    Loc.Get("deeper_editor_export_unsupported_format"),
+                    Loc.Get("deeper_editor_export_dialog_title"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var srcExt = System.IO.Path.GetExtension(sourcePath);
+            var srcDir = System.IO.Path.GetDirectoryName(sourcePath) ?? "";
+            var srcBase = System.IO.Path.GetFileNameWithoutExtension(sourcePath);
+            var defaultName = srcBase + " (CCP)" + srcExt;
+
+            var pickDest = new SaveFileDialog
+            {
+                Title = Loc.Get("deeper_editor_export_save_dialog_title"),
+                // Pin the filter to the source extension so the user can't
+                // accidentally pick a destination format that doesn't match
+                // the source bytes (e.g. saving an MP3 body with a .wav
+                // extension would produce an unplayable file).
+                Filter = $"Media (*{srcExt})|*{srcExt}",
+                FileName = defaultName,
+                AddExtension = true,
+                DefaultExt = srcExt
+            };
+            if (!string.IsNullOrEmpty(srcDir)) pickDest.InitialDirectory = srcDir;
+            if (pickDest.ShowDialog(this) != true) return;
+
+            var destPath = pickDest.FileName;
+            if (string.Equals(System.IO.Path.GetFullPath(destPath), System.IO.Path.GetFullPath(sourcePath), StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(this,
+                    Loc.Get("deeper_editor_export_same_file_error"),
+                    Loc.Get("deeper_editor_export_dialog_title"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var result = EnhancementMediaBundler.Export(_enhancement, sourcePath, destPath);
+            if (result.Success)
+            {
+                MessageBox.Show(this,
+                    string.Format(Loc.Get("deeper_editor_export_success_fmt"), result.OutputPath),
+                    Loc.Get("deeper_editor_export_dialog_title"),
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show(this,
+                    string.Format(Loc.Get("deeper_editor_export_failed_fmt"), result.Error ?? "(unknown)"),
+                    Loc.Get("deeper_editor_export_dialog_title"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
         private void MenuClose_Click(object sender, RoutedEventArgs e) => Close();
 
         private void UpdateTitle()
@@ -3576,6 +3661,11 @@ namespace ConditioningControlPanel.Views.Deeper
                     MenuSaveAs_Click(this, new RoutedEventArgs());
                 else
                     MenuSave_Click(this, new RoutedEventArgs());
+                e.Handled = true;
+            }
+            else if (e.Key == Key.E && !inTextBox && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                MenuExportEnhanced_Click(this, new RoutedEventArgs());
                 e.Handled = true;
             }
         }
