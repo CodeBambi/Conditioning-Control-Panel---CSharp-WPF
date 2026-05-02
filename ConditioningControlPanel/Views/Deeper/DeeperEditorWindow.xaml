@@ -12,10 +12,50 @@
         Closing="Window_Closing">
 
     <Window.Resources>
+        <!-- Top-level menu-bar item (e.g. "File"). Keeps the bar's light-on-dark
+             appearance, but overrides the WPF default popup template so the
+             dropdown body matches the editor's dark theme instead of the
+             system-light popup that ships out of the box (which made every
+             menu item show up white-on-white). Children of this item should
+             use TimelineCtxMenuItem so their hover state and sub-popups stay
+             on the same theme. -->
         <Style x:Key="EditorMenuItem" TargetType="MenuItem">
             <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type MenuItem}">
+                        <Grid>
+                            <Border x:Name="Border" Background="{TemplateBinding Background}"
+                                    BorderThickness="0" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter ContentSource="Header"
+                                                  VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                  TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                            </Border>
+                            <Popup x:Name="PART_Popup"
+                                   IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Placement="Bottom" VerticalOffset="2"
+                                   AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                                <Border Background="{DynamicResource DarkerBgBrush}"
+                                        BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="2"
+                                        CornerRadius="8" Padding="4">
+                                    <StackPanel IsItemsHost="True"
+                                                KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#3D3D60"/>
+                            </Trigger>
+                            <Trigger Property="IsSubmenuOpen" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#3D3D60"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <!-- Dark-themed MenuItem template that propagates the dark/pink theme into
              submenu popups. WPF's default MenuItem template uses a system-light
@@ -176,12 +216,16 @@
             <DockPanel LastChildFill="True">
                 <Menu DockPanel.Dock="Left" Background="Transparent" Foreground="{DynamicResource TextLightBrush}">
                     <MenuItem Header="{loc:Str menu_file}" Style="{StaticResource EditorMenuItem}">
-                        <MenuItem Header="{loc:Str menu_file_save}" Click="MenuSave_Click" InputGestureText="Ctrl+S"/>
-                        <MenuItem Header="{loc:Str menu_file_save_as}" Click="MenuSaveAs_Click" InputGestureText="Ctrl+Shift+S"/>
+                        <MenuItem Header="{loc:Str menu_file_save}" Click="MenuSave_Click" InputGestureText="Ctrl+S"
+                                  Style="{StaticResource TimelineCtxMenuItem}"/>
+                        <MenuItem Header="{loc:Str menu_file_save_as}" Click="MenuSaveAs_Click" InputGestureText="Ctrl+Shift+S"
+                                  Style="{StaticResource TimelineCtxMenuItem}"/>
                         <Separator/>
-                        <MenuItem Header="{loc:Str menu_file_export}" Click="MenuExportEnhanced_Click" InputGestureText="Ctrl+E"/>
+                        <MenuItem Header="{loc:Str menu_file_export}" Click="MenuExportEnhanced_Click" InputGestureText="Ctrl+E"
+                                  Style="{StaticResource TimelineCtxMenuItem}"/>
                         <Separator/>
-                        <MenuItem Header="{loc:Str menu_file_close}" Click="MenuClose_Click"/>
+                        <MenuItem Header="{loc:Str menu_file_close}" Click="MenuClose_Click"
+                                  Style="{StaticResource TimelineCtxMenuItem}"/>
                     </MenuItem>
                 </Menu>
                 <TextBlock x:Name="TxtTitle" DockPanel.Dock="Left" Margin="22,0,0,0"

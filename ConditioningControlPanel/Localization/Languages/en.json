@@ -296,6 +296,8 @@
   "deeper_tut_tab_library_body": "Everything in your Deeper folder shows up here. Double-click to edit, right-click for play/reveal/delete.\n\nThe bundled \"Welcome to Deeper\" demo is here on first launch — open it to see a working example with regions, haptics, and rules.",
   "deeper_tut_tab_recent_title": "Recent Files",
   "deeper_tut_tab_recent_body": "Last few files you opened. Includes anything outside your library too.",
+  "deeper_tut_tab_export_title": "🆕 Export as Media",
+  "deeper_tut_tab_export_body": "You can now bundle an enhancement directly into a copy of an MP4, MP3, or WAV. Find it in the editor under File → Export as Media… (Ctrl+E), or the button next to Save.\n\nThe exported file plays normally in any player — and CCP loads the effects automatically when you open it back in the Deeper player. No more sidecar .ccpenh.json files: hand someone the media and they get the enhancement for free.",
   "deeper_tut_tab_done_title": "You're set",
   "deeper_tut_tab_done_body": "Open the demo from the library and poke at it — the editor's tour will walk you through that side too. You can re-run this tour anytime from the 🎓 Tutorial button.",
 

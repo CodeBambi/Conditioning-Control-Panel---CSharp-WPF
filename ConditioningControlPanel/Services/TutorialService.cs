@@ -1447,6 +1447,15 @@ namespace ConditioningControlPanel.Services
                 },
                 new TutorialStep
                 {
+                    Id = "dp_export",
+                    Icon = "\ud83d\udce6",
+                    Title = Loc.Get("deeper_tut_tab_export_title"),
+                    Description = Loc.Get("deeper_tut_tab_export_body"),
+                    RequiresTab = "deeper",
+                    TextPosition = TutorialStepPosition.Center
+                },
+                new TutorialStep
+                {
                     Id = "dp_done",
                     Icon = "\u2764",
                     Title = Loc.Get("deeper_tut_tab_done_title"),
