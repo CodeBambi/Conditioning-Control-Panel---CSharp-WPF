@@ -197,6 +197,9 @@ namespace ConditioningControlPanel.Services
             // Track session start for achievements (e.g., Relapse)
             App.Achievements?.TrackSessionStart();
 
+            // Begin capturing the post-session media log (videos played + flash images shown)
+            App.SessionLog?.BeginSession(session);
+
             // Announce first phase
             if (session.Phases.Count > 0)
             {
@@ -264,6 +267,8 @@ namespace ConditioningControlPanel.Services
                 App.Achievements?.TrackSessionAbandoned();
             }
 
+            int xpForLog = 0;
+
             if (completed && _currentSession != null)
             {
                 // Calculate XP with pause penalty (100 XP per pause)
@@ -281,6 +286,7 @@ namespace ConditioningControlPanel.Services
                 int durationBonus = (int)Math.Round(durationMinutes * (8 + level * 0.15));
 
                 int finalXP = Math.Max(0, (int)Math.Round(baseXP * multiplier) + durationBonus);
+                xpForLog = finalXP;
 
                 // Track achievement using settings captured at session START (not current settings).
                 // AutonomyService.TriggerVideoSafely() temporarily sets StrictLockEnabled=false mid-session,
@@ -315,11 +321,17 @@ namespace ConditioningControlPanel.Services
             else
             {
                 App.Logger?.Information("Session stopped early");
-                
+
                 // Track panic button press for Relapse achievement
                 App.Achievements?.TrackPanicPressed();
             }
-            
+
+            // Finalize media log AFTER XP is settled so the persisted log records the actual award.
+            // Aborted sessions still get a log (xpForLog == 0) so the post-session dialog shows
+            // what played even when the user cut things short.
+            try { App.SessionLog?.EndSession(completed, finalElapsedTime, xpForLog); }
+            catch (Exception ex) { App.Logger?.Error(ex, "SessionLog.EndSession failed"); }
+
             _currentSession = null;
         }
 

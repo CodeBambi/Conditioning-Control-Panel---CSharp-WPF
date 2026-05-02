@@ -3368,7 +3368,26 @@
 
                         <Grid Grid.Row="0" Margin="0,0,0,10">
                             <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_sessions}"/>
-                            <Button x:Name="HelpBtnSessions" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Sessions"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button x:Name="BtnSessionHistory" Click="BtnSessionHistory_Click"
+                                        ToolTip="{loc:Str tooltip_recent_sessions}"
+                                        Background="Transparent" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
+                                        Foreground="{DynamicResource PinkBrush}"
+                                        Padding="8,3" Margin="0,0,6,0" FontSize="12" Cursor="Hand">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                    CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <TextBlock Text="{loc:Str btn_recent_sessions}" FontWeight="SemiBold"/>
+                                </Button>
+                                <Button x:Name="HelpBtnSessions" Style="{StaticResource HelpButtonStyle}" Tag="Sessions"/>
+                            </StackPanel>
                         </Grid>
 
                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">

@@ -153,6 +153,12 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public string? LastVideoTitle =>
             string.IsNullOrEmpty(_retryPath) ? null : Path.GetFileNameWithoutExtension(_retryPath);
+
+        /// <summary>
+        /// Full file path of the most recently started video. Read by SessionLogService
+        /// inside the VideoStarted handler. Null/empty when no video has played yet.
+        /// </summary>
+        public string? LastVideoPath => _retryPath;
         public bool IsRunning => _isRunning;
 
         /// <summary>

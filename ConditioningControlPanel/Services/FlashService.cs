@@ -69,6 +69,10 @@ namespace ConditioningControlPanel.Services
         private const long MAX_IMAGE_CACHE_BYTES = 200L * 1024 * 1024; // 200 MB cap
         private long _imageCacheBytes;
 
+        // Snapshot of file paths from the most recent FlashDisplayed batch.
+        // Read by SessionLogService after FlashDisplayed fires.
+        private IReadOnlyList<string> _lastDisplayedPaths = Array.Empty<string>();
+
         #endregion
 
         #region Events
@@ -86,6 +90,13 @@ namespace ConditioningControlPanel.Services
         /// Whether the flash service is currently running
         /// </summary>
         public bool IsRunning => _isRunning;
+
+        /// <summary>
+        /// File paths of images shown by the most recent FlashDisplayed event.
+        /// Snapshot is captured immediately before the event fires so subscribers
+        /// can read it synchronously. Empty when no flash has displayed yet.
+        /// </summary>
+        public IReadOnlyList<string> LastDisplayedImagePaths => _lastDisplayedPaths;
 
         /// <summary>
         /// Snapshot of currently-active flash windows that should respond to
@@ -800,8 +811,18 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
+            // Snapshot file paths before notifying subscribers so SessionLogService
+            // can attribute the FlashDisplayed event to specific files.
+            var pathSnapshot = new List<string>(images.Count);
+            for (int p = 0; p < images.Count; p++)
+            {
+                var fp = images[p]?.FilePath;
+                if (!string.IsNullOrEmpty(fp)) pathSnapshot.Add(fp);
+            }
+            _lastDisplayedPaths = pathSnapshot;
+
             FlashDisplayed?.Invoke(this, EventArgs.Empty);
-            
+
             if (!isMultiplication)
             {
                 _isBusy = false;

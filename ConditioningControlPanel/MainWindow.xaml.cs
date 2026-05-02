@@ -297,6 +297,14 @@ namespace ConditioningControlPanel
             App.Progression.XPChanged += OnXPChanged;
             App.Progression.LevelUp += OnLevelUp;
 
+            // Post-session media log: the dialog appears here for both natural completion
+            // and abort. SessionEngine raises LogReady AFTER it fires SessionCompleted, so
+            // OnSessionCompleted handles XP awarding only - the dialog is shown from this hook.
+            if (App.SessionLog != null)
+            {
+                App.SessionLog.LogReady += OnSessionLogReady;
+            }
+
             // Subscribe to companion events for real-time UI updates (v5.3)
             if (App.Companion != null)
             {
@@ -14184,6 +14192,19 @@ namespace ConditioningControlPanel
                 Localization.Loc.Get("section_intensity_ramp"),
                 glyph: "📈");
 
+        private void BtnSessionHistory_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dialog = new SessionLogHistoryWindow { Owner = this };
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open session history dialog");
+            }
+        }
+
         private void BtnStartSession_Click(object sender, RoutedEventArgs e)
         {
             // The button doubles as Start/Stop — state dictates which path to run.
@@ -14260,13 +14281,9 @@ namespace ConditioningControlPanel
             App.IsSessionRunning = false;
             Dispatcher.Invoke(() =>
             {
-                // Award XP
+                // Award XP. The completion dialog is shown from OnSessionLogReady,
+                // which fires for both completion and abort.
                 App.Progression?.AddXP(e.XPEarned, XPSource.Session);
-
-                // Show completion window
-                var completeWindow = new SessionCompleteWindow(e.Session, e.Duration, e.XPEarned);
-                completeWindow.Owner = this;
-                completeWindow.ShowDialog();
 
                 App.Logger?.Information("Session {Name} completed, awarded {XP} XP", e.Session.Name, e.XPEarned);
 
@@ -14274,6 +14291,26 @@ namespace ConditioningControlPanel
                 if (App.ProfileSync?.IsSyncEnabled == true)
                 {
                     _ = App.ProfileSync.SyncProfileAsync();
+                }
+            });
+        }
+
+        private void OnSessionLogReady(object? sender, SessionLogReadyEventArgs e)
+        {
+            var log = e.Log;
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    var dialog = new SessionCompleteWindow(log)
+                    {
+                        Owner = IsLoaded ? this : null,
+                    };
+                    dialog.ShowDialog();
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Error(ex, "Failed to show post-session log dialog");
                 }
             });
         }
