@@ -26,6 +26,7 @@ namespace ConditioningControlPanel.Services.Deeper
         private readonly IPlaybackTimeSource _source;
         private readonly IActionDispatcher _dispatcher;
         private readonly Services.WebcamTrackingService? _webcam;
+        private readonly Action<string>? _diag;
 
         private List<TimelineEntry> _timeline = new();
         private List<TimelineItem> _reactiveRules = new();
@@ -64,12 +65,19 @@ namespace ConditioningControlPanel.Services.Deeper
             Enhancement enhancement,
             IPlaybackTimeSource source,
             IActionDispatcher dispatcher,
-            Services.WebcamTrackingService? webcam = null)
+            Services.WebcamTrackingService? webcam = null,
+            Action<string>? diag = null)
         {
             _enhancement = enhancement ?? throw new ArgumentNullException(nameof(enhancement));
             _source = source ?? throw new ArgumentNullException(nameof(source));
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _webcam = webcam;
+            _diag = diag;
+        }
+
+        private void Diag(string line)
+        {
+            try { _diag?.Invoke(line); } catch { /* never let a diag subscriber kill the engine */ }
         }
 
         // -- Compile -----------------------------------------------------------
@@ -274,6 +282,24 @@ namespace ConditioningControlPanel.Services.Deeper
             _running = true;
             App.Logger?.Information("EnhancementEngine started: {Name} ({Tl} timeline entries, {Rules} reactive rules)",
                 _enhancement.Metadata?.Name, _timeline.Count, _reactiveRules.Count);
+
+            int blinkRules = _reactiveRules.Count(i => i.Trigger is BlinkDetectedTrigger);
+            int gazeRules = _reactiveRules.Count(i => i.Trigger is GazeTargetTrigger or GazeAvoidTrigger);
+            int mouthRules = _reactiveRules.Count(i => i.Trigger is MouthOpenTrigger);
+            int attentionRules = _reactiveRules.Count(i => i.Trigger is AttentionLostTrigger);
+            int webcamRules = blinkRules + gazeRules + mouthRules + attentionRules;
+            if (webcamRules > 0 && _webcam == null)
+            {
+                Diag($"⚠ {webcamRules} webcam rule(s) but App.Webcam is null — they will never fire.");
+            }
+            else if (webcamRules > 0)
+            {
+                Diag($"engine ready: {_timeline.Count} timeline entries, {_reactiveRules.Count} reactive rule(s) ({blinkRules} blink, {gazeRules} gaze, {mouthRules} mouth, {attentionRules} attention)");
+            }
+            else
+            {
+                Diag($"engine ready: {_timeline.Count} timeline entries, {_reactiveRules.Count} reactive rule(s)");
+            }
         }
 
         public void Stop()
@@ -431,13 +457,17 @@ namespace ConditioningControlPanel.Services.Deeper
         private void OnBlink()
         {
             if (!_running) return;
-            FireWebcamRules<BlinkDetectedTrigger>(_ => true);
+            int eligible = _reactiveRules.Count(i => i.Trigger is BlinkDetectedTrigger);
+            int fired = FireWebcamRules<BlinkDetectedTrigger>(_ => true);
+            Diag($"• blink ({eligible} rule(s), {fired} fired)");
         }
 
         private void OnMouthOpen()
         {
             if (!_running) return;
-            FireWebcamRules<MouthOpenTrigger>(_ => true);
+            int eligible = _reactiveRules.Count(i => i.Trigger is MouthOpenTrigger);
+            int fired = FireWebcamRules<MouthOpenTrigger>(_ => true);
+            Diag($"• mouth_open ({eligible} rule(s), {fired} fired)");
         }
 
         private void OnGazeMove(System.Windows.Point screenPoint)
@@ -467,6 +497,7 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             if (!_running) return;
             _faceLostSince = DateTime.UtcNow;
+            Diag("• face_lost");
         }
 
         private void OnFaceFound()
@@ -477,8 +508,14 @@ namespace ConditioningControlPanel.Services.Deeper
             if (_faceLostSince.HasValue)
             {
                 var gap = (DateTime.UtcNow - _faceLostSince.Value).TotalMilliseconds;
-                FireWebcamRules<AttentionLostTrigger>(t => gap >= t.MinDurationMs);
+                int eligible = _reactiveRules.Count(i => i.Trigger is AttentionLostTrigger);
+                int fired = FireWebcamRules<AttentionLostTrigger>(t => gap >= t.MinDurationMs);
+                Diag($"• face_found (gap {gap:F0}ms, {eligible} rule(s), {fired} fired)");
                 _faceLostSince = null;
+            }
+            else
+            {
+                Diag("• face_found");
             }
         }
 
@@ -521,16 +558,19 @@ namespace ConditioningControlPanel.Services.Deeper
 
         // -- Rule firing helpers ----------------------------------------------
 
-        private void FireWebcamRules<TTrigger>(Func<TTrigger, bool> predicate) where TTrigger : EnhancementTrigger
+        private int FireWebcamRules<TTrigger>(Func<TTrigger, bool> predicate) where TTrigger : EnhancementTrigger
         {
             var t = _source.GetCurrentTimeSeconds();
+            int fired = 0;
             foreach (var item in _reactiveRules)
             {
                 if (item.Trigger is not TTrigger trig) continue;
                 if (!predicate(trig)) continue;
                 if (!PassesRuleGate(item, t)) continue;
                 DispatchSafely(item.Action!, t);
+                fired++;
             }
+            return fired;
         }
 
         private void FireRegionRules<TTrigger>(string regionId, double t, Func<TTrigger, string> idSelector)

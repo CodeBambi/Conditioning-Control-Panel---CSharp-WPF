@@ -115,7 +115,11 @@ namespace ConditioningControlPanel.Services.Deeper
 
                 // Additive-schema bridge: if the file pre-dates timeline_items but
                 // has legacy regions/rules/haptic_tracks, project them so the
-                // editor + engine can treat TimelineItems as authoritative.
+                // editor + engine can treat TimelineItems as authoritative for
+                // pure-legacy files. Mixed files (TimelineItems + legacy) are
+                // expected after the save back-projection was removed: the engine's
+                // Compile reads both collections directly, and the editor still
+                // owns the legacy lists for its rule/region/haptic UI panels.
                 if (enhancement.TimelineItems.Count == 0 && HasLegacyContent(enhancement))
                     ProjectLegacyToTimeline(enhancement);
 
@@ -150,32 +154,15 @@ namespace ConditioningControlPanel.Services.Deeper
             e.Schema = Enhancement.SchemaTag;
             if (e.Version <= 0) e.Version = Enhancement.CurrentVersion;
 
-            // When the new editor is the source of truth, rebuild the legacy
-            // collections from TimelineItems so files saved by this build still
-            // load on older CCP versions that only know about regions/rules/haptic_tracks.
-            // Snapshot + restore so the in-memory enhancement is untouched —
-            // back-projection used to replace the live Regions/Rules/HapticTracks
-            // lists, breaking the editor's selection identity (a UI control bound
-            // to _selectedRegion suddenly pointed at an orphaned Region the
-            // collection no longer contained).
-            if (e.TimelineItems.Count > 0)
-            {
-                var savedRegions = e.Regions;
-                var savedRules = e.Rules;
-                var savedHaptics = e.HapticTracks;
-                try
-                {
-                    BackProjectTimelineToLegacy(e);
-                    return JsonConvert.SerializeObject(e, WriteSettings);
-                }
-                finally
-                {
-                    e.Regions = savedRegions;
-                    e.Rules = savedRules;
-                    e.HapticTracks = savedHaptics;
-                }
-            }
-
+            // The file format keeps both representations side-by-side: TimelineItems
+            // for content the editor authored as timeline items (currently non-haptic
+            // effects), and the legacy Regions/Rules/HapticTracks collections for
+            // everything the editor still stores under the original schema (rules,
+            // regions, haptic events). Earlier this method back-projected TimelineItems
+            // into the legacy collections, which silently dropped any rule/region/haptic
+            // the user had added because nothing in TimelineItems represented them.
+            // The loader merges the two on read, so just serialize whatever the editor
+            // built — both halves contribute to the runtime collections.
             return JsonConvert.SerializeObject(e, WriteSettings);
         }
 
@@ -303,98 +290,6 @@ namespace ConditioningControlPanel.Services.Deeper
             };
         }
 
-        // -- Back-projection: TimelineItems → legacy collections ------------------
-
-        /// <summary>
-        /// Save back-projection. Rebuilds the v1 regions/rules/haptic_tracks
-        /// collections from TimelineItems so files saved by this build still load
-        /// on older CCP clients that only understand the legacy schema.
-        /// Non-haptic Effects (flash/bubble/subliminal/overlay) have no v1
-        /// equivalent — they only appear in <c>timeline_items</c>; older clients
-        /// silently skip them.
-        /// </summary>
-        public static void BackProjectTimelineToLegacy(Enhancement e)
-        {
-            var regions = new List<Region>();
-            var rules = new List<EnhancementRule>();
-            var hapticEvents = new List<HapticEvent>();
-            var seenRegionIds = new HashSet<string>();
-
-            foreach (var ti in e.TimelineItems)
-            {
-                if (ti == null) continue;
-
-                if (ti.Kind == TimelineItemKind.Rule)
-                {
-                    if (ti.Duration > 0 && ti.Duration < double.MaxValue)
-                    {
-                        // Band-style rule: emit a Region + (optional) Rule pointing at it.
-                        var regionId = ti.Id;
-                        if (string.IsNullOrEmpty(regionId) || !seenRegionIds.Add(regionId))
-                            regionId = TimelineItem.NewId();
-
-                        regions.Add(new Region
-                        {
-                            Id = regionId,
-                            Start = ti.Start,
-                            End = ti.Start + ti.Duration,
-                            Label = ti.Label ?? "",
-                            Color = ti.Color ?? "#7B5CFF"
-                        });
-
-                        if (ti.Trigger != null && ti.Action != null)
-                        {
-                            rules.Add(new EnhancementRule
-                            {
-                                Trigger = ti.Trigger,
-                                Action = ti.Action,
-                                RegionConstraint = regionId,
-                                CooldownMs = ti.CooldownMs,
-                                Enabled = ti.Enabled
-                            });
-                        }
-                    }
-                    else if (ti.Trigger != null && ti.Action != null)
-                    {
-                        // Point-style or unbounded rule: emit a free-standing Rule.
-                        rules.Add(new EnhancementRule
-                        {
-                            Trigger = ti.Trigger,
-                            Action = ti.Action,
-                            RegionConstraint = null,
-                            CooldownMs = ti.CooldownMs,
-                            Enabled = ti.Enabled
-                        });
-                    }
-                }
-                else if (ti.Kind == TimelineItemKind.Effect && ti.EffectType == EffectTypes.Haptic)
-                {
-                    hapticEvents.Add(new HapticEvent
-                    {
-                        Start = ti.Start,
-                        Duration = ti.Duration > 0 ? ti.Duration : Math.Max(0.05, ti.EffectDurationMs / 1000.0),
-                        Intensity = ti.EffectIntensity,
-                        PatternName = ti.EffectPatternName,
-                        CustomPattern = ti.EffectCustomPattern
-                    });
-                }
-                // Non-haptic Effects: no legacy shape — only timeline_items carries them.
-            }
-
-            e.Regions = regions;
-            e.Rules = rules;
-            if (hapticEvents.Count > 0)
-            {
-                e.HapticTracks = new List<HapticTrack>
-                {
-                    new() { Id = "primary", Events = hapticEvents }
-                };
-            }
-            else
-            {
-                e.HapticTracks = new List<HapticTrack>();
-            }
-        }
 
         /// <summary>
         /// Diagnostic round-trip self-check. Builds a fixture covering every trigger

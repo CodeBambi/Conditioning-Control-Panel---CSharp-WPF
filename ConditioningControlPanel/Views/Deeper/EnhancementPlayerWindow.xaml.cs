@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models.Deeper;
+using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Deeper;
 using Microsoft.Win32;
 
@@ -67,6 +68,7 @@ namespace ConditioningControlPanel.Views.Deeper
             _host.Loaded += OnHostLoaded;
             _host.LoadFailed += OnHostLoadFailed;
             _host.ActionLogged += OnHostActionLogged;
+            _host.Diagnostic += OnHostActionLogged;
 
             LstEvents.ItemsSource = _events;
 
@@ -75,6 +77,7 @@ namespace ConditioningControlPanel.Views.Deeper
             _uiTimer.Start();
 
             UpdateVolumeFromPlayer();
+            SubscribeWebcamStateForButton();
         }
 
         /// <summary>
@@ -368,6 +371,101 @@ namespace ConditioningControlPanel.Views.Deeper
             TxtCurrent.Text = "0:00";
             UpdatePlayhead(0);
             TxtStatus.Text = Loc.Get("deeper_player_status_stopped");
+        }
+
+        private Action<WebcamTrackingState>? _onWebcamStateChanged;
+
+        private void BtnEyeTracking_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null)
+            {
+                MessageBox.Show(this,
+                    Loc.Get("deeper_player_eye_tracking_unavailable"),
+                    Loc.Get("deeper_player_btn_eye_tracking_start"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (svc.IsRunning)
+            {
+                svc.Stop();
+                return;
+            }
+
+            // First time using webcam tracking: send the user to the Lab tab to
+            // read the privacy explanation and run first-time setup before we
+            // turn the camera on from inside the player. The consent flag is
+            // flipped server-side by WebcamConsentDialog (in the Lab), so once
+            // that's done future clicks bypass this branch.
+            if (!WebcamTrackingService.IsConsentCurrent())
+            {
+                MessageBox.Show(this,
+                    Loc.Get("deeper_player_eye_tracking_first_time"),
+                    Loc.Get("deeper_player_btn_eye_tracking_start"),
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // Consent already on file: a single confirmation, then start.
+            var confirm = MessageBox.Show(this,
+                Loc.Get("deeper_player_eye_tracking_confirm_start"),
+                Loc.Get("deeper_player_btn_eye_tracking_start"),
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            try
+            {
+                if (!svc.Start())
+                {
+                    MessageBox.Show(this,
+                        string.Format(Loc.Get("deeper_player_eye_tracking_start_failed_fmt"), svc.State),
+                        Loc.Get("deeper_player_btn_eye_tracking_start"),
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementPlayer: eye tracking start failed");
+                MessageBox.Show(this,
+                    string.Format(Loc.Get("deeper_player_eye_tracking_start_failed_fmt"), ex.Message),
+                    Loc.Get("deeper_player_btn_eye_tracking_start"),
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void SubscribeWebcamStateForButton()
+        {
+            var svc = App.Webcam;
+            if (svc == null || _onWebcamStateChanged != null) return;
+            _onWebcamStateChanged = state => UpdateEyeTrackingButton(state);
+            svc.OnTrackingStateChanged += _onWebcamStateChanged;
+            UpdateEyeTrackingButton(svc.State);
+        }
+
+        private void UnsubscribeWebcamStateForButton()
+        {
+            var svc = App.Webcam;
+            if (svc == null || _onWebcamStateChanged == null) return;
+            try { svc.OnTrackingStateChanged -= _onWebcamStateChanged; } catch { }
+            _onWebcamStateChanged = null;
+        }
+
+        private void UpdateEyeTrackingButton(WebcamTrackingState state)
+        {
+            // OnTrackingStateChanged fires on the dispatcher thread already, but
+            // dispatch defensively in case a future change moves it.
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(() => UpdateEyeTrackingButton(state));
+                return;
+            }
+            if (BtnEyeTracking == null) return;
+            bool running = state == WebcamTrackingState.Tracking || state == WebcamTrackingState.FaceLost
+                        || state == WebcamTrackingState.Starting;
+            BtnEyeTracking.Content = Loc.Get(running
+                ? "deeper_player_btn_eye_tracking_stop"
+                : "deeper_player_btn_eye_tracking_start");
         }
 
         private void SliderVolume_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -970,6 +1068,8 @@ namespace ConditioningControlPanel.Views.Deeper
                 _host.Loaded -= OnHostLoaded;
                 _host.LoadFailed -= OnHostLoadFailed;
                 _host.ActionLogged -= OnHostActionLogged;
+                _host.Diagnostic -= OnHostActionLogged;
+                UnsubscribeWebcamStateForButton();
                 UnbindEngineIfRunning();
                 _player.Stop();
 

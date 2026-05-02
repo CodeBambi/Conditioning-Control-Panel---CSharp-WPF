@@ -18,14 +18,16 @@ namespace ConditioningControlPanel.Services.Commands
         public Task<bool> ExecuteAsync()
         {
             var amount = Math.Clamp(_data.Amount, 0, MaxAmount);
-            var duration = Math.Clamp(_data.Duration, 0, MaxDurationSec);
+            var durationSec = Math.Clamp(_data.Duration, 0, MaxDurationSec);
             var size = Math.Clamp(_data.Size, 0, MaxSizePct);
+            // FlashService now expects duration in milliseconds (was implicitly seconds).
+            var durationMs = durationSec * 1000;
 
             try
             {
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    App.Flash?.TriggerFlashOnce(amount, duration, size);
+                    App.Flash?.TriggerFlashOnce(amount, durationMs, size);
                 });
                 return Task.FromResult(true);
             }

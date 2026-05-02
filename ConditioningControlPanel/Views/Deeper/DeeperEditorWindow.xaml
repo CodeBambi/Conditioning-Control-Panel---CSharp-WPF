@@ -777,6 +777,13 @@
                         Padding="14,6" Cursor="Hand" FontWeight="SemiBold"
                         Background="{DynamicResource DeeperAccentBrush}" Foreground="White"
                         BorderThickness="0"/>
+                <Button x:Name="BtnEditorExport" DockPanel.Dock="Right" Content="{loc:Str btn_export_media}"
+                        Click="MenuExportEnhanced_Click"
+                        ToolTip="{loc:Str deeper_editor_tt_export_media}"
+                        Padding="14,6" Margin="0,0,8,0" Cursor="Hand" FontWeight="SemiBold"
+                        Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                        Foreground="{DynamicResource DeeperAccentBrush}"
+                        BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
                 <TextBlock x:Name="TxtValidationSummary" Text="{loc:Str deeper_editor_validation_clean}"
                            Foreground="{DynamicResource TextLightBrush}"
                            FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0"

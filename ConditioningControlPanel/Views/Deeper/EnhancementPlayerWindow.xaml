@@ -164,6 +164,14 @@
                         VerticalAlignment="Center"
                         ValueChanged="SliderVolume_ValueChanged"/>
             </StackPanel>
+            <Button x:Name="BtnEyeTracking" DockPanel.Dock="Right"
+                    Content="{loc:Str deeper_player_btn_eye_tracking_start}"
+                    Click="BtnEyeTracking_Click"
+                    ToolTip="{loc:Str deeper_player_tt_eye_tracking}"
+                    Padding="10,4" Margin="0,0,8,0" Cursor="Hand" FontSize="12"
+                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                    Foreground="{DynamicResource DeeperAccentBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
         </DockPanel>
 
         <!-- Status -->

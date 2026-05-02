@@ -708,7 +708,12 @@ namespace ConditioningControlPanel.Services
             }
 
             var settings = App.Settings.Current;
-            double duration = customDuration ?? settings.FlashDuration; // Default to manual duration setting
+            // customDuration is in MILLISECONDS (matches the surrounding lifetimeMs units);
+            // settings.FlashDuration is in SECONDS. Normalise to seconds so PlaySound /
+            // unduck / lifetime math downstream stays in one unit.
+            double duration = customDuration.HasValue
+                ? customDuration.Value / 1000.0
+                : settings.FlashDuration;
 
             // Play sound ONLY ONCE per flash event (not for hydra spawns) - only if audio enabled
             if (settings.FlashAudioEnabled && !_soundPlayingForCurrentFlash && !isMultiplication && !string.IsNullOrEmpty(soundPath) && File.Exists(soundPath))

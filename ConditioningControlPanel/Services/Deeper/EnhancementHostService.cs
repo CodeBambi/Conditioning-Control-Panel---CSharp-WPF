@@ -36,6 +36,14 @@ namespace ConditioningControlPanel.Services.Deeper
         /// </summary>
         public event Action<string>? ActionLogged;
 
+        /// <summary>
+        /// Fires for engine-internal diagnostics that aren't dispatched actions:
+        /// webcam events received (with eligible rule counts), gate rejections,
+        /// etc. Subscribers see WHY a rule didn't fire instead of silence.
+        /// Format: "• blink (2 rules eligible)" / "• face_lost".
+        /// </summary>
+        public event Action<string>? Diagnostic;
+
         // -- Load / unload -----------------------------------------------------
 
         public bool LoadFromFile(string path)
@@ -160,8 +168,14 @@ namespace ConditioningControlPanel.Services.Deeper
                 _activeRecorder = new RecordingActionDispatcher(new RealActionDispatcher());
                 _activeRecorder.ActionLogged += OnRecorderActionLogged;
 
-                var webcam = (App.Webcam?.IsRunning ?? false) ? App.Webcam : null;
-                _engine = new EnhancementEngine(LoadedEnhancement, source, _activeRecorder, webcam);
+                // Pass the webcam reference unconditionally — the engine subscribes to
+                // its events at Start() and they'll simply never fire until the user
+                // turns tracking on. Snapshotting "running right now" used to drop
+                // BlinkDetected/GazeTarget/etc. rules silently when playback started
+                // before the webcam did, even though the user later started tracking
+                // mid-session and saw the events register everywhere else.
+                var webcam = App.Webcam;
+                _engine = new EnhancementEngine(LoadedEnhancement, source, _activeRecorder, webcam, EmitDiagnostic);
                 _engine.Start();
                 App.Logger?.Information("Deeper engine bound and started");
                 return true;
@@ -200,6 +214,12 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             try { ActionLogged?.Invoke(line); }
             catch (Exception ex) { App.Logger?.Debug("EnhancementHostService.ActionLogged subscriber error: {Error}", ex.Message); }
+        }
+
+        private void EmitDiagnostic(string line)
+        {
+            try { Diagnostic?.Invoke(line); }
+            catch (Exception ex) { App.Logger?.Debug("EnhancementHostService.Diagnostic subscriber error: {Error}", ex.Message); }
         }
 
         public void Dispose()
