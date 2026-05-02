@@ -66,9 +66,12 @@ namespace ConditioningControlPanel.Services.Deeper
         }
 
         /// <summary>
-        /// Copies <paramref name="sourceMediaPath"/> to <paramref name="destPath"/>,
-        /// then injects the enhancement JSON into the destination file using the
-        /// container-appropriate mechanism. Source is never modified.
+        /// Writes a bundled copy of <paramref name="sourceMediaPath"/> to
+        /// <paramref name="destPath"/> with the enhancement JSON embedded.
+        /// Uses temp-then-rename so a crash mid-write cannot leave the
+        /// destination in a partial/corrupt state. The source file is read
+        /// only — when destPath equals sourceMediaPath the source is replaced
+        /// atomically with the bundled version.
         /// </summary>
         public static BundleResult Export(Enhancement enhancement, string sourceMediaPath, string destPath)
         {
@@ -96,15 +99,33 @@ namespace ConditioningControlPanel.Services.Deeper
                 return BundleResult.Fail($"Failed to serialize enhancement: {ex.Message}");
             }
 
+            // Build a tmp path next to the destination so File.Move stays on
+            // the same volume (atomic on NTFS). Random suffix avoids collision
+            // if two exports race to the same dest.
+            string tmpPath;
             try
             {
-                // Copy first, then inject in-place. If injection fails, we
-                // delete the partial dest so the user isn't left with a
-                // half-baked file masquerading as enhanced.
-                File.Copy(sourceMediaPath, destPath, overwrite: true);
+                var destDir = Path.GetDirectoryName(Path.GetFullPath(destPath));
+                if (string.IsNullOrEmpty(destDir))
+                    return BundleResult.Fail("Destination directory could not be resolved.");
+                tmpPath = Path.Combine(destDir, $".{Path.GetFileName(destPath)}.{Guid.NewGuid():N}.tmp");
             }
             catch (Exception ex)
             {
+                return BundleResult.Fail($"Invalid destination path: {ex.Message}");
+            }
+
+            try
+            {
+                // Copy source to a temp file, inject into the temp, then
+                // atomically move the temp over the destination. Source is
+                // never touched (even when src==dst, we read src into tmp
+                // *before* the final move replaces src).
+                File.Copy(sourceMediaPath, tmpPath, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                TryDelete(tmpPath);
                 return BundleResult.Fail($"Failed to copy source: {ex.Message}");
             }
 
@@ -117,25 +138,32 @@ namespace ConditioningControlPanel.Services.Deeper
                     case ".m4a":
                     case ".m4v":
                     case ".mov":
-                        WriteIsoBmffUuidBox(destPath, json);
+                        WriteIsoBmffUuidBox(tmpPath, json);
                         break;
                     case ".mp3":
-                        WriteId3v2TxxxFrame(destPath, json);
+                        WriteId3v2TxxxFrame(tmpPath, json);
                         break;
                     case ".wav":
-                        WriteWavCcpeChunk(destPath, json);
+                        WriteWavCcpeChunk(tmpPath, json);
                         break;
                     default:
                         throw new InvalidOperationException($"Unhandled extension: {ext}");
                 }
+
+                File.Move(tmpPath, destPath, overwrite: true);
                 return BundleResult.Ok(destPath);
             }
             catch (Exception ex)
             {
-                try { File.Delete(destPath); } catch { /* best effort */ }
+                TryDelete(tmpPath);
                 App.Logger?.Warning(ex, "EnhancementMediaBundler.Export injection failed: {Path}", destPath);
                 return BundleResult.Fail($"Failed to inject metadata: {ex.Message}");
             }
+        }
+
+        private static void TryDelete(string path)
+        {
+            try { if (File.Exists(path)) File.Delete(path); } catch { /* best effort */ }
         }
 
         /// <summary>
@@ -620,7 +648,12 @@ namespace ConditioningControlPanel.Services.Deeper
                 throw new InvalidDataException("Not a WAVE RIFF.");
 
             uint oldRiffSize = ReadUInt32LE(hdr, 4);
-            uint newRiffSize = checked(oldRiffSize + (uint)chunkLenIncludingHeader);
+            // RIFF master size is unsigned 32-bit; refuse before overflow rather
+            // than throw a confusing OverflowException to the user.
+            if ((ulong)oldRiffSize + (ulong)chunkLenIncludingHeader > uint.MaxValue)
+                throw new InvalidDataException(
+                    "WAV file is too close to the 4 GB RIFF limit to embed metadata.");
+            uint newRiffSize = oldRiffSize + (uint)chunkLenIncludingHeader;
 
             // Append chunk at EOF.
             fs.Seek(0, SeekOrigin.End);

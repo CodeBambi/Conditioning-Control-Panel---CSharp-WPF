@@ -152,22 +152,33 @@ namespace ConditioningControlPanel.Services.Deeper
 
         private void OnPlaybackStopped(object? sender, StoppedEventArgs e)
         {
-            // PlaybackStopped fires on Stop AND on natural end. Distinguish by
-            // checking if we ran past the end of the reader; if so, raise Ended.
-            try
+            // NAudio raises this on its WaveOut callback thread. The whole
+            // body must run on the UI thread because (a) DispatcherTimer.Stop
+            // silently corrupts the timer when called off-thread, and (b) the
+            // _reader / _output Position/Length read can race with a UI-thread
+            // Stop() that's mid-dispose. Marshal first, then read state.
+            var ex = e.Exception;
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+            void Handle()
             {
-                _tickTimer?.Stop();
-                bool naturalEnd = _reader != null && _reader.Position >= _reader.Length - 1024;
-                if (naturalEnd)
+                try
                 {
-                    var dispatcher = System.Windows.Application.Current?.Dispatcher;
-                    if (dispatcher != null && !dispatcher.HasShutdownStarted)
-                        dispatcher.BeginInvoke(() => { try { Ended?.Invoke(); } catch { } });
+                    _tickTimer?.Stop();
+                    bool naturalEnd = _reader != null && _reader.Position >= _reader.Length - 1024;
+                    if (naturalEnd)
+                    {
+                        try { Ended?.Invoke(); } catch { }
+                    }
+                    if (ex != null)
+                        App.Logger?.Warning(ex, "EnhancementAudioPlayer playback stopped with error");
                 }
-                if (e.Exception != null)
-                    App.Logger?.Warning(e.Exception, "EnhancementAudioPlayer playback stopped with error");
+                catch { }
             }
-            catch { }
+
+            if (dispatcher.CheckAccess()) Handle();
+            else { try { dispatcher.BeginInvoke((Action)Handle); } catch { } }
         }
 
         public void Dispose()

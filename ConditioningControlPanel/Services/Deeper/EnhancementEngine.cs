@@ -305,22 +305,25 @@ namespace ConditioningControlPanel.Services.Deeper
         public void Stop()
         {
             if (!_running) return;
-            _source.PlaybackTimeChanged -= OnPlaybackTime;
+            // Flip _running first so any in-flight tick / dispatch short-circuits
+            // before we start tearing down subscriptions.
+            _running = false;
+
+            try { _source.PlaybackTimeChanged -= OnPlaybackTime; } catch { }
 
             if (_webcam != null)
             {
-                _webcam.OnBlink -= OnBlink;
-                _webcam.OnMouthOpen -= OnMouthOpen;
-                _webcam.OnGazeMove -= OnGazeMove;
-                _webcam.OnFaceLost -= OnFaceLost;
-                _webcam.OnFaceFound -= OnFaceFound;
+                try { _webcam.OnBlink -= OnBlink; } catch { }
+                try { _webcam.OnMouthOpen -= OnMouthOpen; } catch { }
+                try { _webcam.OnGazeMove -= OnGazeMove; } catch { }
+                try { _webcam.OnFaceLost -= OnFaceLost; } catch { }
+                try { _webcam.OnFaceFound -= OnFaceFound; } catch { }
             }
 
             try { _runCts?.Cancel(); } catch { }
-            _runCts?.Dispose();
+            try { _runCts?.Dispose(); } catch { }
             _runCts = null;
 
-            _running = false;
             App.Logger?.Information("EnhancementEngine stopped: {Name}", _enhancement.Metadata?.Name);
         }
 
@@ -336,6 +339,12 @@ namespace ConditioningControlPanel.Services.Deeper
         private void OnPlaybackTime(double t)
         {
             if (!_running) return;
+
+            // Browser sources can briefly forward NaN currentTime during
+            // reloads. NaN comparisons are false everywhere so the rest of the
+            // tick would silently no-op AND store NaN as _lastTickTime,
+            // breaking seek-back detection until the next clean tick.
+            if (double.IsNaN(t) || double.IsInfinity(t)) return;
 
             // Suppress the metadata-load phantom tick from a WebView2 source.
             // Browser pages emit a tick at t=0 the moment <video> metadata
@@ -371,14 +380,20 @@ namespace ConditioningControlPanel.Services.Deeper
                     _currentRegionId = newRegionId;
                     if (prev != null)
                         FireRegionRules<RegionExitedTrigger>(prev, t, tr => tr.RegionId);
+                    if (!_running) return;
                     if (newRegionId != null)
                         FireRegionRules<RegionEnteredTrigger>(newRegionId, t, tr => tr.RegionId);
+                    if (!_running) return;
                 }
 
                 // Fire any sorted-timeline entries whose time has been reached.
+                // Re-check _running between dispatches: a Stop() called by a
+                // dispatched action (or another thread) must short-circuit
+                // remaining fires for this tick.
                 while (_lastFiredIndex + 1 < _timeline.Count
                        && _timeline[_lastFiredIndex + 1].Time <= t)
                 {
+                    if (!_running) break;
                     _lastFiredIndex++;
                     var entry = _timeline[_lastFiredIndex];
                     if (entry.OwnerItem != null && !PassesRuleGate(entry.OwnerItem, t)) continue;
@@ -434,11 +449,11 @@ namespace ConditioningControlPanel.Services.Deeper
         // -- Editor preview injection ------------------------------------------
         // Public entry points that mirror the webcam handlers so editor preview
         // can drive the engine from keyboard / mouse without a real camera.
-        // Safe to call from the UI thread on a stopped engine (no-op).
+        // Always invoked from the UI thread, so they bypass the marshal step.
 
-        public void InjectBlink() => OnBlink();
-        public void InjectMouthOpen() => OnMouthOpen();
-        public void InjectGaze(System.Windows.Point screenPoint) => OnGazeMove(screenPoint);
+        public void InjectBlink() => OnBlinkCore();
+        public void InjectMouthOpen() => OnMouthOpenCore();
+        public void InjectGaze(System.Windows.Point screenPoint) => OnGazeMoveCore(screenPoint);
 
         /// <summary>
         /// Simulate an attention-lost gap of the given duration. Mirrors the
@@ -449,12 +464,42 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             if (!_running) return;
             _faceLostSince = DateTime.UtcNow.AddMilliseconds(-Math.Max(0, gapMs));
-            OnFaceFound();
+            OnFaceFoundCore();
         }
 
         // -- Webcam handlers ---------------------------------------------------
+        // WebcamTrackingService raises these on its capture thread. Engine
+        // state (Dictionary/HashSet, _faceLostSince, _itemLastFired, etc.) is
+        // not thread-safe and OnPlaybackTime mutates the same fields on the UI
+        // thread, so each handler marshals onto the dispatcher before touching
+        // anything. The Core methods assume UI-thread context.
 
-        private void OnBlink()
+        private void OnBlink() => MarshalToUi(_onBlinkCore);
+        private void OnMouthOpen() => MarshalToUi(_onMouthOpenCore);
+        private void OnGazeMove(System.Windows.Point screenPoint)
+        {
+            // Capture by value to avoid sharing the struct across threads.
+            var p = screenPoint;
+            MarshalToUi(() => OnGazeMoveCore(p));
+        }
+        private void OnFaceLost() => MarshalToUi(_onFaceLostCore);
+        private void OnFaceFound() => MarshalToUi(_onFaceFoundCore);
+
+        // Cached delegates so the no-arg handlers don't allocate on every event.
+        private Action _onBlinkCore => OnBlinkCore;
+        private Action _onMouthOpenCore => OnMouthOpenCore;
+        private Action _onFaceLostCore => OnFaceLostCore;
+        private Action _onFaceFoundCore => OnFaceFoundCore;
+
+        private static void MarshalToUi(Action action)
+        {
+            var d = Application.Current?.Dispatcher;
+            if (d == null || d.HasShutdownStarted) return;
+            if (d.CheckAccess()) { action(); return; }
+            try { d.BeginInvoke(action); } catch { /* dispatcher shutting down */ }
+        }
+
+        private void OnBlinkCore()
         {
             if (!_running) return;
             int eligible = _reactiveRules.Count(i => i.Trigger is BlinkDetectedTrigger);
@@ -462,7 +507,7 @@ namespace ConditioningControlPanel.Services.Deeper
             Diag($"• blink ({eligible} rule(s), {fired} fired)");
         }
 
-        private void OnMouthOpen()
+        private void OnMouthOpenCore()
         {
             if (!_running) return;
             int eligible = _reactiveRules.Count(i => i.Trigger is MouthOpenTrigger);
@@ -470,7 +515,7 @@ namespace ConditioningControlPanel.Services.Deeper
             Diag($"• mouth_open ({eligible} rule(s), {fired} fired)");
         }
 
-        private void OnGazeMove(System.Windows.Point screenPoint)
+        private void OnGazeMoveCore(System.Windows.Point screenPoint)
         {
             if (!_running) return;
             var videoRect = _source.GetVideoRect();
@@ -493,14 +538,14 @@ namespace ConditioningControlPanel.Services.Deeper
             }
         }
 
-        private void OnFaceLost()
+        private void OnFaceLostCore()
         {
             if (!_running) return;
             _faceLostSince = DateTime.UtcNow;
             Diag("• face_lost");
         }
 
-        private void OnFaceFound()
+        private void OnFaceFoundCore()
         {
             if (!_running) return;
             // If the face was lost long enough to satisfy any rule, fire on return.
@@ -624,7 +669,15 @@ namespace ConditioningControlPanel.Services.Deeper
 
         private async void DispatchSafely(EnhancementAction action, double t, string? explicitRegionId = null)
         {
-            var ct = _runCts?.Token ?? CancellationToken.None;
+            // Snapshot the CTS once: Stop() may dispose _runCts on another
+            // thread between our null-check and .Token access. Reading the
+            // local reference and tolerating ObjectDisposedException keeps
+            // dispatch from crashing on a teardown race.
+            var cts = _runCts;
+            CancellationToken ct;
+            try { ct = cts?.Token ?? CancellationToken.None; }
+            catch (ObjectDisposedException) { ct = CancellationToken.None; }
+
             try
             {
                 var ctx = new EnhancementDispatchContext(_enhancement, _source, t, explicitRegionId ?? _currentRegionId);

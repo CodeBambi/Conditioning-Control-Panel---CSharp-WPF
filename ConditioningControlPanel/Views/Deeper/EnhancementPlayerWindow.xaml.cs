@@ -1049,45 +1049,55 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            // Per-step try/catch: a single catch-all around the whole teardown
+            // means an early throw (e.g. ScreenMirror NRE) skips _uiTimer.Stop
+            // and leaves dead delegates pinned on the App.* singletons. Stop
+            // the tick timer first so no UI work is queued onto a dying window.
+            try { _uiTimer?.Stop(); } catch { }
+            try { if (_uiTimer != null) _uiTimer.Tick -= UiTimer_Tick; } catch { }
+            _uiTimer = null;
+
+            // Exit fullscreen synchronously so the reparent-on-Closed lambda
+            // releases VideoBrowser back to VideoPane BEFORE we dispose it.
+            try { if (_isVideoFullscreen) ExitVideoFullscreen(); } catch { }
+
             try
             {
-                // Force-exit fullscreen first so we don't leak a topmost borderless
-                // window after the Player is gone, and so display topology gets
-                // restored if mirroring was active.
-                if (_isVideoFullscreen) ExitVideoFullscreen();
                 if (_isPlayerDualMonitorActive)
                 {
                     try { App.ScreenMirror?.DisableMirror(); } catch { }
                     _isPlayerDualMonitorActive = false;
                 }
-
-                _uiTimer?.Stop();
-                _uiTimer = null;
-                _player.Loaded -= OnPlayerLoaded;
-                _player.Ended -= OnPlayerEnded;
-                _host.Loaded -= OnHostLoaded;
-                _host.LoadFailed -= OnHostLoadFailed;
-                _host.ActionLogged -= OnHostActionLogged;
-                _host.Diagnostic -= OnHostActionLogged;
-                UnsubscribeWebcamStateForButton();
-                UnbindEngineIfRunning();
-                _player.Stop();
-
-                try
-                {
-                    if (_videoBrowserReady && VideoBrowser?.CoreWebView2 != null)
-                    {
-                        VideoBrowser.CoreWebView2.NavigationStarting -= OnVideoNavStarting;
-                        VideoBrowser.CoreWebView2.NavigationCompleted -= OnVideoNavCompleted;
-                        VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged -= OnVideoFullscreenChanged;
-                    }
-                }
-                catch { }
-                try { _videoSource?.Dispose(); } catch { }
-                _videoSource = null;
-                try { VideoBrowser?.Dispose(); } catch { }
             }
             catch { }
+
+            // Unsubscribe singleton-service events. Each in its own try so a
+            // throw on one (e.g. _player already disposed) doesn't strand the
+            // others as dead delegates on the app-lifetime singletons.
+            try { _player.Loaded -= OnPlayerLoaded; } catch { }
+            try { _player.Ended -= OnPlayerEnded; } catch { }
+            try { _host.Loaded -= OnHostLoaded; } catch { }
+            try { _host.LoadFailed -= OnHostLoadFailed; } catch { }
+            try { _host.ActionLogged -= OnHostActionLogged; } catch { }
+            try { _host.Diagnostic -= OnHostActionLogged; } catch { }
+            try { UnsubscribeWebcamStateForButton(); } catch { }
+            try { UnbindEngineIfRunning(); } catch { }
+            try { _player.Stop(); } catch { }
+
+            try
+            {
+                if (_videoBrowserReady && VideoBrowser?.CoreWebView2 != null)
+                {
+                    try { VideoBrowser.CoreWebView2.NavigationStarting -= OnVideoNavStarting; } catch { }
+                    try { VideoBrowser.CoreWebView2.NavigationCompleted -= OnVideoNavCompleted; } catch { }
+                    try { VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged -= OnVideoFullscreenChanged; } catch { }
+                }
+            }
+            catch { }
+
+            try { _videoSource?.Dispose(); } catch { }
+            _videoSource = null;
+            try { VideoBrowser?.Dispose(); } catch { }
         }
 
         private static string FormatTime(double seconds)

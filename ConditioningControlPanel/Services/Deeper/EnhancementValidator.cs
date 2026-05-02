@@ -25,6 +25,14 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             var errors = new List<ValidationError>();
 
+            // Newtonsoft accepts non-standard "NaN"/"Infinity" JSON literals by
+            // default, and a NaN double makes every range comparison silently
+            // false (NaN < 0 == false, NaN > 1 == false), bypassing every
+            // bounds check below and producing nondeterministic OrderBy on
+            // overlap detection. Reject non-finite doubles up-front so the
+            // regular range checks operate on real numbers only.
+            ValidateAllDoublesFinite(e, errors);
+
             ValidateMediaType(e, errors);
             ValidateTimelineItems(e, errors);
 
@@ -126,7 +134,21 @@ namespace ConditioningControlPanel.Services.Deeper
                     }
 
                     if (item.Action != null)
+                    {
+                        if (item.Enabled
+                            && item.Trigger != null
+                            && item.Action is NoOpEnhancementAction nopa
+                            && nopa.OriginalType == ActionTypes.NoOp)
+                        {
+                            errors.Add(new ValidationError
+                            {
+                                Path = $"{path}.action",
+                                Message = "Rule is enabled but has no action — it will fire silently. Pick an action or disable the rule.",
+                                Severity = ValidationSeverity.Warning
+                            });
+                        }
                         ValidateActionSpecific(item.Action, $"{path}.action", bandIds, errors);
+                    }
                 }
             }
         }
@@ -187,6 +209,123 @@ namespace ConditioningControlPanel.Services.Deeper
                         Message = $"Unknown effect_type \"{item.EffectType}\" — effect will be skipped at runtime.",
                         Severity = ValidationSeverity.Warning
                     });
+                    break;
+            }
+        }
+
+        private static void ValidateAllDoublesFinite(Enhancement e, List<ValidationError> errors)
+        {
+            void Reject(string path, string field, double v)
+            {
+                if (!double.IsFinite(v))
+                    errors.Add(new ValidationError
+                    {
+                        Path = path,
+                        Message = $"{field} must be a finite number (got {v}).",
+                        Severity = ValidationSeverity.Error
+                    });
+            }
+
+            void RejectPattern(List<double[]>? pattern, string path)
+            {
+                if (pattern == null) return;
+                for (int i = 0; i < pattern.Count; i++)
+                {
+                    var kf = pattern[i];
+                    if (kf == null) continue;
+                    for (int j = 0; j < kf.Length; j++)
+                        Reject($"{path}.custom_pattern[{i}][{j}]", "value", kf[j]);
+                }
+            }
+
+            for (int i = 0; i < e.TimelineItems.Count; i++)
+            {
+                var item = e.TimelineItems[i];
+                if (item == null) continue;
+                var path = $"timeline_items[{i}]";
+                Reject(path, "start", item.Start);
+                Reject(path, "duration", item.Duration);
+                Reject(path, "effect_intensity", item.EffectIntensity);
+                Reject(path, "effect_opacity", item.EffectOpacity);
+                RejectPattern(item.EffectCustomPattern, path);
+                RejectTriggerDoubles(item.Trigger, $"{path}.trigger", Reject);
+                RejectActionDoubles(item.Action, $"{path}.action", Reject, RejectPattern);
+            }
+
+            for (int i = 0; i < e.Regions.Count; i++)
+            {
+                var r = e.Regions[i];
+                var path = $"regions[{i}]";
+                Reject(path, "start", r.Start);
+                Reject(path, "end", r.End);
+            }
+
+            for (int i = 0; i < e.Rules.Count; i++)
+            {
+                var rule = e.Rules[i];
+                var path = $"rules[{i}]";
+                RejectTriggerDoubles(rule.Trigger, $"{path}.trigger", Reject);
+                RejectActionDoubles(rule.Action, $"{path}.action", Reject, RejectPattern);
+            }
+
+            for (int t = 0; t < e.HapticTracks.Count; t++)
+            {
+                var track = e.HapticTracks[t];
+                if (track?.Events == null) continue;
+                for (int j = 0; j < track.Events.Count; j++)
+                {
+                    var ev = track.Events[j];
+                    if (ev == null) continue;
+                    var path = $"haptic_tracks[{t}].events[{j}]";
+                    Reject(path, "start", ev.Start);
+                    Reject(path, "duration", ev.Duration);
+                    Reject(path, "intensity", ev.Intensity);
+                    RejectPattern(ev.CustomPattern, path);
+                }
+            }
+        }
+
+        private static void RejectTriggerDoubles(EnhancementTrigger? t, string path, System.Action<string, string, double> reject)
+        {
+            switch (t)
+            {
+                case GazeTargetTrigger g when g.Rect != null:
+                    for (int i = 0; i < g.Rect.Length; i++) reject($"{path}.rect[{i}]", "value", g.Rect[i]);
+                    break;
+                case GazeAvoidTrigger g when g.Rect != null:
+                    for (int i = 0; i < g.Rect.Length; i++) reject($"{path}.rect[{i}]", "value", g.Rect[i]);
+                    break;
+                case TimeReachedTrigger tr:
+                    reject(path, "time", tr.Time);
+                    break;
+            }
+        }
+
+        private static void RejectActionDoubles(
+            EnhancementAction? a,
+            string path,
+            System.Action<string, string, double> reject,
+            System.Action<List<double[]>?, string> rejectPattern)
+        {
+            switch (a)
+            {
+                case SeekAction s when s.Time.HasValue:
+                    reject(path, "time", s.Time.Value);
+                    break;
+                case TriggerHapticAction h:
+                    reject(path, "intensity", h.Intensity);
+                    rejectPattern(h.CustomPattern, path);
+                    break;
+                case TriggerEffectAction te:
+                    reject(path, "intensity", te.Intensity);
+                    reject(path, "opacity", te.Opacity);
+                    rejectPattern(te.CustomPattern, path);
+                    break;
+                case ScreenShakeAction ss:
+                    reject(path, "intensity", ss.Intensity);
+                    break;
+                case SetIntensityAction si:
+                    reject(path, "value", si.Value);
                     break;
             }
         }
@@ -466,6 +605,19 @@ namespace ConditioningControlPanel.Services.Deeper
                 }
 
                 ValidateTriggerSpecific(rule.Trigger, $"{path}.trigger", regionIds, errors);
+
+                if (rule.Enabled
+                    && rule.Action is NoOpEnhancementAction nopa
+                    && nopa.OriginalType == ActionTypes.NoOp)
+                {
+                    errors.Add(new ValidationError
+                    {
+                        Path = $"{path}.action",
+                        Message = "Rule is enabled but has no action — it will fire silently. Pick an action or disable the rule.",
+                        Severity = ValidationSeverity.Warning
+                    });
+                }
+
                 ValidateActionSpecific(rule.Action, $"{path}.action", regionIds, errors);
 
                 if (!string.IsNullOrEmpty(rule.RegionConstraint) && !regionIds.Contains(rule.RegionConstraint))

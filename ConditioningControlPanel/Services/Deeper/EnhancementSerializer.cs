@@ -16,11 +16,17 @@ namespace ConditioningControlPanel.Services.Deeper
 
     public static class EnhancementSerializer
     {
+        // Hard cap on JSON nesting depth. Real enhancements never exceed ~6
+        // levels; 64 is generous headroom and a tight ceiling against
+        // stack-overflow DoS via deeply-nested attacker-controlled JSON.
+        private const int MaxJsonDepth = 64;
+
         private static readonly JsonSerializerSettings ReadSettings = new()
         {
             MissingMemberHandling = MissingMemberHandling.Ignore,
             NullValueHandling = NullValueHandling.Ignore,
-            DefaultValueHandling = DefaultValueHandling.Include
+            DefaultValueHandling = DefaultValueHandling.Include,
+            MaxDepth = MaxJsonDepth
         };
 
         private static readonly JsonSerializerSettings WriteSettings = new()
@@ -77,7 +83,12 @@ namespace ConditioningControlPanel.Services.Deeper
             JObject root;
             try
             {
-                root = JObject.Parse(json);
+                // JObject.Parse(string) doesn't honour a MaxDepth setting;
+                // construct a JsonTextReader explicitly so deeply-nested
+                // hostile JSON is rejected before it can stack-overflow.
+                using var sr = new StringReader(json);
+                using var jr = new JsonTextReader(sr) { MaxDepth = MaxJsonDepth };
+                root = JObject.Load(jr);
             }
             catch (JsonReaderException ex)
             {

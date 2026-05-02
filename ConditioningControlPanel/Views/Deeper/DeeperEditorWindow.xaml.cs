@@ -1532,6 +1532,12 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             if (start + duration > _totalSeconds) start = Math.Max(0, _totalSeconds - duration);
 
+            // Snapshot BEFORE the mutation so Ctrl+Z restores the pre-create
+            // state. Without this push, undo silently bypasses the H-keypress
+            // create and pops back to the user's previous edit, leaving the
+            // freshly added haptic in place.
+            PushUndoSnapshot();
+
             var ev = new HapticEvent
             {
                 Start = start,
@@ -2093,6 +2099,9 @@ namespace ConditioningControlPanel.Views.Deeper
             EnhancementTrigger defaultTrigger = isAudio
                 ? new TimeReachedTrigger { Time = Math.Max(0, _currentSeconds) }
                 : new GazeTargetTrigger();
+            // Snapshot BEFORE the mutation so Ctrl+Z reaches the pre-add state
+            // instead of skipping over it and undoing the user's previous edit.
+            PushUndoSnapshot();
             var rule = new EnhancementRule
             {
                 Trigger = defaultTrigger,

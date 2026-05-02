@@ -157,18 +157,27 @@ namespace ConditioningControlPanel.Services.Deeper
             {
                 if (_webView == null) return;
                 _host.LoadFromMemory(enhancement, pageUrl);
-                _activeSource = new BrowserVideoTimeSource(_webView);
-                if (!_host.Bind(_activeSource,
-                        attach: () => _activeSource?.Attach(),
+                // Capture the source in a local so the attach/detach lambdas
+                // operate on THIS binding's source, not whatever the field
+                // points to later. Without this, a fast nav can swap _activeSource
+                // before the previous detach fires, and the stale lambda would
+                // tear down the *new* source.
+                var src = new BrowserVideoTimeSource(_webView);
+                _activeSource = src;
+                if (!_host.Bind(src,
+                        attach: () => src.Attach(),
                         detach: () =>
                         {
-                            _activeSource?.Detach();
-                            _activeSource?.Dispose();
-                            _activeSource = null;
+                            try { src.Detach(); } catch { }
+                            try { src.Dispose(); } catch { }
+                            // Only clear the field if it still points at OUR
+                            // source — a newer BindActive may have already
+                            // replaced it.
+                            if (ReferenceEquals(_activeSource, src)) _activeSource = null;
                         }))
                 {
-                    _activeSource?.Dispose();
-                    _activeSource = null;
+                    src.Dispose();
+                    if (ReferenceEquals(_activeSource, src)) _activeSource = null;
                     return;
                 }
                 _activeUrl = pageUrl;
