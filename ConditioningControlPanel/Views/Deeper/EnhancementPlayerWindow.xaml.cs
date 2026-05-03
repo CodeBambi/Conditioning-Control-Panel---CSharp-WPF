@@ -350,7 +350,12 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             else
             {
-                BtnPickAudio_Click(sender, e);
+                // Nothing loaded — point users at the dedicated pickers in the
+                // header rather than ambushing them with a file dialog. The
+                // earlier fallback popped OpenFileDialog on every empty-state
+                // Play click, which was indistinguishable from a misclick on
+                // the wrong button.
+                TxtStatus.Text = Loc.Get("deeper_player_status_pick_first");
             }
         }
 
@@ -810,10 +815,43 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtVideoStatus.Visibility = Visibility.Collapsed;
                 BtnPlayPause.Content = "⏸";
                 TxtStatus.Text = Loc.Get("deeper_player_status_playing");
+
+                ScrollVideoIntoView();
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "EnhancementPlayer: video bind failed");
+            }
+        }
+
+        // HypnoTube and similar embed pages stack promo banners above the
+        // <video> element, so a freshly-loaded page lands at scrollTop=0 with
+        // the player below the fold. Polls for the <video> for up to 4s
+        // (HT injects the player container after the main HTML completes,
+        // so it's frequently null at NavigationCompleted), then scrollIntoView
+        // centers it. scrollIntoView is layout-aware — preferable to a fixed
+        // scrollBy(0, N) since HT swaps banner stacks day-to-day.
+        private void ScrollVideoIntoView()
+        {
+            try
+            {
+                if (VideoBrowser?.CoreWebView2 == null) return;
+                _ = VideoBrowser.CoreWebView2.ExecuteScriptAsync(@"
+                    (function() {
+                        var tries = 0;
+                        var iv = setInterval(function() {
+                            var v = document.querySelector('video');
+                            if (v) {
+                                v.scrollIntoView({ block: 'center', behavior: 'auto' });
+                                clearInterval(iv);
+                            } else if (++tries > 40) { clearInterval(iv); }
+                        }, 100);
+                    })();
+                ");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementPlayer: scrollIntoView injection failed: {Error}", ex.Message);
             }
         }
 

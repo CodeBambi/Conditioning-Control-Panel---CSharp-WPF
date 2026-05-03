@@ -444,6 +444,22 @@ namespace ConditioningControlPanel.Views.Deeper
                 _browserSource = new BrowserVideoTimeSource(BrowserPreview);
                 _browserSource.Attach();
                 _browserSource.PlaybackTimeChanged += OnBrowserTimeChanged;
+
+                // HT stacks promo banners above the <video>; without this the
+                // editor preview lands at scrollTop=0 with the player offscreen.
+                // Polls for the video element since HT injects it post-load.
+                _ = BrowserPreview.CoreWebView2.ExecuteScriptAsync(@"
+                    (function() {
+                        var tries = 0;
+                        var iv = setInterval(function() {
+                            var v = document.querySelector('video');
+                            if (v) {
+                                v.scrollIntoView({ block: 'center', behavior: 'auto' });
+                                clearInterval(iv);
+                            } else if (++tries > 40) { clearInterval(iv); }
+                        }, 100);
+                    })();
+                ");
             }
             catch (Exception ex)
             {

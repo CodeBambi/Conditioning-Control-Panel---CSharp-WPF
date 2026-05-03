@@ -210,26 +210,39 @@ namespace ConditioningControlPanel.Services.Deeper
                 }
             }
 
-            // 2) HypnoTube-specific uploader link is the most accurate source —
-            // it points at the actual user who uploaded. JSON-LD author and the
-            // meta author tag often resolve to "Mechbunny.com" / the site itself
-            // rather than the uploader, so we prefer the /user/ link first.
+            // 2) HypnoTube uploader link, anchored on the "Submitted by" text
+            // marker. A naive "first /user/ link wins" matched the brand/source
+            // badge ("mechbunny.com") that HT places earlier in the markup than
+            // the actual uploader profile link, so we anchor specifically on
+            // the "Submitted by" caption that prefixes the real uploader.
+            // Falls through to JSON-LD / meta-author if the marker is absent.
             var linkMatch = HtUploaderRegex.Match(html);
             if (linkMatch.Success && linkMatch.Groups.Count > 1)
             {
                 var uploader = WebDecode(linkMatch.Groups[1].Value).Trim();
                 // Strip any inner HTML (avatar img tags, spans, etc.)
                 uploader = Regex.Replace(uploader, "<[^>]+>", "").Trim();
-                if (!string.IsNullOrEmpty(uploader)) meta.Uploader = uploader;
+                // Domain-style values ("mechbunny.com") are brand attributions,
+                // not uploader names — fall through so the next strategies run.
+                if (!string.IsNullOrEmpty(uploader) && !LooksLikeDomainName(uploader))
+                    meta.Uploader = uploader;
             }
 
             // 3) JSON-LD VideoObject for uploader (fallback).
             if (string.IsNullOrEmpty(meta.Uploader))
-                meta.Uploader = TryExtractJsonLdAuthor(html);
+            {
+                var jsonLd = TryExtractJsonLdAuthor(html);
+                if (!string.IsNullOrEmpty(jsonLd) && !LooksLikeDomainName(jsonLd!.Trim()))
+                    meta.Uploader = jsonLd;
+            }
 
             // 4) Last-resort regexes for uploader.
             if (string.IsNullOrEmpty(meta.Uploader))
-                meta.Uploader = ExtractMetaContent(html, "name", "author");
+            {
+                var metaAuthor = ExtractMetaContent(html, "name", "author");
+                if (!string.IsNullOrEmpty(metaAuthor) && !LooksLikeDomainName(metaAuthor!.Trim()))
+                    meta.Uploader = metaAuthor;
+            }
 
             // Trim and normalize.
             meta.Title = NormalizeWhitespace(meta.Title);
@@ -250,11 +263,23 @@ namespace ConditioningControlPanel.Services.Deeper
             @"<meta[^>]+property\s*=\s*[""']og:video:tag[""'][^>]+content\s*=\s*[""']([^""']+)[""']",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        // HypnoTube uses /user/ (singular) for profile URLs, e.g.
-        // /user/viatrixia-224012/. Match singular AND plural to be robust.
+        // HypnoTube renders the uploader as `Submitted by <a href="/user/...">NAME</a>`.
+        // The optional `(?:<[^>]+>\s*)*` swallows any avatar img / wrapper span /
+        // whitespace HT inserts between the caption and the link. Singular AND
+        // plural /user|/users supported in case HT ever changes its URL scheme.
         private static readonly Regex HtUploaderRegex = new(
-            @"<a[^>]+href\s*=\s*[""']/users?/[^""']+[""'][^>]*>(.*?)</a>",
+            @"Submitted\s+by\s*(?:<[^>]+>\s*)*<a[^>]+href\s*=\s*[""']/users?/[^""']+[""'][^>]*>(.*?)</a>",
             RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline);
+
+        // Brand attributions like "mechbunny.com" / "videos-host.tv" should not
+        // be returned as uploader names. Conservative TLD list — extend if HT
+        // surfaces brand badges in other domains.
+        private static readonly Regex DomainNameRegex = new(
+            @"^[\w-]+\.(com|net|org|tv|co|io)$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static bool LooksLikeDomainName(string s)
+            => !string.IsNullOrEmpty(s) && DomainNameRegex.IsMatch(s);
 
         private static readonly Regex JsonLdRegex = new(
             @"<script[^>]+type\s*=\s*[""']application/ld\+json[""'][^>]*>(.*?)</script>",

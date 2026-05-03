@@ -1783,18 +1783,7 @@ namespace ConditioningControlPanel.Services
                     FollowUpButton2Text = Loc.Get("deeper_itut_ht_followup_open_player"),
                     FollowUpAction2 = step =>
                     {
-                        try
-                        {
-                            if (App.DeeperPlayer != null && App.DeeperHost != null)
-                            {
-                                var owner = Application.Current?.MainWindow;
-                                var win = new ConditioningControlPanel.Views.Deeper.EnhancementPlayerWindow(
-                                    App.DeeperPlayer, App.DeeperHost);
-                                if (owner != null) win.Owner = owner;
-                                win.Show();
-                            }
-                        }
-                        catch { }
+                        try { OpenDeeperPlayerWithLastSavedEnhancement(); } catch { }
                         try { App.Tutorial?.Skip(); } catch { }
                     },
                     FollowUpButton3Text = Loc.Get("deeper_itut_ht_followup_done"),
@@ -2257,18 +2246,7 @@ namespace ConditioningControlPanel.Services
                 FollowUpButton2Text = Loc.Get("deeper_itut_ht_followup_open_player"),
                 FollowUpAction2 = step =>
                 {
-                    try
-                    {
-                        if (App.DeeperPlayer != null && App.DeeperHost != null)
-                        {
-                            var owner = Application.Current?.MainWindow;
-                            var win = new ConditioningControlPanel.Views.Deeper.EnhancementPlayerWindow(
-                                App.DeeperPlayer, App.DeeperHost);
-                            if (owner != null) win.Owner = owner;
-                            win.Show();
-                        }
-                    }
-                    catch { }
+                    try { OpenDeeperPlayerWithLastSavedEnhancement(); } catch { }
                     try { App.Tutorial?.Skip(); } catch { }
                 },
                 FollowUpButton3Text = Loc.Get("deeper_itut_ht_followup_done"),
@@ -2280,5 +2258,41 @@ namespace ConditioningControlPanel.Services
         }
 
         #endregion
+
+        // Tutorial follow-up entrypoint: open the Deeper Player and auto-load
+        // the enhancement the user just saved during the tutorial. Without
+        // this, the player opened with no media and Play had nothing to drive.
+        // Falls back to a bare player on any load failure so the user always
+        // gets a window.
+        private static void OpenDeeperPlayerWithLastSavedEnhancement()
+        {
+            if (App.DeeperPlayer == null || App.DeeperHost == null) return;
+
+            var owner = Application.Current?.MainWindow;
+            var path = TutorialEventBus.LastSavedEnhancementPath;
+
+            ConditioningControlPanel.Models.Deeper.Enhancement? enh = null;
+            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+            {
+                try
+                {
+                    enh = ConditioningControlPanel.Services.Deeper.EnhancementSerializer
+                        .LoadFromFile(path);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("TutorialService: failed to load tutorial enhancement {Path}: {Error}",
+                        path, ex.Message);
+                }
+            }
+
+            var win = enh != null
+                ? new ConditioningControlPanel.Views.Deeper.EnhancementPlayerWindow(
+                    App.DeeperPlayer, App.DeeperHost, enh, "tutorial-followup")
+                : new ConditioningControlPanel.Views.Deeper.EnhancementPlayerWindow(
+                    App.DeeperPlayer, App.DeeperHost);
+            if (owner != null) win.Owner = owner;
+            win.Show();
+        }
     }
 }
