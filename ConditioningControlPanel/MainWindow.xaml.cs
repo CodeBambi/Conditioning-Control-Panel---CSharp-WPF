@@ -3678,7 +3678,7 @@ namespace ConditioningControlPanel
             try { App.Webcam?.Stop(); } catch { }
         }
 
-        private void BtnWebcamDebugStart_Click(object sender, RoutedEventArgs e)
+        private async void BtnWebcamDebugStart_Click(object sender, RoutedEventArgs e)
         {
             var svc = App.Webcam;
             if (svc == null)
@@ -3716,7 +3716,7 @@ namespace ConditioningControlPanel
             _webcamDebugFaceLabel = "—";
             UpdateWebcamDebugCounters();
 
-            var started = svc.Start();
+            var started = await StartWebcamOffUiThreadAsync(svc);
             if (started)
             {
                 BtnWebcamDebugStart.Content = "Stop tracking";
@@ -3725,6 +3725,28 @@ namespace ConditioningControlPanel
             else
             {
                 AppendWebcamDebugLog($"Start() returned false. State={svc.State}. See logs/app.log.");
+            }
+        }
+
+        // Webcam Start() does VideoCapture open + 3 ONNX InferenceSession ctors
+        // synchronously. On slow USB negotiation or driver-init paths that can
+        // block 10-30s; doing it on the UI thread freezes the window long
+        // enough for Windows' "not responding" reaper to terminate the app
+        // (XTNSN's BUG-T3HE68DHXY pattern: instant freeze on click → silent
+        // crash 10-15s later, no managed exception). Hop to a worker thread.
+        private async Task<bool> StartWebcamOffUiThreadAsync(WebcamTrackingService svc)
+        {
+            AppendWebcamDebugLog("Starting webcam (camera open + model load can take a few seconds)…");
+            if (TxtWebcamDebugStatus != null) TxtWebcamDebugStatus.Text = "Starting…";
+            try
+            {
+                return await Task.Run(() => svc.Start());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "MainWindow: webcam Start() threw on worker thread");
+                AppendWebcamDebugLog($"Start() threw: {ex.Message}");
+                return false;
             }
         }
 
@@ -3815,7 +3837,7 @@ namespace ConditioningControlPanel
             TxtWebcamDebugCounters.Text = $"Face: {_webcamDebugFaceLabel} | Blinks: {_webcamDebugBlinkCount} | Gaze: {gaze}";
         }
 
-        private void BtnWebcamDebugCalibrate_Click(object sender, RoutedEventArgs e)
+        private async void BtnWebcamDebugCalibrate_Click(object sender, RoutedEventArgs e)
         {
             var svc = App.Webcam;
             if (svc == null)
@@ -3841,8 +3863,7 @@ namespace ConditioningControlPanel
             var startedHere = false;
             if (!svc.IsRunning)
             {
-                AppendWebcamDebugLog("Starting tracking for calibration…");
-                if (!svc.Start())
+                if (!await StartWebcamOffUiThreadAsync(svc))
                 {
                     AppendWebcamDebugLog($"Couldn't start tracking. State={svc.State}.");
                     return;
@@ -3914,7 +3935,7 @@ namespace ConditioningControlPanel
             if (TxtFocusGazeStatus != null && !active) TxtFocusGazeStatus.Text = "";
         }
 
-        private void ChkFocusGaze_Changed(object sender, RoutedEventArgs e)
+        private async void ChkFocusGaze_Changed(object sender, RoutedEventArgs e)
         {
             if (_focusGazeSyncing) return;
             if (App.GazeFocus == null) return;
@@ -3930,6 +3951,22 @@ namespace ConditioningControlPanel
                     {
                         SyncFocusGazeToggle(false);
                         if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_consent_required");
+                        return;
+                    }
+                }
+
+                // Pre-warm the webcam off the UI thread so GazeFocus.Start —
+                // which would otherwise call WebcamTrackingService.Start
+                // synchronously — finds it already running and just subscribes.
+                if (App.Webcam != null && !App.Webcam.IsRunning)
+                {
+                    if (TxtFocusGazeStatus != null) TxtFocusGazeStatus.Text = "Starting webcam…";
+                    var started = await Task.Run(() => App.Webcam.Start());
+                    if (!started)
+                    {
+                        SyncFocusGazeToggle(false);
+                        if (TxtFocusGazeStatus != null)
+                            TxtFocusGazeStatus.Text = Localization.Loc.GetF("label_focus_gaze_webcam_failed_format", App.Webcam?.State);
                         return;
                     }
                 }
@@ -4167,7 +4204,7 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void BtnWebcamDebugTrackerTest_Click(object sender, RoutedEventArgs e)
+        private async void BtnWebcamDebugTrackerTest_Click(object sender, RoutedEventArgs e)
         {
             var svc = App.Webcam;
             if (svc == null)
@@ -4194,8 +4231,7 @@ namespace ConditioningControlPanel
             var startedHere = false;
             if (!svc.IsRunning)
             {
-                AppendWebcamDebugLog("Starting tracking for tracker test…");
-                if (!svc.Start())
+                if (!await StartWebcamOffUiThreadAsync(svc))
                 {
                     AppendWebcamDebugLog($"Couldn't start tracking. State={svc.State}.");
                     return;
@@ -4226,7 +4262,7 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void BtnWebcamDebugQuickRecal_Click(object sender, RoutedEventArgs e)
+        private async void BtnWebcamDebugQuickRecal_Click(object sender, RoutedEventArgs e)
         {
             var svc = App.Webcam;
             if (svc == null)
@@ -4251,8 +4287,7 @@ namespace ConditioningControlPanel
             var startedHere = false;
             if (!svc.IsRunning)
             {
-                AppendWebcamDebugLog("Starting tracking for quick recal…");
-                if (!svc.Start())
+                if (!await StartWebcamOffUiThreadAsync(svc))
                 {
                     AppendWebcamDebugLog($"Couldn't start tracking. State={svc.State}.");
                     return;
