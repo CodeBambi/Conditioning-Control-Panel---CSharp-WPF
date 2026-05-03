@@ -401,6 +401,7 @@ namespace ConditioningControlPanel
             {
                 // Not first launch - check if we need to show "What's New" after an update
                 ShowWhatsNewIfNeeded();
+                ShowSeasonResetIfNeeded();
             }
 
             // Initialize scheduler timer (checks every 30 seconds)
@@ -11643,6 +11644,79 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Shows a "What's New" dialog if the app was updated since last launch
         /// </summary>
+        /// <summary>
+        /// Shows a one-time-per-month notice when the monthly leaderboard season has rotated.
+        /// The server resets <c>level</c>/<c>xp</c>/<c>daily_quest_streak</c> on the 1st of every
+        /// month UTC; achievements, HighestLevelEver, skills, and lifetime XP are preserved.
+        /// Without this notice, returning users on the 1st think they lost their progress and
+        /// file bug reports. Only shown to users with HighestLevelEver >= 2 (anyone with progression).
+        /// </summary>
+        private void ShowSeasonResetIfNeeded()
+        {
+            try
+            {
+                if (App.Settings?.Current == null) return;
+
+                var currentSeason = DateTime.UtcNow.ToString("yyyy-MM");
+                var lastSeasonSeen = App.Settings.Current.LastSeasonResetSeen ?? "";
+                var highestLevel = App.Settings.Current.HighestLevelEver;
+
+                // Brand-new users (never leveled up) skip this. They'll see it next month if they progress.
+                if (highestLevel < 2) return;
+
+                // Already shown for this season
+                if (lastSeasonSeen == currentSeason) return;
+
+                App.Logger?.Information("Season changed from {Old} to {New}, showing season reset notice (HighestLevel={Highest})",
+                    string.IsNullOrEmpty(lastSeasonSeen) ? "(none)" : lastSeasonSeen, currentSeason, highestLevel);
+
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        IsStartupDialogShowing = true;
+                        App.Logger?.Information("Season reset dialog showing, setting IsStartupDialogShowing=true");
+
+                        var message =
+                            "The monthly leaderboard season has rotated. This happens at the start of every month so everyone has a fresh chance to climb the rankings.\n\n" +
+                            "What resets:\n" +
+                            "  - Current Level and XP\n" +
+                            "  - Daily quest streak\n" +
+                            "  - Monthly leaderboard position\n\n" +
+                            "What's preserved:\n" +
+                            "  - All achievements\n" +
+                            "  - Highest Level Ever (yours: " + highestLevel + ")\n" +
+                            "  - Skill points and unlocked enhancements\n" +
+                            "  - Total lifetime XP\n" +
+                            "  - Patreon perks and whitelist\n\n" +
+                            "Welcome to season " + currentSeason + "!";
+
+                        MessageBox.Show(
+                            message,
+                            "New Season Started",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+
+                        App.Settings.Current.LastSeasonResetSeen = currentSeason;
+                        App.Settings.Save();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Failed to show season reset dialog");
+                    }
+                    finally
+                    {
+                        IsStartupDialogShowing = false;
+                        App.Logger?.Information("Season reset dialog dismissed, setting IsStartupDialogShowing=false");
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Loaded);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Error checking for season reset");
+            }
+        }
+
         private void ShowWhatsNewIfNeeded()
         {
             try

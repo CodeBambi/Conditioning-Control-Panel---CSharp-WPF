@@ -111,6 +111,20 @@ namespace ConditioningControlPanel.Models
             set { _dismissedAnnouncementId = value ?? ""; OnPropertyChanged(); }
         }
 
+        private string _lastSeasonResetSeen = "";
+        /// <summary>
+        /// "YYYY-MM" (UTC) of the most recent monthly season-reset popup the user has dismissed.
+        /// The leaderboard rotates seasons on the 1st of every month UTC, which also resets
+        /// current level/XP and daily streak. Achievements, HighestLevelEver, skills, and
+        /// lifetime XP are preserved server-side. Empty for users who have never seen the
+        /// popup; we only show it to users who have any progression to lose (HighestLevelEver >= 2).
+        /// </summary>
+        public string LastSeasonResetSeen
+        {
+            get => _lastSeasonResetSeen;
+            set { _lastSeasonResetSeen = value ?? ""; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Skill Tree / Enhancements
