@@ -579,6 +579,11 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // A Manual step pointing at a TextBox almost always means "type
+            // something here, then click Next." Without click-through the
+            // overlay swallows the click and the box never gets focus.
+            if (targetElement is TextBox) clickThroughHole = true;
+
             try { targetElement.BringIntoView(); } catch { }
             try { _targetWindow.UpdateLayout(); } catch { }
 

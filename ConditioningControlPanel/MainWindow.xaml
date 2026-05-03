@@ -8520,13 +8520,24 @@
                             CornerRadius="10" Padding="18,14"
                             ToolTip="{loc:Str deeper_tab_library_tooltip}">
                         <DockPanel LastChildFill="True">
-                            <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+                            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10" LastChildFill="True">
+                                <Button x:Name="BtnDeeperOpenLibraryFolder" DockPanel.Dock="Right"
+                                        Content="📁" Click="BtnDeeperOpenLibraryFolder_Click"
+                                        ToolTip="{loc:Str deeper_library_open_folder_tooltip}"
+                                        Width="22" Height="20" Padding="0" FontSize="11" Cursor="Hand"
+                                        Margin="8,0,0,0"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource DeeperAccentBrush}"
+                                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                        BorderThickness="1"/>
+                                <TextBlock x:Name="TxtDeeperLibraryCount" DockPanel.Dock="Right"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
                                 <TextBlock Text="{loc:Str deeper_section_library}"
+                                           VerticalAlignment="Center"
                                            Foreground="{DynamicResource TextLightBrush}"
                                            FontSize="12" FontWeight="Bold"/>
-                                <TextBlock x:Name="TxtDeeperLibraryCount" HorizontalAlignment="Right"
-                                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
-                            </Grid>
+                            </DockPanel>
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel x:Name="DeeperLibraryList"/>
                             </ScrollViewer>

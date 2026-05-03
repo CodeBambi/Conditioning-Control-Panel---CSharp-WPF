@@ -2460,6 +2460,28 @@ namespace ConditioningControlPanel
             DockPanel.SetDock(icon, Dock.Left);
             titleRow.Children.Add(icon);
 
+            var deleteBtn = new Button
+            {
+                Content = "🗑",
+                Width = 22, Height = 20, Padding = new Thickness(0),
+                FontSize = 11,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = (System.Windows.Media.Brush)FindResource("DeeperAccentBrush"),
+                BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
+                BorderThickness = new Thickness(1),
+                Margin = new Thickness(8, 0, 0, 0),
+                ToolTip = Loc.Get("deeper_library_delete_tooltip"),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            deleteBtn.Click += (s, e) =>
+            {
+                e.Handled = true;
+                DeleteDeeperLibraryEntry(entry);
+            };
+            DockPanel.SetDock(deleteBtn, Dock.Right);
+            titleRow.Children.Add(deleteBtn);
+
             var name = new TextBlock
             {
                 Text = entry.Name,
@@ -2542,6 +2564,48 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to open Deeper file {Path}", path);
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void BtnDeeperOpenLibraryFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var folder = App.EnhancementLibrary?.LibraryFolder;
+            if (string.IsNullOrEmpty(folder)) return;
+            try
+            {
+                System.IO.Directory.CreateDirectory(folder);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to open Deeper library folder {Folder}", folder);
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void DeleteDeeperLibraryEntry(Services.Deeper.EnhancementLibraryEntry entry)
+        {
+            var label = string.IsNullOrEmpty(entry.Name) ? System.IO.Path.GetFileName(entry.FilePath) : entry.Name;
+            var msg = string.Format(Loc.Get("deeper_library_delete_confirm_fmt"), label);
+            var result = MessageBox.Show(this, msg, Loc.Get("deeper_library_delete_title"),
+                MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            if (result != MessageBoxResult.OK) return;
+            try
+            {
+                if (System.IO.File.Exists(entry.FilePath))
+                    System.IO.File.Delete(entry.FilePath);
+                // FileSystemWatcher in EnhancementLibrary will fire LibraryChanged
+                // and refresh the UI, but force an immediate refresh for snappiness.
+                RefreshDeeperLibraryUI();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to delete Deeper library entry {Path}", entry.FilePath);
                 MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }

@@ -670,7 +670,16 @@
                                       SelectionChanged="CmbActionType_SelectionChanged"/>
                             <StackPanel x:Name="ActionFields"/>
 
-                            <TextBlock Text="{loc:Str deeper_editor_rule_region_constraint}" Style="{StaticResource EditorLabel}" Margin="0,4,0,4"/>
+                            <DockPanel LastChildFill="False" Margin="0,4,0,4">
+                                <TextBlock Text="{loc:Str deeper_editor_rule_region_constraint}" Style="{StaticResource EditorLabel}" DockPanel.Dock="Left"/>
+                                <Button DockPanel.Dock="Right" Content="?" Click="BtnRegionHelp_Click"
+                                        ToolTip="{loc:Str deeper_editor_help_region}"
+                                        Width="20" Height="20" Padding="0" FontSize="11" Cursor="Hand"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource DeeperAccentBrush}"
+                                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                        BorderThickness="1"/>
+                            </DockPanel>
                             <ComboBox x:Name="CmbRuleRegion" Style="{StaticResource EditorComboBox}"
                                       ItemContainerStyle="{StaticResource EditorComboBoxItem}"
                                       ToolTip="{loc:Str deeper_editor_tt_rule_region}"

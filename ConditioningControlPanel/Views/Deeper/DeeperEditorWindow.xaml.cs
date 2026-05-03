@@ -2109,6 +2109,13 @@ namespace ConditioningControlPanel.Views.Deeper
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
+        private void BtnRegionHelp_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show(this, Loc.Get("deeper_editor_help_region_body"),
+                Loc.Get("deeper_editor_help_region"),
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
         private void BtnAddRule_Click(object sender, RoutedEventArgs e)
         {
             var isAudio = _enhancement.MediaType == MediaTypes.Audio;
