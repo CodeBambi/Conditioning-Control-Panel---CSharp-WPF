@@ -76,6 +76,12 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
 
         private bool _gameRunning;
         private bool _webcamSubscribed;
+        // Tracks whether we suspended the main-session FlashService at gameplay start
+        // so we can restart it on close. Without this, scheduled flash images from the
+        // main session pop on top of the gaze targets and disrupt the game (bug #202).
+        // The minigame's own reward-flash path uses TriggerFlashOnce which bypasses
+        // _isRunning, so suspending the timer-driven service doesn't break rewards.
+        private bool _suspendedFlashServiceForGame;
 
         // Saved windowed state so ToggleFullscreen() can restore cleanly.
         private WindowStyle _savedStyle;
@@ -394,6 +400,18 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
 
             _settings.Save();
             HideReadyBanner();
+
+            // Suspend the main-session timer-driven FlashService for the duration of
+            // the minigame so its random flashes don't pop over the gaze targets
+            // (bug #202). Restored in Window_Closing. Reward flashes still fire via
+            // TriggerFlashOnce which is independent of _isRunning.
+            if (App.Flash?.IsRunning == true)
+            {
+                App.Flash.Stop();
+                _suspendedFlashServiceForGame = true;
+                App.Logger?.Information("GazeMinigame: suspended main FlashService for the duration of the game");
+            }
+
             BeginCountdown();
         }
 
@@ -1280,6 +1298,20 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             // DllNotFoundException in the crash log.
             DisposeCurrentRoundPlayers(synchronous: true);
             UnsubscribeWebcam();
+
+            if (_suspendedFlashServiceForGame)
+            {
+                _suspendedFlashServiceForGame = false;
+                try
+                {
+                    App.Flash?.Start();
+                    App.Logger?.Information("GazeMinigame: resumed main FlashService after game ended");
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "GazeMinigame: failed to resume FlashService on close");
+                }
+            }
         }
     }
 }
