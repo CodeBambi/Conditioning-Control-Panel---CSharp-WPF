@@ -577,6 +577,15 @@ namespace ConditioningControlPanel.Services
                 App.Autonomy?.CancelActivePulses();
                 App.Autonomy?.Stop();
 
+                // Stop any vibration the remote was driving. Without this, the device
+                // keeps running on its last commanded level until the per-command
+                // timeout expires (or forever for indefinite patterns), which is what
+                // bug #179 ("haptics server doesn't stop after escape") was about.
+                if (App.Haptics != null)
+                {
+                    _ = App.Haptics.StopAsync();
+                }
+
                 App.Video?.Stop();
                 App.Flash?.Stop();
                 App.Subliminal?.Stop();

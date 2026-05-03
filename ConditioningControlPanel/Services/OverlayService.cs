@@ -41,6 +41,13 @@ public class OverlayService : IDisposable
     private double _lastAppliedPinkOpacity = -1;
     private double _lastAppliedSpiralOpacity = -1;
     private int _consecutiveTopmostLossCount;
+    // Tick counter for periodic topmost-layer "kick". The 500ms timer drives this;
+    // every ~5s (10 ticks) we re-issue HWND_TOPMOST even if the WS_EX_TOPMOST flag
+    // is set, because Windows can reorder within the topmost layer (fullscreen
+    // video, OS notifications, browser overlays) without ever clearing the flag —
+    // that's the case behind the "spiral disappeared mid-session, toggle off/on
+    // brings it back" reports.
+    private int _topmostKickTickCounter;
 
     // GIF frame animation fields
     private readonly List<System.Windows.Controls.Image> _spiralGifImages = new();
@@ -385,6 +392,15 @@ public class OverlayService : IDisposable
         else
         {
             _consecutiveTopmostLossCount = 0;
+        }
+
+        // Periodic unconditional kick to handle in-layer reordering even when the
+        // WS_EX_TOPMOST flag is technically still set on our windows.
+        _topmostKickTickCounter++;
+        if (_topmostKickTickCounter >= 10) // 10 x 500ms = 5 seconds
+        {
+            _topmostKickTickCounter = 0;
+            ReassertZOrder(force: true);
         }
     }
 
@@ -1514,10 +1530,15 @@ public class OverlayService : IDisposable
     }
 
     /// <summary>
-    /// Re-asserts HWND_TOPMOST on overlay windows, but only if they've actually lost it.
-    /// Returns true if any window needed recovery.
+    /// Re-asserts HWND_TOPMOST on overlay windows. By default only windows that have
+    /// actually lost the WS_EX_TOPMOST flag are re-pinned. Pass <paramref name="force"/>
+    /// = true to re-issue HWND_TOPMOST unconditionally, which bumps the window to the
+    /// front of the topmost layer even when its flag is already set — required after
+    /// fullscreen videos, OS notifications, or other topmost windows have temporarily
+    /// reordered things without clearing our flag.
+    /// Returns true if any window was re-pinned.
     /// </summary>
-    private bool ReassertZOrder()
+    private bool ReassertZOrder(bool force = false)
     {
         bool anyRecovered = false;
         foreach (var list in new[] { _pinkFilterWindows, _spiralWindows, _brainDrainBlurWindows })
@@ -1528,11 +1549,12 @@ public class OverlayService : IDisposable
                 if (hwnd == IntPtr.Zero) continue;
 
                 int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                if ((exStyle & WS_EX_TOPMOST) == 0)
+                bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
+                if (needsPin || force)
                 {
                     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    anyRecovered = true;
+                    if (needsPin) anyRecovered = true;
                 }
             }
         }
@@ -1550,7 +1572,10 @@ public class OverlayService : IDisposable
         Application.Current?.Dispatcher?.BeginInvoke(DispatcherPriority.Background, () =>
         {
             if (_isDisposed || !_isRunning) return;
-            ReassertZOrder();
+            // Force re-pin even if WS_EX_TOPMOST is technically still set — a topmost
+            // sibling closing leaves us in the topmost layer but possibly behind
+            // whatever else was there, so we need to bump to the front.
+            ReassertZOrder(force: true);
         });
     }
 

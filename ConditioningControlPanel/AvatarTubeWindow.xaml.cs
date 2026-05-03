@@ -2459,13 +2459,29 @@ namespace ConditioningControlPanel
             // Display duration is user-controlled via Companion tab slider (1-10s, default 2).
             // Long AI replies are still readable: hovering keeps the bubble open, and
             // "Show chat history" preserves the full conversation for re-reading.
-            double displayDuration = Math.Clamp(App.Settings?.Current?.BubbleDurationSeconds ?? 2.0, 1.0, 10.0);
+            double userSetting = Math.Clamp(App.Settings?.Current?.BubbleDurationSeconds ?? 2.0, 1.0, 10.0);
+            double displayDuration = userSetting;
 
             // The typewriter eats into the visible window. Add its estimated runtime so the
             // slider value reflects fully-rendered reading time, not raw bubble-open time.
             if (source == SpeechSource.AI && !_isWaitingForAi)
             {
-                displayDuration += EstimateTypewriterDurationMs(text.Length) / 1000.0;
+                double typewriterSec = EstimateTypewriterDurationMs(text.Length) / 1000.0;
+                displayDuration += typewriterSec;
+
+                // Floor for long replies: the user's slider value is sensible for the short
+                // trigger-style bubbles it was designed for, but a 200-char AI reply at
+                // userSetting=2 leaves only 2 seconds of reading time after typing - which
+                // is what bug report #193 ("text disappears as soon as it's finished being
+                // written") was about. Apply ~12 chars/sec ESL-friendly reading speed as a
+                // minimum post-typewriter dwell, capped at 30s so a runaway long reply
+                // doesn't pin the bubble forever. Anyone who explicitly wants short dwell
+                // can still hover the bubble or open the chat history.
+                const double charsPerSecond = 12.0;
+                const double maxPostTypeSec = 30.0;
+                double readingFloorSec = Math.Min(maxPostTypeSec, text.Length / charsPerSecond);
+                double minTotalSec = typewriterSec + Math.Max(userSetting, readingFloorSec);
+                if (minTotalSec > displayDuration) displayDuration = minTotalSec;
             }
 
             // Hide after calculated duration

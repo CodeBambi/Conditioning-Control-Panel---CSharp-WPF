@@ -242,6 +242,10 @@ namespace ConditioningControlPanel.Services
         // Start/Stop, so the value never tears between visible snapshots.
         private volatile WebcamTrackingState _state = WebcamTrackingState.Stopped;
         public WebcamTrackingState State => _state;
+        // Set when ONNX runtime init fails for a reason that will keep failing this session
+        // (ETW blocked, missing redist, OS-level restriction). Prevents Start() from
+        // hammering OrtEnv.CreateInstance over and over.
+        private volatile bool _modelInitPermanentlyFailed;
         public bool IsRunning => _state == WebcamTrackingState.Tracking || _state == WebcamTrackingState.FaceLost;
         public WebcamCalibrationData? Calibration { get; private set; }
 
@@ -417,6 +421,14 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Logger?.Information("WebcamTrackingService: Start() refused — consent not current (granted={Granted}, storedVersion={Stored}, currentVersion={Current})",
                         App.Settings?.Current?.WebcamConsentGiven, App.Settings?.Current?.WebcamConsentVersion, ConsentVersion);
+                    return false;
+                }
+                if (_modelInitPermanentlyFailed)
+                {
+                    // ONNX runtime can't initialize on this machine (ETW blocked, missing
+                    // VC++ redist, etc). No point retrying every time the user clicks Start.
+                    App.Logger?.Information("WebcamTrackingService: Start() refused — ONNX model load previously failed in a way that won't recover this session");
+                    SetState(WebcamTrackingState.Error);
                     return false;
                 }
                 if (IsRunning) return true;
@@ -737,7 +749,25 @@ namespace ConditioningControlPanel.Services
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "WebcamTrackingService: failed to load detection models");
+                // Some failure modes are environmental and won't recover until the user
+                // changes something on their machine — don't keep retrying them on every
+                // click of Start. The most common one we see in bug reports is ETW
+                // registration failing (HRESULT 0x8007046E / -2147024786 or 0x80070776),
+                // which means the Event Tracing for Windows service is restricted by
+                // Group Policy or AV software. ONNX Runtime requires it.
+                var msg = ex.Message ?? string.Empty;
+                var isEtwFailure = msg.IndexOf("ETW", StringComparison.OrdinalIgnoreCase) >= 0
+                    || msg.IndexOf("etw_sink", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (isEtwFailure)
+                {
+                    _modelInitPermanentlyFailed = true;
+                    App.Logger?.Warning(
+                        "WebcamTrackingService: ONNX Runtime cannot initialize because Windows Event Tracing (ETW) is restricted on this machine. This is usually caused by Group Policy, antivirus, or a disabled Event Log service. Webcam tracking will remain unavailable until that's resolved.");
+                }
+                else
+                {
+                    App.Logger?.Warning(ex, "WebcamTrackingService: failed to load detection models");
+                }
                 try { face?.Dispose(); } catch { }
                 try { mesh?.Dispose(); } catch { }
                 try { iris?.Dispose(); } catch { }
