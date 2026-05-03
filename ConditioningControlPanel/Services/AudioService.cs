@@ -53,6 +53,65 @@ namespace ConditioningControlPanel.Services
         private DateTime _webView2PidsCacheTime = DateTime.MinValue;
         private static readonly TimeSpan WebView2CacheExpiry = TimeSpan.FromSeconds(30);
 
+        // Discovered working WaveOut device number. -1 means use WAVE_MAPPER (NAudio default).
+        // We learn an explicit number only if WAVE_MAPPER refuses to open ("BadDeviceId"),
+        // which happens on systems where the default audio endpoint is a virtual device that
+        // can't service waveOutOpen — see bug #181. Once a working number is found it's
+        // reused for the session so we don't re-enumerate on every PlaySound call.
+        private int _workingWaveOutDeviceNumber = -1;
+        private bool _waveOutPermanentlyUnavailable;
+
+        /// <summary>
+        /// Constructs a <see cref="WaveOutEvent"/>, transparently retrying with explicit
+        /// device numbers if the default WAVE_MAPPER refuses to open. Returns null only
+        /// if no device on the system will accept waveOutOpen — in which case the user's
+        /// audio stack is broken in a way we can't paper over.
+        /// </summary>
+        private WaveOutEvent? CreateWaveOut()
+        {
+            if (_waveOutPermanentlyUnavailable) return null;
+
+            // Try the cached/preferred device first.
+            try
+            {
+                var w = new WaveOutEvent();
+                if (_workingWaveOutDeviceNumber >= 0) w.DeviceNumber = _workingWaveOutDeviceNumber;
+                return w;
+            }
+            catch (NAudio.MmException ex) when (string.Equals(ex.Result.ToString(), "BadDeviceId", StringComparison.OrdinalIgnoreCase))
+            {
+                App.Logger?.Warning("AudioService: WaveOut default device returned BadDeviceId, scanning for a usable output device");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "AudioService: WaveOut default device construction failed");
+                return null;
+            }
+
+            // Fallback: enumerate explicit device numbers and pick the first one that opens.
+            int count;
+            try { count = WaveOut.DeviceCount; }
+            catch { count = 0; }
+            for (int i = 0; i < count; i++)
+            {
+                try
+                {
+                    var w = new WaveOutEvent { DeviceNumber = i };
+                    _workingWaveOutDeviceNumber = i;
+                    App.Logger?.Information("AudioService: using WaveOut device #{Num} as fallback", i);
+                    return w;
+                }
+                catch
+                {
+                    // try next
+                }
+            }
+
+            _waveOutPermanentlyUnavailable = true;
+            App.Logger?.Warning("AudioService: no WaveOut device on this system would accept waveOutOpen ({Count} candidates tried). Audio playback disabled this session.", count);
+            return null;
+        }
+
         // Crash recovery file for ducking state
         private static readonly string DuckingRecoveryFile = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -114,15 +173,16 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Information("[AudioDiag] Resources/sub_audio/: {Count} files found", subCount);
                 }
 
-                // Check WaveOutEvent can be created (tests audio device availability)
-                try
+                // Check WaveOutEvent can be created (tests audio device availability).
+                // CreateWaveOut transparently falls back to explicit device numbers if
+                // WAVE_MAPPER refuses (bug #181), so this also primes the cached working
+                // device number for subsequent PlaySound calls.
+                using (var testDevice = CreateWaveOut())
                 {
-                    using var testDevice = new WaveOutEvent();
-                    App.Logger?.Information("[AudioDiag] WaveOutEvent: OK (audio device available)");
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning("[AudioDiag] WaveOutEvent FAILED — no audio output device? Error: {Error}", ex.Message);
+                    if (testDevice != null)
+                        App.Logger?.Information("[AudioDiag] WaveOutEvent: OK (audio device available)");
+                    else
+                        App.Logger?.Warning("[AudioDiag] WaveOutEvent FAILED — no audio output device on this system accepts waveOutOpen. Check Windows audio settings, default device, and that the audio service is running.");
                 }
 
                 // Log current audio settings for diagnosis
@@ -174,16 +234,16 @@ namespace ConditioningControlPanel.Services
                 diagnostics.AppendLine($"Resources/sub_audio/: {count} files");
             }
 
-            // Check audio device
-            try
+            // Check audio device — CreateWaveOut falls back to explicit device numbers
+            // if the default WAVE_MAPPER refuses (bug #181).
+            using (var testDevice = CreateWaveOut())
             {
-                using var testDevice = new WaveOutEvent();
-                diagnostics.AppendLine("Audio device: OK");
-            }
-            catch (Exception ex)
-            {
-                diagnostics.AppendLine($"Audio device: FAILED ({ex.Message})");
-                return diagnostics.ToString();
+                if (testDevice == null)
+                {
+                    diagnostics.AppendLine("Audio device: FAILED (no output device on this system accepts waveOutOpen — check Windows audio settings, default playback device, and that the Windows Audio service is running)");
+                    return diagnostics.ToString();
+                }
+                diagnostics.AppendLine($"Audio device: OK (device #{testDevice.DeviceNumber})");
             }
 
             // Try to play a sound
@@ -210,12 +270,19 @@ namespace ConditioningControlPanel.Services
             {
                 StopSound();
                 _soundFile = new AudioFileReader(playFile);
-                _soundPlayer = new WaveOutEvent();
-                _soundFile.Volume = 0.5f; // Fixed 50% for test — bypasses curve
-                _soundPlayer.Init(_soundFile);
-                _soundPlayer.Play();
-                diagnostics.AppendLine($"Playing: {Path.GetFileName(playFile)} at 50% volume");
-                diagnostics.AppendLine("If you can't hear this, check Windows volume mixer.");
+                _soundPlayer = CreateWaveOut();
+                if (_soundPlayer == null)
+                {
+                    diagnostics.AppendLine("Playback FAILED: no usable audio output device (check Windows default playback device and audio service)");
+                }
+                else
+                {
+                    _soundFile.Volume = 0.5f; // Fixed 50% for test — bypasses curve
+                    _soundPlayer.Init(_soundFile);
+                    _soundPlayer.Play();
+                    diagnostics.AppendLine($"Playing: {Path.GetFileName(playFile)} at 50% volume (device #{_soundPlayer.DeviceNumber})");
+                    diagnostics.AppendLine("If you can't hear this, check Windows volume mixer.");
+                }
             }
             catch (Exception ex)
             {
@@ -348,13 +415,19 @@ namespace ConditioningControlPanel.Services
                 }
 
                 _soundFile = new AudioFileReader(path);
-                _soundPlayer = new WaveOutEvent();
-                
+                _soundPlayer = CreateWaveOut();
+                if (_soundPlayer == null)
+                {
+                    _soundFile.Dispose();
+                    _soundFile = null;
+                    return 0;
+                }
+
                 // Apply volume curve (gentler, minimum 5%)
                 var volume = volumePercent / 100.0f;
                 var curvedVolume = Math.Max(0.05f, (float)Math.Pow(volume, 1.5));
                 _soundFile.Volume = curvedVolume;
-                
+
                 _soundPlayer.Init(_soundFile);
                 _soundPlayer.Play();
                 

@@ -509,23 +509,21 @@ internal class BouncingTextWindow : Window
         // Convert global position to local screen position
         var localX = x - (_screen.Bounds.X / _dpiScale);
         var localY = y - (_screen.Bounds.Y / _dpiScale);
-        
-        // Check if any part of the text is visible on this screen
-        bool isVisible = (localX + textWidth >= 0) && 
-                         (localX < Width) && 
-                         (localY + textHeight >= 0) && 
-                         (localY < Height);
-        
-        if (isVisible)
-        {
-            Canvas.SetLeft(_textBlock, localX);
-            Canvas.SetTop(_textBlock, localY);
-            _textBlock.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            _textBlock.Visibility = Visibility.Collapsed;
-        }
+
+        // Just position the text and let WPF clip it to the window naturally. The
+        // previous "is any part visible on this screen?" check used Width/Height
+        // (this window's bounds, computed from the desktop DPI scale) as the
+        // boundary, which goes wrong on mixed-DPI multi-monitor setups: the text
+        // would appear to "hide and come back" inside a region of the screen
+        // because the visibility math thought we were off-screen when we weren't.
+        // (Bug #188.) The bouncing math in BouncingTextService keeps _posX/_posY
+        // inside the virtual desktop bounds anyway, so any window that covers part
+        // of where the text is will render it; windows that don't cover that
+        // region just render the text off-canvas and WPF clips it. No visibility
+        // toggle needed.
+        Canvas.SetLeft(_textBlock, localX);
+        Canvas.SetTop(_textBlock, localY);
+        _textBlock.Visibility = Visibility.Visible;
     }
 
     private void MakeClickThrough()
