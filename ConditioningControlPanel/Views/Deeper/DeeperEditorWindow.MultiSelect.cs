@@ -62,8 +62,10 @@ namespace ConditioningControlPanel.Views.Deeper
         /// <summary>
         /// Drive selection in response to a mouse click on a timeline item.
         /// Ctrl held = toggle the item's membership in the selection set
-        /// (without changing the primary anchor). Plain click = collapse the
-        /// set to just this item.
+        /// (without changing the primary anchor). Plain click on an item
+        /// that's already part of a multi-selection PRESERVES the set so
+        /// the click can initiate a group drag — clicking an outside item
+        /// collapses the set to just that item.
         /// </summary>
         private void HandleSelectionClick(object item)
         {
@@ -72,14 +74,123 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 if (!_selectionSet.Add(item)) _selectionSet.Remove(item);
             }
-            else
+            else if (!_selectionSet.Contains(item))
             {
                 _selectionSet.Clear();
                 _selectionSet.Add(item);
             }
+            // else: plain click on an already-selected item — leave the set
+            // intact so the subsequent drag moves the whole group.
         }
 
         internal bool IsInSelectionSet(object? item) => item != null && _selectionSet.Contains(item);
+
+        /// <summary>True when Ctrl was held during the current click so the
+        /// caller should treat the click as a pure selection toggle and skip
+        /// all drag-init / mouse-capture work.</summary>
+        internal static bool IsCtrlDown()
+            => (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+
+        // -- Group drag --------------------------------------------------------
+        // When a drag starts on an item that's part of a multi-selection, we
+        // capture every selected item's original Start so MouseMove can apply
+        // a single clamped delta to all of them. Without this, the primary
+        // moves but the rest stay put, and per-tick deltas would drift.
+
+        // Maps each in-multi-selection item -> its original Start at drag begin.
+        // Empty (or 1 entry) means single-item drag — fall through to the
+        // existing per-item code paths.
+        private readonly Dictionary<object, double> _multiDragOriginalStart = new();
+        // Pre-computed clamp window so the leftmost item never goes below 0
+        // and the rightmost item never crosses _totalSeconds.
+        private double _multiDragMinDelta;
+        private double _multiDragMaxDelta;
+
+        internal void BeginMultiDragCapture()
+        {
+            _multiDragOriginalStart.Clear();
+            if (_selectionSet.Count <= 1) return;
+
+            double minStart = double.MaxValue;
+            double maxEnd = double.MinValue;
+            foreach (var sel in _selectionSet)
+            {
+                switch (sel)
+                {
+                    case Region r:
+                        _multiDragOriginalStart[r] = r.Start;
+                        if (r.Start < minStart) minStart = r.Start;
+                        if (r.End > maxEnd) maxEnd = r.End;
+                        break;
+                    case TimelineItem ti:
+                        _multiDragOriginalStart[ti] = ti.Start;
+                        if (ti.Start < minStart) minStart = ti.Start;
+                        var tiEnd = ti.Start + Math.Max(0, ti.Duration);
+                        if (tiEnd > maxEnd) maxEnd = tiEnd;
+                        break;
+                    case HapticEvent ev:
+                        _multiDragOriginalStart[ev] = ev.Start;
+                        if (ev.Start < minStart) minStart = ev.Start;
+                        var evEnd = ev.Start + ev.Duration;
+                        if (evEnd > maxEnd) maxEnd = evEnd;
+                        break;
+                }
+            }
+
+            // Bound the group within the timeline. If _totalSeconds is unknown
+            // (no media loaded), don't constrain the right edge — the user can
+            // drag freely and the data layer will still accept it.
+            _multiDragMinDelta = -minStart;
+            _multiDragMaxDelta = (_totalSeconds > 0 ? _totalSeconds : double.PositiveInfinity) - maxEnd;
+        }
+
+        internal void EndMultiDragCapture() => _multiDragOriginalStart.Clear();
+
+        internal bool IsMultiDragActive => _multiDragOriginalStart.Count > 1;
+
+        /// <summary>
+        /// Compute the primary item's new Start under the active drag, then —
+        /// if a multi-selection drag is in progress — apply the same clamped
+        /// delta to every other selected item. The caller assigns the return
+        /// value to primary.Start (and adjusts primary.End / Duration as
+        /// before for region / effect-segment cases). Single-item drags get
+        /// the same per-item clamp the original code applied.
+        /// </summary>
+        internal double ComputeShift(object primary, double mouseSec, double dragOffsetSec, double primaryDuration)
+        {
+            var desiredNewStart = mouseSec - dragOffsetSec;
+
+            if (!IsMultiDragActive)
+            {
+                var maxStart = _totalSeconds > 0 ? Math.Max(0, _totalSeconds - primaryDuration) : double.MaxValue;
+                return Math.Max(0, Math.Min(maxStart, desiredNewStart));
+            }
+
+            var primaryOrig = _multiDragOriginalStart.TryGetValue(primary, out var po) ? po : 0;
+            var desiredDelta = desiredNewStart - primaryOrig;
+            var clamped = Math.Max(_multiDragMinDelta, Math.Min(_multiDragMaxDelta, desiredDelta));
+
+            foreach (var (item, originalStart) in _multiDragOriginalStart)
+            {
+                if (ReferenceEquals(item, primary)) continue;
+                var newStart = originalStart + clamped;
+                switch (item)
+                {
+                    case Region r:
+                        var len = Math.Max(0, r.End - r.Start);
+                        r.Start = newStart;
+                        r.End = newStart + len;
+                        break;
+                    case TimelineItem ti:
+                        ti.Start = newStart;
+                        break;
+                    case HapticEvent ev:
+                        ev.Start = newStart;
+                        break;
+                }
+            }
+            return primaryOrig + clamped;
+        }
 
         // -- Rubber-band drag --------------------------------------------------
 

@@ -252,6 +252,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     // Point-style rule: no companion region — just a Rule that fires at the time.
                     _enhancement.Rules.Add(rule);
                     MarkDirty();
+                    RebuildRuleVisuals();
                     SelectRule(rule);
                 }
                 else
@@ -269,6 +270,13 @@ namespace ConditioningControlPanel.Views.Deeper
                     };
                     _enhancement.Regions.Add(region);
                     rule.RegionConstraint = region.Id;
+                    // Wire the trigger's RegionId to the same region so validation
+                    // passes on first save/preview. BuildDefaultTrigger leaves it
+                    // empty because it doesn't know which region we're about to
+                    // create; setting it here keeps the band-style rule fully
+                    // self-contained.
+                    if (rule.Trigger is RegionEnteredTrigger reTrig) reTrig.RegionId = region.Id;
+                    else if (rule.Trigger is RegionExitedTrigger rxTrig) rxTrig.RegionId = region.Id;
                     _enhancement.Rules.Add(rule);
                     MarkDirty();
                     RebuildRegionVisuals();
@@ -386,7 +394,17 @@ namespace ConditioningControlPanel.Views.Deeper
             dot.MouseLeftButtonDown += (s, e) =>
             {
                 e.Handled = true;
+                bool ctrl = IsCtrlDown();
                 HandleSelectionClick(item);
+                if (ctrl)
+                {
+                    // Pure toggle — refresh all lanes so the new selection-set
+                    // membership is reflected. Don't promote to primary.
+                    RebuildRegionVisuals();
+                    RebuildHapticVisuals();
+                    RebuildEffectVisuals();
+                    return;
+                }
                 SelectEffect(item);
             };
 
@@ -454,11 +472,24 @@ namespace ConditioningControlPanel.Views.Deeper
             // returns ~(0,0) and trips the left-edge resize check unconditionally.
             var pos = e.GetPosition(r);
             var rectWidth = r.ActualWidth;
+            bool ctrl = IsCtrlDown();
             HandleSelectionClick(item);
+            // Ctrl+Click is a pure selection toggle — no drag-init, no mouse
+            // capture, no primary swap. Refresh visuals so the new selection-
+            // set membership is reflected immediately.
+            if (ctrl)
+            {
+                RebuildRegionVisuals();
+                RebuildHapticVisuals();
+                RebuildEffectVisuals();
+                e.Handled = true;
+                return;
+            }
             SelectEffect(item);
 
             _draggedEffect = item;
             _effectDragOriginalDuration = Math.Max(0, item.Duration);
+            BeginMultiDragCapture();
 
             if (pos.X <= EdgeResizePx)
             {
@@ -491,6 +522,8 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildEffectVisuals();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
+            RebuildRuleVisuals();
+            RefreshItemsList();
         }
 
         private void UpdateSelectedSidePanelForEffect()
@@ -741,6 +774,113 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 if (changed) MarkDirty();
             }
+        }
+
+        // -- Rule indicators on timeline ------------------------------------------
+        // TimeReached rules don't have a Region (so RebuildRegionVisuals skips
+        // them), and they aren't Effects either. Without a dedicated visual they
+        // were invisible on the timeline — the user could create one but had no
+        // way to find or click it again. This renders each TimeReached rule as
+        // a thin orange pin: a vertical line at the trigger time topped with a
+        // small flag, click-to-select, with a wider transparent hit area.
+
+        private readonly System.Collections.Generic.List<System.Windows.UIElement> _ruleVisuals = new();
+        private static readonly System.Windows.Media.Color RulePinColor =
+            System.Windows.Media.Color.FromRgb(0xFF, 0x8C, 0x00);
+
+        private void RebuildRuleVisuals()
+        {
+            try
+            {
+                foreach (var v in _ruleVisuals)
+                {
+                    try { TimelineCanvas.Children.Remove(v); } catch { }
+                }
+                _ruleVisuals.Clear();
+
+                var w = TimelineCanvas.ActualWidth;
+                var h = TimelineCanvas.ActualHeight;
+                if (w <= 0 || h <= 0 || _totalSeconds <= 0) return;
+
+                int idx = 0;
+                foreach (var rule in _enhancement.Rules)
+                {
+                    idx++;
+                    if (rule?.Trigger is not TimeReachedTrigger tr) continue;
+                    BuildRulePin(rule, tr, idx, w, h);
+                }
+                EnsurePlayheadOnTop();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: RebuildRuleVisuals error: {Error}", ex.Message);
+            }
+        }
+
+        private void BuildRulePin(EnhancementRule rule, TimeReachedTrigger tr, int oneBasedIndex,
+            double canvasWidth, double canvasHeight)
+        {
+            double x = (Math.Max(0, tr.Time) / _totalSeconds) * canvasWidth;
+            bool isSelected = rule == _selectedRule;
+
+            var brush = new System.Windows.Media.SolidColorBrush(RulePinColor);
+            brush.Freeze();
+            var selStroke = isSelected ? System.Windows.Media.Brushes.White : null;
+
+            // Vertical pin line
+            var line = new System.Windows.Shapes.Line
+            {
+                X1 = x, X2 = x,
+                Y1 = 0, Y2 = canvasHeight,
+                Stroke = brush,
+                StrokeThickness = isSelected ? 2.5 : 1.5,
+                StrokeDashArray = new System.Windows.Media.DoubleCollection { 4, 3 },
+                IsHitTestVisible = false
+            };
+            Panel.SetZIndex(line, 9);
+            TimelineCanvas.Children.Add(line);
+            _ruleVisuals.Add(line);
+
+            // Flag at top — a small filled triangle (right-pointing pennant) so
+            // it's distinguishable from region rectangles and effect dots.
+            var flag = new System.Windows.Shapes.Polygon
+            {
+                Points = new System.Windows.Media.PointCollection
+                {
+                    new Point(x, 2),
+                    new Point(x + 12, 6),
+                    new Point(x, 10)
+                },
+                Fill = brush,
+                Stroke = selStroke,
+                StrokeThickness = isSelected ? 1.5 : 0,
+                IsHitTestVisible = false
+            };
+            Panel.SetZIndex(flag, 10);
+            TimelineCanvas.Children.Add(flag);
+            _ruleVisuals.Add(flag);
+
+            // Wider transparent hit-rect so the user can click on or near the
+            // pin without pixel-precise aiming.
+            var hit = new System.Windows.Shapes.Rectangle
+            {
+                Width = 14,
+                Height = canvasHeight,
+                Fill = System.Windows.Media.Brushes.Transparent,
+                Cursor = Cursors.Hand,
+                Tag = rule,
+                ToolTip = $"Rule #{oneBasedIndex} · time {tr.Time:0.##}s"
+            };
+            Canvas.SetLeft(hit, x - 7);
+            Canvas.SetTop(hit, 0);
+            Panel.SetZIndex(hit, 11);
+            hit.MouseLeftButtonDown += (s, e) =>
+            {
+                e.Handled = true;
+                SelectRule(rule);
+            };
+            TimelineCanvas.Children.Add(hit);
+            _ruleVisuals.Add(hit);
         }
 
         // -- Helpers --------------------------------------------------------------

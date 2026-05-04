@@ -302,11 +302,15 @@ namespace ConditioningControlPanel.Services.Deeper
 
         public Enhancement CreateBlank(string mediaType, string mediaSource)
         {
+            // Leave Name empty so the editor's HT auto-fill can populate it
+            // from og:title. UpdateTitle() falls back to the localized
+            // "Untitled" string when Name is empty, so the window header
+            // still reads correctly until the user (or auto-fill) sets one.
             return new Enhancement
             {
                 MediaType = mediaType,
                 MediaSource = mediaSource,
-                Metadata = new EnhancementMetadata { Name = "Untitled" }
+                Metadata = new EnhancementMetadata()
             };
         }
 

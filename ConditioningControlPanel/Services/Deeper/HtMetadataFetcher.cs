@@ -210,22 +210,38 @@ namespace ConditioningControlPanel.Services.Deeper
                 }
             }
 
-            // 2) HypnoTube uploader link, anchored on the "Submitted by" text
-            // marker. A naive "first /user/ link wins" matched the brand/source
-            // badge ("mechbunny.com") that HT places earlier in the markup than
-            // the actual uploader profile link, so we anchor specifically on
-            // the "Submitted by" caption that prefixes the real uploader.
-            // Falls through to JSON-LD / meta-author if the marker is absent.
-            var linkMatch = HtUploaderRegex.Match(html);
-            if (linkMatch.Success && linkMatch.Groups.Count > 1)
+            // 2) HypnoTube uploader link. The current markup wraps an avatar
+            // img + a "Submitted by NAME" caption inside a single
+            //   <a href="https://hypnotube.com/user/.../" title="NAME"> ... </a>
+            // We anchor the regex on a "Submitted by" caption appearing
+            // INSIDE the anchor body so unrelated /user/ links elsewhere on
+            // the page (sidebar, related videos, comments) can't shadow the
+            // real uploader. Prefer the anchor's title="..." attribute since
+            // it's the cleanest source of the username; fall back to the
+            // text after "Submitted by" if title is missing or domain-shaped.
+            var anchorMatch = HtUploaderAnchorRegex.Match(html);
+            if (anchorMatch.Success && anchorMatch.Groups.Count > 2)
             {
-                var uploader = WebDecode(linkMatch.Groups[1].Value).Trim();
-                // Strip any inner HTML (avatar img tags, spans, etc.)
-                uploader = Regex.Replace(uploader, "<[^>]+>", "").Trim();
-                // Domain-style values ("mechbunny.com") are brand attributions,
-                // not uploader names — fall through so the next strategies run.
-                if (!string.IsNullOrEmpty(uploader) && !LooksLikeDomainName(uploader))
-                    meta.Uploader = uploader;
+                var attrs = anchorMatch.Groups[1].Value;
+                var inner = anchorMatch.Groups[2].Value;
+                string? candidate = null;
+
+                var titleMatch = TitleAttrRegex.Match(attrs);
+                if (titleMatch.Success && titleMatch.Groups.Count > 1)
+                    candidate = WebDecode(titleMatch.Groups[1].Value).Trim();
+
+                if (string.IsNullOrEmpty(candidate) || LooksLikeDomainName(candidate))
+                {
+                    // Strip nested tags (img, span.sub-label, etc.) before
+                    // searching so the regex sees a clean "Submitted by NAME".
+                    var stripped = Regex.Replace(inner, "<[^>]+>", " ");
+                    var subMatch = SubmittedByTextRegex.Match(stripped);
+                    if (subMatch.Success && subMatch.Groups.Count > 1)
+                        candidate = WebDecode(subMatch.Groups[1].Value).Trim();
+                }
+
+                if (!string.IsNullOrEmpty(candidate) && !LooksLikeDomainName(candidate))
+                    meta.Uploader = candidate;
             }
 
             // 3) JSON-LD VideoObject for uploader (fallback).
@@ -263,13 +279,27 @@ namespace ConditioningControlPanel.Services.Deeper
             @"<meta[^>]+property\s*=\s*[""']og:video:tag[""'][^>]+content\s*=\s*[""']([^""']+)[""']",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        // HypnoTube renders the uploader as `Submitted by <a href="/user/...">NAME</a>`.
-        // The optional `(?:<[^>]+>\s*)*` swallows any avatar img / wrapper span /
-        // whitespace HT inserts between the caption and the link. Singular AND
-        // plural /user|/users supported in case HT ever changes its URL scheme.
-        private static readonly Regex HtUploaderRegex = new(
-            @"Submitted\s+by\s*(?:<[^>]+>\s*)*<a[^>]+href\s*=\s*[""']/users?/[^""']+[""'][^>]*>(.*?)</a>",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline);
+        // HypnoTube wraps the avatar img + "Submitted by NAME" caption inside
+        // a single <a href="https://hypnotube.com/user/.../" title="NAME">…</a>.
+        // We require the body to contain the "Submitted by" caption so that
+        // unrelated /user/ links (sidebar, related videos) can't shadow the
+        // real uploader. Group 1 = anchor attributes (for title=""), group 2
+        // = anchor inner HTML (for the "Submitted by NAME" fallback). The
+        // href accepts either an absolute URL or a relative /user(s)/... path
+        // so older or future markup variants still match.
+        private static readonly Regex HtUploaderAnchorRegex = new(
+            @"<a\b([^>]*\bhref\s*=\s*[""'][^""']*?/users?/[^""']+[""'][^>]*)>([\s\S]*?Submitted\s+by[\s\S]*?)</a>",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex TitleAttrRegex = new(
+            @"\btitle\s*=\s*[""']([^""']+)[""']",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // Matches the username text that follows the "Submitted by" caption
+        // after nested tags (img, span.sub-label) have been stripped out.
+        private static readonly Regex SubmittedByTextRegex = new(
+            @"Submitted\s+by\s*[:\-]?\s*([^<\r\n]+)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         // Brand attributions like "mechbunny.com" / "videos-host.tv" should not
         // be returned as uploader names. Conservative TLD list — extend if HT

@@ -467,6 +467,57 @@
 
                         <Separator Margin="0,10,0,14"/>
 
+                        <!-- Items overview: collapsible list of every rule + effect on this
+                             enhancement, with a row-level bin button. Lets the user delete
+                             things without first hunting them down on the timeline.
+                             ScrollViewer caps height at ~6 rows; rows beyond scroll.
+                             Themed with DeeperAccent dynamic resources so Deeper-themed
+                             mods recolor it alongside the rest of the editor. -->
+                        <StackPanel x:Name="ItemsListSection" Margin="0,0,0,12">
+                            <ToggleButton x:Name="ItemsListToggle" IsChecked="True"
+                                          Cursor="Hand" HorizontalContentAlignment="Stretch"
+                                          Padding="10,6"
+                                          Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                          BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                          BorderThickness="1"
+                                          Foreground="{DynamicResource TextLightBrush}"
+                                          Checked="ItemsListToggle_Changed"
+                                          Unchecked="ItemsListToggle_Changed">
+                                <DockPanel LastChildFill="True">
+                                    <TextBlock x:Name="ItemsListChevron" DockPanel.Dock="Left"
+                                               Text="▼" FontSize="11"
+                                               Foreground="{DynamicResource DeeperAccentBrush}"
+                                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock x:Name="TxtItemsListCount" DockPanel.Dock="Right"
+                                               Foreground="{DynamicResource TextDimBrush}"
+                                               FontSize="11" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{loc:Str deeper_editor_section_items_list}"
+                                               Foreground="{DynamicResource DeeperAccentBrush}"
+                                               FontSize="12" FontWeight="Bold"
+                                               VerticalAlignment="Center"/>
+                                </DockPanel>
+                            </ToggleButton>
+                            <Border x:Name="ItemsListContent"
+                                    Background="{DynamicResource PanelBgBrush}"
+                                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                    BorderThickness="1,0,1,1">
+                                <Grid>
+                                    <TextBlock x:Name="TxtItemsListEmpty"
+                                               Text="{loc:Str deeper_editor_items_list_empty}"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="11" FontStyle="Italic"
+                                               TextWrapping="Wrap" Padding="10,8"
+                                               Visibility="Collapsed"/>
+                                    <ScrollViewer x:Name="ItemsListScroll"
+                                                  MaxHeight="240"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsControl x:Name="LstAllItems"/>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+
                         <TextBlock Text="{loc:Str deeper_editor_section_selected}"
                                    Foreground="{DynamicResource DeeperAccentBrush}"
                                    FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>

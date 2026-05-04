@@ -332,7 +332,11 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
+            RebuildRuleVisuals();
             RefreshRulesList();
+            // Initial-load population — MarkDirty is suppressed during load so
+            // its piggy-backed RefreshItemsList won't fire; do it explicitly here.
+            RefreshItemsList();
 
             // Fire HT metadata auto-fill in the background. Hostname-gated inside
             // the fetcher; non-HT URLs are silent no-ops.
@@ -840,6 +844,7 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
+            RebuildRuleVisuals();
         }
 
         // -- Timeline zoom -----------------------------------------------------
@@ -883,6 +888,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 RebuildRegionVisuals();
                 RebuildHapticVisuals();
                 RebuildEffectVisuals();
+                RebuildRuleVisuals();
 
                 if (timeAnchor is double ta && _totalSeconds > 0 && anchorViewportX is double ax2)
                 {
@@ -955,11 +961,15 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_dragMode == DragMode.ShiftHapticEvent && _draggedHaptic != null)
             {
                 PushDragSnapshotOnce();
-                var newStart = MouseToSeconds(e) - _hapticDragOffsetSec;
-                newStart = Math.Max(0, Math.Min(newStart, Math.Max(0, _totalSeconds - _draggedHaptic.Duration)));
+                var newStart = ComputeShift(_draggedHaptic, MouseToSeconds(e), _hapticDragOffsetSec, _draggedHaptic.Duration);
                 _draggedHaptic.Start = newStart;
                 MarkDirty();
                 RebuildHapticVisuals();
+                if (IsMultiDragActive)
+                {
+                    RebuildRegionVisuals();
+                    RebuildEffectVisuals();
+                }
                 if (_selectedHaptic == _draggedHaptic) PopulateHapticEditor();
                 return;
             }
@@ -988,12 +998,16 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_dragMode == DragMode.DragRegion && _draggedRegion != null)
             {
                 PushDragSnapshotOnce();
-                var newStart = MouseToSeconds(e) - _regionDragOffsetSec;
-                newStart = Math.Max(0, Math.Min(newStart, Math.Max(0, _totalSeconds - _regionDragOriginalLength)));
+                var newStart = ComputeShift(_draggedRegion, MouseToSeconds(e), _regionDragOffsetSec, _regionDragOriginalLength);
                 _draggedRegion.Start = newStart;
                 _draggedRegion.End = newStart + _regionDragOriginalLength;
                 MarkDirty();
                 RebuildRegionVisuals();
+                if (IsMultiDragActive)
+                {
+                    RebuildHapticVisuals();
+                    RebuildEffectVisuals();
+                }
                 if (_selectedRegion == _draggedRegion) UpdateSelectedSidePanel();
                 return;
             }
@@ -1020,11 +1034,15 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_dragMode == DragMode.DragEffect && _draggedEffect != null)
             {
                 PushDragSnapshotOnce();
-                var newStart = MouseToSeconds(e) - _effectDragOffsetSec;
-                newStart = Math.Max(0, Math.Min(newStart, Math.Max(0, _totalSeconds - _effectDragOriginalDuration)));
+                var newStart = ComputeShift(_draggedEffect, MouseToSeconds(e), _effectDragOffsetSec, _effectDragOriginalDuration);
                 _draggedEffect.Start = newStart;
                 MarkDirty();
                 RebuildEffectVisuals();
+                if (IsMultiDragActive)
+                {
+                    RebuildRegionVisuals();
+                    RebuildHapticVisuals();
+                }
                 if (_selectedEffect == _draggedEffect) UpdateSelectedSidePanelForEffect();
                 return;
             }
@@ -1087,6 +1105,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _draggedHapticTrack = null;
                 _dragMode = DragMode.None;
                 _dragSnapshotPushed = false;
+                EndMultiDragCapture();
                 TimelineCanvas.ReleaseMouseCapture();
                 ScheduleValidation();
                 return;
@@ -1098,6 +1117,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _draggedRegion = null;
                 _dragMode = DragMode.None;
                 _dragSnapshotPushed = false;
+                EndMultiDragCapture();
                 TimelineCanvas.ReleaseMouseCapture();
                 ScheduleValidation();
                 return;
@@ -1109,6 +1129,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _draggedEffect = null;
                 _dragMode = DragMode.None;
                 _dragSnapshotPushed = false;
+                EndMultiDragCapture();
                 TimelineCanvas.ReleaseMouseCapture();
                 ScheduleValidation();
                 return;
@@ -1249,6 +1270,7 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
+            RebuildRuleVisuals();
             RefreshRulesList();
         }
 
@@ -1278,6 +1300,7 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
+            RebuildRuleVisuals();
             RefreshRulesList();
         }
 
@@ -1293,6 +1316,7 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
+            RebuildRuleVisuals();
             RefreshRulesList();
         }
 
@@ -1487,8 +1511,21 @@ namespace ConditioningControlPanel.Views.Deeper
             // returns ~(0,0) and trips the left-edge resize check unconditionally.
             var pos = e.GetPosition(r);
             var rectWidth = r.ActualWidth;
+            bool ctrl = IsCtrlDown();
 
             HandleSelectionClick(region);
+            // Ctrl+Click is a pure selection toggle — no drag-init, no mouse
+            // capture, no primary swap. Refresh visuals so the new selection-
+            // set membership is reflected immediately.
+            if (ctrl)
+            {
+                RebuildRegionVisuals();
+                RebuildHapticVisuals();
+                RebuildEffectVisuals();
+                e.Handled = true;
+                return;
+            }
+
             // If a rule constrains this region, treat the band as the rule's
             // visual representation: select the Rule (so trigger / action /
             // gaze rect / "Pick on video…" controls are reachable from a single
@@ -1507,6 +1544,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
             _draggedRegion = region;
             _regionDragOriginalLength = Math.Max(0, region.End - region.Start);
+            BeginMultiDragCapture();
 
             if (pos.X <= EdgeResizePx)
             {
@@ -1654,7 +1692,18 @@ namespace ConditioningControlPanel.Views.Deeper
             // returns ~(0,0) and trips the left-edge resize check unconditionally.
             var pos = e.GetPosition(r);
             var rectWidth = r.ActualWidth;
+            bool ctrl = IsCtrlDown();
             HandleSelectionClick(ev);
+            // Ctrl+Click is a pure selection toggle — no drag-init, no mouse
+            // capture, no primary swap.
+            if (ctrl)
+            {
+                RebuildRegionVisuals();
+                RebuildHapticVisuals();
+                RebuildEffectVisuals();
+                e.Handled = true;
+                return;
+            }
             SelectHaptic(track, ev);
 
             // Begin drag-shift on pointer hold (no Shift modifier — that's region-create).
@@ -1690,6 +1739,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _draggedHapticTrack = track;
                 _hapticDragStartSec = ev.Start;
                 _hapticDragOffsetSec = MouseToSeconds(e) - ev.Start;
+                BeginMultiDragCapture();
                 TimelineCanvas.CaptureMouse();
             }
             e.Handled = true;
@@ -1962,7 +2012,9 @@ namespace ConditioningControlPanel.Views.Deeper
             // redesign — rules are now created via right-click on the timeline
             // and edited via the Selected Item panel when a band is selected.
             // This method is kept as a stable hook so legacy callers don't
-            // need to be updated; it's a no-op now.
+            // need to be updated; it now also drives the side-panel Rules &
+            // Effects overview list (selection highlight + count).
+            RefreshItemsList();
         }
 
         private System.Windows.UIElement BuildRuleRow(EnhancementRule rule, int index)
@@ -2145,6 +2197,7 @@ namespace ConditioningControlPanel.Views.Deeper
             _enhancement.Rules.Remove(_selectedRule);
             SelectNothing();
             MarkDirty();
+            RebuildRuleVisuals();
             ScheduleValidation();
         }
 
@@ -2371,6 +2424,7 @@ namespace ConditioningControlPanel.Views.Deeper
             EndGazePick(commit: false);
             BuildTriggerFields();
             MarkDirty();
+            RebuildRuleVisuals();
             RefreshRulesList();
             ScheduleValidation();
         }
@@ -2456,7 +2510,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     break;
                 case TimeReachedTrigger tr:
                     AddDoubleField(TriggerFields, Loc.Get("deeper_editor_trigger_time"),
-                        tr.Time, v => tr.Time = Math.Max(0, v));
+                        tr.Time, v => { tr.Time = Math.Max(0, v); RebuildRuleVisuals(); });
                     AssignNameToLastTextBox(TriggerFields, "TutorialTriggerTimeField");
                     break;
                 case RegionEnteredTrigger re:
@@ -3273,6 +3327,12 @@ namespace ConditioningControlPanel.Views.Deeper
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
+                // Heal band-style rules whose trigger.RegionId is empty but whose
+                // RegionConstraint already points to a real region (older buggy
+                // path left RegionId blank). Without this, validation rejects
+                // the in-memory enhancement and the player opens with no media —
+                // exactly what the user reported when Preview "did nothing".
+                HealEmptyTriggerRegionIds();
                 var win = new EnhancementPlayerWindow(
                     App.DeeperPlayer, App.DeeperHost, _enhancement, "editor-preview")
                 { Owner = this };
@@ -3285,6 +3345,32 @@ namespace ConditioningControlPanel.Views.Deeper
                     string.Format(Loc.Get("deeper_editor_preview_open_failed_fmt"), $"{ex.GetType().Name}: {ex.Message}"),
                     Loc.Get("deeper_editor_preview_failed_title"),
                     MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void HealEmptyTriggerRegionIds()
+        {
+            try
+            {
+                var regionIds = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+                foreach (var r in _enhancement.Regions)
+                    if (!string.IsNullOrEmpty(r?.Id)) regionIds.Add(r.Id);
+
+                foreach (var rule in _enhancement.Rules)
+                {
+                    if (rule == null) continue;
+                    var fallbackId = rule.RegionConstraint;
+                    if (string.IsNullOrEmpty(fallbackId) || !regionIds.Contains(fallbackId)) continue;
+
+                    if (rule.Trigger is RegionEnteredTrigger re && string.IsNullOrEmpty(re.RegionId))
+                        re.RegionId = fallbackId;
+                    else if (rule.Trigger is RegionExitedTrigger rx && string.IsNullOrEmpty(rx.RegionId))
+                        rx.RegionId = fallbackId;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: HealEmptyTriggerRegionIds error: {Error}", ex.Message);
             }
         }
 
@@ -3381,6 +3467,9 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_suppressDirty) return;
             _isDirty = true;
             TxtDirty.Visibility = Visibility.Visible;
+            // Items overview is data-driven; every mutation refreshes it once
+            // here, instead of bolting a call onto each individual mutator.
+            RefreshItemsList();
         }
 
         private void ScheduleValidation()
