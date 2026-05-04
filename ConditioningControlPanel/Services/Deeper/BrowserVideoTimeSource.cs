@@ -88,10 +88,15 @@ namespace ConditioningControlPanel.Services.Deeper
         private async Task PollAsync()
         {
             if (!_attached || _pollInFlight) return;
-            if (_webView.CoreWebView2 == null) return;
             _pollInFlight = true;
             try
             {
+                // CoreWebView2 access must be inside the try: once the WebView2
+                // control has been Disposed (typically during app shutdown), the
+                // property throws ObjectDisposedException instead of returning
+                // null, and a tick that landed mid-shutdown would route the
+                // exception to DispatcherUnhandledException.
+                if (_webView.CoreWebView2 == null) return;
                 var json = await _webView.CoreWebView2.ExecuteScriptAsync(PollScript);
                 if (string.IsNullOrEmpty(json) || json == "null") return;
 
@@ -122,6 +127,12 @@ namespace ConditioningControlPanel.Services.Deeper
                     catch (Exception ex) { App.Logger?.Debug("BrowserVideoTimeSource subscriber error: {Error}", ex.Message); }
                 }
             }
+            catch (ObjectDisposedException)
+            {
+                // WebView2 was disposed underneath us (app shutdown). Stop the
+                // timer so we don't re-throw on every subsequent tick.
+                Detach();
+            }
             catch (Exception ex)
             {
                 App.Logger?.Debug("BrowserVideoTimeSource poll error: {Error}", ex.Message);
@@ -138,6 +149,8 @@ namespace ConditioningControlPanel.Services.Deeper
 
         public void Seek(double seconds)
         {
+            // try-catch swallows ObjectDisposedException too — the CoreWebView2
+            // property throws if the WebView control was disposed mid-call.
             try
             {
                 if (_webView.CoreWebView2 == null) return;
