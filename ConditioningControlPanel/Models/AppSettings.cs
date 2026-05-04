@@ -644,6 +644,25 @@ namespace ConditioningControlPanel.Models
             set { _backgroundMusicEnabled = value; OnPropertyChanged(); }
         }
 
+        // MMDevice ID of the playback endpoint the user wants CCP audio routed to.
+        // Empty = system default. Streaming use case: route CCP to a private headset
+        // while the stream's default endpoint stays clean.
+        private string _audioOutputDeviceId = "";
+        public string AudioOutputDeviceId
+        {
+            get => _audioOutputDeviceId;
+            set { _audioOutputDeviceId = value ?? ""; OnPropertyChanged(); }
+        }
+
+        // Friendly name of the chosen device, persisted as a fallback in case the
+        // MMDevice ID changes across reboots/driver updates — we then re-resolve by name.
+        private string _audioOutputDeviceName = "";
+        public string AudioOutputDeviceName
+        {
+            get => _audioOutputDeviceName;
+            set { _audioOutputDeviceName = value ?? ""; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Subliminals
@@ -3152,6 +3171,19 @@ namespace ConditioningControlPanel.Models
         {
             get => _webcamCalibrationMode;
             set { _webcamCalibrationMode = value ?? ""; OnPropertyChanged(); }
+        }
+
+        // Which monitor the calibration / Quick Recal / Tracker Test windows
+        // open on. "Primary" = follow the system primary; otherwise the
+        // System.Windows.Forms.Screen.DeviceName (e.g. "\\.\DISPLAY2"). Stored
+        // by device name (not index) so reordering monitors is non-destructive
+        // when possible — when the named display is gone, the runtime falls
+        // back to Primary silently.
+        private string _webcamCalibrationScreen = "Primary";
+        public string WebcamCalibrationScreen
+        {
+            get => _webcamCalibrationScreen;
+            set { _webcamCalibrationScreen = string.IsNullOrWhiteSpace(value) ? "Primary" : value; OnPropertyChanged(); }
         }
 
         // Index passed to OpenCV's VideoCapture. -1 means "not yet chosen", which

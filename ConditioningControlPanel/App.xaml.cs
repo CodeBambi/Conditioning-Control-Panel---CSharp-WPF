@@ -428,6 +428,64 @@ namespace ConditioningControlPanel
             }
         }
 
+        /// <summary>
+        /// Returns the monitor the user picked for webcam calibration / Quick
+        /// Recal / Tracker Test, falling back to the primary screen if their
+        /// saved choice is "Primary" or no longer present (monitor unplugged
+        /// or device-name-renamed). Never returns null on a working system —
+        /// callers can assume a valid Screen comes back.
+        /// </summary>
+        public static System.Windows.Forms.Screen? GetWebcamCalibrationScreen()
+        {
+            try
+            {
+                var name = Settings?.Current?.WebcamCalibrationScreen;
+                var screens = GetAllScreensCached();
+                if (screens.Length == 0) return System.Windows.Forms.Screen.PrimaryScreen;
+                if (string.IsNullOrEmpty(name) || string.Equals(name, "Primary", StringComparison.OrdinalIgnoreCase))
+                    return System.Windows.Forms.Screen.PrimaryScreen ?? screens[0];
+                foreach (var s in screens)
+                {
+                    if (string.Equals(s.DeviceName, name, StringComparison.OrdinalIgnoreCase))
+                        return s;
+                }
+                Logger?.Debug("GetWebcamCalibrationScreen: saved monitor {Name} not found, falling back to Primary", name);
+                return System.Windows.Forms.Screen.PrimaryScreen ?? screens[0];
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("GetWebcamCalibrationScreen failed: {Error}", ex.Message);
+                return System.Windows.Forms.Screen.PrimaryScreen;
+            }
+        }
+
+        /// <summary>
+        /// Positions a borderless WPF window so it maximizes on the user's
+        /// chosen calibration monitor. Must be called BEFORE Show()/ShowDialog().
+        /// Safe no-op if the screen lookup fails.
+        /// </summary>
+        public static void ApplyCalibrationScreenPlacement(System.Windows.Window window)
+        {
+            if (window == null) return;
+            try
+            {
+                var screen = GetWebcamCalibrationScreen();
+                if (screen == null) return;
+                // For Maximized + WindowStartupLocation=Manual, WPF picks the
+                // monitor containing (Left, Top) and maximizes there. Setting
+                // these in physical pixels is fine — the position only needs
+                // to land somewhere inside the target screen's pixel rect, and
+                // a pixel offset stays inside the same monitor.
+                window.WindowStartupLocation = System.Windows.WindowStartupLocation.Manual;
+                window.Left = screen.Bounds.Left;
+                window.Top = screen.Bounds.Top;
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("ApplyCalibrationScreenPlacement failed: {Error}", ex.Message);
+            }
+        }
+
         // --- CCP window rect cache (used by Awareness Engine self-exclusion) ---
         private static System.Drawing.Rectangle[]? _cachedCcpWindowRects;
         private static DateTime _ccpWindowRectsCacheTime = DateTime.MinValue;

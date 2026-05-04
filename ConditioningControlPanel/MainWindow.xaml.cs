@@ -663,6 +663,7 @@ namespace ConditioningControlPanel
                     {
                         var audioFile = new AudioFileReader(soundPath);
                         var outputDevice = new WaveOutEvent();
+                        App.Audio?.ApplyPreferredDevice(outputDevice);
 
                         var masterVolume = App.Settings.Current.MasterVolume / 100f;
                         var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.2625f;
@@ -4073,6 +4074,7 @@ namespace ConditioningControlPanel
 
             AppendWebcamDebugLog("Opening calibration window…");
             var calDlg = new WebcamCalibrationWindow { Owner = this };
+            App.ApplyCalibrationScreenPlacement(calDlg);
             var result = calDlg.ShowDialog();
 
             if (result == true)
@@ -4448,6 +4450,7 @@ namespace ConditioningControlPanel
 
             AppendWebcamDebugLog("Opening tracker test window…");
             var trackerDlg = new WebcamGazeTrackerWindow { Owner = this };
+            App.ApplyCalibrationScreenPlacement(trackerDlg);
             trackerDlg.ShowDialog();
             AppendWebcamDebugLog("Tracker test closed.");
 
@@ -4504,6 +4507,7 @@ namespace ConditioningControlPanel
 
             AppendWebcamDebugLog("Opening quick-recal window…");
             var recalDlg = new WebcamQuickRecalWindow { Owner = this };
+            App.ApplyCalibrationScreenPlacement(recalDlg);
             var result = recalDlg.ShowDialog();
             AppendWebcamDebugLog(result == true
                 ? $"Quick recal applied (offset {svc.Calibration.RuntimeOffset?.Dx:F0}, {svc.Calibration.RuntimeOffset?.Dy:F0} px)."
@@ -4648,6 +4652,77 @@ namespace ConditioningControlPanel
         {
             RefreshWebcamDeviceList();
             AppendWebcamDebugLog($"Re-scanned cameras: {(CmbWebcamDevice?.Items.Count ?? 0)} found.");
+        }
+
+        // Re-entrancy guard so seeding the ComboBox doesn't trigger the save path.
+        private bool _webcamMonitorPopulating;
+
+        private void RefreshWebcamMonitorList()
+        {
+            if (CmbWebcamMonitor == null) return;
+            _webcamMonitorPopulating = true;
+            try
+            {
+                CmbWebcamMonitor.Items.Clear();
+
+                // Always include "Primary" — it's the default and survives any
+                // monitor reorder. Stored verbatim so GetWebcamCalibrationScreen
+                // can short-circuit to Screen.PrimaryScreen.
+                CmbWebcamMonitor.Items.Add(new ComboBoxItem
+                {
+                    Content = Loc.Get("webcam_monitor_primary"),
+                    Tag = "Primary",
+                });
+
+                int n = 1;
+                foreach (var s in App.GetAllScreensCached())
+                {
+                    var label = string.Format(
+                        Loc.Get("webcam_monitor_item_fmt"),
+                        n++,
+                        s.DeviceName,
+                        s.Bounds.Width,
+                        s.Bounds.Height);
+                    CmbWebcamMonitor.Items.Add(new ComboBoxItem
+                    {
+                        Content = label,
+                        Tag = s.DeviceName,
+                    });
+                }
+
+                var saved = App.Settings?.Current?.WebcamCalibrationScreen ?? "Primary";
+                int target = 0;
+                for (int i = 0; i < CmbWebcamMonitor.Items.Count; i++)
+                {
+                    if (CmbWebcamMonitor.Items[i] is ComboBoxItem ci
+                        && ci.Tag is string tag
+                        && string.Equals(tag, saved, StringComparison.OrdinalIgnoreCase))
+                    {
+                        target = i; break;
+                    }
+                }
+                CmbWebcamMonitor.SelectedIndex = target;
+            }
+            finally
+            {
+                _webcamMonitorPopulating = false;
+            }
+        }
+
+        private void CmbWebcamMonitor_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_webcamMonitorPopulating) return;
+            if (CmbWebcamMonitor?.SelectedItem is not ComboBoxItem item) return;
+            if (item.Tag is not string deviceName) return;
+
+            if (App.Settings?.Current is { } s)
+            {
+                if (string.Equals(s.WebcamCalibrationScreen, deviceName, StringComparison.OrdinalIgnoreCase)) return;
+                s.WebcamCalibrationScreen = deviceName;
+                App.Settings.Save();
+            }
+
+            AppendWebcamDebugLog($"Calibration monitor set to {item.Content}.");
         }
 
         private void AppendWebcamDebugLog(string line)
@@ -5708,6 +5783,7 @@ namespace ConditioningControlPanel
                     AnimateTabIn(LabTab);
                     BtnLab.Style = activeStyle;
                     RefreshWebcamDeviceList();
+                    RefreshWebcamMonitorList();
                     break;
 
                 // Note: "patreon" case is handled at the top of ShowTab as a
@@ -16277,9 +16353,20 @@ namespace ConditioningControlPanel
                 TxtBrowserStatus.Text = Loc.Get("label_loading");
                 TxtBrowserStatus.Foreground = FindResource("PinkBrush") as SolidColorBrush;
                 BrowserLoadingText.Text = Loc.Get("label_initializing_webview2");
-                
+
+                // If a previous BrowserService was disposed but the bridge
+                // survived, it's still subscribed to the dead service's events
+                // and pointing at a dead WebView. Drop it so the BrowserReady
+                // handler below re-creates a bridge wired to the new service.
+                if (App.BrowserEnhanceBridge != null)
+                {
+                    try { App.BrowserEnhanceBridge.MatchChanged -= OnBrowserEnhanceMatchChanged; } catch { }
+                    try { App.BrowserEnhanceBridge.Dispose(); } catch { }
+                    App.BrowserEnhanceBridge = null;
+                }
+
                 _browser = new BrowserService();
-                
+
                 _browser.BrowserReady += (s, e) =>
                 {
                     Dispatcher.Invoke(() =>
@@ -19283,6 +19370,7 @@ namespace ConditioningControlPanel
             ChkAudioDuck.IsChecked = s.AudioDuckingEnabled;
             SliderDuck.Value = s.DuckingLevel;
             ChkExcludeBambiCloudDucking.IsChecked = s.ExcludeBambiCloudFromDucking;
+            PopulateAudioOutputDevices();
 
             // Progression
             ChkSpiralEnabled.IsChecked = s.SpiralEnabled;
@@ -20839,6 +20927,73 @@ namespace ConditioningControlPanel
             var result = App.Audio?.TestAudioPlayback() ?? "Audio service not initialized";
             App.Logger?.Information("[AudioDiag] Test requested:\n{Result}", result);
             System.Windows.MessageBox.Show(result, "Audio Diagnostics", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        // Set during PopulateAudioOutputDevices to suppress the SelectionChanged save while
+        // we're rebuilding the list (otherwise restoring the persisted selection writes itself
+        // back, which is harmless but logs a redundant info line).
+        private bool _populatingAudioOutputs;
+
+        private void PopulateAudioOutputDevices()
+        {
+            if (CmbAudioOutputDevice == null || App.Audio == null) return;
+            try
+            {
+                _populatingAudioOutputs = true;
+                var devices = App.Audio.EnumerateOutputDevices();
+                CmbAudioOutputDevice.ItemsSource = devices;
+                CmbAudioOutputDevice.DisplayMemberPath = nameof(Services.AudioService.AudioOutputDevice.Name);
+
+                // Restore persisted selection: prefer ID match, fall back to name (handles ID
+                // changes after driver reinstall / device reorder).
+                var savedId = App.Settings?.Current?.AudioOutputDeviceId ?? "";
+                var savedName = App.Settings?.Current?.AudioOutputDeviceName ?? "";
+                Services.AudioService.AudioOutputDevice? pick = null;
+                foreach (var d in devices)
+                {
+                    if (!string.IsNullOrEmpty(savedId) && d.Id == savedId) { pick = d; break; }
+                }
+                if (pick == null && !string.IsNullOrEmpty(savedName))
+                {
+                    foreach (var d in devices)
+                    {
+                        if (string.Equals(d.Name, savedName, StringComparison.OrdinalIgnoreCase)) { pick = d; break; }
+                    }
+                }
+                CmbAudioOutputDevice.SelectedItem = pick ?? devices[0]; // index 0 = "System default"
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("PopulateAudioOutputDevices failed: {Error}", ex.Message);
+            }
+            finally
+            {
+                _populatingAudioOutputs = false;
+            }
+        }
+
+        private void CmbAudioOutputDevice_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_isLoading || _populatingAudioOutputs) return;
+            if (CmbAudioOutputDevice?.SelectedItem is not Services.AudioService.AudioOutputDevice dev) return;
+            if (App.Settings?.Current == null) return;
+
+            App.Settings.Current.AudioOutputDeviceId = dev.Id ?? "";
+            App.Settings.Current.AudioOutputDeviceName = dev.Name ?? "";
+            App.Settings.Save();
+
+            // Invalidate cached device-number resolution + drain pooled WaveOuts (their
+            // DeviceNumber is locked once Init() ran, so they need to be re-created).
+            App.Audio?.InvalidateOutputDeviceCache();
+            try { Services.BubbleService.DrainAudioDevicePool(); } catch { }
+            try { QuizWindow.DrainAudioDevicePool(); } catch { }
+
+            App.Logger?.Information("Audio output device set to '{Name}' (id={Id})", dev.Name, string.IsNullOrEmpty(dev.Id) ? "(default)" : dev.Id);
+        }
+
+        private void BtnAudioOutputRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            PopulateAudioOutputDevices();
         }
 
         private void SliderSpiralOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

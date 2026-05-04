@@ -3024,6 +3024,28 @@
                                 <TextBlock x:Name="TxtDuck" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="80%" FontSize="10"/>
                             </Grid>
 
+                            <!-- Audio Output device picker — route CCP audio to a chosen device
+                                 (e.g. private headset) so streamers can use the program without
+                                 their viewers hearing the audio on the system default endpoint. -->
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="45"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_output}" FontSize="10"
+                                           ToolTip="{loc:Str tooltip_audio_output_device}"/>
+                                <ComboBox Grid.Column="1" x:Name="CmbAudioOutputDevice"
+                                          Margin="4,0,4,0" Foreground="Black" Background="White"
+                                          ToolTip="{loc:Str tooltip_audio_output_device}"
+                                          SelectionChanged="CmbAudioOutputDevice_SelectionChanged"/>
+                                <Button Grid.Column="2" x:Name="BtnAudioOutputRefresh" Content="↻"
+                                        Click="BtnAudioOutputRefresh_Click"
+                                        ToolTip="Re-scan playback devices."
+                                        Padding="8,2" Background="#33FF69B4" Foreground="White" FontSize="10"
+                                        BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"/>
+                            </Grid>
+
                             <!-- Don't-duck-browser toggle + Audio Test on the same row -->
                             <Grid Margin="0,4,0,0">
                                 <Grid.ColumnDefinitions>
@@ -7398,6 +7420,24 @@
                                         BorderBrush="#FF8800" BorderThickness="1"
                                         FontSize="11" FontWeight="SemiBold" Cursor="Hand"
                                         Click="BtnWebcamDeviceRefresh_Click"/>
+                            </Grid>
+
+                            <!-- Monitor picker: which display the calibration / Quick
+                                 Recal / Tracker Test windows open on. Stored by
+                                 device name so reordering monitors is non-destructive. -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{loc:Str webcam_monitor_label}"
+                                           Foreground="#CCCCCC" FontSize="12"
+                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <ComboBox Grid.Column="1" x:Name="CmbWebcamMonitor"
+                                          Foreground="Black" Background="White"
+                                          BorderBrush="#FF8800" BorderThickness="1"
+                                          ToolTip="{loc:Str webcam_monitor_tooltip}"
+                                          SelectionChanged="CmbWebcamMonitor_SelectionChanged"/>
                             </Grid>
 
                             <Grid>
