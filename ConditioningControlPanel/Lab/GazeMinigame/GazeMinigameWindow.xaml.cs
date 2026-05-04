@@ -350,7 +350,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             HideReadyBanner();
         }
 
-        private void BtnStartGame_Click(object sender, RoutedEventArgs e)
+        private async void BtnStartGame_Click(object sender, RoutedEventArgs e)
         {
             // Webcam preconditions, in order. Each failure stays on Ready with
             // a friendly banner — no modal interruption mid-flow.
@@ -371,10 +371,21 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
                 return;
             }
 
-            if (!App.Webcam.IsRunning && !App.Webcam.Start())
+            // Hop Webcam.Start to a worker thread — VideoCapture open + ONNX
+            // session ctors can block 10-30s on slow USB negotiation, and doing
+            // that on the UI thread freezes the window long enough for Windows'
+            // "not responding" reaper to terminate the app silently (BUG-T3HE68DHXY:
+            // instant freeze on click → silent crash 10-15s later).
+            if (!App.Webcam.IsRunning)
             {
-                ShowReadyBanner($"Couldn't start the webcam (state: {App.Webcam.State}). Check that no other app is using the camera.");
-                return;
+                ShowReadyBanner("Starting the webcam…");
+                var started = await Task.Run(() => App.Webcam.Start());
+                if (!started)
+                {
+                    ShowReadyBanner($"Couldn't start the webcam (state: {App.Webcam.State}). Check that no other app is using the camera.");
+                    return;
+                }
+                HideReadyBanner();
             }
 
             if (App.Webcam.Calibration == null)

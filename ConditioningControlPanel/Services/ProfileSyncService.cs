@@ -911,16 +911,36 @@ namespace ConditioningControlPanel.Services
             }
             else if (localTotalXp > cloudTotalXp + MAX_STARTUP_DELTA)
             {
-                // Local is suspiciously higher than cloud — likely file edit, not legitimate play.
-                // Force adopt cloud values to prevent XP inflation exploit.
-                var cloudLevelXp = App.Progression?.GetCurrentLevelXP(cloudProfile.Level, cloudProfile.Xp) ?? 0;
+                // Local is suspiciously higher than cloud — would normally adopt cloud to prevent file-edit exploits.
+                // BUT: distinguish "real cloud says you're ahead of yourself" from "cloud read fell through to an
+                // uninitialized record" (e.g. V2 sync rate-limited, V1 fallback returns empty defaults for a
+                // V2-native user). The latter looks like Level=1, Xp=0, no achievements, no skills — a pristine
+                // record that no real progressed user could have. Treat that as a misload and keep local.
+                bool looksUninitialized =
+                    cloudProfile.Level <= 1 &&
+                    cloudProfile.Xp == 0 &&
+                    (cloudProfile.Achievements == null || cloudProfile.Achievements.Count == 0) &&
+                    (cloudProfile.UnlockedSkills == null || cloudProfile.UnlockedSkills.Count == 0) &&
+                    (cloudProfile.SkillPoints ?? 0) == 0;
 
-                App.Logger?.Warning("[Anti-cheat] Local XP suspiciously high on startup: local={LocalXP} vs cloud={CloudXP} (delta={Delta}) — forcing cloud values",
-                    (int)localTotalXp, (int)cloudTotalXp, (int)(localTotalXp - cloudTotalXp));
+                if (looksUninitialized)
+                {
+                    App.Logger?.Warning("[Anti-cheat] DEFENDED: cloud profile looks uninitialized (Level 1, 0 XP, no achievements/skills) but local has progress (Level {LocalLevel}, {LocalXP} XP). Refusing to clobber — likely a failed/empty cloud read, not an exploit. Local kept.",
+                        settings.PlayerLevel, (int)localTotalXp);
+                    // Fall through without modifying settings — keep local values.
+                }
+                else
+                {
+                    // Cloud has real data and local is well above it — adopt cloud (file-edit exploit guard).
+                    var cloudLevelXp = App.Progression?.GetCurrentLevelXP(cloudProfile.Level, cloudProfile.Xp) ?? 0;
 
-                settings.PlayerLevel = cloudProfile.Level;
-                settings.PlayerXP = cloudLevelXp;
-                needsSave = true;
+                    App.Logger?.Warning("[Anti-cheat] Local XP suspiciously high on startup: local={LocalXP} vs cloud={CloudXP} (delta={Delta}) — forcing cloud values",
+                        (int)localTotalXp, (int)cloudTotalXp, (int)(localTotalXp - cloudTotalXp));
+
+                    settings.PlayerLevel = cloudProfile.Level;
+                    settings.PlayerXP = cloudLevelXp;
+                    needsSave = true;
+                }
             }
             else if (localTotalXp > cloudTotalXp)
             {

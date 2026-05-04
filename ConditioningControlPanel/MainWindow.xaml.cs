@@ -4375,7 +4375,7 @@ namespace ConditioningControlPanel
             App.Settings?.Save();
         }
 
-        private void BtnBlinkTrainerStart_Click(object sender, RoutedEventArgs e)
+        private async void BtnBlinkTrainerStart_Click(object sender, RoutedEventArgs e)
         {
             if (App.BlinkTrainer == null) return;
             if (App.BlinkTrainer.IsRunning)
@@ -4393,6 +4393,23 @@ namespace ConditioningControlPanel
                 {
                     if (TxtBlinkTrainerStatus != null)
                         TxtBlinkTrainerStatus.Text = "Webcam consent required.";
+                    return;
+                }
+            }
+
+            // Pre-warm the webcam off the UI thread so BlinkTrainer.Start —
+            // which would otherwise call WebcamTrackingService.Start synchronously —
+            // finds it already running. Same pattern as ChkFocusGaze_Changed; without
+            // this a slow USB negotiation freezes the UI long enough for Windows'
+            // "not responding" reaper to terminate the app silently.
+            if (App.Webcam != null && !App.Webcam.IsRunning)
+            {
+                if (TxtBlinkTrainerStatus != null) TxtBlinkTrainerStatus.Text = "Starting webcam…";
+                var started = await Task.Run(() => App.Webcam.Start());
+                if (!started)
+                {
+                    if (TxtBlinkTrainerStatus != null)
+                        TxtBlinkTrainerStatus.Text = $"Could not start webcam ({App.Webcam.State}).";
                     return;
                 }
             }
