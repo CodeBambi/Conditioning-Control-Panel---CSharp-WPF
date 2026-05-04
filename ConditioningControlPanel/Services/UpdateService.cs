@@ -20,57 +20,41 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.9.3";
+        public const string AppVersion = "5.9.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.9.3 - We Need To Go Deeper
+        public const string CurrentPatchNotes = @"v5.9.4 - Even Deeper
 
-This is a pre-release. Deeper is a brand new tab and a major feature in beta - please report anything you hit. Existing 5.9.1 installs will be prompted to update.
-
-🔊 AUDIO HOTFIX
-• Mandatory videos play sound again on Windows 11 builds where DirectSound was silently failing to bind to the audio device. LibVLC now auto-picks WASAPI (the modern Windows default).
-• If you still don't hear video audio, the new diagnostic log lists which audio modules your system exposes - paste it in Discord or open a bug report.
-
-✨ HEADLINE: DEEPER
-• A whole new tab. Deeper lets you build and play multi-track hypnosis tapes - an editor with timeline, regions, audio/video, haptic curves, rule triggers, and an end-user player.
-• Editor: timeline scrub + zoom, region/haptic resize, multi-select + clipboard + undo, preview mode (real device + recorder + overlay), HT description auto-discovery + WebView2 JS bridge, library hot-reload + media-source matching + URL paste, wildcard previews.
-• Rules: trigger/action editor, gaze rect picker, cooldowns, visual curve editing for haptic actions, end-of-band loop, t=0 phantom suppression, rule-fire latch.
-• Player: real fullscreen, browser bridge, replay-after-stop, audio + video tutorials, TriggerEffect surfaced, native media file export.
-• Tutorials: welcome card, tab/editor walkthroughs, on-rails overlay framework, media-export slide.
-• BETA badge + disclaimer banner on the tab.
-
-🎮 SESSIONS
-• Post-session media log + a recent-sessions browser to retrace what played and when.
-
-📸 WEBCAM
-• Camera device selector - pick which physical (or virtual) camera the eye-tracker uses.
-• Title-bar camera-active pill replaces the prior [DEBUG] labeling on the tracking card.
-
-🔒 SECURITY & PRIVACY
-• Deeper SSRF hardening on URL fetchers with a strict host allowlist.
-• DNS-rebind guard.
-• Player WebView2 lockdown - input-path hardening, validator gaps closed.
-• Webcam: enforced consent-version gate at every consent check.
-• Webcam: per-event telemetry demoted to Debug to keep biometric correlates out of logs.
-
-⚡ PERFORMANCE & STABILITY
-• Webcam: per-frame buffer caching, async-void crash guards, BlinkTrainer dispose.
-• Webcam: symmetric event-subscription teardown, async TCS continuations.
-• Webcam: lifecycle correctness - native disposal deferred until capture thread exits.
-• Deeper: leak/crash/correctness review pass + medium-tier review pass.
-• Deeper editor: lifecycle teardown pass + shutdown disposes.
+This is a pre-release - bundles all changes since 5.9.1 (5.9.2 + 5.9.3 + new polish). Please report anything you hit.
 
 🔧 BUG FIXES
-• Deeper: rules/regions/haptics save fix, webcam wiring, player polish.
-• Deeper: validator alignment, localized preview messages, log breadcrumbs.
-• Lab Smokescreen card: clarified it's Prime Subjects testing, not all Patreon.
+• Dashboard enhance: matches saved .ccpenh files on the first page load instead of needing a navigation bounce; logs why a HT page didn't match so library mismatches are debuggable.
+• Fullscreen on HT videos (dashboard browser, Deeper player, editor preview): double-clicking the video and clicking HT's minimize button now reliably exit fullscreen instead of silently pausing.
+• Screen-shake effect now actually shakes the video during fullscreen (was invisible because WebView2's render surface ignored WPF transforms).
+• Lazy-loaded dashboard browser opens HypnoTube directly when you click the HT tab first - no more BambiCloud → HypnoTube bounce.
+• Deeper Player: Play button now starts playback; video maximizes in the viewport instead of leaving black bands.
+• Three Deeper HypnoTube player bugs from the tutorial flow.
+• ObjectDisposedException on app close while a Deeper HT enhancement was running.
+• UI freeze when starting the webcam from Lab buttons.
+• Main flash effects suspended during the gaze minigame so they don't disrupt rounds.
+• Bouncing-text invisible regions + BadDeviceId audio output failures.
+• Four triage-round bugs: overlay z-order, haptics, bubble dwell, ETW.
 
-🎨 UI/UX
-• Deeper: gaze picker as a separate window + dropdown legibility fix.
-• Deeper: dark File menu dropdown.";
+✨ FEATURES
+• Audio output device picker - route all CCP audio through your chosen output instead of always the system default.
+• Lab calibration: pick which monitor the webcam calibration runs on.
+• .ccpenh file association - double-click an enhancement file to open it in the Deeper editor.
+• Linked Files strip in the editor for quick access to associated assets.
+• Editor Rules & Effects overview list, group drag, HT uploader regex fix.
+• Editor polish: tutorial textbox focus, region help, library delete + open folder.
+• Monthly season-reset popup to clarify the ""level reset"" pattern.
+
+🛡️ ANTI-CHEAT
+• Defend anti-cheat against rate-limited cloud reads.
+• Extend webcam off-UI-thread coverage.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
