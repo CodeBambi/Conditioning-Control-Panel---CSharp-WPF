@@ -98,6 +98,7 @@ namespace ConditioningControlPanel.Services
 
                 // Create media player with memory rendering
                 _mediaPlayer = new VlcMediaPlayer(_libVLC);
+                App.Audio?.ApplyPreferredDevice(_mediaPlayer);
                 _mediaPlayer.SetVideoCallbacks(LockCallback, null, DisplayCallback);
                 _mediaPlayer.SetVideoFormat("RV32", _videoWidth, _videoHeight, _videoWidth * 4);
 

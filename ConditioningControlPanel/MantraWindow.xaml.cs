@@ -373,6 +373,7 @@ namespace ConditioningControlPanel
                 _droneMixer.AddMixerInput(_droneHarmonic);
 
                 _droneOutput = new WaveOutEvent();
+                App.Audio?.ApplyPreferredDevice(_droneOutput);
                 _droneOutput.Init(_droneMixer);
                 _droneOutput.Play();
             }
@@ -413,6 +414,7 @@ namespace ConditioningControlPanel
                 };
 
                 var output = new WaveOutEvent();
+                App.Audio?.ApplyPreferredDevice(output);
                 output.Init(take);
                 output.PlaybackStopped += (_, _) =>
                 {

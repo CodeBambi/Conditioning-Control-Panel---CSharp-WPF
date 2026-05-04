@@ -61,30 +61,41 @@ namespace ConditioningControlPanel.Services
         private int _workingWaveOutDeviceNumber = -1;
         private bool _waveOutPermanentlyUnavailable;
 
+        // Cache of the resolved WaveOut device number for the user's chosen MMDevice
+        // (Settings.AudioOutputDeviceId). Invalidated by InvalidateOutputDeviceCache().
+        // -2 = not yet resolved, -1 = default (no override), >=0 = explicit waveOut driver number.
+        private int _userWaveOutDeviceNumber = -2;
+        private string _resolvedForDeviceId = "";
+
         /// <summary>
         /// Constructs a <see cref="WaveOutEvent"/>, transparently retrying with explicit
-        /// device numbers if the default WAVE_MAPPER refuses to open. Returns null only
+        /// device numbers if the default WAVE_MAPPER refuses to open. Honors the user's
+        /// chosen output device (Settings.AudioOutputDeviceId) when set. Returns null only
         /// if no device on the system will accept waveOutOpen — in which case the user's
         /// audio stack is broken in a way we can't paper over.
+        ///
+        /// Public so other services can route their audio to the same chosen device.
         /// </summary>
-        private WaveOutEvent? CreateWaveOut()
+        public WaveOutEvent? CreateWaveOut()
         {
             if (_waveOutPermanentlyUnavailable) return null;
 
-            // Try the cached/preferred device first.
+            // Resolve the preferred device number — user choice overrides the bug-#181 fallback.
+            int preferred = ResolvePreferredWaveOutDeviceNumber();
+
             try
             {
                 var w = new WaveOutEvent();
-                if (_workingWaveOutDeviceNumber >= 0) w.DeviceNumber = _workingWaveOutDeviceNumber;
+                if (preferred >= 0) w.DeviceNumber = preferred;
                 return w;
             }
             catch (NAudio.MmException ex) when (string.Equals(ex.Result.ToString(), "BadDeviceId", StringComparison.OrdinalIgnoreCase))
             {
-                App.Logger?.Warning("AudioService: WaveOut default device returned BadDeviceId, scanning for a usable output device");
+                App.Logger?.Warning("AudioService: WaveOut device #{Num} returned BadDeviceId, scanning for a usable fallback", preferred);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "AudioService: WaveOut default device construction failed");
+                App.Logger?.Warning(ex, "AudioService: WaveOut construction failed (device #{Num})", preferred);
                 return null;
             }
 
@@ -94,6 +105,7 @@ namespace ConditioningControlPanel.Services
             catch { count = 0; }
             for (int i = 0; i < count; i++)
             {
+                if (i == preferred) continue; // already failed above
                 try
                 {
                     var w = new WaveOutEvent { DeviceNumber = i };
@@ -111,6 +123,204 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Warning("AudioService: no WaveOut device on this system would accept waveOutOpen ({Count} candidates tried). Audio playback disabled this session.", count);
             return null;
         }
+
+        #region Output Device Selection (user-chosen routing)
+
+        /// <summary>
+        /// Apply the user's preferred output device to a <see cref="WaveOutEvent"/> created
+        /// elsewhere. No-op if no device is chosen or the chosen device can't be resolved.
+        /// Must be called BEFORE Init() — DeviceNumber can't change once Init runs.
+        /// </summary>
+        public void ApplyPreferredDevice(WaveOutEvent waveOut)
+        {
+            if (waveOut == null) return;
+            try
+            {
+                var num = ResolvePreferredWaveOutDeviceNumber();
+                if (num >= 0) waveOut.DeviceNumber = num;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ApplyPreferredDevice(WaveOut): {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Apply the user's preferred output device to a LibVLC <see cref="LibVLCSharp.Shared.MediaPlayer"/>.
+        /// LibVLC's mmdevice aout backend accepts the same MMDevice ID strings we use here.
+        /// Safe to call before or after media is set; LibVLC re-applies on next playback.
+        /// </summary>
+        public void ApplyPreferredDevice(LibVLCSharp.Shared.MediaPlayer player)
+        {
+            if (player == null) return;
+            try
+            {
+                var deviceId = App.Settings?.Current?.AudioOutputDeviceId;
+                if (string.IsNullOrEmpty(deviceId)) return;
+                player.SetOutputDevice(deviceId);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("ApplyPreferredDevice(MediaPlayer): {Error}", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Returns the resolved WaveOut driver number for the user's chosen output device,
+        /// or -1 if no device is chosen / nothing matched (use WAVE_MAPPER).
+        /// Result is cached until <see cref="InvalidateOutputDeviceCache"/> is called.
+        /// </summary>
+        public int ResolvePreferredWaveOutDeviceNumber()
+        {
+            var settings = App.Settings?.Current;
+            var chosenId = settings?.AudioOutputDeviceId ?? "";
+
+            if (string.IsNullOrEmpty(chosenId))
+            {
+                // No user choice — fall back to bug-#181 cache (default device or learned fallback).
+                return _workingWaveOutDeviceNumber;
+            }
+
+            // Cache hit?
+            if (_userWaveOutDeviceNumber != -2 && _resolvedForDeviceId == chosenId)
+                return _userWaveOutDeviceNumber;
+
+            _resolvedForDeviceId = chosenId;
+            _userWaveOutDeviceNumber = -1;
+
+            // Map MMDevice ID -> friendly name -> WaveOut driver number.
+            // The two enumerations don't share IDs; matching is by product name (truncated to 32
+            // chars by the legacy MM API, so we compare with a tolerant prefix/contains match).
+            string? friendly = null;
+            try
+            {
+                if (_deviceEnumerator != null)
+                {
+                    var dev = _deviceEnumerator.GetDevice(chosenId);
+                    friendly = dev?.FriendlyName;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Could not look up MMDevice {Id}: {Error}", chosenId, ex.Message);
+            }
+
+            // Fallback to persisted name if MMDevice lookup failed (device may have moved IDs
+            // across reboots / driver reinstall — we re-resolve by friendly name).
+            if (string.IsNullOrEmpty(friendly))
+                friendly = settings?.AudioOutputDeviceName ?? "";
+
+            if (string.IsNullOrEmpty(friendly))
+                return _userWaveOutDeviceNumber;
+
+            // FriendlyName format from MMDevice is usually "Speakers (Realtek...)" — extract the
+            // bracketed driver name as the highest-quality match key, then fall back to the full string.
+            string driverName = friendly;
+            int open = friendly.IndexOf('(');
+            int close = friendly.LastIndexOf(')');
+            if (open >= 0 && close > open) driverName = friendly.Substring(open + 1, close - open - 1).Trim();
+
+            int count;
+            try { count = WaveOut.DeviceCount; } catch { count = 0; }
+            for (int i = 0; i < count; i++)
+            {
+                try
+                {
+                    var caps = WaveOut.GetCapabilities(i);
+                    var product = caps.ProductName ?? "";
+                    if (product.Length == 0) continue;
+
+                    // WaveOut product names are truncated to 31 chars. Match by prefix in either
+                    // direction so the truncation doesn't cause false negatives.
+                    if (driverName.StartsWith(product, StringComparison.OrdinalIgnoreCase) ||
+                        product.StartsWith(driverName, StringComparison.OrdinalIgnoreCase) ||
+                        friendly.IndexOf(product, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        _userWaveOutDeviceNumber = i;
+                        App.Logger?.Information("AudioService: routing WaveOut to device #{Num} '{Product}' (matches MMDevice '{Friendly}')",
+                            i, product, friendly);
+                        return i;
+                    }
+                }
+                catch { /* skip unreadable device */ }
+            }
+
+            App.Logger?.Warning("AudioService: chosen output device '{Friendly}' has no matching WaveOut driver — using default", friendly);
+            return _userWaveOutDeviceNumber;
+        }
+
+        /// <summary>
+        /// Drop the cached WaveOut device-number resolution. Call after the user changes
+        /// the output device setting so the next playback re-resolves.
+        /// </summary>
+        public void InvalidateOutputDeviceCache()
+        {
+            _userWaveOutDeviceNumber = -2;
+            _resolvedForDeviceId = "";
+            // Also reset the bug-#181 fallback cache so a fresh default-device resolution happens
+            // (the user may have changed the system default along with the CCP-specific choice).
+            _workingWaveOutDeviceNumber = -1;
+            _waveOutPermanentlyUnavailable = false;
+        }
+
+        /// <summary>
+        /// Output device descriptor for the picker UI.
+        /// </summary>
+        public sealed class AudioOutputDevice
+        {
+            public string Id { get; set; } = "";
+            public string Name { get; set; } = "";
+            public bool IsDefault { get; set; }
+            public override string ToString() => IsDefault ? Name + " (default)" : Name;
+        }
+
+        /// <summary>
+        /// Enumerate active playback endpoints for the device picker. The first entry is
+        /// always the synthetic "System default" choice (empty ID).
+        /// </summary>
+        public List<AudioOutputDevice> EnumerateOutputDevices()
+        {
+            var list = new List<AudioOutputDevice>
+            {
+                new AudioOutputDevice { Id = "", Name = "System default", IsDefault = true }
+            };
+
+            try
+            {
+                _deviceEnumerator ??= new MMDeviceEnumerator();
+                var defaultId = "";
+                try
+                {
+                    var def = _deviceEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+                    defaultId = def?.ID ?? "";
+                }
+                catch { /* default may be unset */ }
+
+                var endpoints = _deviceEnumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
+                for (int i = 0; i < endpoints.Count; i++)
+                {
+                    try
+                    {
+                        var dev = endpoints[i];
+                        list.Add(new AudioOutputDevice
+                        {
+                            Id = dev.ID ?? "",
+                            Name = dev.FriendlyName ?? "(unnamed)",
+                            IsDefault = !string.IsNullOrEmpty(defaultId) && dev.ID == defaultId
+                        });
+                    }
+                    catch { /* skip */ }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning("EnumerateOutputDevices failed: {Error}", ex.Message);
+            }
+
+            return list;
+        }
+
+        #endregion
 
         // Crash recovery file for ducking state
         private static readonly string DuckingRecoveryFile = Path.Combine(

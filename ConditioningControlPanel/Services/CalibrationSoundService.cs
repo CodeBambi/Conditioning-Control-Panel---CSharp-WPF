@@ -49,6 +49,7 @@ namespace ConditioningControlPanel.Services
                     {
                         reader = new AudioFileReader(path) { Volume = curved };
                         device = new WaveOutEvent();
+                        App.Audio?.ApplyPreferredDevice(device);
                         device.Init(reader);
                         device.Play();
                         while (device.PlaybackState == PlaybackState.Playing)

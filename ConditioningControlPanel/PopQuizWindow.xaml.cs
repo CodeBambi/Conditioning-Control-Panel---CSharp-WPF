@@ -200,6 +200,7 @@ namespace ConditioningControlPanel
                     {
                         reader = new AudioFileReader(path) { Volume = volume };
                         output = new WaveOutEvent();
+                        App.Audio?.ApplyPreferredDevice(output);
                         output.Init(reader);
                         output.Play();
                         while (output.PlaybackState == PlaybackState.Playing)

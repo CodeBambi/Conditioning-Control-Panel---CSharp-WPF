@@ -244,6 +244,8 @@
   "tooltip_how_much_to_reduce_other_audio": "降低其他音频的幅度",
   "tooltip_ducking_percentage_80_reduce_other_audio_to_2": "闪避百分比（80% = 将其他音频降至20%）",
   "setting_don_t_duck_browser": "不闪避浏览器",
+  "setting_output": "输出",
+  "tooltip_audio_output_device": "选择 CCP 音频发送到的播放设备。适合直播 - 路由到私人耳机，这样系统默认设备上的观众就听不到了。",
   "tooltip_when_enabled_audio_from_the_integrated_bambic": "启用时，内置 BambiCloud 浏览器的音频在闪避期间不会被降低",
   "btn_login_2": "🔐 登录",
   "tooltip_login_with_discord_or_patreon": "使用 Discord 或 Patreon 登录",

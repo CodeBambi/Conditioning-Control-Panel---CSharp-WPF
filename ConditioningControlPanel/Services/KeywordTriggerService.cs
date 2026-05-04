@@ -1511,6 +1511,7 @@ namespace ConditioningControlPanel.Services
 
                     _triggerAudioFile = new AudioFileReader(path);
                     _triggerPlayer = new WaveOutEvent();
+                    App.Audio?.ApplyPreferredDevice(_triggerPlayer);
 
                     // Apply volume curve (same as AudioService)
                     var volume = volumePercent / 100.0f;

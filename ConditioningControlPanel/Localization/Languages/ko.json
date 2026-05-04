@@ -244,6 +244,8 @@
   "tooltip_how_much_to_reduce_other_audio": "다른 오디오를 얼마나 줄일지",
   "tooltip_ducking_percentage_80_reduce_other_audio_to_2": "덕킹 비율 (80% = 다른 오디오를 20%로 줄임)",
   "setting_don_t_duck_browser": "브라우저 덕킹 안 함",
+  "setting_output": "출력",
+  "tooltip_audio_output_device": "CCP 오디오가 보내질 재생 장치를 선택해요. 스트리밍에 유용해요 - 개인 헤드셋으로 보내면 시청자가 시스템 기본 장치에서 듣지 못해요.",
   "tooltip_when_enabled_audio_from_the_integrated_bambic": "활성화 시 내장 BambiCloud 브라우저의 오디오가 덕킹 중에 줄어들지 않아요",
   "btn_login_2": "🔐 로그인",
   "tooltip_login_with_discord_or_patreon": "Discord 또는 Patreon으로 로그인",

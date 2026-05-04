@@ -226,6 +226,8 @@
   "tooltip_how_much_to_reduce_other_audio": "Насколько снижать громкость другого аудио",
   "tooltip_ducking_percentage_80_reduce_other_audio_to_2": "Процент приглушения (80% = снизить громкость другого аудио до 20%)",
   "setting_don_t_duck_browser": "Не приглушать встроенный браузер",
+  "setting_output": "Выход",
+  "tooltip_audio_output_device": "Выберите устройство воспроизведения, на которое отправляется звук CCP. Удобно для стриминга - направьте звук в приватные наушники, чтобы зрители на устройстве по умолчанию его не слышали.",
   "tooltip_when_enabled_audio_from_the_integrated_bambic": "Если включено то аудио из встроенного браузера не будет приглушаться.",
   "btn_login_2": "🔐 Войти",
   "tooltip_login_with_discord_or_patreon": "Войти через Discord или Patreon",

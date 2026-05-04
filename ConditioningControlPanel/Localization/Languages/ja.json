@@ -244,6 +244,8 @@
   "tooltip_how_much_to_reduce_other_audio": "他のオーディオをどれだけ下げるか",
   "tooltip_ducking_percentage_80_reduce_other_audio_to_2": "ダッキング率（80% = 他のオーディオを20%に低減）",
   "setting_don_t_duck_browser": "ブラウザを除外",
+  "setting_output": "出力",
+  "tooltip_audio_output_device": "CCPの音声を送る再生デバイスを選択。配信時に便利 - プライベートなヘッドセットに振り分ければ、視聴者にはシステムの既定デバイスから聞こえません。",
   "tooltip_when_enabled_audio_from_the_integrated_bambic": "有効時：内蔵BambiCloudブラウザのオーディオはダッキング中に低減されません",
   "btn_login_2": "🔐 ログイン",
   "tooltip_login_with_discord_or_patreon": "DiscordまたはPatreonでログイン",

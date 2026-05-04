@@ -448,6 +448,7 @@ namespace ConditioningControlPanel.Services
 
                 _audioFile = new AudioFileReader(path);
                 _audioPlayer = new WaveOutEvent();
+                App.Audio?.ApplyPreferredDevice(_audioPlayer);
 
                 // Apply volume with curve, including master volume
                 var masterVol = App.Settings.Current.MasterVolume / 100.0f;

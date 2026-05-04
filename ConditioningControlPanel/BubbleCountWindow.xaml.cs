@@ -419,6 +419,7 @@ namespace ConditioningControlPanel
 
                 _mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC);
                 _allMediaPlayers.Add(_mediaPlayer);
+                App.Audio?.ApplyPreferredDevice(_mediaPlayer);
 
                 // Add VideoView to container
                 VideoContainer.Children.Add(_videoView);
@@ -755,6 +756,7 @@ namespace ConditioningControlPanel
                     using var audioFile = new AudioFileReader(popPath);
                     audioFile.Volume = volume;
                     using var outputDevice = new WaveOutEvent();
+                    App.Audio?.ApplyPreferredDevice(outputDevice);
                     outputDevice.Init(audioFile);
                     outputDevice.Play();
                     while (outputDevice.PlaybackState == PlaybackState.Playing)

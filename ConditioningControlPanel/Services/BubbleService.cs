@@ -381,7 +381,27 @@ public class BubbleService : IDisposable
                 return _audioDevicePool.Dequeue();
             }
         }
-        return new WaveOutEvent();
+        // Apply user's chosen output device on construction. Pool is drained when the
+        // setting changes (see DrainAudioDevicePool) so we never need to reapply on Get.
+        var w = new WaveOutEvent();
+        App.Audio?.ApplyPreferredDevice(w);
+        return w;
+    }
+
+    /// <summary>
+    /// Disposes all pooled audio devices. Call after the user changes the output device
+    /// setting so the next pop-sound playback re-creates devices on the new endpoint
+    /// (DeviceNumber can't be changed once Init() has been called).
+    /// </summary>
+    public static void DrainAudioDevicePool()
+    {
+        lock (_audioPoolLock)
+        {
+            while (_audioDevicePool.Count > 0)
+            {
+                try { _audioDevicePool.Dequeue().Dispose(); } catch { }
+            }
+        }
     }
 
     private void ReturnAudioDevice(WaveOutEvent device)

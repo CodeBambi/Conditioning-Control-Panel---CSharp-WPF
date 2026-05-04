@@ -145,6 +145,7 @@ namespace ConditioningControlPanel
                         {
                             using var audioFile = new AudioFileReader(soundPath);
                             using var outputDevice = new WaveOutEvent();
+                            App.Audio?.ApplyPreferredDevice(outputDevice);
 
                             var masterVolume = App.Settings.Current.MasterVolume / 100f;
                             var curvedVolume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;

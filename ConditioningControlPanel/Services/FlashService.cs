@@ -1609,6 +1609,7 @@ namespace ConditioningControlPanel.Services
                         {
                             using var audioFile = new AudioFileReader(chimePath);
                             using var outputDevice = new WaveOutEvent();
+                            App.Audio?.ApplyPreferredDevice(outputDevice);
 
                             var masterVolume = App.Settings.Current.MasterVolume / 100f;
                             var volume = (float)Math.Pow(masterVolume, 1.5) * 0.35f;
@@ -1769,6 +1770,7 @@ namespace ConditioningControlPanel.Services
             {
                 audioFile = new AudioFileReader(path);
                 sound = new WaveOutEvent();
+                App.Audio?.ApplyPreferredDevice(sound);
 
                 // Apply volume curve (gentler, minimum 5%)
                 var volume = volumePercent / 100.0f;

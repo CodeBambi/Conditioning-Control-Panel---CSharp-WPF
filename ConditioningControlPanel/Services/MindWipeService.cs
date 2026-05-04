@@ -320,8 +320,9 @@ namespace ConditioningControlPanel.Services
                     // Create new player A
                     _loopReaderA = new AudioFileReader(_loopFilePath);
                     _loopReaderA.Volume = (float)_volume;
-                    
+
                     _loopWaveOutA = new WaveOutEvent();
+                    App.Audio?.ApplyPreferredDevice(_loopWaveOutA);
                     _loopWaveOutA.Init(_loopReaderA);
                     _loopWaveOutA.Play();
                     
@@ -338,8 +339,9 @@ namespace ConditioningControlPanel.Services
                     // Create new player B
                     _loopReaderB = new AudioFileReader(_loopFilePath);
                     _loopReaderB.Volume = (float)_volume;
-                    
+
                     _loopWaveOutB = new WaveOutEvent();
+                    App.Audio?.ApplyPreferredDevice(_loopWaveOutB);
                     _loopWaveOutB.Init(_loopReaderB);
                     _loopWaveOutB.Play();
                     
@@ -511,8 +513,9 @@ namespace ConditioningControlPanel.Services
                 
                 _audioReader = new AudioFileReader(filePath);
                 _audioReader.Volume = (float)_volume;
-                
+
                 _waveOut = new WaveOutEvent();
+                App.Audio?.ApplyPreferredDevice(_waveOut);
                 _waveOut.Init(_audioReader);
                 _waveOut.PlaybackStopped += (s, e) =>
                 {

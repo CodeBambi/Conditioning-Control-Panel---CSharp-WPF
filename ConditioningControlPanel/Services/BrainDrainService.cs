@@ -189,6 +189,7 @@ namespace ConditioningControlPanel.Services
                 _audioReader.Volume = (float)(App.Settings.Current.MasterVolume / 100.0);
                 
                 _waveOut = new WaveOutEvent();
+                App.Audio?.ApplyPreferredDevice(_waveOut);
                 _waveOut.Init(_audioReader);
                 _waveOut.PlaybackStopped += (s, e) =>
                 {

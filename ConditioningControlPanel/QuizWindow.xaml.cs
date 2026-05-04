@@ -1087,7 +1087,26 @@ namespace ConditioningControlPanel
                 if (_audioPool.Count > 0)
                     return _audioPool.Dequeue();
             }
-            return new WaveOutEvent();
+            // Pool is drained when user changes output device (DrainAudioDevicePool),
+            // so we only need to apply on construction.
+            var w = new WaveOutEvent();
+            App.Audio?.ApplyPreferredDevice(w);
+            return w;
+        }
+
+        /// <summary>
+        /// Disposes pooled audio devices. Call after the user changes the output device
+        /// setting so the next quiz sound re-creates devices on the new endpoint.
+        /// </summary>
+        public static void DrainAudioDevicePool()
+        {
+            lock (_audioPoolLock)
+            {
+                while (_audioPool.Count > 0)
+                {
+                    try { _audioPool.Dequeue().Dispose(); } catch { }
+                }
+            }
         }
 
         private static void ReturnDevice(WaveOutEvent device)
@@ -1198,6 +1217,7 @@ namespace ConditioningControlPanel
                 _droneReader = new AudioFileReader(path) { Volume = GetVolume(0.35f) };
                 _droneLoop = new LoopStream(_droneReader);
                 _droneOutput = new WaveOutEvent();
+                App.Audio?.ApplyPreferredDevice(_droneOutput);
                 _droneOutput.Init(_droneLoop);
                 _droneOutput.Play();
             }

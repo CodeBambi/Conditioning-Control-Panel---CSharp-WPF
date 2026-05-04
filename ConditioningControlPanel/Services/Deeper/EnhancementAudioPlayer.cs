@@ -75,6 +75,7 @@ namespace ConditioningControlPanel.Services.Deeper
 
                 _reader = new MediaFoundationReader(path);
                 _output = new WaveOutEvent { DesiredLatency = 200 };
+                App.Audio?.ApplyPreferredDevice(_output);
                 _output.Init(_reader);
                 _output.PlaybackStopped += OnPlaybackStopped;
                 _output.Play();

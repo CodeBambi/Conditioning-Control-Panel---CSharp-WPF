@@ -848,6 +848,7 @@ namespace ConditioningControlPanel.Services
             {
                 _mediaPlayers.Add(mediaPlayer);
             }
+            App.Audio?.ApplyPreferredDevice(mediaPlayer);
 
             if (withAudio)
             {
@@ -1174,6 +1175,7 @@ namespace ConditioningControlPanel.Services
                 {
                     _mediaPlayers.Add(mediaPlayer);
                 }
+                App.Audio?.ApplyPreferredDevice(mediaPlayer);
 
             // Only the primary player handles events (to avoid duplicate triggers)
             if (withAudio)
@@ -2930,6 +2932,7 @@ namespace ConditioningControlPanel.Services
                             var masterVolume = App.Settings?.Current?.MasterVolume ?? 100;
                             audioFile.Volume = 0.6f * (masterVolume / 100f);
                             using var outputDevice = new WaveOutEvent();
+                            App.Audio?.ApplyPreferredDevice(outputDevice);
                             outputDevice.Init(audioFile);
                             outputDevice.Play();
                             while (outputDevice.PlaybackState == PlaybackState.Playing)
