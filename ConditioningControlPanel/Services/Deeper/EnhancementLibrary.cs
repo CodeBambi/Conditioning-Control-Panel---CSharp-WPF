@@ -215,6 +215,8 @@ namespace ConditioningControlPanel.Services.Deeper
         /// (basename), substring of media_source pattern (with trailing *
         /// stripped). Returns null if nothing matches; ignores enhancements
         /// of the wrong media_type when supplied.
+        /// URLs on known hosts are normalized first (lowercase host, drop
+        /// trailing slash + query + fragment) so equivalent URLs match.
         /// </summary>
         public EnhancementLibraryEntry? FindMatch(string audioOrUrl, string? mediaTypeFilter = null)
         {
@@ -222,6 +224,7 @@ namespace ConditioningControlPanel.Services.Deeper
             try
             {
                 var entries = ScanLibrary();
+                var queryNorm = NormalizeMediaKey(audioOrUrl);
                 var baseName = Path.GetFileNameWithoutExtension(audioOrUrl);
 
                 EnhancementLibraryEntry? best = null;
@@ -229,9 +232,10 @@ namespace ConditioningControlPanel.Services.Deeper
                 {
                     if (mediaTypeFilter != null && entry.MediaType != mediaTypeFilter) continue;
                     var pattern = entry.MediaSource ?? "";
+                    var patternNorm = NormalizeMediaKey(pattern);
 
-                    // Exact / suffix match wins immediately.
-                    if (string.Equals(pattern, audioOrUrl, StringComparison.OrdinalIgnoreCase))
+                    // Exact / suffix match wins immediately (after normalization).
+                    if (string.Equals(patternNorm, queryNorm, StringComparison.OrdinalIgnoreCase))
                         return entry;
 
                     // Basename of pattern matches basename of audioOrUrl.
@@ -256,6 +260,91 @@ namespace ConditioningControlPanel.Services.Deeper
             catch (Exception ex)
             {
                 App.Logger?.Debug("EnhancementLibrary.FindMatch error: {Error}", ex.Message);
+                return null;
+            }
+        }
+
+        // URL canonicalization for FindMatch only — never mutates stored
+        // media_source values. Treats two URLs as equivalent if they differ
+        // only by case, trailing slash, query string, or fragment. Restricted
+        // to hosts in DeeperConfig.PreviewHostAllowlist so we don't accidentally
+        // collapse meaningful query params on third-party URLs the user pasted.
+        private static string NormalizeMediaKey(string source)
+        {
+            if (string.IsNullOrEmpty(source)) return source;
+            if (!Uri.TryCreate(source, UriKind.Absolute, out var uri)) return source;
+            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return source;
+
+            var host = uri.Host.ToLowerInvariant();
+            var hostAllowed = false;
+            foreach (var allowed in DeeperConfig.PreviewHostAllowlist)
+            {
+                if (host == allowed || host.EndsWith("." + allowed, StringComparison.Ordinal))
+                {
+                    hostAllowed = true;
+                    break;
+                }
+            }
+            if (!hostAllowed) return source;
+
+            var path = uri.AbsolutePath.TrimEnd('/');
+            return uri.Scheme + "://" + host + path;
+        }
+
+        /// <summary>
+        /// Looks up a library entry by its file path. Used to ask "is this
+        /// project already in the library?" without re-scanning every row.
+        /// </summary>
+        public EnhancementLibraryEntry? FindByJsonPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            try
+            {
+                var canonical = Path.GetFullPath(path);
+                foreach (var entry in ScanLibrary())
+                {
+                    if (string.Equals(Path.GetFullPath(entry.FilePath), canonical, StringComparison.OrdinalIgnoreCase))
+                        return entry;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementLibrary.FindByJsonPath error: {Error}", ex.Message);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Saves an in-memory enhancement into the library folder using a
+        /// suggested filename, deduping with "(2)", "(3)" suffixes if a file
+        /// with the same name already exists. Returns the path saved to, or
+        /// null on failure. <paramref name="sourceTag"/> is logged for trace.
+        /// </summary>
+        public string? PromoteToLibrary(Enhancement enhancement, string sourceTag)
+        {
+            if (enhancement == null) return null;
+            try
+            {
+                Directory.CreateDirectory(LibraryFolder);
+                var baseName = SuggestedFileName(enhancement);
+                var stem = baseName.EndsWith(FileSuffix, StringComparison.OrdinalIgnoreCase)
+                    ? baseName.Substring(0, baseName.Length - FileSuffix.Length)
+                    : baseName;
+                var target = Path.Combine(LibraryFolder, baseName);
+                int n = 2;
+                while (File.Exists(target))
+                {
+                    target = Path.Combine(LibraryFolder, $"{stem} ({n}){FileSuffix}");
+                    n++;
+                    if (n > 999) return null; // sanity cap
+                }
+                Save(enhancement, target);
+                App.Logger?.Information("EnhancementLibrary: promoted to library: {Path} (from {Tag})", target, sourceTag);
+                return target;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementLibrary: PromoteToLibrary failed (tag={Tag})", sourceTag);
                 return null;
             }
         }

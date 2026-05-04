@@ -205,6 +205,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/> <!-- title bar / menu -->
+            <RowDefinition Height="Auto"/> <!-- linked files strip -->
             <RowDefinition Height="*"/>    <!-- main content -->
             <RowDefinition Height="Auto"/> <!-- validation strip -->
         </Grid.RowDefinitions>
@@ -243,14 +244,140 @@
                         Background="{DynamicResource DeeperAccentTransparent20Brush}"
                         Foreground="{DynamicResource DeeperAccentBrush}"
                         BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
-                <TextBlock x:Name="TxtFilePath" Margin="0,0,12,0" HorizontalAlignment="Right"
-                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"
-                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <TextBlock/>
             </DockPanel>
         </Border>
 
+        <!-- Linked Files strip: shows the JSON project + linked media (file or HT URL)
+             with one-click swap/change/clear. Replaces the old read-only
+             "Media source" textbox in the Metadata tab so the linkage is
+             always visible above the timeline. -->
+        <Border Grid.Row="1" Background="{DynamicResource PanelBgBrush}"
+                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="0,0,0,1"
+                Padding="14,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Project (JSON) -->
+                <Grid Grid.Column="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="📄" FontSize="13"
+                               VerticalAlignment="Center" Margin="0,0,6,0"
+                               Foreground="{DynamicResource DeeperAccentSoftBrush}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxtLinkedJsonName"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               FontSize="12" FontWeight="SemiBold"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                    <Button Grid.Row="0" Grid.Column="2" x:Name="BtnLinkedJsonOpenFolder"
+                            Content="📁" Click="BtnLinkedJsonOpenFolder_Click"
+                            ToolTip="{loc:Str deeper_editor_linked_open_folder_tt}"
+                            Width="26" Height="22" Padding="0" Cursor="Hand" FontSize="11"
+                            Margin="6,0,0,0"
+                            Background="Transparent"
+                            Foreground="{DynamicResource DeeperAccentBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"/>
+                    <Button Grid.Row="0" Grid.Column="3" x:Name="BtnLinkedJsonSwap"
+                            Content="{loc:Str deeper_editor_linked_swap_json_btn}"
+                            Click="BtnLinkedJsonSwap_Click"
+                            Padding="8,3" Margin="6,0,0,0" Cursor="Hand" FontSize="11"
+                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                            Foreground="{DynamicResource DeeperAccentBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" x:Name="TxtLinkedJsonPath"
+                               Foreground="{DynamicResource TextDimBrush}" FontSize="10"
+                               TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                </Grid>
+
+                <!-- Linked media -->
+                <Grid Grid.Column="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" x:Name="TxtLinkedMediaIcon"
+                               Text="🎬" FontSize="13"
+                               VerticalAlignment="Center" Margin="0,0,4,0"
+                               Foreground="{DynamicResource DeeperAccentSoftBrush}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxtLinkedMediaStatus"
+                               Text="✓" FontSize="12" FontWeight="Bold"
+                               VerticalAlignment="Center" Margin="0,0,6,0"
+                               Foreground="{DynamicResource DeeperAccentBrush}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" x:Name="TxtLinkedMediaName"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               FontSize="12" FontWeight="SemiBold"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                    <Button Grid.Row="0" Grid.Column="3" x:Name="BtnLinkedMediaChange"
+                            Content="{loc:Str deeper_editor_linked_change_media_btn}"
+                            Click="BtnLinkedMediaChange_Click"
+                            Padding="8,3" Margin="6,0,0,0" Cursor="Hand" FontSize="11"
+                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                            Foreground="{DynamicResource DeeperAccentBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
+                    <Button Grid.Row="0" Grid.Column="4" x:Name="BtnLinkedMediaClear"
+                            Content="{loc:Str deeper_editor_linked_clear_media_btn}"
+                            Click="BtnLinkedMediaClear_Click"
+                            Padding="8,3" Margin="6,0,0,0" Cursor="Hand" FontSize="11"
+                            Background="Transparent"
+                            Foreground="{DynamicResource TextMutedBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" x:Name="TxtLinkedMediaPath"
+                               Foreground="{DynamicResource TextDimBrush}" FontSize="10"
+                               TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                </Grid>
+
+                <!-- Change-media popup: file vs URL -->
+                <Popup x:Name="MediaChangePopup" PlacementTarget="{Binding ElementName=BtnLinkedMediaChange}"
+                       Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+                    <Border Background="{DynamicResource DarkerBgBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="2"
+                            CornerRadius="6" Padding="6">
+                        <StackPanel>
+                            <Button Content="{loc:Str deeper_editor_linked_change_media_local}"
+                                    Click="BtnChangeMediaLocal_Click"
+                                    Padding="10,6" Cursor="Hand" FontSize="11" Margin="0,0,0,2"
+                                    HorizontalContentAlignment="Left"
+                                    Background="Transparent"
+                                    Foreground="{DynamicResource TextLightBrush}"
+                                    BorderThickness="0"/>
+                            <Button Content="{loc:Str deeper_editor_linked_change_media_url}"
+                                    Click="BtnChangeMediaUrl_Click"
+                                    Padding="10,6" Cursor="Hand" FontSize="11"
+                                    HorizontalContentAlignment="Left"
+                                    Background="Transparent"
+                                    Foreground="{DynamicResource TextLightBrush}"
+                                    BorderThickness="0"/>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+            </Grid>
+        </Border>
+
         <!-- Main 2-column body -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="320"/>
@@ -452,18 +579,6 @@
                         <TextBox x:Name="TxtMetaLicense" Style="{StaticResource EditorTextBox}"
                                  ToolTip="{loc:Str deeper_editor_tt_meta_license}"
                                  TextChanged="MetadataField_TextChanged"/>
-
-                        <Separator Margin="0,10,0,14"/>
-
-                        <TextBlock Text="{loc:Str deeper_editor_label_media_source}" Style="{StaticResource EditorLabel}"/>
-                        <TextBox x:Name="TxtMediaSource" Style="{StaticResource EditorTextBox}"
-                                 ToolTip="{loc:Str deeper_editor_tt_media_source}"
-                                 IsReadOnly="True" Foreground="{DynamicResource TextDimBrush}"/>
-
-                        <TextBlock Text="{loc:Str deeper_editor_label_media_type}" Style="{StaticResource EditorLabel}"/>
-                        <TextBlock x:Name="TxtMediaType" Foreground="{DynamicResource TextLightBrush}"
-                                   ToolTip="{loc:Str deeper_editor_tt_media_type}"
-                                   FontSize="12" Margin="0,0,0,8"/>
 
                         <Separator Margin="0,10,0,14"/>
 
@@ -872,7 +987,7 @@
         </Grid>
 
         <!-- Validation strip -->
-        <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}"
+        <Border Grid.Row="3" Background="{DynamicResource PanelBgBrush}"
                 BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="0,1,0,0"
                 Padding="14,8">
             <DockPanel LastChildFill="True">

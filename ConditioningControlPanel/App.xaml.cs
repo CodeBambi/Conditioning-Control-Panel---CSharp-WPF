@@ -47,6 +47,79 @@ namespace ConditioningControlPanel
         private static Thread? _showSignalThread;
         private readonly TaskCompletionSource _patreonInitDone = new();
 
+        // "Open with CCP" handoff: --play / --edit args parsed at startup.
+        // First instance routes directly after MainWindow loads; second instance
+        // writes a handoff file at %LOCALAPPDATA%\ConditioningControlPanel\fileopen.pending
+        // before signaling, which the listener reads and replays on the dispatcher.
+        private static string? _pendingFileOpenAction;
+        private static string? _pendingFileOpenPath;
+        private static string FileOpenHandoffPath => Path.Combine(UserDataPath, "fileopen.pending");
+
+        private static readonly HashSet<string> FileOpenAllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v",
+            ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"
+        };
+
+        private static (string? action, string? path) ParseFileOpenArgs(string[] args)
+        {
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                var a = args[i];
+                if (a == "--play" || a == "--edit")
+                {
+                    var validated = ValidateMediaArgPath(args[i + 1]);
+                    if (validated == null) return (null, null);
+                    return (a == "--play" ? "play" : "edit", validated);
+                }
+            }
+            return (null, null);
+        }
+
+        private static string? ValidateMediaArgPath(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            // Reject UNC and extended-length prefixes — only local file paths allowed.
+            if (raw.StartsWith(@"\\", StringComparison.Ordinal)) return null;
+            if (raw.StartsWith(@"\\?\", StringComparison.Ordinal)) return null;
+            string full;
+            try { full = Path.GetFullPath(raw); }
+            catch { return null; }
+            if (!Path.IsPathRooted(full)) return null;
+            if (!File.Exists(full)) return null;
+            var ext = Path.GetExtension(full);
+            if (!FileOpenAllowedExtensions.Contains(ext)) return null;
+            return full;
+        }
+
+        private static void WriteFileOpenHandoff(string action, string path)
+        {
+            try
+            {
+                Directory.CreateDirectory(UserDataPath);
+                File.WriteAllText(FileOpenHandoffPath, action + "\n" + path);
+            }
+            catch { /* best effort — failure just means second instance has no handoff */ }
+        }
+
+        private static (string? action, string? path) ConsumeFileOpenHandoff()
+        {
+            try
+            {
+                var p = FileOpenHandoffPath;
+                if (!File.Exists(p)) return (null, null);
+                var lines = File.ReadAllText(p).Split('\n');
+                try { File.Delete(p); } catch { }
+                if (lines.Length < 2) return (null, null);
+                var action = lines[0].Trim();
+                var path = ValidateMediaArgPath(lines[1].Trim());
+                if (path == null) return (null, null);
+                if (action != "play" && action != "edit") return (null, null);
+                return (action, path);
+            }
+            catch { return (null, null); }
+        }
+
         /// <summary>
         /// User data folder path in LocalAppData - persists across updates
         /// </summary>
@@ -538,6 +611,10 @@ namespace ConditioningControlPanel
             // Force the splash to render before continuing with any initialization
             splash.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => { }));
 
+            // Parse "Open with CCP" args. Done before single-instance check so a
+            // second-instance launch can write its handoff file before signaling.
+            (_pendingFileOpenAction, _pendingFileOpenPath) = ParseFileOpenArgs(e.Args);
+
             // Check for single instance
             _mutex = new Mutex(true, MutexName, out bool createdNew);
             _mutexOwned = createdNew; // Track if we actually own the mutex
@@ -546,6 +623,10 @@ namespace ConditioningControlPanel
                 // Another instance is already running - signal it to show its window
                 try
                 {
+                    if (_pendingFileOpenAction != null && _pendingFileOpenPath != null)
+                    {
+                        WriteFileOpenHandoff(_pendingFileOpenAction, _pendingFileOpenPath);
+                    }
                     var signal = EventWaitHandle.OpenExisting(ShowSignalName);
                     signal.Set();
                     signal.Dispose();
@@ -573,6 +654,12 @@ namespace ConditioningControlPanel
                                 if (mainWin != null)
                                 {
                                     mainWin.ShowFromTray();
+                                    var (action, path) = ConsumeFileOpenHandoff();
+                                    if (action != null && path != null)
+                                    {
+                                        try { mainWin.HandlePendingFileOpen(action, path); }
+                                        catch (Exception ex) { Logger?.Warning(ex, "HandlePendingFileOpen failed"); }
+                                    }
                                 }
                             });
                         }
@@ -951,6 +1038,25 @@ namespace ConditioningControlPanel
             // Same problem hits anywhere code does `Application.Current.MainWindow as MainWindow`
             // — popups, feature controls, etc. Expose a stable static reference.
             MainWindowRef = mainWindow;
+
+            // First-instance "Open with CCP" dispatch: replay parsed --play/--edit
+            // args once MainWindow is fully loaded so the player/editor windows
+            // can use it as their Owner.
+            if (_pendingFileOpenAction != null && _pendingFileOpenPath != null)
+            {
+                var action = _pendingFileOpenAction;
+                var path = _pendingFileOpenPath;
+                _pendingFileOpenAction = null;
+                _pendingFileOpenPath = null;
+                mainWindow.Loaded += (_, _) =>
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try { mainWindow.HandlePendingFileOpen(action, path); }
+                        catch (Exception ex) { Logger?.Warning(ex, "HandlePendingFileOpen failed"); }
+                    }), System.Windows.Threading.DispatcherPriority.Background);
+                };
+            }
 
             // Close splash screen with fade animation
             // Drop Topmost FIRST so deferred dialogs (What's New, Age Verification) aren't hidden behind it

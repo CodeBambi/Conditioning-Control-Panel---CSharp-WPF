@@ -66,34 +66,47 @@
 
         <!-- Enhancement file row -->
         <Grid Grid.Row="2" Margin="0,0,0,14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="100"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="{loc:Str deeper_player_enh_label}"
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str deeper_player_enh_label}"
                        Foreground="{DynamicResource TextLightBrush}"
                        VerticalAlignment="Center"/>
-            <TextBlock Grid.Column="1" x:Name="TxtEnhPath"
+            <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxtEnhPath"
                        Text="{loc:Str deeper_player_no_enh}"
                        Foreground="{DynamicResource TextMutedBrush}"
                        VerticalAlignment="Center"
                        TextTrimming="CharacterEllipsis"/>
-            <Button Grid.Column="2" Content="{loc:Str deeper_player_pick_enh}"
+            <Button Grid.Row="0" Grid.Column="2" Content="{loc:Str deeper_player_pick_enh}"
                     Click="BtnPickEnhancement_Click"
                     Padding="10,4" Cursor="Hand" FontSize="11"
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                     Foreground="{DynamicResource DeeperAccentBrush}"
                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
-            <Button Grid.Column="3" Content="{loc:Str deeper_player_load_url}"
+            <Button Grid.Row="0" Grid.Column="3" Content="{loc:Str deeper_player_load_url}"
                     Click="BtnLoadUrl_Click"
                     Padding="10,4" Cursor="Hand" FontSize="11" Margin="6,0,0,0"
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                     Foreground="{DynamicResource DeeperAccentBrush}"
                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
-            <Button Grid.Column="4" x:Name="BtnUnloadEnhancement"
+            <Button Grid.Row="0" Grid.Column="4" x:Name="BtnCreateNewEnhancement"
+                    Content="{loc:Str deeper_player_create_new_btn}"
+                    Click="BtnCreateNewEnhancement_Click"
+                    Padding="10,4" Cursor="Hand" FontSize="11" Margin="6,0,0,0"
+                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                    Foreground="{DynamicResource DeeperAccentBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                    Visibility="Collapsed"/>
+            <Button Grid.Row="0" Grid.Column="5" x:Name="BtnUnloadEnhancement"
                     Content="{loc:Str deeper_player_unload}"
                     Click="BtnUnloadEnhancement_Click"
                     Padding="8,4" Cursor="Hand" FontSize="11" Margin="6,0,0,0"
@@ -101,6 +114,15 @@
                     Foreground="{DynamicResource TextMutedBrush}"
                     BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
                     Visibility="Collapsed"/>
+
+            <!-- Discovery-source badge: tells the user how the loaded enhancement
+                 was found (library / sidecar / embedded / manual / URL). Hidden
+                 when no enhancement is loaded. -->
+            <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="5" x:Name="TxtEnhSource"
+                       Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                       FontSize="10" Margin="0,2,0,0"
+                       TextTrimming="CharacterEllipsis"
+                       Visibility="Collapsed"/>
         </Grid>
 
         <!-- Media pane: audio waveform OR video WebView2, swapped by MediaType -->

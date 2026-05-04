@@ -2373,6 +2373,53 @@ namespace ConditioningControlPanel
             }
         }
 
+        // ---- Public entry points for "Open with CCP" + drag-drop dispatch ----
+
+        public void OpenInDeeperPlayer(string mediaPath)
+        {
+            try
+            {
+                var win = new Views.Deeper.EnhancementPlayerWindow(App.DeeperPlayer, App.DeeperHost) { Owner = this };
+                win.Show();
+                win.OpenLocalMediaFile(mediaPath);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open Deeper player for {Path}", mediaPath);
+                MessageBox.Show(this,
+                    $"Couldn't open Deeper Player:\n\n{ex.GetType().Name}: {ex.Message}",
+                    "Open Player failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        public void OpenInDeeperEditorForMedia(string mediaPath)
+        {
+            try
+            {
+                var ext = Path.GetExtension(mediaPath);
+                var mediaType = AssetVideoExtensions.Contains(ext)
+                    ? Models.Deeper.MediaTypes.Video
+                    : Models.Deeper.MediaTypes.Audio;
+                var enhancement = App.EnhancementLibrary?.CreateBlank(mediaType, mediaPath);
+                if (enhancement == null) return;
+                OpenDeeperEditor(enhancement, null);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open Deeper editor for {Path}", mediaPath);
+                MessageBox.Show(this,
+                    $"Couldn't open Deeper Editor:\n\n{ex.GetType().Name}: {ex.Message}",
+                    "Open Editor failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        public void HandlePendingFileOpen(string action, string path)
+        {
+            if (string.IsNullOrEmpty(action) || string.IsNullOrEmpty(path)) return;
+            if (action == "play") OpenInDeeperPlayer(path);
+            else if (action == "edit") OpenInDeeperEditorForMedia(path);
+        }
+
         private void OnDeeperLibraryChanged(object? sender, EventArgs e)
         {
             // Library change events arrive on the dispatcher thread already
@@ -2502,6 +2549,10 @@ namespace ConditioningControlPanel
                     FontSize = 11, Margin = new Thickness(0, 2, 0, 0)
                 });
             }
+            // Linked-media line: status dot + icon + basename/host. Tooltip
+            // carries the full media source so users can hover to inspect.
+            var mediaLine = BuildDeeperMediaLine(entry.MediaSource, entry.MediaType);
+            if (mediaLine != null) stack.Children.Add(mediaLine);
             stack.Children.Add(new TextBlock
             {
                 Text = System.IO.Path.GetFileName(entry.FilePath),
@@ -2512,6 +2563,77 @@ namespace ConditioningControlPanel
 
             border.Child = stack;
             return border;
+        }
+
+        // Builds the small "{🎬|🎵} {basename or host}  {✓|⚠|🌐}" line that
+        // appears on each Deeper library/recent card. Returns null if the
+        // entry has nothing useful to show (caller skips the row).
+        private DockPanel? BuildDeeperMediaLine(string mediaSource, string mediaType)
+        {
+            var dim = (System.Windows.Media.Brush)FindResource("TextDimBrush");
+            var muted = (System.Windows.Media.Brush)FindResource("TextMutedBrush");
+            var accent = (System.Windows.Media.Brush)FindResource("DeeperAccentBrush");
+            var icon = mediaType == Models.Deeper.MediaTypes.Audio ? "🎵" : "🎬";
+
+            string statusDot;
+            string display;
+            System.Windows.Media.Brush statusBrush;
+            if (string.IsNullOrEmpty(mediaSource))
+            {
+                statusDot = "⚠";
+                statusBrush = muted;
+                display = Loc.Get("deeper_tab_card_no_media");
+            }
+            else if (mediaSource.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                  || mediaSource.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                statusDot = "🌐";
+                statusBrush = accent;
+                try { display = new Uri(mediaSource).Host; }
+                catch { display = mediaSource; }
+            }
+            else
+            {
+                bool exists = false;
+                try { exists = System.IO.File.Exists(mediaSource); } catch { }
+                statusDot = exists ? "✓" : "⚠";
+                statusBrush = exists ? accent : muted;
+                display = System.IO.Path.GetFileName(mediaSource);
+                if (string.IsNullOrEmpty(display)) display = mediaSource;
+            }
+
+            var line = new DockPanel
+            {
+                LastChildFill = true,
+                Margin = new Thickness(0, 2, 0, 0),
+                ToolTip = string.IsNullOrEmpty(mediaSource) ? null : (object)mediaSource
+            };
+            var iconText = new TextBlock
+            {
+                Text = icon, FontSize = 11,
+                Foreground = dim,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 4, 0)
+            };
+            DockPanel.SetDock(iconText, Dock.Left);
+            line.Children.Add(iconText);
+            var statusText = new TextBlock
+            {
+                Text = statusDot, FontSize = 11, FontWeight = FontWeights.Bold,
+                Foreground = statusBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0)
+            };
+            DockPanel.SetDock(statusText, Dock.Left);
+            line.Children.Add(statusText);
+            line.Children.Add(new TextBlock
+            {
+                Text = display, FontSize = 10,
+                Foreground = dim,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            return line;
         }
 
         private Border BuildDeeperRecentRow(string path)
@@ -2538,6 +2660,19 @@ namespace ConditioningControlPanel
                 FontSize = 12, FontWeight = FontWeights.SemiBold,
                 TextTrimming = TextTrimming.CharacterEllipsis
             });
+            // Best-effort media line: read the JSON to get its media_source
+            // and media_type. Failures (corrupt file, missing on disk) just
+            // skip the line — the caller still has the project path below.
+            try
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    var enh = Services.Deeper.EnhancementSerializer.LoadFromFile(path);
+                    var line = BuildDeeperMediaLine(enh.MediaSource, enh.MediaType);
+                    if (line != null) stack.Children.Add(line);
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("Recent-row media line skipped: {Error}", ex.Message); }
             stack.Children.Add(new TextBlock
             {
                 Text = path,
@@ -14170,10 +14305,115 @@ namespace ConditioningControlPanel
             border.Child = mainStack;
             dialog.Content = border;
             dialog.ShowDialog();
-            
+
             return result;
         }
-        
+
+        // Three-choice dialog used when a single media file is dropped onto MainWindow.
+        // Modeled on ShowStyledDialog but with three primary actions stacked vertically
+        // (Play / Edit / Add to Library) and a small Cancel link below.
+        private MediaDropChoice ShowMediaDropChoiceDialog(string filePath)
+        {
+            var dialog = new Window
+            {
+                Title = Loc.Get("dlg_media_drop_title"),
+                Width = 460,
+                SizeToContent = SizeToContent.Height,
+                MinHeight = 240,
+                MaxHeight = 600,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStyle = WindowStyle.None,
+                AllowsTransparency = true,
+                Background = System.Windows.Media.Brushes.Transparent
+            };
+
+            var border = new Border
+            {
+                Background = Application.Current.Resources["DarkerBgBrush"] as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(26, 26, 46)),
+                BorderBrush = FindResource("PinkBrush") as SolidColorBrush,
+                BorderThickness = new Thickness(2),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(20)
+            };
+
+            var stack = new StackPanel();
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = Loc.Get("dlg_media_drop_title"),
+                Foreground = FindResource("PinkBrush") as SolidColorBrush,
+                FontSize = 18,
+                FontWeight = FontWeights.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            stack.Children.Add(new TextBlock
+            {
+                Text = Path.GetFileName(filePath),
+                Foreground = Brushes.White,
+                FontSize = 12,
+                Opacity = 0.75,
+                TextWrapping = TextWrapping.Wrap,
+                TextAlignment = TextAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 16)
+            });
+
+            var choice = MediaDropChoice.Cancel;
+
+            Button MakeBigButton(string label)
+            {
+                return new Button
+                {
+                    Content = label,
+                    Background = FindResource("PinkBrush") as SolidColorBrush,
+                    Foreground = Brushes.White,
+                    BorderThickness = new Thickness(0),
+                    Padding = new Thickness(20, 12, 20, 12),
+                    Margin = new Thickness(0, 0, 0, 8),
+                    FontSize = 13,
+                    FontWeight = FontWeights.SemiBold,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Cursor = Cursors.Hand
+                };
+            }
+
+            var btnPlay = MakeBigButton(Loc.Get("dlg_media_drop_play"));
+            btnPlay.Click += (_, _) => { choice = MediaDropChoice.Play; dialog.Close(); };
+            stack.Children.Add(btnPlay);
+
+            var btnEdit = MakeBigButton(Loc.Get("dlg_media_drop_edit"));
+            btnEdit.Click += (_, _) => { choice = MediaDropChoice.Edit; dialog.Close(); };
+            stack.Children.Add(btnEdit);
+
+            var btnLib = MakeBigButton(Loc.Get("dlg_media_drop_library"));
+            btnLib.Click += (_, _) => { choice = MediaDropChoice.Library; dialog.Close(); };
+            stack.Children.Add(btnLib);
+
+            var btnCancel = new Button
+            {
+                Content = Loc.Get("dlg_media_drop_cancel"),
+                Background = Brushes.Transparent,
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(8, 6, 8, 6),
+                Margin = new Thickness(0, 8, 0, 0),
+                FontSize = 11,
+                Opacity = 0.7,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Cursor = Cursors.Hand
+            };
+            btnCancel.Click += (_, _) => { choice = MediaDropChoice.Cancel; dialog.Close(); };
+            stack.Children.Add(btnCancel);
+
+            border.Child = stack;
+            dialog.Content = border;
+            dialog.ShowDialog();
+            return choice;
+        }
+
         // --- velvet-mosaic: highlight feature cards whose feature is enabled ---
 
         private void RefreshFeatureCardActiveStates()
@@ -15538,6 +15778,21 @@ namespace ConditioningControlPanel
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
 
             var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+
+            // Single-file media drop: prompt Play / Edit / Add-to-Library.
+            // Multi-file, folder, and .zip drops fall through to the existing flow.
+            if (files.Length == 1 && File.Exists(files[0]) && IsDeeperPlayableMedia(files[0]))
+            {
+                var choice = ShowMediaDropChoiceDialog(files[0]);
+                switch (choice)
+                {
+                    case MediaDropChoice.Play: OpenInDeeperPlayer(files[0]); return;
+                    case MediaDropChoice.Edit: OpenInDeeperEditorForMedia(files[0]); return;
+                    case MediaDropChoice.Library: await HandleAssetDropAsync(files); return;
+                    case MediaDropChoice.Cancel: return;
+                }
+            }
+
             var dropType = DetectDropType(files);
 
             switch (dropType)
@@ -15565,6 +15820,28 @@ namespace ConditioningControlPanel
         {
             ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".tif"
         };
+
+        // Deeper-playable subsets — narrower than AssetVideoExtensions because the
+        // player's WebView2 + NAudio backends only handle these. Used by the
+        // "Open with CCP" file association and the single-file drop prompt.
+        private static readonly HashSet<string> DeeperVideoExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"
+        };
+
+        private static readonly HashSet<string> DeeperAudioExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"
+        };
+
+        private enum MediaDropChoice { Cancel, Play, Edit, Library }
+
+        private static bool IsDeeperPlayableMedia(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            var ext = Path.GetExtension(path);
+            return DeeperVideoExtensions.Contains(ext) || DeeperAudioExtensions.Contains(ext);
+        }
 
         private static DropType DetectDropType(string[] files)
         {

@@ -318,14 +318,11 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtMetaDescription.Text = _enhancement.Metadata.Description;
                 TxtMetaTags.Text = string.Join(", ", _enhancement.Metadata.Tags);
                 TxtMetaLicense.Text = _enhancement.Metadata.License;
-                TxtMediaSource.Text = _enhancement.MediaSource;
-                TxtMediaType.Text = _enhancement.MediaType == MediaTypes.Audio
-                    ? Loc.Get("deeper_editor_media_type_audio")
-                    : Loc.Get("deeper_editor_media_type_video");
             }
             finally { _suppressDirty = false; }
 
             UpdateTitle();
+            RefreshLinkedFilesUi();
             UpdateCreatorLockUi();
             RefreshValidation();
             SelectNothing();
@@ -3671,8 +3668,286 @@ namespace ConditioningControlPanel.Views.Deeper
             var name = string.IsNullOrEmpty(_enhancement.Metadata.Name)
                 ? Loc.Get("deeper_editor_untitled") : _enhancement.Metadata.Name;
             TxtTitle.Text = name;
-            TxtFilePath.Text = _filePath ?? Loc.Get("deeper_editor_unsaved");
             Title = $"Deeper — {name}";
+            // Linked-files strip shows the file path; keep it in sync.
+            RefreshLinkedFilesUi();
+        }
+
+        // -- Linked Files strip ----------------------------------------------
+
+        private void RefreshLinkedFilesUi()
+        {
+            // JSON side
+            if (string.IsNullOrEmpty(_filePath))
+            {
+                TxtLinkedJsonName.Text = Loc.Get("deeper_editor_unsaved");
+                TxtLinkedJsonPath.Text = "";
+                BtnLinkedJsonOpenFolder.IsEnabled = false;
+            }
+            else
+            {
+                TxtLinkedJsonName.Text = System.IO.Path.GetFileName(_filePath);
+                TxtLinkedJsonPath.Text = _filePath;
+                TxtLinkedJsonPath.ToolTip = _filePath;
+                BtnLinkedJsonOpenFolder.IsEnabled = true;
+            }
+
+            // Media side
+            var src = _enhancement?.MediaSource ?? "";
+            var isUrl = src.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                     || src.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+            TxtLinkedMediaIcon.Text = _enhancement?.MediaType == MediaTypes.Audio ? "🎵" : "🎬";
+
+            if (string.IsNullOrEmpty(src))
+            {
+                TxtLinkedMediaStatus.Text = "⚠";
+                TxtLinkedMediaStatus.ToolTip = Loc.Get("deeper_editor_linked_status_local_missing");
+                TxtLinkedMediaName.Text = Loc.Get("deeper_editor_linked_no_media");
+                TxtLinkedMediaPath.Text = "";
+                BtnLinkedMediaClear.IsEnabled = false;
+            }
+            else if (isUrl)
+            {
+                TxtLinkedMediaStatus.Text = "🌐";
+                TxtLinkedMediaStatus.ToolTip = Loc.Get("deeper_editor_linked_status_url");
+                string display;
+                try { display = new Uri(src).Host; } catch { display = src; }
+                TxtLinkedMediaName.Text = display;
+                TxtLinkedMediaPath.Text = src;
+                TxtLinkedMediaPath.ToolTip = src;
+                BtnLinkedMediaClear.IsEnabled = true;
+            }
+            else
+            {
+                var exists = false;
+                try { exists = File.Exists(src); } catch { }
+                TxtLinkedMediaStatus.Text = exists ? "✓" : "⚠";
+                TxtLinkedMediaStatus.ToolTip = exists
+                    ? Loc.Get("deeper_editor_linked_status_local_ok")
+                    : Loc.Get("deeper_editor_linked_status_local_missing");
+                TxtLinkedMediaName.Text = System.IO.Path.GetFileName(src);
+                TxtLinkedMediaPath.Text = src;
+                TxtLinkedMediaPath.ToolTip = src;
+                BtnLinkedMediaClear.IsEnabled = true;
+            }
+        }
+
+        private void BtnLinkedJsonOpenFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_filePath)) return;
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{_filePath}\"",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: open folder failed: {Error}", ex.Message);
+            }
+        }
+
+        private void BtnLinkedJsonSwap_Click(object sender, RoutedEventArgs e)
+        {
+            if (!ConfirmDiscardChanges()) return;
+
+            var library = App.EnhancementLibrary;
+            var dlg = new OpenFileDialog
+            {
+                Title = Loc.Get("deeper_editor_linked_swap_json_btn"),
+                Filter = $"Deeper Enhancement (*{EnhancementLibrary.FileSuffix})|*{EnhancementLibrary.FileSuffix}|All files (*.*)|*.*",
+                InitialDirectory = library?.LibraryFolder ?? ""
+            };
+            if (dlg.ShowDialog(this) != true) return;
+
+            try
+            {
+                var enhancement = library?.Open(dlg.FileName);
+                if (enhancement == null) return;
+                TeardownPreview();
+                LoadEnhancement(enhancement, dlg.FileName);
+                _ = InitializePreviewAsync();
+            }
+            catch (EnhancementLoadException ex)
+            {
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "DeeperEditor: swap JSON failed");
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void BtnLinkedMediaChange_Click(object sender, RoutedEventArgs e)
+        {
+            MediaChangePopup.IsOpen = true;
+        }
+
+        private void BtnChangeMediaLocal_Click(object sender, RoutedEventArgs e)
+        {
+            MediaChangePopup.IsOpen = false;
+            var dlg = new OpenFileDialog
+            {
+                Title = Loc.Get("deeper_editor_linked_change_media_btn"),
+                Filter =
+                    "Media (audio + video)|*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg;*.mp4;*.webm;*.mkv;*.mov;*.avi;*.m4v"
+                    + "|Audio (*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg)|*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg"
+                    + "|Video (*.mp4;*.webm;*.mkv;*.mov;*.avi;*.m4v)|*.mp4;*.webm;*.mkv;*.mov;*.avi;*.m4v"
+                    + "|All files (*.*)|*.*"
+            };
+            if (dlg.ShowDialog(this) != true) return;
+            ApplyChangedMedia(dlg.FileName, isLocal: true);
+        }
+
+        private void BtnChangeMediaUrl_Click(object sender, RoutedEventArgs e)
+        {
+            MediaChangePopup.IsOpen = false;
+            var prompt = new ConditioningControlPanel.Views.Deeper.UrlPromptDialog { Owner = this };
+            if (prompt.ShowDialog() != true || string.IsNullOrEmpty(prompt.Result)) return;
+            ApplyChangedMedia(prompt.Result, isLocal: false);
+        }
+
+        private void ApplyChangedMedia(string newSource, bool isLocal)
+        {
+            // Detect a matching enhancement (embedded JSON, sidecar, or library)
+            // for the new media. If found, offer to switch projects too.
+            Enhancement? matched = null;
+            string? matchedSource = null;
+
+            try
+            {
+                if (isLocal && EnhancementMediaBundler.IsSupportedExtension(newSource)
+                    && EnhancementMediaBundler.TryExtract(newSource, out var embedded, out _)
+                    && embedded != null)
+                {
+                    matched = embedded;
+                    matchedSource = newSource; // embedded source = the media itself
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("DeeperEditor: embedded probe failed: {Error}", ex.Message); }
+
+            if (matched == null && isLocal)
+            {
+                try
+                {
+                    var dir = System.IO.Path.GetDirectoryName(newSource);
+                    var stem = System.IO.Path.GetFileNameWithoutExtension(newSource);
+                    if (!string.IsNullOrEmpty(dir) && !string.IsNullOrEmpty(stem))
+                    {
+                        var sidecar = System.IO.Path.Combine(dir, stem + EnhancementLibrary.FileSuffix);
+                        if (File.Exists(sidecar))
+                        {
+                            matched = EnhancementSerializer.LoadFromFile(sidecar);
+                            matchedSource = sidecar;
+                        }
+                    }
+                }
+                catch (Exception ex) { App.Logger?.Debug("DeeperEditor: sidecar probe failed: {Error}", ex.Message); }
+            }
+
+            if (matched == null)
+            {
+                try
+                {
+                    var mediaTypeFilter = isLocal && IsLocalVideoFile(newSource)
+                        ? MediaTypes.Video
+                        : (isLocal ? MediaTypes.Audio : (string?)null);
+                    var libMatch = App.EnhancementLibrary?.FindMatch(newSource, mediaTypeFilter);
+                    if (libMatch != null)
+                    {
+                        matched = EnhancementSerializer.LoadFromFile(libMatch.FilePath);
+                        matchedSource = libMatch.FilePath;
+                    }
+                }
+                catch (Exception ex) { App.Logger?.Debug("DeeperEditor: library probe failed: {Error}", ex.Message); }
+            }
+
+            if (matched != null && !string.IsNullOrEmpty(matchedSource))
+            {
+                var result = MessageBox.Show(this,
+                    Loc.Get("deeper_editor_linked_replace_project_q"),
+                    "Deeper",
+                    MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+                if (result == MessageBoxResult.Cancel) return;
+                if (result == MessageBoxResult.Yes)
+                {
+                    if (!ConfirmDiscardChanges()) return;
+                    // Use the matching project; treat embedded-source case as
+                    // unsaved (filePath=null) so a save would write a new file
+                    // rather than overwrite the media in place.
+                    var loadPath = matchedSource.EndsWith(EnhancementLibrary.FileSuffix, StringComparison.OrdinalIgnoreCase)
+                        ? matchedSource
+                        : null;
+                    TeardownPreview();
+                    LoadEnhancement(matched, loadPath);
+                    _ = InitializePreviewAsync();
+                    return;
+                }
+                // No → fall through to relink media on the current project.
+            }
+
+            // Just relink: update the current enhancement's media source.
+            _enhancement.MediaSource = newSource;
+            if (isLocal)
+            {
+                _enhancement.MediaType = IsLocalVideoFile(newSource) ? MediaTypes.Video : MediaTypes.Audio;
+            }
+            else
+            {
+                _enhancement.MediaType = MediaTypes.Video;
+            }
+            MarkDirty();
+            RefreshLinkedFilesUi();
+            TeardownPreview();
+            _ = InitializePreviewAsync();
+            _ = TryAutoFillFromHtAsync(_enhancement.MediaSource);
+        }
+
+        private void BtnLinkedMediaClear_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_enhancement?.MediaSource)) return;
+            var result = MessageBox.Show(this,
+                Loc.Get("deeper_editor_linked_clear_confirm"),
+                "Deeper",
+                MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            if (result != MessageBoxResult.OK) return;
+            _enhancement.MediaSource = "";
+            MarkDirty();
+            TeardownPreview();
+            ShowPlaceholder();
+            RefreshLinkedFilesUi();
+        }
+
+        // Best-effort dirty-prompt for swap/load flows. Returns true if the
+        // caller should proceed (user saved, or chose to discard, or there
+        // were no unsaved changes); false if the user cancelled.
+        private bool ConfirmDiscardChanges()
+        {
+            if (!_isDirty) return true;
+            var result = MessageBox.Show(this,
+                Loc.Get("deeper_editor_unsaved_prompt"),
+                Loc.Get("deeper_editor_unsaved_prompt_title"),
+                MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+            if (result == MessageBoxResult.Cancel) return false;
+            if (result == MessageBoxResult.Yes)
+            {
+                MenuSave_Click(this, new RoutedEventArgs());
+                // If save was cancelled (e.g. SaveAs dialog), _isDirty is still true.
+                return !_isDirty;
+            }
+            return true; // discard
+        }
+
+        private static bool IsLocalVideoFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+            return ext is ".mp4" or ".webm" or ".mkv" or ".mov" or ".avi" or ".m4v";
         }
 
         private static string FormatTime(double seconds)
@@ -3827,6 +4102,57 @@ namespace ConditioningControlPanel.Views.Deeper
             try { _editorTutorialOverlay?.Close(); } catch { }
             _editorTutorialOverlay = null;
             DisposePlayback();
+        }
+
+        // Stops/disposes the playback resources tied to the *current* media so
+        // a new media link can be initialized cleanly. Unlike DisposePlayback
+        // (window-close path), this leaves the timers and WebView2 control
+        // intact — the editor is still alive and may re-initialize them.
+        private void TeardownPreview()
+        {
+            try
+            {
+                if (_mediaPlayer != null)
+                {
+                    if (VideoPreview != null) VideoPreview.MediaPlayer = null;
+                    try { if (_vlcLengthChanged != null) _mediaPlayer.LengthChanged -= _vlcLengthChanged; } catch { }
+                    try { if (_vlcTimeChanged != null) _mediaPlayer.TimeChanged -= _vlcTimeChanged; } catch { }
+                    try { if (_vlcEndReached != null) _mediaPlayer.EndReached -= _vlcEndReached; } catch { }
+                    _vlcLengthChanged = null;
+                    _vlcTimeChanged = null;
+                    _vlcEndReached = null;
+                    try { _mediaPlayer.Stop(); } catch { }
+                    try { _mediaPlayer.Dispose(); } catch { }
+                    _mediaPlayer = null;
+                }
+                if (_vlcMedia != null)
+                {
+                    try { _vlcMedia.Dispose(); } catch { }
+                    _vlcMedia = null;
+                }
+                if (_waveOut != null)
+                {
+                    try { if (_waveOutStopped != null) _waveOut.PlaybackStopped -= _waveOutStopped; } catch { }
+                    _waveOutStopped = null;
+                    try { _waveOut.Stop(); } catch { }
+                    try { _waveOut.Dispose(); } catch { }
+                    _waveOut = null;
+                }
+                _audioReader?.Dispose();
+                _audioReader = null;
+                if (_browserSource != null)
+                {
+                    try { _browserSource.PlaybackTimeChanged -= OnBrowserTimeChanged; } catch { }
+                    try { _browserSource.Dispose(); } catch { }
+                    _browserSource = null;
+                }
+                _totalSeconds = 0;
+                _currentSeconds = 0;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: teardown preview warning: {Error}", ex.Message);
+            }
         }
 
         private void DisposePlayback()

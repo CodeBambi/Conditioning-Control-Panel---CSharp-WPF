@@ -46,6 +46,16 @@ namespace ConditioningControlPanel.Views.Deeper
         private string? _lastAudioPath;
         private bool _loadInProgress;
 
+        // Tracks WHICH branch of TryAutoLoadEnhancement supplied the current
+        // enhancement (or whether the user picked it manually). Drives the
+        // small "From library / Embedded in media / ..." badge under TxtEnhPath.
+        private enum DiscoverySource { Manual, Library, Sidecar, Embedded, Url, PromotedFromEmbedded }
+        private DiscoverySource _lastDiscoverySource = DiscoverySource.Manual;
+        // Path of the most recently loaded media in the player. Lets the
+        // "Create new enhancement..." button hand the editor a pre-linked
+        // media so the user starts authoring against the right file.
+        private string? _lastMediaPathForCreateNew;
+
         // Live event log (last N actions the engine fired). Newest first.
         private const int MaxEventLogEntries = 30;
         private readonly System.Collections.ObjectModel.ObservableCollection<string> _events = new();
@@ -97,6 +107,31 @@ namespace ConditioningControlPanel.Views.Deeper
             // window's controls are instantiated. LoadFromMemory fires Loaded
             // synchronously which then dispatches to the UI thread anyway.
             Loaded += (_, _) => _host.LoadFromMemory(enhancement, sourceTag);
+        }
+
+        /// <summary>
+        /// Public entry for external launchers (Windows file association,
+        /// MainWindow drag-drop dispatch). Mirrors BtnPickAudio_Click's
+        /// dispatch logic but takes a path directly. Defers via Loaded if the
+        /// window hasn't finished initializing yet — LoadLocalVideoAsync
+        /// touches WebView2 and TxtVideoStatus, both of which require the
+        /// XAML to be live.
+        /// </summary>
+        public void OpenLocalMediaFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+
+            void Load()
+            {
+                if (IsLocalVideoFile(path))
+                    _ = LoadLocalVideoAsync(path);
+                else
+                    LoadAudio(path);
+                TryAutoLoadEnhancement(path);
+            }
+
+            if (IsLoaded) Load();
+            else Loaded += (_, _) => Load();
         }
 
         // -- File pickers ------------------------------------------------------
@@ -179,6 +214,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 Filter = "Deeper Enhancement (*.ccpenh.json)|*.ccpenh.json|All files (*.*)|*.*"
             };
             if (dlg.ShowDialog(this) != true) return;
+            _lastDiscoverySource = DiscoverySource.Manual;
             _host.LoadFromFile(dlg.FileName);
         }
 
@@ -198,6 +234,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     TxtStatus.Text = Loc.Get("deeper_player_status_url_failed");
                     return;
                 }
+                _lastDiscoverySource = DiscoverySource.Url;
                 _host.LoadFromMemory(enh, dlg.Result);
                 TxtStatus.Text = Loc.Get("deeper_player_status_url_loaded");
             }
@@ -216,12 +253,39 @@ namespace ConditioningControlPanel.Views.Deeper
             //    to share a basename in the same folder.
             // 1) Side-by-side: foo.mp3 → foo.ccpenh.json next to it.
             // 2) Library lookup by media_source pattern (Phase 10).
+            // Track the discovery branch so OnHostLoaded can show the right
+            // "from library / embedded / ..." badge under TxtEnhPath.
+            _lastMediaPathForCreateNew = mediaPath;
+            BtnCreateNewEnhancement.Visibility = Visibility.Collapsed;
             try
             {
                 if (EnhancementMediaBundler.IsSupportedExtension(mediaPath)
                     && EnhancementMediaBundler.TryExtract(mediaPath, out var embedded, out _)
                     && embedded != null)
                 {
+                    var mediaType = IsLocalVideoFile(mediaPath)
+                        ? Models.Deeper.MediaTypes.Video
+                        : Models.Deeper.MediaTypes.Audio;
+                    // Auto-promote: if the library doesn't already have a
+                    // matching entry for this media, save the embedded JSON
+                    // into the user's library so the project survives next time
+                    // the file is opened and shows up in the Deeper tab.
+                    var existing = App.EnhancementLibrary?.FindMatch(mediaPath, mediaType);
+                    if (existing == null)
+                    {
+                        var saved = App.EnhancementLibrary?.PromoteToLibrary(embedded, mediaPath);
+                        if (!string.IsNullOrEmpty(saved))
+                        {
+                            _lastDiscoverySource = DiscoverySource.PromotedFromEmbedded;
+                            _host.LoadFromFile(saved!);
+                            ShowPromotedBanner(Path.GetFileName(saved!));
+                            return;
+                        }
+                        // Promotion failed (e.g. read-only library) — fall back
+                        // to the original in-memory load so the user still gets
+                        // their enhancement this session.
+                    }
+                    _lastDiscoverySource = DiscoverySource.Embedded;
                     _host.LoadFromMemory(embedded, "embedded:" + Path.GetFileName(mediaPath));
                     return;
                 }
@@ -233,20 +297,72 @@ namespace ConditioningControlPanel.Views.Deeper
                     var candidate = Path.Combine(dir, baseName + ".ccpenh.json");
                     if (File.Exists(candidate))
                     {
+                        _lastDiscoverySource = DiscoverySource.Sidecar;
                         _host.LoadFromFile(candidate);
                         return;
                     }
                 }
 
-                var mediaType = IsLocalVideoFile(mediaPath)
+                var mediaTypeForMatch = IsLocalVideoFile(mediaPath)
                     ? Models.Deeper.MediaTypes.Video
                     : Models.Deeper.MediaTypes.Audio;
-                var match = App.EnhancementLibrary?.FindMatch(mediaPath, mediaType);
-                if (match != null) _host.LoadFromFile(match.FilePath);
+                var match = App.EnhancementLibrary?.FindMatch(mediaPath, mediaTypeForMatch);
+                if (match != null)
+                {
+                    _lastDiscoverySource = DiscoverySource.Library;
+                    _host.LoadFromFile(match.FilePath);
+                    return;
+                }
+
+                // Nothing found. Surface the "Create new enhancement..." button
+                // so the user can author against this media in the editor.
+                BtnCreateNewEnhancement.Visibility = Visibility.Visible;
+                TxtStatus.Text = Loc.Get("deeper_player_no_enh_for_media");
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("EnhancementPlayer: auto-load enhancement failed: {Error}", ex.Message);
+            }
+        }
+
+        // Non-modal toast under the source badge, auto-clears after ~6s.
+        private System.Windows.Threading.DispatcherTimer? _promotedClearTimer;
+        private void ShowPromotedBanner(string filename)
+        {
+            try
+            {
+                TxtStatus.Text = string.Format(Loc.Get("deeper_player_promoted_to_library_fmt"), filename);
+                _promotedClearTimer?.Stop();
+                _promotedClearTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(6)
+                };
+                _promotedClearTimer.Tick += (_, _) =>
+                {
+                    _promotedClearTimer?.Stop();
+                    _promotedClearTimer = null;
+                };
+                _promotedClearTimer.Start();
+            }
+            catch { }
+        }
+
+        private void BtnCreateNewEnhancement_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_lastMediaPathForCreateNew)) return;
+            try
+            {
+                var mediaType = IsLocalVideoFile(_lastMediaPathForCreateNew)
+                    ? Models.Deeper.MediaTypes.Video
+                    : Models.Deeper.MediaTypes.Audio;
+                var blank = App.EnhancementLibrary?.CreateBlank(mediaType, _lastMediaPathForCreateNew)
+                            ?? new Enhancement { MediaType = mediaType, MediaSource = _lastMediaPathForCreateNew };
+                var editor = new DeeperEditorWindow(blank, null) { Owner = this };
+                editor.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementPlayer: open editor for new enhancement failed");
             }
         }
 
@@ -632,6 +748,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtEnhPath.Text = Loc.Get("deeper_player_no_enh");
                 TxtEnhMetadata.Text = "";
                 BtnUnloadEnhancement.Visibility = Visibility.Collapsed;
+                TxtEnhSource.Visibility = Visibility.Collapsed;
                 UnbindEngineIfRunning();
                 ShowMediaPaneFor(MediaTypes.Audio); // default back to audio UI
                 return;
@@ -642,6 +759,20 @@ namespace ConditioningControlPanel.Views.Deeper
             var counts = $"{enh.Regions.Count} regions, {enh.HapticTracks.Sum(t => t?.Events?.Count ?? 0)} haptic events, {enh.Rules.Count} rules";
             TxtEnhMetadata.Text = $"{name}{creator}  ·  {counts}";
             BtnUnloadEnhancement.Visibility = Visibility.Visible;
+            BtnCreateNewEnhancement.Visibility = Visibility.Collapsed;
+
+            // Discovery-source badge
+            var key = _lastDiscoverySource switch
+            {
+                DiscoverySource.Library => "deeper_player_enh_source_library",
+                DiscoverySource.Sidecar => "deeper_player_enh_source_sidecar",
+                DiscoverySource.Embedded => "deeper_player_enh_source_embedded",
+                DiscoverySource.PromotedFromEmbedded => "deeper_player_enh_source_library",
+                DiscoverySource.Url => "deeper_player_enh_source_url",
+                _ => "deeper_player_enh_source_manual",
+            };
+            TxtEnhSource.Text = Loc.Get(key);
+            TxtEnhSource.Visibility = Visibility.Visible;
 
             ShowMediaPaneFor(enh.MediaType);
             if (enh.MediaType == MediaTypes.Video && IsRemoteVideoUrl(enh.MediaSource))
