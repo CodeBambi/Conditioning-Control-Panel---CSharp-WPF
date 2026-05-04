@@ -895,11 +895,110 @@ namespace ConditioningControlPanel.Views.Deeper
             settings.IsZoomControlEnabled = false;
             settings.IsBuiltInErrorPageEnabled = false;
 
+            // Exit-fullscreen detector. JS-only `document.exitFullscreen()` is
+            // unreliable in WebView2 — sometimes the page state doesn't actually
+            // clear, and `ContainsFullScreenElementChanged` never fires, so the
+            // borderless host window stays up forever. Belt-and-suspenders:
+            //
+            //   1) Click-pair (two clicks within 350ms, capture phase) AND
+            //      dblclick (safety net) both call tryExit while fullscreen.
+            //   2) tryExit calls `document.exitFullscreen()` AND posts a
+            //      'ccp_exit_fullscreen' WebMessage to C#.
+            //   3) C#'s OnVideoWebMessageReceived force-closes the fullscreen
+            //      Window directly — independent of the page's actual state.
+            //
+            // Either the page exits cleanly (event handler closes window) or
+            // it doesn't (WebMessage handler closes window). Both routes
+            // converge on the user being out of fullscreen.
+            await VideoBrowser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
+                (function() {
+                    function inAnyFs() {
+                        return !!(document.fullscreenElement || window._ccpForcedFs);
+                    }
+                    function postExit() {
+                        try { window.chrome.webview.postMessage('ccp_exit_fullscreen'); } catch (_) {}
+                    }
+                    function exitLoop(remaining) {
+                        if (remaining <= 0 || !document.fullscreenElement) return;
+                        try {
+                            var p = document.exitFullscreen ? document.exitFullscreen()
+                                  : (document.webkitExitFullscreen ? document.webkitExitFullscreen() : null);
+                            if (p && p.then) {
+                                p.then(function(){ exitLoop(remaining - 1); },
+                                       function(){ setTimeout(function(){ exitLoop(remaining - 1); }, 30); });
+                            } else {
+                                setTimeout(function(){ exitLoop(remaining - 1); }, 30);
+                            }
+                        } catch (_) {
+                            setTimeout(function(){ exitLoop(remaining - 1); }, 30);
+                        }
+                    }
+                    function dblHandler(e) {
+                        if (!inAnyFs()) return;
+                        if (e) {
+                            try { e.stopImmediatePropagation(); } catch (_) {}
+                            try { e.preventDefault(); } catch (_) {}
+                        }
+                        exitLoop(5);
+                        postExit();
+                    }
+                    // Only the native dblclick event — not a click-pair
+                    // detector, which would also fire on legitimate two-click
+                    // sequences (timeline scrub + play, ad dismiss, etc.).
+                    document.addEventListener('dblclick', dblHandler, true);
+                    document.addEventListener('dblclick', dblHandler, false);
+                    window.addEventListener('dblclick', dblHandler, true);
+                    function bindOnVideo() {
+                        try {
+                            var vids = document.querySelectorAll('video');
+                            for (var i = 0; i < vids.length; i++) {
+                                var v = vids[i];
+                                if (v._ccpBound) continue;
+                                v._ccpBound = true;
+                                v.addEventListener('dblclick', dblHandler, true);
+                                v.addEventListener('dblclick', dblHandler, false);
+                            }
+                        } catch (_) {}
+                    }
+                    bindOnVideo();
+                    setInterval(function() {
+                        if (inAnyFs()) bindOnVideo();
+                    }, 1000);
+                    document.addEventListener('fullscreenchange', function() {
+                        if (!document.fullscreenElement && window._ccpForcedFs) {
+                            postExit();
+                        }
+                    });
+                })();
+            ");
+
             _videoBrowserReady = true;
             VideoBrowser.CoreWebView2.NavigationStarting += OnVideoNavStarting;
             VideoBrowser.CoreWebView2.NavigationCompleted += OnVideoNavCompleted;
             VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged += OnVideoFullscreenChanged;
+            VideoBrowser.CoreWebView2.WebMessageReceived += OnVideoWebMessageReceived;
             return true;
+        }
+
+        private void OnVideoWebMessageReceived(object? sender,
+            Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            try
+            {
+                var msg = e.TryGetWebMessageAsString();
+                if (msg == "ccp_exit_fullscreen")
+                {
+                    App.Logger?.Information("EnhancementPlayer: ccp_exit_fullscreen received (forced FS active = {Active})", _isVideoFullscreen);
+                    if (_isVideoFullscreen)
+                    {
+                        Dispatcher.BeginInvoke(() => { try { ExitVideoFullscreen(); } catch { } });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementPlayer: web message handler error: {Error}", ex.Message);
+            }
         }
 
         private static bool IsAllowedPlayerHost(Uri uri)
@@ -1040,13 +1139,20 @@ namespace ConditioningControlPanel.Views.Deeper
             try
             {
                 var contains = VideoBrowser?.CoreWebView2?.ContainsFullScreenElement ?? false;
-                if (contains == _isVideoFullscreen) return;
 
                 if (contains)
                 {
-                    // Mirror primary across all monitors when the user opted in.
+                    if (_isVideoFullscreen) return;
+
+                    // Always reparent — even on single monitor, the user
+                    // expects HT fullscreen to cover the screen, not just the
+                    // player's video pane. The dblclick exit works via the
+                    // JS click-pair + ccp_exit_fullscreen WebMessage path,
+                    // which closes the borderless window through the flag
+                    // even when the page lost HTML5 fullscreen at reparent.
                     var screens = App.GetAllScreensCached();
-                    if (App.Settings?.Current?.DualMonitorEnabled == true && screens.Length > 1)
+                    var dualMonitor = App.Settings?.Current?.DualMonitorEnabled == true && screens.Length > 1;
+                    if (dualMonitor)
                     {
                         _isPlayerDualMonitorActive = App.ScreenMirror?.EnableMirror() ?? false;
                     }
@@ -1054,6 +1160,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 }
                 else
                 {
+                    if (!_isVideoFullscreen) return;
                     if (_isPlayerDualMonitorActive)
                     {
                         try { App.ScreenMirror?.DisableMirror(); } catch { }
@@ -1137,6 +1244,16 @@ namespace ConditioningControlPanel.Views.Deeper
                         App.Logger?.Debug("EnhancementPlayer: WebView re-parent on close failed: {Error}", ex.Message);
                     }
                     _videoFullscreenWindow = null;
+
+                    // After reparent the underlying Chromium HWND is in a state
+                    // where the page no longer receives input events (mouse
+                    // wheel scroll, clicks) until the user clicks into the
+                    // WebView. Focusing the WebView programmatically wakes the
+                    // inner HWND back up so the HT page is scrollable on
+                    // return. Mouse.Capture(null) clears any stuck capture
+                    // from the fullscreen click sequence.
+                    try { Mouse.Capture(null); } catch { }
+                    try { VideoBrowser?.Focus(); } catch { }
                 };
 
                 // Show small first, pump render queue, then maximize — matches the
@@ -1146,10 +1263,14 @@ namespace ConditioningControlPanel.Views.Deeper
                 _videoFullscreenWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
                 _videoFullscreenWindow.WindowState = WindowState.Maximized;
 
-                // After the reparent the page can lose its HTML5 fullscreen state
-                // (the WebView sees a layout reset). Re-request on the <video>
-                // element so the page renders the same way it did before the move.
-                _ = ReRequestVideoFullscreenAsync();
+                // Flag the page so the JS click-pair / dblclick handlers fire
+                // even when the page itself lost HTML5 fullscreen during the
+                // reparent. `window._ccpForcedFs` is read alongside
+                // `document.fullscreenElement` in the dblclick handler so the
+                // user can always exit our WPF "forced fullscreen" by
+                // double-clicking the video, regardless of page state.
+                try { _ = VideoBrowser.CoreWebView2.ExecuteScriptAsync("window._ccpForcedFs = true;"); }
+                catch { }
 
                 App.Logger?.Information("EnhancementPlayer: entered fullscreen on {Screen}", screen.DeviceName);
             }
@@ -1166,6 +1287,18 @@ namespace ConditioningControlPanel.Views.Deeper
             try
             {
                 _isVideoFullscreen = false;
+                // Clear the JS flag and best-effort exit any HTML5 fullscreen
+                // that may still be active on the page. Both calls are no-ops
+                // if the WebView is gone or the page already exited.
+                try
+                {
+                    if (VideoBrowser?.CoreWebView2 != null)
+                    {
+                        _ = VideoBrowser.CoreWebView2.ExecuteScriptAsync(
+                            "window._ccpForcedFs = false; try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
+                    }
+                }
+                catch { }
                 if (_videoFullscreenWindow != null)
                 {
                     try { _videoFullscreenWindow.Close(); }
@@ -1201,31 +1334,6 @@ namespace ConditioningControlPanel.Views.Deeper
             catch
             {
                 ExitVideoFullscreen();
-            }
-        }
-
-        private async Task ReRequestVideoFullscreenAsync()
-        {
-            if (VideoBrowser?.CoreWebView2 == null) return;
-            try
-            {
-                await Task.Delay(300);
-                await VideoBrowser.CoreWebView2.ExecuteScriptAsync(@"
-                    (function() {
-                        var video = document.querySelector('video');
-                        if (video) {
-                            if (video.requestFullscreen) {
-                                video.requestFullscreen();
-                            } else if (video.webkitRequestFullscreen) {
-                                video.webkitRequestFullscreen();
-                            }
-                        }
-                    })();
-                ");
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug(ex, "EnhancementPlayer: re-request fullscreen failed");
             }
         }
 
@@ -1301,6 +1409,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     try { VideoBrowser.CoreWebView2.NavigationStarting -= OnVideoNavStarting; } catch { }
                     try { VideoBrowser.CoreWebView2.NavigationCompleted -= OnVideoNavCompleted; } catch { }
                     try { VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged -= OnVideoFullscreenChanged; } catch { }
+                    try { VideoBrowser.CoreWebView2.WebMessageReceived -= OnVideoWebMessageReceived; } catch { }
                 }
             }
             catch { }

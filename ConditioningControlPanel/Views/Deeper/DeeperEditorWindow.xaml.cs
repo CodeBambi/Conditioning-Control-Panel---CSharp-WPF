@@ -47,6 +47,9 @@ namespace ConditioningControlPanel.Views.Deeper
         // the editor doesn't kill the user's browse session.
         private BrowserVideoTimeSource? _browserSource;
         private bool _browserInitInFlight;
+        private bool _previewBrowserConfigured;
+        private bool _isPreviewFullscreen;
+        private Window? _previewFullscreenWindow;
 
         // Common
         private double _totalSeconds;
@@ -440,6 +443,93 @@ namespace ConditioningControlPanel.Views.Deeper
                 BrowserPreview.CoreWebView2.NavigationStarting -= OnBrowserNavigationStarting;
                 BrowserPreview.CoreWebView2.NavigationStarting += OnBrowserNavigationStarting;
 
+                // One-time wiring: dblclick exit-fullscreen script + the
+                // ContainsFullScreenElementChanged subscription. InitializeBrowserAsync
+                // runs again whenever the user changes media_source, but the
+                // CoreWebView2 instance is reused across calls — re-adding the
+                // script and re-subscribing would double-fire on every nav.
+                if (!_previewBrowserConfigured)
+                {
+                    _previewBrowserConfigured = true;
+
+                    // Exit-fullscreen detector. JS-only `document.exitFullscreen()`
+                    // is unreliable in WebView2; sometimes ContainsFullScreenElementChanged
+                    // never fires, leaving the host stuck. Belt-and-suspenders:
+                    // click-pair detector + dblclick safety net BOTH call tryExit,
+                    // which calls exitFullscreen AND posts a 'ccp_exit_fullscreen'
+                    // WebMessage. C# force-closes the fullscreen window on receipt
+                    // independent of the page's actual fullscreen state.
+                    await BrowserPreview.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
+                        (function() {
+                            function inAnyFs() {
+                                return !!(document.fullscreenElement || window._ccpForcedFs);
+                            }
+                            function postExit() {
+                                try { window.chrome.webview.postMessage('ccp_exit_fullscreen'); } catch (_) {}
+                            }
+                            function exitLoop(remaining) {
+                                if (remaining <= 0 || !document.fullscreenElement) return;
+                                try {
+                                    var p = document.exitFullscreen ? document.exitFullscreen()
+                                          : (document.webkitExitFullscreen ? document.webkitExitFullscreen() : null);
+                                    if (p && p.then) {
+                                        p.then(function(){ exitLoop(remaining - 1); },
+                                               function(){ setTimeout(function(){ exitLoop(remaining - 1); }, 30); });
+                                    } else {
+                                        setTimeout(function(){ exitLoop(remaining - 1); }, 30);
+                                    }
+                                } catch (_) {
+                                    setTimeout(function(){ exitLoop(remaining - 1); }, 30);
+                                }
+                            }
+                            function dblHandler(e) {
+                                if (!inAnyFs()) return;
+                                if (e) {
+                                    try { e.stopImmediatePropagation(); } catch (_) {}
+                                    try { e.preventDefault(); } catch (_) {}
+                                }
+                                exitLoop(5);
+                                postExit();
+                            }
+                            // Only the native dblclick event — not a click-pair
+                            // detector, which would also fire on legitimate
+                            // two-click sequences (timeline scrub + play, etc.).
+                            document.addEventListener('dblclick', dblHandler, true);
+                            document.addEventListener('dblclick', dblHandler, false);
+                            window.addEventListener('dblclick', dblHandler, true);
+                            function bindOnVideo() {
+                                try {
+                                    var vids = document.querySelectorAll('video');
+                                    for (var i = 0; i < vids.length; i++) {
+                                        var v = vids[i];
+                                        if (v._ccpBound) continue;
+                                        v._ccpBound = true;
+                                        v.addEventListener('dblclick', dblHandler, true);
+                                        v.addEventListener('dblclick', dblHandler, false);
+                                    }
+                                } catch (_) {}
+                            }
+                            bindOnVideo();
+                            setInterval(function() {
+                                if (inAnyFs()) bindOnVideo();
+                            }, 1000);
+                            document.addEventListener('fullscreenchange', function() {
+                                if (!document.fullscreenElement && window._ccpForcedFs) {
+                                    postExit();
+                                }
+                            });
+                        })();
+                    ");
+
+                    // Without this, HT's video.requestFullscreen() just expands
+                    // the video to fill the small preview pane within the
+                    // editor's grid — the timeline below stays visible behind it
+                    // and exit leaves focus trapped in the WebView2 so the
+                    // timeline ScrollViewer's PreviewMouseWheel never fires.
+                    BrowserPreview.CoreWebView2.ContainsFullScreenElementChanged += OnPreviewFullscreenChanged;
+                    BrowserPreview.CoreWebView2.WebMessageReceived += OnPreviewWebMessageReceived;
+                }
+
                 BrowserPreview.CoreWebView2.Navigate(url);
 
                 _browserSource = new BrowserVideoTimeSource(BrowserPreview);
@@ -497,6 +587,194 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
+        // -- Preview fullscreen reparent --------------------------------------
+        // HT's HTML5 fullscreen on <video> would otherwise just stretch the
+        // video to fill the WebView2's allocated cell (the small preview row),
+        // leaving the editor's timeline + side panel visible behind it and
+        // making "fullscreen" basically broken. Mirror EnhancementPlayerWindow:
+        // reparent BrowserPreview into a borderless topmost window for the
+        // duration of fullscreen, return it to PreviewHost on exit.
+
+        private void OnPreviewWebMessageReceived(object? sender,
+            Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            try
+            {
+                var msg = e.TryGetWebMessageAsString();
+                if (msg == "ccp_exit_fullscreen")
+                {
+                    App.Logger?.Information("DeeperEditor: ccp_exit_fullscreen received (forced FS active = {Active})", _isPreviewFullscreen);
+                    if (_isPreviewFullscreen)
+                    {
+                        Dispatcher.BeginInvoke(() => { try { ExitPreviewFullscreen(); } catch { } });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: web message handler error: {Error}", ex.Message);
+            }
+        }
+
+        private void OnPreviewFullscreenChanged(object? sender, object? e)
+        {
+            try
+            {
+                var contains = BrowserPreview?.CoreWebView2?.ContainsFullScreenElement ?? false;
+                if (contains == _isPreviewFullscreen) return;
+                if (contains) EnterPreviewFullscreen();
+                else ExitPreviewFullscreen();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "DeeperEditor: preview fullscreen toggle failed");
+            }
+        }
+
+        private void EnterPreviewFullscreen()
+        {
+            if (_isPreviewFullscreen || BrowserPreview == null) return;
+            try
+            {
+                _isPreviewFullscreen = true;
+
+                var screen = System.Windows.Forms.Screen.FromHandle(
+                    new System.Windows.Interop.WindowInteropHelper(this).Handle);
+
+                if (BrowserPreview.Parent is Panel panel)
+                {
+                    panel.Children.Remove(BrowserPreview);
+                }
+
+                _previewFullscreenWindow = new Window
+                {
+                    WindowStyle = WindowStyle.None,
+                    ResizeMode = ResizeMode.NoResize,
+                    ShowInTaskbar = false,
+                    Topmost = true,
+                    Background = Brushes.Black,
+                    WindowStartupLocation = WindowStartupLocation.Manual,
+                    Left = screen.Bounds.X + 100,
+                    Top = screen.Bounds.Y + 100,
+                    Width = 400,
+                    Height = 300,
+                    Content = BrowserPreview
+                };
+
+                _previewFullscreenWindow.KeyDown += (_, args) =>
+                {
+                    if (args.Key == Key.Escape || args.Key == Key.F11)
+                    {
+                        ExitPreviewFullscreenViaScript();
+                        args.Handled = true;
+                    }
+                };
+
+                _previewFullscreenWindow.Closing += (_, _) =>
+                {
+                    if (_previewFullscreenWindow != null)
+                        _previewFullscreenWindow.Content = null;
+                };
+
+                _previewFullscreenWindow.Closed += (_, _) =>
+                {
+                    try
+                    {
+                        if (BrowserPreview != null
+                            && PreviewHost != null
+                            && !PreviewHost.Children.Contains(BrowserPreview))
+                        {
+                            PreviewHost.Children.Insert(0, BrowserPreview);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("DeeperEditor: preview re-parent on close failed: {Error}", ex.Message);
+                    }
+                    _previewFullscreenWindow = null;
+
+                    // After reparent the underlying Chromium HWND is in a
+                    // state where the HT page no longer receives input (mouse
+                    // wheel scroll, clicks) until the user clicks into it.
+                    // Focusing the WebView wakes the inner HWND back up so the
+                    // page is scrollable. Mouse.Capture(null) clears any stuck
+                    // capture so timeline PreviewMouseWheel works too — wheel
+                    // events are hit-test based, so focus on the WebView
+                    // doesn't steal them when the cursor is over the timeline.
+                    try { Mouse.Capture(null); } catch { }
+                    try { BrowserPreview?.Focus(); } catch { }
+                };
+
+                _previewFullscreenWindow.Show();
+                _previewFullscreenWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
+                _previewFullscreenWindow.WindowState = WindowState.Maximized;
+
+                // Flag the page so dblclick / click-pair handlers fire even
+                // when HTML5 fullscreen state was lost during reparent.
+                try { _ = BrowserPreview.CoreWebView2.ExecuteScriptAsync("window._ccpForcedFs = true;"); }
+                catch { }
+
+                App.Logger?.Information("DeeperEditor: preview entered fullscreen on {Screen}", screen.DeviceName);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "DeeperEditor: failed to enter preview fullscreen");
+                ExitPreviewFullscreen();
+            }
+        }
+
+        private void ExitPreviewFullscreen()
+        {
+            if (!_isPreviewFullscreen) return;
+            try
+            {
+                _isPreviewFullscreen = false;
+                try
+                {
+                    if (BrowserPreview?.CoreWebView2 != null)
+                    {
+                        _ = BrowserPreview.CoreWebView2.ExecuteScriptAsync(
+                            "window._ccpForcedFs = false; try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
+                    }
+                }
+                catch { }
+                if (_previewFullscreenWindow != null)
+                {
+                    try { _previewFullscreenWindow.Close(); }
+                    catch (Exception ex) { App.Logger?.Debug("DeeperEditor: preview fullscreen window close failed: {Error}", ex.Message); }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "DeeperEditor: failed to exit preview fullscreen");
+            }
+        }
+
+        private void ExitPreviewFullscreenViaScript()
+        {
+            // Driving exitFullscreen from the page side fires
+            // ContainsFullScreenElementChanged again, which routes through
+            // OnPreviewFullscreenChanged → ExitPreviewFullscreen and keeps the
+            // page and window in sync (vs closing the window first and leaving
+            // the page in fullscreen state).
+            try
+            {
+                if (BrowserPreview?.CoreWebView2 != null)
+                {
+                    _ = BrowserPreview.CoreWebView2.ExecuteScriptAsync(
+                        "(function(){if(document.fullscreenElement)document.exitFullscreen();})();");
+                }
+                else
+                {
+                    ExitPreviewFullscreen();
+                }
+            }
+            catch
+            {
+                ExitPreviewFullscreen();
+            }
+        }
+
         private void OnBrowserTimeChanged(double seconds)
         {
             // BrowserVideoTimeSource fires on its own poll timer; marshal to
@@ -537,6 +815,7 @@ namespace ConditioningControlPanel.Views.Deeper
             PreviewPlaceholder.Visibility = Visibility.Collapsed;
 
             _mediaPlayer = new VlcMediaPlayer(VideoService.SharedLibVLC);
+            App.Audio?.ApplyPreferredDevice(_mediaPlayer);
             VideoPreview.MediaPlayer = _mediaPlayer;
 
             // Hold the Media as a field instead of `using var`. Assigning a
@@ -659,6 +938,7 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 _audioReader = new AudioFileReader(path);
                 _waveOut = new WaveOutEvent();
+                App.Audio?.ApplyPreferredDevice(_waveOut);
                 _waveOut.Init(_audioReader);
                 _waveOutStopped = OnWaveOutPlaybackStopped;
                 _waveOut.PlaybackStopped += _waveOutStopped;
@@ -4101,6 +4381,12 @@ namespace ConditioningControlPanel.Views.Deeper
             // outlive the editor and pin the closed window.
             try { _editorTutorialOverlay?.Close(); } catch { }
             _editorTutorialOverlay = null;
+
+            // Exit preview fullscreen synchronously so the reparent-on-Closed
+            // lambda releases BrowserPreview back to PreviewHost BEFORE
+            // DisposePlayback tries to dispose it.
+            try { if (_isPreviewFullscreen) ExitPreviewFullscreen(); } catch { }
+
             DisposePlayback();
         }
 
@@ -4191,6 +4477,16 @@ namespace ConditioningControlPanel.Views.Deeper
                 }
                 _audioReader?.Dispose();
                 _audioReader = null;
+
+                try
+                {
+                    if (_previewBrowserConfigured && BrowserPreview?.CoreWebView2 != null)
+                    {
+                        BrowserPreview.CoreWebView2.ContainsFullScreenElementChanged -= OnPreviewFullscreenChanged;
+                        BrowserPreview.CoreWebView2.WebMessageReceived -= OnPreviewWebMessageReceived;
+                    }
+                }
+                catch { }
 
                 if (_browserSource != null)
                 {

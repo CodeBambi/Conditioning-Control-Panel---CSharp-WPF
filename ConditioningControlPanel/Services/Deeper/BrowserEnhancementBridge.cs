@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using ConditioningControlPanel.Models.Deeper;
 using Microsoft.Web.WebView2.Wpf;
 
@@ -31,6 +32,26 @@ namespace ConditioningControlPanel.Services.Deeper
             _webView = webView ?? throw new ArgumentNullException(nameof(webView));
             _browser = browser ?? throw new ArgumentNullException(nameof(browser));
             _browser.NavigationCompleted += OnNavigationCompleted;
+
+            // Backfill: BrowserReady (where this bridge gets constructed) fires
+            // after BrowserService has already wired its own NavigationCompleted
+            // and issued the first Navigate. If that first page has finished
+            // loading before our subscription above runs, _lastUrl stays null
+            // and the user sees no match until they bounce navigation. Read the
+            // current Source once so we evaluate whatever's already on screen.
+            try
+            {
+                var current = _webView.CoreWebView2?.Source;
+                if (!string.IsNullOrEmpty(current))
+                {
+                    _lastUrl = current;
+                    Evaluate(current);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BrowserEnhancementBridge backfill failed: {Error}", ex.Message);
+            }
         }
 
         /// <summary>
@@ -67,6 +88,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 var match = App.EnhancementLibrary?.FindMatch(url, MediaTypes.Video);
                 if (match == null)
                 {
+                    LogNoMatch(url);
                     Unbind();
                     MatchChanged?.Invoke(null);
                     return;
@@ -102,6 +124,45 @@ namespace ConditioningControlPanel.Services.Deeper
                 App.Logger?.Warning(ex, "BrowserEnhancementBridge.Evaluate failed");
                 Unbind();
                 MatchChanged?.Invoke(null);
+            }
+        }
+
+        // Logs one Information line when navigation lands on a known preview
+        // host (hypnotube.com etc) but no library entry matched. Helps the user
+        // (and us) debug "I saved an enhancement but it didn't fire" without
+        // adding noise on every general browsing page.
+        private static void LogNoMatch(string url)
+        {
+            try
+            {
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
+                var host = uri.Host.ToLowerInvariant();
+                bool allowlisted = false;
+                foreach (var h in DeeperConfig.PreviewHostAllowlist)
+                {
+                    if (host == h || host.EndsWith("." + h, StringComparison.Ordinal))
+                    {
+                        allowlisted = true;
+                        break;
+                    }
+                }
+                if (!allowlisted) return;
+
+                var entries = App.EnhancementLibrary?.ScanLibrary();
+                var count = entries?.Count ?? 0;
+                var sample = "";
+                if (entries != null && count > 0)
+                {
+                    var top = entries.Take(3).Select(e => e.MediaSource ?? "(none)");
+                    sample = " | sample media_source: " + string.Join("  ;  ", top);
+                }
+                App.Logger?.Information(
+                    "BrowserEnhancementBridge: no match for {Url} ({Count} library entries){Sample}",
+                    UrlSafety.RedactUrl(url), count, sample);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("BrowserEnhancementBridge.LogNoMatch failed: {Error}", ex.Message);
             }
         }
 

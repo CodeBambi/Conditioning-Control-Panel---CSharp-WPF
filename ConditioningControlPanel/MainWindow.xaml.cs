@@ -16583,11 +16583,18 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return; // Don't auto-load browser during XAML init
 
-            // Lazy-load browser on first toggle interaction
+            // Lazy-load browser on first toggle interaction. Pass the URL
+            // matching the radio button the user just clicked — without an
+            // override, InitializeBrowserAsync defaults to BambiCloud and the
+            // first HT click would land on BC, forcing the user to bounce
+            // BC→HT to actually get to HT.
             if (!_browserInitialized)
             {
-                await InitializeBrowserAsync();
-                return; // InitializeBrowserAsync navigates to the correct site already
+                var initialUrl = RbHypnoTube?.IsChecked == true
+                    ? "https://hypnotube.com/"
+                    : "https://bambicloud.com/";
+                await InitializeBrowserAsync(initialUrl);
+                return;
             }
             if (_browser == null) return;
 
@@ -16930,6 +16937,16 @@ namespace ConditioningControlPanel
                 else
                 {
                     App.Logger?.Debug("Browser web message received: {Message}", message);
+                }
+
+                // Force-exit our WPF "forced fullscreen" surface — sent by the
+                // dblclick / click-pair / fullscreenchange handlers injected
+                // into every CCP WebView. Fires the same path Esc/F11 do.
+                if (message == "ccp_exit_fullscreen")
+                {
+                    App.Logger?.Information("MainWindow: ccp_exit_fullscreen received (forced FS active = {Active})", _isBrowserFullscreen);
+                    if (_isBrowserFullscreen) ExitBrowserFullscreen();
+                    return;
                 }
 
                 // Parse the JSON message
@@ -18318,13 +18335,11 @@ namespace ConditioningControlPanel
 
             if (isFullscreen)
             {
-                // Check if dual monitor mode should be used (screen mirroring)
                 var screens = App.GetAllScreensCached();
                 var useDualMonitor = App.Settings.Current.DualMonitorEnabled && screens.Length > 1;
 
                 if (useDualMonitor)
                 {
-                    // Enable screen mirroring - clones primary to all monitors
                     _isDualMonitorPlaybackActive = App.ScreenMirror.EnableMirror();
                     if (_isDualMonitorPlaybackActive)
                     {
@@ -18332,11 +18347,16 @@ namespace ConditioningControlPanel
                     }
                 }
 
+                // Always reparent — single-monitor users still need real
+                // full-monitor fullscreen, otherwise HT's HTML5 fullscreen
+                // just renders inside the dashboard cell. The dblclick exit
+                // works via the JS click-pair detector + ccp_exit_fullscreen
+                // WebMessage path (window._ccpForcedFs flag covers the case
+                // where the page lost HTML5 fullscreen during reparent).
                 EnterBrowserFullscreen();
             }
             else
             {
-                // Disable screen mirroring if it was active
                 if (_isDualMonitorPlaybackActive)
                 {
                     App.ScreenMirror.DisableMirror();
@@ -18447,11 +18467,21 @@ namespace ConditioningControlPanel
                     _browserPopoutWindow.WindowState = WindowState.Maximized;
                 }
 
-                // Re-request fullscreen on the video element after the window transition.
-                // Reparenting or resizing the WebView can cause the document's Fullscreen API
-                // state to be lost, leaving the site's regular layout visible as "black bands".
-                // ExecuteScriptAsync bypasses the user-gesture requirement in WebView2.
-                _ = ReRequestVideoFullscreenAsync();
+                // (Removed: ReRequestVideoFullscreenAsync.) That stacked a
+                // second HTML5 fullscreen entry on top of HT's wrapper-level
+                // one, and document.exitFullscreen() only pops one stack
+                // entry per call — so HT's minimize button and dblclick
+                // appeared to do nothing. Letting HT's original wrapper
+                // fullscreen ride through the transition gives a single-layer
+                // exit that pops cleanly on one exitFullscreen call.
+
+                // Flag the page so the JS click-pair / dblclick handlers
+                // (injected in BrowserService) fire even if the page lost
+                // HTML5 fullscreen state during the reparent. The user can
+                // always exit our WPF "forced fullscreen" by double-clicking
+                // the video — same as Esc.
+                try { _ = _browser.WebView.CoreWebView2.ExecuteScriptAsync("window._ccpForcedFs = true;"); }
+                catch { }
 
                 App.Logger?.Information("Browser entered fullscreen");
             }
@@ -18468,6 +18498,18 @@ namespace ConditioningControlPanel
 
             try
             {
+                // Clear the JS flag and best-effort exit any lingering HTML5
+                // fullscreen on the page side before we restore window state.
+                try
+                {
+                    if (_browser?.WebView?.CoreWebView2 != null)
+                    {
+                        _ = _browser.WebView.CoreWebView2.ExecuteScriptAsync(
+                            "window._ccpForcedFs = false; try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
+                    }
+                }
+                catch { }
+
                 if (_browserPopoutWindow != null)
                 {
                     if (_browserFullscreenWasPopout)
@@ -18502,39 +18544,6 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Failed to exit browser fullscreen");
-            }
-        }
-
-        /// <summary>
-        /// After reparenting or resizing the WebView for fullscreen, the document's
-        /// Fullscreen API state may be lost. This re-requests fullscreen on the video
-        /// element so it covers the entire viewport instead of showing the site layout.
-        /// </summary>
-        private async Task ReRequestVideoFullscreenAsync()
-        {
-            if (_browser?.WebView?.CoreWebView2 == null) return;
-
-            try
-            {
-                // Wait for the WebView to settle in its new window/size
-                await Task.Delay(300);
-
-                await _browser.WebView.CoreWebView2.ExecuteScriptAsync(@"
-                    (function() {
-                        var video = document.querySelector('video');
-                        if (video) {
-                            if (video.requestFullscreen) {
-                                video.requestFullscreen();
-                            } else if (video.webkitRequestFullscreen) {
-                                video.webkitRequestFullscreen();
-                            }
-                        }
-                    })();
-                ");
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug(ex, "Failed to re-request video fullscreen");
             }
         }
 

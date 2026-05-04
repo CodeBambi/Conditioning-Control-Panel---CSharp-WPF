@@ -197,6 +197,90 @@ namespace ConditioningControlPanel.Services
                 _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
                 _webView.CoreWebView2.DocumentTitleChanged += OnTitleChanged;
 
+                // Inject the CCP forced-fullscreen exit detector. When MainWindow
+                // reparents the WebView into a borderless fullscreen popout window
+                // (dual-monitor mirroring path), the page may lose HTML5 fullscreen
+                // state — leaving the user trapped because document.exitFullscreen()
+                // is a no-op. This script:
+                //   • Listens for dblclick on document/window/<video> (5 phases)
+                //   • Detects two clicks within 350ms while in WPF forced FS
+                //   • Posts 'ccp_exit_fullscreen' to MainWindow which closes the
+                //     borderless window — giving dblclick parity with Esc/F11.
+                // Active only when MainWindow has set window._ccpForcedFs = true.
+                try
+                {
+                    await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
+                        (function() {
+                            function inAnyFs() {
+                                return !!(document.fullscreenElement || window._ccpForcedFs);
+                            }
+                            function postExit() {
+                                try { window.chrome.webview.postMessage('ccp_exit_fullscreen'); } catch (_) {}
+                            }
+                            function exitLoop(remaining) {
+                                if (remaining <= 0 || !document.fullscreenElement) return;
+                                try {
+                                    var p = document.exitFullscreen ? document.exitFullscreen()
+                                          : (document.webkitExitFullscreen ? document.webkitExitFullscreen() : null);
+                                    if (p && p.then) {
+                                        p.then(function(){ exitLoop(remaining - 1); },
+                                               function(){ setTimeout(function(){ exitLoop(remaining - 1); }, 30); });
+                                    } else {
+                                        setTimeout(function(){ exitLoop(remaining - 1); }, 30);
+                                    }
+                                } catch (_) {
+                                    setTimeout(function(){ exitLoop(remaining - 1); }, 30);
+                                }
+                            }
+                            function dblHandler(e) {
+                                if (!inAnyFs()) return;
+                                if (e) {
+                                    try { e.stopImmediatePropagation(); } catch (_) {}
+                                    try { e.preventDefault(); } catch (_) {}
+                                }
+                                exitLoop(5);
+                                postExit();
+                            }
+                            // Only react to the real dblclick event — don't
+                            // treat any two clicks within Xms as a dblclick,
+                            // because that fires on legitimate single-click
+                            // sequences (timeline scrub + play, ad dismiss,
+                            // overlay click, etc.) and exits fullscreen
+                            // unexpectedly. dblclick events fire reliably in
+                            // WebView2 for real double-clicks on the video
+                            // and bubble up to document.
+                            document.addEventListener('dblclick', dblHandler, true);
+                            document.addEventListener('dblclick', dblHandler, false);
+                            window.addEventListener('dblclick', dblHandler, true);
+                            function bindOnVideo() {
+                                try {
+                                    var vids = document.querySelectorAll('video');
+                                    for (var i = 0; i < vids.length; i++) {
+                                        var v = vids[i];
+                                        if (v._ccpBound) continue;
+                                        v._ccpBound = true;
+                                        v.addEventListener('dblclick', dblHandler, true);
+                                        v.addEventListener('dblclick', dblHandler, false);
+                                    }
+                                } catch (_) {}
+                            }
+                            bindOnVideo();
+                            setInterval(function() {
+                                if (inAnyFs()) bindOnVideo();
+                            }, 1000);
+                            document.addEventListener('fullscreenchange', function() {
+                                if (!document.fullscreenElement && window._ccpForcedFs) {
+                                    postExit();
+                                }
+                            });
+                        })();
+                    ");
+                }
+                catch (Exception scriptEx)
+                {
+                    App.Logger?.Warning(scriptEx, "Failed to inject CCP forced-fullscreen exit detector");
+                }
+
                 // Navigate to URL
                 var url = _pendingUrl ?? _defaultUrl;
                 App.Logger?.Information("Navigating to: {Url}", url);

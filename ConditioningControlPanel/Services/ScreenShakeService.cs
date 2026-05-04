@@ -81,10 +81,27 @@ namespace ConditioningControlPanel.Services
                     catch { /* skip windows that throw on Content access */ }
                 }
 
-                if (_targets.Count == 0) return;
-
                 _amplitude = MaxOffsetPx * intensity;
                 _endsAt = DateTime.UtcNow.AddMilliseconds(durationMs);
+
+                // RenderTransform does NOT propagate into WebView2's Chromium
+                // surface (HwndHost lives outside WPF's render tree). When a
+                // Deeper player or editor goes fullscreen, the WebView2 IS the
+                // entire visible content of the fullscreen window, so the
+                // WPF-only shake above is invisible there. Also drive a CSS
+                // transform inside every visible WebView2 so the page content
+                // (and anything mirrored from it via ScreenMirror) shakes too.
+                foreach (Window win in windows)
+                {
+                    try
+                    {
+                        if (!win.IsVisible) continue;
+                        TriggerWebViewShake(win, _amplitude, durationMs);
+                    }
+                    catch { }
+                }
+
+                if (_targets.Count == 0) return;
 
                 if (_timer == null)
                 {
@@ -100,6 +117,74 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("ScreenShakeService.Start error: {Error}", ex.Message);
             }
+        }
+
+        // Walks a window's visual tree, finds every WebView2 control, and
+        // injects a self-contained CSS shake into each. The JS clears any
+        // prior shake timer before starting so back-to-back shakes don't
+        // double up. Self-expires on the page side after durationMs.
+        private static void TriggerWebViewShake(Window win, double amplitudePx, int durationMs)
+        {
+            try
+            {
+                if (win.Content is not DependencyObject root) return;
+                var webViews = new List<Microsoft.Web.WebView2.Wpf.WebView2>();
+                FindWebViews(root, webViews);
+                if (webViews.Count == 0) return;
+
+                var amp = amplitudePx.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                var dur = durationMs.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                // Target the <video> element directly when present. HT applies
+                // :fullscreen rules with high specificity to the wrapper, which
+                // a plain inline `style.transform` would not always override —
+                // so we use setProperty(..., 'important'). Falls back to
+                // documentElement for non-video pages. Picking the <video>
+                // unconditionally also means the shake is visible in BOTH
+                // embedded mode AND HTML5 fullscreen without re-querying
+                // document.fullscreenElement (which can flip-flop between
+                // wrapper and video element across HT player versions).
+                var script = "(function(amp, durationMs){"
+                    + "try{ if(window._ccpShakeTimer){ clearInterval(window._ccpShakeTimer); var p=window._ccpShakeTarget; if(p&&p.style){p.style.removeProperty('transform');} } }catch(e){}"
+                    + "var t=document.querySelector('video')||document.fullscreenElement||document.documentElement; if(!t)return;"
+                    + "window._ccpShakeTarget=t; var endsAt=Date.now()+durationMs;"
+                    + "window._ccpShakeTimer=setInterval(function(){"
+                    + "  if(Date.now()>=endsAt){ try{clearInterval(window._ccpShakeTimer);}catch(e){} window._ccpShakeTimer=null; try{t.style.removeProperty('transform');}catch(e){} return; }"
+                    + "  var dx=(Math.random()*2-1)*amp, dy=(Math.random()*2-1)*amp;"
+                    + "  try{ t.style.setProperty('transform','translate('+dx.toFixed(1)+'px,'+dy.toFixed(1)+'px)','important'); }catch(e){}"
+                    + "},30);"
+                    + "})(" + amp + "," + dur + ");";
+
+                foreach (var wv in webViews)
+                {
+                    try
+                    {
+                        if (wv.CoreWebView2 == null) continue;
+                        _ = wv.CoreWebView2.ExecuteScriptAsync(script);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        private static void FindWebViews(DependencyObject root, List<Microsoft.Web.WebView2.Wpf.WebView2> results)
+        {
+            try
+            {
+                if (root is Microsoft.Web.WebView2.Wpf.WebView2 w)
+                {
+                    // Don't descend into the WebView's internal visual tree —
+                    // nothing reachable inside is something we want to shake.
+                    results.Add(w);
+                    return;
+                }
+                int count = VisualTreeHelper.GetChildrenCount(root);
+                for (int i = 0; i < count; i++)
+                {
+                    FindWebViews(VisualTreeHelper.GetChild(root, i), results);
+                }
+            }
+            catch { }
         }
 
         private void OnTick(object? sender, EventArgs e)
