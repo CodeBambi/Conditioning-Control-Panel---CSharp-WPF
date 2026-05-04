@@ -871,8 +871,17 @@ namespace ConditioningControlPanel.Views.Deeper
                 "ConditioningControlPanel",
                 "browser_data_deeper_player");
             System.IO.Directory.CreateDirectory(userDataFolder);
+            // --autoplay-policy=no-user-gesture-required: Chromium otherwise
+            // rejects programmatic v.play() calls (the WPF Play button is not
+            // a JS user gesture), which manifested as "I click Play and
+            // nothing happens" on Editor → Preview → browser-video flows.
+            var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions
+            {
+                AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required"
+            };
             var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment
-                .CreateAsync(userDataFolder: userDataFolder).ConfigureAwait(true);
+                .CreateAsync(browserExecutableFolder: null, userDataFolder: userDataFolder, options: options)
+                .ConfigureAwait(true);
             await VideoBrowser.EnsureCoreWebView2Async(env).ConfigureAwait(true);
             if (VideoBrowser.CoreWebView2 == null) return false;
 
@@ -956,12 +965,15 @@ namespace ConditioningControlPanel.Views.Deeper
         }
 
         // HypnoTube and similar embed pages stack promo banners above the
-        // <video> element, so a freshly-loaded page lands at scrollTop=0 with
-        // the player below the fold. Polls for the <video> for up to 4s
-        // (HT injects the player container after the main HTML completes,
-        // so it's frequently null at NavigationCompleted), then scrollIntoView
-        // centers it. scrollIntoView is layout-aware — preferable to a fixed
-        // scrollBy(0, N) since HT swaps banner stacks day-to-day.
+        // <video> element. We do two things on every nav:
+        //   1) Walk up from the <video> to find the player container (first
+        //      ancestor with reasonable width/height) and fix it to the full
+        //      viewport with a high z-index. Keeps the player's controls
+        //      inside the container, hides everything else.
+        //   2) Disable body scroll so the page chrome can't be revealed.
+        // Polls for the <video> for up to 4s — HT injects its player container
+        // after the main HTML completes, so it's frequently null at
+        // NavigationCompleted.
         private void ScrollVideoIntoView()
         {
             try
@@ -969,20 +981,49 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (VideoBrowser?.CoreWebView2 == null) return;
                 _ = VideoBrowser.CoreWebView2.ExecuteScriptAsync(@"
                     (function() {
+                        function maximize(v) {
+                            // Walk up to find the player container — first ancestor
+                            // with width >= 200 and height >= 150. Falls back to
+                            // <video> itself if no good container is found.
+                            var node = v.parentElement;
+                            var container = v;
+                            while (node && node !== document.body) {
+                                var r = node.getBoundingClientRect();
+                                if (r.width >= 200 && r.height >= 150) { container = node; break; }
+                                node = node.parentElement;
+                            }
+                            container.style.cssText =
+                                'position:fixed!important;top:0!important;left:0!important;' +
+                                'width:100vw!important;height:100vh!important;' +
+                                'max-width:100vw!important;max-height:100vh!important;' +
+                                'z-index:2147483647!important;background:#000!important;' +
+                                'margin:0!important;padding:0!important;';
+                            v.style.cssText =
+                                'width:100%!important;height:100%!important;' +
+                                'max-width:none!important;max-height:none!important;' +
+                                'object-fit:contain!important;background:#000!important;';
+                            try {
+                                document.documentElement.style.overflow = 'hidden';
+                                document.body.style.overflow = 'hidden';
+                                document.body.style.background = '#000';
+                            } catch (e) { /* ignore */ }
+                        }
                         var tries = 0;
                         var iv = setInterval(function() {
                             var v = document.querySelector('video');
-                            if (v) {
-                                v.scrollIntoView({ block: 'center', behavior: 'auto' });
+                            if (v && v.getBoundingClientRect().width > 0) {
+                                try { maximize(v); } catch (e) { /* ignore */ }
                                 clearInterval(iv);
-                            } else if (++tries > 40) { clearInterval(iv); }
+                            } else if (++tries > 40) {
+                                clearInterval(iv);
+                            }
                         }, 100);
                     })();
                 ");
             }
             catch (Exception ex)
             {
-                App.Logger?.Debug("EnhancementPlayer: scrollIntoView injection failed: {Error}", ex.Message);
+                App.Logger?.Debug("EnhancementPlayer: video maximize injection failed: {Error}", ex.Message);
             }
         }
 
