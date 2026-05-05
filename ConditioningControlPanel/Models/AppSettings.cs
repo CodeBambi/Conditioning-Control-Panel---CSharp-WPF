@@ -489,6 +489,37 @@ namespace ConditioningControlPanel.Models
             set { _videosPerHour = Math.Clamp(value, 1, 20); OnPropertyChanged(); }
         }
 
+        private int _sideVideoOpacity = 35;
+        public int SideVideoOpacity
+        {
+            get => _sideVideoOpacity;
+            set { _sideVideoOpacity = Math.Clamp(value, 5, 100); OnPropertyChanged(); }
+        }
+
+        private string _sideVideoMode = "location";
+        public string SideVideoMode
+        {
+            get => _sideVideoMode;
+            set
+            {
+                _sideVideoMode = value is "background" or "location" ? value : "location";
+                OnPropertyChanged();
+            }
+        }
+
+        private string _sideVideoLocation = "bottom_right";
+        public string SideVideoLocation
+        {
+            get => _sideVideoLocation;
+            set
+            {
+                _sideVideoLocation = value is "top_left" or "top_right" or "bottom_left" or "bottom_right" or "center" or "random"
+                    ? value
+                    : "bottom_right";
+                OnPropertyChanged();
+            }
+        }
+
         private bool _strictLockEnabled = false; // DANGEROUS: Cannot close video
         public bool StrictLockEnabled
         {

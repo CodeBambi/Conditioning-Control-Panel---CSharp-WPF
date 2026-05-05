@@ -246,6 +246,7 @@ namespace ConditioningControlPanel
 
         public static FlashService Flash { get; private set; } = null!;
         public static VideoService Video { get; private set; } = null!;
+        public static SideVideoService SideVideo { get; private set; } = null!;
         public static AudioService Audio { get; private set; } = null!;
         public static SessionLogService SessionLog { get; private set; } = null!;
         public static ProgressionService Progression { get; private set; } = null!;
@@ -883,6 +884,7 @@ namespace ConditioningControlPanel
             splash.SetProgress(0.5, "Initializing video service...");
             Video = new VideoService();
             Video.PreloadLibVLC(); // Pre-load LibVLC in background for faster first video
+            SideVideo = new SideVideoService();
 
             // Session media log - must be after Flash and Video so it can subscribe to their events.
             SessionLog = new SessionLogService();
@@ -2313,6 +2315,7 @@ Application State:
             SessionLog?.Dispose();
             Flash?.Dispose();
             Video?.Dispose();
+            SideVideo?.Dispose();
             Subliminal?.Dispose();
             Overlay?.Dispose();
             ScreenShake?.Dispose();

@@ -39,6 +39,10 @@ namespace ConditioningControlPanel.Features
                 ChkEnable.IsChecked = s.MandatoryVideosEnabled;
                 SliderPerHour.Value = s.VideosPerHour;
                 TxtPerHour.Text = s.VideosPerHour.ToString();
+                SliderSideOpacity.Value = s.SideVideoOpacity;
+                TxtSideOpacity.Text = $"{s.SideVideoOpacity}%";
+                SelectComboItemByTag(CmbSideMode, s.SideVideoMode);
+                SelectComboItemByTag(CmbSideLocation, s.SideVideoLocation);
                 ChkStrict.IsChecked = s.StrictLockEnabled;
                 ChkMiniGame.IsChecked = s.AttentionChecksEnabled;
                 SliderTargets.Value = s.AttentionDensity;
@@ -56,6 +60,9 @@ namespace ConditioningControlPanel.Features
         {
             if (e.PropertyName == nameof(Models.AppSettings.MandatoryVideosEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.VideosPerHour) ||
+                e.PropertyName == nameof(Models.AppSettings.SideVideoOpacity) ||
+                e.PropertyName == nameof(Models.AppSettings.SideVideoMode) ||
+                e.PropertyName == nameof(Models.AppSettings.SideVideoLocation) ||
                 e.PropertyName == nameof(Models.AppSettings.StrictLockEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.AttentionChecksEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.AttentionDensity) ||
@@ -65,6 +72,20 @@ namespace ConditioningControlPanel.Features
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
+        }
+
+        private static void SelectComboItemByTag(ComboBox combo, string value)
+        {
+            foreach (var item in combo.Items)
+            {
+                if (item is ComboBoxItem cbi && string.Equals(cbi.Tag?.ToString(), value, StringComparison.OrdinalIgnoreCase))
+                {
+                    combo.SelectedItem = cbi;
+                    return;
+                }
+            }
+            if (combo.Items.Count > 0)
+                combo.SelectedIndex = 0;
         }
 
         private void ChkEnable_Changed(object sender, RoutedEventArgs e)
@@ -95,6 +116,41 @@ namespace ConditioningControlPanel.Features
             TxtPerHour.Text = v.ToString();
             s.VideosPerHour = v;
             App.Settings?.Save();
+        }
+
+        private void SliderSideOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtSideOpacity.Text = $"{v}%";
+            s.SideVideoOpacity = v;
+            App.Settings?.Save();
+        }
+
+        private void CmbSideMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            if (CmbSideMode.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            {
+                s.SideVideoMode = tag;
+                App.Settings?.Save();
+            }
+        }
+
+        private void CmbSideLocation_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            if (CmbSideLocation.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+            {
+                s.SideVideoLocation = tag;
+                App.Settings?.Save();
+            }
         }
 
         private void ChkStrict_Changed(object sender, RoutedEventArgs e)
@@ -249,6 +305,19 @@ namespace ConditioningControlPanel.Features
             {
                 App.Logger?.Error(ex, "Error in BtnTestVideo_Click");
                 MessageBox.Show($"Error triggering video: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void BtnTestSideVideo_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                App.SideVideo?.TriggerSideVideo();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Error in BtnTestSideVideo_Click");
+                MessageBox.Show($"Error triggering side video: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
