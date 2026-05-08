@@ -70,7 +70,6 @@
                         Cursor="Hand" Click="BtnLoginDeviceCode_Click"
                         Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="🌐" FontSize="20" Margin="0,0,10,0"/>
                         <TextBlock Text="Sign in via Web" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
@@ -206,6 +205,18 @@
                                HorizontalAlignment="Center"
                                TextAlignment="Center"/>
                 </Border>
+
+                <!-- Manual fallback: if Process.Start failed to open the browser, the user
+                     can read this URL and open it themselves. Selectable so they can copy. -->
+                <TextBlock Text="Or open this URL manually:"
+                           FontSize="11" Foreground="#808080"
+                           HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                <TextBox x:Name="TxtVerificationUrl"
+                         IsReadOnly="True"
+                         BorderThickness="0" Background="Transparent" Foreground="#B0B0B0"
+                         FontSize="12" FontFamily="Consolas, Courier New"
+                         HorizontalAlignment="Center" Margin="0,0,0,12"
+                         Cursor="IBeam"/>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,15">
                     <Button x:Name="BtnDeviceCodeCopy" Content="Copy code"

@@ -61,6 +61,16 @@ namespace ConditioningControlPanel
             {
                 BtnLoginDeviceCode.Visibility = Visibility.Visible;
             }
+
+            // SP3: cancel any in-flight device-code polling on dialog close so
+            // alt+F4 / parent .Close() / session-end don't leave an orphan loop
+            // hammering /poll against a hidden window until 15min server expiry.
+            this.Closed += (s, e) =>
+            {
+                _deviceCts?.Cancel();
+                _deviceCts?.Dispose();
+                _deviceCts = null;
+            };
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -643,6 +653,8 @@ namespace ConditioningControlPanel
             Close();
         }
 
+        #endregion
+
         #region SP3 Device-Code Flow
 
         private async void BtnLoginDeviceCode_Click(object sender, RoutedEventArgs e)
@@ -690,6 +702,8 @@ namespace ConditioningControlPanel
             TxtDeviceCode.Text = code.Length == 6
                 ? $"{code.Substring(0, 3)}-{code.Substring(3, 3)}"
                 : code;
+            // Keep DRY with the service constant; if it changes, single source of truth.
+            TxtVerificationUrl.Text = V2DeviceCodeService.VerificationUrl;
             TxtDeviceStatus.Text = "Waiting for browser confirmation...";
         }
 
@@ -753,8 +767,15 @@ namespace ConditioningControlPanel
                             break;
 
                         case V2DeviceCodeService.PollStatus.Expired:
-                        case V2DeviceCodeService.PollStatus.NotFound:
                             HandleDeviceCodeExpired();
+                            return;
+
+                        case V2DeviceCodeService.PollStatus.NotFound:
+                            // 404 is distinct from 410 per proxy doc — recovery is the
+                            // same (re-run /initiate) but the message differs. Shouldn't
+                            // fire in practice (desktop holds the code; user doesn't type),
+                            // but if it does, surface diagnostically clear copy.
+                            HandleDeviceCodeError("Sign-in code wasn't recognized. Please try again.");
                             return;
 
                         case V2DeviceCodeService.PollStatus.RateLimited:
@@ -820,6 +841,14 @@ namespace ConditioningControlPanel
                 Provider = "device_code"
             };
 
+            // Polling loop has already returned; this is hygiene so the CTS
+            // doesn't linger as an undisposed IDisposable until GC. Closed
+            // event handler also disposes — Dispose is idempotent so the
+            // double-call is safe.
+            _deviceCts?.Cancel();
+            _deviceCts?.Dispose();
+            _deviceCts = null;
+
             DialogResult = true;
             Close();
         }
@@ -873,8 +902,6 @@ namespace ConditioningControlPanel
             _deviceCode = null;
             ShowProviderSelection();
         }
-
-        #endregion
 
         #endregion
     }
