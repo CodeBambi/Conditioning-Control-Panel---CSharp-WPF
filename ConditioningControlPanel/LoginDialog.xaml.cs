@@ -29,6 +29,11 @@ namespace ConditioningControlPanel
         private string? _pendingInviteCode;
         private string? _pendingPassword;
 
+        // SP3 device-code flow state
+        private CancellationTokenSource? _deviceCts;
+        private string? _deviceCode;
+        private DateTimeOffset _deviceCodeExpiresAt;
+
         /// <summary>
         /// Result of the login process
         /// </summary>
@@ -48,6 +53,14 @@ namespace ConditioningControlPanel
         public LoginDialog()
         {
             InitializeComponent();
+
+            // SP3 Lab gate: cached PatreonTier >= 2 from a prior legacy login.
+            // Removed when SP3 promotes from Lab to stable.
+            var tier = App.Settings?.Current?.PatreonTier ?? 0;
+            if (tier >= 2)
+            {
+                BtnLoginDeviceCode.Visibility = Visibility.Visible;
+            }
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -198,6 +211,7 @@ namespace ConditioningControlPanel
             LoadingPanel.Visibility = Visibility.Collapsed;
             UsernamePanel.Visibility = Visibility.Visible;
             AccountPanel.Visibility = Visibility.Collapsed;
+            DeviceCodePanel.Visibility = Visibility.Collapsed;
 
             TxtUsernameTitle.Text = Loc.Get("label_choose_your_display_name");
             TxtUsernameSubtitle.Text = Loc.Get("label_this_will_be_shown_on_the_leaderboard");
@@ -390,6 +404,7 @@ namespace ConditioningControlPanel
             LoadingPanel.Visibility = Visibility.Collapsed;
             UsernamePanel.Visibility = Visibility.Collapsed;
             AccountPanel.Visibility = Visibility.Visible;
+            DeviceCodePanel.Visibility = Visibility.Collapsed;
 
             // Clear all fields
             TxtInviteCode.Text = "";
@@ -574,6 +589,7 @@ namespace ConditioningControlPanel
             LoadingPanel.Visibility = Visibility.Collapsed;
             UsernamePanel.Visibility = Visibility.Collapsed;
             AccountPanel.Visibility = Visibility.Collapsed;
+            DeviceCodePanel.Visibility = Visibility.Collapsed;
             BtnLoginDiscord.IsEnabled = true;
             BtnLoginPatreon.IsEnabled = true;
         }
@@ -585,6 +601,7 @@ namespace ConditioningControlPanel
             LoadingPanel.Visibility = Visibility.Visible;
             UsernamePanel.Visibility = Visibility.Collapsed;
             AccountPanel.Visibility = Visibility.Collapsed;
+            DeviceCodePanel.Visibility = Visibility.Collapsed;
         }
 
         private void ShowError(string message)
@@ -615,12 +632,249 @@ namespace ConditioningControlPanel
             else if (_firstProvider == "patreon")
                 App.Patreon?.Logout();
 
+            // Stop device-code polling if it's running.
+            _deviceCts?.Cancel();
+            _deviceCode = null;
+
             // Clear sensitive data (audit C1)
             ClearSensitiveData();
 
             DialogResult = false;
             Close();
         }
+
+        #region SP3 Device-Code Flow
+
+        private async void BtnLoginDeviceCode_Click(object sender, RoutedEventArgs e)
+        {
+            ShowLoading("Generating sign-in code...");
+
+            try
+            {
+                var svc = new V2DeviceCodeService();
+                var resp = await svc.InitiateAsync();
+
+                if (!resp.Success || string.IsNullOrEmpty(resp.Code))
+                {
+                    ShowError(SanitizeError(resp.Error));
+                    return;
+                }
+
+                _deviceCode = resp.Code;
+                _deviceCodeExpiresAt = resp.ExpiresAt;
+
+                ShowDeviceCodePanel(resp.Code);
+                OpenVerificationUrl();
+
+                _deviceCts?.Cancel();
+                _deviceCts?.Dispose();
+                _deviceCts = new CancellationTokenSource();
+                _ = PollDeviceCodeLoopAsync(_deviceCts.Token);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "[DeviceCode] Initiate exception");
+                ShowError(Loc.Get("login_failed_please_try_again"));
+            }
+        }
+
+        private void ShowDeviceCodePanel(string code)
+        {
+            ProviderPanel.Visibility = Visibility.Collapsed;
+            LoadingPanel.Visibility = Visibility.Collapsed;
+            UsernamePanel.Visibility = Visibility.Collapsed;
+            AccountPanel.Visibility = Visibility.Collapsed;
+            DeviceCodePanel.Visibility = Visibility.Visible;
+
+            // Display 6-char code as "ABC-DEF" for legibility.
+            TxtDeviceCode.Text = code.Length == 6
+                ? $"{code.Substring(0, 3)}-{code.Substring(3, 3)}"
+                : code;
+            TxtDeviceStatus.Text = "Waiting for browser confirmation...";
+        }
+
+        private static void OpenVerificationUrl()
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = V2DeviceCodeService.VerificationUrl,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[DeviceCode] Failed to open browser");
+            }
+        }
+
+        /// <summary>
+        /// Polls /v2/auth/device/poll until 200 confirmed, 410/404 expired, or
+        /// hard expiry (server-returned expires_at). Backs off on 429/503/transient.
+        /// </summary>
+        private async Task PollDeviceCodeLoopAsync(CancellationToken ct)
+        {
+            if (string.IsNullOrEmpty(_deviceCode)) return;
+
+            var svc = new V2DeviceCodeService();
+            int intervalMs = 3000;
+            int consecutiveUnknown = 0;
+
+            try
+            {
+                // Initial wait so the user has time to switch to the browser.
+                await Task.Delay(intervalMs, ct);
+
+                while (!ct.IsCancellationRequested)
+                {
+                    // Hard expiry guard against server-returned expires_at —
+                    // don't trust local clock for "is the code expired" logic
+                    // beyond this comparison against a server-issued timestamp.
+                    if (DateTimeOffset.UtcNow > _deviceCodeExpiresAt)
+                    {
+                        HandleDeviceCodeExpired();
+                        return;
+                    }
+
+                    var result = await svc.PollAsync(_deviceCode!, ct);
+                    if (ct.IsCancellationRequested) return;
+
+                    switch (result.Status)
+                    {
+                        case V2DeviceCodeService.PollStatus.Confirmed:
+                            HandleDeviceCodeConfirmed(result);
+                            return;
+
+                        case V2DeviceCodeService.PollStatus.Pending:
+                            intervalMs = 3000;
+                            consecutiveUnknown = 0;
+                            TxtDeviceStatus.Text = "Waiting for browser confirmation...";
+                            break;
+
+                        case V2DeviceCodeService.PollStatus.Expired:
+                        case V2DeviceCodeService.PollStatus.NotFound:
+                            HandleDeviceCodeExpired();
+                            return;
+
+                        case V2DeviceCodeService.PollStatus.RateLimited:
+                        case V2DeviceCodeService.PollStatus.ServiceUnavailable:
+                            intervalMs = Math.Min(intervalMs * 2, 30000);
+                            TxtDeviceStatus.Text = "Connection busy, retrying...";
+                            break;
+
+                        case V2DeviceCodeService.PollStatus.BadRequest:
+                        case V2DeviceCodeService.PollStatus.Unauthorized:
+                            HandleDeviceCodeError("Sign-in failed. Please try again.");
+                            return;
+
+                        case V2DeviceCodeService.PollStatus.Unknown:
+                        default:
+                            consecutiveUnknown++;
+                            if (consecutiveUnknown >= 5)
+                            {
+                                HandleDeviceCodeError("Lost connection to server. Please try again.");
+                                return;
+                            }
+                            intervalMs = Math.Min(intervalMs * 2, 30000);
+                            TxtDeviceStatus.Text = "Connection issue, retrying...";
+                            break;
+                    }
+
+                    await Task.Delay(intervalMs, ct);
+                }
+            }
+            catch (OperationCanceledException) { /* user cancelled */ }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "[DeviceCode] Poll loop crashed");
+                HandleDeviceCodeError("Unexpected error. Please try again.");
+            }
+        }
+
+        private void HandleDeviceCodeConfirmed(V2DeviceCodeService.PollResponse result)
+        {
+            if (string.IsNullOrEmpty(result.AuthToken) || string.IsNullOrEmpty(result.UnifiedId))
+            {
+                HandleDeviceCodeError("Server returned an incomplete response.");
+                return;
+            }
+
+            // Store auth_token via DPAPI (same protection as legacy paths).
+            // unified_id is plaintext in settings.json — same as every other provider.
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.AuthToken = result.AuthToken;
+                App.Settings.Current.UnifiedId = result.UnifiedId;
+                App.Settings.Save();
+            }
+            App.UnifiedUserId = result.UnifiedId;
+
+            Result = new LoginResult
+            {
+                Success = true,
+                IsLegacyUser = false,
+                ShouldShowOgWelcome = false,
+                UnifiedId = result.UnifiedId,
+                DisplayName = App.Settings?.Current?.UserDisplayName,
+                Provider = "device_code"
+            };
+
+            DialogResult = true;
+            Close();
+        }
+
+        private void HandleDeviceCodeExpired()
+        {
+            _deviceCts?.Cancel();
+            _deviceCode = null;
+            MessageBox.Show(this,
+                "Sign-in code expired. Please try again.",
+                Loc.Get("title_error"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            ShowProviderSelection();
+        }
+
+        private void HandleDeviceCodeError(string message)
+        {
+            _deviceCts?.Cancel();
+            _deviceCode = null;
+            MessageBox.Show(this,
+                message,
+                Loc.Get("title_error"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            ShowProviderSelection();
+        }
+
+        private void BtnDeviceCodeCopy_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_deviceCode)) return;
+            try
+            {
+                Clipboard.SetText(_deviceCode);
+                TxtDeviceStatus.Text = "Code copied. Paste in your browser.";
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[DeviceCode] Clipboard copy failed");
+            }
+        }
+
+        private void BtnDeviceCodeOpenBrowser_Click(object sender, RoutedEventArgs e)
+        {
+            OpenVerificationUrl();
+        }
+
+        private void BtnDeviceCodeCancel_Click(object sender, MouseButtonEventArgs e)
+        {
+            _deviceCts?.Cancel();
+            _deviceCode = null;
+            ShowProviderSelection();
+        }
+
+        #endregion
 
         #endregion
     }
