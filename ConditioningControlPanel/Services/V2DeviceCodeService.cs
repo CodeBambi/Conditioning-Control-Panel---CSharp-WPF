@@ -53,6 +53,17 @@ namespace ConditioningControlPanel.Services
             public string? Error { get; set; }
         }
 
+        // Internal DTO for JsonConvert.DeserializeObject — typed deserialization
+        // with [JsonProperty] handles ISO 8601 + 'Z' suffix → DateTimeOffset cleanly,
+        // unlike JObject.Parse + JValue<DateTime>.ToString round-trip which strips
+        // timezone info on non-UTC systems.
+        private class InitiateRaw
+        {
+            [JsonProperty("code")] public string? Code { get; set; }
+            [JsonProperty("session_id")] public string? SessionId { get; set; }
+            [JsonProperty("expires_at")] public DateTimeOffset ExpiresAt { get; set; }
+        }
+
         public class PollResponse
         {
             public PollStatus Status { get; set; }
@@ -82,28 +93,35 @@ namespace ConditioningControlPanel.Services
                     return new InitiateResponse { Success = false, Error = error };
                 }
 
-                var obj = JObject.Parse(json);
-                var code = obj["code"]?.ToString();
-                var sessionId = obj["session_id"]?.ToString();
-                var expiresAtStr = obj["expires_at"]?.ToString();
+                // Typed POCO deserialization — same pattern as V2AuthService. Handles
+                // ISO 8601 with 'Z' suffix → DateTimeOffset cleanly, preserving UTC.
+                InitiateRaw? raw;
+                try
+                {
+                    raw = JsonConvert.DeserializeObject<InitiateRaw>(json);
+                }
+                catch (Exception ex)
+                {
+                    return new InitiateResponse { Success = false, Error = "Bad response: " + ex.Message };
+                }
 
-                if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(expiresAtStr))
+                if (raw == null || string.IsNullOrEmpty(raw.Code))
                 {
                     return new InitiateResponse { Success = false, Error = "Invalid response" };
                 }
 
-                if (!DateTimeOffset.TryParse(expiresAtStr, out var expiresAt))
+                if (raw.ExpiresAt == default)
                 {
                     return new InitiateResponse { Success = false, Error = "Invalid expiry" };
                 }
 
-                Log.Information("[DeviceCode] Initiated session={Session}", sessionId?.Substring(0, Math.Min(8, sessionId.Length)));
+                Log.Information("[DeviceCode] Initiated session={Session}", raw.SessionId?.Substring(0, Math.Min(8, raw.SessionId.Length)));
                 return new InitiateResponse
                 {
                     Success = true,
-                    Code = code,
-                    SessionId = sessionId,
-                    ExpiresAt = expiresAt
+                    Code = raw.Code,
+                    SessionId = raw.SessionId,
+                    ExpiresAt = raw.ExpiresAt
                 };
             }
             catch (OperationCanceledException)
