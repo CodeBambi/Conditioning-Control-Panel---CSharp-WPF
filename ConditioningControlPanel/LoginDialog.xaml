@@ -61,6 +61,19 @@
                     </StackPanel>
                 </Button>
 
+                <!-- SP3: Sign in via Web (device-code flow). Visibility gated at runtime
+                     on AppSettings.PatreonTier >= 2 (Lab-tier soak). -->
+                <Button x:Name="BtnLoginDeviceCode"
+                        Padding="20,15" Margin="0,0,0,15"
+                        Background="#9333EA" Foreground="White"
+                        BorderThickness="0" FontWeight="Bold" FontSize="16"
+                        Cursor="Hand" Click="BtnLoginDeviceCode_Click"
+                        Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Sign in via Web" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
             </StackPanel>
 
             <!-- Account Login/Register Panel -->
@@ -167,6 +180,69 @@
                            FontSize="16" Foreground="White" HorizontalAlignment="Center"/>
                 <ProgressBar IsIndeterminate="True" Width="200" Height="4" Margin="0,15,0,0"
                              Foreground="{DynamicResource PinkBrush}" Background="{DynamicResource AccentTintedBgBrush}"/>
+            </StackPanel>
+
+            <!-- SP3: Device-Code Panel -->
+            <StackPanel x:Name="DeviceCodePanel" Grid.Row="2" Visibility="Collapsed"
+                        VerticalAlignment="Center">
+                <TextBlock Text="Sign in via Web"
+                           FontSize="18" FontWeight="Bold" Foreground="White"
+                           HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                <TextBlock Text="We've opened your browser to finish sign-in. Complete it there, then come back to this window. It's okay to leave this open."
+                           FontSize="12" Foreground="#B0B0B0" TextWrapping="Wrap"
+                           HorizontalAlignment="Center" Margin="0,0,0,15"
+                           TextAlignment="Center"/>
+
+                <TextBlock Text="Your code:"
+                           FontSize="11" Foreground="#808080"
+                           HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                <Border BorderBrush="#9333EA" BorderThickness="2" CornerRadius="6"
+                        Background="{DynamicResource PanelBgBrush}" Padding="20,12"
+                        HorizontalAlignment="Center" Margin="0,0,0,12">
+                    <TextBlock x:Name="TxtDeviceCode" Text="------"
+                               FontSize="32" FontWeight="Bold" Foreground="White"
+                               FontFamily="Consolas, Courier New"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"/>
+                </Border>
+
+                <!-- Manual fallback: if Process.Start failed to open the browser, the user
+                     can read this URL and open it themselves. Selectable so they can copy. -->
+                <TextBlock Text="Or open this URL manually:"
+                           FontSize="11" Foreground="#808080"
+                           HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                <TextBox x:Name="TxtVerificationUrl"
+                         IsReadOnly="True"
+                         BorderThickness="0" Background="Transparent" Foreground="#B0B0B0"
+                         FontSize="12" FontFamily="Consolas, Courier New"
+                         HorizontalAlignment="Center" Margin="0,0,0,12"
+                         Cursor="IBeam"/>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,15">
+                    <Button x:Name="BtnDeviceCodeCopy" Content="Copy code"
+                            Padding="14,6" Margin="0,0,8,0"
+                            Background="{DynamicResource AccentTintedBgBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="12" Cursor="Hand"
+                            Click="BtnDeviceCodeCopy_Click"/>
+                    <Button x:Name="BtnDeviceCodeOpenBrowser" Content="Open browser again"
+                            Padding="14,6"
+                            Background="{DynamicResource AccentTintedBgBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="12" Cursor="Hand"
+                            Click="BtnDeviceCodeOpenBrowser_Click"/>
+                </StackPanel>
+
+                <TextBlock x:Name="TxtDeviceStatus" Text="Waiting for browser confirmation..."
+                           FontSize="12" Foreground="#B0B0B0"
+                           HorizontalAlignment="Center" Margin="0,0,0,8"
+                           TextAlignment="Center" TextWrapping="Wrap"/>
+                <ProgressBar x:Name="DeviceProgressBar" IsIndeterminate="True"
+                             Width="200" Height="3" Margin="0,0,0,15"
+                             Foreground="#9333EA" Background="{DynamicResource AccentTintedBgBrush}"/>
+
+                <TextBlock Text="Cancel" Margin="0,0,0,0"
+                           FontSize="12" Foreground="#808080"
+                           HorizontalAlignment="Center" Cursor="Hand"
+                           MouseLeftButtonDown="BtnDeviceCodeCancel_Click"/>
             </StackPanel>
 
             <!-- Cancel Button -->
