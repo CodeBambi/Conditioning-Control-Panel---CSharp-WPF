@@ -202,6 +202,55 @@
             </Setter>
         </Style>
 
+        <!-- SP5 layer 3: NeonPurple tab styles for the Available Subjects tab.
+             Mirror of TabButtonDeeper/Active but with #B47BFF accent — distinct
+             from the Deeper violet so the two purple-tinted tabs don't read as
+             the same family. -->
+        <Style x:Key="TabButtonNeon" TargetType="Button" BasedOn="{StaticResource TabButton}">
+            <Setter Property="Foreground" Value="{DynamicResource NeonPurpleBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NeonPurpleBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="Transparent"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource NeonPurpleTransparent20Brush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TabButtonNeonActive" TargetType="Button" BasedOn="{StaticResource TabButtonActive}">
+            <Setter Property="Background" Value="{DynamicResource NeonPurpleBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NeonPurpleBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bg" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource NeonPurpleSoftBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Small Pink Button Style (for tutorial guide buttons) -->
         <Style x:Key="SmallPinkButton" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
@@ -1584,6 +1633,17 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🌊" FontSize="12" Margin="0,0,4,0"/>
                             <TextBlock Text="{loc:Str tab_deeper}" FontSize="11"/>
+                        </StackPanel>
+                    </Button>
+                    <!-- SP5 layer 3: Available Subjects directory tab. Free-tier
+                         (controller side of Remote Control). NeonPurple accent. -->
+                    <Button x:Name="BtnAvailableSubjects" Tag="AvailableSubjects"
+                            Style="{StaticResource TabButtonNeon}"
+                            Margin="3,0" Click="BtnAvailableSubjects_Click"
+                            ToolTip="{loc:Str tooltip_available_subjects}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🛰️" FontSize="12" Margin="0,0,4,0"/>
+                            <TextBlock Text="{loc:Str tab_available_subjects}" FontSize="11"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource TabButton}"
@@ -9118,6 +9178,87 @@
                                 </Border>
                             </Grid>
 
+                            <!-- SP5 layer 3: Available Subjects directory opt-in.
+                                 Visible while configuring; collapses on session start.
+                                 The opt-in checkbox itself never persists across
+                                 sessions — re-opt every time. Tags + status_text
+                                 persist only when "Remember" is ticked. -->
+                            <Border x:Name="OptInSectionPanel" Background="{DynamicResource SurfaceBgBrush}"
+                                    BorderBrush="#FFB47BFF" BorderThickness="1"
+                                    CornerRadius="10" Padding="20,16" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <CheckBox x:Name="ChkOptIntoDirectory" Foreground="White" FontSize="14"
+                                              Content="{loc:Str chk_optin_directory}" FontWeight="Bold"
+                                              Checked="ChkOptIntoDirectory_Changed"
+                                              Unchecked="ChkOptIntoDirectory_Changed"/>
+                                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                               Text="{loc:Str desc_optin_directory_consent}" TextWrapping="Wrap"
+                                               Margin="0,8,0,0" LineHeight="18"/>
+
+                                    <StackPanel x:Name="OptInFormPanel" Visibility="Collapsed" Margin="0,12,0,0">
+                                        <TextBlock Text="{loc:Str label_optin_tags}" Foreground="#FFB47BFF"
+                                                   FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
+                                        <WrapPanel x:Name="OptInTagsPanel">
+                                            <CheckBox x:Name="ChkTagBimbo" Tag="bimbo"
+                                                      Content="bimbo" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagDrone" Tag="drone"
+                                                      Content="drone" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagTrance" Tag="trance"
+                                                      Content="trance" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagFeminization" Tag="feminization"
+                                                      Content="feminization" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagSubmission" Tag="submission"
+                                                      Content="submission" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagDegradation" Tag="degradation"
+                                                      Content="degradation" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagAudioOk" Tag="audio_ok"
+                                                      Content="audio_ok" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagSoftOnly" Tag="soft_only"
+                                                      Content="soft_only" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagLockdownOk" Tag="lockdown_ok"
+                                                      Content="lockdown_ok" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagChastity" Tag="chastity"
+                                                      Content="chastity" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                        </WrapPanel>
+
+                                        <TextBlock Text="{loc:Str label_optin_status}" Foreground="#FFB47BFF"
+                                                   FontSize="11" FontWeight="Bold" Margin="0,12,0,6"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="TxtOptInStatus" Grid.Column="0" MaxLength="80"
+                                                     Background="{DynamicResource PanelBgBrush}" Foreground="White"
+                                                     BorderBrush="#FFB47BFF" BorderThickness="1"
+                                                     Padding="10,8" FontSize="13"
+                                                     TextChanged="TxtOptInStatus_TextChanged"/>
+                                            <TextBlock x:Name="TxtOptInStatusCount" Grid.Column="1"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" VerticalAlignment="Center"
+                                                       Margin="10,0,0,0" Text="0/80"/>
+                                        </Grid>
+
+                                        <CheckBox x:Name="ChkRememberOptInDetails" Foreground="White" FontSize="12"
+                                                  Margin="0,12,0,0"
+                                                  Content="{loc:Str chk_remember_optin_details}"/>
+
+                                        <TextBlock x:Name="TxtOptInFeedback" Foreground="#FFB47BFF" FontSize="11"
+                                                   Margin="0,8,0,0" Visibility="Collapsed" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
                             <!-- Hidden ComboBox keeps existing handler wiring intact -->
                             <ComboBox x:Name="CmbRemoteTier" Visibility="Collapsed"
                                       SelectionChanged="CmbRemoteTier_SelectionChanged">
@@ -9264,6 +9405,130 @@
 
                 </StackPanel>
             </ScrollViewer>
+        </ContentControl>
+
+        <!-- SP5 layer 3: Available Subjects directory tab. Controller side of
+             remote control. NeonPurple accent throughout. Free-tier; the
+             content is fetched per-poll from /v2/directory/list (X-Auth-Token
+             auth). Click Connect on a card → POST /v2/directory/claim → on
+             200, the returned session_url opens in the user's default browser
+             via Process.Start (one-click pairing URL with PIN in the hash
+             fragment, never logged or persisted on the desktop). -->
+        <ContentControl x:Name="AvailableSubjectsTab" Grid.Row="4" Margin="10,5,10,10"
+                        Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+            <Grid Margin="36,28,36,28">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Grid Grid.Row="0" Margin="0,0,0,18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="🛰️" FontSize="40" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{loc:Str tab_available_subjects}"
+                                   Foreground="{DynamicResource NeonPurpleBrush}"
+                                   FontSize="26" FontWeight="Bold"/>
+                        <TextBlock Text="{loc:Str desc_available_subjects}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="13" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Empty state (visible iff service.IsEmpty + !HasError) -->
+                <Border Grid.Row="1" x:Name="AvailableSubjectsEmptyPanel"
+                        Background="{DynamicResource SurfaceBgBrush}"
+                        BorderBrush="{DynamicResource NeonPurpleBrush}" BorderThickness="1"
+                        CornerRadius="10" Padding="24,18" Margin="0,0,0,12"
+                        Visibility="Collapsed">
+                    <TextBlock Text="{loc:Str empty_available_subjects}"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="13" TextWrapping="Wrap" LineHeight="20"/>
+                </Border>
+
+                <!-- Error state (visible iff service.HasError) -->
+                <Border Grid.Row="1" x:Name="AvailableSubjectsErrorPanel"
+                        Background="{DynamicResource SurfaceBgBrush}"
+                        BorderBrush="{DynamicResource DangerBrush}" BorderThickness="1"
+                        CornerRadius="10" Padding="24,18" Margin="0,0,0,12"
+                        Visibility="Collapsed">
+                    <TextBlock Text="{loc:Str error_available_subjects}"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="13" TextWrapping="Wrap" LineHeight="20"/>
+                </Border>
+
+                <!-- Side-scrollable horizontal card list. ItemsSource is bound
+                     in code-behind to App.AvailableSubjects.Entries. Each card
+                     gets a fixed 260px width to keep horizontal scrolling
+                     intentional rather than incidental. -->
+                <ScrollViewer Grid.Row="2" x:Name="AvailableSubjectsScroller"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="AvailableSubjectsList">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Width="260" Margin="0,0,12,4" Opacity="{Binding CardOpacity}"
+                                        Background="{DynamicResource SurfaceBgBrush}"
+                                        BorderBrush="{DynamicResource NeonPurpleBrush}"
+                                        BorderThickness="1" CornerRadius="10" Padding="18,14">
+                                    <StackPanel>
+                                        <!-- Top row: name + level + tier badge -->
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{Binding DisplayName}" Foreground="White"
+                                                           FontSize="15" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Foreground="{DynamicResource TextMutedBrush}"
+                                                           FontSize="11" Margin="0,2,0,0">
+                                                    <Run Text="Lv "/><Run Text="{Binding Level, Mode=OneWay}"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <Border Grid.Column="1" Background="{DynamicResource NeonPurpleTransparent20Brush}"
+                                                    CornerRadius="9999" Padding="8,3" VerticalAlignment="Top">
+                                                <TextBlock Text="{Binding TierLabel}"
+                                                           Foreground="{DynamicResource NeonPurpleBrush}"
+                                                           FontSize="10" FontWeight="Bold"/>
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Status text (only when present) -->
+                                        <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
+                                                   Visibility="{Binding HasStatusText, Converter={StaticResource BoolToVisibility}}"/>
+
+                                        <!-- Tags as a CSV line (compact for narrow card) -->
+                                        <TextBlock Text="{Binding TagsCsv}" Foreground="{DynamicResource TextMutedBrush}"
+                                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"
+                                                   Visibility="{Binding HasTags, Converter={StaticResource BoolToVisibility}}"/>
+
+                                        <!-- Connect button (or Taken disabled) -->
+                                        <Button Content="{Binding ConnectButtonText}"
+                                                Tag="{Binding UnifiedId}"
+                                                IsEnabled="{Binding IsConnectEnabled}"
+                                                Click="BtnConnectSubject_Click"
+                                                Background="{DynamicResource NeonPurpleBrush}" Foreground="White"
+                                                FontSize="13" FontWeight="Bold"
+                                                Padding="0,8" BorderThickness="0" Cursor="Hand"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
         </ContentControl>
 
         <!-- Bambi Takeover Tab — Patreon premium feature, visible-but-locked for free users -->

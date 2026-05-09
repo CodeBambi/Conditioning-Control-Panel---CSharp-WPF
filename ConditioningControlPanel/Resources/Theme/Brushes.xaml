@@ -65,4 +65,9 @@
     <SolidColorBrush x:Key="DeeperAccentTransparent20Brush" Color="{DynamicResource DeeperAccentTransparent20}"/>
     <SolidColorBrush x:Key="DeeperAccentTransparent40Brush" Color="{DynamicResource DeeperAccentTransparent40}"/>
 
+    <!-- SP5 layer 3: NeonPurple brushes for the Available Subjects tab. -->
+    <SolidColorBrush x:Key="NeonPurpleBrush" Color="{DynamicResource NeonPurple}"/>
+    <SolidColorBrush x:Key="NeonPurpleSoftBrush" Color="{DynamicResource NeonPurpleSoft}"/>
+    <SolidColorBrush x:Key="NeonPurpleTransparent20Brush" Color="{DynamicResource NeonPurpleTransparent20}"/>
+
 </ResourceDictionary>

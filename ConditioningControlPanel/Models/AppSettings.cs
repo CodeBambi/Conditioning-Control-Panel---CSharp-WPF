@@ -3055,6 +3055,49 @@ namespace ConditioningControlPanel.Models
             set { _stopEffectsOnRemoteDisconnect = value; OnPropertyChanged(); }
         }
 
+        // SP5 layer 3 — Available Subjects directory opt-in.
+        //
+        // The opt-in checkbox itself NEVER persists across sessions: the user
+        // re-opts every time they start a remote-control session. Only the tag
+        // selection + status_text are persisted, and only when the user
+        // explicitly checks "Remember tags + status".
+        private bool _rememberDirectoryDetails;
+        public bool RememberDirectoryDetails
+        {
+            get => _rememberDirectoryDetails;
+            set { _rememberDirectoryDetails = value; OnPropertyChanged(); }
+        }
+
+        private List<string> _savedDirectoryTags = new();
+        /// <summary>
+        /// Tag IDs the user picked last time they opted into the directory and
+        /// chose "Remember". Used to pre-fill the tag selector on the next
+        /// session-start configuration. Capped at 5 entries on save (the UI
+        /// also caps selection at 5).
+        /// </summary>
+        public List<string> SavedDirectoryTags
+        {
+            get => _savedDirectoryTags;
+            set { _savedDirectoryTags = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
+        private string _savedDirectoryStatusText = "";
+        /// <summary>
+        /// Free-text status the user wrote last time they opted into the
+        /// directory and chose "Remember". 80 char max (UI-enforced + clamped
+        /// here on set).
+        /// </summary>
+        public string SavedDirectoryStatusText
+        {
+            get => _savedDirectoryStatusText;
+            set
+            {
+                var v = value ?? "";
+                _savedDirectoryStatusText = v.Length > 80 ? v.Substring(0, 80) : v;
+                OnPropertyChanged();
+            }
+        }
+
         #endregion
 
         #region Validation

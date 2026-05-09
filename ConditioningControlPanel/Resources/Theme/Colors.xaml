@@ -65,4 +65,14 @@
     <Color x:Key="DeeperAccentTransparent20">#207B5CFF</Color>
     <Color x:Key="DeeperAccentTransparent40">#407B5CFF</Color>
 
+    <!-- SP5 layer 3: NeonPurple — Available Subjects directory tab + page accent.
+         Distinct from DeeperAccent #7B5CFF (violet, calmer); #B47BFF reads as
+         bright/neon and marks the section as visually different. ~12:1 against
+         the dark background tokens (AAA). Mirrors the cclabs-web neon-purple
+         token shipped in SP5L2 so the desktop and web "Available Subjects"
+         surfaces share a single visual identity. -->
+    <Color x:Key="NeonPurple">#FFB47BFF</Color>
+    <Color x:Key="NeonPurpleSoft">#FFD4BCFF</Color>
+    <Color x:Key="NeonPurpleTransparent20">#33B47BFF</Color>
+
 </ResourceDictionary>

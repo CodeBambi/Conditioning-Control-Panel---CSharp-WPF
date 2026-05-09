@@ -290,6 +290,7 @@ namespace ConditioningControlPanel
         public static KeywordHighlightService? KeywordHighlight { get; private set; }
         public static ActivityTracker ActivityTracker { get; private set; } = null!;
         public static RemoteControlService RemoteControl { get; private set; } = null!;
+        public static AvailableSubjectsService AvailableSubjects { get; private set; } = null!;
         public static CompanionPhraseService CompanionPhrases { get; private set; } = null!;
         public static LockdownService Lockdown { get; private set; } = null!;
         public static MantraService Mantra { get; private set; } = null!;
@@ -973,6 +974,7 @@ namespace ConditioningControlPanel
             ScreenOcr = new ScreenOcrService();
             KeywordHighlight = new KeywordHighlightService();
             RemoteControl = new RemoteControlService();
+            AvailableSubjects = new AvailableSubjectsService();
             CompanionPhrases = new CompanionPhraseService();
 
             // Auto-connect haptics if enabled (runs in background)

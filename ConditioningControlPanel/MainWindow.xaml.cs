@@ -5710,7 +5710,11 @@ namespace ConditioningControlPanel
             LabTab.Visibility = Visibility.Collapsed;
             AwarenessTab.Visibility = Visibility.Collapsed;
             if (RemoteControlTab != null) RemoteControlTab.Visibility = Visibility.Collapsed;
+            if (AvailableSubjectsTab != null) AvailableSubjectsTab.Visibility = Visibility.Collapsed;
             if (BambiTakeoverTab != null) BambiTakeoverTab.Visibility = Visibility.Collapsed;
+            // SP5L3: stop polling whenever we leave the Available Subjects
+            // tab. Idempotent — safe to call even if not currently polling.
+            App.AvailableSubjects?.StopPolling();
             if (HapticsTab != null) HapticsTab.Visibility = Visibility.Collapsed;
             if (LockdownTab != null) LockdownTab.Visibility = Visibility.Collapsed;
 
@@ -5722,6 +5726,7 @@ namespace ConditioningControlPanel
             BtnQuests.Style = inactiveStyle;
             BtnEnhancements.Style = inactiveStyle;
             if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeper") as Style;
+            if (BtnAvailableSubjects != null) BtnAvailableSubjects.Style = FindResource("TabButtonNeon") as Style;
             BtnAchievements.Style = inactiveStyle;
             BtnCompanion.Style = inactiveStyle;
             BtnLeaderboard.Style = inactiveStyle;
@@ -5840,6 +5845,18 @@ namespace ConditioningControlPanel
                     RemoteControlTab.Visibility = Visibility.Visible;
                     AnimateTabIn(RemoteControlTab);
                     UpdateRemoteControlUI();
+                    break;
+
+                case "availablesubjects":
+                    if (AvailableSubjectsTab != null)
+                    {
+                        AvailableSubjectsTab.Visibility = Visibility.Visible;
+                        AnimateTabIn(AvailableSubjectsTab);
+                    }
+                    if (BtnAvailableSubjects != null)
+                        BtnAvailableSubjects.Style = FindResource("TabButtonNeonActive") as Style;
+                    EnsureAvailableSubjectsBound();
+                    App.AvailableSubjects?.StartPolling();
                     break;
 
                 case "bambitakeover":
@@ -10910,6 +10927,14 @@ namespace ConditioningControlPanel
                 UpdateRemoteStatus(false);
                 RefreshRemoteQrCode(BuildRemotePairingUrl(code));
 
+                // SP5 layer 3: collapse the opt-in form now that a session is
+                // active (user spec: "section visibility bound to !IsActive").
+                // Then chain the directory opt-in call if the user ticked the
+                // checkbox. Best-effort — the session is already running.
+                if (OptInSectionPanel != null)
+                    OptInSectionPanel.Visibility = System.Windows.Visibility.Collapsed;
+                _ = RunOptInChainAsync();
+
                 // Listen for controller connection changes
                 App.RemoteControl.ControllerConnectedChanged += OnRemoteControllerChanged;
                 App.RemoteControl.ControllerIdleChanged += OnRemoteControllerIdleChanged;
@@ -11070,6 +11095,264 @@ namespace ConditioningControlPanel
             App.Settings.Save();
         }
 
+        // =====================================================================
+        // SP5 layer 3 — Available Subjects tab (controller side)
+        // =====================================================================
+
+        private bool _availableSubjectsBound;
+
+        private void BtnAvailableSubjects_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("availablesubjects");
+        }
+
+        /// <summary>
+        /// One-time binding: hook the service's ObservableCollection to the
+        /// ItemsControl ItemsSource and the IsEmpty/HasError flags to the
+        /// empty/error panels. Called from ShowTab on first navigation.
+        /// </summary>
+        private void EnsureAvailableSubjectsBound()
+        {
+            if (_availableSubjectsBound) return;
+            if (App.AvailableSubjects == null) return;
+            if (AvailableSubjectsList == null) return;
+
+            AvailableSubjectsList.ItemsSource = App.AvailableSubjects.Entries;
+            App.AvailableSubjects.PropertyChanged += OnAvailableSubjectsServicePropertyChanged;
+            UpdateAvailableSubjectsEmptyAndError();
+            _availableSubjectsBound = true;
+        }
+
+        private void OnAvailableSubjectsServicePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            // The service raises these from a background task — marshal to UI.
+            Dispatcher.Invoke(UpdateAvailableSubjectsEmptyAndError);
+        }
+
+        private void UpdateAvailableSubjectsEmptyAndError()
+        {
+            var svc = App.AvailableSubjects;
+            if (svc == null) return;
+            // Show error panel if last refresh failed; show empty panel if
+            // last refresh was clean but the roster is empty. Otherwise both
+            // hidden (cards visible).
+            if (AvailableSubjectsErrorPanel != null)
+                AvailableSubjectsErrorPanel.Visibility = svc.HasError
+                    ? Visibility.Visible : Visibility.Collapsed;
+            if (AvailableSubjectsEmptyPanel != null)
+                AvailableSubjectsEmptyPanel.Visibility = (!svc.HasError && svc.IsEmpty)
+                    ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Connect button on a subject card. Reads the entry from the button's
+        /// DataContext, calls the service to claim, and on success opens the
+        /// returned session_url in the user's default browser via Process.Start.
+        ///
+        /// Privacy: the session_url string lives in this method's stack only —
+        /// referenced once for Process.Start, never logged, never assigned to
+        /// any field. The hash fragment carries the PIN; the cclabs.app/remote/
+        /// page strips it from the URL after parsing.
+        ///
+        /// 409 → service handles silently (re-fetches, card flips to TAKEN).
+        /// other failures → no toast in v1; user can re-click. Audit-log
+        /// coverage for the failure mode is filed as the SP6 followup.
+        /// </summary>
+        private async void BtnConnectSubject_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.Button btn) return;
+            if (btn.DataContext is not ConditioningControlPanel.Services.DirectoryEntry entry) return;
+            if (entry.Claimed) return; // belt-and-braces; IsEnabled binding already guards
+            if (App.AvailableSubjects == null) return;
+
+            btn.IsEnabled = false;
+            try
+            {
+                var url = await App.AvailableSubjects.TryClaimAsync(entry.UnifiedId);
+                if (string.IsNullOrEmpty(url)) return; // 409 handled silently or transient error
+
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+                    {
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // Don't echo the URL into the log line — exception message
+                    // typically only carries the OS error code anyway.
+                    App.Logger?.Warning(ex, "[AvailableSubjects] failed to open browser for claimed session");
+                }
+            }
+            finally
+            {
+                // Restore the button — IsEnabled binding will recompute on the
+                // next refresh based on entry.Claimed.
+                btn.IsEnabled = entry.IsConnectEnabled;
+            }
+        }
+
+        // =====================================================================
+        // SP5 layer 3 — Available Subjects directory opt-in
+        // =====================================================================
+        // The opt-in checkbox itself NEVER persists across sessions. The user
+        // re-opts every time. Tags + status_text persist to AppSettings only
+        // when ChkRememberOptInDetails is ticked at the moment of session
+        // start. The chained opt-in API call happens after StartSessionAsync
+        // returns a code; failure is best-effort (logged + non-blocking inline
+        // status), the session itself is unaffected.
+
+        // Per locked decisions: 10 fixed tags, cap selection at 5.
+        private const int OptInMaxTags = 5;
+
+        private System.Windows.Controls.CheckBox[] OptInTagCheckBoxes() => new[]
+        {
+            ChkTagBimbo, ChkTagDrone, ChkTagTrance, ChkTagFeminization,
+            ChkTagSubmission, ChkTagDegradation, ChkTagAudioOk, ChkTagSoftOnly,
+            ChkTagLockdownOk, ChkTagChastity
+        };
+
+        private void ChkOptIntoDirectory_Changed(object sender, RoutedEventArgs e)
+        {
+            if (OptInFormPanel == null) return;
+            var checkedNow = ChkOptIntoDirectory?.IsChecked == true;
+            OptInFormPanel.Visibility = checkedNow
+                ? System.Windows.Visibility.Visible
+                : System.Windows.Visibility.Collapsed;
+
+            // First time user opens the form this session → pre-populate from
+            // saved settings (only if Remember was previously ticked).
+            if (checkedNow) PopulateOptInFormFromSavedSettings();
+        }
+
+        private void PopulateOptInFormFromSavedSettings()
+        {
+            var s = App.Settings?.Current;
+            if (s == null) return;
+
+            // Saved tags → check matching boxes.
+            var saved = new HashSet<string>(s.SavedDirectoryTags ?? new List<string>());
+            foreach (var cb in OptInTagCheckBoxes())
+            {
+                var tag = cb.Tag as string ?? "";
+                cb.IsChecked = saved.Contains(tag);
+            }
+
+            // Saved status text + char count.
+            if (TxtOptInStatus != null) TxtOptInStatus.Text = s.SavedDirectoryStatusText ?? "";
+            UpdateOptInStatusCharCount();
+
+            // Remember toggle reflects saved preference.
+            if (ChkRememberOptInDetails != null)
+                ChkRememberOptInDetails.IsChecked = s.RememberDirectoryDetails;
+        }
+
+        private void TxtOptInStatus_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            UpdateOptInStatusCharCount();
+        }
+
+        private void UpdateOptInStatusCharCount()
+        {
+            if (TxtOptInStatusCount == null || TxtOptInStatus == null) return;
+            var len = (TxtOptInStatus.Text ?? "").Length;
+            TxtOptInStatusCount.Text = $"{len}/80";
+        }
+
+        private void ChkOptInTag_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.CheckBox cb) return;
+            if (cb.IsChecked != true) return; // unchecking is always fine; only cap on check
+
+            var checkedCount = OptInTagCheckBoxes().Count(c => c.IsChecked == true);
+            if (checkedCount > OptInMaxTags)
+            {
+                // Soft cap: undo the just-clicked check and surface a brief inline
+                // hint via the feedback TextBlock.
+                cb.IsChecked = false;
+                ShowOptInFeedback(Loc.Get("msg_optin_directory_max_tags"), persistMs: 2500);
+            }
+        }
+
+        private List<string> GetSelectedDirectoryTags()
+        {
+            var list = new List<string>();
+            foreach (var cb in OptInTagCheckBoxes())
+            {
+                if (cb.IsChecked == true && cb.Tag is string tag && !string.IsNullOrEmpty(tag))
+                    list.Add(tag);
+            }
+            return list;
+        }
+
+        private System.Windows.Threading.DispatcherTimer? _optInFeedbackTimer;
+        private void ShowOptInFeedback(string message, int persistMs)
+        {
+            if (TxtOptInFeedback == null) return;
+            TxtOptInFeedback.Text = message;
+            TxtOptInFeedback.Visibility = System.Windows.Visibility.Visible;
+            _optInFeedbackTimer?.Stop();
+            _optInFeedbackTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(persistMs)
+            };
+            _optInFeedbackTimer.Tick += (_, _) =>
+            {
+                _optInFeedbackTimer?.Stop();
+                if (TxtOptInFeedback != null)
+                {
+                    TxtOptInFeedback.Text = "";
+                    TxtOptInFeedback.Visibility = System.Windows.Visibility.Collapsed;
+                }
+            };
+            _optInFeedbackTimer.Start();
+        }
+
+        /// <summary>
+        /// Runs after a successful StartSessionAsync. If the user opted in,
+        /// chains the proxy /v2/directory/opt-in call and persists the
+        /// tags+status on success when "Remember" is ticked. All best-effort:
+        /// the session is already running and is not affected by failures here.
+        /// </summary>
+        private async Task RunOptInChainAsync()
+        {
+            if (App.RemoteControl == null) return;
+            if (ChkOptIntoDirectory?.IsChecked != true) return;
+
+            var tags = GetSelectedDirectoryTags();
+            var statusText = TxtOptInStatus?.Text ?? "";
+            // Defensive: cap to OptInMaxTags + 80c even if UI somehow let more
+            // through (paste, accessibility, etc.). The proxy validates again,
+            // but failing client-side here is faster + clearer.
+            if (tags.Count > OptInMaxTags) tags = tags.Take(OptInMaxTags).ToList();
+            if (statusText.Length > 80) statusText = statusText.Substring(0, 80);
+
+            var ok = await App.RemoteControl.OptInToDirectoryAsync(tags, statusText);
+            if (!ok)
+            {
+                ShowOptInFeedback(Loc.Get("msg_optin_directory_failed"), persistMs: 4000);
+                return;
+            }
+
+            // Persist tags+status only on success AND only when Remember is on.
+            if (ChkRememberOptInDetails?.IsChecked == true && App.Settings?.Current is { } s)
+            {
+                s.RememberDirectoryDetails = true;
+                s.SavedDirectoryTags = tags;
+                s.SavedDirectoryStatusText = statusText;
+                App.Settings.Save();
+            }
+            else if (ChkRememberOptInDetails?.IsChecked != true && App.Settings?.Current is { } s2 && s2.RememberDirectoryDetails)
+            {
+                // Remember was previously on, now off → clear saved state.
+                s2.RememberDirectoryDetails = false;
+                s2.SavedDirectoryTags = new List<string>();
+                s2.SavedDirectoryStatusText = "";
+                App.Settings.Save();
+            }
+        }
+
         private async Task StopRemoteControl()
         {
             if (App.RemoteControl != null)
@@ -11089,6 +11372,16 @@ namespace ConditioningControlPanel
             BtnStopRemote.Visibility = System.Windows.Visibility.Collapsed;
             if (ImgRemoteQrCode != null) ImgRemoteQrCode.Source = null;
             if (LstRemoteCommandLog != null) LstRemoteCommandLog.Items.Clear();
+
+            // SP5 layer 3: restore the opt-in section so the user can
+            // configure it for the next session (or untick if they're done).
+            // The opt-in checkbox itself stays unchecked — re-opt every time.
+            if (OptInSectionPanel != null)
+                OptInSectionPanel.Visibility = System.Windows.Visibility.Visible;
+            if (ChkOptIntoDirectory != null)
+                ChkOptIntoDirectory.IsChecked = false;
+            if (OptInFormPanel != null)
+                OptInFormPanel.Visibility = System.Windows.Visibility.Collapsed;
         }
 
         private void OnRemoteControllerChanged(object? sender, EventArgs e)
