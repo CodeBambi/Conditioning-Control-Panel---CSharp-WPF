@@ -20,41 +20,28 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.9.4";
+        public const string AppVersion = "5.9.5";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.9.4 - Even Deeper
+        public const string CurrentPatchNotes = @"v5.9.5 - Open Invitation
 
-This is a pre-release - bundles all changes since 5.9.1 (5.9.2 + 5.9.3 + new polish). Please report anything you hit.
-
-🔧 BUG FIXES
-• Dashboard enhance: matches saved .ccpenh files on the first page load instead of needing a navigation bounce; logs why a HT page didn't match so library mismatches are debuggable.
-• Fullscreen on HT videos (dashboard browser, Deeper player, editor preview): double-clicking the video and clicking HT's minimize button now reliably exit fullscreen instead of silently pausing.
-• Screen-shake effect now actually shakes the video during fullscreen (was invisible because WebView2's render surface ignored WPF transforms).
-• Lazy-loaded dashboard browser opens HypnoTube directly when you click the HT tab first - no more BambiCloud → HypnoTube bounce.
-• Deeper Player: Play button now starts playback; video maximizes in the viewport instead of leaving black bands.
-• Three Deeper HypnoTube player bugs from the tutorial flow.
-• ObjectDisposedException on app close while a Deeper HT enhancement was running.
-• UI freeze when starting the webcam from Lab buttons.
-• Main flash effects suspended during the gaze minigame so they don't disrupt rounds.
-• Bouncing-text invisible regions + BadDeviceId audio output failures.
-• Four triage-round bugs: overlay z-order, haptics, bubble dwell, ETW.
+Adds the Available Subjects directory: opt-in for subjects, browse-and-claim for controllers, both desktop and web.
 
 ✨ FEATURES
-• Audio output device picker - route all CCP audio through your chosen output instead of always the system default.
-• Lab calibration: pick which monitor the webcam calibration runs on.
-• .ccpenh file association - double-click an enhancement file to open it in the Deeper editor.
-• Linked Files strip in the editor for quick access to associated assets.
-• Editor Rules & Effects overview list, group drag, HT uploader regex fix.
-• Editor polish: tutorial textbox focus, region help, library delete + open folder.
-• Monthly season-reset popup to clarify the ""level reset"" pattern.
+• Available Subjects directory - opt into a public list of currently-active remote-control sessions; controllers browse the list at app.cclabs.app/dashboard/subjects (web) or in the new ""Available Subjects"" tab in the main UI (desktop). First-clicker wins; the one-click pairing URL opens in the controller's browser.
+• Subject opt-in: new section in the Remote Control page with a tag selector (10 fixed tags, pick up to 5), 80-char status, and a ""Remember tags + status"" toggle that persists between sessions.
+• Controller side: new neon-purple ""Available Subjects"" tab next to Deeper. Side-scrollable card list, 15-second refresh while visible, Connect button opens the session in your default browser.
 
-🛡️ ANTI-CHEAT
-• Defend anti-cheat against rate-limited cloud reads.
-• Extend webcam off-UI-thread coverage.";
+🔧 BUG FIXES
+• Gaze minigame flash leak (#221) - main flash effects no longer disrupt gaze rounds.
+• Asset migration loop (#227) - fixed.
+• Sign in via web: dialog cleanup on close, URL display polish, premature-expiry on non-UTC systems, settings now apply correctly on confirm.
+
+🎨 UI/UX
+• New neon-purple accent (#B47BFF) on the Available Subjects tab - distinct from the pink primary and the Deeper violet.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
