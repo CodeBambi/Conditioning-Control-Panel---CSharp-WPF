@@ -813,10 +813,24 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // Store auth_token via DPAPI (same protection as legacy paths).
-            // unified_id is plaintext in settings.json — same as every other provider.
-            if (App.Settings?.Current != null)
+            // Apply full user data when the server included it (SP3 fix).
+            // ApplyUserDataToSettings populates DisplayName / Level / XP /
+            // PatreonTier / season info, which lets the post-login flow in
+            // MainWindow.OpenUnifiedLoginDialog clear ProfileSyncService's
+            // anti-cheat guard ("local looks like fresh defaults — refuse
+            // to push") so the cloud profile actually round-trips. Without
+            // a populated user, the desktop stays at defaults forever for
+            // device-code logins. Mirrors the Patreon/Discord legacy flow.
+            if (result.User != null)
             {
+                new V2AuthService().ApplyUserDataToSettings(result.User, result.AuthToken);
+            }
+            else if (App.Settings?.Current != null)
+            {
+                // Older proxy build without user piggyback, or server-side
+                // user fetch failed. Fall back to bare token + uid storage —
+                // the user's UI will show defaults until they re-auth via
+                // Patreon or Discord, but at least authenticated calls work.
                 App.Settings.Current.AuthToken = result.AuthToken;
                 App.Settings.Current.UnifiedId = result.UnifiedId;
                 App.Settings.Save();
