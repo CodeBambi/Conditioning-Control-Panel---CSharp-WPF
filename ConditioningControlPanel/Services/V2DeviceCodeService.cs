@@ -72,6 +72,14 @@ namespace ConditioningControlPanel.Services
             public string? AuthToken { get; set; }
             public string? UnifiedId { get; set; }
             public bool IsNewUser { get; set; }
+
+            // Server-provided user object on confirmed (post-fix proxy build).
+            // Null on older proxy builds or if the server's user-fetch failed —
+            // caller falls back to bare token+id storage in that case, which
+            // leaves the UI at defaults until the user re-auths via Patreon
+            // or Discord. See HandleDeviceCodeConfirmed in LoginDialog for
+            // how this gets applied via V2AuthService.ApplyUserDataToSettings.
+            public V2AuthService.V2User? User { get; set; }
         }
 
         public async Task<InitiateResponse> InitiateAsync(CancellationToken ct = default)
@@ -155,14 +163,36 @@ namespace ConditioningControlPanel.Services
                         var authToken = obj["auth_token"]?.ToString();
                         var unifiedId = obj["unified_id"]?.ToString();
                         var isNewUser = (bool?)obj["is_new_user"] ?? false;
+
+                        // SP3 fix: server now piggybacks user data on confirmed
+                        // (mirrors /v2/auth/patreon and /v2/auth/discord shape)
+                        // so the desktop can populate local AppSettings before
+                        // ProfileSync's anti-cheat guard refuses the post-login
+                        // round-trip. Older proxy builds omit this field;
+                        // null is handled gracefully by the caller.
+                        V2AuthService.V2User? user = null;
+                        var userToken = obj["user"];
+                        if (userToken != null && userToken.Type == JTokenType.Object)
+                        {
+                            try
+                            {
+                                user = userToken.ToObject<V2AuthService.V2User>();
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Warning(ex, "[DeviceCode] Failed to parse user from poll response");
+                            }
+                        }
+
                         // Never log auth_token.
-                        Log.Information("[DeviceCode] Confirmed uid={Uid} new={New}", unifiedId, isNewUser);
+                        Log.Information("[DeviceCode] Confirmed uid={Uid} new={New} hasUser={HasUser}", unifiedId, isNewUser, user != null);
                         return new PollResponse
                         {
                             Status = PollStatus.Confirmed,
                             AuthToken = authToken,
                             UnifiedId = unifiedId,
-                            IsNewUser = isNewUser
+                            IsNewUser = isNewUser,
+                            User = user
                         };
                     }
                     case 202:
