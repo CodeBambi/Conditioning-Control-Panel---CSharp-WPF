@@ -5710,7 +5710,11 @@ namespace ConditioningControlPanel
             LabTab.Visibility = Visibility.Collapsed;
             AwarenessTab.Visibility = Visibility.Collapsed;
             if (RemoteControlTab != null) RemoteControlTab.Visibility = Visibility.Collapsed;
+            if (AvailableSubjectsTab != null) AvailableSubjectsTab.Visibility = Visibility.Collapsed;
             if (BambiTakeoverTab != null) BambiTakeoverTab.Visibility = Visibility.Collapsed;
+            // SP5L3: stop polling whenever we leave the Available Subjects
+            // tab. Idempotent — safe to call even if not currently polling.
+            App.AvailableSubjects?.StopPolling();
             if (HapticsTab != null) HapticsTab.Visibility = Visibility.Collapsed;
             if (LockdownTab != null) LockdownTab.Visibility = Visibility.Collapsed;
 
@@ -5722,6 +5726,7 @@ namespace ConditioningControlPanel
             BtnQuests.Style = inactiveStyle;
             BtnEnhancements.Style = inactiveStyle;
             if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeper") as Style;
+            if (BtnAvailableSubjects != null) BtnAvailableSubjects.Style = FindResource("TabButtonNeon") as Style;
             BtnAchievements.Style = inactiveStyle;
             BtnCompanion.Style = inactiveStyle;
             BtnLeaderboard.Style = inactiveStyle;
@@ -5840,6 +5845,18 @@ namespace ConditioningControlPanel
                     RemoteControlTab.Visibility = Visibility.Visible;
                     AnimateTabIn(RemoteControlTab);
                     UpdateRemoteControlUI();
+                    break;
+
+                case "availablesubjects":
+                    if (AvailableSubjectsTab != null)
+                    {
+                        AvailableSubjectsTab.Visibility = Visibility.Visible;
+                        AnimateTabIn(AvailableSubjectsTab);
+                    }
+                    if (BtnAvailableSubjects != null)
+                        BtnAvailableSubjects.Style = FindResource("TabButtonNeonActive") as Style;
+                    EnsureAvailableSubjectsBound();
+                    App.AvailableSubjects?.StartPolling();
                     break;
 
                 case "bambitakeover":
@@ -11076,6 +11093,104 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current == null) return;
             App.Settings.Current.StopEffectsOnRemoteDisconnect = ChkStopEffectsOnRemoteDisconnect.IsChecked ?? false;
             App.Settings.Save();
+        }
+
+        // =====================================================================
+        // SP5 layer 3 — Available Subjects tab (controller side)
+        // =====================================================================
+
+        private bool _availableSubjectsBound;
+
+        private void BtnAvailableSubjects_Click(object sender, RoutedEventArgs e)
+        {
+            ShowTab("availablesubjects");
+        }
+
+        /// <summary>
+        /// One-time binding: hook the service's ObservableCollection to the
+        /// ItemsControl ItemsSource and the IsEmpty/HasError flags to the
+        /// empty/error panels. Called from ShowTab on first navigation.
+        /// </summary>
+        private void EnsureAvailableSubjectsBound()
+        {
+            if (_availableSubjectsBound) return;
+            if (App.AvailableSubjects == null) return;
+            if (AvailableSubjectsList == null) return;
+
+            AvailableSubjectsList.ItemsSource = App.AvailableSubjects.Entries;
+            App.AvailableSubjects.PropertyChanged += OnAvailableSubjectsServicePropertyChanged;
+            UpdateAvailableSubjectsEmptyAndError();
+            _availableSubjectsBound = true;
+        }
+
+        private void OnAvailableSubjectsServicePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            // The service raises these from a background task — marshal to UI.
+            Dispatcher.Invoke(UpdateAvailableSubjectsEmptyAndError);
+        }
+
+        private void UpdateAvailableSubjectsEmptyAndError()
+        {
+            var svc = App.AvailableSubjects;
+            if (svc == null) return;
+            // Show error panel if last refresh failed; show empty panel if
+            // last refresh was clean but the roster is empty. Otherwise both
+            // hidden (cards visible).
+            if (AvailableSubjectsErrorPanel != null)
+                AvailableSubjectsErrorPanel.Visibility = svc.HasError
+                    ? Visibility.Visible : Visibility.Collapsed;
+            if (AvailableSubjectsEmptyPanel != null)
+                AvailableSubjectsEmptyPanel.Visibility = (!svc.HasError && svc.IsEmpty)
+                    ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Connect button on a subject card. Reads the entry from the button's
+        /// DataContext, calls the service to claim, and on success opens the
+        /// returned session_url in the user's default browser via Process.Start.
+        ///
+        /// Privacy: the session_url string lives in this method's stack only —
+        /// referenced once for Process.Start, never logged, never assigned to
+        /// any field. The hash fragment carries the PIN; the cclabs.app/remote/
+        /// page strips it from the URL after parsing.
+        ///
+        /// 409 → service handles silently (re-fetches, card flips to TAKEN).
+        /// other failures → no toast in v1; user can re-click. Audit-log
+        /// coverage for the failure mode is filed as the SP6 followup.
+        /// </summary>
+        private async void BtnConnectSubject_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.Button btn) return;
+            if (btn.DataContext is not ConditioningControlPanel.Services.DirectoryEntry entry) return;
+            if (entry.Claimed) return; // belt-and-braces; IsEnabled binding already guards
+            if (App.AvailableSubjects == null) return;
+
+            btn.IsEnabled = false;
+            try
+            {
+                var url = await App.AvailableSubjects.TryClaimAsync(entry.UnifiedId);
+                if (string.IsNullOrEmpty(url)) return; // 409 handled silently or transient error
+
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+                    {
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // Don't echo the URL into the log line — exception message
+                    // typically only carries the OS error code anyway.
+                    App.Logger?.Warning(ex, "[AvailableSubjects] failed to open browser for claimed session");
+                }
+            }
+            finally
+            {
+                // Restore the button — IsEnabled binding will recompute on the
+                // next refresh based on entry.Claimed.
+                btn.IsEnabled = entry.IsConnectEnabled;
+            }
         }
 
         // =====================================================================
