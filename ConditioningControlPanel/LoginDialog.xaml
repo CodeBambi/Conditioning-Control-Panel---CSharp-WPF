@@ -61,14 +61,12 @@
                     </StackPanel>
                 </Button>
 
-                <!-- SP3: Sign in via Web (device-code flow). Visibility gated at runtime
-                     on AppSettings.PatreonTier >= 2 (Lab-tier soak). -->
+                <!-- SP3: Sign in via Web (device-code flow). -->
                 <Button x:Name="BtnLoginDeviceCode"
                         Padding="20,15" Margin="0,0,0,15"
                         Background="#9333EA" Foreground="White"
                         BorderThickness="0" FontWeight="Bold" FontSize="16"
-                        Cursor="Hand" Click="BtnLoginDeviceCode_Click"
-                        Visibility="Collapsed">
+                        Cursor="Hand" Click="BtnLoginDeviceCode_Click">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Sign in via Web" VerticalAlignment="Center"/>
                     </StackPanel>
