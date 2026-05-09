@@ -168,6 +168,62 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// SP5 layer 3: opt the active remote-control session into the public
+        /// Available Subjects directory. POSTs /v2/directory/opt-in with the
+        /// caller's X-Auth-Token. Best-effort: failure does NOT undo the
+        /// session. Caller (MainWindow) shows a non-blocking inline status
+        /// message on failure.
+        ///
+        /// Privacy note: the body sends `pin` as plaintext (the proxy stores
+        /// it in directory:entry:&lt;uid&gt; for /claim to embed in the one-click
+        /// pairing URL). This is the same PIN the desktop is already showing
+        /// to the user via TxtRemotePin and copying to the clipboard via
+        /// BtnCopyRemoteLink — no new exposure.
+        /// </summary>
+        /// <returns>true on 200 OK; false on any other outcome (network,
+        /// 4xx, 5xx). The caller logs/displays the non-blocking notification.</returns>
+        public async Task<bool> OptInToDirectoryAsync(List<string> tags, string statusText)
+        {
+            if (!IsActive || string.IsNullOrEmpty(SessionCode) || string.IsNullOrEmpty(ConnectPin))
+            {
+                App.Logger?.Warning("[RemoteControl] OptIn called without active session");
+                return false;
+            }
+            var unifiedId = App.UnifiedUserId;
+            if (string.IsNullOrEmpty(unifiedId)) return false;
+
+            try
+            {
+                var body = JsonConvert.SerializeObject(new
+                {
+                    unified_id = unifiedId,
+                    code = SessionCode,
+                    pin = ConnectPin,
+                    tags = tags ?? new List<string>(),
+                    status_text = statusText ?? ""
+                });
+                using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/directory/opt-in", body);
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Status only — never log the response body (defensive;
+                    // /v2/directory/opt-in's error responses don't carry the
+                    // PIN, but match the discipline used elsewhere in this
+                    // service for any directory-related error path).
+                    App.Logger?.Warning("[RemoteControl] Directory opt-in failed: {Status}", response.StatusCode);
+                    return false;
+                }
+                App.Logger?.Information("[RemoteControl] Directory opt-in OK ({TagCount} tags, status={StatusLen}c)",
+                    (tags ?? new List<string>()).Count, (statusText ?? "").Length);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[RemoteControl] Directory opt-in error");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Stops the remote control session.
         /// </summary>
         public async Task StopSessionAsync()

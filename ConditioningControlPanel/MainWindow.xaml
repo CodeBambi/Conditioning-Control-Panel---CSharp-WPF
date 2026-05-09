@@ -9118,6 +9118,87 @@
                                 </Border>
                             </Grid>
 
+                            <!-- SP5 layer 3: Available Subjects directory opt-in.
+                                 Visible while configuring; collapses on session start.
+                                 The opt-in checkbox itself never persists across
+                                 sessions — re-opt every time. Tags + status_text
+                                 persist only when "Remember" is ticked. -->
+                            <Border x:Name="OptInSectionPanel" Background="{DynamicResource SurfaceBgBrush}"
+                                    BorderBrush="#FFB47BFF" BorderThickness="1"
+                                    CornerRadius="10" Padding="20,16" Margin="0,0,0,18">
+                                <StackPanel>
+                                    <CheckBox x:Name="ChkOptIntoDirectory" Foreground="White" FontSize="14"
+                                              Content="{loc:Str chk_optin_directory}" FontWeight="Bold"
+                                              Checked="ChkOptIntoDirectory_Changed"
+                                              Unchecked="ChkOptIntoDirectory_Changed"/>
+                                    <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                               Text="{loc:Str desc_optin_directory_consent}" TextWrapping="Wrap"
+                                               Margin="0,8,0,0" LineHeight="18"/>
+
+                                    <StackPanel x:Name="OptInFormPanel" Visibility="Collapsed" Margin="0,12,0,0">
+                                        <TextBlock Text="{loc:Str label_optin_tags}" Foreground="#FFB47BFF"
+                                                   FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
+                                        <WrapPanel x:Name="OptInTagsPanel">
+                                            <CheckBox x:Name="ChkTagBimbo" Tag="bimbo"
+                                                      Content="bimbo" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagDrone" Tag="drone"
+                                                      Content="drone" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagTrance" Tag="trance"
+                                                      Content="trance" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagFeminization" Tag="feminization"
+                                                      Content="feminization" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagSubmission" Tag="submission"
+                                                      Content="submission" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagDegradation" Tag="degradation"
+                                                      Content="degradation" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagAudioOk" Tag="audio_ok"
+                                                      Content="audio_ok" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagSoftOnly" Tag="soft_only"
+                                                      Content="soft_only" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagLockdownOk" Tag="lockdown_ok"
+                                                      Content="lockdown_ok" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                            <CheckBox x:Name="ChkTagChastity" Tag="chastity"
+                                                      Content="chastity" Foreground="White" Margin="0,0,12,6"
+                                                      Click="ChkOptInTag_Click"/>
+                                        </WrapPanel>
+
+                                        <TextBlock Text="{loc:Str label_optin_status}" Foreground="#FFB47BFF"
+                                                   FontSize="11" FontWeight="Bold" Margin="0,12,0,6"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="TxtOptInStatus" Grid.Column="0" MaxLength="80"
+                                                     Background="{DynamicResource PanelBgBrush}" Foreground="White"
+                                                     BorderBrush="#FFB47BFF" BorderThickness="1"
+                                                     Padding="10,8" FontSize="13"
+                                                     TextChanged="TxtOptInStatus_TextChanged"/>
+                                            <TextBlock x:Name="TxtOptInStatusCount" Grid.Column="1"
+                                                       Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" VerticalAlignment="Center"
+                                                       Margin="10,0,0,0" Text="0/80"/>
+                                        </Grid>
+
+                                        <CheckBox x:Name="ChkRememberOptInDetails" Foreground="White" FontSize="12"
+                                                  Margin="0,12,0,0"
+                                                  Content="{loc:Str chk_remember_optin_details}"/>
+
+                                        <TextBlock x:Name="TxtOptInFeedback" Foreground="#FFB47BFF" FontSize="11"
+                                                   Margin="0,8,0,0" Visibility="Collapsed" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
                             <!-- Hidden ComboBox keeps existing handler wiring intact -->
                             <ComboBox x:Name="CmbRemoteTier" Visibility="Collapsed"
                                       SelectionChanged="CmbRemoteTier_SelectionChanged">
