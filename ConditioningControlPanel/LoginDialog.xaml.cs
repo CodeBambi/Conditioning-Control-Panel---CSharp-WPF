@@ -54,14 +54,6 @@ namespace ConditioningControlPanel
         {
             InitializeComponent();
 
-            // SP3 Lab gate: cached PatreonTier >= 2 from a prior legacy login.
-            // Removed when SP3 promotes from Lab to stable.
-            var tier = App.Settings?.Current?.PatreonTier ?? 0;
-            if (tier >= 2)
-            {
-                BtnLoginDeviceCode.Visibility = Visibility.Visible;
-            }
-
             // SP3: cancel any in-flight device-code polling on dialog close so
             // alt+F4 / parent .Close() / session-end don't leave an orphan loop
             // hammering /poll against a hidden window until 15min server expiry.

@@ -21,8 +21,10 @@ namespace ConditioningControlPanel.Services
         private const string SERVER_URL = "https://codebambi-proxy.vercel.app";
 
         // Hardcoded: /v2/auth/device/initiate doesn't return a verification_url.
-        // Switch this single constant if cclabs-web adds a dedicated /pair page.
-        public const string VerificationUrl = "https://app.cclabs.app/login";
+        // /dashboard/link-device is the canonical pairing page on cclabs-web;
+        // the layout's auth gate handles the not-signed-in case via a ?next=
+        // round-trip back to this path.
+        public const string VerificationUrl = "https://app.cclabs.app/dashboard/link-device";
 
         static V2DeviceCodeService()
         {
