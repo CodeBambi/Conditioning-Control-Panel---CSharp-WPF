@@ -1314,14 +1314,26 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
             if (_suspendedFlashServiceForGame)
             {
                 _suspendedFlashServiceForGame = false;
-                try
+                // Only resume if the main session engine is still running. The user may
+                // have stopped the engine during the minigame (or it was never on and
+                // FlashService was running standalone) — blindly calling Start() leaves
+                // flashes firing with no way to stop them short of restarting the app
+                // (bug #221).
+                if (App.IsEngineRunning)
                 {
-                    App.Flash?.Start();
-                    App.Logger?.Information("GazeMinigame: resumed main FlashService after game ended");
+                    try
+                    {
+                        App.Flash?.Start();
+                        App.Logger?.Information("GazeMinigame: resumed main FlashService after game ended");
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "GazeMinigame: failed to resume FlashService on close");
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    App.Logger?.Warning(ex, "GazeMinigame: failed to resume FlashService on close");
+                    App.Logger?.Information("GazeMinigame: skipped FlashService resume — engine is no longer running");
                 }
             }
         }

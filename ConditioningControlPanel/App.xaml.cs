@@ -2121,6 +2121,17 @@ Application State:
         {
             try
             {
+                // If the user has chosen a custom assets folder, they manage their own
+                // assets — don't keep copying files into the default AppData location on
+                // every launch (bug #227). The migration only ever exists to rescue
+                // assets the user hasn't explicitly relocated.
+                var customPath = Settings?.Current?.CustomAssetsPath;
+                if (!string.IsNullOrWhiteSpace(customPath) && Directory.Exists(customPath))
+                {
+                    Logger?.Debug("Asset migration skipped — user has a custom assets path: {Path}", customPath);
+                    return;
+                }
+
                 var migratedCount = 0;
 
                 // 1. Migrate from current app directory (standard migration)
