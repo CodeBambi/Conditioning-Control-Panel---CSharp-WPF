@@ -848,7 +848,7 @@ namespace ConditioningControlPanel.Services
             {
                 _mediaPlayers.Add(mediaPlayer);
             }
-            App.Audio?.ApplyPreferredDevice(mediaPlayer);
+            if (withAudio) App.Audio?.ApplyPreferredDevice(mediaPlayer);
 
             if (withAudio)
             {
@@ -945,17 +945,15 @@ namespace ConditioningControlPanel.Services
 
             // Create media from URL — disposed after Play() (LibVLC ref-counts internally)
             using var media = new Media(_libVLC!, url, FromType.FromLocation);
+            // Secondaries skip audio decoding entirely — prevents a parallel WASAPI session
+            // from opening on the same MMDevice and racing the primary's mixer state.
+            if (!withAudio) media.AddOption(":no-audio");
             mediaPlayer.Play(media);
 
             if (withAudio)
             {
                 mediaPlayer.Mute = false;
                 mediaPlayer.Volume = GetEffectiveVolume();
-            }
-            else
-            {
-                mediaPlayer.Mute = true;
-                mediaPlayer.Volume = 0;
             }
 
             return win;
@@ -1175,7 +1173,7 @@ namespace ConditioningControlPanel.Services
                 {
                     _mediaPlayers.Add(mediaPlayer);
                 }
-                App.Audio?.ApplyPreferredDevice(mediaPlayer);
+                if (withAudio) App.Audio?.ApplyPreferredDevice(mediaPlayer);
 
             // Only the primary player handles events (to avoid duplicate triggers)
             if (withAudio)
@@ -1331,6 +1329,10 @@ namespace ConditioningControlPanel.Services
             // Media is disposed after Play() — LibVLC internally ref-counts, so this is safe
             // (DualMonitorVideoService already uses this pattern with 'using var media')
             using var media = new Media(_libVLC!, path, FromType.FromPath);
+            // Secondaries skip audio decoding entirely. Setting Mute=true after Play() opened
+            // a second WASAPI session on the same MMDevice; Windows collapsed both into one
+            // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
+            if (!withAudio) media.AddOption(":no-audio");
 
             // Play the media
             mediaPlayer.Play(media);
@@ -1345,12 +1347,6 @@ namespace ConditioningControlPanel.Services
                 mediaPlayer.Volume = GetEffectiveVolume();
                 App.Logger?.Information("LibVLC audio: Volume={Vol}, Mute={Mute}",
                     mediaPlayer.Volume, mediaPlayer.Mute);
-            }
-            else
-            {
-                // Mute secondary monitors
-                mediaPlayer.Mute = true;
-                mediaPlayer.Volume = 0;
             }
 
                 App.Logger?.Debug("LibVLC video window on: {Screen} (audio: {Audio}, vol: {Vol}, mute: {Mute})",
