@@ -11129,6 +11129,13 @@ namespace ConditioningControlPanel
             Dispatcher.Invoke(UpdateAvailableSubjectsEmptyAndError);
         }
 
+        private void AvailableSubjectsScroller_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.ScrollViewer sv) return;
+            sv.ScrollToHorizontalOffset(sv.HorizontalOffset - e.Delta);
+            e.Handled = true;
+        }
+
         private void UpdateAvailableSubjectsEmptyAndError()
         {
             var svc = App.AvailableSubjects;

@@ -9468,7 +9468,8 @@
                      intentional rather than incidental. -->
                 <ScrollViewer Grid.Row="2" x:Name="AvailableSubjectsScroller"
                               HorizontalScrollBarVisibility="Auto"
-                              VerticalScrollBarVisibility="Disabled">
+                              VerticalScrollBarVisibility="Disabled"
+                              PreviewMouseWheel="AvailableSubjectsScroller_PreviewMouseWheel">
                     <ItemsControl x:Name="AvailableSubjectsList">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
