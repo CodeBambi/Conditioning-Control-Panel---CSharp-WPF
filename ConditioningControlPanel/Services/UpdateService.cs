@@ -20,19 +20,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.9.6";
+        public const string AppVersion = "5.9.7";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.9.6 - Polish Pass
+        public const string CurrentPatchNotes = @"v5.9.7 - Polish Pass II
 
-Two bug fixes on top of v5.9.5.
+One more fix to finish what v5.9.6 started.
 
 🔧 BUG FIXES
-• Available Subjects horizontal scroll now responds to the mouse wheel (closes #236, #241, #246).
-• Dual-monitor video audio: secondary screens skip audio decode entirely so the per-app mixer slider behaves consistently (closes #232, #242).";
+• Available Subjects horizontal scrollbar now renders and drags properly. The thumb was being styled for vertical orientation only, which collapsed the bar to a tiny non-interactive pill at one end of the row.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
