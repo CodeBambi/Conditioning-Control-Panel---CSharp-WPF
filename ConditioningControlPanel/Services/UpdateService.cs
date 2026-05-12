@@ -20,28 +20,19 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.9.5";
+        public const string AppVersion = "5.9.6";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.9.5 - Open Invitation
+        public const string CurrentPatchNotes = @"v5.9.6 - Polish Pass
 
-Adds the Available Subjects directory: opt-in for subjects, browse-and-claim for controllers, both desktop and web.
-
-✨ FEATURES
-• Available Subjects directory - opt into a public list of currently-active remote-control sessions; controllers browse the list at app.cclabs.app/dashboard/subjects (web) or in the new ""Available Subjects"" tab in the main UI (desktop). First-clicker wins; the one-click pairing URL opens in the controller's browser.
-• Subject opt-in: new section in the Remote Control page with a tag selector (10 fixed tags, pick up to 5), 80-char status, and a ""Remember tags + status"" toggle that persists between sessions.
-• Controller side: new neon-purple ""Available Subjects"" tab next to Deeper. Side-scrollable card list, 15-second refresh while visible, Connect button opens the session in your default browser.
+Two bug fixes on top of v5.9.5.
 
 🔧 BUG FIXES
-• Gaze minigame flash leak (#221) - main flash effects no longer disrupt gaze rounds.
-• Asset migration loop (#227) - fixed.
-• Sign in via web: dialog cleanup on close, URL display polish, premature-expiry on non-UTC systems, settings now apply correctly on confirm.
-
-🎨 UI/UX
-• New neon-purple accent (#B47BFF) on the Available Subjects tab - distinct from the pink primary and the Deeper violet.";
+• Available Subjects horizontal scroll now responds to the mouse wheel (closes #236, #241, #246).
+• Dual-monitor video audio: secondary screens skip audio decode entirely so the per-app mixer slider behaves consistently (closes #232, #242).";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
