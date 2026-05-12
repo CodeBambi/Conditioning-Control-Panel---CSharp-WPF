@@ -569,7 +569,6 @@
 
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Width" Value="8"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
@@ -580,8 +579,7 @@
                                     Opacity="0.2"
                                     Margin="1"/>
                             <Track x:Name="PART_Track"
-                                   Orientation="{TemplateBinding Orientation}"
-                                   IsDirectionReversed="true">
+                                   Orientation="{TemplateBinding Orientation}">
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Style="{StaticResource InvisibleRepeatButton}" Command="ScrollBar.LineUpCommand"/>
                                 </Track.DecreaseRepeatButton>
@@ -589,18 +587,20 @@
                                     <RepeatButton Style="{StaticResource InvisibleRepeatButton}" Command="ScrollBar.LineDownCommand"/>
                                 </Track.IncreaseRepeatButton>
                                 <Track.Thumb>
-                                    <Thumb Style="{StaticResource SimpleCuteThumb}"/>
+                                    <Thumb x:Name="ThumbElement" Style="{StaticResource SimpleCuteThumb}"/>
                                 </Track.Thumb>
                             </Track>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="Orientation" Value="Horizontal">
                                 <Setter Property="Height" Value="8"/>
-                                <Setter TargetName="TrackBg" Property="CornerRadius" Value="4"/>
+                                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/>
+                                <Setter TargetName="ThumbElement" Property="MinWidth" Value="30"/>
+                                <Setter TargetName="ThumbElement" Property="MinHeight" Value="6"/>
                             </Trigger>
                             <Trigger Property="Orientation" Value="Vertical">
                                 <Setter Property="Width" Value="8"/>
-                                <Setter TargetName="TrackBg" Property="CornerRadius" Value="4"/>
+                                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="True"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="TrackBg" Property="Opacity" Value="0.1"/>
