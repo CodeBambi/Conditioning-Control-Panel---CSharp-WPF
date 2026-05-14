@@ -35,7 +35,6 @@ namespace ConditioningControlPanel.Views.Deeper
         private bool _isScrubbing;
         private bool _suppressVolumeSync;
         private bool _videoBrowserReady;
-        private string? _pendingVideoUrl;
         // Exactly one file:// URL we just asked the WebView2 to navigate to from
         // a user-picked local video. NavigationStarting allows this URL once,
         // then clears it. Any other file:// nav (e.g. hostile redirect from a
@@ -195,8 +194,8 @@ namespace ConditioningControlPanel.Views.Deeper
                 // its default media-viewer page with a real <video> element.
                 // Authorize this exact file:// URL through NavigationStarting once.
                 var fileUri = new Uri(path).AbsoluteUri;
-                _pendingVideoUrl = fileUri;
                 _initialAllowedFileUrl = fileUri;
+                BindVideoSource();
                 VideoBrowser.CoreWebView2.Navigate(fileUri);
             }
             catch (Exception ex)
@@ -555,6 +554,43 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
+        // Picture-in-Picture toggle. Chromium maintains a single PiP window
+        // app-wide, so calling requestPictureInPicture when one is already
+        // open just moves focus; exitPictureInPicture closes it. We pick the
+        // largest <video> on the page so ad/preroll iframes don't grab PiP
+        // ahead of the real player.
+        private async void BtnPictureInPicture_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (VideoBrowser?.CoreWebView2 == null) return;
+                await VideoBrowser.CoreWebView2.ExecuteScriptAsync(@"
+                    (function() {
+                        try {
+                            if (document.pictureInPictureElement) {
+                                document.exitPictureInPicture();
+                                return;
+                            }
+                            var vids = document.querySelectorAll('video');
+                            var best = null, bestArea = 0;
+                            for (var i = 0; i < vids.length; i++) {
+                                var r = vids[i].getBoundingClientRect();
+                                var a = r.width * r.height;
+                                if (a > bestArea) { best = vids[i]; bestArea = a; }
+                            }
+                            if (best && best.requestPictureInPicture) {
+                                best.requestPictureInPicture();
+                            }
+                        } catch (_) {}
+                    })();
+                ");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementPlayer: PiP toggle failed: {Error}", ex.Message);
+            }
+        }
+
         private void SubscribeWebcamStateForButton()
         {
             var svc = App.Webcam;
@@ -804,6 +840,7 @@ namespace ConditioningControlPanel.Views.Deeper
             AudioPane.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
             VideoPane.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
             VolumePanel.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
+            BtnPictureInPicture.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private static bool IsRemoteVideoUrl(string? source)
@@ -834,6 +871,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     App.Logger?.Warning(
                         "EnhancementPlayer: rejected video MediaSource {Host}", initialUri?.Host);
                     TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
+                    TxtStatus.Text = Loc.Get("deeper_player_status_host_not_allowed");
                     return;
                 }
 
@@ -843,7 +881,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     return;
                 }
 
-                _pendingVideoUrl = url;
+                BindVideoSource();
                 VideoBrowser.CoreWebView2.Navigate(url);
             }
             catch (Exception ex)
@@ -851,6 +889,24 @@ namespace ConditioningControlPanel.Views.Deeper
                 App.Logger?.Warning(ex, "EnhancementPlayer: video load failed");
                 TxtVideoStatus.Text = Loc.Get("deeper_player_video_no_video");
             }
+        }
+
+        // Bind the engine to a fresh BrowserVideoTimeSource against the
+        // current WebView. Called BEFORE Navigate so the source is live by the
+        // time the user sees an interactive page — previously we waited for
+        // NavigationCompleted and races between "page interactive" and
+        // "NavigationCompleted fires" left the Play button silently dead.
+        // The source itself doesn't cache document state; it polls
+        // querySelector('video') fresh each tick, so it doesn't care which
+        // navigation it was constructed against.
+        private void BindVideoSource()
+        {
+            _videoSource?.Dispose();
+            _videoSource = new BrowserVideoTimeSource(VideoBrowser);
+            var src = _videoSource;
+            _host.Bind(src,
+                attach: () => src?.Attach(),
+                detach: () => { try { src?.Detach(); } catch { } });
         }
 
         // Single hardened WebView2 init for the Player. Mirrors
@@ -1036,21 +1092,12 @@ namespace ConditioningControlPanel.Views.Deeper
         private void OnVideoNavCompleted(object? sender,
             Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
         {
+            // Post-navigation UI work only. _videoSource is bound up front in
+            // LoadVideoUrlAsync / LoadLocalVideoAsync (see BindVideoSource), so
+            // by the time this fires the engine is already wired and the poll
+            // loop will reconcile BtnPlayPause within one tick.
             try
             {
-                if (_pendingVideoUrl == null) return;
-                _pendingVideoUrl = null;
-
-                // Build a fresh time source per navigation so seek/state is
-                // tied to the actual loaded page's <video>, not stale state.
-                _videoSource?.Dispose();
-                _videoSource = new BrowserVideoTimeSource(VideoBrowser);
-
-                var src = _videoSource;
-                _host.Bind(src,
-                    attach: () => src?.Attach(),
-                    detach: () => { try { src?.Detach(); } catch { } });
-
                 TxtVideoStatus.Visibility = Visibility.Collapsed;
                 BtnPlayPause.Content = "⏸";
                 TxtStatus.Text = Loc.Get("deeper_player_status_playing");
@@ -1059,20 +1106,17 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "EnhancementPlayer: video bind failed");
+                App.Logger?.Warning(ex, "EnhancementPlayer: post-nav UI update failed");
             }
         }
 
-        // HypnoTube and similar embed pages stack promo banners above the
-        // <video> element. We do two things on every nav:
-        //   1) Walk up from the <video> to find the player container (first
-        //      ancestor with reasonable width/height) and fix it to the full
-        //      viewport with a high z-index. Keeps the player's controls
-        //      inside the container, hides everything else.
-        //   2) Disable body scroll so the page chrome can't be revealed.
-        // Polls for the <video> for up to 4s — HT injects its player container
-        // after the main HTML completes, so it's frequently null at
-        // NavigationCompleted.
+        // Scroll the embedded player into the viewport center on nav and
+        // whenever a new <video> appears. We deliberately do NOT mutate the
+        // page DOM/CSS — earlier attempts to hide site chrome (stretch-to-
+        // fill, sibling-hide overlays) broke JW Player's internal controls
+        // and left the user staring at a black rectangle. The natural page
+        // renders normally; the Pop out (PiP) button is the answer when the
+        // user wants a chrome-free view.
         private void ScrollVideoIntoView()
         {
             try
@@ -1080,10 +1124,18 @@ namespace ConditioningControlPanel.Views.Deeper
                 if (VideoBrowser?.CoreWebView2 == null) return;
                 _ = VideoBrowser.CoreWebView2.ExecuteScriptAsync(@"
                     (function() {
+                        if (window._ccpMaxInstalled) {
+                            try { window._ccpMaxApply && window._ccpMaxApply(); } catch (_) {}
+                            return;
+                        }
+                        window._ccpMaxInstalled = true;
+
                         function maximize(v) {
-                            // Walk up to find the player container — first ancestor
-                            // with width >= 200 and height >= 150. Falls back to
-                            // <video> itself if no good container is found.
+                            if (!v || v._ccpMaximized) return;
+                            // Walk up to find the player container — first
+                            // ancestor with width >= 200 and height >= 150.
+                            // Falls back to <video> itself if no good
+                            // container is found.
                             var node = v.parentElement;
                             var container = v;
                             while (node && node !== document.body) {
@@ -1091,32 +1143,94 @@ namespace ConditioningControlPanel.Views.Deeper
                                 if (r.width >= 200 && r.height >= 150) { container = node; break; }
                                 node = node.parentElement;
                             }
-                            container.style.cssText =
-                                'position:fixed!important;top:0!important;left:0!important;' +
-                                'width:100vw!important;height:100vh!important;' +
-                                'max-width:100vw!important;max-height:100vh!important;' +
-                                'z-index:2147483647!important;background:#000!important;' +
-                                'margin:0!important;padding:0!important;';
-                            v.style.cssText =
-                                'width:100%!important;height:100%!important;' +
-                                'max-width:none!important;max-height:none!important;' +
-                                'object-fit:contain!important;background:#000!important;';
                             try {
-                                document.documentElement.style.overflow = 'hidden';
-                                document.body.style.overflow = 'hidden';
-                                document.body.style.background = '#000';
-                            } catch (e) { /* ignore */ }
+                                container.scrollIntoView({
+                                    behavior: 'smooth',
+                                    block: 'center',
+                                    inline: 'center'
+                                });
+                            } catch (_) { /* ignore */ }
+                            v._ccpMaximized = true;
                         }
+
+                        // Iframes known to throw on .contentDocument access
+                        // (cross-origin). Native throws cost ~10-50us each in
+                        // Chromium, and a doc-wide observer firing at 60Hz
+                        // multiplied that across every ad iframe on every tick.
+                        // Once we've thrown on an iframe once, skip it.
+                        var crossOriginIframes = new WeakSet();
+
+                        function apply() {
+                            try {
+                                var vids = document.querySelectorAll('video');
+                                for (var i = 0; i < vids.length; i++) {
+                                    var v = vids[i];
+                                    var r = v.getBoundingClientRect();
+                                    if (r.width > 0 && r.height > 0) {
+                                        maximize(v);
+                                    }
+                                }
+                                // Same-origin iframes (rare on HT, common on
+                                // generic embed pages). Cross-origin iframes
+                                // throw on contentDocument access — swallow
+                                // the first throw and cache so we skip them
+                                // on subsequent calls.
+                                var ifs = document.querySelectorAll('iframe');
+                                for (var j = 0; j < ifs.length; j++) {
+                                    var f = ifs[j];
+                                    if (crossOriginIframes.has(f)) continue;
+                                    try {
+                                        var d = f.contentDocument;
+                                        if (!d) continue;
+                                        var iv = d.querySelectorAll('video');
+                                        for (var k = 0; k < iv.length; k++) maximize(iv[k]);
+                                    } catch (_) {
+                                        crossOriginIframes.add(f);
+                                    }
+                                }
+                            } catch (_) { /* ignore */ }
+                        }
+                        window._ccpMaxApply = apply;
+
+                        // rAF coalescer: the MutationObserver below fires on
+                        // every style/class/childList mutation, which on a
+                        // playing HT or TikTok page is dozens of times per
+                        // animation frame (progress bar updates, control fades,
+                        // engagement counters). Without this, apply() ran for
+                        // each one even though it's idempotent once
+                        // _ccpMaximized is set. Coalesce to at most one
+                        // apply() per frame regardless of mutation volume.
+                        function scheduledApply() {
+                            if (window._ccpMaxScheduled) return;
+                            window._ccpMaxScheduled = true;
+                            requestAnimationFrame(function() {
+                                window._ccpMaxScheduled = false;
+                                apply();
+                            });
+                        }
+
+                        // Initial run + retry burst for the first ~6s so
+                        // late-attached players catch up even before the
+                        // observer fires.
+                        apply();
                         var tries = 0;
                         var iv = setInterval(function() {
-                            var v = document.querySelector('video');
-                            if (v && v.getBoundingClientRect().width > 0) {
-                                try { maximize(v); } catch (e) { /* ignore */ }
-                                clearInterval(iv);
-                            } else if (++tries > 40) {
-                                clearInterval(iv);
-                            }
+                            apply();
+                            if (++tries > 60) clearInterval(iv);
                         }, 100);
+
+                        // Persistent observer: any new <video> node (or any
+                        // restyle that resizes a maximized container) re-runs
+                        // apply() so the user can't end up looking at chrome.
+                        // Routed through scheduledApply so high-frequency
+                        // mutations collapse to one apply() per frame.
+                        try {
+                            var mo = new MutationObserver(scheduledApply);
+                            mo.observe(document.documentElement, {
+                                childList: true, subtree: true,
+                                attributes: true, attributeFilter: ['style', 'class']
+                            });
+                        } catch (_) { /* ignore */ }
                     })();
                 ");
             }

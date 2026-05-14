@@ -194,6 +194,15 @@
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                     Foreground="{DynamicResource DeeperAccentBrush}"
                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
+            <Button x:Name="BtnPictureInPicture" DockPanel.Dock="Right"
+                    Content="{loc:Str deeper_player_btn_pip}"
+                    Click="BtnPictureInPicture_Click"
+                    ToolTip="{loc:Str deeper_player_tt_pip}"
+                    Padding="10,4" Margin="0,0,8,0" Cursor="Hand" FontSize="12"
+                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                    Foreground="{DynamicResource DeeperAccentBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                    Visibility="Collapsed"/>
         </DockPanel>
 
         <!-- Status -->
