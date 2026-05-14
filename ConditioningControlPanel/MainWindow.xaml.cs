@@ -84,6 +84,7 @@ namespace ConditioningControlPanel
         private TrayIconService? _trayIcon;
         private GlobalKeyboardHook? _keyboardHook;
         private bool _isCapturingPanicKey = false;
+        internal bool IsCapturingPanicKey => _isCapturingPanicKey;
         private bool _exitRequested = false;
         private int _panicPressCount = 0;
         private string _leaderboardMode = "monthly";
@@ -1031,12 +1032,36 @@ namespace ConditioningControlPanel
 
         internal bool RequestToggleWindowsStartup(bool enable)
         {
-            // Drive the existing handler via the legacy checkbox so the combined-with-hidden
-            // warning runs. Return the final state reflected on the checkbox.
+            // The legacy ChkWinStart hidden on MainWindow uses a Click handler that
+            // doesn't fire on programmatic IsChecked changes — so just toggling the
+            // checkbox here would silently skip StartupManager.SetStartupState and
+            // the OS shortcut would never be created/removed. Drive the registration
+            // ourselves and mirror the result onto the legacy checkbox for any code
+            // that still reads it.
             if (ChkWinStart == null) return StartupManager.IsRegistered();
-            if ((ChkWinStart.IsChecked ?? false) == enable) return enable;
-            ChkWinStart.IsChecked = enable;
-            return ChkWinStart.IsChecked ?? false;
+            if ((ChkWinStart.IsChecked ?? false) == enable && StartupManager.IsRegistered() == enable)
+                return enable;
+
+            if (!StartupManager.SetStartupState(enable))
+            {
+                MessageBox.Show(this,
+                    Loc.Get("msg_failed_to_update_startup"),
+                    Loc.Get("title_startup_error"),
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                var actual = StartupManager.IsRegistered();
+                _isLoading = true;
+                try { ChkWinStart.IsChecked = actual; } finally { _isLoading = false; }
+                App.Settings.Current.RunOnStartup = actual;
+                App.Settings.Save();
+                return actual;
+            }
+
+            _isLoading = true;
+            try { ChkWinStart.IsChecked = enable; } finally { _isLoading = false; }
+            App.Settings.Current.RunOnStartup = enable;
+            App.Settings.Save();
+            return enable;
         }
 
         private void LoadLogo()

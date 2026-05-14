@@ -701,13 +701,32 @@ namespace ConditioningControlPanel.Services
                 cap.Set(VideoCaptureProperties.Fps, TargetFps);
                 cap.Set(VideoCaptureProperties.BufferSize, 1);
 
-                using var probe = new Mat();
-                if (!cap.Read(probe) || probe.Empty())
+                // Slow drivers (especially USB UVC over a hub, or virtual cameras
+                // that lazy-init their pipeline) can return an empty first frame
+                // even though the device isn't actually held by another app.
+                // Retry a handful of times before declaring CameraInUse so that
+                // case warms up instead of being misdiagnosed.
+                bool probeOk = false;
+                int probeAttempts = 0;
+                using (var probe = new Mat())
+                {
+                    for (int i = 0; i < 5; i++)
+                    {
+                        probeAttempts++;
+                        if (cap.Read(probe) && !probe.Empty())
+                        {
+                            probeOk = true;
+                            break;
+                        }
+                        System.Threading.Thread.Sleep(200);
+                    }
+                }
+                if (!probeOk)
                 {
                     cap.Dispose();
                     App.Logger?.Warning(
-                        "WebcamTrackingService: probe frame failed for device index {Index} ('{Name}') — camera may be in use by another app",
-                        deviceIndex, detectedName);
+                        "WebcamTrackingService: probe frame failed after {Attempts} attempts for device index {Index} ('{Name}') — camera may be held by antivirus webcam shielding, Windows camera privacy, or another app",
+                        probeAttempts, deviceIndex, detectedName);
                     SetState(WebcamTrackingState.CameraInUse);
                     return false;
                 }

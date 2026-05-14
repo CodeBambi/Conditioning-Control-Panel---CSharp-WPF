@@ -46,6 +46,12 @@ namespace ConditioningControlPanel.Features
         {
             if (e.Key == Key.Escape)
             {
+                // Don't eat Esc while the panic-key picker is waiting for a key —
+                // otherwise the user can never assign Escape (or anything else, if
+                // they instinctively hit Esc to abort): the popup closes before the
+                // global hook records the capture.
+                var owner = Application.Current?.MainWindow as MainWindow;
+                if (owner?.IsCapturingPanicKey == true) return;
                 Close();
                 e.Handled = true;
             }

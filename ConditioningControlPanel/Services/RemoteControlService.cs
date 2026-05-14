@@ -212,6 +212,11 @@ namespace ConditioningControlPanel.Services
                     App.Logger?.Warning("[RemoteControl] Directory opt-in failed: {Status}", response.StatusCode);
                     return false;
                 }
+                // Cache so we can re-publish availability after the controller disconnects.
+                // Without this the server-side directory entry stays in 'claimed' state and
+                // the subject shows as taken even after the controller is gone.
+                _lastOptInTags = tags ?? new List<string>();
+                _lastOptInStatus = statusText ?? "";
                 App.Logger?.Information("[RemoteControl] Directory opt-in OK ({TagCount} tags, status={StatusLen}c)",
                     (tags ?? new List<string>()).Count, (statusText ?? "").Length);
                 return true;
@@ -220,6 +225,25 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Warning(ex, "[RemoteControl] Directory opt-in error");
                 return false;
+            }
+        }
+
+        // Last successful opt-in payload, replayed on controller disconnect to flip
+        // the subject's directory entry back to available. Null = never opted in this session.
+        private List<string>? _lastOptInTags;
+        private string? _lastOptInStatus;
+
+        private async Task RepublishDirectoryIfOptedInAsync()
+        {
+            if (_lastOptInTags == null) return;
+            if (!IsActive) return;
+            try
+            {
+                await OptInToDirectoryAsync(_lastOptInTags, _lastOptInStatus ?? "");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[RemoteControl] Directory re-publish after disconnect failed");
             }
         }
 
@@ -260,6 +284,8 @@ namespace ConditioningControlPanel.Services
             _lastStatusPushUtc = DateTime.MinValue;
             _statusBackoffUntil = DateTime.MinValue;
             _engineStoppedForController = false;
+            _lastOptInTags = null;
+            _lastOptInStatus = null;
             IsActive = false;
             SessionCode = null;
             ConnectPin = null;
@@ -448,6 +474,12 @@ namespace ConditioningControlPanel.Services
                         // isn't snapped to a halt mid-session. Opt-in setting stops them.
                         if (App.Settings?.Current?.StopEffectsOnRemoteDisconnect == true)
                             StopRemoteTriggeredEffects();
+
+                        // Re-publish to the Available Subjects directory so the subject
+                        // flips from "taken" back to available without restarting Remote
+                        // Control. Server-side claim flag stays set across controller
+                        // disconnect, so we overwrite the entry with a fresh opt-in.
+                        _ = RepublishDirectoryIfOptedInAsync();
                     }
                     ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
                 }
@@ -471,6 +503,10 @@ namespace ConditioningControlPanel.Services
                         ControllerConnected = false;
                         if (App.Settings?.Current?.StopEffectsOnRemoteDisconnect == true)
                             StopRemoteTriggeredEffects();
+                        // Same rationale as the explicit-disconnect branch above: flip the
+                        // directory entry back to available so the subject isn't stuck as
+                        // "taken" after an idle timeout.
+                        _ = RepublishDirectoryIfOptedInAsync();
                         ControllerConnectedChanged?.Invoke(this, EventArgs.Empty);
                         ControllerIdle = false;
                         ControllerIdleChanged?.Invoke(this, EventArgs.Empty);

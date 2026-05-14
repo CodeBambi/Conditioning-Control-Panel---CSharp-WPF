@@ -419,7 +419,7 @@ namespace ConditioningControlPanel
 
                 _mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC);
                 _allMediaPlayers.Add(_mediaPlayer);
-                App.Audio?.ApplyPreferredDevice(_mediaPlayer);
+                if (_isPrimary) App.Audio?.ApplyPreferredDevice(_mediaPlayer);
 
                 // Add VideoView to container
                 VideoContainer.Children.Add(_videoView);
@@ -462,10 +462,6 @@ namespace ConditioningControlPanel
                 {
                     // Secondary window - sync target count
                     _targetBubbleCount = _sharedTargetCount;
-
-                    // Mute secondary
-                    _mediaPlayer.Mute = true;
-                    _mediaPlayer.Volume = 0;
                 }
 
                 // Attach player to view and start playback
@@ -474,6 +470,10 @@ namespace ConditioningControlPanel
 
                 App.Logger?.Information("BubbleCountWindow.OnLoaded: Creating Media for path: {Path}", _videoPath);
                 var media = new Media(_libVLC, _videoPath, FromType.FromPath);
+                // Secondaries skip audio decoding entirely. Setting Mute=true after Play() opened
+                // a second WASAPI session on the same MMDevice; Windows collapsed both into one
+                // per-app mixer slider and the result was doubled/desynced or zero-volume audio.
+                if (!_isPrimary) media.AddOption(":no-audio");
 
                 App.Logger?.Information("BubbleCountWindow.OnLoaded: Calling Play()...");
                 var playResult = _mediaPlayer.Play(media);
