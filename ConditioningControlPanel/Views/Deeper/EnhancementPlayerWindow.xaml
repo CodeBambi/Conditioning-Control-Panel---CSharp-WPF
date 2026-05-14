@@ -4,7 +4,7 @@
         xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Deeper Player"
-        Height="640" Width="900" MinHeight="420" MinWidth="640"
+        Height="768" Width="900" MinHeight="504" MinWidth="640"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource DarkerBgBrush}"
         Closing="Window_Closing">
@@ -151,6 +151,24 @@
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                IsHitTestVisible="False"/>
+                    <!-- Zoom controls overlay: top-right corner, semi-transparent
+                         pill, 10% per click. Sits above the WebView via Z-order. -->
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Margin="0,6,8,0" Panel.ZIndex="10">
+                        <Button x:Name="BtnZoomOut" Content="−"
+                                Click="BtnZoomOut_Click"
+                                Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold"
+                                Background="#A0000000" Foreground="White" BorderThickness="0"
+                                Cursor="Hand"
+                                ToolTip="{loc:Str deeper_zoom_out_tt}"/>
+                        <Button x:Name="BtnZoomIn" Content="+"
+                                Click="BtnZoomIn_Click"
+                                Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold" Margin="4,0,0,0"
+                                Background="#A0000000" Foreground="White" BorderThickness="0"
+                                Cursor="Hand"
+                                ToolTip="{loc:Str deeper_zoom_in_tt}"/>
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>

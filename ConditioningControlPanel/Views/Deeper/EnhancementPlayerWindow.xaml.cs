@@ -69,6 +69,8 @@ namespace ConditioningControlPanel.Views.Deeper
         public EnhancementPlayerWindow(EnhancementAudioPlayer player, EnhancementHostService host)
         {
             InitializeComponent();
+            WindowChromeHelper.ApplyDarkTitleBar(this);
+            WindowChromeHelper.RestoreOwnerOnClose(this);
             _player = player ?? throw new ArgumentNullException(nameof(player));
             _host = host ?? throw new ArgumentNullException(nameof(host));
 
@@ -551,6 +553,27 @@ namespace ConditioningControlPanel.Views.Deeper
                     string.Format(Loc.Get("deeper_player_eye_tracking_start_failed_fmt"), ex.Message),
                     Loc.Get("deeper_player_btn_eye_tracking_start"),
                     MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        // ±10% zoom on the embedded browser. Uses WebView2.ZoomFactor, which
+        // proxies to CoreWebView2's zoom level — same effect as Ctrl+/Ctrl- in
+        // Edge. Clamped to keep the user from zooming themselves into a stuck
+        // state (extreme out makes the page unreadable, extreme in eats RAM).
+        private void BtnZoomIn_Click(object sender, RoutedEventArgs e) => AdjustVideoZoom(+0.10);
+        private void BtnZoomOut_Click(object sender, RoutedEventArgs e) => AdjustVideoZoom(-0.10);
+
+        private void AdjustVideoZoom(double delta)
+        {
+            try
+            {
+                if (VideoBrowser?.CoreWebView2 == null) return;
+                var next = Math.Clamp(VideoBrowser.ZoomFactor + delta, 0.25, 5.0);
+                VideoBrowser.ZoomFactor = next;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementPlayer: zoom adjust failed: {Error}", ex.Message);
             }
         }
 

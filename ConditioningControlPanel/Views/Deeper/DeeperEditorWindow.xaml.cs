@@ -121,6 +121,8 @@ namespace ConditioningControlPanel.Views.Deeper
         public DeeperEditorWindow(Enhancement enhancement, string? filePath)
         {
             InitializeComponent();
+            WindowChromeHelper.ApplyDarkTitleBar(this);
+            WindowChromeHelper.RestoreOwnerOnClose(this);
             Loaded += DeeperEditorWindow_Loaded;
             KeyDown += DeeperEditorWindow_KeyDown;
 
@@ -1186,6 +1188,28 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void BtnZoomIn_Click(object sender, RoutedEventArgs e) => SetZoom(_zoomFactor * 1.5);
         private void BtnZoomOut_Click(object sender, RoutedEventArgs e) => SetZoom(_zoomFactor / 1.5);
+
+        // ±10% zoom on the embedded WebView2 preview (BrowserPreview). Distinct
+        // from BtnZoomIn/Out above, which scale the timeline canvas — these
+        // change CoreWebView2's page zoom for sites whose default rendering is
+        // too small/large inside the preview pane. Clamped to keep the user
+        // from zooming themselves into a stuck state.
+        private void BtnPreviewZoomIn_Click(object sender, RoutedEventArgs e) => AdjustPreviewZoom(+0.10);
+        private void BtnPreviewZoomOut_Click(object sender, RoutedEventArgs e) => AdjustPreviewZoom(-0.10);
+
+        private void AdjustPreviewZoom(double delta)
+        {
+            try
+            {
+                if (BrowserPreview?.CoreWebView2 == null) return;
+                var next = Math.Clamp(BrowserPreview.ZoomFactor + delta, 0.25, 5.0);
+                BrowserPreview.ZoomFactor = next;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: preview zoom adjust failed: {Error}", ex.Message);
+            }
+        }
 
         private void TimelineScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {

@@ -72,8 +72,8 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="MinWidth" Value="80"/>
+            <Setter Property="Padding" Value="6,6"/>
+            <Setter Property="MinWidth" Value="65"/>
             <Setter Property="Height" Value="32"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -131,8 +131,8 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="10,6"/>
-            <Setter Property="MinWidth" Value="80"/>
+            <Setter Property="Padding" Value="6,6"/>
+            <Setter Property="MinWidth" Value="65"/>
             <Setter Property="Height" Value="32"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -1566,8 +1566,8 @@
                     <Border Background="{DynamicResource PinkBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,20,0">
                         <TextBlock x:Name="TxtLevel" Text="{loc:Str label_lvl_1}" Foreground="White" FontWeight="Bold" FontSize="12"/>
                     </Border>
-                    <TextBlock x:Name="TxtHeaderVersion" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Normal"
-                               VerticalAlignment="Bottom" Margin="6,0,0,2"/>
+                    <TextBlock x:Name="TxtHeaderVersion" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="10" FontWeight="Normal"
+                               VerticalAlignment="Bottom" Margin="4,0,0,3"/>
                     <!-- Streak Fire Icon (unlocked by Good Girl Streak skill) -->
                     <Border x:Name="StreakFirePill" VerticalAlignment="Center"
                             Margin="10,0,0,0" Visibility="Collapsed" CornerRadius="11" Padding="7,4"

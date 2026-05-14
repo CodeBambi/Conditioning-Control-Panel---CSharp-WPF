@@ -5,8 +5,8 @@
         xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Deeper"
-        Height="720" Width="1180"
-        MinHeight="560" MinWidth="980"
+        Height="864" Width="1180"
+        MinHeight="672" MinWidth="980"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource DarkerBgBrush}"
         Closing="Window_Closing">
@@ -399,6 +399,28 @@
                              play HT URLs reliably (signed HLS); WebView2 renders the real page so
                              the timeline can scrub the actual <video> element via JS. -->
                         <wv2:WebView2 x:Name="BrowserPreview" Visibility="Collapsed"/>
+
+                        <!-- Zoom controls overlay (visible only when the WebView is
+                             rendering): top-right corner, semi-transparent pill,
+                             10% per click. Hidden for VLC/waveform modes since
+                             ZoomFactor doesn't apply to them. -->
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    Margin="0,6,8,0" Panel.ZIndex="10"
+                                    Visibility="{Binding ElementName=BrowserPreview, Path=Visibility}">
+                            <Button x:Name="BtnPreviewZoomOut" Content="−"
+                                    Click="BtnPreviewZoomOut_Click"
+                                    Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold"
+                                    Background="#A0000000" Foreground="White" BorderThickness="0"
+                                    Cursor="Hand"
+                                    ToolTip="{loc:Str deeper_zoom_out_tt}"/>
+                            <Button x:Name="BtnPreviewZoomIn" Content="+"
+                                    Click="BtnPreviewZoomIn_Click"
+                                    Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold" Margin="4,0,0,0"
+                                    Background="#A0000000" Foreground="White" BorderThickness="0"
+                                    Cursor="Hand"
+                                    ToolTip="{loc:Str deeper_zoom_in_tt}"/>
+                        </StackPanel>
 
                         <Canvas x:Name="WaveformCanvas" Visibility="Collapsed" Background="#10000020">
                             <Path x:Name="WaveformPath" Stroke="{DynamicResource DeeperAccentBrush}"
