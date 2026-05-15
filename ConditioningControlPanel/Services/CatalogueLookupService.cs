@@ -111,7 +111,10 @@ namespace ConditioningControlPanel.Services
                             License: item["license"]?.ToString(),
                             ViewCount: item["view_count"]?.ToObject<int?>() ?? 0,
                             HtUrl: item["ht_url"]?.ToString() ?? url,
-                            ThumbnailPath: item["thumbnail_path"]?.ToString(),
+                            // JSON key: thumbnail_url (full absolute URL). C# field name
+                            // ThumbnailPath is legacy from when the server returned a relative
+                            // storage path. Don't rename without also updating CataloguePickerDialog.xaml.
+                            ThumbnailPath: item["thumbnail_url"]?.ToString(),
                             FileUrl: item["file_url"]?.ToString() ?? ""
                         ));
                     }
