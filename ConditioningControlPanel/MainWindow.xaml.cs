@@ -75,6 +75,14 @@ namespace ConditioningControlPanel
         private bool _isBrowserFullscreen = false;
         private bool _browserFullscreenWasPopout = false;
         private double _browserPreFullscreenZoom = 1.0;
+        // W3 Piece 1 — catalogue lookup state. One CTS per in-flight lookup;
+        // the navigation hook cancels the previous one when a new HT URL is
+        // detected, so a slow lookup landing after the user moved on can't
+        // surface a stale toast. _currentCatalogueHtVideoId is set just before
+        // the toast appears and verified on action click — if it no longer
+        // matches the current page, the action no-ops.
+        private System.Threading.CancellationTokenSource? _catalogueLookupCts;
+        private string? _currentCatalogueHtVideoId;
         // Popout pre-fullscreen state
         private WindowStyle _popoutPreFsStyle;
         private ResizeMode _popoutPreFsResize;
@@ -442,6 +450,45 @@ namespace ConditioningControlPanel
             // reacting to file drops.
             if (App.EnhancementLibrary != null)
                 App.EnhancementLibrary.LibraryChanged += OnDeeperLibraryChanged;
+
+            // W3 Piece 1 — register the "open file in Deeper Player" opener so
+            // the catalogue lookup service can hand a freshly-downloaded
+            // enhancement straight to the runtime UI without taking a static
+            // reference to MainWindow.
+            //
+            // NOT OpenDeeperFile (which routes to the Editor). Catalogue
+            // enhancements should auto-play, matching the user's expectation
+            // after clicking "Use one" / picking a row. We mirror the Editor's
+            // own Preview button (DeeperEditorWindow.cs:3637) — the canonical
+            // "open this .ccpenh.json into the Player" pattern uses the 4-arg
+            // EnhancementPlayerWindow constructor with a source tag so the
+            // discovery-source badge can show "catalogue" later if we add it.
+            //
+            // Returns true on successful Show(), false on any failure so the
+            // service can surface the OpenError toast (which offers "Open
+            // Library" as a recovery action).
+            App.CatalogueLookup?.SetOpener(path =>
+            {
+                try
+                {
+                    var enhancement = App.EnhancementLibrary?.Open(path);
+                    if (enhancement == null)
+                    {
+                        App.Logger?.Warning("[Catalogue] EnhancementLibrary.Open returned null for {Path}", path);
+                        return false;
+                    }
+                    // captures MainWindow as owner; valid since this opener is registered during MainWindow's lifetime
+                    var win = new Views.Deeper.EnhancementPlayerWindow(
+                        App.DeeperPlayer, App.DeeperHost, enhancement, "catalogue") { Owner = this };
+                    win.Show();
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "[Catalogue] Player open failed for {Path}", path);
+                    return false;
+                }
+            });
 
             // Close the Exclusives submenu popup on Alt+Tab / focus loss.
             // MouseLeave doesn't fire during Alt+Tab, so without this the popup
@@ -1631,6 +1678,44 @@ namespace ConditioningControlPanel
             var hwndSource = HwndSource.FromHwnd(hwnd);
             hwndSource?.AddHook(WndProc);
 
+            // Wire the in-app notification surface. Anything App.Notifications.Show()'d
+            // before this point is replayed on attach.
+            App.Notifications?.AttachHost(NotificationHost);
+
+            // Phase 1.6: legacy calibration prompt. Pre-multi-monitor-hotfix
+            // saves have MonitorBounds without DeviceName, so the runtime
+            // can't pin gaze content to the calibrated screen. Show a
+            // dismissable sticky toast suggesting recalibration. Placeholder
+            // copy — voice-pass at ship time.
+            try
+            {
+                var cal = App.Webcam?.Calibration;
+                if (cal?.MonitorBounds != null && string.IsNullOrEmpty(cal.MonitorBounds.DeviceName))
+                {
+                    App.Notifications?.ShowSticky(
+                        "recalibrate-multimonitor",
+                        "Your calibration needs updating for multi-monitor support.",
+                        Services.NotificationType.Warning,
+                        actionLabel: "Recalibrate",
+                        action: () =>
+                        {
+                            try
+                            {
+                                WebcamCalibrationWindow.ShowDialogWithRecalibrate(this);
+                            }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Warning(ex, "Recalibrate toast: failed to open calibration window");
+                            }
+                        });
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Recalibrate-suggest check failed: {Error}", ex.Message);
+            }
+
+
             // Enable Windows 11 rounded corners
             try
             {
@@ -2555,6 +2640,44 @@ namespace ConditioningControlPanel
             DockPanel.SetDock(deleteBtn, Dock.Right);
             titleRow.Children.Add(deleteBtn);
 
+            // Catalogue submit button — only rendered for enhancements that
+            // could actually pass server-side validation (video media type +
+            // HypnoTube URL in one of the two real-world shapes). Audio
+            // enhancements, local-file sources, and non-HT URLs render
+            // without the button so the user never gets a useless toast.
+            // Sits to the left of trash on the right edge of the row
+            // (DockPanel processes children in order, so the second
+            // right-docked element lands inboard of the first). Disabled
+            // when no auth token — tooltip swaps to the sign-in hint so
+            // users get a clear nudge instead of an AuthFailed toast.
+            if (IsCatalogueEligible(entry))
+            {
+                var hasAuth = !string.IsNullOrEmpty(App.Settings?.Current?.AuthToken);
+                var submitBtn = new Button
+                {
+                    Content = "📤",
+                    Width = 22, Height = 20, Padding = new Thickness(0),
+                    FontSize = 11,
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    Background = System.Windows.Media.Brushes.Transparent,
+                    Foreground = (System.Windows.Media.Brush)FindResource("DeeperAccentBrush"),
+                    BorderBrush = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
+                    BorderThickness = new Thickness(1),
+                    Margin = new Thickness(8, 0, 0, 0),
+                    ToolTip = Loc.Get(hasAuth ? "deeper_library_submit_tooltip" : "deeper_library_submit_button_disabled_tooltip"),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    IsEnabled = hasAuth,
+                    Opacity = hasAuth ? 1.0 : 0.4,
+                };
+                submitBtn.Click += (s, e) =>
+                {
+                    e.Handled = true;
+                    _ = SubmitDeeperLibraryEntryAsync(entry);
+                };
+                DockPanel.SetDock(submitBtn, Dock.Right);
+                titleRow.Children.Add(submitBtn);
+            }
+
             var name = new TextBlock
             {
                 Text = entry.Name,
@@ -2768,6 +2891,341 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "Failed to delete Deeper library entry {Path}", entry.FilePath);
                 MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        // W3 Piece 1 — invoked from BrowserService.NavigationCompleted on every
+        // page load in the embedded browser. Filters non-HT URLs out, debounces
+        // rapid navigations via a per-window CTS, and surfaces the result as a
+        // toast (or no toast at all when there are no results / lookup failed).
+        //
+        // Runs entirely off the WebView2 navigation thread context because the
+        // caller already marshals through Dispatcher.Invoke before calling us,
+        // but the lookup itself awaits on the thread pool so we don't block UI
+        // during the network call.
+        private void TriggerCatalogueLookupForNavigation(string url)
+        {
+            try
+            {
+                if (App.CatalogueLookup == null) return;
+                // Cheap pre-filter — saves the cost of starting a Task for the
+                // (very common) case of a non-HT navigation. The service does
+                // the same check defensively.
+                if (!Helpers.HtUrlHelper.IsEligibleHtUrl(url)) return;
+
+                // Cancel any in-flight lookup from the previous navigation so a
+                // delayed response doesn't surface a toast for a page the user
+                // has already left.
+                try { _catalogueLookupCts?.Cancel(); }
+                catch { /* idempotent */ }
+                _catalogueLookupCts?.Dispose();
+                var cts = new System.Threading.CancellationTokenSource();
+                _catalogueLookupCts = cts;
+
+                _ = RunCatalogueLookupAsync(url, cts.Token);
+            }
+            catch (Exception ex)
+            {
+                // Defensive — must never propagate out of a navigation event handler.
+                App.Logger?.Warning(ex, "[Catalogue] TriggerCatalogueLookupForNavigation threw");
+            }
+        }
+
+        private async System.Threading.Tasks.Task RunCatalogueLookupAsync(string url, System.Threading.CancellationToken ct)
+        {
+            LookupResult result;
+            try
+            {
+                result = await App.CatalogueLookup!.LookupForUrlAsync(url, ct).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                return; // user navigated away; nothing to do
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[Catalogue] Lookup threw unexpectedly");
+                return;
+            }
+
+            // Drop the result silently if a newer navigation has since started
+            // — protects against the (small) race window between the lookup
+            // returning and the CTS getting cancelled.
+            if (ct.IsCancellationRequested) return;
+
+            switch (result)
+            {
+                case LookupResult.Success s:
+                    ShowCatalogueLookupToast(url, s.Entries);
+                    break;
+                case LookupResult.None:
+                case LookupResult.InvalidUrl:
+                case LookupResult.NetworkError:
+                    // No user-visible feedback on these — silent by design.
+                    break;
+            }
+        }
+
+        // Surface a toast for {N} discovered enhancements. Updates
+        // _currentCatalogueHtVideoId so the action handler can validate the
+        // user is still on the same video when they click.
+        private void ShowCatalogueLookupToast(string url, System.Collections.Generic.List<CatalogueEntry> entries)
+        {
+            if (entries == null || entries.Count == 0) return;
+
+            var videoId = Helpers.HtUrlHelper.TryExtractHtVideoId(url);
+            _currentCatalogueHtVideoId = videoId;
+
+            string message;
+            string actionLabel;
+            if (entries.Count == 1)
+            {
+                message = Loc.Get("catalogue_lookup_toast_one");
+                actionLabel = Loc.Get("catalogue_lookup_action_use_one");
+            }
+            else
+            {
+                message = string.Format(Loc.Get("catalogue_lookup_toast_many_fmt"), entries.Count);
+                actionLabel = Loc.Get("catalogue_lookup_action_pick_one");
+            }
+
+            // Snapshot the entries + video ID for the action closure so a later
+            // mutation of _currentCatalogueHtVideoId by a parallel navigation
+            // can be detected.
+            var snapshotEntries = entries;
+            var snapshotVideoId = videoId;
+
+            App.Notifications?.Show(message, NotificationType.Info, TimeSpan.FromSeconds(10),
+                actionLabel,
+                () =>
+                {
+                    // Stale-toast guard: the user navigated away before clicking.
+                    // Silently bail — they'll see a fresh toast for whatever
+                    // video they're now on (if any).
+                    if (!string.Equals(_currentCatalogueHtVideoId, snapshotVideoId, StringComparison.Ordinal))
+                    {
+                        App.Logger?.Information("[Catalogue] Toast action ignored (user navigated away)");
+                        return;
+                    }
+
+                    if (snapshotEntries.Count == 1)
+                    {
+                        _ = DownloadAndOpenCatalogueEntryAsync(snapshotEntries[0]);
+                    }
+                    else
+                    {
+                        OpenCataloguePickerDialog(snapshotEntries, snapshotVideoId);
+                    }
+                });
+        }
+
+        private void OpenCataloguePickerDialog(System.Collections.Generic.List<CatalogueEntry> entries, string? videoId)
+        {
+            try
+            {
+                var dlg = new CataloguePickerDialog(entries, videoId) { Owner = this };
+                dlg.ShowDialog();
+                if (dlg.SelectedEntry != null)
+                {
+                    _ = DownloadAndOpenCatalogueEntryAsync(dlg.SelectedEntry);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[Catalogue] Picker dialog threw");
+            }
+        }
+
+        private async System.Threading.Tasks.Task DownloadAndOpenCatalogueEntryAsync(CatalogueEntry entry)
+        {
+            DownloadResult result;
+            try
+            {
+                // Pass default cancellation here — the per-navigation CTS is
+                // about lookups, not downloads. Once the user has clicked
+                // through, they expect the download to complete even if they
+                // navigate the browser away while it's in flight.
+                result = await App.CatalogueLookup!.DownloadAndOpenAsync(entry, default).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[Catalogue] Download flow threw");
+                App.Notifications?.Show(Loc.Get("catalogue_lookup_toast_download_failed"),
+                    NotificationType.Error, TimeSpan.FromSeconds(8));
+                return;
+            }
+
+            switch (result)
+            {
+                case DownloadResult.Success s:
+                    App.Notifications?.Show(
+                        string.Format(Loc.Get("catalogue_lookup_toast_loaded_fmt"), entry.Title),
+                        NotificationType.Info, TimeSpan.FromSeconds(6));
+                    break;
+                case DownloadResult.NetworkError:
+                    App.Notifications?.Show(Loc.Get("catalogue_lookup_toast_download_failed"),
+                        NotificationType.Error, TimeSpan.FromSeconds(8));
+                    break;
+                case DownloadResult.InvalidFile:
+                    App.Notifications?.Show(Loc.Get("catalogue_lookup_toast_invalid_file"),
+                        NotificationType.Error, TimeSpan.FromSeconds(8));
+                    break;
+                case DownloadResult.SaveError:
+                    App.Notifications?.Show(Loc.Get("catalogue_lookup_toast_save_failed"),
+                        NotificationType.Error, TimeSpan.FromSeconds(8));
+                    break;
+                case DownloadResult.OpenError oe:
+                    App.Notifications?.Show(
+                        string.Format(Loc.Get("catalogue_lookup_toast_open_failed_fmt"), oe.LocalFilename),
+                        NotificationType.Warning, TimeSpan.FromSeconds(10),
+                        Loc.Get("catalogue_lookup_action_open_library"),
+                        () => SwitchToDeeperLibraryTab());
+                    break;
+            }
+        }
+
+        // Focus the Deeper Library tab when the user clicks "Open Library"
+        // from the OpenError recovery toast.
+        private void SwitchToDeeperLibraryTab()
+        {
+            try { ShowTab("deeper"); }
+            catch (Exception ex) { App.Logger?.Debug("[Catalogue] SwitchToDeeperLibraryTab failed: {Msg}", ex.Message); }
+        }
+
+        // Catalogue eligibility check — wraps the URL helper with the media-type
+        // gate (audio enhancements aren't catalogued in W2).
+        //
+        // URL eligibility itself lives in Helpers/HtUrlHelper.cs because it's
+        // now shared by three callers:
+        //   1. This W2 row-level submit gate
+        //   2. The catalogue server (kept in sync via cclabs-web's enhancements.ts)
+        //   3. W3 Piece 1's CatalogueLookupService navigation hook
+        // The two client consumers MUST agree on what counts as an HT URL —
+        // see HtUrlHelper for the shared regex pair and update both this client
+        // helper AND the server's normalizeHtUrl together when adding patterns.
+        private static bool IsCatalogueEligible(Services.Deeper.EnhancementLibraryEntry entry)
+        {
+            if (entry == null) return false;
+            if (entry.MediaType != Models.Deeper.MediaTypes.Video) return false;
+            return Helpers.HtUrlHelper.IsEligibleHtUrl(entry.MediaSource);
+        }
+
+        // W2 — submit a library enhancement to the cclabs catalogue. Opens the
+        // affirmation modal; on confirmation, awaits CatalogueService and maps
+        // the SubmissionResult to a NotificationService toast per the spec.
+        private async Task SubmitDeeperLibraryEntryAsync(Services.Deeper.EnhancementLibraryEntry entry)
+        {
+            // Defense in depth — the button is already disabled when auth is
+            // missing, but a race (token expiring between row build and click)
+            // would otherwise produce an AuthFailed toast as the first feedback.
+            if (string.IsNullOrEmpty(App.Settings?.Current?.AuthToken))
+            {
+                App.Notifications?.Show(Loc.Get("catalogue_toast_auth_failed"),
+                    Services.NotificationType.Warning, TimeSpan.FromSeconds(8));
+                return;
+            }
+
+            var label = string.IsNullOrEmpty(entry.Name) ? System.IO.Path.GetFileName(entry.FilePath) : entry.Name;
+            var dialog = new CatalogueSubmitDialog(label) { Owner = this };
+            if (dialog.ShowDialog() != true || !dialog.Confirmed) return;
+
+            SubmissionResult result;
+            try
+            {
+                result = await App.Catalogue.SubmitEnhancementAsync(entry.FilePath, default).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                // CatalogueService is designed to never throw, but defensively
+                // surface anything that escapes as an UnknownError.
+                App.Logger?.Warning(ex, "[Catalogue] Submit threw unexpectedly");
+                result = new SubmissionResult.UnknownError(0, ex.Message);
+            }
+
+            ShowCatalogueSubmissionResultToast(result);
+        }
+
+        // Map a SubmissionResult to a localized toast. Kept separate from the
+        // submit method so tests / future flows (e.g. a "retry all failed"
+        // button) can reuse the mapping.
+        private void ShowCatalogueSubmissionResultToast(SubmissionResult result)
+        {
+            switch (result)
+            {
+                case SubmissionResult.Success:
+                    // Success uses the distinct green border (#4CAF50) so the
+                    // happy-path outcome is visually unambiguous next to the
+                    // pink Info border that Duplicate uses.
+                    App.Notifications?.Show(Loc.Get("catalogue_toast_success"),
+                        Services.NotificationType.Success, TimeSpan.FromSeconds(6));
+                    break;
+
+                case SubmissionResult.Duplicate d:
+                {
+                    var key = d.ExistingStatus switch
+                    {
+                        "approved" => "catalogue_toast_duplicate_approved",
+                        "rejected" => "catalogue_toast_duplicate_rejected",
+                        _ => "catalogue_toast_duplicate_pending",
+                    };
+                    App.Notifications?.Show(Loc.Get(key),
+                        Services.NotificationType.Info, TimeSpan.FromSeconds(6));
+                    break;
+                }
+
+                case SubmissionResult.ValidationError v:
+                {
+                    var key = v.ErrorCode switch
+                    {
+                        "missing_title" => "catalogue_toast_error_missing_title",
+                        "missing_creator" => "catalogue_toast_error_missing_creator",
+                        "invalid_media_source" => "catalogue_toast_error_invalid_media_source",
+                        "invalid_schema" => "catalogue_toast_error_invalid_schema",
+                        "file_too_large" => "catalogue_toast_error_file_too_large",
+                        "stale_guidelines_version" => "catalogue_toast_error_stale_guidelines",
+                        _ => "",
+                    };
+                    var msg = !string.IsNullOrEmpty(key)
+                        ? Loc.Get(key)
+                        : Loc.GetF("catalogue_toast_error_generic_fmt", v.ErrorCode);
+                    App.Notifications?.Show(msg, Services.NotificationType.Warning, TimeSpan.FromSeconds(8));
+                    break;
+                }
+
+                case SubmissionResult.AuthFailed:
+                    // CatalogueService.MapResponse already invalidated the
+                    // cache for us; the user just needs to re-link in Settings.
+                    App.Notifications?.Show(Loc.Get("catalogue_toast_auth_failed"),
+                        Services.NotificationType.Warning, TimeSpan.FromSeconds(10));
+                    break;
+
+                case SubmissionResult.TooLarge:
+                    App.Notifications?.Show(Loc.Get("catalogue_toast_too_large"),
+                        Services.NotificationType.Error, TimeSpan.FromSeconds(8));
+                    break;
+
+                case SubmissionResult.RateLimited r:
+                {
+                    string msg;
+                    if (r.RetryAfterSeconds.HasValue && r.RetryAfterSeconds.Value > 0)
+                    {
+                        var minutes = Math.Max(1, (int)Math.Ceiling(r.RetryAfterSeconds.Value / 60.0));
+                        msg = Loc.GetF("catalogue_toast_rate_limited_minutes_fmt", minutes);
+                    }
+                    else
+                    {
+                        msg = Loc.Get("catalogue_toast_rate_limited_unknown");
+                    }
+                    App.Notifications?.Show(msg, Services.NotificationType.Warning, TimeSpan.FromSeconds(10));
+                    break;
+                }
+
+                case SubmissionResult.UnknownError u:
+                    App.Logger?.Warning("[Catalogue] Submission UnknownError status={Status} body={Body}",
+                        u.StatusCode, u.Body);
+                    App.Notifications?.Show(Loc.Get("catalogue_toast_unknown_error"),
+                        Services.NotificationType.Error, TimeSpan.FromSeconds(8));
+                    break;
             }
         }
 
@@ -4098,9 +4556,7 @@ namespace ConditioningControlPanel
             }
 
             AppendWebcamDebugLog("Opening calibration window…");
-            var calDlg = new WebcamCalibrationWindow { Owner = this };
-            App.ApplyCalibrationScreenPlacement(calDlg);
-            var result = calDlg.ShowDialog();
+            var result = WebcamCalibrationWindow.ShowDialogWithRecalibrate(this);
 
             if (result == true)
             {
@@ -4626,6 +5082,7 @@ namespace ConditioningControlPanel
                 AppendWebcamDebugLog("Debug cursor hidden.");
             }
         }
+
 
         // Suppresses the SelectionChanged save while we programmatically
         // (re)populate the ComboBox during enumeration / restore.
@@ -5702,7 +6159,7 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void ShowTab(string tab)
+        internal void ShowTab(string tab)
         {
             // Legacy redirect: the "patreon" tab was eliminated and its
             // account/data content lives in the dashboard's App Info popup now.
@@ -16768,6 +17225,13 @@ namespace ConditioningControlPanel
                             App.Logger?.Information("AudioSync: Injecting script for HypnoTube page");
                             await _browser.InjectAudioSyncScriptAsync();
                         }
+
+                        // W3 Piece 1 — fire a catalogue lookup for HT video URLs.
+                        // Fully async, fire-and-forget; doesn't block navigation
+                        // or anything else. Eligibility is re-checked inside the
+                        // service so a non-HT URL just returns InvalidUrl
+                        // without hitting the network.
+                        TriggerCatalogueLookupForNavigation(url);
                     });
                 };
 

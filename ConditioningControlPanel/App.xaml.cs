@@ -292,12 +292,16 @@ namespace ConditioningControlPanel
         public static RemoteControlService RemoteControl { get; private set; } = null!;
         public static AvailableSubjectsService AvailableSubjects { get; private set; } = null!;
         public static CompanionPhraseService CompanionPhrases { get; private set; } = null!;
+        public static CatalogueService Catalogue { get; private set; } = null!;
+        public static CatalogueLookupService CatalogueLookup { get; private set; } = null!;
         public static LockdownService Lockdown { get; private set; } = null!;
         public static MantraService Mantra { get; private set; } = null!;
         public static ModService Mods { get; private set; } = null!;
         public static BugReportService BugReport { get; private set; } = null!;
         public static WallpaperService? Wallpaper { get; private set; }
         public static WebcamTrackingService Webcam { get; private set; } = null!;
+        public static NotificationService Notifications { get; private set; } = null!;
+        public static AttentionCheckService AttentionCheck { get; private set; } = null!;
         public static FocusGameService FocusGame { get; private set; } = null!;
         public static GazeFocusService GazeFocus { get; private set; } = null!;
         public static GazeDebugCursorService GazeCursor { get; private set; } = null!;
@@ -854,6 +858,21 @@ namespace ConditioningControlPanel
             // Initialize services
             Settings = new SettingsService();
 
+            // One-shot settings migrations. Must run before anything reads
+            // the migrated fields (Flash UI, GazeFocusService, etc.).
+            try
+            {
+                if (Settings.Current != null)
+                {
+                    Settings.Current.RunFlashClickableDecouplingMigration();
+                    Settings.Save();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Warning(ex, "Settings migration failed (non-fatal, defaults apply)");
+            }
+
             // Restore UnifiedUserId from settings (persisted from previous session)
             if (!string.IsNullOrEmpty(Settings?.Current?.UnifiedId))
             {
@@ -976,6 +995,8 @@ namespace ConditioningControlPanel
             RemoteControl = new RemoteControlService();
             AvailableSubjects = new AvailableSubjectsService();
             CompanionPhrases = new CompanionPhraseService();
+            Catalogue = new CatalogueService();
+            CatalogueLookup = new CatalogueLookupService();
 
             // Auto-connect haptics if enabled (runs in background)
             if (Settings.Current.Haptics.AutoConnect && Settings.Current.Haptics.Provider != Services.Haptics.HapticProviderType.Mock)
@@ -1011,6 +1032,23 @@ namespace ConditioningControlPanel
             GazeCursor = new GazeDebugCursorService();
             GazeFocus = new GazeFocusService();
             BlinkTrainer = new BlinkTrainerService();
+
+            // In-app non-blocking notifications. Host attachment is deferred to
+            // MainWindow.Loaded — calls before then enqueue and replay once
+            // attached.
+            Notifications = new NotificationService();
+
+            // Phase 4 Attention-Check mechanic: scrapped pre-ship per design call.
+            // Service is still constructed so the AttentionCheckSettingsDialog
+            // and AttentionCheckFeatureControl files compile (they hold the
+            // mechanic's design intact for future revival), but it's never
+            // Start()'d and the default for AttentionCheckEnabled is false.
+            // To revive in a later release, restore the OnPass/OnFail handler
+            // wiring, the PropertyChanged subscription, the Start() call, and
+            // the no-webcam sticky — all of which were here at HEAD before
+            // this commit. The Lab UI surface and intro sticky also need to
+            // come back; see MainWindow for those touchpoints.
+            AttentionCheck = new AttentionCheckService();
 
             // Deeper enhancement library — file ops, recent files, library scan.
             // Eager-init: lightweight, just creates the folder and reads recent files
