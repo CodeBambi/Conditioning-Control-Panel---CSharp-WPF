@@ -974,21 +974,37 @@ namespace ConditioningControlPanel.Views.Deeper
             settings.IsZoomControlEnabled = false;
             settings.IsBuiltInErrorPageEnabled = false;
 
-            // Exit-fullscreen detector. JS-only `document.exitFullscreen()` is
-            // unreliable in WebView2 — sometimes the page state doesn't actually
-            // clear, and `ContainsFullScreenElementChanged` never fires, so the
-            // borderless host window stays up forever. Belt-and-suspenders:
+            // Fullscreen toggle on dblclick. Belt-and-suspenders for BOTH
+            // directions:
             //
-            //   1) Click-pair (two clicks within 350ms, capture phase) AND
-            //      dblclick (safety net) both call tryExit while fullscreen.
-            //   2) tryExit calls `document.exitFullscreen()` AND posts a
-            //      'ccp_exit_fullscreen' WebMessage to C#.
-            //   3) C#'s OnVideoWebMessageReceived force-closes the fullscreen
-            //      Window directly — independent of the page's actual state.
+            // EXIT (already in fullscreen):
+            //   JS-only `document.exitFullscreen()` is unreliable in WebView2
+            //   — sometimes the page state doesn't actually clear, and
+            //   `ContainsFullScreenElementChanged` never fires, so the
+            //   borderless host window stays up forever. So:
+            //     1) dblHandler calls exitLoop (retries exitFullscreen up
+            //        to 5x in case the first call no-ops).
+            //     2) dblHandler posts 'ccp_exit_fullscreen' WebMessage too.
+            //     3) C#'s OnVideoWebMessageReceived force-closes the
+            //        fullscreen Window directly — independent of page state.
+            //   Either the page exits cleanly (event handler closes window)
+            //   or it doesn't (WebMessage handler closes window). Both
+            //   routes converge on the user being out of fullscreen.
             //
-            // Either the page exits cleanly (event handler closes window) or
-            // it doesn't (WebMessage handler closes window). Both routes
-            // converge on the user being out of fullscreen.
+            // ENTER (not yet in fullscreen):
+            //   tryEnterFs picks the largest <video> on the page (same
+            //   approach BtnPictureInPicture_Click uses, so ad/preroll
+            //   iframes don't grab fullscreen ahead of the real player)
+            //   and calls requestFullscreen() on it. The HTML5 fullscreen
+            //   API requires a user gesture, which dblclick satisfies. The
+            //   resulting fullscreenchange → Chromium's
+            //   ContainsFullScreenElementChanged → C#'s
+            //   OnVideoFullscreenChanged → existing EnterVideoFullscreen
+            //   reparent path. No new C# needed.
+            //
+            // stopImmediatePropagation runs only when we actually act
+            // (either exited or found a video to enter on). On non-video
+            // pages dblclick flows through untouched.
             await VideoBrowser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(@"
                 (function() {
                     function inAnyFs() {
@@ -1012,14 +1028,42 @@ namespace ConditioningControlPanel.Views.Deeper
                             setTimeout(function(){ exitLoop(remaining - 1); }, 30);
                         }
                     }
+                    function tryEnterFs() {
+                        try {
+                            var vids = document.querySelectorAll('video');
+                            if (!vids || vids.length === 0) return false;
+                            var best = null, bestArea = 0;
+                            for (var i = 0; i < vids.length; i++) {
+                                var r = vids[i].getBoundingClientRect();
+                                var a = r.width * r.height;
+                                if (a > bestArea) { best = vids[i]; bestArea = a; }
+                            }
+                            var req = best && (best.requestFullscreen
+                                            || best.webkitRequestFullscreen);
+                            if (!req) return false;
+                            var p = req.call(best);
+                            if (p && p.catch) p.catch(function(){});
+                            return true;
+                        } catch (_) { return false; }
+                    }
                     function dblHandler(e) {
-                        if (!inAnyFs()) return;
-                        if (e) {
-                            try { e.stopImmediatePropagation(); } catch (_) {}
-                            try { e.preventDefault(); } catch (_) {}
+                        if (inAnyFs()) {
+                            if (e) {
+                                try { e.stopImmediatePropagation(); } catch (_) {}
+                                try { e.preventDefault(); } catch (_) {}
+                            }
+                            exitLoop(5);
+                            postExit();
+                        } else {
+                            // Enter only if there's actually a video. Without
+                            // this guard, dblclick on non-video pages would
+                            // swallow the page's own dblclick handler.
+                            if (!tryEnterFs()) return;
+                            if (e) {
+                                try { e.stopImmediatePropagation(); } catch (_) {}
+                                try { e.preventDefault(); } catch (_) {}
+                            }
                         }
-                        exitLoop(5);
-                        postExit();
                     }
                     // Only the native dblclick event — not a click-pair
                     // detector, which would also fire on legitimate two-click
