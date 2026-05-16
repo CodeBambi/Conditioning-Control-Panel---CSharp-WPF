@@ -240,6 +240,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Blink Trainer stage demo assets — SFW abstract gradients shown on the
+         dedicated Blink Trainer page when no live preview is running, and to
+         non-premium users behind the gate. Regenerate via
+         assets\BlinkTrainer\Demo\generate_demos.ps1. -->
+    <Resource Include="assets\BlinkTrainer\Demo\*.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Haptics setup guide images -->
     <Resource Include="Resources\haptics_guide\*.png" />
   </ItemGroup>

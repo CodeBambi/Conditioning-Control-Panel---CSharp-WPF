@@ -1,6 +1,15 @@
 # Project briefing (contains operational details)
 project-briefing.md
 
+# Local survey/recon notes (not for commit)
+ccp-desktop-survey-*.md
+ConditioningControlPanel/docs/surveys/
+
+# Stray PowerShell PNG outputs that landed at the wrong path
+# (System.Drawing.Drawing2D.* etc., from failed Add-Type scratch scripts).
+# Root-anchored so legit deeper-tree files matching the pattern aren't excluded.
+/ConditioningControlPanel/System.Drawing.*
+
 # Claude Code local config
 .claude/
 ConditioningControlPanel/.claude/
