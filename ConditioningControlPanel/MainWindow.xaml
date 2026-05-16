@@ -9520,9 +9520,33 @@
                                                 Tag="{Binding UnifiedId}"
                                                 IsEnabled="{Binding IsConnectEnabled}"
                                                 Click="BtnConnectSubject_Click"
-                                                Background="{DynamicResource NeonPurpleBrush}" Foreground="White"
                                                 FontSize="13" FontWeight="Bold"
-                                                Padding="0,8" BorderThickness="0" Cursor="Hand"/>
+                                                Padding="0,8" BorderThickness="0" Cursor="Hand">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Background" Value="{DynamicResource NeonPurpleBrush}"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="border" CornerRadius="8"
+                                                                        Padding="{TemplateBinding Padding}"
+                                                                        Background="{TemplateBinding Background}">
+                                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                                      VerticalAlignment="Center"/>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsEnabled" Value="False">
+                                                                        <Setter TargetName="border" Property="Background" Value="#3A2E5A"/>
+                                                                        <Setter Property="Foreground" Value="White"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>
