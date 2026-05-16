@@ -20,18 +20,35 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.9.7";
+        public const string AppVersion = "5.9.8";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.9.7 - Polish Pass II
+        public const string CurrentPatchNotes = @"v5.9.8 - Don't Blink
 
-One more fix to finish what v5.9.6 started.
+Blink Trainer just got its own home. Plus a few new gaze tricks, a long-requested video filter, and the usual round of fixes.
+
+✨ FEATURES
+• Blink Trainer is now a dedicated Exclusives page with a polished interface, a live preview that swaps on your actual blinks while you're configuring it, cleaner folder management with hover states and asset counts, a visual tiling mode picker (Same image vs Mix images), and inline webcam consent + calibration controls. Premium tier required. The Lab card became a ""moved here"" stub so nobody gets lost.
+• Flash gaze interactions: Stare to pop dismisses a flash without a click; Stare to keep extends a flash's lifetime while you're looking at it (new Linger boost slider, 500-5000ms). Decoupled from FlashClickable so the mouse and gaze toggles are independent.
+• Video duration filter: Min/max length sliders on the Video card so you can keep the pool focused on short clips or long ones without shuffling content packs.
+• Video gaze-click: Attention-check targets during mandatory videos can now be popped by gaze dwell, same as a mouse click.
+• Catalogue preview: A new system for browsing community-submitted enhancement files (.ccpenh.json) inside the app, so you can pull other people's Deeper setups into yours without manual file passing. Submissions are open. Proper unveiling once there's enough content to make the picker worth showing off.
+
+🎨 UI/UX
+• Deeper polish: zoom buttons (+/-) on browser pages, dark immersive titlebars on player and editor, Pop Out (PiP) button on the player transport row, taller default player and editor windows, double-click a video to enter or exit fullscreen, and ""Available Subjects"" tab label shortened to ""Subjects"" so longer player titles don't clip.
 
 🔧 BUG FIXES
-• Available Subjects horizontal scrollbar now renders and drags properly. The thumb was being styled for vertical orientation only, which collapsed the bar to a tiny non-interactive pill at one end of the row.";
+• Windows startup checkbox actually creates and removes the OS shortcut now (closes #252, #248, #231). Was wired through a Click handler that doesn't fire on programmatic IsChecked changes.
+• Panic key picker stops eating Escape so you can reassign panic to Esc itself if you want (closes #229).
+• Remote Control replays its directory opt-in payload after a disconnect so your ""available"" state survives controller dropouts (closes #250, #247, #230).
+• Bubble Count audio: secondaries skip audio decode to dodge the WASAPI session race that muted the count audio (closes #253).
+• Webcam camera-in-use false positives reduced: slow UVC drivers and virtual cameras get up to 5 probe retries before being reported as ""in use by another app.""
+• Smaller fixes: AssetPackSelectorDialog warns on mixed image-only / video-only pack selections, Gaze Minigame uses the shared calibration helper for consistency, webcam blink-pop respects FlashGazePopEnabled, bubble multi-monitor calibration clamp prevents bubbles from spawning on non-calibrated screens.
+
+Don't blink.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
