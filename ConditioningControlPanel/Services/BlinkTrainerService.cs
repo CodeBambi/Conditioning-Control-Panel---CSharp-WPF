@@ -13,7 +13,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using ConditioningControlPanel.Lab.GazeMinigame;
+using ConditioningControlPanel.Localization;
 using XamlAnimatedGif;
 
 namespace ConditioningControlPanel.Services;
@@ -80,38 +80,36 @@ public class BlinkTrainerService : IDisposable
             var settings = App.Settings?.Current;
             if (settings == null) { LastError = "Settings not loaded."; return false; }
 
-            // Build the asset pool from selected folders.
-            var pool = new List<string>();
-            foreach (var folder in settings.BlinkTrainerFolders ?? new())
-            {
-                if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) continue;
-                var pack = AssetPack.FromFolder(folder);
-                if (pack == null) continue;
-                pool.AddRange(pack.ImagePaths);
-                if (settings.BlinkTrainerIncludeVideos) pool.AddRange(pack.VideoPaths);
-            }
+            // Build the asset pool from selected folders via the shared helper
+            // (also used by the Exclusives tab's stage preview).
+            var poolHelper = BlinkTrainerAssetPool.Build(
+                settings.BlinkTrainerFolders,
+                settings.BlinkTrainerIncludeVideos);
 
-            if (pool.Count == 0)
+            if (poolHelper.IsEmpty)
             {
                 LastError = settings.BlinkTrainerFolders == null || settings.BlinkTrainerFolders.Count == 0
-                    ? "Add at least one folder first."
-                    : "No images / GIFs found in the selected folders.";
+                    ? Loc.Get("blink_trainer_error_no_folders")
+                    : Loc.Get("blink_trainer_error_no_assets");
                 return false;
             }
+
+            var pool = poolHelper.Paths.ToList();
 
             // Webcam: must have consent + be running.
-            if (App.Webcam == null) { LastError = "Webcam service not initialized."; return false; }
-            if (!WebcamTrackingService.IsConsentCurrent()) { LastError = "Enable webcam consent first."; return false; }
+            if (App.Webcam == null) { LastError = Loc.Get("blink_trainer_error_webcam_uninit"); return false; }
+            if (!WebcamTrackingService.IsConsentCurrent()) { LastError = Loc.Get("blink_trainer_error_no_consent"); return false; }
             if (!App.Webcam.IsRunning && !App.Webcam.Start())
             {
-                LastError = $"Could not start webcam ({App.Webcam.State}).";
+                LastError = Loc.GetF("blink_trainer_error_webcam_start_format", App.Webcam.State);
                 return false;
             }
 
-            // Create one overlay window per screen (mirroring spiral's DualMonitor behavior).
-            var screens = settings.DualMonitorEnabled
-                ? App.GetAllScreensCached()
-                : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+            // Multi-monitor hotfix: route through the shared gaze policy. When
+            // calibration is loaded, this pins the blink-trainer overlay to the
+            // calibrated screen so blink events aren't fired against an image
+            // the user can't reach with their gaze.
+            var screens = GazeContentScreenPolicy.ResolveScreens(settings);
 
             var opacity = Math.Clamp(settings.BlinkTrainerOpacity, 1, 100) / 100.0;
             foreach (var screen in screens)
@@ -123,7 +121,7 @@ public class BlinkTrainerService : IDisposable
 
             if (_overlays.Count == 0)
             {
-                LastError = "Could not create overlay window.";
+                LastError = Loc.Get("blink_trainer_error_overlay_create");
                 Cleanup();
                 return false;
             }

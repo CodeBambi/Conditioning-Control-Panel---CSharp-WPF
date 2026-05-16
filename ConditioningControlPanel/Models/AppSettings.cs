@@ -3555,6 +3555,14 @@ namespace ConditioningControlPanel.Models
             set { _blinkTrainerMixImages = value; OnPropertyChanged(); }
         }
 
+        // Tracks whether the user has visited the v5.9.8 Blink Trainer flagship
+        // page at least once. Used to suppress the one-time "moved to its own
+        // home" sticky toast (see Phase G). Defaults false so existing users
+        // see the toast on first launch after update; new users default to
+        // false too but the toast self-suppresses once they visit the tab.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool HasSeenBlinkTrainerFlagship { get; set; }
+
         #endregion
 
         #region Deeper
@@ -3603,13 +3611,24 @@ namespace ConditioningControlPanel.Models
             set { _browserEnhanceIfPossible = value; OnPropertyChanged(); }
         }
 
+        #endregion
+
+        #region Migrations
+
         /// <summary>
-        /// Runs the one-shot FlashClickable → gaze-pop / linger decoupling
-        /// migration. Pre-3.4 builds had FlashClickable as a master switch
-        /// for both mouse and gaze interaction. This migration preserves the
-        /// intent of users who had FlashClickable=false by turning the new
-        /// gaze toggles off too. Idempotent — the migration flag prevents
-        /// re-running after the user later configures the toggles. Returns.
+        /// Phase 3.4: preserve "no interaction" intent for users who had
+        /// FlashClickable=false before the decoupling. Pre-3.4, FlashClickable
+        /// was a master switch for both mouse and gaze; Phase 3 split gaze-pop
+        /// and stare-linger into their own toggles, both default ON. Without
+        /// this migration, a hands-free / accessibility user upgrading from
+        /// an older build would silently get gaze interaction enabled.
+        ///
+        /// One-shot via <see cref="MigratedFlashClickableDecoupling"/> — new
+        /// installs run the same code path harmlessly (FlashClickable defaults
+        /// to true, so the inner branch is a no-op), and a user who later
+        /// configures the new toggles independently won't have them clobbered.
+        /// Caller is responsible for persisting the settings file after this
+        /// returns.
         /// </summary>
         public void RunFlashClickableDecouplingMigration()
         {

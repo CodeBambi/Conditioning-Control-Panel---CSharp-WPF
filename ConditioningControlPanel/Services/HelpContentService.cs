@@ -1175,6 +1175,31 @@ namespace ConditioningControlPanel.Services
                              "if the gaze stays inside the hitbox long enough, the item's normal pop/dismiss handler " +
                              "fires \u2014 identical to a click. Looking away cancels the dwell. Webcam consent and a stored " +
                              "calibration are both prerequisites; either failing produces a localized status message."
+            },
+
+            ["BlinkTrainer"] = new HelpContent
+            {
+                SectionId = "BlinkTrainer",
+                Icon = "\ud83d\udcab", // DIZZY SYMBOL (U+1F4AB) \u2014 matches the page header + submenu icon
+                Title = "Blink Trainer",
+                WhatItDoes = "A topmost overlay that swaps to a new random asset every time you blink. " +
+                             "Pick folders of images or videos, set how long the session runs, and choose " +
+                             "the overlay's opacity. Each blink picks a new asset from your pool. " +
+                             "Requires a Patreon supporter tier.",
+                Tips = new List<string>
+                {
+                    "Add multiple asset folders to keep the pool varied and avoid quick repeats",
+                    "Lower the opacity if you want what's underneath partially visible",
+                    "Mix images mode tiles the overlay so each cell pulls a different image \u2014 try it on portrait pools",
+                    "Include videos in the pool when you want motion alongside stills",
+                    "Calibrate the webcam if you use multiple monitors \u2014 the overlay needs to know which screen to land on"
+                },
+                HowItWorks = "The webcam tracker raises a blink event every time it detects a full eye-closure cycle. " +
+                             "Each event picks a random asset from your configured folders and renders it across one or " +
+                             "more overlay windows \u2014 the screen-policy code uses your calibration to pick which monitor " +
+                             "to target on multi-display setups. Frame processing happens locally on your machine; no " +
+                             "images leave your device. The overlay is click-through and topmost, so it sits above your " +
+                             "session without blocking interaction underneath."
             }
         };
 

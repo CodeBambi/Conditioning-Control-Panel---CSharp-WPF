@@ -1715,6 +1715,51 @@ namespace ConditioningControlPanel
                 App.Logger?.Debug("Recalibrate-suggest check failed: {Error}", ex.Message);
             }
 
+            // v5.9.8 Blink Trainer flagship sticky. Fires once for users who
+            // updated to v5.9.8 and haven't yet visited the new Exclusives →
+            // Blink Trainer page. Suppression is belt-and-suspenders:
+            //   - ShowSticky no-ops if its key is in DismissedNotificationKeys
+            //   - the if-check below short-circuits when HasSeenBlinkTrainerFlagship is true
+            //   - the action handler ALSO adds the key to DismissedNotificationKeys
+            //     in case HasSeen somehow doesn't persist.
+            try
+            {
+                const string flagshipKey = "blink-trainer-flagship-v5.9.8";
+                if (App.Settings?.Current?.HasSeenBlinkTrainerFlagship == false)
+                {
+                    App.Notifications?.ShowSticky(
+                        flagshipKey,
+                        Localization.Loc.Get("blink_trainer_flagship_toast"),
+                        Services.NotificationType.Info,
+                        actionLabel: Localization.Loc.Get("blink_trainer_flagship_toast_action"),
+                        action: () =>
+                        {
+                            try
+                            {
+                                // Belt-and-suspenders dedupe: add the key to
+                                // DismissedNotificationKeys so the toast can't
+                                // refire next launch even if HasSeen flag fails
+                                // to persist.
+                                var s = App.Settings?.Current;
+                                if (s != null && !s.DismissedNotificationKeys.Contains(flagshipKey))
+                                {
+                                    s.DismissedNotificationKeys.Add(flagshipKey);
+                                    App.Settings?.Save();
+                                }
+                                ShowTab("blinktrainer");
+                            }
+                            catch (Exception ex)
+                            {
+                                App.Logger?.Warning(ex, "Blink Trainer toast action: failed");
+                            }
+                        });
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Blink Trainer flagship sticky: failed");
+            }
+
 
             // Enable Windows 11 rounded corners
             try
@@ -4574,6 +4619,12 @@ namespace ConditioningControlPanel
                 svc.Stop();
                 BtnWebcamDebugStart.Content = "Start tracking";
             }
+
+            // Cross-tab propagation (Cleanup 2 + Phase D): the Blink Trainer
+            // page shows calibration status AND has a NeedsCalibration status
+            // state; refresh both surfaces if the user has visited the tab.
+            RefreshBlinkTrainerWebcamColumn();
+            RefreshBlinkTrainerStatusRow();
         }
 
         private void BtnGazeMinigame_Click(object sender, RoutedEventArgs e)
@@ -4676,9 +4727,13 @@ namespace ConditioningControlPanel
             }
         }
 
-        // ─── Blink Trainer (Lab) ──────────────────────────────────────────
+        // ─── Blink Trainer — service lifecycle + Running countdown ───────
+        // The configurator + stage UI now lives on the dedicated Exclusives
+        // page (see "Blink Trainer Tab — *" regions). What's left here is the
+        // service-side glue: hook StateChanged, run the 1Hz countdown timer
+        // that the new status row's Running text depends on, and stop on
+        // window close.
         private DispatcherTimer? _blinkTrainerTickTimer;
-        private bool _blinkTrainerSyncing;
 
         private void HookBlinkTrainerService()
         {
@@ -4688,71 +4743,49 @@ namespace ConditioningControlPanel
             // overlay window is the only thing keeping the process alive.
             Closing += (_, _) => App.BlinkTrainer?.Stop();
 
-            InitializeBlinkTrainerUI();
-
             App.BlinkTrainer.StateChanged += () =>
             {
                 if (!Dispatcher.CheckAccess())
                 {
-                    Dispatcher.BeginInvoke(SyncBlinkTrainerUI);
+                    Dispatcher.BeginInvoke(OnBlinkTrainerServiceStateChanged);
                     return;
                 }
-                SyncBlinkTrainerUI();
+                OnBlinkTrainerServiceStateChanged();
             };
+
+            // Defensive: if the service is somehow already running at hook
+            // time (shouldn't happen — hook runs at window load before the
+            // user can start anything — but cheap insurance), make sure the
+            // countdown timer is wired.
+            SyncBlinkTrainerCountdownTimer();
         }
 
-        private void InitializeBlinkTrainerUI()
+        /// <summary>
+        /// Single fan-out for BlinkTrainerService.StateChanged. Updates the
+        /// new Exclusives tab's status row + stage mode and manages the
+        /// per-second countdown timer that BlinkTrainerTick drives.
+        /// </summary>
+        private void OnBlinkTrainerServiceStateChanged()
         {
-            var settings = App.Settings?.Current;
-            if (settings == null) return;
+            try { SyncBlinkTrainerCountdownTimer(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "SyncBlinkTrainerCountdownTimer failed"); }
 
-            _blinkTrainerSyncing = true;
-            try
-            {
-                if (LstBlinkTrainerFolders != null)
-                {
-                    LstBlinkTrainerFolders.Items.Clear();
-                    foreach (var f in settings.BlinkTrainerFolders)
-                        LstBlinkTrainerFolders.Items.Add(f);
-                }
+            try { RefreshBlinkTrainerStatusRow(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "RefreshBlinkTrainerStatusRow failed"); }
 
-                if (SliderBlinkTrainerDuration != null)
-                    SliderBlinkTrainerDuration.Value = settings.BlinkTrainerDurationMinutes;
-                if (TxtBlinkTrainerDuration != null)
-                    TxtBlinkTrainerDuration.Text = $"{settings.BlinkTrainerDurationMinutes} min";
-
-                if (SliderBlinkTrainerOpacity != null)
-                    SliderBlinkTrainerOpacity.Value = settings.BlinkTrainerOpacity;
-                if (TxtBlinkTrainerOpacity != null)
-                    TxtBlinkTrainerOpacity.Text = $"{settings.BlinkTrainerOpacity}%";
-
-                if (ChkBlinkTrainerIncludeVideos != null)
-                    ChkBlinkTrainerIncludeVideos.IsChecked = settings.BlinkTrainerIncludeVideos;
-
-                if (ChkBlinkTrainerMixImages != null)
-                    ChkBlinkTrainerMixImages.IsChecked = settings.BlinkTrainerMixImages;
-            }
-            finally { _blinkTrainerSyncing = false; }
-
-            SyncBlinkTrainerUI();
+            try { ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode()); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "ApplyBlinkTrainerStageMode failed"); }
         }
 
-        private void SyncBlinkTrainerUI()
+        /// <summary>
+        /// Starts / stops the 1Hz countdown timer to match the service's
+        /// running state. Idempotent. Drives the new Exclusives tab's Running
+        /// status text via BlinkTrainerTick.
+        /// </summary>
+        private void SyncBlinkTrainerCountdownTimer()
         {
             if (App.BlinkTrainer == null) return;
             var running = App.BlinkTrainer.IsRunning;
-
-            if (BtnBlinkTrainerStart != null)
-                BtnBlinkTrainerStart.Content = running ? "Stop" : "Start";
-
-            // Lock the configurator while a session is in progress.
-            if (BtnBlinkTrainerAddFolder != null) BtnBlinkTrainerAddFolder.IsEnabled = !running;
-            if (BtnBlinkTrainerRemoveFolder != null) BtnBlinkTrainerRemoveFolder.IsEnabled = !running;
-            if (LstBlinkTrainerFolders != null) LstBlinkTrainerFolders.IsEnabled = !running;
-            if (ChkBlinkTrainerIncludeVideos != null) ChkBlinkTrainerIncludeVideos.IsEnabled = !running;
-            if (ChkBlinkTrainerMixImages != null) ChkBlinkTrainerMixImages.IsEnabled = !running;
-            if (SliderBlinkTrainerDuration != null) SliderBlinkTrainerDuration.IsEnabled = !running;
-            if (SliderBlinkTrainerOpacity != null) SliderBlinkTrainerOpacity.IsEnabled = !running;
 
             if (running)
             {
@@ -4772,10 +4805,6 @@ namespace ConditioningControlPanel
                     _blinkTrainerTickTimer.Tick -= BlinkTrainerTick;
                     _blinkTrainerTickTimer = null;
                 }
-                if (TxtBlinkTrainerStatus != null)
-                    TxtBlinkTrainerStatus.Text = string.IsNullOrEmpty(App.BlinkTrainer.LastError)
-                        ? ""
-                        : App.BlinkTrainer.LastError;
             }
         }
 
@@ -4783,123 +4812,26 @@ namespace ConditioningControlPanel
         {
             if (App.BlinkTrainer == null || !App.BlinkTrainer.IsRunning) return;
             var rem = App.BlinkTrainer.Remaining;
-            if (TxtBlinkTrainerStatus != null)
-                TxtBlinkTrainerStatus.Text = $"Running — {(int)rem.TotalMinutes}m {rem.Seconds:00}s remaining";
+
+            // New Exclusives tab status text — only overwrite while we're
+            // displaying the Running state. Other states (Error / NeedsX) get
+            // their own copy from ApplyBlinkTrainerStatusState.
+            if (BlinkTrainerStatusText != null && _currentBlinkTrainerStatusState == BlinkTrainerStatusState.Running)
+                BlinkTrainerStatusText.Text = Localization.Loc.GetF("blink_trainer_status_running", $"{rem:mm\\:ss}");
         }
 
-        private void BtnBlinkTrainerAddFolder_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Lab "Moved to Exclusives" stub navigates to the new home.
+        /// </summary>
+        private void BtnLabBlinkTrainerOpenNew_Click(object sender, RoutedEventArgs e)
         {
-            using var dlg = new System.Windows.Forms.FolderBrowserDialog
+            try
             {
-                Description = "Pick a folder of images / GIFs (videos optional)",
-                UseDescriptionForTitle = true,
-                SelectedPath = App.EffectiveAssetsPath ?? "",
-            };
-            if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
-
-            var folder = dlg.SelectedPath;
-            if (string.IsNullOrWhiteSpace(folder)) return;
-
-            var settings = App.Settings?.Current;
-            if (settings == null) return;
-            if (settings.BlinkTrainerFolders.Any(f =>
-                string.Equals(f, folder, StringComparison.OrdinalIgnoreCase))) return;
-
-            settings.BlinkTrainerFolders.Add(folder);
-            App.Settings?.Save();
-
-            LstBlinkTrainerFolders?.Items.Add(folder);
-            if (TxtBlinkTrainerStatus != null) TxtBlinkTrainerStatus.Text = "";
-        }
-
-        private void BtnBlinkTrainerRemoveFolder_Click(object sender, RoutedEventArgs e)
-        {
-            if (LstBlinkTrainerFolders?.SelectedItem is not string sel) return;
-            var settings = App.Settings?.Current;
-            if (settings == null) return;
-            settings.BlinkTrainerFolders.RemoveAll(f => string.Equals(f, sel, StringComparison.OrdinalIgnoreCase));
-            App.Settings?.Save();
-            LstBlinkTrainerFolders.Items.Remove(sel);
-        }
-
-        private void SliderBlinkTrainerDuration_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_blinkTrainerSyncing) return;
-            var v = (int)Math.Round(e.NewValue);
-            if (App.Settings?.Current != null) App.Settings.Current.BlinkTrainerDurationMinutes = v;
-            if (TxtBlinkTrainerDuration != null) TxtBlinkTrainerDuration.Text = $"{v} min";
-            App.Settings?.Save();
-        }
-
-        private void SliderBlinkTrainerOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_blinkTrainerSyncing) return;
-            var v = (int)Math.Round(e.NewValue);
-            if (App.Settings?.Current != null) App.Settings.Current.BlinkTrainerOpacity = v;
-            if (TxtBlinkTrainerOpacity != null) TxtBlinkTrainerOpacity.Text = $"{v}%";
-            App.Settings?.Save();
-        }
-
-        private void ChkBlinkTrainerIncludeVideos_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_blinkTrainerSyncing) return;
-            if (App.Settings?.Current != null)
-                App.Settings.Current.BlinkTrainerIncludeVideos = ChkBlinkTrainerIncludeVideos?.IsChecked == true;
-            App.Settings?.Save();
-        }
-
-        private void ChkBlinkTrainerMixImages_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_blinkTrainerSyncing) return;
-            if (App.Settings?.Current != null)
-                App.Settings.Current.BlinkTrainerMixImages = ChkBlinkTrainerMixImages?.IsChecked == true;
-            App.Settings?.Save();
-        }
-
-        private async void BtnBlinkTrainerStart_Click(object sender, RoutedEventArgs e)
-        {
-            if (App.BlinkTrainer == null) return;
-            if (App.BlinkTrainer.IsRunning)
-            {
-                App.BlinkTrainer.Stop();
-                return;
+                ShowTab("blinktrainer");
             }
-
-            // Webcam consent gate (mirrors Focus Gaze flow)
-            if (!WebcamTrackingService.IsConsentCurrent())
+            catch (Exception ex)
             {
-                var dlg = new WebcamConsentDialog { Owner = this };
-                var ok = dlg.ShowDialog();
-                if (ok != true || !dlg.ConsentGiven)
-                {
-                    if (TxtBlinkTrainerStatus != null)
-                        TxtBlinkTrainerStatus.Text = "Webcam consent required.";
-                    return;
-                }
-            }
-
-            // Pre-warm the webcam off the UI thread so BlinkTrainer.Start —
-            // which would otherwise call WebcamTrackingService.Start synchronously —
-            // finds it already running. Same pattern as ChkFocusGaze_Changed; without
-            // this a slow USB negotiation freezes the UI long enough for Windows'
-            // "not responding" reaper to terminate the app silently.
-            if (App.Webcam != null && !App.Webcam.IsRunning)
-            {
-                if (TxtBlinkTrainerStatus != null) TxtBlinkTrainerStatus.Text = "Starting webcam…";
-                var started = await Task.Run(() => App.Webcam.Start());
-                if (!started)
-                {
-                    if (TxtBlinkTrainerStatus != null)
-                        TxtBlinkTrainerStatus.Text = $"Could not start webcam ({App.Webcam.State}).";
-                    return;
-                }
-            }
-
-            if (!App.BlinkTrainer.Start() && TxtBlinkTrainerStatus != null)
-            {
-                TxtBlinkTrainerStatus.Text = string.IsNullOrEmpty(App.BlinkTrainer.LastError)
-                    ? "Could not start."
-                    : App.BlinkTrainer.LastError;
+                App.Logger?.Warning(ex, "Lab Blink Trainer stub navigation failed");
             }
         }
 
@@ -5016,6 +4948,10 @@ namespace ConditioningControlPanel
                 svc.Stop();
                 BtnWebcamDebugStart.Content = "Start tracking";
             }
+
+            // Cross-tab propagation (Cleanup 2 + Phase D).
+            RefreshBlinkTrainerWebcamColumn();
+            RefreshBlinkTrainerStatusRow();
         }
 
         private void BtnWebcamReviewPrivacy_Click(object sender, RoutedEventArgs e)
@@ -5031,6 +4967,11 @@ namespace ConditioningControlPanel
                 var dlg = new WebcamConsentDialog { Owner = this };
                 dlg.ShowDialog();
                 AppendWebcamDebugLog("Privacy info reviewed.");
+                // Cross-tab propagation (Cleanup 2 + Phase D): consent may have
+                // been toggled via the dialog's Enable path.
+                RefreshBlinkTrainerWebcamColumn();
+                RefreshBlinkTrainerStatusRow();
+                ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
             }
             catch (Exception ex)
             {
@@ -5061,6 +5002,11 @@ namespace ConditioningControlPanel
                 App.Webcam?.RevokeConsent();
                 if (ChkWebcamDebugCursor != null) ChkWebcamDebugCursor.IsChecked = false;
                 AppendWebcamDebugLog("Consent revoked. Calibration deleted; webcam features disabled.");
+
+                // Cross-tab propagation (Cleanup 2 + Phase D).
+                RefreshBlinkTrainerWebcamColumn();
+                RefreshBlinkTrainerStatusRow();
+                ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
             }
             catch (Exception ex)
             {
@@ -5085,50 +5031,102 @@ namespace ConditioningControlPanel
 
 
         // Suppresses the SelectionChanged save while we programmatically
-        // (re)populate the ComboBox during enumeration / restore.
+        // (re)populate either webcam ComboBox during enumeration / restore /
+        // cross-tab sync. Single flag covers BOTH Lab + Blink Trainer combos
+        // so a populate-one-then-the-other sequence inside
+        // PopulateWebcamDeviceCombos doesn't trip the save path mid-loop.
         private bool _webcamDevicePopulating;
 
-        private void RefreshWebcamDeviceList()
+        /// <summary>
+        /// Single enumeration → both combos. The Lab (CmbWebcamDevice) and
+        /// the Blink Trainer page (CmbBlinkTrainerWebcamDevice) share device
+        /// state via AppSettings.WebcamDeviceIndex but historically only
+        /// re-populated on their own tab's entry — leaving the other combo
+        /// stale until the user navigated to it. This helper rebuilds both
+        /// at once. Safe to call when one combo's parent tab hasn't been
+        /// loaded yet (null check inside PopulateWebcamCombo).
+        /// </summary>
+        private void PopulateWebcamDeviceCombos()
         {
-            if (CmbWebcamDevice == null) return;
             if (App.Webcam == null) return;
-
+            var devices = App.Webcam.EnumerateDevices();
             _webcamDevicePopulating = true;
             try
             {
-                CmbWebcamDevice.Items.Clear();
-
-                var devices = App.Webcam.EnumerateDevices();
-                if (devices.Count == 0)
-                {
-                    CmbWebcamDevice.Items.Add(new ComboBoxItem
-                    {
-                        Content = "(no cameras detected)",
-                        Tag = -1,
-                        IsEnabled = false,
-                    });
-                    CmbWebcamDevice.SelectedIndex = 0;
-                    return;
-                }
-
-                foreach (var d in devices)
-                {
-                    CmbWebcamDevice.Items.Add(new ComboBoxItem
-                    {
-                        Content = $"[{d.Index}] {d.Name}",
-                        Tag = d.Index,
-                    });
-                }
-
-                int saved = App.Settings?.Current?.WebcamDeviceIndex ?? -1;
-                int target = saved >= 0 && saved < devices.Count ? saved : 0;
-                CmbWebcamDevice.SelectedIndex = target;
+                PopulateWebcamCombo(CmbWebcamDevice, devices);
+                PopulateWebcamCombo(CmbBlinkTrainerWebcamDevice, devices);
             }
             finally
             {
                 _webcamDevicePopulating = false;
             }
         }
+
+        private static void PopulateWebcamCombo(
+            ComboBox? cb,
+            IReadOnlyList<Services.WebcamDeviceEnumerator.WebcamDevice> devices)
+        {
+            if (cb == null) return;
+            cb.Items.Clear();
+            if (devices.Count == 0)
+            {
+                cb.Items.Add(new ComboBoxItem
+                {
+                    Content = "(no cameras detected)",
+                    Tag = -1,
+                    IsEnabled = false,
+                });
+                cb.SelectedIndex = 0;
+                return;
+            }
+            foreach (var d in devices)
+            {
+                cb.Items.Add(new ComboBoxItem
+                {
+                    Content = $"[{d.Index}] {d.Name}",
+                    Tag = d.Index,
+                });
+            }
+            int saved = App.Settings?.Current?.WebcamDeviceIndex ?? -1;
+            int target = saved >= 0 && saved < devices.Count ? saved : 0;
+            cb.SelectedIndex = target;
+        }
+
+        /// <summary>
+        /// After a user selects a device on one combo, sync the other combo's
+        /// SelectedIndex to match so the two surfaces don't visually diverge.
+        /// Uses the _webcamDevicePopulating guard to suppress the partner
+        /// combo's SelectionChanged save path.
+        /// </summary>
+        private void SyncWebcamComboSelections(int idx)
+        {
+            _webcamDevicePopulating = true;
+            try
+            {
+                SelectComboByDeviceIndex(CmbWebcamDevice, idx);
+                SelectComboByDeviceIndex(CmbBlinkTrainerWebcamDevice, idx);
+            }
+            finally { _webcamDevicePopulating = false; }
+        }
+
+        private static void SelectComboByDeviceIndex(ComboBox? cb, int idx)
+        {
+            if (cb == null) return;
+            for (int i = 0; i < cb.Items.Count; i++)
+            {
+                if (cb.Items[i] is ComboBoxItem cbi && cbi.Tag is int t && t == idx)
+                {
+                    if (cb.SelectedIndex != i) cb.SelectedIndex = i;
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Kept for backwards-compat with existing callers (Lab ShowTab,
+        /// BtnWebcamDeviceRefresh_Click). Both combos refresh in one pass.
+        /// </summary>
+        private void RefreshWebcamDeviceList() => PopulateWebcamDeviceCombos();
 
         private void CmbWebcamDevice_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
@@ -5144,12 +5142,15 @@ namespace ConditioningControlPanel
                 App.Settings.Save();
             }
 
+            // Keep the Blink Trainer combo in lockstep if it's been instantiated.
+            SyncWebcamComboSelections(idx);
+
             AppendWebcamDebugLog($"Camera set to {item.Content}. {(App.Webcam?.IsRunning == true ? "Stop and Start tracking to apply." : "Will be used on next Start.")}");
         }
 
         private void BtnWebcamDeviceRefresh_Click(object sender, RoutedEventArgs e)
         {
-            RefreshWebcamDeviceList();
+            PopulateWebcamDeviceCombos();
             AppendWebcamDebugLog($"Re-scanned cameras: {(CmbWebcamDevice?.Items.Count ?? 0)} found.");
         }
 
@@ -5325,6 +5326,12 @@ namespace ConditioningControlPanel
             ShowTab("lockdown");
         }
 
+        private void BtnSubBlinkTrainer_Click(object sender, RoutedEventArgs e)
+        {
+            ExclusivesSubmenuPopup.IsOpen = false;
+            ShowTab("blinktrainer");
+        }
+
         /// <summary>
         /// Updates "Premium" badges on the Exclusives submenu items based on the
         /// user's current subscription state. Called whenever the popup opens.
@@ -5338,6 +5345,7 @@ namespace ConditioningControlPanel
             if (SubBadgeHaptics != null) SubBadgeHaptics.Visibility = badgeVis;
             if (SubBadgeAwareness != null) SubBadgeAwareness.Visibility = badgeVis;
             if (SubBadgeLockdown != null) SubBadgeLockdown.Visibility = badgeVis;
+            if (SubBadgeBlinkTrainer != null) SubBadgeBlinkTrainer.Visibility = badgeVis;
         }
 
         /// <summary>
@@ -6199,6 +6207,21 @@ namespace ConditioningControlPanel
             App.AvailableSubjects?.StopPolling();
             if (HapticsTab != null) HapticsTab.Visibility = Visibility.Collapsed;
             if (LockdownTab != null) LockdownTab.Visibility = Visibility.Collapsed;
+            if (BlinkTrainerTab != null)
+            {
+                // Stop the demo timer AND drop the live-mode OnBlink subscription
+                // when leaving the tab so neither runs while the user is
+                // elsewhere. Both are idempotent.
+                if (BlinkTrainerTab.Visibility == Visibility.Visible)
+                {
+                    StopBlinkTrainerDemoLoop();
+                    UnsubscribeBlinkTrainerLiveBlink();
+                    // Reset cached mode so the next entry re-runs the resolver
+                    // and starts whatever's appropriate from scratch.
+                    _currentBlinkTrainerStageMode = BlinkTrainerStageMode.Demo;
+                }
+                BlinkTrainerTab.Visibility = Visibility.Collapsed;
+            }
 
             // Reset all button styles to inactive
             var inactiveStyle = FindResource("TabButton") as Style;
@@ -6360,8 +6383,1391 @@ namespace ConditioningControlPanel
                     RefreshPremiumGate(LockdownGate);
                     break;
 
+                case "blinktrainer":
+                    BlinkTrainerTab.Visibility = Visibility.Visible;
+                    AnimateTabIn(BlinkTrainerTab);
+                    RefreshBlinkTrainerTab();
+                    break;
+
             }
         }
+
+        /// <summary>
+        /// Per-tab refresh hook for the Blink Trainer page. Called on every
+        /// transition into the tab. Phase C: syncs all control state from
+        /// settings + webcam status. Phase D will add live-mode detection
+        /// (consent + folders + active session) and skip the demo when live
+        /// mode takes over.
+        /// </summary>
+        private void RefreshBlinkTrainerTab()
+        {
+            // First-visit flag flip (Phase G) — suppresses the v5.9.8 flagship
+            // sticky toast on next launch. Also dismisses the toast in this
+            // session if it's currently showing (H.3): once the user finds
+            // the feature, the announcement has done its job.
+            // Isolated try/catch so a settings failure here can't keep the
+            // rest of the refresh from running.
+            try
+            {
+                if (App.Settings?.Current is { HasSeenBlinkTrainerFlagship: false } first)
+                {
+                    first.HasSeenBlinkTrainerFlagship = true;
+                    App.Settings?.Save();
+
+                    // Fade out the toast if it's still on screen, and persist
+                    // the dismissal so it can't refire even if HasSeen somehow
+                    // doesn't stick.
+                    const string flagshipKey = "blink-trainer-flagship-v5.9.8";
+                    App.Notifications?.Dismiss(flagshipKey);
+                    if (!first.DismissedNotificationKeys.Contains(flagshipKey))
+                    {
+                        first.DismissedNotificationKeys.Add(flagshipKey);
+                        App.Settings?.Save();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "HasSeenBlinkTrainerFlagship flag: failed to set");
+            }
+
+            try
+            {
+                var s = App.Settings?.Current;
+                if (s != null)
+                {
+                    // IncludeVideos toggle — set before rebuilding cards so count
+                    // summaries use the current mode.
+                    if (ToggleBlinkTrainerIncludeVideos != null)
+                        ToggleBlinkTrainerIncludeVideos.IsChecked = s.BlinkTrainerIncludeVideos;
+
+                    // Duration
+                    if (SliderBlinkTrainerDurationNew != null)
+                        SliderBlinkTrainerDurationNew.Value = s.BlinkTrainerDurationMinutes;
+                    if (TxtBlinkTrainerDurationValue != null)
+                        TxtBlinkTrainerDurationValue.Text = $"{s.BlinkTrainerDurationMinutes} min";
+
+                    // Opacity
+                    if (SliderBlinkTrainerOpacityNew != null)
+                        SliderBlinkTrainerOpacityNew.Value = s.BlinkTrainerOpacity;
+                    if (TxtBlinkTrainerOpacityValue != null)
+                        TxtBlinkTrainerOpacityValue.Text = $"{s.BlinkTrainerOpacity}%";
+
+                    // Mix-mode selection visual
+                    SetMixModeSelection(s.BlinkTrainerMixImages);
+                }
+
+                RebuildBlinkTrainerFolderCards();
+                RefreshBlinkTrainerWebcamColumn();
+                RefreshBlinkTrainerGate();
+
+                // Phase D: status row + stage mode are now state-machine driven.
+                // RefreshBlinkTrainerStatusRow paints the dot/text/action button;
+                // ApplyBlinkTrainerStageMode handles demo-vs-live transitions.
+                // ApplyBlinkTrainerStageMode also calls StartBlinkTrainerDemoLoop
+                // when it decides demo mode is appropriate.
+                RefreshBlinkTrainerStatusRow();
+                ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
+
+                // ApplyBlinkTrainerStageMode is a no-op when the mode hasn't
+                // changed (e.g. second tab visit while already in Demo). Cover
+                // the initial-show case where there's nothing to transition
+                // FROM by ensuring the demo loop is running if we're in Demo.
+                if (_currentBlinkTrainerStageMode == BlinkTrainerStageMode.Demo)
+                    StartBlinkTrainerDemoLoop();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RefreshBlinkTrainerTab failed");
+            }
+        }
+
+        #region Blink Trainer Tab — demo loop (Phase B)
+
+        // Demo loop state. The loop cycles through 4 SFW abstract gradient PNGs
+        // every 2 seconds with a 200ms cross-fade between two overlapping Image
+        // controls. This is DEMO MODE ONLY — Phase D's live-mode swap (driven by
+        // App.Webcam.OnBlink) will hard-cut, not cross-fade. Keep the two paths
+        // separate so we can tune timing independently.
+        private DispatcherTimer? _blinkTrainerDemoTimer;
+        private int _blinkTrainerDemoIndex = 0;
+        private bool _blinkTrainerDemoUsingA = true;
+        private List<BitmapImage>? _blinkTrainerDemoAssets;
+
+        /// <summary>
+        /// Lazily loads the 4 demo PNGs from pack:// URIs and shuffles them so
+        /// the play order isn't predictable. Cached in a field; the images
+        /// outlive every tab visit and are only released on app shutdown.
+        /// </summary>
+        private void EnsureBlinkTrainerDemoAssetsLoaded()
+        {
+            if (_blinkTrainerDemoAssets != null) return;
+
+            var loaded = new List<BitmapImage>(4);
+            for (int i = 1; i <= 4; i++)
+            {
+                try
+                {
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.UriSource = new Uri(
+                        $"pack://application:,,,/assets/BlinkTrainer/Demo/demo_{i:00}.png",
+                        UriKind.Absolute);
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    loaded.Add(bmp);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "BlinkTrainer demo asset demo_{Index:00}.png failed to load", i);
+                }
+            }
+
+            // Fisher-Yates shuffle so the first run isn't always demo_01 -> 02 -> ...
+            var rng = Random.Shared;
+            for (int i = loaded.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (loaded[i], loaded[j]) = (loaded[j], loaded[i]);
+            }
+
+            _blinkTrainerDemoAssets = loaded;
+        }
+
+        /// <summary>
+        /// Starts the 2s cross-fade cycle on the stage preview. Idempotent — if
+        /// already running, returns immediately. Sets the initial image
+        /// synchronously so the user never sees an empty frame.
+        /// </summary>
+        private void StartBlinkTrainerDemoLoop()
+        {
+            try
+            {
+                if (_blinkTrainerDemoTimer != null) return; // already running
+
+                EnsureBlinkTrainerDemoAssetsLoaded();
+                if (_blinkTrainerDemoAssets == null || _blinkTrainerDemoAssets.Count == 0)
+                {
+                    App.Logger?.Warning("BlinkTrainer: demo loop skipped — no demo assets loaded");
+                    return;
+                }
+
+                _blinkTrainerDemoIndex = 0;
+                _blinkTrainerDemoUsingA = true;
+                if (BlinkTrainerStageImageA != null)
+                {
+                    BlinkTrainerStageImageA.Source = _blinkTrainerDemoAssets[0];
+                    BlinkTrainerStageImageA.Opacity = 1;
+                }
+                if (BlinkTrainerStageImageB != null)
+                {
+                    BlinkTrainerStageImageB.Source = null;
+                    BlinkTrainerStageImageB.Opacity = 0;
+                }
+
+                _blinkTrainerDemoTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.0) };
+                _blinkTrainerDemoTimer.Tick += BlinkTrainerDemoTimer_Tick;
+                _blinkTrainerDemoTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "StartBlinkTrainerDemoLoop failed");
+            }
+        }
+
+        private void BlinkTrainerDemoTimer_Tick(object? sender, EventArgs e) => AdvanceBlinkTrainerDemo();
+
+        /// <summary>
+        /// Stops the demo timer and detaches its handler. Idempotent. Does NOT
+        /// clear the cached assets (they're cheap to keep around for the next
+        /// tab visit).
+        /// </summary>
+        private void StopBlinkTrainerDemoLoop()
+        {
+            try
+            {
+                if (_blinkTrainerDemoTimer == null) return;
+                _blinkTrainerDemoTimer.Stop();
+                _blinkTrainerDemoTimer.Tick -= BlinkTrainerDemoTimer_Tick;
+                _blinkTrainerDemoTimer = null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "StopBlinkTrainerDemoLoop failed");
+            }
+        }
+
+        private void AdvanceBlinkTrainerDemo()
+        {
+            if (_blinkTrainerDemoAssets == null || _blinkTrainerDemoAssets.Count == 0) return;
+            if (BlinkTrainerStageImageA == null || BlinkTrainerStageImageB == null) return;
+
+            _blinkTrainerDemoIndex = (_blinkTrainerDemoIndex + 1) % _blinkTrainerDemoAssets.Count;
+            var nextAsset = _blinkTrainerDemoAssets[_blinkTrainerDemoIndex];
+
+            Image incoming = _blinkTrainerDemoUsingA ? BlinkTrainerStageImageB : BlinkTrainerStageImageA;
+            Image outgoing = _blinkTrainerDemoUsingA ? BlinkTrainerStageImageA : BlinkTrainerStageImageB;
+
+            incoming.Source = nextAsset;
+
+            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200))
+                { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut } };
+            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(200))
+                { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseInOut } };
+
+            incoming.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+            outgoing.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+
+            _blinkTrainerDemoUsingA = !_blinkTrainerDemoUsingA;
+        }
+
+        /// <summary>
+        /// Toggles a Blink Trainer session via BlinkTrainerService. Mirrors
+        /// the legacy Lab handler's pre-warm-then-start sequence, but routes
+        /// the post-action UI refresh through Phase D's state machine.
+        /// </summary>
+        private async void BtnBlinkTrainerStartSession_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (App.BlinkTrainer == null) return;
+
+                if (App.BlinkTrainer.IsRunning)
+                {
+                    App.BlinkTrainer.Stop();
+                    // StateChanged fires inside Stop() and refreshes both UIs;
+                    // call explicitly here too for the case where Stop runs
+                    // synchronously enough that StateChanged is already done.
+                    RefreshBlinkTrainerStatusRow();
+                    ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
+                    return;
+                }
+
+                // Pre-warm webcam off the UI thread so BlinkTrainerService.Start
+                // doesn't block on capture device init. Same pattern as the
+                // legacy Lab handler (BtnBlinkTrainerStart_Click).
+                if (App.Webcam != null && !App.Webcam.IsRunning && WebcamTrackingService.IsConsentCurrent())
+                {
+                    try
+                    {
+                        await Task.Run(() =>
+                        {
+                            try { App.Webcam.Start(); }
+                            catch (Exception ex) { App.Logger?.Warning(ex, "Blink Trainer prewarm failed"); }
+                        });
+                    }
+                    catch { /* swallowed — Start() handles its own error reporting */ }
+                }
+
+                App.BlinkTrainer.Start();
+                // Defensive refresh (see Stop branch).
+                RefreshBlinkTrainerStatusRow();
+                ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Blink Trainer Start handler failed");
+            }
+        }
+
+        #endregion
+
+        #region Blink Trainer Tab — live mode + state machine (Phase D)
+
+        // ──────────────────────────────────────────────────────────────────
+        // Stage mode (Demo vs Live)
+        // ──────────────────────────────────────────────────────────────────
+
+        private enum BlinkTrainerStageMode
+        {
+            Demo,         // no consent / no folders / non-premium (Phase E)
+            LivePreview,  // ready but no session running — show real swaps in preview
+            LiveSession,  // session running — preview keeps mirroring (D.5)
+        }
+
+        private BlinkTrainerStageMode _currentBlinkTrainerStageMode = BlinkTrainerStageMode.Demo;
+        private bool _blinkTrainerLiveSubscribed;
+
+        // Live-mode pool cache. Token combines the folder list + IncludeVideos
+        // bool; rebuild whenever it changes.
+        private BlinkTrainerAssetPool? _blinkTrainerLivePool;
+        private string _blinkTrainerLivePoolToken = "";
+        private string? _blinkTrainerLiveLastPickedPath;
+
+        private BlinkTrainerStageMode DetermineBlinkTrainerStageMode()
+        {
+            // Phase E: non-premium users always see the demo loop. Their saved
+            // folder list stays in settings but doesn't render on the stage,
+            // because the demo is what's visible to them through the gate.
+            if (App.Patreon?.HasPremiumAccess != true)
+                return BlinkTrainerStageMode.Demo;
+
+            var s = App.Settings?.Current;
+            bool consented = WebcamTrackingService.IsConsentCurrent();
+            bool hasFolders = (s?.BlinkTrainerFolders?.Count ?? 0) > 0;
+            bool running = App.BlinkTrainer?.IsRunning == true;
+
+            if (running) return BlinkTrainerStageMode.LiveSession;
+            if (consented && hasFolders) return BlinkTrainerStageMode.LivePreview;
+            return BlinkTrainerStageMode.Demo;
+        }
+
+        /// <summary>
+        /// Shows / hides the premium gate based on HasPremiumAccess. Mirrors
+        /// the existing RefreshPremiumGate pattern (Bambi / Awareness / etc.)
+        /// but keeps Blink Trainer's gate self-contained so the gate logic and
+        /// the stage-mode short-circuit live together. Also disables the
+        /// gated StackPanel (H.1) so keyboard focus can't tab past the gate
+        /// into covered controls — a non-premium user shouldn't be able to
+        /// adjust the duration slider via arrow keys with no visible feedback.
+        /// </summary>
+        private void RefreshBlinkTrainerGate()
+        {
+            if (BlinkTrainerGate == null) return;
+            bool premium = App.Patreon?.HasPremiumAccess == true;
+            BlinkTrainerGate.Visibility = premium ? Visibility.Collapsed : Visibility.Visible;
+            if (BlinkTrainerGatedContent != null)
+                BlinkTrainerGatedContent.IsEnabled = premium;
+        }
+
+        private void BtnBlinkTrainerGateUnlock_Click(object sender, RoutedEventArgs e)
+        {
+            // Same path every other gated tab uses (Bambi / Haptics / etc.):
+            // open the dashboard's App Info & Data popup where the Patreon
+            // login lives.
+            ShowAppInfoPopup();
+        }
+
+        /// <summary>
+        /// Idempotent transition. Stops the loop/subscription owned by the
+        /// outgoing mode and starts the incoming one. Both LivePreview and
+        /// LiveSession use the same OnBlink subscription so transitioning
+        /// between them is a no-op.
+        /// </summary>
+        private void ApplyBlinkTrainerStageMode(BlinkTrainerStageMode mode)
+        {
+            if (mode == _currentBlinkTrainerStageMode) return;
+
+            bool wasLive = _currentBlinkTrainerStageMode != BlinkTrainerStageMode.Demo;
+            bool nowLive = mode != BlinkTrainerStageMode.Demo;
+
+            if (wasLive && !nowLive)
+            {
+                UnsubscribeBlinkTrainerLiveBlink();
+                StartBlinkTrainerDemoLoop();
+            }
+            else if (!wasLive && nowLive)
+            {
+                StopBlinkTrainerDemoLoop();
+                // Reset stage to a known state before live mode takes over so
+                // the user doesn't see a stale demo asset in their first frame.
+                ResetBlinkTrainerStageForLive();
+                SubscribeBlinkTrainerLiveBlink();
+            }
+
+            _currentBlinkTrainerStageMode = mode;
+            App.Logger?.Debug("BlinkTrainer stage mode -> {Mode}", mode);
+        }
+
+        private void ResetBlinkTrainerStageForLive()
+        {
+            try
+            {
+                // Park both images on the first live blink's "incoming" slot.
+                if (BlinkTrainerStageImageA != null)
+                {
+                    BlinkTrainerStageImageA.BeginAnimation(UIElement.OpacityProperty, null);
+                    BlinkTrainerStageImageA.Opacity = 0;
+                }
+                if (BlinkTrainerStageImageB != null)
+                {
+                    BlinkTrainerStageImageB.BeginAnimation(UIElement.OpacityProperty, null);
+                    BlinkTrainerStageImageB.Opacity = 0;
+                }
+                if (BlinkTrainerStageMedia != null)
+                {
+                    try { BlinkTrainerStageMedia.Stop(); } catch { }
+                    BlinkTrainerStageMedia.Opacity = 0;
+                }
+                _blinkTrainerLiveLastPickedPath = null;
+                _blinkTrainerDemoUsingA = true; // first live pick goes to A
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "ResetBlinkTrainerStageForLive failed"); }
+        }
+
+        private void SubscribeBlinkTrainerLiveBlink()
+        {
+            if (_blinkTrainerLiveSubscribed) return;
+            if (App.Webcam == null) return;
+            App.Webcam.OnBlink += OnBlinkTrainerStagePreviewBlink;
+            _blinkTrainerLiveSubscribed = true;
+        }
+
+        private void UnsubscribeBlinkTrainerLiveBlink()
+        {
+            if (!_blinkTrainerLiveSubscribed) return;
+            if (App.Webcam != null) App.Webcam.OnBlink -= OnBlinkTrainerStagePreviewBlink;
+            _blinkTrainerLiveSubscribed = false;
+        }
+
+        /// <summary>
+        /// Invalidate the cached live pool so the next OnBlink rebuilds. Called
+        /// on folder add/remove and IncludeVideos toggle.
+        /// </summary>
+        private void InvalidateBlinkTrainerLivePool()
+        {
+            _blinkTrainerLivePool = null;
+            _blinkTrainerLivePoolToken = "";
+        }
+
+        private BlinkTrainerAssetPool GetOrBuildBlinkTrainerLivePool()
+        {
+            var s = App.Settings?.Current;
+            var folders = s?.BlinkTrainerFolders ?? new List<string>();
+            bool includeVideos = s?.BlinkTrainerIncludeVideos == true;
+            var token = string.Join("|", folders) + "::" + includeVideos;
+            if (_blinkTrainerLivePool == null || _blinkTrainerLivePoolToken != token)
+            {
+                _blinkTrainerLivePool = BlinkTrainerAssetPool.Build(folders, includeVideos);
+                _blinkTrainerLivePoolToken = token;
+            }
+            return _blinkTrainerLivePool;
+        }
+
+        /// <summary>
+        /// Hard-cut swap on every real blink. App.Webcam.OnBlink already raises
+        /// on the UI dispatcher (per WebcamTrackingService:1642), but Dispatcher
+        /// check is cheap defense.
+        /// </summary>
+        private void OnBlinkTrainerStagePreviewBlink()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(OnBlinkTrainerStagePreviewBlink));
+                return;
+            }
+            try
+            {
+                var pool = GetOrBuildBlinkTrainerLivePool();
+                if (pool.IsEmpty) return;
+                var path = pool.PickRandom(_blinkTrainerLiveLastPickedPath);
+                if (string.IsNullOrEmpty(path)) return;
+                _blinkTrainerLiveLastPickedPath = path;
+
+                if (BlinkTrainerAssetPool.IsVideo(path))
+                    ApplyBlinkTrainerLiveVideo(path);
+                else
+                    ApplyBlinkTrainerLiveImage(path);
+            }
+            catch (Exception ex)
+            {
+                // Don't crash; just skip this swap. Demo fallback is reserved
+                // for non-configured state, not live errors.
+                App.Logger?.Warning(ex, "OnBlinkTrainerStagePreviewBlink failed");
+            }
+        }
+
+        private void ApplyBlinkTrainerLiveImage(string path)
+        {
+            if (BlinkTrainerStageImageA == null || BlinkTrainerStageImageB == null) return;
+
+            // Stop any playing video first.
+            if (BlinkTrainerStageMedia != null)
+            {
+                try { BlinkTrainerStageMedia.Stop(); } catch { }
+                BlinkTrainerStageMedia.Opacity = 0;
+            }
+
+            BitmapImage bmp;
+            try
+            {
+                bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.UriSource = new Uri(path);
+                bmp.EndInit();
+                bmp.Freeze();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BlinkTrainer live image load failed for {Path}", path);
+                return;
+            }
+
+            // Hard-cut swap — kill any in-flight animations from demo mode and
+            // pin opacities directly. Toggle which Image control is "active".
+            Image incoming = _blinkTrainerDemoUsingA ? BlinkTrainerStageImageB : BlinkTrainerStageImageA;
+            Image outgoing = _blinkTrainerDemoUsingA ? BlinkTrainerStageImageA : BlinkTrainerStageImageB;
+
+            incoming.BeginAnimation(UIElement.OpacityProperty, null);
+            outgoing.BeginAnimation(UIElement.OpacityProperty, null);
+            incoming.Source = bmp;
+            incoming.Opacity = 1;
+            outgoing.Opacity = 0;
+
+            _blinkTrainerDemoUsingA = !_blinkTrainerDemoUsingA;
+        }
+
+        private void ApplyBlinkTrainerLiveVideo(string path)
+        {
+            if (BlinkTrainerStageMedia == null) return;
+
+            // Hide both images while the video is on top.
+            if (BlinkTrainerStageImageA != null)
+            {
+                BlinkTrainerStageImageA.BeginAnimation(UIElement.OpacityProperty, null);
+                BlinkTrainerStageImageA.Opacity = 0;
+            }
+            if (BlinkTrainerStageImageB != null)
+            {
+                BlinkTrainerStageImageB.BeginAnimation(UIElement.OpacityProperty, null);
+                BlinkTrainerStageImageB.Opacity = 0;
+            }
+
+            try
+            {
+                BlinkTrainerStageMedia.Stop();
+                BlinkTrainerStageMedia.Source = new Uri(path);
+                BlinkTrainerStageMedia.Opacity = 1;
+                BlinkTrainerStageMedia.Play();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BlinkTrainer live video load failed for {Path}", path);
+                BlinkTrainerStageMedia.Opacity = 0;
+            }
+        }
+
+        private void BlinkTrainerStageMedia_MediaEnded(object sender, RoutedEventArgs e)
+        {
+            // Loop the preview video until the next blink swaps it.
+            try
+            {
+                if (BlinkTrainerStageMedia == null) return;
+                BlinkTrainerStageMedia.Position = TimeSpan.Zero;
+                BlinkTrainerStageMedia.Play();
+            }
+            catch { }
+        }
+
+        // ──────────────────────────────────────────────────────────────────
+        // Status row state machine
+        // ──────────────────────────────────────────────────────────────────
+
+        private enum BlinkTrainerStatusState
+        {
+            IdleReady,
+            Running,
+            NeedsConsent,
+            NeedsFolders,
+            NeedsCalibration,
+            Error,
+        }
+
+        private BlinkTrainerStatusState _currentBlinkTrainerStatusState = BlinkTrainerStatusState.IdleReady;
+        private RoutedEventHandler? _blinkTrainerStatusActionHandler;
+        private Storyboard? _blinkTrainerStatusDotPulseClock;
+
+        private BlinkTrainerStatusState DetermineBlinkTrainerStatusState()
+        {
+            if (App.BlinkTrainer?.IsRunning == true)
+                return BlinkTrainerStatusState.Running;
+
+            // Service exposes LastError as a non-empty string after a failure.
+            if (!string.IsNullOrEmpty(App.BlinkTrainer?.LastError))
+                return BlinkTrainerStatusState.Error;
+
+            if (!WebcamTrackingService.IsConsentCurrent())
+                return BlinkTrainerStatusState.NeedsConsent;
+
+            var folderCount = App.Settings?.Current?.BlinkTrainerFolders?.Count ?? 0;
+            if (folderCount == 0)
+                return BlinkTrainerStatusState.NeedsFolders;
+
+            if (IsMultiMonitorEnvironment() && !HasUsableCalibration())
+                return BlinkTrainerStatusState.NeedsCalibration;
+
+            return BlinkTrainerStatusState.IdleReady;
+        }
+
+        private static bool IsMultiMonitorEnvironment()
+        {
+            try
+            {
+                var screens = System.Windows.Forms.Screen.AllScreens;
+                return screens != null && screens.Length > 1;
+            }
+            catch { return false; }
+        }
+
+        private static bool HasUsableCalibration()
+        {
+            var cal = App.Webcam?.Calibration;
+            if (cal == null) return false;
+            // Pre-multimonitor saves had empty DeviceName — see the existing
+            // recalibrate-multimonitor sticky toast at MainWindow.xaml.cs:1690.
+            if (cal.MonitorBounds == null) return false;
+            return !string.IsNullOrEmpty(cal.MonitorBounds.DeviceName);
+        }
+
+        private void RefreshBlinkTrainerStatusRow()
+        {
+            if (BlinkTrainerStatusDot == null || BlinkTrainerStatusText == null) return;
+
+            var state = DetermineBlinkTrainerStatusState();
+            if (state != _currentBlinkTrainerStatusState)
+            {
+                App.Logger?.Debug("BlinkTrainer status state -> {State}", state);
+                _currentBlinkTrainerStatusState = state;
+            }
+            ApplyBlinkTrainerStatusState(state);
+        }
+
+        private void ApplyBlinkTrainerStatusState(BlinkTrainerStatusState state)
+        {
+            var pinkBrush = FindResource("PinkBrush") as Brush ?? Brushes.HotPink;
+            Brush amber = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xD0, 0x80));
+            Brush green = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80));
+            Brush red = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xEF, 0x44, 0x44));
+            amber.Freeze();
+            green.Freeze();
+            red.Freeze();
+
+            // Stop any prior animation explicitly so dot opacity isn't stuck
+            // mid-pulse when leaving IdleReady.
+            BlinkTrainerStatusDot.BeginAnimation(UIElement.OpacityProperty, null);
+            BlinkTrainerStatusDot.Opacity = 1;
+            StopBlinkTrainerStatusDotPulse();
+
+            string startLabel = Localization.Loc.Get("blink_trainer_start_session");
+            string stopLabel = Localization.Loc.Get("blink_trainer_stop_session");
+
+            switch (state)
+            {
+                case BlinkTrainerStatusState.IdleReady:
+                    BlinkTrainerStatusDot.Fill = pinkBrush;
+                    BlinkTrainerStatusText.Text = Localization.Loc.Get("blink_trainer_status_ready");
+                    BlinkTrainerStatusText.Foreground = FindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
+                    WireBlinkTrainerStatusAction(null, null);
+                    SetStartButtonState(enabled: true, content: startLabel);
+                    StartBlinkTrainerStatusDotPulse();
+                    break;
+
+                case BlinkTrainerStatusState.Running:
+                    BlinkTrainerStatusDot.Fill = green;
+                    // Initial text — BlinkTrainerTick takes over each second.
+                    var rem = App.BlinkTrainer?.Remaining ?? TimeSpan.Zero;
+                    BlinkTrainerStatusText.Text = Localization.Loc.GetF("blink_trainer_status_running", $"{rem:mm\\:ss}");
+                    BlinkTrainerStatusText.Foreground = FindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
+                    WireBlinkTrainerStatusAction(null, null);
+                    SetStartButtonState(enabled: true, content: stopLabel);
+                    break;
+
+                case BlinkTrainerStatusState.NeedsConsent:
+                    BlinkTrainerStatusDot.Fill = amber;
+                    BlinkTrainerStatusText.Text = Localization.Loc.Get("blink_trainer_status_needs_consent");
+                    BlinkTrainerStatusText.Foreground = FindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
+                    WireBlinkTrainerStatusAction(
+                        Localization.Loc.Get("blink_trainer_consent_grant"),
+                        BlinkTrainerStatusAction_GrantConsent);
+                    SetStartButtonState(enabled: false, content: startLabel);
+                    break;
+
+                case BlinkTrainerStatusState.NeedsFolders:
+                    BlinkTrainerStatusDot.Fill = amber;
+                    BlinkTrainerStatusText.Text = Localization.Loc.Get("blink_trainer_status_needs_folders");
+                    BlinkTrainerStatusText.Foreground = FindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
+                    WireBlinkTrainerStatusAction(
+                        Localization.Loc.Get("blink_trainer_add_folder"),
+                        BlinkTrainerStatusAction_AddFolder);
+                    SetStartButtonState(enabled: false, content: startLabel);
+                    break;
+
+                case BlinkTrainerStatusState.NeedsCalibration:
+                    BlinkTrainerStatusDot.Fill = amber;
+                    BlinkTrainerStatusText.Text = Localization.Loc.Get("blink_trainer_status_needs_calibration");
+                    BlinkTrainerStatusText.Foreground = FindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
+                    WireBlinkTrainerStatusAction(
+                        Localization.Loc.Get("blink_trainer_calibration_btn"),
+                        BlinkTrainerStatusAction_Calibrate);
+                    // Calibration is recommended for multi-monitor only; let
+                    // the user start without it.
+                    SetStartButtonState(enabled: true, content: startLabel);
+                    break;
+
+                case BlinkTrainerStatusState.Error:
+                    BlinkTrainerStatusDot.Fill = red;
+                    // Service-supplied error text — passed through as-is. Service
+                    // LastError strings are not currently localized; if/when they
+                    // are, this branch picks up the loc'd value transparently.
+                    BlinkTrainerStatusText.Text = App.BlinkTrainer?.LastError ?? "";
+                    BlinkTrainerStatusText.Foreground = red;
+                    WireBlinkTrainerStatusAction(null, null);
+                    SetStartButtonState(enabled: true, content: startLabel);
+                    break;
+            }
+        }
+
+        private void SetStartButtonState(bool enabled, string content)
+        {
+            if (BtnBlinkTrainerStartSession == null) return;
+            BtnBlinkTrainerStartSession.IsEnabled = enabled;
+            BtnBlinkTrainerStartSession.Content = content;
+        }
+
+        /// <summary>
+        /// Single point of truth for the status action button's delegate. Unhooks
+        /// any prior handler before wiring the new one, so handlers can't accumulate
+        /// across state transitions.
+        /// </summary>
+        private void WireBlinkTrainerStatusAction(string? content, RoutedEventHandler? handler)
+        {
+            if (BlinkTrainerStatusAction == null) return;
+
+            if (_blinkTrainerStatusActionHandler != null)
+                BlinkTrainerStatusAction.Click -= _blinkTrainerStatusActionHandler;
+            _blinkTrainerStatusActionHandler = handler;
+
+            if (content != null && handler != null)
+            {
+                BlinkTrainerStatusAction.Content = content;
+                BlinkTrainerStatusAction.Click += handler;
+                BlinkTrainerStatusAction.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                BlinkTrainerStatusAction.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void StartBlinkTrainerStatusDotPulse()
+        {
+            try
+            {
+                if (BlinkTrainerStatusDot == null) return;
+                var sb = BlinkTrainerStatusDot.Resources["BlinkTrainerStatusDotPulse"] as Storyboard;
+                if (sb == null) return;
+                _blinkTrainerStatusDotPulseClock = sb;
+                sb.Begin(BlinkTrainerStatusDot, true);
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "StartBlinkTrainerStatusDotPulse failed"); }
+        }
+
+        private void StopBlinkTrainerStatusDotPulse()
+        {
+            try
+            {
+                if (_blinkTrainerStatusDotPulseClock != null && BlinkTrainerStatusDot != null)
+                    _blinkTrainerStatusDotPulseClock.Stop(BlinkTrainerStatusDot);
+                _blinkTrainerStatusDotPulseClock = null;
+            }
+            catch { }
+        }
+
+        // Status action button handlers — routed via WireBlinkTrainerStatusAction
+        // so only the current state's handler is wired at any time.
+
+        private void BlinkTrainerStatusAction_GrantConsent(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dlg = new WebcamConsentDialog { Owner = this };
+                dlg.ShowDialog();
+                RefreshBlinkTrainerWebcamColumn();
+                RefreshBlinkTrainerStatusRow();
+                ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BlinkTrainerStatusAction_GrantConsent failed"); }
+        }
+
+        private void BlinkTrainerStatusAction_AddFolder(object sender, RoutedEventArgs e)
+        {
+            // Reuse the same flow as the Asset Packs column's "+ Add folder" so
+            // there's exactly one folder-pick path.
+            BtnBlinkTrainerAddFolderCard_Click(sender, e);
+            InvalidateBlinkTrainerLivePool();
+            RefreshBlinkTrainerStatusRow();
+            ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
+        }
+
+        private void BlinkTrainerStatusAction_Calibrate(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                WebcamCalibrationWindow.ShowDialogWithRecalibrate(this);
+                RefreshBlinkTrainerWebcamColumn();
+                RefreshBlinkTrainerStatusRow();
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BlinkTrainerStatusAction_Calibrate failed"); }
+        }
+
+        #endregion
+
+        #region Blink Trainer Tab — controls (Phase C)
+
+        // ──────────────────────────────────────────────────────────────────
+        // Column 1: Asset Packs
+        // ──────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Rebuilds the folder card stack from AppSettings.Current.BlinkTrainerFolders.
+        /// Each card shows the folder's display name, an image/video count summary,
+        /// and a × remove button. Card hover state is handled inline via a local
+        /// Style trigger (no separate XAML resource).
+        /// </summary>
+        private void RebuildBlinkTrainerFolderCards()
+        {
+            try
+            {
+                if (BlinkTrainerFolderCardsHost == null) return;
+                BlinkTrainerFolderCardsHost.Children.Clear();
+
+                var settings = App.Settings?.Current;
+                if (settings?.BlinkTrainerFolders == null) return;
+
+                bool includeVideos = settings.BlinkTrainerIncludeVideos;
+                foreach (var folder in settings.BlinkTrainerFolders.ToList())
+                {
+                    BlinkTrainerFolderCardsHost.Children.Add(BuildBlinkTrainerFolderCard(folder, includeVideos));
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RebuildBlinkTrainerFolderCards failed");
+            }
+        }
+
+        private Border BuildBlinkTrainerFolderCard(string folder, bool includeVideos)
+        {
+            // Card border with hover-state border-brush swap via a local Style.
+            // Background brush stays #11000000; the only thing that changes is
+            // the border color (0.3 pink at rest, full pink on hover).
+            var pinkColorObj = TryFindResource("PinkColor");
+            var pinkColor = pinkColorObj is System.Windows.Media.Color c
+                ? c
+                : System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4);
+            var restBorder = new SolidColorBrush(pinkColor) { Opacity = 0.3 };
+            restBorder.Freeze();
+
+            var style = new Style(typeof(Border));
+            var hoverTrigger = new Trigger { Property = Border.IsMouseOverProperty, Value = true };
+            hoverTrigger.Setters.Add(new Setter(
+                Border.BorderBrushProperty,
+                FindResource("PinkBrush")));
+            style.Triggers.Add(hoverTrigger);
+
+            var card = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x11, 0, 0, 0)),
+                BorderBrush = restBorder,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(10, 8, 10, 8),
+                Margin = new Thickness(0, 0, 0, 8),
+                Style = style,
+            };
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var info = new StackPanel();
+            Grid.SetColumn(info, 0);
+
+            // Display name: folder basename, falling back to parent if blank
+            // (e.g. trailing-slash paths). Tooltip carries the full path.
+            string displayName = "";
+            try
+            {
+                displayName = System.IO.Path.GetFileName(folder);
+                if (string.IsNullOrWhiteSpace(displayName))
+                    displayName = new System.IO.DirectoryInfo(folder).Name;
+            }
+            catch { displayName = folder; }
+            if (string.IsNullOrWhiteSpace(displayName)) displayName = folder;
+
+            info.Children.Add(new TextBlock
+            {
+                Text = displayName,
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.Medium,
+                FontSize = 12,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                ToolTip = folder,
+            });
+
+            // Count summary via AssetPack.FromFolder. Null pack = invalid/empty.
+            var pack = Lab.GazeMinigame.AssetPack.FromFolder(folder);
+            string countLine;
+            Brush countBrush = FindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
+            if (pack == null)
+            {
+                countLine = Localization.Loc.Get("blink_trainer_folder_empty_or_invalid");
+                countBrush = FindResource("TextDimBrush") as Brush ?? countBrush;
+            }
+            else
+            {
+                int gifCount = pack.ImagePaths.Count(p =>
+                    System.IO.Path.GetExtension(p).Equals(".gif", StringComparison.OrdinalIgnoreCase));
+                int nonGifImages = pack.ImagePaths.Count - gifCount;
+
+                if (includeVideos)
+                {
+                    countLine = $"{pack.ImagePaths.Count} images, {pack.VideoPaths.Count} videos";
+                }
+                else
+                {
+                    countLine = gifCount > 0
+                        ? $"{nonGifImages} images, {gifCount} GIFs"
+                        : $"{pack.ImagePaths.Count} images";
+                }
+            }
+            info.Children.Add(new TextBlock
+            {
+                Text = countLine,
+                Foreground = countBrush,
+                FontSize = 11,
+                Margin = new Thickness(0, 2, 0, 0),
+            });
+
+            grid.Children.Add(info);
+
+            // × remove button. Tag carries the folder path so the handler can
+            // disambiguate when multiple cards live in the same StackPanel.
+            var removeBtn = new Button
+            {
+                Content = "×",
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Foreground = FindResource("TextMutedBrush") as Brush ?? Brushes.Gray,
+                Padding = new Thickness(6, 0, 6, 0),
+                FontSize = 16,
+                Cursor = Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Top,
+                Tag = folder,
+            };
+            removeBtn.Click += BtnBlinkTrainerRemoveFolderCard_Click;
+            Grid.SetColumn(removeBtn, 1);
+            grid.Children.Add(removeBtn);
+
+            card.Child = grid;
+            return card;
+        }
+
+        private void BtnBlinkTrainerAddFolderCard_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                using var dlg = new System.Windows.Forms.FolderBrowserDialog
+                {
+                    Description = "Pick a folder of images / GIFs for Blink Trainer",
+                };
+                if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+
+                var folder = dlg.SelectedPath;
+                if (string.IsNullOrWhiteSpace(folder)) return;
+
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                if (settings.BlinkTrainerFolders.Any(f => string.Equals(f, folder, StringComparison.OrdinalIgnoreCase)))
+                    return;
+
+                settings.BlinkTrainerFolders.Add(folder);
+                App.Settings?.Save();
+                RebuildBlinkTrainerFolderCards();
+                InvalidateBlinkTrainerLivePool();
+                RefreshBlinkTrainerStatusRow();
+                ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BtnBlinkTrainerAddFolderCard_Click failed");
+            }
+        }
+
+        private void BtnBlinkTrainerRemoveFolderCard_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is not Button btn) return;
+                if (btn.Tag is not string folder) return;
+
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                settings.BlinkTrainerFolders.RemoveAll(f =>
+                    string.Equals(f, folder, StringComparison.OrdinalIgnoreCase));
+                App.Settings?.Save();
+                RebuildBlinkTrainerFolderCards();
+                InvalidateBlinkTrainerLivePool();
+                RefreshBlinkTrainerStatusRow();
+                ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BtnBlinkTrainerRemoveFolderCard_Click failed");
+            }
+        }
+
+        private void ToggleBlinkTrainerIncludeVideos_Changed(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (ToggleBlinkTrainerIncludeVideos == null) return;
+                var settings = App.Settings?.Current;
+                if (settings == null) return;
+
+                bool newValue = ToggleBlinkTrainerIncludeVideos.IsChecked == true;
+                if (settings.BlinkTrainerIncludeVideos == newValue) return;
+                settings.BlinkTrainerIncludeVideos = newValue;
+                App.Settings?.Save();
+
+                // Rebuild cards so count summaries reflect the new mode, and
+                // invalidate the live pool so the next blink picks from the
+                // updated mix.
+                RebuildBlinkTrainerFolderCards();
+                InvalidateBlinkTrainerLivePool();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "ToggleBlinkTrainerIncludeVideos_Changed failed");
+            }
+        }
+
+        // ──────────────────────────────────────────────────────────────────
+        // Column 2: Session
+        // ──────────────────────────────────────────────────────────────────
+
+        private void SliderBlinkTrainerDurationNew_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                int v = (int)Math.Round(e.NewValue);
+                if (App.Settings?.Current is { } s) s.BlinkTrainerDurationMinutes = v;
+                if (TxtBlinkTrainerDurationValue != null)
+                    TxtBlinkTrainerDurationValue.Text = $"{v} min";
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "SliderBlinkTrainerDurationNew_Changed failed"); }
+        }
+
+        private void SliderBlinkTrainerOpacityNew_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            try
+            {
+                int v = (int)Math.Round(e.NewValue);
+                if (App.Settings?.Current is { } s) s.BlinkTrainerOpacity = v;
+                if (TxtBlinkTrainerOpacityValue != null)
+                    TxtBlinkTrainerOpacityValue.Text = $"{v}%";
+                ApplyBlinkTrainerOpacityFillOpacity(v);
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "SliderBlinkTrainerOpacityNew_Changed failed"); }
+        }
+
+        // ── H.7: reactive opacity slider fill ──
+        // The filled portion of the BlinkTrainerGradientSlider template is a
+        // RepeatButton inside the Track named "PART_Track". On the slider's
+        // Loaded event we walk the template once to cache that RepeatButton,
+        // then ValueChanged sets its Opacity to map 1-100 -> 0.109-1.0. The
+        // shared style means the Duration slider has the same RepeatButton,
+        // but only the Opacity slider's Loaded handler caches a reference, so
+        // only its fill fades.
+        private RepeatButton? _blinkTrainerOpacityFillButton;
+
+        private void SliderBlinkTrainerOpacityNew_Loaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is not Slider slider) return;
+                if (slider.Template?.FindName("PART_Track", slider) is not Track track) return;
+                _blinkTrainerOpacityFillButton = track.DecreaseRepeatButton;
+                ApplyBlinkTrainerOpacityFillOpacity((int)Math.Round(slider.Value));
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "SliderBlinkTrainerOpacityNew_Loaded failed"); }
+        }
+
+        private void ApplyBlinkTrainerOpacityFillOpacity(int sliderValue)
+        {
+            if (_blinkTrainerOpacityFillButton == null) return;
+            // Linear map 1-100 -> ~0.109-1.0. Slope 0.9 over 99-unit range,
+            // offset 0.1 so v=1 is still faintly visible.
+            int v = Math.Clamp(sliderValue, 1, 100);
+            _blinkTrainerOpacityFillButton.Opacity = v / 100.0 * 0.9 + 0.1;
+        }
+
+        // ── H.6: reactive value-label scale on slider drag ──
+        // PreviewMouseLeftButtonDown fires on press anywhere in the slider area
+        // (track or thumb). LostMouseCapture catches the release-outside-slider
+        // case where MouseLeftButtonUp wouldn't fire on the slider itself.
+
+        private void BlinkTrainerSlider_DragStart(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Slider s) AnimateBlinkTrainerSliderLabel(s, scaleTo: 1.15, durationMs: 100, easeOut: true);
+        }
+
+        private void BlinkTrainerSlider_DragEnd(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Slider s) AnimateBlinkTrainerSliderLabel(s, scaleTo: 1.0, durationMs: 150, easeOut: false);
+        }
+
+        private void BlinkTrainerSlider_LostCapture(object sender, MouseEventArgs e)
+        {
+            if (sender is Slider s) AnimateBlinkTrainerSliderLabel(s, scaleTo: 1.0, durationMs: 150, easeOut: false);
+        }
+
+        private void AnimateBlinkTrainerSliderLabel(Slider slider, double scaleTo, int durationMs, bool easeOut)
+        {
+            TextBlock? label = null;
+            if (slider == SliderBlinkTrainerDurationNew) label = TxtBlinkTrainerDurationValue;
+            else if (slider == SliderBlinkTrainerOpacityNew) label = TxtBlinkTrainerOpacityValue;
+            if (label?.RenderTransform is not ScaleTransform st) return;
+
+            IEasingFunction ease = easeOut
+                ? new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.6 }
+                : new QuadraticEase { EasingMode = EasingMode.EaseOut };
+            var anim = new DoubleAnimation(scaleTo, TimeSpan.FromMilliseconds(durationMs))
+            {
+                EasingFunction = ease,
+            };
+            st.BeginAnimation(ScaleTransform.ScaleXProperty, anim);
+            st.BeginAnimation(ScaleTransform.ScaleYProperty, anim);
+        }
+
+        private void BlinkTrainerMixOptionSame_Click(object sender, MouseButtonEventArgs e) => SetMixMode(false);
+        private void BlinkTrainerMixOptionMix_Click(object sender, MouseButtonEventArgs e) => SetMixMode(true);
+
+        private void SetMixMode(bool isMix)
+        {
+            try
+            {
+                if (App.Settings?.Current is { } s)
+                {
+                    if (s.BlinkTrainerMixImages != isMix)
+                    {
+                        s.BlinkTrainerMixImages = isMix;
+                        App.Settings?.Save();
+                    }
+                }
+                SetMixModeSelection(isMix);
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "SetMixMode failed"); }
+        }
+
+        /// <summary>
+        /// Paints the selected mix-mode option border with full pink + a pink
+        /// drop-shadow glow, and clears the unselected one. Called on tab show
+        /// and on every option click.
+        /// </summary>
+        private void SetMixModeSelection(bool isMix)
+        {
+            if (BlinkTrainerMixOptionSame == null || BlinkTrainerMixOptionMix == null) return;
+
+            var pinkBrush = FindResource("PinkBrush") as Brush ?? Brushes.HotPink;
+            var pinkColorObj = TryFindResource("PinkColor");
+            var pinkColor = pinkColorObj is System.Windows.Media.Color c
+                ? c
+                : System.Windows.Media.Color.FromRgb(0xFF, 0x69, 0xB4);
+
+            void Apply(Border b, bool selected)
+            {
+                if (selected)
+                {
+                    b.BorderBrush = pinkBrush;
+                    b.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                    {
+                        Color = pinkColor,
+                        BlurRadius = 16,
+                        ShadowDepth = 0,
+                        Opacity = 0.6,
+                    };
+                }
+                else
+                {
+                    b.BorderBrush = Brushes.Transparent;
+                    b.Effect = null;
+                }
+            }
+            Apply(BlinkTrainerMixOptionSame, !isMix);
+            Apply(BlinkTrainerMixOptionMix, isMix);
+        }
+
+        // ──────────────────────────────────────────────────────────────────
+        // Column 3: Webcam
+        // ──────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Refreshes every Webcam-column control: device list, consent
+        /// card tint + button text, calibration status line. Called on tab
+        /// show and after any dialog return (consent / calibrate / quick recal).
+        /// </summary>
+        private void RefreshBlinkTrainerWebcamColumn()
+        {
+            try
+            {
+                // Shared populator (Cleanup 1) — also refreshes the Lab combo.
+                PopulateWebcamDeviceCombos();
+
+                // Consent
+                bool consented = WebcamTrackingService.IsConsentCurrent();
+                if (BlinkTrainerConsentCard != null)
+                {
+                    if (consented)
+                    {
+                        // Green-tinted (granted)
+                        BlinkTrainerConsentCard.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x1A, 0x4A, 0xDE, 0x80));
+                        BlinkTrainerConsentCard.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80));
+                    }
+                    else
+                    {
+                        // Amber-tinted (required)
+                        BlinkTrainerConsentCard.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x1A, 0xFF, 0xD0, 0x80));
+                        BlinkTrainerConsentCard.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xD0, 0x80));
+                    }
+                }
+                if (BlinkTrainerConsentStatus != null)
+                {
+                    BlinkTrainerConsentStatus.Text = Localization.Loc.Get(
+                        consented ? "blink_trainer_consent_granted" : "blink_trainer_consent_required");
+                }
+                if (BtnBlinkTrainerManageConsent != null)
+                {
+                    BtnBlinkTrainerManageConsent.Content = Localization.Loc.Get(
+                        consented ? "blink_trainer_consent_manage" : "blink_trainer_consent_grant");
+                }
+
+                // Calibration status line. All three branches are now loc'd;
+                // the "Calibrated for {device}" line uses GetF with the device
+                // name passed as the {0} substitution (still system-provided
+                // text, but the surrounding wording is translatable).
+                if (BlinkTrainerCalibrationStatus != null)
+                {
+                    var cal = App.Webcam?.Calibration;
+                    if (cal == null)
+                    {
+                        BlinkTrainerCalibrationStatus.Text = Localization.Loc.Get("blink_trainer_calibration_none");
+                    }
+                    else if (cal.MonitorBounds != null && !string.IsNullOrEmpty(cal.MonitorBounds.DeviceName))
+                    {
+                        BlinkTrainerCalibrationStatus.Text = Localization.Loc.GetF(
+                            "blink_trainer_calibration_calibrated_format", cal.MonitorBounds.DeviceName);
+                    }
+                    else
+                    {
+                        // Pre-multimonitor calibration data — flagged by the
+                        // existing recalibrate-multimonitor sticky toast.
+                        BlinkTrainerCalibrationStatus.Text = Localization.Loc.Get("blink_trainer_calibration_outdated");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RefreshBlinkTrainerWebcamColumn failed");
+            }
+        }
+
+        private void CmbBlinkTrainerWebcamDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_webcamDevicePopulating) return;
+            if (CmbBlinkTrainerWebcamDevice?.SelectedItem is not ComboBoxItem item) return;
+            if (item.Tag is not int idx || idx < 0) return;
+
+            if (App.Settings?.Current is { } s)
+            {
+                if (s.WebcamDeviceIndex == idx) return;
+                s.WebcamDeviceIndex = idx;
+                s.WebcamDeviceName = item.Content?.ToString() ?? "";
+                App.Settings?.Save();
+            }
+
+            // Cross-tab sync (Cleanup 1) — propagate to the Lab combo.
+            SyncWebcamComboSelections(idx);
+        }
+
+        private void BtnBlinkTrainerWebcamRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            try { PopulateWebcamDeviceCombos(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BtnBlinkTrainerWebcamRefresh_Click failed"); }
+        }
+
+        private void BtnBlinkTrainerManageConsent_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Same dialog in both directions — non-consenting users go through
+                // the grant gates; already-consenting users see review-only copy.
+                // Closing without explicit Enable leaves WebcamConsentGiven alone.
+                var dlg = new WebcamConsentDialog { Owner = this };
+                dlg.ShowDialog();
+                RefreshBlinkTrainerWebcamColumn();
+                RefreshBlinkTrainerStatusRow();
+                ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BtnBlinkTrainerManageConsent_Click failed");
+            }
+        }
+
+        private void BtnBlinkTrainerCalibrate_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                WebcamCalibrationWindow.ShowDialogWithRecalibrate(this);
+                RefreshBlinkTrainerWebcamColumn();
+                RefreshBlinkTrainerStatusRow();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BtnBlinkTrainerCalibrate_Click failed");
+            }
+        }
+
+        private void BtnBlinkTrainerQuickRecal_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var svc = App.Webcam;
+                if (svc == null) return;
+                if (!WebcamTrackingService.IsConsentCurrent())
+                {
+                    var consent = new WebcamConsentDialog { Owner = this };
+                    if (consent.ShowDialog() != true || !consent.ConsentGiven)
+                    {
+                        RefreshBlinkTrainerWebcamColumn();
+                        return;
+                    }
+                }
+                if (svc.Calibration == null)
+                {
+                    System.Windows.MessageBox.Show(this,
+                        Localization.Loc.Get("blink_trainer_quick_recal_needs_full_body"),
+                        Localization.Loc.Get("blink_trainer_quick_recal_needs_full_title"),
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+
+                bool startedHere = false;
+                if (!svc.IsRunning)
+                {
+                    if (svc.Start()) startedHere = true;
+                }
+
+                var recalDlg = new WebcamQuickRecalWindow { Owner = this };
+                App.ApplyCalibrationScreenPlacement(recalDlg);
+                recalDlg.ShowDialog();
+
+                if (startedHere) svc.Stop();
+                RefreshBlinkTrainerWebcamColumn();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BtnBlinkTrainerQuickRecal_Click failed");
+            }
+        }
+
+        #endregion
 
         #region Lab
 
@@ -7989,6 +9395,15 @@ namespace ConditioningControlPanel
             RefreshPremiumGate(RemoteControlGate);
             RefreshPremiumGate(AwarenessGate);
             RefreshPremiumGate(LockdownGate);
+            // Blink Trainer uses its own gate refresh (also re-resolves stage
+            // mode + status state since premium loss/gain flips the resolver
+            // short-circuit and may swap demo↔live).
+            RefreshBlinkTrainerGate();
+            if (BlinkTrainerTab != null)
+            {
+                RefreshBlinkTrainerStatusRow();
+                ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
+            }
 
             // Update AI connection status
             if (TxtAiStatus != null)
@@ -14687,7 +16102,11 @@ namespace ConditioningControlPanel
             SetHelpContent(HelpBtnPacks, "ContentPacks");
             SetHelpContent(HelpBtnAssetBrowser, "AssetBrowser");
 
-            // Lab tab
+            // Lab tab.
+            // Note: BlinkTrainer was promoted from this cluster to Exclusives
+            // in v5.9.8 — see Exclusives subsection below. The Lab stub itself
+            // doesn't get a ? button (it's a navigation signpost, not a feature
+            // surface).
             SetHelpContent(HelpBtnQuiz, "Quiz");
             SetHelpContent(HelpBtnWebcamGames, "WebcamGames");
             SetHelpContent(HelpBtnGazeMinigame, "GazeMinigame");
@@ -14697,7 +16116,9 @@ namespace ConditioningControlPanel
             SetHelpContent(HelpBtnRemoteControl, "RemoteControl");
             SetHelpContent(HelpBtnGetBackToMe, "GetBackToMe");
 
-            // Side panels
+            // Side panels + Exclusives features (Awareness / Haptics / BlinkTrainer
+            // share this cluster — they're dedicated full-tab Exclusives surfaces
+            // that happen to live alongside dashboard side-panel help entries).
             SetHelpContent(HelpBtnAchievements, "Achievements");
             SetHelpContent(HelpBtnCompanions, "Companions");
             SetHelpContent(HelpBtnPrompts, "CommunityPrompts");
@@ -14707,6 +16128,7 @@ namespace ConditioningControlPanel
             SetHelpContent(HelpBtnAiChat, "AiChat");
             SetHelpContent(HelpBtnAwareness, "WindowAwareness");
             SetHelpContent(HelpBtnHaptics, "Haptics");
+            SetHelpContent(HelpBtnBlinkTrainer, "BlinkTrainer");
             SetHelpContent(HelpBtnVideoHapticSync, "VideoHapticSync");
             SetHelpContent(HelpBtnDiscordProfile, "DiscordProfile");
             SetHelpContent(HelpBtnLeaderboard, "Leaderboard");
@@ -26215,6 +27637,14 @@ namespace ConditioningControlPanel
                 // Stop bouncing text when minimizing to tray (user expects app to be "closed")
                 App.BouncingText?.Stop();
             }
+
+            // Make sure the Blink Trainer demo timer + live subscription are
+            // released. Idempotent; also called from the tab hide-all path,
+            // so this is just a safety net for the close-window-while-tab-
+            // visible case.
+            try { StopBlinkTrainerDemoLoop(); } catch { }
+            try { UnsubscribeBlinkTrainerLiveBlink(); } catch { }
+
             base.OnClosing(e);
         }
 

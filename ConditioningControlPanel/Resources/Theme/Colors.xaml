@@ -74,5 +74,8 @@
     <Color x:Key="NeonPurple">#FFB47BFF</Color>
     <Color x:Key="NeonPurpleSoft">#FFD4BCFF</Color>
     <Color x:Key="NeonPurpleTransparent20">#33B47BFF</Color>
+    <!-- Naming-parity alias with PinkColor — gradient stops that take a Color
+         (not a Brush) want a "*Color" key. Same value as NeonPurple. -->
+    <Color x:Key="NeonPurpleColor">#FFB47BFF</Color>
 
 </ResourceDictionary>

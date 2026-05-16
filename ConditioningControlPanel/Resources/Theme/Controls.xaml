@@ -142,6 +142,9 @@
         </Setter>
     </Style>
 
+    <!-- House pattern: iOS-style toggle is a styled CheckBox, not a ToggleButton.
+         Used across every Features/* UserControl, Bambi Takeover, Focus Gaze, and
+         the Blink Trainer page. If you need a toggle: <CheckBox Style="{StaticResource ToggleStyle}"/>. -->
     <Style x:Key="ToggleStyle" TargetType="CheckBox">
         <Setter Property="Template">
             <Setter.Value>
