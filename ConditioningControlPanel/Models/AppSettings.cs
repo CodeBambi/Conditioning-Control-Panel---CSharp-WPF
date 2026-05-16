@@ -1118,6 +1118,138 @@ namespace ConditioningControlPanel.Models
             set { _dualMonitorEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _restrictGazeContentToCalibratedScreen = true;
+        /// <summary>
+        /// When enabled (and a webcam calibration exists), all gaze-reactive
+        /// content (Bubble Pop, Blink Trainer, Flash gaze-pop targets, etc.)
+        /// is pinned to the monitor calibration ran on, overriding
+        /// <see cref="DualMonitorEnabled"/>. Prevents the multi-monitor
+        /// case where content spawns on a screen the gaze pipeline can't
+        /// project to. No-op when no calibration is loaded.
+        /// </summary>
+        public bool RestrictGazeContentToCalibratedScreen
+        {
+            get => _restrictGazeContentToCalibratedScreen;
+            set { _restrictGazeContentToCalibratedScreen = value; OnPropertyChanged(); }
+        }
+
+        // ---- Gaze-reactive flash behavior (Phase 3) -----------------------
+        // FlashGazePopEnabled gates the gaze-pop pipeline (dwell threshold
+        // triggers a click). FlashGazeLingerEnabled gates the stare-linger
+        // behavior (dwelling extends the flash's lifetime via BoostLifetime).
+        // Both are independent; (Pop=OFF, Linger=ON) is a valid combination
+        // and produces "stare to keep the flash alive but never auto-dismiss"
+        // semantics. GazeFocusService branches the two paths so a disabled
+        // pop flag never suppresses linger, and an enabled linger never
+        // forces a pop.
+
+        private bool _flashGazePopEnabled = true;
+        public bool FlashGazePopEnabled
+        {
+            get => _flashGazePopEnabled;
+            set { _flashGazePopEnabled = value; OnPropertyChanged(); }
+        }
+
+        private bool _flashGazeLingerEnabled = true;
+        public bool FlashGazeLingerEnabled
+        {
+            get => _flashGazeLingerEnabled;
+            set { _flashGazeLingerEnabled = value; OnPropertyChanged(); }
+        }
+
+        // How far out to push a flash window's death time on each linger
+        // boost. CancelAfter is replaced each call, so this effectively
+        // pins "alive for N more ms from now" while gaze is on the window.
+        private int _flashGazeLingerExtensionMs = 1500;
+        public int FlashGazeLingerExtensionMs
+        {
+            get => _flashGazeLingerExtensionMs;
+            set { _flashGazeLingerExtensionMs = Math.Clamp(value, 250, 10000); OnPropertyChanged(); }
+        }
+
+        // One-shot migration flag. Pre-3.4 builds had FlashClickable as a
+        // master switch for both mouse and gaze interaction. Phase 3
+        // decoupled them — gaze-pop and stare-linger have their own toggles,
+        // both default ON. To preserve the intent of existing users who
+        // had FlashClickable=false (hands-free / accessibility / deep-trance
+        // configs), App.OnStartup runs RunFlashClickableDecouplingMigration
+        // once: if FlashClickable was off, the new gaze toggles are also
+        // turned off. Flag prevents re-migration after the user later
+        // configures the new toggles independently.
+        private bool _migratedFlashClickableDecoupling = false;
+        public bool MigratedFlashClickableDecoupling
+        {
+            get => _migratedFlashClickableDecoupling;
+            set { _migratedFlashClickableDecoupling = value; OnPropertyChanged(); }
+        }
+
+        // ---- Phase 4: Attention-Check headline mechanic --------------------
+
+        public enum AttentionCheckFailModeKind { LockCard, XpPenalty, None }
+        public enum AttentionCheckScopeKind { Always, DuringSessionsOnly }
+
+        // Scrapped pre-ship per design call — feature stays in the codebase
+        // but is disabled by default and has no UI surface in this release.
+        // To revive: flip default to true, re-add the Lab toggle, re-add the
+        // App.OnStartup wiring (see git history for the integration points).
+        private bool _attentionCheckEnabled = false;
+        public bool AttentionCheckEnabled
+        {
+            get => _attentionCheckEnabled;
+            set { _attentionCheckEnabled = value; OnPropertyChanged(); }
+        }
+
+        private int _attentionCheckMinPerSession = 1;
+        public int AttentionCheckMinPerSession
+        {
+            get => _attentionCheckMinPerSession;
+            set { _attentionCheckMinPerSession = Math.Clamp(value, 0, 20); OnPropertyChanged(); }
+        }
+
+        private int _attentionCheckMaxPerSession = 5;
+        public int AttentionCheckMaxPerSession
+        {
+            get => _attentionCheckMaxPerSession;
+            set { _attentionCheckMaxPerSession = Math.Clamp(value, 1, 30); OnPropertyChanged(); }
+        }
+
+        private int _attentionCheckGraceMs = 4000;
+        public int AttentionCheckGraceMs
+        {
+            get => _attentionCheckGraceMs;
+            set { _attentionCheckGraceMs = Math.Clamp(value, 1000, 15000); OnPropertyChanged(); }
+        }
+
+        private AttentionCheckFailModeKind _attentionCheckFailMode = AttentionCheckFailModeKind.XpPenalty;
+        public AttentionCheckFailModeKind AttentionCheckFailMode
+        {
+            get => _attentionCheckFailMode;
+            set { _attentionCheckFailMode = value; OnPropertyChanged(); }
+        }
+
+        // Pass reward and miss penalty are fixed by design — not user-tunable.
+        // See AttentionCheckService.PassXp / FailXpPenalty for the values.
+        // (Pre-ship the values had sliders here; removed so the mechanic
+        // can't be tuned into a grind lever.)
+
+        private AttentionCheckScopeKind _attentionCheckScope = AttentionCheckScopeKind.Always;
+        public AttentionCheckScopeKind AttentionCheckScope
+        {
+            get => _attentionCheckScope;
+            set { _attentionCheckScope = value; OnPropertyChanged(); }
+        }
+
+        // Per-key sticky-notification dismissal memory. Toasts that call
+        // ShowSticky(key, ...) record the key here when dismissed so they
+        // don't re-appear next launch.
+        private List<string> _dismissedNotificationKeys = new();
+        [JsonProperty]
+        public List<string> DismissedNotificationKeys
+        {
+            get => _dismissedNotificationKeys;
+            set { _dismissedNotificationKeys = value ?? new List<string>(); OnPropertyChanged(); }
+        }
+
         private bool _runOnStartup = false;
         public bool RunOnStartup
         {
@@ -3441,6 +3573,27 @@ namespace ConditioningControlPanel.Models
         {
             get => _browserEnhanceIfPossible;
             set { _browserEnhanceIfPossible = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Runs the one-shot FlashClickable → gaze-pop / linger decoupling
+        /// migration. Pre-3.4 builds had FlashClickable as a master switch
+        /// for both mouse and gaze interaction. This migration preserves the
+        /// intent of users who had FlashClickable=false by turning the new
+        /// gaze toggles off too. Idempotent — the migration flag prevents
+        /// re-running after the user later configures the toggles. Returns.
+        /// </summary>
+        public void RunFlashClickableDecouplingMigration()
+        {
+            if (MigratedFlashClickableDecoupling) return;
+
+            if (!FlashClickable)
+            {
+                FlashGazePopEnabled = false;
+                FlashGazeLingerEnabled = false;
+            }
+
+            MigratedFlashClickableDecoupling = true;
         }
 
         #endregion

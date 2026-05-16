@@ -20,6 +20,7 @@ namespace ConditioningControlPanel.Services
         AvatarInteraction,
         KeywordTrigger,
         Mantra,
+        AttentionCheck,
         Other
     }
 

@@ -249,6 +249,69 @@ namespace ConditioningControlPanel.Services
         public bool IsRunning => _state == WebcamTrackingState.Tracking || _state == WebcamTrackingState.FaceLost;
         public WebcamCalibrationData? Calibration { get; private set; }
 
+        /// <summary>
+        /// Returns the System.Windows.Forms.Screen that matches the monitor the
+        /// current calibration ran on, or null when (a) no calibration is loaded,
+        /// (b) the calibration predates the monitor-identity capture and has no
+        /// DeviceName, or (c) a monitor with that DeviceName is no longer
+        /// connected. Callers should treat null as "fall back to primary screen
+        /// with no calibration-based clamping."
+        /// </summary>
+        public System.Windows.Forms.Screen? GetCalibratedScreen()
+        {
+            var name = Calibration?.MonitorBounds?.DeviceName;
+            if (string.IsNullOrEmpty(name)) return null;
+            try
+            {
+                foreach (var screen in System.Windows.Forms.Screen.AllScreens)
+                {
+                    if (string.Equals(screen.DeviceName, name, StringComparison.OrdinalIgnoreCase))
+                        return screen;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "WebcamTrackingService.GetCalibratedScreen: enumeration failed");
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Populates <paramref name="bounds"/> with the calibrated screen's
+        /// full bounds rect. Returns false in the same cases as
+        /// <see cref="GetCalibratedScreen"/> returns null.
+        /// </summary>
+        public bool TryGetCalibratedBounds(out System.Windows.Rect bounds)
+        {
+            var screen = GetCalibratedScreen();
+            if (screen == null)
+            {
+                bounds = default;
+                return false;
+            }
+            bounds = new System.Windows.Rect(
+                screen.Bounds.X, screen.Bounds.Y,
+                screen.Bounds.Width, screen.Bounds.Height);
+            return true;
+        }
+
+        /// <summary>
+        /// Returns true when (x, y, width, height) describes the same monitor
+        /// the current calibration ran on. Used by call sites that operate on
+        /// raw rect components (e.g. FlashService.MonitorInfo) and can't share
+        /// a Screen reference. False when no calibration is loaded or the
+        /// calibrated monitor is no longer connected.
+        /// </summary>
+        public bool IsCalibratedMonitor(int x, int y, int width, int height)
+        {
+            var screen = GetCalibratedScreen();
+            if (screen == null) return false;
+            return screen.Bounds.X == x
+                && screen.Bounds.Y == y
+                && screen.Bounds.Width == width
+                && screen.Bounds.Height == height;
+        }
+
         public event Action? OnBlink;
         public event Action<System.Windows.Point>? OnLongStare;
         public event Action? OnMouthOpen;

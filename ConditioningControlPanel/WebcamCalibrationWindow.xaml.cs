@@ -471,6 +471,21 @@ namespace ConditioningControlPanel
             var calMonitorWidth = ActualWidth;
             var calMonitorHeight = ActualHeight;
 
+            // Identify which physical monitor calibration ran on, so the
+            // multi-monitor hotfix can clamp gaze-reactive content to the
+            // calibrated screen at runtime.
+            System.Windows.Forms.Screen? calScreen = null;
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero)
+                    calScreen = System.Windows.Forms.Screen.FromHandle(hwnd);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "WebcamCalibrationWindow: failed to identify calibration monitor");
+            }
+
             // Head-pose compensation pipeline (BaselineHeadPose + HeadPoseComp)
             // was retired. The PnP head-pose estimator from face landmarks is
             // noisier than the natural head movement during normal use, so the
@@ -487,7 +502,10 @@ namespace ConditioningControlPanel
                 {
                     Width = (int)calMonitorWidth,
                     Height = (int)calMonitorHeight,
-                    DpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX
+                    DpiScale = VisualTreeHelper.GetDpi(this).DpiScaleX,
+                    DeviceName = calScreen?.DeviceName,
+                    X = calScreen?.Bounds.X ?? 0,
+                    Y = calScreen?.Bounds.Y ?? 0,
                 },
                 PrimaryDeviceId = "",
                 LeftRefVec = leftRef,
@@ -521,6 +539,10 @@ namespace ConditioningControlPanel
             // Validation passed — persist permanently.
             App.Webcam?.ApplyCalibration(data);
 
+            // Clear the legacy-calibration sticky toast (if it was up) now
+            // that the user has a fresh calibration with a DeviceName.
+            App.Notifications?.Dismiss("recalibrate-multimonitor");
+
             var settings = App.Settings?.Current;
             if (settings != null)
             {
@@ -533,12 +555,105 @@ namespace ConditioningControlPanel
             CalibrationSoundService.CalibrationVerified();
 
             ValidationPanel.Visibility = Visibility.Collapsed;
-            TxtTitle.Text = "Calibration verified";
-            TxtStatus.Text = "Gaze, blink, mouth-open, and tongue detection confirmed working.";
-            TxtProgress.Text = "Closing…";
             DotCanvas.Visibility = Visibility.Collapsed;
+            StatusPanel.Visibility = Visibility.Collapsed;
 
-            _ = CloseAfterDelayAsync();
+            // Show the verify panel instead of auto-closing. The user gets a
+            // chance to preview accuracy via the debug cursor and either
+            // accept (Done) or redo (Recalibrate).
+            VerifyPanel.Visibility = Visibility.Visible;
+        }
+
+        /// <summary>
+        /// Set to true when the user clicked Recalibrate on the verify panel.
+        /// Callers that want to loop should re-open the dialog while this is
+        /// true. Use <see cref="ShowDialogWithRecalibrate"/> for the canonical
+        /// loop pattern.
+        /// </summary>
+        public bool WantsRecalibrate { get; private set; }
+
+        /// <summary>
+        /// Helper for callers: shows the dialog, re-opens automatically when
+        /// the user clicks Recalibrate on the verify panel. Returns the
+        /// terminal DialogResult — true when calibration was accepted, false
+        /// when cancelled.
+        /// </summary>
+        public static bool? ShowDialogWithRecalibrate(System.Windows.Window owner)
+        {
+            bool? final;
+            while (true)
+            {
+                var dlg = new WebcamCalibrationWindow { Owner = owner };
+                App.ApplyCalibrationScreenPlacement(dlg);
+                final = dlg.ShowDialog();
+                if (!dlg.WantsRecalibrate) break;
+            }
+            return final;
+        }
+
+        private System.Windows.Threading.DispatcherTimer? _verifyCountdownTimer;
+        private int _verifyCountdownSecondsLeft;
+
+        private void BtnVerifyAccuracy_Click(object sender, RoutedEventArgs e)
+        {
+            // Enable debug cursor for ~15s so the user can sanity-check the
+            // cursor follows their gaze. Re-clicking before the countdown
+            // expires just resets the timer.
+            App.GazeCursor?.Show("calibration-verify");
+            _verifyCountdownSecondsLeft = 15;
+            UpdateVerifyCountdownUi();
+
+            if (_verifyCountdownTimer == null)
+            {
+                _verifyCountdownTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(1),
+                };
+                _verifyCountdownTimer.Tick += (_, _) =>
+                {
+                    _verifyCountdownSecondsLeft--;
+                    if (_verifyCountdownSecondsLeft <= 0)
+                    {
+                        StopVerifyCountdown();
+                    }
+                    else
+                    {
+                        UpdateVerifyCountdownUi();
+                    }
+                };
+            }
+            _verifyCountdownTimer.Stop();
+            _verifyCountdownTimer.Start();
+
+            BtnVerifyAccuracy.IsEnabled = false;
+        }
+
+        private void UpdateVerifyCountdownUi()
+        {
+            TxtVerifyStatus.Text = $"Move your eyes around — the pink dot should track them. {_verifyCountdownSecondsLeft}s left.";
+        }
+
+        private void StopVerifyCountdown()
+        {
+            _verifyCountdownTimer?.Stop();
+            App.GazeCursor?.Hide("calibration-verify");
+            BtnVerifyAccuracy.IsEnabled = true;
+            TxtVerifyStatus.Text = "Click Verify to preview accuracy with a live gaze cursor, or close when ready.";
+        }
+
+        private void BtnVerifyRecalibrate_Click(object sender, RoutedEventArgs e)
+        {
+            StopVerifyCountdown();
+            WantsRecalibrate = true;
+            DialogResult = false;
+            Close();
+        }
+
+        private void BtnVerifyDone_Click(object sender, RoutedEventArgs e)
+        {
+            StopVerifyCountdown();
+            DialogResult = true;
+            Close();
         }
 
         private async Task<bool> RunValidationPhaseAsync()

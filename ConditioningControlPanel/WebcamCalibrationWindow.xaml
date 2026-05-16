@@ -149,5 +149,38 @@
                         HorizontalAlignment="Center"/>
             </StackPanel>
         </Border>
+
+        <!-- Verify panel: shown after successful calibration. Replaces the
+             old 2.5s auto-close so the user can sanity-check accuracy via
+             the debug cursor before committing. Placeholder copy — voice-pass
+             at ship time. -->
+        <Border x:Name="VerifyPanel" Visibility="Collapsed"
+                Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="2"
+                CornerRadius="10" Padding="28" HorizontalAlignment="Center" VerticalAlignment="Center"
+                MaxWidth="560">
+            <StackPanel>
+                <TextBlock Text="Calibration verified" Foreground="#FF69B4" FontSize="22"
+                           FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock Text="Gaze, blink, mouth-open and tongue detection confirmed working."
+                           Foreground="#CCCCCC" FontSize="13" Margin="0,8,0,0"
+                           TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtVerifyStatus" Text="Click Verify to preview accuracy with a live gaze cursor, or close when ready."
+                           Foreground="#AAAAAA" FontSize="12" Margin="0,16,0,20"
+                           TextWrapping="Wrap" HorizontalAlignment="Center" MaxWidth="440"/>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="BtnVerifyAccuracy" Content="Verify accuracy" Padding="20,10"
+                            Background="#33333A" Foreground="White" BorderBrush="#FF69B4"
+                            BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
+                            Margin="0,0,8,0" Click="BtnVerifyAccuracy_Click"/>
+                    <Button x:Name="BtnVerifyRecalibrate" Content="Recalibrate" Padding="20,10"
+                            Background="#33333A" Foreground="White" BorderThickness="0"
+                            Cursor="Hand" Margin="0,0,8,0" Click="BtnVerifyRecalibrate_Click"/>
+                    <Button x:Name="BtnVerifyDone" Content="Done" Padding="20,10"
+                            Background="#FF69B4" Foreground="Black" BorderThickness="0"
+                            FontWeight="Bold" Cursor="Hand" Click="BtnVerifyDone_Click"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

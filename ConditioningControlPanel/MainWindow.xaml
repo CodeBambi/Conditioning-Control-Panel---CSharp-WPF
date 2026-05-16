@@ -11062,5 +11062,16 @@
     <!-- Browser fullscreen overlay - sits outside Viewbox so WebView gets native resolution.
          WebView stays within same Window HWND, avoiding DirectX swapchain recreation that causes HDR blinks. -->
     <Grid x:Name="BrowserFullscreenOverlay" Background="Black" Visibility="Collapsed" Panel.ZIndex="9999"/>
+
+    <!-- In-app toast/banner host. No Background = empty area is click-through
+         (WPF rule: panels with unset/null Background do not hit-test on empty
+         pixels even with IsHitTestVisible=True, while individual toast Borders
+         have their own Background and capture their own clicks). Panel.ZIndex
+         sits below the browser overlay so a fullscreen browser still covers
+         it. -->
+    <StackPanel x:Name="NotificationHost"
+                HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="0,40,16,0" Width="380"
+                Panel.ZIndex="9998"/>
     </Grid>
 </Window>

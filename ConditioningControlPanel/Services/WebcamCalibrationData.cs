@@ -163,6 +163,13 @@ namespace ConditioningControlPanel.Services
         [JsonProperty] public int Width { get; set; }
         [JsonProperty] public int Height { get; set; }
         [JsonProperty] public double DpiScale { get; set; } = 1.0;
+
+        // Identity of the monitor calibration ran on. Pre-hotfix saves have these
+        // as null / 0 — consumers must treat null DeviceName as "unknown monitor"
+        // and fall back to primary, then prompt the user to recalibrate.
+        [JsonProperty] public string? DeviceName { get; set; }
+        [JsonProperty] public int X { get; set; }
+        [JsonProperty] public int Y { get; set; }
     }
 
     /// <summary>
