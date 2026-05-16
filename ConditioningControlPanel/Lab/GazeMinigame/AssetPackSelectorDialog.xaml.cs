@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -103,7 +104,25 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
                 PackListPanel.Children.Add(BuildPackRow(SelectedPacks[i], i));
             }
 
+            // Show the mismatch banner when selected packs span disjoint
+            // content types (one image-only + one video-only). At runtime
+            // the minigame can't pair them — zeroing the image slider
+            // empties the video pack and vice versa, dead-ending the start
+            // button with no explanation. Banner surfaces the reason
+            // proactively.
+            MismatchBanner.Visibility = HasContentTypeMismatch()
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
             BtnOk.IsEnabled = SelectedPacks.Count >= 2;
+        }
+
+        private bool HasContentTypeMismatch()
+        {
+            if (SelectedPacks.Count < 2) return false;
+            var anyImageOnly = SelectedPacks.Any(p => p.ImageCount > 0 && p.VideoCount == 0);
+            var anyVideoOnly = SelectedPacks.Any(p => p.VideoCount > 0 && p.ImageCount == 0);
+            return anyImageOnly && anyVideoOnly;
         }
 
         private Border BuildPackRow(AssetPack pack, int index)

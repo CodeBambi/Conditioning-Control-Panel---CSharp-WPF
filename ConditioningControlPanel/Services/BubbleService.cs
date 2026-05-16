@@ -212,10 +212,11 @@ public class BubbleService : IDisposable
             try
             {
                 var settings = App.Settings.Current;
-                var screens = settings.DualMonitorEnabled
-                    ? App.GetAllScreensCached()
-                    : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
-                
+                // Multi-monitor hotfix: route through the shared gaze policy so
+                // bubbles only spawn on the screen the user's gaze is calibrated
+                // for. No-op when no calibration is loaded.
+                var screens = GazeContentScreenPolicy.ResolveScreens(settings);
+
                 var screen = screens[_random.Next(screens.Length)];
                 // Outside sessions, bubbles are always clickable (no UI toggle exists for this setting)
                 var isClickable = App.IsSessionRunning ? settings.BubblesClickable : true;
@@ -256,9 +257,11 @@ public class BubbleService : IDisposable
                 }
 
                 var settings = App.Settings.Current;
-                var screens = settings.DualMonitorEnabled
-                    ? App.GetAllScreensCached()
-                    : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
+                // Multi-monitor hotfix: same clamp as SpawnBubble. SpawnOnce
+                // is hit by keyword-triggered spawns from the awareness
+                // engine; without this, keyword bubbles would bypass the
+                // calibration clamp and reappear on a non-calibrated screen.
+                var screens = GazeContentScreenPolicy.ResolveScreens(settings);
 
                 var screen = screens[_random.Next(screens.Length)];
                 var isClickable = App.IsSessionRunning ? settings.BubblesClickable : true;

@@ -344,9 +344,7 @@ namespace ConditioningControlPanel.Lab.GazeMinigame
         private void BtnReadyBannerAction_Click(object sender, RoutedEventArgs e)
         {
             // Currently the only banner action is "open calibration".
-            var dlg = new WebcamCalibrationWindow { Owner = this };
-            App.ApplyCalibrationScreenPlacement(dlg);
-            dlg.ShowDialog();
+            WebcamCalibrationWindow.ShowDialogWithRecalibrate(this);
             HideReadyBanner();
         }
 

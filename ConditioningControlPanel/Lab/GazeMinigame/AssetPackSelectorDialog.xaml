@@ -11,6 +11,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -24,14 +25,28 @@
             Need at least 2 packs.
         </TextBlock>
 
-        <Border Grid.Row="2" BorderBrush="#33333A" BorderThickness="1" CornerRadius="6"
+        <!-- Placeholder copy — voice-pass at ship time. Shown when selected
+             packs span both image-only and video-only types (no overlap), which
+             would dead-end the minigame at runtime. -->
+        <Border Grid.Row="2" x:Name="MismatchBanner" Visibility="Collapsed"
+                Background="#3A2A1A" BorderBrush="#FFB347" BorderThickness="1"
+                CornerRadius="6" Padding="12,8" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="⚠" Foreground="#FFB347" FontSize="16"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBlock Foreground="#FFE0B0" FontSize="12" TextWrapping="Wrap"
+                           Text="All selected packs must share a content type. Mix images-only packs together, or videos-only packs together — combining the two means the minigame can't pick a viable item."/>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="3" BorderBrush="#33333A" BorderThickness="1" CornerRadius="6"
                 Background="#0F0F1A" Padding="8">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel x:Name="PackListPanel"/>
             </ScrollViewer>
         </Border>
 
-        <Grid Grid.Row="3" Margin="0,16,0,0">
+        <Grid Grid.Row="4" Margin="0,16,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
