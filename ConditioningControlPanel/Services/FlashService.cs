@@ -100,13 +100,22 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Snapshot of currently-active flash windows that should respond to
-        /// Focus Gaze dwells. Returns empty when the user has FlashClickable
-        /// turned off — gaze respects the same opt-in as mouse clicks.
-        /// Caller iterates in reverse for topmost-first selection.
+        /// Focus Gaze dwells. Returns empty when neither gaze-pop nor
+        /// stare-linger is enabled — dwell tracking has no consumer in that
+        /// state. FlashClickable controls mouse clicks only; gaze-pop and
+        /// linger have their own toggles. Caller iterates in reverse for
+        /// topmost-first selection.
         /// </summary>
         internal IReadOnlyList<FlashWindow> GetGazeTargets()
         {
-            if (App.Settings?.Current?.FlashClickable != true)
+            var settings = App.Settings?.Current;
+            if (settings == null) return Array.Empty<FlashWindow>();
+
+            // Decoupled from FlashClickable: a user can have mouse-clickable
+            // OFF while gaze-pop or linger is ON, and vice versa. Bail only
+            // when BOTH gaze behaviors are off — there's nothing to consume
+            // the dwell.
+            if (!settings.FlashGazePopEnabled && !settings.FlashGazeLingerEnabled)
                 return Array.Empty<FlashWindow>();
 
             lock (_lockObj)
@@ -114,7 +123,7 @@ namespace ConditioningControlPanel.Services
                 var list = new List<FlashWindow>(_activeWindows.Count);
                 foreach (var w in _activeWindows)
                 {
-                    if (w.IsClickable && !w.IsFadingOut) list.Add(w);
+                    if (!w.IsFadingOut) list.Add(w);
                 }
                 return list;
             }
@@ -297,7 +306,6 @@ namespace ConditioningControlPanel.Services
             {
                 var settings = App.Settings.Current;
                 var soundPath = playSound ? GetNextSound() : null;
-                var monitors = GetMonitors(settings.DualMonitorEnabled);
                 var scale = settings.ImageScale / 100.0;
 
                 var data = await LoadImageAsync(imagePath);
@@ -307,7 +315,7 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
-                var monitor = monitors[_random.Next(monitors.Count)];
+                var monitor = PickMonitor(settings);
                 var geometry = CalculateGeometry(data.Width, data.Height, monitor, scale);
                 data.Geometry = geometry;
                 data.Monitor = monitor;
@@ -423,11 +431,10 @@ namespace ConditioningControlPanel.Services
 
                 // Get sound ONCE for this flash event
                 var soundPath = GetNextSound();
-                var monitors = GetMonitors(settings.DualMonitorEnabled);
-                
+
                 // Scale is percentage: 50-250%, stored as 50-250, so divide by 100
                 var scale = (size ?? settings.ImageScale) / 100.0;
-                
+
                 // Load images in parallel on background threads
                 var loadTasks = images.Select(imagePath => LoadImageAsync(imagePath)).ToArray();
                 var results = await Task.WhenAll(loadTasks);
@@ -437,7 +444,7 @@ namespace ConditioningControlPanel.Services
                 {
                     if (data != null)
                     {
-                        var monitor = monitors[_random.Next(monitors.Count)];
+                        var monitor = PickMonitor(settings);
                         var geometry = CalculateGeometry(data.Width, data.Height, monitor, scale);
                         data.Geometry = geometry;
                         data.Monitor = monitor;
@@ -896,6 +903,9 @@ namespace ConditioningControlPanel.Services
                     OriginalLifetimeMs = lifetimeMs,
                     HydraGeneration = hydraGeneration
                 };
+                // Capture the monitor on the window so hydra children can inherit
+                // their parent's screen (TriggerMultiplication reads window.Monitor).
+                window.Monitor = monitor;
 
                 // Register cancellation callback — when the token fires, mark this window for fade-out~ 🌙
                 // Store the registration so we can dispose it in SafeCloseFlashWindow
@@ -1120,7 +1130,7 @@ namespace ConditioningControlPanel.Services
                 {
                     // Calculate remaining lifetime from the clicked window for linked timing~ 🔗
                     var remainingMs = Math.Max(1000, (int)(window.ExpiresAt - DateTime.Now).TotalMilliseconds);
-                    TriggerMultiplication(maxHydra, currentCount, window.OriginalLifetimeMs, remainingMs, window.HydraGeneration);
+                    TriggerMultiplication(maxHydra, currentCount, window.OriginalLifetimeMs, remainingMs, window.HydraGeneration, window.Monitor);
                 }
             }
         }
@@ -1131,7 +1141,7 @@ namespace ConditioningControlPanel.Services
         /// When HydraLinkedTiming is true, children get parentRemainingMs; when false, they get a fresh full lifetime.
         /// parentGeneration is the clicked window's generation — children will be parentGeneration + 1.
         /// </summary>
-        private async void TriggerMultiplication(int maxHydra, int currentCount, int parentLifetimeMs, int parentRemainingMs, int parentGeneration)
+        private async void TriggerMultiplication(int maxHydra, int currentCount, int parentLifetimeMs, int parentRemainingMs, int parentGeneration, MonitorInfo? parentMonitor = null)
         {
             try
             {
@@ -1146,7 +1156,6 @@ namespace ConditioningControlPanel.Services
                 var images = GetNextImages(numToSpawn);
                 if (images.Count == 0) return;
 
-                var monitors = GetMonitors(settings.DualMonitorEnabled);
                 var scale = settings.ImageScale / 100.0;
 
                 // Decide hydra spawn lifetime based on the Linked timing setting~ 🔗✨
@@ -1167,7 +1176,10 @@ namespace ConditioningControlPanel.Services
                 {
                     if (data != null)
                     {
-                        var monitor = monitors[_random.Next(monitors.Count)];
+                        // Hydra children stay on the parent's screen (preferred
+                        // monitor). When no parent monitor is known, PickMonitor
+                        // falls through to the calibration clamp / random pick.
+                        var monitor = PickMonitor(settings, parentMonitor);
                         var geometry = CalculateGeometry(data.Width, data.Height, monitor, scale);
                         data.Geometry = geometry;
                         data.Monitor = monitor;
@@ -1288,6 +1300,65 @@ namespace ConditioningControlPanel.Services
         #endregion
 
         #region Monitor Support
+
+        /// <summary>
+        /// Selects a monitor for the next flash spawn. Resolution order:
+        ///   1. Calibration clamp (overrides DualMonitorEnabled): when
+        ///      RestrictGazeContentToCalibratedScreen is on AND a webcam
+        ///      calibration is loaded, return the calibrated monitor.
+        ///   2. Preferred (hydra inheritance): when <paramref name="preferred"/>
+        ///      is supplied (passed by TriggerMultiplication so children stay
+        ///      on the parent's screen) and exists in the candidate list,
+        ///      return it. New behavior in this release — children used to
+        ///      re-pick randomly.
+        ///   3. Random pick from GetMonitors(DualMonitorEnabled).
+        /// All gaze-reactive spawn paths route through here so the multi-monitor
+        /// hotfix is applied uniformly — see also GazeContentScreenPolicy for
+        /// the Screen-typed siblings (BubbleService, BlinkTrainerService).
+        /// </summary>
+        private MonitorInfo PickMonitor(AppSettings settings, MonitorInfo? preferred = null)
+        {
+            // Calibration clamp — overrides DualMonitorEnabled because the gaze
+            // pipeline can only project to the calibrated screen.
+            if (settings.RestrictGazeContentToCalibratedScreen)
+            {
+                var cal = App.Webcam?.GetCalibratedScreen();
+                if (cal != null)
+                {
+                    try
+                    {
+                        var dpiScale = GetDpiForScreen(cal);
+                        return new MonitorInfo
+                        {
+                            X = (int)(cal.Bounds.X / dpiScale),
+                            Y = (int)(cal.Bounds.Y / dpiScale),
+                            Width = (int)(cal.Bounds.Width / dpiScale),
+                            Height = (int)(cal.Bounds.Height / dpiScale),
+                            IsPrimary = cal.Primary,
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("PickMonitor: calibrated-screen conversion failed, falling through: {Error}", ex.Message);
+                    }
+                }
+            }
+
+            var candidates = GetMonitors(settings.DualMonitorEnabled);
+
+            // Hydra inheritance: keep children on the parent's screen.
+            if (preferred != null)
+            {
+                foreach (var m in candidates)
+                {
+                    if (m.X == preferred.X && m.Y == preferred.Y
+                        && m.Width == preferred.Width && m.Height == preferred.Height)
+                        return m;
+                }
+            }
+
+            return candidates[_random.Next(candidates.Count)];
+        }
 
         private List<MonitorInfo> GetMonitors(bool dualMonitor)
         {
@@ -1989,6 +2060,37 @@ namespace ConditioningControlPanel.Services
         /// Gen 0 = 100% XP, Gen 1 = 75%, Gen 2 = 50%, Gen 3 = 25%, Gen 4+ = 10% floor.
         /// </summary>
         public int HydraGeneration { get; set; }
+
+        /// <summary>
+        /// Monitor this window was spawned on. Set by SpawnFlashWindow so
+        /// hydra children (TriggerMultiplication) can inherit the parent's
+        /// screen via PickMonitor's preferred-monitor path.
+        /// </summary>
+        public MonitorInfo Monitor { get; set; } = new();
+
+        /// <summary>
+        /// Pushes the window's death deadline out by <paramref name="extraMs"/>
+        /// from now. Called by GazeFocusService each dwell tick while gaze is
+        /// on this window and stare-linger is enabled. CancelAfter is replaced
+        /// per call (last call wins), so the deadline tracks "alive for
+        /// extraMs more from the most recent boost." When gaze leaves, the
+        /// deadline stops being pushed and elapses naturally. Updates
+        /// ExpiresAt too so any code that reads it sees the new deadline.
+        /// </summary>
+        public void BoostLifetime(int extraMs)
+        {
+            if (extraMs <= 0) return;
+            try
+            {
+                LifetimeCts?.CancelAfter(extraMs);
+                ExpiresAt = DateTime.Now.AddMilliseconds(extraMs);
+            }
+            catch
+            {
+                // CTS may have been disposed (window fading out) — silent
+                // is fine, the window is already on its way out.
+            }
+        }
 
         /// <summary>
         /// Whether this flash triggered a lucky proc (golden glow effect)

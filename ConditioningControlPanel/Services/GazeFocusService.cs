@@ -29,6 +29,13 @@ public class GazeFocusService : IDisposable
     private const int CooldownMs = 250;
     private const int TickMs = 33; // ~30 FPS
 
+    // Stare-linger boost cadence. The dwell tick runs every ~33ms; we only
+    // call BoostLifetime every ~250ms (8 ticks) so CancelAfter isn't
+    // re-scheduled on every frame. The window's death deadline still tracks
+    // "alive for FlashGazeLingerExtensionMs from the last boost" closely
+    // because each boost replaces the previous timer.
+    private const int LingerBoostThrottleMs = 250;
+
     // Predictive target scoring — replaces the old hard-radius slack hit-test.
     // For each candidate target we compute:
     //   score = exp(-d² / 2σ²)  (Gaussian falloff with distance d from rect edge)
@@ -58,6 +65,12 @@ public class GazeFocusService : IDisposable
     // Mutually exclusive — only one target is being dwelt on at a time.
     private Bubble? _currentBubble;
     private FlashWindow? _currentFlash;
+    private FloatingText? _currentFloating;
+
+    // Throttle clock for stare-linger boosts. Reset to MinValue whenever the
+    // dwell target changes (or no target is held) so the first boost on
+    // re-acquisition fires immediately.
+    private DateTime _lastLingerBoostAt = DateTime.MinValue;
 
     public bool IsActive { get; private set; }
     public int DwellMs { get; set; } = DefaultDwellMs;
@@ -186,8 +199,15 @@ public class GazeFocusService : IDisposable
             }
             else if (hit.Value.Flash is FlashWindow fw)
             {
-                try { App.Flash?.GazePop(fw); }
-                catch (Exception ex) { App.Logger?.Debug("Gaze blink-pop flash failed: {Error}", ex.Message); }
+                // Match AdvanceFlashDwell's gating exactly: blink-pop is the
+                // alternate codepath to dwell-pop and must respect the same
+                // FlashGazePopEnabled toggle, otherwise a user who turned
+                // gaze-pop off still gets blinked out of flashes.
+                if (App.Settings?.Current?.FlashGazePopEnabled == true)
+                {
+                    try { App.Flash?.GazePop(fw); }
+                    catch (Exception ex) { App.Logger?.Debug("Gaze blink-pop flash failed: {Error}", ex.Message); }
+                }
             }
             _cooldownUntil = DateTime.UtcNow.AddMilliseconds(CooldownMs);
         }
@@ -237,6 +257,10 @@ public class GazeFocusService : IDisposable
             {
                 AdvanceFlashDwell(fw);
             }
+            else if (hit.Value.Floating is FloatingText ft)
+            {
+                AdvanceFloatingTextDwell(ft);
+            }
         }
         catch (Exception ex)
         {
@@ -254,7 +278,18 @@ public class GazeFocusService : IDisposable
     {
         Bubble? bestBubble = null;
         FlashWindow? bestFlash = null;
+        FloatingText? bestFloating = null;
         double bestScore = ScoreThreshold;
+
+        // Defensive multi-monitor clamp at the gaze read: drop targets that
+        // aren't on the calibrated screen, even if their spawn path missed
+        // GazeContentScreenPolicy. Returns null (no-clamp) when there's no
+        // calibration loaded — uniform fail-open behavior across all clamp
+        // sites.
+        System.Windows.Forms.Screen? calScreen = null;
+        var settings = App.Settings?.Current;
+        if (settings?.RestrictGazeContentToCalibratedScreen == true)
+            calScreen = App.Webcam?.GetCalibratedScreen();
 
         var flashes = App.Flash?.GetGazeTargets();
         if (flashes != null)
@@ -265,6 +300,7 @@ public class GazeFocusService : IDisposable
                 Rect rect;
                 try { rect = new Rect(fw.Left, fw.Top, fw.Width, fw.Height); }
                 catch { continue; }
+                if (!TargetOnCalScreen(rect, calScreen)) continue;
                 var dist = DistanceFromRectEdge(rect, p);
                 var score = GaussianScore(dist, FlashScoreSigma) + FlashTypeBonus;
                 if (ReferenceEquals(_currentFlash, fw)) score += StickyBonus;
@@ -273,6 +309,7 @@ public class GazeFocusService : IDisposable
                     bestScore = score;
                     bestFlash = fw;
                     bestBubble = null;
+                    bestFloating = null;
                 }
             }
         }
@@ -285,6 +322,7 @@ public class GazeFocusService : IDisposable
                 var b = bubbles[i];
                 var rect = b.GetGazeBounds();
                 if (rect.IsEmpty) continue;
+                if (!TargetOnCalScreen(rect, calScreen)) continue;
                 var dist = DistanceFromRectEdge(rect, p);
                 var score = GaussianScore(dist, BubbleScoreSigma);
                 if (ReferenceEquals(_currentBubble, b)) score += StickyBonus;
@@ -293,13 +331,74 @@ public class GazeFocusService : IDisposable
                     bestScore = score;
                     bestBubble = b;
                     bestFlash = null;
+                    bestFloating = null;
                 }
             }
         }
 
-        if (bestFlash != null) return new GazeHit(null, bestFlash);
-        if (bestBubble != null) return new GazeHit(bestBubble, null);
+        // Video attention-game targets (Phase 3.2). Same scoring shape as
+        // bubbles — no type bonus, so flashes still win when both are
+        // simultaneously hit.
+        var floats = App.Video?.GetGazeTargets();
+        if (floats != null)
+        {
+            for (int i = floats.Count - 1; i >= 0; i--)
+            {
+                var ft = floats[i];
+                var rect = ft.GetGazeBounds();
+                if (rect.IsEmpty) continue;
+                if (!TargetOnCalScreen(rect, calScreen)) continue;
+                var dist = DistanceFromRectEdge(rect, p);
+                var score = GaussianScore(dist, BubbleScoreSigma);
+                if (ReferenceEquals(_currentFloating, ft)) score += StickyBonus;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestFloating = ft;
+                    bestFlash = null;
+                    bestBubble = null;
+                }
+            }
+        }
+
+        if (bestFlash != null) return new GazeHit(null, bestFlash, null);
+        if (bestBubble != null) return new GazeHit(bestBubble, null, null);
+        if (bestFloating != null) return new GazeHit(null, null, bestFloating);
         return null;
+    }
+
+    // Defensive clamp helper for the gaze read. Uses the rect's center for
+    // screen lookup. WPF Window coordinates are in DIPs but Screen.FromPoint
+    // takes pixels; on same-DPI multi-monitor setups these align, and on
+    // mixed-DPI setups the center-based check is robust enough for monitors
+    // that are visually distinct. Fail-open on errors (target considered
+    // valid) since this is a defensive backstop, not the primary clamp.
+    //
+    // The PRIMARY defense is the spawn-write clamps via
+    // GazeContentScreenPolicy and FlashService.PickMonitor — those execute
+    // before any gaze content is positioned, so on multi-monitor systems
+    // misplaced spawns should be impossible. This backstop catches the case
+    // where a future consumer (or refactor) bypasses the policy helpers.
+    // Known edge case: on mixed-DPI multi-monitor setups, rect-center
+    // coordinates carry small drift between DIPs and pixels, which CAN cause
+    // a misclassification when a target is positioned near a monitor edge.
+    // If users on mixed-DPI hardware report stray gaze-clicks on off-screen
+    // content, this is the suspect — but the spawn-write clamp should make
+    // such a target rare to begin with.
+    private static bool TargetOnCalScreen(Rect r, System.Windows.Forms.Screen? cal)
+    {
+        if (cal == null) return true;
+        try
+        {
+            var cx = (int)(r.X + r.Width / 2.0);
+            var cy = (int)(r.Y + r.Height / 2.0);
+            var s = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(cx, cy));
+            return s != null && string.Equals(s.DeviceName, cal.DeviceName, System.StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private static double GaussianScore(double dist, double sigma)
@@ -321,9 +420,15 @@ public class GazeFocusService : IDisposable
 
     private readonly struct GazeHit
     {
-        public GazeHit(Bubble? bubble, FlashWindow? flash) { Bubble = bubble; Flash = flash; }
+        public GazeHit(Bubble? bubble, FlashWindow? flash, FloatingText? floating)
+        {
+            Bubble = bubble;
+            Flash = flash;
+            Floating = floating;
+        }
         public Bubble? Bubble { get; }
         public FlashWindow? Flash { get; }
+        public FloatingText? Floating { get; }
     }
 
     private void AdvanceBubbleDwell(Bubble b)
@@ -348,24 +453,79 @@ public class GazeFocusService : IDisposable
         }
     }
 
+    // Phase 3.3: dwell tick branches pop and linger independently. The two
+    // behaviors share the dwell-time tracker but their fire conditions are
+    // separate, so (Pop=OFF, Linger=ON) extends a flash's lifetime without
+    // ever auto-dismissing it, and (Pop=ON, Linger=OFF) restores the pre-3.3
+    // gaze-pop behavior with no lifetime extension.
     private void AdvanceFlashDwell(FlashWindow fw)
     {
+        var settings = App.Settings?.Current;
+        var popEnabled = settings?.FlashGazePopEnabled == true;
+        var lingerEnabled = settings?.FlashGazeLingerEnabled == true;
+        var lingerExtensionMs = settings?.FlashGazeLingerExtensionMs ?? 1500;
+
         if (!ReferenceEquals(_currentFlash, fw))
         {
             ClearTarget();
             _currentFlash = fw;
             _dwellStartedAt = DateTime.UtcNow;
+            _lastLingerBoostAt = DateTime.MinValue;
         }
 
         var elapsedMs = (DateTime.UtcNow - _dwellStartedAt).TotalMilliseconds;
-        var t = elapsedMs / DwellMs;
-        fw.SetGazeDwellProgress(t);
 
-        if (elapsedMs >= DwellMs)
+        // Pop progress visual: only show the dwell-filling ring when pop
+        // is actually going to fire. With pop disabled, the ring would
+        // mislead the user into expecting a click that never happens.
+        if (popEnabled)
+        {
+            var t = elapsedMs / DwellMs;
+            fw.SetGazeDwellProgress(t);
+        }
+
+        // Linger boost. Independent of popEnabled. Throttled to ~250ms so
+        // CancelAfter isn't re-scheduled every 33ms tick. Each boost pushes
+        // the death deadline lingerExtensionMs into the future from now;
+        // when gaze leaves, the deadline stops moving and elapses
+        // naturally.
+        if (lingerEnabled
+            && (DateTime.UtcNow - _lastLingerBoostAt).TotalMilliseconds >= LingerBoostThrottleMs)
+        {
+            try { fw.BoostLifetime(lingerExtensionMs); }
+            catch (Exception ex) { App.Logger?.Debug("Flash linger boost failed: {Error}", ex.Message); }
+            _lastLingerBoostAt = DateTime.UtcNow;
+        }
+
+        // Pop. Independent of lingerEnabled. When pop is off, dwell can
+        // accumulate past DwellMs indefinitely without firing — linger
+        // alone holds the window alive. When pop is on, this fires once
+        // dwell reaches DwellMs and the cooldown prevents chain-popping.
+        if (popEnabled && elapsedMs >= DwellMs)
         {
             try { App.Flash?.GazePop(fw); }
             catch (Exception ex) { App.Logger?.Debug("Gaze flash pop failed: {Error}", ex.Message); }
             _currentFlash = null;
+            _cooldownUntil = DateTime.UtcNow.AddMilliseconds(CooldownMs);
+        }
+    }
+
+    private void AdvanceFloatingTextDwell(FloatingText ft)
+    {
+        if (!ReferenceEquals(_currentFloating, ft))
+        {
+            ClearTarget();
+            _currentFloating = ft;
+            _dwellStartedAt = DateTime.UtcNow;
+        }
+
+        var elapsedMs = (DateTime.UtcNow - _dwellStartedAt).TotalMilliseconds;
+
+        if (elapsedMs >= DwellMs)
+        {
+            try { App.Video?.GazeClick(ft); }
+            catch (Exception ex) { App.Logger?.Debug("Gaze video target click failed: {Error}", ex.Message); }
+            _currentFloating = null;
             _cooldownUntil = DateTime.UtcNow.AddMilliseconds(CooldownMs);
         }
     }
@@ -382,6 +542,11 @@ public class GazeFocusService : IDisposable
             try { _currentFlash.SetGazeDwellProgress(0); } catch { }
             _currentFlash = null;
         }
+        if (_currentFloating != null)
+        {
+            _currentFloating = null;
+        }
+        _lastLingerBoostAt = DateTime.MinValue;
     }
 
     public void Dispose() => Stop();

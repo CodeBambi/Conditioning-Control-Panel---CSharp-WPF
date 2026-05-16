@@ -47,6 +47,10 @@ namespace ConditioningControlPanel.Features
                 ChkCorruption.IsChecked = s.CorruptionMode;
                 ChkHydraLinked.IsChecked = s.HydraLinkedTiming;
                 ChkGlow.IsChecked = s.FlashGlowEnabled;
+                ChkFlashGazePop.IsChecked = s.FlashGazePopEnabled;
+                ChkFlashGazeLinger.IsChecked = s.FlashGazeLingerEnabled;
+                SliderFlashLingerMs.Value = s.FlashGazeLingerExtensionMs;
+                TxtFlashLingerMs.Text = $"{s.FlashGazeLingerExtensionMs} ms";
             }
             finally { _isLoading = false; }
         }
@@ -61,10 +65,42 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.FlashClickable) ||
                 e.PropertyName == nameof(Models.AppSettings.CorruptionMode) ||
                 e.PropertyName == nameof(Models.AppSettings.HydraLinkedTiming) ||
-                e.PropertyName == nameof(Models.AppSettings.FlashGlowEnabled))
+                e.PropertyName == nameof(Models.AppSettings.FlashGlowEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashGazePopEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerExtensionMs))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
+        }
+
+        private void ChkFlashGazePop_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashGazePopEnabled = ChkFlashGazePop.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        private void ChkFlashGazeLinger_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashGazeLingerEnabled = ChkFlashGazeLinger.IsChecked ?? false;
+            App.Settings?.Save();
+        }
+
+        private void SliderFlashLingerMs_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var v = (int)e.NewValue;
+            TxtFlashLingerMs.Text = $"{v} ms";
+            s.FlashGazeLingerExtensionMs = v;
+            App.Settings?.Save();
         }
 
         private void ChkEnable_Changed(object sender, RoutedEventArgs e)

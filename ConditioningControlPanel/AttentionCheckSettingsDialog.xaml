@@ -1,0 +1,42 @@
+<Window x:Class="ConditioningControlPanel.AttentionCheckSettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:features="clr-namespace:ConditioningControlPanel.Features"
+        Title="Attention Checks"
+        Width="460" Height="640"
+        Background="{DynamicResource DarkerBgBrush}"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Attention check settings"
+                   Foreground="White" FontSize="18" FontWeight="Bold" Margin="0,0,0,12"/>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <features:AttentionCheckFeatureControl/>
+        </ScrollViewer>
+
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Content="Test now" Padding="14,8"
+                    Background="#33333A" Foreground="White"
+                    BorderBrush="#FF69B4" BorderThickness="1"
+                    FontWeight="SemiBold" Cursor="Hand"
+                    ToolTip="Fire a check immediately instead of waiting for the next scheduled one. Needs webcam tracking running."
+                    Click="BtnTestNow_Click"/>
+            <Button Grid.Column="2" Content="Close" Padding="20,8"
+                    Background="#FF69B4" Foreground="Black" BorderThickness="0"
+                    FontWeight="Bold" Cursor="Hand" Click="BtnClose_Click"/>
+        </Grid>
+    </Grid>
+</Window>

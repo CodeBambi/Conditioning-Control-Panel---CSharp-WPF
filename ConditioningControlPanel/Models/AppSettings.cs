@@ -496,6 +496,24 @@ namespace ConditioningControlPanel.Models
             set { _strictLockEnabled = value; OnPropertyChanged(); }
         }
 
+        // Video duration filter (seconds). 0 = no limit. Applied when refilling
+        // the video queue; videos outside the [min, max] range are excluded so
+        // a session can be pinned to short clips or long ones without
+        // shuffling content packs.
+        private int _videoMinDurationSeconds = 0;
+        public int VideoMinDurationSeconds
+        {
+            get => _videoMinDurationSeconds;
+            set { _videoMinDurationSeconds = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _videoMaxDurationSeconds = 0;
+        public int VideoMaxDurationSeconds
+        {
+            get => _videoMaxDurationSeconds;
+            set { _videoMaxDurationSeconds = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
         private bool _forceVideoOnLaunch = false;
         public bool ForceVideoOnLaunch
         {
@@ -1165,6 +1183,16 @@ namespace ConditioningControlPanel.Models
         {
             get => _flashGazeLingerExtensionMs;
             set { _flashGazeLingerExtensionMs = Math.Clamp(value, 250, 10000); OnPropertyChanged(); }
+        }
+
+        // VideoGazeClickEnabled gates the gaze-dwell shortcut for the video
+        // attention minigame (look at a FloatingText target long enough to
+        // fire its onHit callback, same as a mouse click).
+        private bool _videoGazeClickEnabled = true;
+        public bool VideoGazeClickEnabled
+        {
+            get => _videoGazeClickEnabled;
+            set { _videoGazeClickEnabled = value; OnPropertyChanged(); }
         }
 
         // One-shot migration flag. Pre-3.4 builds had FlashClickable as a

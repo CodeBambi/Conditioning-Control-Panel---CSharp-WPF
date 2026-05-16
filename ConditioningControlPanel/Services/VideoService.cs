@@ -168,6 +168,48 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         public static LibVLC? SharedLibVLC => _libVLC;
 
+        // Lazy-init cache of per-video duration metadata. Used by the
+        // min/max duration filter in RefillVideoQueues; missing entries fall
+        // open (video is included, duration parsed lazily on next refill).
+        private VideoMetadataCache? _metadataCache;
+        public VideoMetadataCache? MetadataCache
+        {
+            get
+            {
+                if (_metadataCache != null) return _metadataCache;
+                if (_libVLC == null) return null;
+                _metadataCache = new VideoMetadataCache(_libVLC);
+                return _metadataCache;
+            }
+        }
+
+        /// <summary>
+        /// Snapshot of currently-active attention targets that should respond
+        /// to Focus Gaze dwells. Returns empty when VideoGazeClickEnabled is
+        /// off. Caller iterates in reverse for topmost-first selection.
+        /// </summary>
+        internal IReadOnlyList<FloatingText> GetGazeTargets()
+        {
+            if (App.Settings?.Current?.VideoGazeClickEnabled != true)
+                return Array.Empty<FloatingText>();
+            lock (_targets)
+            {
+                return _targets.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Programmatic equivalent of a mouse click on an attention target.
+        /// Runs the same idempotent Hit() pipeline (sound, onHit callback,
+        /// fade). Safe to call against a target that's already been hit or
+        /// destroyed.
+        /// </summary>
+        internal void GazeClick(FloatingText target)
+        {
+            if (target == null) return;
+            target.Hit();
+        }
+
         /// <summary>
         /// Wait for LibVLC initialization to complete (with timeout).
         /// Returns true if LibVLC is available, false if timeout or init failed.
@@ -2471,6 +2513,33 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("VideoService: {Before} -> {After} after disabled filter", beforeCount, files.Count);
             }
 
+            // Duration filter (Phase 5). Best-effort: videos with no cached
+            // duration are included and parsed lazily — they'll get filtered
+            // correctly on the next refill once the cache is warm. We never
+            // block playback on a cache miss, so cold runs aren't penalized.
+            var minSec = App.Settings?.Current?.VideoMinDurationSeconds ?? 0;
+            var maxSec = App.Settings?.Current?.VideoMaxDurationSeconds ?? 0;
+            if ((minSec > 0 || maxSec > 0) && MetadataCache != null)
+            {
+                var beforeDur = files.Count;
+                files = files.Where(f =>
+                {
+                    var dur = MetadataCache.TryGetDuration(f);
+                    if (dur == null)
+                    {
+                        // Kick off a background parse so the next refill has the data.
+                        // Don't await — we let this video through this cycle.
+                        _ = MetadataCache.GetOrComputeDurationAsync(f);
+                        return true;
+                    }
+                    if (minSec > 0 && dur.Value < minSec) return false;
+                    if (maxSec > 0 && dur.Value > maxSec) return false;
+                    return true;
+                }).ToList();
+                App.Logger?.Debug("VideoService: {Before} -> {After} after duration filter [{Min}s, {Max}s]",
+                    beforeDur, files.Count, minSec, maxSec);
+            }
+
             // Shuffle using Fisher-Yates algorithm for reliable randomization
             ShuffleList(files);
             _videoQueue = new Queue<string>(files);
@@ -2619,8 +2688,15 @@ namespace ConditioningControlPanel.Services
         private IntPtr _hwnd;
         private int _tickCount;  // For periodic z-order refresh
 
+        // Stored for programmatic invocation (gaze-click). The mouse click
+        // handler also routes through Hit() so the click and gaze paths
+        // share identical bookkeeping (idempotency, sound, callback, fade).
+        private readonly Action _onHit;
+        private bool _clicked;
+
         public FloatingText(string text, Screen screen, int size, Action onHit)
         {
+            _onHit = onHit;
             try
             {
                 size = Math.Max(40, size);
@@ -2816,17 +2892,12 @@ namespace ConditioningControlPanel.Services
                 _vx = Math.Cos(angle) * 3.0;
                 _vy = Math.Sin(angle) * 3.0;
 
-                // Click = hit
-                bool clicked = false;
+                // Click = hit — routes through Hit() so the gaze-click path
+                // shares the same idempotency + sound + callback + fade.
                 _win.MouseLeftButtonDown += (s, e) =>
                 {
                     e.Handled = true;  // Prevent click from propagating to windows behind
-                    if (clicked) return;
-                    clicked = true;
-                    App.Logger?.Information("ATTENTION: Target clicked");
-                    PlayPopSound();
-                    onHit();
-                    FadeOut();
+                    Hit();
                 };
 
                 // Movement
@@ -2973,6 +3044,37 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("Failed to close target window: {Error}", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Programmatic equivalent of a mouse click on this target. Plays the
+        /// pop sound, invokes the stored onHit callback, and fades the
+        /// window. Idempotent — calling Hit() twice (mouse + gaze racing)
+        /// only registers once. Used by VideoService.GazeClick for the
+        /// stare-to-click path.
+        /// </summary>
+        public void Hit()
+        {
+            if (_clicked || _dead) return;
+            _clicked = true;
+            App.Logger?.Information("ATTENTION: Target clicked");
+            PlayPopSound();
+            try { _onHit?.Invoke(); }
+            catch (Exception ex) { App.Logger?.Debug("FloatingText.Hit: onHit callback threw: {Error}", ex.Message); }
+            FadeOut();
+        }
+
+        /// <summary>
+        /// Current bounds in WPF DIPs for gaze hit-testing. Matches the
+        /// coordinate space that WebcamTrackingService.OnGazeMove emits.
+        /// Returns Rect.Empty when the window is dead or coordinates can't
+        /// be read.
+        /// </summary>
+        public System.Windows.Rect GetGazeBounds()
+        {
+            if (_dead) return System.Windows.Rect.Empty;
+            try { return new System.Windows.Rect(_x, _y, _win.Width, _win.Height); }
+            catch { return System.Windows.Rect.Empty; }
         }
 
         public void BringToFront()
