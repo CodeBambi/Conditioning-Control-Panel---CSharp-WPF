@@ -11065,12 +11065,22 @@
                                         <StackPanel>
                                             <TextBlock x:Name="BlinkTrainerConsentStatus"
                                                        Foreground="White" FontSize="12" FontWeight="Medium"/>
-                                            <Button x:Name="BtnBlinkTrainerManageConsent"
-                                                    HorizontalAlignment="Left"
-                                                    Margin="0,8,0,0"
-                                                    Padding="10,4" FontSize="11"
-                                                    Style="{StaticResource OutlineButton}"
-                                                    Click="BtnBlinkTrainerManageConsent_Click"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                <Button x:Name="BtnBlinkTrainerManageConsent"
+                                                        Padding="10,4" FontSize="11"
+                                                        Style="{StaticResource OutlineButton}"
+                                                        Click="BtnBlinkTrainerManageConsent_Click"/>
+                                                <Button x:Name="BtnBlinkTrainerRevokeConsent"
+                                                        Margin="8,0,0,0"
+                                                        Padding="10,4" FontSize="11"
+                                                        Visibility="Collapsed"
+                                                        Background="Transparent" Foreground="#FF6060"
+                                                        BorderBrush="#FF6060" BorderThickness="1"
+                                                        Cursor="Hand"
+                                                        Content="{loc:Str blink_trainer_consent_revoke}"
+                                                        ToolTip="{loc:Str blink_trainer_consent_revoke_tooltip}"
+                                                        Click="BtnBlinkTrainerRevokeConsent_Click"/>
+                                            </StackPanel>
                                         </StackPanel>
                                     </Border>
 

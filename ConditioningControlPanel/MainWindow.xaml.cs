@@ -7635,6 +7635,10 @@ namespace ConditioningControlPanel
                     BtnBlinkTrainerManageConsent.Content = Localization.Loc.Get(
                         consented ? "blink_trainer_consent_manage" : "blink_trainer_consent_grant");
                 }
+                if (BtnBlinkTrainerRevokeConsent != null)
+                {
+                    BtnBlinkTrainerRevokeConsent.Visibility = consented ? Visibility.Visible : Visibility.Collapsed;
+                }
 
                 // Calibration status line. All three branches are now loc'd;
                 // the "Calibrated for {device}" line uses GetF with the device
@@ -7706,6 +7710,32 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "BtnBlinkTrainerManageConsent_Click failed");
+            }
+        }
+
+        private void BtnBlinkTrainerRevokeConsent_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var result = MessageBox.Show(
+                    this,
+                    Localization.Loc.Get("blink_trainer_consent_revoke_confirm_body"),
+                    Localization.Loc.Get("blink_trainer_consent_revoke_confirm_title"),
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.Cancel);
+                if (result != MessageBoxResult.OK) return;
+
+                App.Webcam?.RevokeConsent();
+                if (ChkWebcamDebugCursor != null) ChkWebcamDebugCursor.IsChecked = false;
+
+                RefreshBlinkTrainerWebcamColumn();
+                RefreshBlinkTrainerStatusRow();
+                ApplyBlinkTrainerStageMode(DetermineBlinkTrainerStageMode());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BtnBlinkTrainerRevokeConsent_Click failed");
             }
         }
 
