@@ -4568,7 +4568,22 @@ namespace ConditioningControlPanel
                     window.InputBindings.RemoveAt(i);
             }
 
-            window.InputBindings.Add(new KeyBinding(OpenChatCommand, key, mods));
+            // KeyGesture rejects letter keys without Ctrl/Alt (e.g. Shift+T alone)
+            // and a handful of other unusual combos. Fall back to Ctrl+T rather
+            // than crashing the click handler.
+            try
+            {
+                window.InputBindings.Add(new KeyBinding(OpenChatCommand, key, mods));
+            }
+            catch (NotSupportedException)
+            {
+                App.Logger?.Warning("ApplyChatShortcutTo: rejected combo {Mods}+{Key}, falling back to Ctrl+T", mods, key);
+                try
+                {
+                    window.InputBindings.Add(new KeyBinding(OpenChatCommand, Key.T, ModifierKeys.Control));
+                }
+                catch { }
+            }
         }
 
         /// <summary>"Ctrl+T" / "Alt+Shift+B" — for the hero card button label.</summary>

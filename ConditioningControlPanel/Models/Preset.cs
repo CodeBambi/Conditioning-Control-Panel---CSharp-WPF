@@ -65,6 +65,8 @@ namespace ConditioningControlPanel.Models
         public bool MandatoryVideosEnabled { get; set; } = false;
         public int VideosPerHour { get; set; } = 6;
         public bool StrictLockEnabled { get; set; } = false;
+        public int VideoMinDurationSeconds { get; set; } = 0;
+        public int VideoMaxDurationSeconds { get; set; } = 0;
 
         // Attention Check (Mini-Game) Settings
         public bool AttentionChecksEnabled { get; set; } = false;
@@ -317,6 +319,8 @@ namespace ConditioningControlPanel.Models
             settings.MandatoryVideosEnabled = MandatoryVideosEnabled;
             settings.VideosPerHour = VideosPerHour;
             settings.StrictLockEnabled = StrictLockEnabled;
+            settings.VideoMinDurationSeconds = VideoMinDurationSeconds;
+            settings.VideoMaxDurationSeconds = VideoMaxDurationSeconds;
 
             // Attention Checks
             settings.AttentionChecksEnabled = AttentionChecksEnabled;
@@ -423,6 +427,8 @@ namespace ConditioningControlPanel.Models
                 MandatoryVideosEnabled = settings.MandatoryVideosEnabled,
                 VideosPerHour = settings.VideosPerHour,
                 StrictLockEnabled = settings.StrictLockEnabled,
+                VideoMinDurationSeconds = settings.VideoMinDurationSeconds,
+                VideoMaxDurationSeconds = settings.VideoMaxDurationSeconds,
 
                 // Attention Checks
                 AttentionChecksEnabled = settings.AttentionChecksEnabled,

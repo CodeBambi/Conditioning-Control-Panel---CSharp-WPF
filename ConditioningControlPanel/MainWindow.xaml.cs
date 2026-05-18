@@ -18824,12 +18824,23 @@ namespace ConditioningControlPanel
                 ? "https://bambicloud.com/"
                 : "https://hypnotube.com/";
 
-            // Set zoom: 50% for both sites
-            _browser.ZoomFactor = 0.5;
-
-            _browser.Navigate(url);
-            App.Logger?.Information("Browser navigated to {Site} (zoom: 50%)",
-                isBambiCloud ? "BambiCloud" : "HypnoTube");
+            // Any property/method touching the WebView2 throws InvalidOperationException
+            // if the underlying browser process has crashed. Tear down and lazy-reinit
+            // on the next toggle rather than propagating the crash.
+            try
+            {
+                _browser.ZoomFactor = 0.5;
+                _browser.Navigate(url);
+                App.Logger?.Information("Browser navigated to {Site} (zoom: 50%)",
+                    isBambiCloud ? "BambiCloud" : "HypnoTube");
+            }
+            catch (InvalidOperationException ex)
+            {
+                App.Logger?.Warning(ex, "WebView2 unusable (browser process likely crashed) - resetting for next toggle");
+                try { (_browser as IDisposable)?.Dispose(); } catch { }
+                _browser = null;
+                _browserInitialized = false;
+            }
         }
 
         /// <summary>

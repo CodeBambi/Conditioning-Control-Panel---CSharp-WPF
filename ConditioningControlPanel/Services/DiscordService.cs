@@ -185,15 +185,17 @@ namespace ConditioningControlPanel.Services
 
                 // Wait for callback with timeout
                 var getContextTask = _callbackListener.GetContextAsync();
+                // Unconditionally observe any future fault. If the listener is disposed
+                // (timeout, cancel, or external Dispose) while the underlying APM call
+                // is still pending, the task faults with ObjectDisposedException and
+                // would otherwise reach the finalizer as an UnobservedTaskException.
+                _ = getContextTask.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
                 var timeoutTask = Task.Delay(TimeSpan.FromMinutes(OAuthTimeoutMinutes), _oauthCts.Token);
 
                 var completedTask = await Task.WhenAny(getContextTask, timeoutTask);
 
                 if (completedTask == timeoutTask)
                 {
-                    // Observe the dangling GetContextAsync to prevent unobserved task exception
-                    // when StopCallbackListener disposes the listener
-                    _ = getContextTask.ContinueWith(t => { _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
                     throw new TimeoutException("Discord login timed out. Please try again.");
                 }
 
