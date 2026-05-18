@@ -80,6 +80,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "startmenuicon"; Description: "Create a Start Menu shortcut"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
+Name: "fileassoc"; Description: "Add 'Open with CCP' to right-click menu for media files (.mp4, .mp3, etc.)"; GroupDescription: "File associations:"; Flags: unchecked
 
 [Files]
 ; Main executable
@@ -111,49 +112,49 @@ Root: HKCU; Subkey: "Software\{#MyAppPublisher}\{#MyAppName}"; ValueType: string
 ; Note: this only adds CCP to the Open With list. It does NOT change which
 ; app is the default for .mp4/.mp3/etc. Users promote to default manually.
 
-Root: HKCU; Subkey: "Software\Classes\CCPanel.Player.1"; ValueType: string; ValueName: ""; ValueData: "Conditioning Control Panel - Player"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\CCPanel.Player.1"; ValueType: string; ValueName: "FriendlyTypeName"; ValueData: "CCP Player"
-Root: HKCU; Subkey: "Software\Classes\CCPanel.Player.1\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
-Root: HKCU; Subkey: "Software\Classes\CCPanel.Player.1\shell\open"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "CCP Player"
-Root: HKCU; Subkey: "Software\Classes\CCPanel.Player.1\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" --play ""%1"""
+Root: HKCU; Subkey: "Software\Classes\CCPanel.Player.1"; ValueType: string; ValueName: ""; ValueData: "Conditioning Control Panel - Player"; Flags: uninsdeletekey; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\CCPanel.Player.1"; ValueType: string; ValueName: "FriendlyTypeName"; ValueData: "CCP Player"; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\CCPanel.Player.1\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\CCPanel.Player.1\shell\open"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "CCP Player"; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\CCPanel.Player.1\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" --play ""%1"""; Tasks: fileassoc
 
-Root: HKCU; Subkey: "Software\Classes\CCPanel.Editor.1"; ValueType: string; ValueName: ""; ValueData: "Conditioning Control Panel - Editor"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\CCPanel.Editor.1"; ValueType: string; ValueName: "FriendlyTypeName"; ValueData: "CCP Editor"
-Root: HKCU; Subkey: "Software\Classes\CCPanel.Editor.1\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"
-Root: HKCU; Subkey: "Software\Classes\CCPanel.Editor.1\shell\open"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "CCP Editor"
-Root: HKCU; Subkey: "Software\Classes\CCPanel.Editor.1\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" --edit ""%1"""
+Root: HKCU; Subkey: "Software\Classes\CCPanel.Editor.1"; ValueType: string; ValueName: ""; ValueData: "Conditioning Control Panel - Editor"; Flags: uninsdeletekey; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\CCPanel.Editor.1"; ValueType: string; ValueName: "FriendlyTypeName"; ValueData: "CCP Editor"; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\CCPanel.Editor.1\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\CCPanel.Editor.1\shell\open"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "CCP Editor"; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\CCPanel.Editor.1\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" --edit ""%1"""; Tasks: fileassoc
 
 ; --- Add CCP to OpenWith for each supported media extension ---
 ; uninsdeletevalue (NOT uninsdeletekey) — we only own our two values, must not
 ; nuke the whole OpenWithProgids subkey on uninstall (other apps live there too).
 
 ; Video
-Root: HKCU; Subkey: "Software\Classes\.mp4\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.mp4\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.webm\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.webm\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.mkv\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.mkv\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.mov\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.mov\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.avi\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.avi\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.m4v\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.m4v\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.mp4\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.mp4\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.webm\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.webm\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.mkv\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.mkv\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.mov\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.mov\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.avi\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.avi\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.m4v\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.m4v\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
 
 ; Audio
-Root: HKCU; Subkey: "Software\Classes\.mp3\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.mp3\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.wav\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.wav\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.m4a\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.m4a\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.aac\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.aac\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.flac\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.flac\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.ogg\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "Software\Classes\.ogg\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\.mp3\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.mp3\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.wav\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.wav\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.m4a\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.m4a\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.aac\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.aac\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.flac\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.flac\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.ogg\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Player.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
+Root: HKCU; Subkey: "Software\Classes\.ogg\OpenWithProgids"; ValueType: string; ValueName: "CCPanel.Editor.1"; ValueData: ""; Flags: uninsdeletevalue; Tasks: fileassoc
 
 [Run]
 ; Option to launch app after interactive installation (shows checkbox)
@@ -411,6 +412,30 @@ begin
   RegDeleteKeyIncludingSubkeys(HKCU, 'Software\ConditioningControlPanel');
 end;
 
+// Remove file-association registry entries (called on upgrade when user opts out)
+procedure CleanupFileAssociations();
+var
+  Exts: array of String;
+  i: Integer;
+begin
+  // Remove both ProgID keys entirely
+  RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\Classes\CCPanel.Player.1');
+  RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\Classes\CCPanel.Editor.1');
+
+  // Remove our entries from each extension's OpenWithProgids list (leave other apps' entries alone)
+  SetArrayLength(Exts, 12);
+  Exts[0] := '.mp4';  Exts[1] := '.webm'; Exts[2] := '.mkv';  Exts[3] := '.mov';
+  Exts[4] := '.avi';  Exts[5] := '.m4v';  Exts[6] := '.mp3';  Exts[7] := '.wav';
+  Exts[8] := '.m4a';  Exts[9] := '.aac';  Exts[10] := '.flac'; Exts[11] := '.ogg';
+  for i := 0 to GetArrayLength(Exts) - 1 do
+  begin
+    RegDeleteValue(HKEY_CURRENT_USER,
+      'Software\Classes\' + Exts[i] + '\OpenWithProgids', 'CCPanel.Player.1');
+    RegDeleteValue(HKEY_CURRENT_USER,
+      'Software\Classes\' + Exts[i] + '\OpenWithProgids', 'CCPanel.Editor.1');
+  end;
+end;
+
 // Prompt to close app if running
 function InitializeSetup(): Boolean;
 var
@@ -481,6 +506,10 @@ begin
       if not DirExists(SelectedAssetsPath + '\videos') then
         ForceDirectories(SelectedAssetsPath + '\videos');
     end;
+
+    // Remove any pre-existing file associations if the user opted out (or silent install)
+    if not WizardIsTaskSelected('fileassoc') then
+      CleanupFileAssociations();
 
     // Offer to clean up old Velopack installation
     if HasOldVelopackInstall then
