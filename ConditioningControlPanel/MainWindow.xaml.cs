@@ -4420,6 +4420,7 @@ namespace ConditioningControlPanel
                 svc.Stop();
                 BtnWebcamDebugStart.Content = "Start tracking";
                 AppendWebcamDebugLog("Stop requested.");
+                RefreshBlinkTrainerTrackerButton();
                 return;
             }
 
@@ -4454,6 +4455,7 @@ namespace ConditioningControlPanel
             {
                 AppendWebcamDebugLog($"Start() returned false. State={svc.State}. See logs/app.log.");
             }
+            RefreshBlinkTrainerTrackerButton();
         }
 
         // Webcam Start() does VideoCapture open + 3 ONNX InferenceSession ctors
@@ -5032,7 +5034,34 @@ namespace ConditioningControlPanel
         private void ChkRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading || ChkRestrictGazeToCalScreen == null || App.Settings?.Current == null) return;
-            App.Settings.Current.RestrictGazeContentToCalibratedScreen = ChkRestrictGazeToCalScreen.IsChecked == true;
+            bool v = ChkRestrictGazeToCalScreen.IsChecked == true;
+            App.Settings.Current.RestrictGazeContentToCalibratedScreen = v;
+            // Mirror to the Blink Trainer copy without re-entering the save path.
+            if (ChkBlinkTrainerRestrictGazeToCalScreen != null
+                && ChkBlinkTrainerRestrictGazeToCalScreen.IsChecked != v)
+            {
+                _restrictGazeCheckboxSyncing = true;
+                try { ChkBlinkTrainerRestrictGazeToCalScreen.IsChecked = v; }
+                finally { _restrictGazeCheckboxSyncing = false; }
+            }
+        }
+
+        // Re-entrancy guard for cross-tab Restrict-gaze checkbox sync.
+        private bool _restrictGazeCheckboxSyncing;
+
+        private void ChkBlinkTrainerRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading || _restrictGazeCheckboxSyncing) return;
+            if (ChkBlinkTrainerRestrictGazeToCalScreen == null || App.Settings?.Current == null) return;
+            bool v = ChkBlinkTrainerRestrictGazeToCalScreen.IsChecked == true;
+            App.Settings.Current.RestrictGazeContentToCalibratedScreen = v;
+            if (ChkRestrictGazeToCalScreen != null
+                && ChkRestrictGazeToCalScreen.IsChecked != v)
+            {
+                _restrictGazeCheckboxSyncing = true;
+                try { ChkRestrictGazeToCalScreen.IsChecked = v; }
+                finally { _restrictGazeCheckboxSyncing = false; }
+            }
         }
 
 
@@ -5165,54 +5194,58 @@ namespace ConditioningControlPanel
 
         private void RefreshWebcamMonitorList()
         {
-            if (CmbWebcamMonitor == null) return;
+            // Populates both the Lab combo (CmbWebcamMonitor) and the Blink Trainer
+            // mirror (CmbBlinkTrainerWebcamMonitor) from the same screen list, with
+            // the same saved-selection lookup. The populating flag guards the
+            // SelectionChanged handlers on both combos.
             _webcamMonitorPopulating = true;
             try
             {
-                CmbWebcamMonitor.Items.Clear();
-
-                // Always include "Primary" — it's the default and survives any
-                // monitor reorder. Stored verbatim so GetWebcamCalibrationScreen
-                // can short-circuit to Screen.PrimaryScreen.
-                CmbWebcamMonitor.Items.Add(new ComboBoxItem
-                {
-                    Content = Loc.Get("webcam_monitor_primary"),
-                    Tag = "Primary",
-                });
-
-                int n = 1;
-                foreach (var s in App.GetAllScreensCached())
-                {
-                    var label = string.Format(
-                        Loc.Get("webcam_monitor_item_fmt"),
-                        n++,
-                        s.DeviceName,
-                        s.Bounds.Width,
-                        s.Bounds.Height);
-                    CmbWebcamMonitor.Items.Add(new ComboBoxItem
-                    {
-                        Content = label,
-                        Tag = s.DeviceName,
-                    });
-                }
-
+                var screens = App.GetAllScreensCached();
                 var saved = App.Settings?.Current?.WebcamCalibrationScreen ?? "Primary";
-                int target = 0;
-                for (int i = 0; i < CmbWebcamMonitor.Items.Count; i++)
-                {
-                    if (CmbWebcamMonitor.Items[i] is ComboBoxItem ci
-                        && ci.Tag is string tag
-                        && string.Equals(tag, saved, StringComparison.OrdinalIgnoreCase))
-                    {
-                        target = i; break;
-                    }
-                }
-                CmbWebcamMonitor.SelectedIndex = target;
+
+                FillMonitorCombo(CmbWebcamMonitor, screens, saved);
+                FillMonitorCombo(CmbBlinkTrainerWebcamMonitor, screens, saved);
             }
             finally
             {
                 _webcamMonitorPopulating = false;
             }
+        }
+
+        private static void FillMonitorCombo(ComboBox? cb, System.Collections.Generic.IList<System.Windows.Forms.Screen> screens, string saved)
+        {
+            if (cb == null) return;
+            cb.Items.Clear();
+            // Always include "Primary" — survives monitor reorder. GetWebcamCalibrationScreen
+            // short-circuits to Screen.PrimaryScreen when set to this sentinel.
+            cb.Items.Add(new ComboBoxItem
+            {
+                Content = Loc.Get("webcam_monitor_primary"),
+                Tag = "Primary",
+            });
+            int n = 1;
+            foreach (var s in screens)
+            {
+                var label = string.Format(
+                    Loc.Get("webcam_monitor_item_fmt"),
+                    n++,
+                    s.DeviceName,
+                    s.Bounds.Width,
+                    s.Bounds.Height);
+                cb.Items.Add(new ComboBoxItem { Content = label, Tag = s.DeviceName });
+            }
+            int target = 0;
+            for (int i = 0; i < cb.Items.Count; i++)
+            {
+                if (cb.Items[i] is ComboBoxItem ci
+                    && ci.Tag is string tag
+                    && string.Equals(tag, saved, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = i; break;
+                }
+            }
+            cb.SelectedIndex = target;
         }
 
         private void CmbWebcamMonitor_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -5228,7 +5261,42 @@ namespace ConditioningControlPanel
                 App.Settings.Save();
             }
 
+            SyncMonitorComboSelection(CmbBlinkTrainerWebcamMonitor, deviceName);
             AppendWebcamDebugLog($"Calibration monitor set to {item.Content}.");
+        }
+
+        private void CmbBlinkTrainerWebcamMonitor_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (_webcamMonitorPopulating) return;
+            if (CmbBlinkTrainerWebcamMonitor?.SelectedItem is not ComboBoxItem item) return;
+            if (item.Tag is not string deviceName) return;
+
+            if (App.Settings?.Current is { } s)
+            {
+                if (string.Equals(s.WebcamCalibrationScreen, deviceName, StringComparison.OrdinalIgnoreCase)) return;
+                s.WebcamCalibrationScreen = deviceName;
+                App.Settings.Save();
+            }
+
+            SyncMonitorComboSelection(CmbWebcamMonitor, deviceName);
+        }
+
+        private void SyncMonitorComboSelection(ComboBox? cb, string deviceName)
+        {
+            if (cb == null) return;
+            for (int i = 0; i < cb.Items.Count; i++)
+            {
+                if (cb.Items[i] is ComboBoxItem ci
+                    && ci.Tag is string tag
+                    && string.Equals(tag, deviceName, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (cb.SelectedIndex == i) return;
+                    _webcamMonitorPopulating = true;
+                    try { cb.SelectedIndex = i; }
+                    finally { _webcamMonitorPopulating = false; }
+                    return;
+                }
+            }
         }
 
         private void AppendWebcamDebugLog(string line)
@@ -6467,7 +6535,19 @@ namespace ConditioningControlPanel
 
                 RebuildBlinkTrainerFolderCards();
                 RefreshBlinkTrainerWebcamColumn();
+                // Monitor picker + Restrict-gaze checkbox mirror the Lab card.
+                // RefreshWebcamMonitorList now populates both combos; the checkbox
+                // gets its initial state here so the BT tab matches without
+                // requiring a Lab visit first.
+                RefreshWebcamMonitorList();
+                if (ChkBlinkTrainerRestrictGazeToCalScreen != null && s != null)
+                {
+                    _restrictGazeCheckboxSyncing = true;
+                    try { ChkBlinkTrainerRestrictGazeToCalScreen.IsChecked = s.RestrictGazeContentToCalibratedScreen; }
+                    finally { _restrictGazeCheckboxSyncing = false; }
+                }
                 RefreshBlinkTrainerGate();
+                RefreshBlinkTrainerTrackerButton();
 
                 // Phase D: status row + stage mode are now state-machine driven.
                 // RefreshBlinkTrainerStatusRow paints the dot/text/action button;
@@ -6737,6 +6817,44 @@ namespace ConditioningControlPanel
             BlinkTrainerGate.Visibility = premium ? Visibility.Collapsed : Visibility.Visible;
             if (BlinkTrainerGatedContent != null)
                 BlinkTrainerGatedContent.IsEnabled = premium;
+            // Stage actions (status row, Start session, tracker toggle) moved
+            // under the preview in v5.9.9; they sit outside the gate overlay's
+            // reach, so gate them via IsEnabled here.
+            if (BlinkTrainerStageActions != null)
+                BlinkTrainerStageActions.IsEnabled = premium;
+        }
+
+        private async void BtnBlinkTrainerStartStopTracker_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null) return;
+
+            if (svc.IsRunning)
+            {
+                svc.Stop();
+                RefreshBlinkTrainerTrackerButton();
+                return;
+            }
+
+            if (!WebcamTrackingService.IsConsentCurrent())
+            {
+                var dlg = new WebcamConsentDialog { Owner = this };
+                var ok = dlg.ShowDialog();
+                if (ok != true || !dlg.ConsentGiven) return;
+            }
+
+            EnsureWebcamDebugSubscribed();
+            await StartWebcamOffUiThreadAsync(svc);
+            RefreshBlinkTrainerTrackerButton();
+        }
+
+        // Keeps the BT tracker toggle in sync with WebcamTrackingService.IsRunning.
+        // Called from RefreshBlinkTrainerTab and after any local start/stop.
+        private void RefreshBlinkTrainerTrackerButton()
+        {
+            if (BtnBlinkTrainerStartStopTracker == null) return;
+            bool running = App.Webcam?.IsRunning == true;
+            BtnBlinkTrainerStartStopTracker.Content = running ? "Stop tracker" : "Start tracker";
         }
 
         private void BtnBlinkTrainerGateUnlock_Click(object sender, RoutedEventArgs e)

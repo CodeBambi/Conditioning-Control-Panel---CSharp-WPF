@@ -10751,7 +10751,13 @@
                                 <ColumnDefinition Width="24"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" x:Name="BlinkTrainerStageFrame"
+                            <!-- Stage column: preview frame on top, action panel (status +
+                                 Start session + tracker toggle) directly underneath. v5.9.9
+                                 moved the actions out of the right column so they live next
+                                 to the visual they control. BlinkTrainerStageActions is
+                                 disabled by RefreshBlinkTrainerGate for non-premium users. -->
+                            <StackPanel Grid.Column="0" VerticalAlignment="Top">
+                            <Border x:Name="BlinkTrainerStageFrame"
                                     Width="448" Height="288"
                                     VerticalAlignment="Top"
                                     CornerRadius="16"
@@ -10788,61 +10794,76 @@
                                 </Border>
                             </Border>
 
+                            <!-- ═══ STAGE ACTIONS (under preview) ═══
+                                 Moved from the right column in v5.9.9 so the controls
+                                 sit next to the visual they drive. IsEnabled is toggled
+                                 by RefreshBlinkTrainerGate. -->
+                            <StackPanel x:Name="BlinkTrainerStageActions">
+
+                                <!-- ═══ STATUS ROW ═══ -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0">
+                                    <!-- Idle-state opacity pulse. Started / stopped by the Phase D state
+                                         machine via FindResource("BlinkTrainerStatusDotPulse"). -->
+                                    <Ellipse x:Name="BlinkTrainerStatusDot" Width="10" Height="10"
+                                             Fill="{DynamicResource PinkBrush}" Margin="0,0,10,0"
+                                             VerticalAlignment="Center">
+                                        <Ellipse.Resources>
+                                            <Storyboard x:Key="BlinkTrainerStatusDotPulse" RepeatBehavior="Forever" AutoReverse="True">
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                 From="1.0" To="0.4"
+                                                                 Duration="0:0:0.8">
+                                                    <DoubleAnimation.EasingFunction>
+                                                        <QuadraticEase EasingMode="EaseInOut"/>
+                                                    </DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </Ellipse.Resources>
+                                    </Ellipse>
+                                    <TextBlock x:Name="BlinkTrainerStatusText"
+                                               Text="{loc:Str blink_trainer_status_ready}"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               FontSize="13"
+                                               VerticalAlignment="Center"/>
+                                    <Button x:Name="BlinkTrainerStatusAction"
+                                            Visibility="Collapsed"
+                                            Margin="12,0,0,0"
+                                            Style="{StaticResource OutlineButton}"
+                                            Padding="10,4"
+                                            FontSize="12"/>
+                                </StackPanel>
+
+                                <!-- ═══ START BUTTON ═══ -->
+                                <Button x:Name="BtnBlinkTrainerStartSession"
+                                        Content="{loc:Str blink_trainer_start_session}"
+                                        HorizontalAlignment="Center"
+                                        Margin="0,14,0,0"
+                                        Padding="32,12"
+                                        FontSize="16"
+                                        FontWeight="Bold"
+                                        Style="{StaticResource SmallPinkButton}"
+                                        Click="BtnBlinkTrainerStartSession_Click"/>
+
+                                <!-- Tracker toggle (v5.9.9). Mirrors the Lab BtnWebcamDebugStart
+                                     so Blink Trainer users can stop the webcam without leaving
+                                     the tab. Label/colour are refreshed by
+                                     RefreshBlinkTrainerTrackerButton. -->
+                                <Button x:Name="BtnBlinkTrainerStartStopTracker"
+                                        Content="Start tracker"
+                                        HorizontalAlignment="Center"
+                                        Margin="0,10,0,0"
+                                        Padding="22,8"
+                                        FontSize="12"
+                                        Style="{StaticResource OutlineButton}"
+                                        Click="BtnBlinkTrainerStartStopTracker_Click"/>
+                            </StackPanel>
+                            </StackPanel>
+
                         <!-- ═══ GATED ZONE (right column) ═══
-                             Status row + Start button + 3 stacked control cards. Covered by
-                             BlinkTrainerGate for non-premium users; the stage on the left
-                             stays visible to show the feature in action. -->
+                             3 stacked control cards (Asset Packs / Webcam+Session row).
+                             Covered by BlinkTrainerGate for non-premium users; the stage
+                             on the left stays visible to show the feature in action. -->
                         <Grid Grid.Column="2" x:Name="BlinkTrainerGatedZone">
                             <StackPanel x:Name="BlinkTrainerGatedContent">
-
-                        <!-- ═══ STATUS ROW ═══
-                             Phase B: only the IDLE state is functional. Other states (Running / consent /
-                             calibration / no folders / error) land in Phase D when live mode wires up. -->
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0">
-                            <!-- Idle-state opacity pulse. Started / stopped by the Phase D state
-                                 machine via FindResource("BlinkTrainerStatusDotPulse"). The
-                                 storyboard is keyed at the Ellipse level so it's freezable and
-                                 reusable across state transitions. -->
-                            <Ellipse x:Name="BlinkTrainerStatusDot" Width="10" Height="10"
-                                     Fill="{DynamicResource PinkBrush}" Margin="0,0,10,0"
-                                     VerticalAlignment="Center">
-                                <Ellipse.Resources>
-                                    <Storyboard x:Key="BlinkTrainerStatusDotPulse" RepeatBehavior="Forever" AutoReverse="True">
-                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                         From="1.0" To="0.4"
-                                                         Duration="0:0:0.8">
-                                            <DoubleAnimation.EasingFunction>
-                                                <QuadraticEase EasingMode="EaseInOut"/>
-                                            </DoubleAnimation.EasingFunction>
-                                        </DoubleAnimation>
-                                    </Storyboard>
-                                </Ellipse.Resources>
-                            </Ellipse>
-                            <TextBlock x:Name="BlinkTrainerStatusText"
-                                       Text="{loc:Str blink_trainer_status_ready}"
-                                       Foreground="{DynamicResource TextMutedBrush}"
-                                       FontSize="13"
-                                       VerticalAlignment="Center"/>
-                            <Button x:Name="BlinkTrainerStatusAction"
-                                    Visibility="Collapsed"
-                                    Margin="12,0,0,0"
-                                    Style="{StaticResource OutlineButton}"
-                                    Padding="10,4"
-                                    FontSize="12"/>
-                        </StackPanel>
-
-                        <!-- ═══ START BUTTON ═══
-                             Phase B: stub handler logs intent. Phase D wires to BlinkTrainerService.Start()
-                             / Stop() and flips Content between "Start session" / "Stop session". -->
-                        <Button x:Name="BtnBlinkTrainerStartSession"
-                                Content="{loc:Str blink_trainer_start_session}"
-                                HorizontalAlignment="Center"
-                                Margin="0,18,0,0"
-                                Padding="32,12"
-                                FontSize="16"
-                                FontWeight="Bold"
-                                Style="{StaticResource SmallPinkButton}"
-                                Click="BtnBlinkTrainerStartSession_Click"/>
 
                         <!-- ═══ CONTROLS ZONE ═══
                              Stacked vertically (was a 3-col grid below the stage in v5.9.8).
@@ -10917,8 +10938,18 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- Webcam (left) + Session (right) — side-by-side row.
+                                 XML order is Session first, Webcam second; Grid.Column
+                                 places them left/right independent of declaration order. -->
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
                             <!-- ── Session ── -->
-                            <Border Margin="0,12,0,0"
+                            <Border Grid.Column="2"
                                     Background="{DynamicResource ElevatedSurfaceBrush}"
                                     BorderThickness="1" CornerRadius="12" Padding="18"
                                     VerticalAlignment="Top">
@@ -11027,7 +11058,7 @@
                             </Border>
 
                             <!-- ── Webcam ── -->
-                            <Border Margin="0,12,0,0"
+                            <Border Grid.Column="0"
                                     Background="{DynamicResource ElevatedSurfaceBrush}"
                                     BorderThickness="1" CornerRadius="12" Padding="18"
                                     VerticalAlignment="Top">
@@ -11060,6 +11091,18 @@
                                                 Style="{StaticResource OutlineButton}"
                                                 Click="BtnBlinkTrainerWebcamRefresh_Click"/>
                                     </Grid>
+
+                                    <!-- Monitor picker — mirrors the Lab CmbWebcamMonitor.
+                                         Both write WebcamCalibrationScreen; selection is kept
+                                         in sync via SyncWebcamMonitorComboSelections. -->
+                                    <TextBlock Text="{loc:Str webcam_monitor_label}"
+                                               Foreground="White" FontSize="12" FontWeight="Medium" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="CmbBlinkTrainerWebcamMonitor"
+                                              Foreground="Black" Background="White"
+                                              FontSize="11"
+                                              Margin="0,0,0,14"
+                                              ToolTip="{loc:Str webcam_monitor_tooltip}"
+                                              SelectionChanged="CmbBlinkTrainerWebcamMonitor_SelectionChanged"/>
 
                                     <!-- Consent status. Border colors driven from code-behind in
                                          RefreshBlinkTrainerWebcamColumn (DataTrigger would need a
@@ -11108,8 +11151,20 @@
                                                 Style="{StaticResource OutlineButton}"
                                                 Click="BtnBlinkTrainerQuickRecal_Click"/>
                                     </StackPanel>
+
+                                    <!-- Mirror of Lab ChkRestrictGazeToCalScreen. Both bind to
+                                         AppSettings.RestrictGazeContentToCalibratedScreen and
+                                         keep each other in sync via the shared handler path. -->
+                                    <CheckBox x:Name="ChkBlinkTrainerRestrictGazeToCalScreen"
+                                              Content="Restrict gaze-reactive effects to the calibrated screen"
+                                              ToolTip="Advanced: leave on unless you know what you're doing. Affects how gaze-reactive effects map to your monitors."
+                                              Foreground="#AAAAAA" FontSize="11"
+                                              Margin="0,14,0,0"
+                                              Checked="ChkBlinkTrainerRestrictGazeToCalScreen_Changed"
+                                              Unchecked="ChkBlinkTrainerRestrictGazeToCalScreen_Changed"/>
                                 </StackPanel>
                             </Border>
+                            </Grid>
                         </StackPanel>
 
                             </StackPanel>
