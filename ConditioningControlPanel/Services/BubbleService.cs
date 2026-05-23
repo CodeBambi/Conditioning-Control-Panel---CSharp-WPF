@@ -212,10 +212,13 @@ public class BubbleService : IDisposable
             try
             {
                 var settings = App.Settings.Current;
-                // Multi-monitor hotfix: route through the shared gaze policy so
-                // bubbles only spawn on the screen the user's gaze is calibrated
-                // for. No-op when no calibration is loaded.
-                var screens = GazeContentScreenPolicy.ResolveScreens(settings);
+                // Baseline spawn: honor DualMonitorEnabled and let bubbles
+                // spawn on all monitors. Gaze-pop interaction on off-cal-
+                // screen bubbles is filtered by GazeFocusService.FindBestTarget;
+                // mouse-click still works everywhere.
+                var screens = settings.DualMonitorEnabled
+                    ? App.GetAllScreensCached()
+                    : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
 
                 var screen = screens[_random.Next(screens.Length)];
                 // Outside sessions, bubbles are always clickable (no UI toggle exists for this setting)
@@ -257,11 +260,13 @@ public class BubbleService : IDisposable
                 }
 
                 var settings = App.Settings.Current;
-                // Multi-monitor hotfix: same clamp as SpawnBubble. SpawnOnce
-                // is hit by keyword-triggered spawns from the awareness
-                // engine; without this, keyword bubbles would bypass the
-                // calibration clamp and reappear on a non-calibrated screen.
-                var screens = GazeContentScreenPolicy.ResolveScreens(settings);
+                // Baseline spawn: keyword-triggered bubbles follow the same
+                // DualMonitorEnabled honoring as the running spawn loop. The
+                // gaze-read backstop in GazeFocusService.FindBestTarget keeps
+                // gaze-pop strictly on the calibrated screen.
+                var screens = settings.DualMonitorEnabled
+                    ? App.GetAllScreensCached()
+                    : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
 
                 var screen = screens[_random.Next(screens.Length)];
                 var isClickable = App.IsSessionRunning ? settings.BubblesClickable : true;

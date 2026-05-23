@@ -1303,47 +1303,18 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Selects a monitor for the next flash spawn. Resolution order:
-        ///   1. Calibration clamp (overrides DualMonitorEnabled): when
-        ///      RestrictGazeContentToCalibratedScreen is on AND a webcam
-        ///      calibration is loaded, return the calibrated monitor.
-        ///   2. Preferred (hydra inheritance): when <paramref name="preferred"/>
+        ///   1. Preferred (hydra inheritance): when <paramref name="preferred"/>
         ///      is supplied (passed by TriggerMultiplication so children stay
         ///      on the parent's screen) and exists in the candidate list,
-        ///      return it. New behavior in this release — children used to
-        ///      re-pick randomly.
-        ///   3. Random pick from GetMonitors(DualMonitorEnabled).
-        /// All gaze-reactive spawn paths route through here so the multi-monitor
-        /// hotfix is applied uniformly — see also GazeContentScreenPolicy for
-        /// the Screen-typed siblings (BubbleService, BlinkTrainerService).
+        ///      return it.
+        ///   2. Random pick from GetMonitors(DualMonitorEnabled).
+        /// Flashes are baseline content — they do not consult the gaze
+        /// calibration clamp. Off-cal-screen flashes are filtered out of
+        /// gaze-pop / gaze-linger interaction by GazeFocusService.FindBestTarget;
+        /// mouse-click works everywhere.
         /// </summary>
         private MonitorInfo PickMonitor(AppSettings settings, MonitorInfo? preferred = null)
         {
-            // Calibration clamp — overrides DualMonitorEnabled because the gaze
-            // pipeline can only project to the calibrated screen.
-            if (settings.RestrictGazeContentToCalibratedScreen)
-            {
-                var cal = App.Webcam?.GetCalibratedScreen();
-                if (cal != null)
-                {
-                    try
-                    {
-                        var dpiScale = GetDpiForScreen(cal);
-                        return new MonitorInfo
-                        {
-                            X = (int)(cal.Bounds.X / dpiScale),
-                            Y = (int)(cal.Bounds.Y / dpiScale),
-                            Width = (int)(cal.Bounds.Width / dpiScale),
-                            Height = (int)(cal.Bounds.Height / dpiScale),
-                            IsPrimary = cal.Primary,
-                        };
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Debug("PickMonitor: calibrated-screen conversion failed, falling through: {Error}", ex.Message);
-                    }
-                }
-            }
-
             var candidates = GetMonitors(settings.DualMonitorEnabled);
 
             // Hydra inheritance: keep children on the parent's screen.

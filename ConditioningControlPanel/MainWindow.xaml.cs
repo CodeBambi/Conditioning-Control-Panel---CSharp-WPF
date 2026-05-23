@@ -5029,6 +5029,12 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void ChkRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading || ChkRestrictGazeToCalScreen == null || App.Settings?.Current == null) return;
+            App.Settings.Current.RestrictGazeContentToCalibratedScreen = ChkRestrictGazeToCalScreen.IsChecked == true;
+        }
+
 
         // Suppresses the SelectionChanged save while we programmatically
         // (re)populate either webcam ComboBox during enumeration / restore /
@@ -6311,6 +6317,8 @@ namespace ConditioningControlPanel
                     BtnLab.Style = activeStyle;
                     RefreshWebcamDeviceList();
                     RefreshWebcamMonitorList();
+                    if (ChkRestrictGazeToCalScreen != null && App.Settings?.Current != null)
+                        ChkRestrictGazeToCalScreen.IsChecked = App.Settings.Current.RestrictGazeContentToCalibratedScreen;
                     break;
 
                 // Note: "patreon" case is handled at the top of ShowTab as a

@@ -374,17 +374,16 @@ public class GazeFocusService : IDisposable
     // that are visually distinct. Fail-open on errors (target considered
     // valid) since this is a defensive backstop, not the primary clamp.
     //
-    // The PRIMARY defense is the spawn-write clamps via
-    // GazeContentScreenPolicy and FlashService.PickMonitor — those execute
-    // before any gaze content is positioned, so on multi-monitor systems
-    // misplaced spawns should be impossible. This backstop catches the case
-    // where a future consumer (or refactor) bypasses the policy helpers.
+    // As of v5.9.9, this is the only read-side clamp; spawn-side clamps were
+    // removed. Only gaze-reactive content (BlinkTrainer overlay) clamps at
+    // spawn now. Flashes and bubbles spawn freely across all monitors;
+    // off-cal-screen instances are simply filtered out of gaze interaction
+    // here, while mouse-click still works everywhere.
     // Known edge case: on mixed-DPI multi-monitor setups, rect-center
     // coordinates carry small drift between DIPs and pixels, which CAN cause
     // a misclassification when a target is positioned near a monitor edge.
     // If users on mixed-DPI hardware report stray gaze-clicks on off-screen
-    // content, this is the suspect — but the spawn-write clamp should make
-    // such a target rare to begin with.
+    // content, this is the suspect.
     private static bool TargetOnCalScreen(Rect r, System.Windows.Forms.Screen? cal)
     {
         if (cal == null) return true;

@@ -7568,6 +7568,17 @@
                                            Foreground="#88CC88" FontFamily="Consolas" FontSize="11"
                                            TextWrapping="Wrap" MinHeight="80"/>
                             </Border>
+
+                            <Expander Header="Advanced" Foreground="#888888" FontSize="11" Margin="0,12,0,0">
+                                <StackPanel Margin="4,6,0,0">
+                                    <CheckBox x:Name="ChkRestrictGazeToCalScreen"
+                                              Content="Restrict gaze-reactive effects to the calibrated screen"
+                                              ToolTip="Advanced: leave on unless you know what you're doing. Affects how gaze-reactive effects map to your monitors."
+                                              Foreground="#AAAAAA" FontSize="11"
+                                              Checked="ChkRestrictGazeToCalScreen_Changed"
+                                              Unchecked="ChkRestrictGazeToCalScreen_Changed"/>
+                                </StackPanel>
+                            </Expander>
                         </StackPanel>
                     </Border>
 
@@ -10728,15 +10739,21 @@
                                     VerticalAlignment="Center" Tag="BlinkTrainer"/>
                         </Grid>
 
-                        <!-- ═══ STAGE ZONE ═══
-                             Framed preview surface that hosts either the live blink-driven swap (Phase D)
-                             or a perpetual demo loop (Phase B). Demo mode is in effect whenever there's no
-                             live session — and is the ONLY mode visible to non-premium users via the gate.
-                             Cross-fade between two overlapping Image controls (cleaner than swapping a
-                             single Source). Phase D's live mode hard-cuts; do not unify the two paths. -->
-                        <Grid Margin="0,32,0,0" HorizontalAlignment="Center">
-                            <Border x:Name="BlinkTrainerStageFrame"
-                                    Width="560" Height="360"
+                        <!-- ═══ STAGE + GATED ZONES (side-by-side, v5.9.9) ═══
+                             Stage frame on the left at 80% of its previous size; the gated
+                             content (status row, Start button, asset/session/webcam cards)
+                             stacks vertically on the right so users no longer have to scroll
+                             to reach the controls. The gate overlay sits in the right column
+                             only — the stage stays visible to entice non-premium users. -->
+                        <Grid Margin="0,32,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="24"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" x:Name="BlinkTrainerStageFrame"
+                                    Width="448" Height="288"
+                                    VerticalAlignment="Top"
                                     CornerRadius="16"
                                     BorderThickness="2"
                                     Background="{DynamicResource SurfaceBgBrush}">
@@ -10770,14 +10787,12 @@
                                     </Grid>
                                 </Border>
                             </Border>
-                        </Grid>
 
-                        <!-- ═══ GATED ZONE ═══
-                             Everything below the stage is covered by BlinkTrainerGate for non-premium
-                             users. Header + stage stay visible above so the user understands what
-                             they're being asked to unlock. The gate overlay sits in the same Grid as
-                             the gated StackPanel and on top of it via Z-order. -->
-                        <Grid x:Name="BlinkTrainerGatedZone">
+                        <!-- ═══ GATED ZONE (right column) ═══
+                             Status row + Start button + 3 stacked control cards. Covered by
+                             BlinkTrainerGate for non-premium users; the stage on the left
+                             stays visible to show the feature in action. -->
+                        <Grid Grid.Column="2" x:Name="BlinkTrainerGatedZone">
                             <StackPanel x:Name="BlinkTrainerGatedContent">
 
                         <!-- ═══ STATUS ROW ═══
@@ -10830,20 +10845,13 @@
                                 Click="BtnBlinkTrainerStartSession_Click"/>
 
                         <!-- ═══ CONTROLS ZONE ═══
-                             Three-column configuration grid. Asset Packs | Session | Webcam.
-                             All inputs wired to the existing BlinkTrainerService settings fields and
-                             shared App.Webcam — no new settings keys introduced. -->
-                        <Grid Margin="0,40,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="16"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="16"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
+                             Stacked vertically (was a 3-col grid below the stage in v5.9.8).
+                             Asset Packs / Session / Webcam cards keep their original styling
+                             and bindings — only the layout direction changed. -->
+                        <StackPanel Margin="0,28,0,0">
 
-                            <!-- ── Column 1: Asset Packs ── -->
-                            <Border Grid.Column="0"
+                            <!-- ── Asset Packs ── -->
+                            <Border
                                     Background="{DynamicResource ElevatedSurfaceBrush}"
                                     BorderThickness="1" CornerRadius="12" Padding="18"
                                     VerticalAlignment="Top">
@@ -10909,8 +10917,8 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- ── Column 2: Session ── -->
-                            <Border Grid.Column="2"
+                            <!-- ── Session ── -->
+                            <Border Margin="0,12,0,0"
                                     Background="{DynamicResource ElevatedSurfaceBrush}"
                                     BorderThickness="1" CornerRadius="12" Padding="18"
                                     VerticalAlignment="Top">
@@ -11018,8 +11026,8 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- ── Column 3: Webcam ── -->
-                            <Border Grid.Column="4"
+                            <!-- ── Webcam ── -->
+                            <Border Margin="0,12,0,0"
                                     Background="{DynamicResource ElevatedSurfaceBrush}"
                                     BorderThickness="1" CornerRadius="12" Padding="18"
                                     VerticalAlignment="Top">
@@ -11102,13 +11110,13 @@
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
-                        </Grid>
+                        </StackPanel>
 
                             </StackPanel>
 
-                            <!-- Premium gate overlay. Sits on top of the gated StackPanel (status row
-                                 + Start button + 3-column controls grid). Stage and header remain
-                                 visible above so the user sees the feature working before the ask. -->
+                            <!-- Premium gate overlay. Sits on top of the gated StackPanel (status
+                                 row + Start button + stacked control cards). Stage and header
+                                 remain visible so the user sees the feature working before the ask. -->
                             <Border x:Name="BlinkTrainerGate"
                                     Visibility="Collapsed"
                                     Background="#CC0A0A14">
@@ -11156,6 +11164,7 @@
                                     </StackPanel>
                                 </Border>
                             </Border>
+                        </Grid>
                         </Grid>
 
                     </StackPanel>

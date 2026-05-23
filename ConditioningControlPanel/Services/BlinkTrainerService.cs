@@ -105,11 +105,10 @@ public class BlinkTrainerService : IDisposable
                 return false;
             }
 
-            // Multi-monitor hotfix: route through the shared gaze policy. When
-            // calibration is loaded, this pins the blink-trainer overlay to the
-            // calibrated screen so blink events aren't fired against an image
-            // the user can't reach with their gaze.
-            var screens = GazeContentScreenPolicy.ResolveScreens(settings);
+            // Gaze-reactive spawn: the user has to be looking at the overlay
+            // for blink detection to work, so pin to the calibrated screen
+            // when calibration is loaded. No-op without calibration.
+            var screens = GazeContentScreenPolicy.ResolveGazeReactiveScreens(settings);
 
             var opacity = Math.Clamp(settings.BlinkTrainerOpacity, 1, 100) / 100.0;
             foreach (var screen in screens)
