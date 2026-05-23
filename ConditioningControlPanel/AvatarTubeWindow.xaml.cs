@@ -2079,8 +2079,9 @@ namespace ConditioningControlPanel
             {
                 if (element == parent) return true;
                 // ContentElements (e.g. Run, Hyperlink) are not part of the visual tree —
-                // VisualTreeHelper.GetParent crashes on them. Use LogicalTreeHelper instead.
-                element = element is System.Windows.Media.Visual
+                // VisualTreeHelper.GetParent throws "X is not a Visual or Visual3D" on them.
+                // Fall back to LogicalTreeHelper for those.
+                element = element is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
                     ? System.Windows.Media.VisualTreeHelper.GetParent(element)
                     : System.Windows.LogicalTreeHelper.GetParent(element);
             }

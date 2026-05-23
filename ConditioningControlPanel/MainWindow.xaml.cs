@@ -18700,6 +18700,29 @@ namespace ConditioningControlPanel
                     Dispatcher.Invoke(() => HandleBrowserFullscreenChanged(isFullscreen));
                 };
 
+                // Chromium render/browser process crash. Tear down so the next
+                // BrowserSiteToggle click lazy-reinits instead of throwing
+                // InvalidOperationException at the user.
+                _browser.BrowserProcessFailed += (s, e) =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        try
+                        {
+                            var dead = _browser?.WebView;
+                            if (dead != null) BrowserContainer.Children.Remove(dead);
+                            try { (_browser as IDisposable)?.Dispose(); } catch { }
+                        }
+                        catch (Exception ex) { App.Logger?.Debug("Browser teardown after ProcessFailed: {Error}", ex.Message); }
+                        _browser = null;
+                        _browserInitialized = false;
+                        BrowserLoadingText.Visibility = Visibility.Visible;
+                        BrowserLoadingText.Text = "Browser crashed - click a site to restart";
+                        TxtBrowserStatus.Text = "Disconnected";
+                        TxtBrowserStatus.Foreground = new SolidColorBrush(Color.FromRgb(230, 80, 80));
+                    });
+                };
+
                 BrowserLoadingText.Text = Loc.Get("label_creating_browser");
 
                 // Navigate directly to the requested URL when lazy-init was triggered by

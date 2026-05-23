@@ -566,6 +566,17 @@ namespace ConditioningControlPanel
                         }
                     });
 
+                    // Per-monitor span filter: any CCP window whose rect fully
+                    // covers any single screen is a full-screen overlay
+                    // container (flash/gaze/bubble surfaces, blur overlays).
+                    // Those carry no readable text but spanned monitor-sized
+                    // exclusion rects were swallowing every OCR'd word in
+                    // multi-monitor setups (#273). Sized windows like
+                    // AvatarTube, MantraWindow, BouncingText, LockCard,
+                    // subliminal popups, etc. fall well below per-monitor
+                    // bounds and stay in the exclusion list where they belong.
+                    var screens = GetAllScreensCached();
+
                     foreach (var hwnd in hwnds)
                     {
                         if (!IsWindowVisible(hwnd)) continue;
@@ -574,6 +585,8 @@ namespace ConditioningControlPanel
                         int w = r.Right - r.Left;
                         int h = r.Bottom - r.Top;
                         if (w <= 0 || h <= 0) continue;
+
+                        if (SpansAnyMonitor(w, h, screens)) continue;
 
                         rects.Add(new System.Drawing.Rectangle(r.Left, r.Top, w, h));
                     }
@@ -587,6 +600,24 @@ namespace ConditioningControlPanel
                 _ccpWindowRectsCacheTime = DateTime.Now;
                 return _cachedCcpWindowRects;
             }
+        }
+
+        // True if the window covers any single screen in full. 4px tolerance
+        // absorbs chrome / DPI rounding so legitimately-fullscreen windows
+        // still classify as monitor-spanning. Sized utility windows
+        // (AvatarTube, MantraWindow, BouncingText, LockCard, subliminal
+        // popups) are well below per-monitor bounds and pass through to the
+        // exclusion list.
+        private static bool SpansAnyMonitor(int width, int height, System.Windows.Forms.Screen[] screens)
+        {
+            if (screens == null || screens.Length == 0) return false;
+            const int tolerancePx = 4;
+            foreach (var s in screens)
+            {
+                var b = s.Bounds;
+                if (width >= b.Width - tolerancePx && height >= b.Height - tolerancePx) return true;
+            }
+            return false;
         }
 
         /// <summary>

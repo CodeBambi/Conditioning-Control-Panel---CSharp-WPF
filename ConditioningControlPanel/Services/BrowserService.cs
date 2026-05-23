@@ -84,6 +84,7 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<string>? NavigationCompleted;
         public event EventHandler<string>? TitleChanged;
         public event EventHandler<bool>? FullscreenChanged;
+        public event EventHandler<CoreWebView2ProcessFailedEventArgs>? BrowserProcessFailed;
 
         public bool IsInitialized => _isInitialized;
         public bool IsFullscreen { get; private set; }
@@ -196,6 +197,13 @@ namespace ConditioningControlPanel.Services
                 // Wire up events
                 _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
                 _webView.CoreWebView2.DocumentTitleChanged += OnTitleChanged;
+                // ProcessFailed fires when the Chromium browser/render process
+                // crashes. Without a handler, the WebView2 control is left in a
+                // zombie state and every subsequent property/method throws
+                // InvalidOperationException — which then surfaces as a crash on
+                // the next BrowserSiteToggle click. Forward to the consumer so
+                // it can dispose the control and lazy-reinit on next use.
+                _webView.CoreWebView2.ProcessFailed += OnProcessFailed;
 
                 // Inject the CCP forced-fullscreen exit detector. When MainWindow
                 // reparents the WebView into a borderless fullscreen popout window
@@ -1177,6 +1185,20 @@ namespace ConditioningControlPanel.Services
         {
             var title = _webView?.CoreWebView2?.DocumentTitle ?? "";
             TitleChanged?.Invoke(this, title);
+        }
+
+        private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
+        {
+            App.Logger?.Warning(
+                "WebView2 process failed: kind={Kind}, reason={Reason}, exitCode={ExitCode}, processDescription={Desc}",
+                e.ProcessFailedKind, e.Reason, e.ExitCode, e.ProcessDescription);
+
+            // Mark uninitialized so callers know not to touch the dead control,
+            // then surface the failure. Consumer is responsible for removing
+            // the WebView2 from its visual tree and disposing this service.
+            _isInitialized = false;
+            try { BrowserProcessFailed?.Invoke(this, e); }
+            catch (Exception ex) { App.Logger?.Debug("BrowserProcessFailed handler threw: {Error}", ex.Message); }
         }
 
         public void Dispose()
