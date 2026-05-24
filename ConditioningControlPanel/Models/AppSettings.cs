@@ -849,9 +849,10 @@ namespace ConditioningControlPanel.Models
         [JsonIgnore]
         public bool IsSissyMode => ActiveModId == BuiltInMods.SissyHypnoId;
 
-        private string _activeModId = BuiltInMods.BambiSleepId;
+        private string _activeModId = BuiltInMods.CCPDefaultId;
         /// <summary>
         /// The ID of the currently active mod. Replaces ContentMode enum.
+        /// Fresh installs land on CCP Default; upgraded users retain their persisted choice.
         /// </summary>
         public string ActiveModId
         {
@@ -861,7 +862,7 @@ namespace ConditioningControlPanel.Models
                 if (_activeModId != value)
                 {
                     _activeModId = value;
-                    // Keep legacy field in sync for backward compat
+                    // Keep legacy field in sync for backward compat (only Bambi/Sissy map cleanly to the old enum)
                     _contentMode = value == BuiltInMods.SissyHypnoId ? ContentMode.SissyHypno : ContentMode.BambiSleep;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsBambiMode));
@@ -923,14 +924,22 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         internal void MigrateFromContentModeToMod()
         {
-            // If ActiveModId is already set to a non-default value, migration already happened
-            if (_activeModId != BuiltInMods.BambiSleepId) return;
+            // Skip if ActiveModId already deserialized to anything other than the new neutral default
+            if (_activeModId != BuiltInMods.CCPDefaultId) return;
 
-            // Check if old ContentMode was SissyHypno — if so, migrate
+            // Pre-v6 upgrade path: legacy users had ContentMode persisted but no ActiveModId yet.
+            // Map their old enum choice (Bambi was the implicit default) onto a real mod ID.
             if (_contentMode == ContentMode.SissyHypno)
             {
                 _activeModId = BuiltInMods.SissyHypnoId;
             }
+            else if (ContentModeChosen)
+            {
+                // ContentModeChosen=true on a legacy install means they accepted the first-launch modal
+                // and were assigned Bambi (the v5.x default). Preserve that choice on upgrade.
+                _activeModId = BuiltInMods.BambiSleepId;
+            }
+            // else: fresh-install-like state → leave on CCPDefaultId
 
             // Migrate *ByMode dictionaries to *ByMod
             if (SubliminalPoolByMode != null && SubliminalPoolByMod == null)
@@ -2361,7 +2370,7 @@ namespace ConditioningControlPanel.Models
         /// Display name for current content mode.
         /// </summary>
         [JsonIgnore]
-        public string ContentModeDisplay => App.Mods?.GetModeDisplayName() ?? (IsBambiMode ? "Bambi Sleep" : "Sissy Hypno");
+        public string ContentModeDisplay => App.Mods?.GetModeDisplayName() ?? "CCP Default";
 
         /// <summary>
         /// Gets/sets the hypnotube links for the currently active content mode.

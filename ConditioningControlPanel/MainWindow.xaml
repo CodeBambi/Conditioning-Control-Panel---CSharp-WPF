@@ -155,6 +155,40 @@
             </Setter>
         </Style>
 
+        <!-- v6 brand-anchor variant. Only the dashboard's primary nav tabs use this; quest sub-tabs
+             and roadmap track buttons keep TabButtonActive so they don't get pulled into the gradient.
+             On every non-CCP-Default mod AccentGradientBrush resolves to SolidColorBrush(accent), so
+             primary-nav active state renders byte-identical to today on Bambi / Sissy / Drone.
+
+             Template is overridden so hover applies a translucent white tint via an overlay Border
+             instead of swapping Background to PinkButtonHoveredBrush. The parent's swap-Background
+             trigger would flicker the gradient out to a solid pink on CCP Default hover; the overlay
+             pattern keeps the gradient intact and adds a gentle hover lift on top, which also reads
+             well on the solid-accent active state every other mod sees. -->
+        <Style x:Key="TabButtonActivePrimary" TargetType="Button" BasedOn="{StaticResource TabButtonActive}">
+            <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <Border x:Name="hoverOverlay" Background="Transparent" IsHitTestVisible="False"/>
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="hoverOverlay" Property="Background" Value="#1AFFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Deeper Tab Button Styles — violet accent variant of TabButton/TabButtonActive
              so the new Deeper tab carries a distinct visual identity in the tab strip. -->
         <Style x:Key="TabButtonDeeper" TargetType="Button" BasedOn="{StaticResource TabButton}">
@@ -1598,29 +1632,35 @@
 
                 <!-- Title + Player Title + App Name + Version -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <!-- Mod Selector Button -->
-                    <Border x:Name="ModSelectorBorder" Background="{DynamicResource PanelAccentBrush}" CornerRadius="8" Padding="8,4" Margin="0,0,10,0"
-                            VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonDown="ModSelector_Click"
-                            ToolTip="{loc:Str tooltip_click_to_open_mod_manager}">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#2A2A4A"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <Border x:Name="ModColorDot" Width="8" Height="8" CornerRadius="4" Margin="0,0,6,0"
-                                    VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TxtModName" Text="{loc:Str label_bambi_sleep}" FontSize="11" FontWeight="SemiBold"
-                                       Foreground="White" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" FontSize="8"
-                                       Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                    <TextBlock x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_bimbo}" Foreground="{DynamicResource PinkBrush}"
+                    <!-- v6.0 Mod Switcher: ComboBox + gear button for management -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <ComboBox x:Name="ModSelectorCombo"
+                                  Style="{StaticResource DarkComboBoxStyle}"
+                                  ItemsSource="{Binding AvailableMods, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  SelectedValuePath="Id"
+                                  SelectionChanged="ModSelectorCombo_SelectionChanged"
+                                  MinWidth="160" Height="22" VerticalAlignment="Center"
+                                  FontSize="11" FontWeight="SemiBold"
+                                  ToolTip="{loc:Str tooltip_switch_mod}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,8,0"
+                                                Background="{Binding AccentBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}" Foreground="White" VerticalAlignment="Center" FontSize="11"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button x:Name="BtnManageMods" Click="BtnManageMods_Click"
+                                ToolTip="{loc:Str tooltip_manage_mods}"
+                                Margin="4,0,0,0" Width="22" Height="22"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand">
+                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                        </Button>
+                    </StackPanel>
+                    <TextBlock x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_subject}" Foreground="{DynamicResource PinkBrush}"
                                FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"
                                MaxWidth="200" TextTrimming="CharacterEllipsis"
                                ToolTip="{Binding ElementName=TxtPlayerTitle, Path=Text}">
@@ -1659,7 +1699,7 @@
 
                 <!-- Row 1 Tab Buttons: Settings, Presets, Progression, Assets -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="BtnSettings" Tag="Settings" Style="{StaticResource TabButtonActive}"
+                    <Button x:Name="BtnSettings" Tag="Settings" Style="{StaticResource TabButtonActivePrimary}"
                             Margin="3,0" Click="BtnSettings_Click" ToolTip="{loc:Str tooltip_dashboard}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="📊" FontSize="12" Margin="0,0,4,0"/>
@@ -2152,7 +2192,7 @@
                                             </Border>
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="🤖" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                <TextBlock x:Name="TxtSubBambiTakeover" Text="{loc:Str tab_bambi_takeover}" Foreground="White" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="TxtSubBambiTakeover" Text="{loc:Str tab_takeover}" Foreground="White" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DockPanel>
                                     </Button>
@@ -2379,7 +2419,8 @@
                                       Click="CardSpiral_Click"/>
 
                 <!-- Center logo (2x2) spanning rows 1-2, cols 1-2 -->
-                <Border Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Grid.ColumnSpan="2"
+                <Border x:Name="LogoBrandFrame"
+                        Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Grid.ColumnSpan="2"
                         Background="#01000000" Margin="6"
                         Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                         ToolTip="{loc:Str tooltip_click_me_rapidly}">
@@ -6713,7 +6754,7 @@
                             <StackPanel>
                                 <TextBlock Text="{loc:Str section_support_development}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"/>
                                 <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,8,0,0">
-                                    <Run Text="{loc:Str section_patreon_unlocks}"/> <Run x:Name="RunPatreonFeatures" Text="{loc:Str section_ai_chat_window_awareness_slut_mode_bambi_take}" Foreground="White"/>
+                                    <Run Text="{loc:Str section_patreon_unlocks}"/> <Run x:Name="RunPatreonFeatures" Text="{loc:Str section_ai_chat_window_awareness_slut_mode_takeover}" Foreground="White"/>
                                 </TextBlock>
                                 <Button x:Name="BtnVisitPatreon" Content="{loc:Str btn_visit_patreon}"
                                         Background="{DynamicResource SecondaryBrush}" Foreground="White"
@@ -7627,7 +7668,7 @@
                                 <Button x:Name="HelpBtnLeaderboard" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Tag="Leaderboard"/>
                                 <Border Background="#1888AACC" CornerRadius="8" Padding="12,8" Margin="10,0,0,0" BorderBrush="#3388AACC" BorderThickness="1">
                                     <StackPanel>
-                                        <TextBlock Text="{loc:Str label_who_s_the_prettiest_bimbo}" FontStyle="Italic" FontSize="15" FontWeight="Bold"
+                                        <TextBlock Text="{loc:Str label_leaderboard_tagline}" FontStyle="Italic" FontSize="15" FontWeight="Bold"
                                                    Foreground="#9988AACC"/>
                                         <TextBlock Text="{loc:Str label_every_level_counts_every_quest_matters}" FontStyle="Italic" FontSize="13" FontWeight="Bold"
                                                    Foreground="#6688AACC" Margin="0,2,0,0"/>
@@ -9980,7 +10021,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="🤖" FontSize="40" VerticalAlignment="Center" Margin="0,0,16,0"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock x:Name="TxtBambiTakeoverHeader" Text="{loc:Str tab_bambi_takeover}" Foreground="White" FontSize="26" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtBambiTakeoverHeader" Text="{loc:Str tab_takeover}" Foreground="White" FontSize="26" FontWeight="Bold"/>
                     </StackPanel>
                 </Grid>
 
@@ -10002,9 +10043,9 @@
                         <StackPanel Grid.Column="2" VerticalAlignment="Center">
                             <TextBlock Text="{loc:Str label_what_is_this}" Foreground="{DynamicResource PinkBrush}"
                                        FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="{loc:Str desc_bambi_takeover}" Foreground="White" FontSize="15"
+                            <TextBlock Text="{loc:Str desc_takeover}" Foreground="White" FontSize="15"
                                        TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="22"/>
-                            <TextBlock Text="{loc:Str desc_bambi_takeover_bullets}"
+                            <TextBlock Text="{loc:Str desc_takeover_bullets}"
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
                                        TextWrapping="Wrap" LineHeight="20"/>
                         </StackPanel>
@@ -10018,7 +10059,7 @@
                 <!-- Locked State (legacy — kept hidden, replaced by gating overlay below) -->
                 <StackPanel x:Name="AutonomyLocked" Visibility="Collapsed">
                     <Grid>
-                        <TextBlock x:Name="TxtTakeoverLocked" Text="{loc:Str label_bambi_takeover}" Foreground="#666666" FontWeight="Bold" FontSize="13"/>
+                        <TextBlock x:Name="TxtTakeoverLocked" Text="{loc:Str label_takeover}" Foreground="#666666" FontWeight="Bold" FontSize="13"/>
                         <TextBlock x:Name="TxtAutonomyLockStatus" Text="{loc:Str label_patreon_only}" Foreground="{DynamicResource SecondaryBrush}" HorizontalAlignment="Right" FontSize="11"/>
                     </Grid>
                     <TextBlock x:Name="TxtAutonomyLockMessage" Text="{loc:Str label_support_on_patreon_to_unlock}" Foreground="{DynamicResource PinkBrush}" FontSize="11" Margin="0,4,0,0"/>
@@ -10136,7 +10177,7 @@
                                 </Grid.ColumnDefinitions>
                                 <Button x:Name="BtnAutonomyStartStop" Grid.Column="0" Content="{loc:Str btn_start_2}" Background="#2A1A3A" Foreground="#90EE90"
                                         FontWeight="Bold" FontSize="14" Padding="14,8"
-                                        Click="BtnAutonomyStartStop_Click" ToolTip="{loc:Str tooltip_start_stop_bambi_takeover}"/>
+                                        Click="BtnAutonomyStartStop_Click" ToolTip="{loc:Str tooltip_start_stop_takeover}"/>
                                 <Button Grid.Column="2" Content="{loc:Str btn_test}" Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="14"
                                         Padding="14,8" Click="BtnTestAutonomy_Click" ToolTip="{loc:Str tooltip_test_action}"/>
                             </Grid>
@@ -11631,6 +11672,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <Button x:Name="BtnStart" Grid.Column="0" Style="{StaticResource PinkButton}"
+                            Background="{DynamicResource AccentGradientBrush}"
                             Height="50" FontSize="18" Click="BtnStart_Click"
                             ToolTip="{loc:Str tooltip_start_stop_the_conditioning_engine}">
                         <StackPanel x:Name="StartButtonContent" Orientation="Horizontal" Height="24" VerticalAlignment="Center">

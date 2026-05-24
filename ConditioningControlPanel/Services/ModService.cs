@@ -24,14 +24,14 @@ namespace ConditioningControlPanel.Services
     /// <summary>
     /// Core service for the modular mod system.
     /// Manages installed mods, active mod selection, and provides all data accessors
-    /// with a fallback chain: ActiveMod → BaseMod (BambiSleep).
+    /// with a fallback chain: ActiveMod → BaseMod (CCP Default).
     /// </summary>
     public class ModService
     {
         private static readonly ILogger? _log = App.Logger;
 
         private ModPackage _activeMod;
-        private readonly ModPackage _baseMod; // Always BambiSleep
+        private readonly ModPackage _baseMod; // Always CCP Default — neutral fallback for missing fields
         private readonly Dictionary<string, ModPackage> _installedMods = new(StringComparer.OrdinalIgnoreCase);
         private readonly string _modsFolder;
 
@@ -60,11 +60,15 @@ namespace ConditioningControlPanel.Services
             _modsFolder = Path.Combine(App.UserDataPath, "mods");
             Directory.CreateDirectory(_modsFolder);
 
-            // Register built-in mods
-            _baseMod = new ModPackage(BuiltInMods.BambiSleep, null, isBuiltIn: true);
+            // Register built-in mods. CCP Default is the neutral baseline + fallback chain root.
+            _baseMod = new ModPackage(BuiltInMods.CCPDefault, null, isBuiltIn: true);
+            var bambiMod = new ModPackage(BuiltInMods.BambiSleep, null, isBuiltIn: true);
             var sissyMod = new ModPackage(BuiltInMods.SissyHypno, null, isBuiltIn: true);
+            var droneMod = new ModPackage(BuiltInMods.Dronification, null, isBuiltIn: true);
             _installedMods[_baseMod.Id] = _baseMod;
+            _installedMods[bambiMod.Id] = bambiMod;
             _installedMods[sissyMod.Id] = sissyMod;
+            _installedMods[droneMod.Id] = droneMod;
 
             // Load user-installed mods from disk
             LoadInstalledMods();
@@ -310,6 +314,8 @@ namespace ConditioningControlPanel.Services
                 if (manifest.Identity.ModeDisplayName?.Length > 200) manifest.Identity.ModeDisplayName = manifest.Identity.ModeDisplayName[..200];
                 if (manifest.Identity.TalkToLabel?.Length > 200) manifest.Identity.TalkToLabel = manifest.Identity.TalkToLabel[..200];
                 if (manifest.Identity.TakeoverLabel?.Length > 200) manifest.Identity.TakeoverLabel = manifest.Identity.TakeoverLabel[..200];
+                if (manifest.Identity.Affirmation?.Length > 200) manifest.Identity.Affirmation = manifest.Identity.Affirmation[..200];
+                if (manifest.Identity.RankSubject?.Length > 200) manifest.Identity.RankSubject = manifest.Identity.RankSubject[..200];
             }
             if (manifest.Messages != null)
             {
@@ -436,7 +442,7 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Uninstall a user-installed mod. Cannot uninstall built-in mods.
-        /// If the uninstalled mod is active, falls back to BambiSleep.
+        /// If the uninstalled mod is active, falls back to CCP Default.
         /// </summary>
         public bool UninstallMod(string modId)
         {
@@ -445,10 +451,10 @@ namespace ConditioningControlPanel.Services
             if (mod.IsBuiltIn)
                 return false;
 
-            // If this was active, fall back to base
+            // If this was active, fall back to neutral default
             if (_activeMod.Id == modId)
             {
-                ActivateMod(BuiltInMods.BambiSleepId);
+                ActivateMod(BuiltInMods.CCPDefaultId);
             }
 
             // Remove from disk
@@ -570,8 +576,10 @@ namespace ConditioningControlPanel.Services
         public string GetSecondaryColorHex()
         {
             // Built-in mods have predefined secondary colors
+            if (_activeMod.Id == BuiltInMods.CCPDefaultId) return "#8B5CF6";
             if (_activeMod.Id == BuiltInMods.BambiSleepId) return "#9B59B6";
             if (_activeMod.Id == BuiltInMods.SissyHypnoId) return "#7B68EE";
+            if (_activeMod.Id == BuiltInMods.DronificationId) return "#00B8C4";
 
             return ComputeSecondaryFromAccent(GetAccentColorHex());
         }
@@ -600,6 +608,17 @@ namespace ConditioningControlPanel.Services
 
         public string GetTakeoverLabel() =>
             GetStringValue(m => m.Identity?.TakeoverLabel, m => m.Identity!.TakeoverLabel!);
+
+        public string GetAffirmation() =>
+            GetStringValue(m => m.Identity?.Affirmation, m => m.Identity!.Affirmation!);
+
+        // RankSubject is optional per-mod; falls back to UserTerm when not set.
+        public string GetRankSubject()
+        {
+            var rank = _activeMod.Manifest.Identity?.RankSubject;
+            if (!string.IsNullOrEmpty(rank)) return rank;
+            return GetUserTerm();
+        }
 
         // Pool defaults
         public Dictionary<string, bool> GetDefaultSubliminalPool() =>
@@ -702,9 +721,7 @@ namespace ConditioningControlPanel.Services
         {
             if (string.IsNullOrEmpty(text)) return text;
 
-            // If active mod is the base mod (BambiSleep), no replacements needed
-            if (_activeMod.Id == BuiltInMods.BambiSleepId) return text;
-
+            // No replacements registered → nothing to do (mod-agnostic check)
             var replacements = _activeMod.Manifest.TextReplacements;
             if (replacements == null || replacements.Count == 0) return text;
 
@@ -789,16 +806,24 @@ namespace ConditioningControlPanel.Services
             _activeMod.Manifest.EnhancementOverrides?.StatPillTooltips?.TryGetValue(skillId, out var tip) == true ? tip : null;
 
         /// <summary>
-        /// Whether the active mod is the base (BambiSleep) mod.
-        /// Used for backward compat where code checks IsBambiMode.
+        /// Whether the active mod is the neutral CCP Default baseline.
         /// </summary>
-        public bool IsBaseMod => _activeMod.Id == BuiltInMods.BambiSleepId;
+        public bool IsCCPDefault => _activeMod.Id == BuiltInMods.CCPDefaultId;
 
         /// <summary>
-        /// Whether the active mod is the SissyHypno built-in.
-        /// Used for backward compat where code checks IsSissyMode.
+        /// Whether the active mod is the BambiSleep built-in stock mod.
+        /// </summary>
+        public bool IsBambiMode => _activeMod.Id == BuiltInMods.BambiSleepId;
+
+        /// <summary>
+        /// Whether the active mod is the SissyHypno built-in stock mod.
         /// </summary>
         public bool IsSissyMod => _activeMod.Id == BuiltInMods.SissyHypnoId;
+
+        /// <summary>
+        /// Whether the active mod is the Dronification built-in stock mod.
+        /// </summary>
+        public bool IsDroneMod => _activeMod.Id == BuiltInMods.DronificationId;
 
         #endregion
 
@@ -933,8 +958,8 @@ namespace ConditioningControlPanel.Services
                 },
                 Identity = new ModIdentity
                 {
-                    CompanionName = "BambiSprite",
-                    UserTerm = "Bambi",
+                    CompanionName = "Companion",
+                    UserTerm = "Subject",
                     ModeDisplayName = "My Custom Mode",
                     TalkToLabel = "Talk to Companion",
                     TakeoverLabel = "Takeover"

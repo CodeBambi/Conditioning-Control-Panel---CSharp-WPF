@@ -350,7 +350,7 @@
                                 </Setter>
                             </Style>
                         </ContextMenu.Style>
-                        <MenuItem x:Name="MenuItemTalkToBambi" Header="{loc:Str section_talk_to_bambi}" Click="MenuItemTalkToBambi_Click" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
+                        <MenuItem x:Name="MenuItemTalkToBambi" Header="{loc:Str section_talk_to_companion}" Click="MenuItemTalkToBambi_Click" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
                         <Separator/>
                         <MenuItem x:Name="MenuItemDetach" Header="{loc:Str section_detach}" Click="MenuItemDetach_Click"/>
                         <MenuItem x:Name="MenuItemAttach" Header="{loc:Str section_attach_to_main_window}" Click="MenuItemAttach_Click" Visibility="Collapsed"/>
@@ -360,7 +360,7 @@
                         <Separator/>
                         <MenuItem x:Name="MenuItemEngine" Header="{loc:Str section_start_engine}" Click="MenuItemEngine_Click" Foreground="#90EE90"/>
                         <MenuItem x:Name="MenuItemTriggerMode" Header="{loc:Str section_trigger_mode}" Click="MenuItemTriggerMode_Click"/>
-                        <MenuItem x:Name="MenuItemBambiTakeover" Header="{loc:Str section_bimbo_takeover}" Click="MenuItemBambiTakeover_Click"/>
+                        <MenuItem x:Name="MenuItemBambiTakeover" Header="{loc:Str section_takeover}" Click="MenuItemBambiTakeover_Click"/>
                         <MenuItem x:Name="MenuItemPersonality" Header="{loc:Str section_personality}" Foreground="{DynamicResource PinkBrush}">
                             <MenuItem.ItemContainerStyle>
                                 <Style TargetType="MenuItem">
@@ -457,7 +457,7 @@
                     <!-- Title and Level -->
                     <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock x:Name="TxtAvatarTitle"
-                                   Text="{loc:Str label_basic_bimbo_2}"
+                                   Text="{loc:Str label_basic_subject_2}"
                                    FontSize="16"
                                    FontWeight="Bold"
                                    Foreground="{DynamicResource PinkBrush}"

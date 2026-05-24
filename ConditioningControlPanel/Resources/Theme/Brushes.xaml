@@ -99,4 +99,19 @@
     <SolidColorBrush x:Key="NeonPurpleSoftBrush" Color="{DynamicResource NeonPurpleSoft}"/>
     <SolidColorBrush x:Key="NeonPurpleTransparent20Brush" Color="{DynamicResource NeonPurpleTransparent20}"/>
 
+    <!-- v6 CCP brand gradient (135°, pink → violet). Static, NOT mod-overridable.
+         Applied at the four brand anchors (logo, START button, XP bar, primary nav active)
+         on CCP Default only; ApplyModTheme swaps AccentGradientBrush to point at this for
+         CCP Default and to a solid SolidColorBrush(accent) for every other mod. -->
+    <LinearGradientBrush x:Key="BrandGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#E84393" Offset="0"/>
+        <GradientStop Color="#8B5CF6" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Anchor swap point. ApplyModTheme rewrites this at runtime:
+           CCP Default → BrandGradient (above)
+           any other mod → SolidColorBrush of the active mod's accent color
+         XAML anchors read {DynamicResource AccentGradientBrush}; everything else stays on PinkBrush. -->
+    <SolidColorBrush x:Key="AccentGradientBrush" Color="{DynamicResource PinkColor}"/>
+
 </ResourceDictionary>

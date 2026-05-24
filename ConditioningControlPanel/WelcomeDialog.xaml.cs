@@ -11,6 +11,7 @@ namespace ConditioningControlPanel
         public WelcomeDialog()
         {
             InitializeComponent();
+            TxtWelcomeHeading.Text = Loc.GetF("label_welcome", App.Mods?.GetAffirmation() ?? "Subject");
         }
 
         private void BtnBegin_Click(object sender, RoutedEventArgs e)

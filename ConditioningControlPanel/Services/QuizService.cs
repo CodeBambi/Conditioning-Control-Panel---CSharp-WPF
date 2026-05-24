@@ -11,6 +11,10 @@ using Newtonsoft.Json;
 
 namespace ConditioningControlPanel.Services
 {
+    // TODO(v6 follow-up): make quiz content mod-aware. Quiz prompts, archetype names, and seed
+    // questions throughout this file are Bambi-coded. Deferred from the v6 agnostic refactor —
+    // a real content authoring pass, not a code change. Track in its own PR.
+
     public enum QuizCategory
     {
         Sissy,

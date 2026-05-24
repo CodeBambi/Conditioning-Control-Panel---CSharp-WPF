@@ -67,6 +67,13 @@ namespace ConditioningControlPanel
         private bool _isRunning = false;
         public bool IsEngineRunning => _isRunning;
         private bool _isLoading = true;
+
+        /// <summary>
+        /// Items shown in the top-bar mod switcher ComboBox. Rebuilt by InitializeModSelector.
+        /// </summary>
+        public ObservableCollection<ModSelectorItem> AvailableMods { get; } = new();
+        // Guards SelectionChanged from re-entering activation while we repopulate the list.
+        private bool _suppressModSelectorChange;
         private BrowserService? _browser;
         private bool _browserInitialized = false;
         private bool _skipSiteToggleNavigation = false;
@@ -382,9 +389,8 @@ namespace ConditioningControlPanel
             // Ensure all services are stopped on startup (cleanup any leftover state)
             App.BouncingText.Stop();
             App.Overlay.Stop();
-            
-            // Show mod selection on first launch (before welcome dialog)
-            ModSelectorDialog.ShowIfNeeded();
+
+            // v6.0: fresh installs land on CCP Default (neutral baseline). No first-launch mod picker.
 
             // Show welcome dialog on first launch, then start tutorial
             // But delay tutorial if update dialog is being shown
@@ -1260,6 +1266,15 @@ namespace ConditioningControlPanel
                 res["AccentTintedBgHoverBrush"] = new SolidColorBrush(tintedBgHover);
                 res["AccentMidGradientBrush"] = new SolidColorBrush(midGradient);
 
+                // === v6 BRAND GRADIENT — anchor swap ===
+                // CCP Default activates the static BrandGradient at the four brand anchors (logo, START,
+                // XP bar, primary nav active). Other mods render solid SolidColorBrush(accent) so their
+                // anchor pixels stay byte-identical to pre-v6 state.
+                if (App.Mods?.IsCCPDefault == true && TryFindResource("BrandGradient") is Brush brandGradient)
+                    res["AccentGradientBrush"] = brandGradient;
+                else
+                    res["AccentGradientBrush"] = new SolidColorBrush(accent);
+
                 // === TITLE BAR (most visible — direct assignment for immediate update) ===
                 var accentBrush = new SolidColorBrush(accent);
                 if (TitleBarBorder != null)
@@ -1279,7 +1294,20 @@ namespace ConditioningControlPanel
                 if (TxtLevelLabel != null)
                     TxtLevelLabel.Foreground = accentBrush;
                 if (XPBar != null)
-                    XPBar.Background = accentBrush;
+                {
+                    // Anchor 3: CCP Default gets BrandGradient, every other mod gets the solid accent it always had.
+                    XPBar.Background = (Brush)res["AccentGradientBrush"];
+                }
+
+                // Anchor 1: logo brand frame. CCP Default gets BrandGradient peeking around the logo;
+                // every other mod keeps its pre-v6 near-transparent background unchanged.
+                if (LogoBrandFrame != null)
+                {
+                    if (App.Mods?.IsCCPDefault == true && TryFindResource("BrandGradient") is Brush logoGradient)
+                        LogoBrandFrame.Background = logoGradient;
+                    else
+                        LogoBrandFrame.Background = new SolidColorBrush(Color.FromArgb(0x01, 0, 0, 0));
+                }
 
                 // === BANNER AREA ===
                 if (TxtBannerPrimary != null)
@@ -1289,9 +1317,7 @@ namespace ConditioningControlPanel
                 if (TxtBannerTertiary != null)
                     TxtBannerTertiary.Foreground = accentBrush;
 
-                // === MOD SELECTOR DOT ===
-                if (ModColorDot != null)
-                    ModColorDot.Background = accentBrush;
+                // Mod selector ComboBox repopulates itself in InitializeModSelector — no per-element refresh here.
 
                 App.Logger?.Debug("Theme-aware UI elements refreshed for mod {ModId}", App.Mods?.ActiveModId);
             }
@@ -1318,22 +1344,45 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Initializes the content mode toggle based on current settings.
+        /// Rebuilds the top-bar mod-switcher ComboBox and selects the active mod.
+        /// Order: CCP Default → Bambi Sleep → Sissy Hypno → Dronification → user mods (alphabetical).
         /// </summary>
         private void InitializeModSelector()
         {
-            // Update mod name display
-            TxtModName.Text = App.Mods?.GetModeDisplayName() ?? "Bambi Sleep";
-
-            // Update mod color dot
-            var accentHex = App.Mods?.GetAccentColorHex() ?? "#FF69B4";
+            _suppressModSelectorChange = true;
             try
             {
-                ModColorDot.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(accentHex));
+                AvailableMods.Clear();
+                if (App.Mods != null)
+                {
+                    // Stock mods in a fixed canonical order.
+                    var stockOrder = new[]
+                    {
+                        BuiltInMods.CCPDefaultId,
+                        BuiltInMods.BambiSleepId,
+                        BuiltInMods.SissyHypnoId,
+                        BuiltInMods.DronificationId,
+                    };
+                    foreach (var id in stockOrder)
+                    {
+                        if (App.Mods.InstalledMods.TryGetValue(id, out var mod))
+                            AvailableMods.Add(BuildSelectorItem(mod));
+                    }
+                    // User-installed mods after stock, alphabetical.
+                    foreach (var mod in App.Mods.InstalledMods.Values
+                        .Where(m => !m.IsBuiltIn)
+                        .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase))
+                    {
+                        AvailableMods.Add(BuildSelectorItem(mod));
+                    }
+
+                    if (ModSelectorCombo != null)
+                        ModSelectorCombo.SelectedValue = App.Mods.ActiveModId;
+                }
             }
-            catch
+            finally
             {
-                ModColorDot.Background = new SolidColorBrush(Colors.HotPink);
+                _suppressModSelectorChange = false;
             }
 
             // Hide BambiCloud option if mod doesn't want it
@@ -1343,14 +1392,32 @@ namespace ConditioningControlPanel
             if (!showBambiCloud)
                 RbHypnoTube.IsChecked = true;
 
-            // Update browser loading text
-            var browserSiteName = showBambiCloud ? "BambiCloud" : "HypnoTube";
-            BrowserLoadingText.Text = $"🌐 Click to connect to {browserSiteName}";
+            RefreshBrowserLoadingText();
+        }
 
-            // Load mod-aware images
-            LoadTakeoverImage();
-            LoadFeatureImages();
-            RefreshThemeAwareElements();
+        private static ModSelectorItem BuildSelectorItem(ModPackage mod)
+        {
+            Brush accent;
+            try
+            {
+                var color = (Color)ColorConverter.ConvertFromString(mod.Manifest.Theme?.AccentColor ?? "#E84393");
+                accent = new SolidColorBrush(color);
+            }
+            catch
+            {
+                accent = new SolidColorBrush(Color.FromRgb(0xE8, 0x43, 0x93));
+            }
+            return new ModSelectorItem(mod.Id, mod.Name, accent);
+        }
+
+        private void RefreshBrowserLoadingText()
+        {
+            if (BrowserLoadingText == null) return;
+            var showBambiCloud = App.Mods?.ShowBambiCloudOption() ?? false;
+            var siteName = showBambiCloud
+                ? "BambiCloud"
+                : (App.Mods?.ActiveMod.Manifest.Browser?.SiteName ?? "HypnoTube");
+            BrowserLoadingText.Text = $"🌐 Click to connect to {siteName}";
         }
 
         /// <summary>
@@ -1431,7 +1498,7 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void ModSelector_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private void BtnManageMods_Click(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
 
@@ -1440,50 +1507,62 @@ namespace ConditioningControlPanel
 
             if (dialog.ModWasChanged)
             {
-                // Update settings to reflect new active mod
-                App.Settings.Current.ActiveModId = App.Mods.ActiveModId;
-                App.Settings.Save();
-
-                // Refresh all mod-aware UI
-                InitializeModSelector();
-                LoadLogo();
-                LoadTakeoverImage();
-                LoadFeatureImages();
-                RefreshThemeAwareElements();
-
-                // Refresh achievement images for new mod
-                PopulateAchievementGrid();
-
-                // Refresh skill tree images for new mod
-                DrawSkillTree();
-
-                // Hide/show BambiCloud based on mod
-                var showBambiCloud = App.Mods?.ShowBambiCloudOption() ?? true;
-                RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
-                if (!showBambiCloud)
-                {
-                    RbHypnoTube.IsChecked = true;
-                    if (_browser != null && _browserInitialized)
-                    {
-                        var url = App.Mods?.GetDefaultBrowserUrl() ?? "https://hypnotube.com/";
-                        _browser.Navigate(url);
-                    }
-                }
-
-                // Update hypnotube links UI for new mod
-                RefreshHypnotubeLinksUI();
-
-                // Update avatar context menu
-                _avatarTubeWindow?.UpdateQuickMenuState();
-
-                App.Logger?.Information("Mod changed to {ModId}", App.Mods?.ActiveModId);
+                ApplyActiveModChange();
             }
+        }
+
+        private void ModSelectorCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isLoading || _suppressModSelectorChange) return;
+            if (ModSelectorCombo?.SelectedValue is not string newModId) return;
+            if (App.Mods == null || App.Mods.ActiveModId == newModId) return;
+
+            App.Mods.ActivateMod(newModId);
+            ApplyActiveModChange();
+        }
+
+        /// <summary>
+        /// Centralized refresh of mod-aware UI after the active mod changes.
+        /// Called by both the top-bar ComboBox and the Manage Mods dialog return path.
+        /// </summary>
+        private void ApplyActiveModChange()
+        {
+            if (App.Mods == null) return;
+
+            App.Settings.Current.ActiveModId = App.Mods.ActiveModId;
+            App.Settings.Current.ModChosen = true;
+            App.Settings.Save();
+
+            InitializeModSelector();
+            LoadLogo();
+            LoadTakeoverImage();
+            LoadFeatureImages();
+            RefreshThemeAwareElements();
+            PopulateAchievementGrid();
+            DrawSkillTree();
+
+            var showBambiCloud = App.Mods.ShowBambiCloudOption();
+            RbBambiCloud.Visibility = showBambiCloud ? Visibility.Visible : Visibility.Collapsed;
+            if (!showBambiCloud)
+            {
+                RbHypnoTube.IsChecked = true;
+                if (_browser != null && _browserInitialized)
+                {
+                    var url = App.Mods.GetDefaultBrowserUrl();
+                    _browser.Navigate(url);
+                }
+            }
+
+            RefreshHypnotubeLinksUI();
+            _avatarTubeWindow?.UpdateQuickMenuState();
+
+            App.Logger?.Information("Mod changed to {ModId}", App.Mods.ActiveModId);
         }
 
         private void RefreshHypnotubeLinksUI()
         {
             if (TxtHypnotubeModeLabel != null)
-                TxtHypnotubeModeLabel.Text = App.Settings?.Current?.ContentModeDisplay ?? "Bambi Sleep";
+                TxtHypnotubeModeLabel.Text = App.Settings?.Current?.ContentModeDisplay ?? "CCP Default";
 
             if (TxtHypnotubeLinks != null)
             {
@@ -6059,9 +6138,10 @@ namespace ConditioningControlPanel
                 BlinkTrainerTab.Visibility = Visibility.Collapsed;
             }
 
-            // Reset all button styles to inactive
+            // Reset all button styles to inactive. activeStyle is the primary-nav-only v6 variant —
+            // quest sub-tabs and roadmap tracks use TabButtonActive directly (see lines further down).
             var inactiveStyle = FindResource("TabButton") as Style;
-            var activeStyle = FindResource("TabButtonActive") as Style;
+            var activeStyle = FindResource("TabButtonActivePrimary") as Style;
             BtnSettings.Style = inactiveStyle;
             BtnPresets.Style = inactiveStyle;
             BtnQuests.Style = inactiveStyle;
@@ -9260,10 +9340,10 @@ namespace ConditioningControlPanel
                 TxtPatreonStatus.Text = string.IsNullOrEmpty(nameToShow) ? "Connected to Patreon" : $"Welcome, {nameToShow}!";
                 TxtPatreonTier.Text = tier switch
                 {
-                    PatreonTier.Level2 => "Level 2 Patron - All features unlocked!",
-                    PatreonTier.Level1 => "Level 1 Patron - All features unlocked!",
-                    _ when isWhitelisted => "Whitelisted - All features unlocked!",
-                    _ => isActivePatron ? "Patron - Thank you for your support!" : "Connected - Subscribe to unlock features"
+                    PatreonTier.Level2 => Loc.Get("label_patreon_tier_level2"),
+                    PatreonTier.Level1 => Loc.Get("label_patreon_tier_level1"),
+                    _ when isWhitelisted => Loc.Get("label_patreon_tier_whitelisted"),
+                    _ => Loc.Get(isActivePatron ? "label_patreon_tier_patron" : "label_patreon_tier_connected")
                 };
                 BtnPatreonLogin.Content = Loc.Get("btn_logout");
             }
@@ -22453,7 +22533,7 @@ namespace ConditioningControlPanel
 
             // Mod-aware Bambi Takeover header + side-nav button label
             // (Drone mod → "Drone Takeover", SissyHypno → "Sissy Takeover", etc.)
-            var takeoverLabel = App.Mods?.GetTakeoverLabel() ?? Loc.Get("tab_bambi_takeover");
+            var takeoverLabel = App.Mods?.GetTakeoverLabel() ?? Loc.Get("tab_takeover");
             if (TxtBambiTakeoverHeader != null) TxtBambiTakeoverHeader.Text = takeoverLabel;
             if (TxtSubBambiTakeover != null) TxtSubBambiTakeover.Text = takeoverLabel;
 
@@ -27739,5 +27819,20 @@ namespace ConditioningControlPanel
     {
         public IntPtr Handle { get; }
         public Win32WindowWrapper(IntPtr handle) => Handle = handle;
+    }
+
+    /// <summary>DTO bound to the top-bar mod-switcher ComboBox.</summary>
+    public sealed class ModSelectorItem
+    {
+        public string Id { get; }
+        public string Name { get; }
+        public Brush AccentBrush { get; }
+
+        public ModSelectorItem(string id, string name, Brush accentBrush)
+        {
+            Id = id;
+            Name = name;
+            AccentBrush = accentBrush;
+        }
     }
 }

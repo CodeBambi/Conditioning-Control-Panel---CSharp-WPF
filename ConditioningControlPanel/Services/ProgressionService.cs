@@ -232,12 +232,12 @@ namespace ConditioningControlPanel.Services
         {
             return level switch
             {
-                < 5 => Loc.Get("rank_beginner_bimbo"),
-                < 10 => Loc.Get("rank_training_bimbo"),
-                < 20 => Loc.Get("rank_eager_bimbo"),
-                < 30 => Loc.Get("rank_devoted_bimbo"),
-                < 50 => Loc.Get("rank_advanced_bimbo"),
-                _ => Loc.Get("rank_perfect_bimbo")
+                < 5 => Loc.GetF("rank_beginner", App.Mods?.GetRankSubject() ?? "Subject"),
+                < 10 => Loc.GetF("rank_training", App.Mods?.GetRankSubject() ?? "Subject"),
+                < 20 => Loc.GetF("rank_eager", App.Mods?.GetRankSubject() ?? "Subject"),
+                < 30 => Loc.GetF("rank_devoted", App.Mods?.GetRankSubject() ?? "Subject"),
+                < 50 => Loc.GetF("rank_advanced", App.Mods?.GetRankSubject() ?? "Subject"),
+                _ => Loc.GetF("rank_perfect", App.Mods?.GetRankSubject() ?? "Subject")
             };
         }
 

@@ -5801,7 +5801,7 @@ namespace ConditioningControlPanel
         public void UpdateQuickMenuState()
         {
             // Talk to companion - mode-aware label
-            var talkToLabel = App.Mods?.GetTalkToLabel() ?? Loc.Get("menu_talk_to_bambi");
+            var talkToLabel = App.Mods?.GetTalkToLabel() ?? Loc.Get("menu_talk_to_companion");
             var chatAvailable = App.Ai?.IsAvailable == true;
             MenuItemTalkToBambi.IsEnabled = chatAvailable;
             if (chatAvailable)
@@ -5828,7 +5828,7 @@ namespace ConditioningControlPanel
             // Takeover (Patreon only) - mode-aware name
             var takeoverAvailable = App.Patreon?.HasPremiumAccess == true;
             var takeoverOn = App.Settings?.Current?.AutonomyModeEnabled == true;
-            var takeoverName = App.Mods?.GetTakeoverLabel() ?? Loc.Get("menu_bambi_takeover");
+            var takeoverName = App.Mods?.GetTakeoverLabel() ?? Loc.Get("menu_takeover");
             MenuItemBambiTakeover.Header = takeoverOn ? Loc.GetF("menu_takeover_on_format", takeoverName) : Loc.GetF("menu_takeover_off_format", takeoverName);
             MenuItemBambiTakeover.Foreground = takeoverOn ? new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")) : new SolidColorBrush(Colors.White);
             MenuItemBambiTakeover.IsEnabled = takeoverAvailable;
