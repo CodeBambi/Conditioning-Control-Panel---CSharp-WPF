@@ -85,6 +85,26 @@
     <Color x:Key="DeeperDrawerStripHover">#FF2A2A42</Color>
     <Color x:Key="DeeperSelectionStrip">#287B5CFF</Color>
 
+    <!-- Mission 3 (Player redesign + theming cleanup) — chrome surfaces and
+         picker overlays that were previously hardcoded across XAML/code.
+
+         PreviewSurfaceBg / WaveformBg / MenuItemHoverBg: editor + player
+         hardcoded hex promoted to theme tokens.
+
+         PlayerOverlayBg: semi-opaque black for in-pane overlays (zoom pills,
+         "Now: region" label) that need to sit over a video frame.
+
+         GazePicker* family: the topmost transparent picker (separate Window)
+         couldn't pick up any DynamicResource until these existed. -->
+    <Color x:Key="DeeperPreviewSurfaceBg">#FF0A0A14</Color>
+    <Color x:Key="DeeperWaveformBg">#10000020</Color>
+    <Color x:Key="DeeperMenuItemHoverBg">#FF3D3D60</Color>
+    <Color x:Key="DeeperPlayerOverlayBg">#A0000000</Color>
+    <Color x:Key="DeeperGazePickerBackdrop">#40000000</Color>
+    <Color x:Key="DeeperGazePickerToolbarBg">#E61C1C35</Color>
+    <Color x:Key="DeeperGazePickerHandleFill">#FFFFFFFF</Color>
+    <Color x:Key="DeeperGazePickerCancelBorder">#80FFFFFF</Color>
+
     <!-- SP5 layer 3: NeonPurple — Available Subjects directory tab + page accent.
          Distinct from DeeperAccent #7B5CFF (violet, calmer); #B47BFF reads as
          bright/neon and marks the section as visually different. ~12:1 against

@@ -84,6 +84,16 @@
     <SolidColorBrush x:Key="DeeperDrawerStripHoverBrush" Color="{DynamicResource DeeperDrawerStripHover}"/>
     <SolidColorBrush x:Key="DeeperSelectionStripBrush" Color="{DynamicResource DeeperSelectionStrip}"/>
 
+    <!-- Mission 3 (Player redesign + theming cleanup) — see Colors.xaml. -->
+    <SolidColorBrush x:Key="DeeperPreviewSurfaceBgBrush" Color="{DynamicResource DeeperPreviewSurfaceBg}"/>
+    <SolidColorBrush x:Key="DeeperWaveformBgBrush" Color="{DynamicResource DeeperWaveformBg}"/>
+    <SolidColorBrush x:Key="DeeperMenuItemHoverBgBrush" Color="{DynamicResource DeeperMenuItemHoverBg}"/>
+    <SolidColorBrush x:Key="DeeperPlayerOverlayBgBrush" Color="{DynamicResource DeeperPlayerOverlayBg}"/>
+    <SolidColorBrush x:Key="DeeperGazePickerBackdropBrush" Color="{DynamicResource DeeperGazePickerBackdrop}"/>
+    <SolidColorBrush x:Key="DeeperGazePickerToolbarBgBrush" Color="{DynamicResource DeeperGazePickerToolbarBg}"/>
+    <SolidColorBrush x:Key="DeeperGazePickerHandleFillBrush" Color="{DynamicResource DeeperGazePickerHandleFill}"/>
+    <SolidColorBrush x:Key="DeeperGazePickerCancelBorderBrush" Color="{DynamicResource DeeperGazePickerCancelBorder}"/>
+
     <!-- SP5 layer 3: NeonPurple brushes for the Available Subjects tab. -->
     <SolidColorBrush x:Key="NeonPurpleBrush" Color="{DynamicResource NeonPurple}"/>
     <SolidColorBrush x:Key="NeonPurpleSoftBrush" Color="{DynamicResource NeonPurpleSoft}"/>
