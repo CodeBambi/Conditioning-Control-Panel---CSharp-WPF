@@ -498,11 +498,13 @@ namespace ConditioningControlPanel.Views.Deeper
                 var h = MiniTimelineCanvas.ActualHeight;
                 if (w <= 0 || h <= 0) return;
 
-                // Use enhancement's effective max time as the denominator.
-                // We prefer playback duration when known, else the latest
-                // region/rule/haptic end so even a short clip with rules
-                // spanning past the end stays visible.
-                var total = ComputeMiniTotalSeconds(enh);
+                // Prefer the actual media duration (player or video source)
+                // so the canvas spans the whole clip the user is watching,
+                // not just the segment the enhancement happens to cover.
+                // Falls back to enhancement-content max (or 60s as a last
+                // resort for a brand-new empty project) when the media
+                // hasn't reported its duration yet.
+                var total = GetEffectiveTimelineTotal(enh);
                 if (total <= 0) return;
                 _miniTotalSeconds = total;
 
@@ -616,12 +618,28 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             if (MiniTimelineCanvas == null || _miniEnhancement == null) return;
             var w = MiniTimelineCanvas.ActualWidth;
-            if (w <= 0 || _miniTotalSeconds <= 0) return;
-            double currentSec;
-            if (_videoSource != null)
-                currentSec = _videoSource.GetCurrentTimeSeconds();
-            else
-                currentSec = _player.CurrentTimeMs / 1000.0;
+            if (w <= 0) return;
+
+            // Recompute the effective total each tick — for video, the
+            // duration isn't known until the WebView2 has actually loaded
+            // the page and the <video> element reports its metadata. For
+            // audio, NAudio reports duration as soon as Play() returns.
+            // Whenever the canonical total drifts more than ~1% from what
+            // the canvas was last drawn against, force a rebuild so band
+            // positions catch up.
+            var effective = GetEffectiveTimelineTotal(_miniEnhancement);
+            if (effective <= 0) return;
+            if (_miniTotalSeconds <= 0
+                || Math.Abs(effective - _miniTotalSeconds) / Math.Max(effective, _miniTotalSeconds) > 0.01)
+            {
+                _miniTotalSeconds = effective;
+                RebuildMiniTimeline();
+                return; // rebuild placed a fresh playhead at x=0; next tick will move it
+            }
+
+            double currentSec = _videoSource != null
+                ? _videoSource.GetCurrentTimeSeconds()
+                : _player.CurrentTimeMs / 1000.0;
             var x = Math.Clamp(currentSec / _miniTotalSeconds, 0, 1) * w;
 
             foreach (var child in MiniTimelineCanvas.Children)
@@ -632,6 +650,34 @@ namespace ConditioningControlPanel.Views.Deeper
                     break;
                 }
             }
+        }
+
+        /// <summary>
+        /// Canonical timeline-length resolver. Picks the longest of:
+        ///  (1) the actually-loaded media duration (audio player or video
+        ///      source — whichever is active),
+        ///  (2) the enhancement's own content extent (latest region end,
+        ///      rule TimeReached time, or haptic event end),
+        ///  (3) 60s as a floor so a brand-new empty project still draws.
+        ///
+        /// Picking the LONGER of (1) and (2) means a project with content
+        /// past the media's real end still surfaces the trailing rules,
+        /// and a project that ends well before the media still spans the
+        /// whole video the user is actually watching.
+        /// </summary>
+        private double GetEffectiveTimelineTotal(Enhancement enh)
+        {
+            double media = 0;
+            try
+            {
+                if (_videoSource != null)
+                    media = _videoSource.GetDurationSeconds();
+                else if (_player != null)
+                    media = _player.DurationMs / 1000.0;
+            }
+            catch { }
+            var content = ComputeMiniTotalSeconds(enh); // already floored at 60s
+            return Math.Max(media, content);
         }
 
         private void MiniTimelineCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
