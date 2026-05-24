@@ -8886,12 +8886,14 @@
                 </DataTemplate>
             </ContentControl.Resources>
 
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly">
             <Grid Margin="28,20,28,20" MaxWidth="1080" HorizontalAlignment="Center">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/> <!-- Header -->
                     <RowDefinition Height="Auto"/> <!-- Welcome card (first-run) -->
                     <RowDefinition Height="Auto"/> <!-- Filter + sort strip -->
-                    <RowDefinition Height="*"/>    <!-- Unified library list -->
+                    <RowDefinition Height="Auto"/> <!-- Unified library list -->
+                    <RowDefinition Height="Auto"/> <!-- Webcam setup card (gateway to free webcam features) -->
                 </Grid.RowDefinitions>
 
                 <!-- Header -->
@@ -9184,11 +9186,11 @@
                 </StackPanel>
 
                 <!-- Unified library list. x:Name preserved (tutorial dp_library
-                     retargets to this element). Virtualized — VirtualizingStackPanel
-                     + CanContentScroll keeps things smooth for libraries with
-                     hundreds of entries. Empty-state hint is painted on top via
-                     the wrapping Grid, controlled from code-behind. -->
-                <Border Grid.Row="3"
+                     retargets to this element). Empty-state hint is painted on
+                     top via the wrapping Grid, controlled from code-behind.
+                     MinHeight=320 so the empty-state hint has room while the
+                     enclosing ScrollViewer handles overflow. -->
+                <Border Grid.Row="3" MinHeight="320"
                         Background="{DynamicResource SurfaceBgBrush}"
                         BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
                         CornerRadius="10" Padding="14,12">
@@ -9235,7 +9237,132 @@
                         </Grid>
                     </DockPanel>
                 </Border>
+
+                <!-- Webcam setup card. Mirrors the Blink Trainer setup card so
+                     non-Patreon users can grant consent + calibrate without
+                     hitting the Blink Trainer paywall. Lives at the bottom of
+                     the hub so the library stays the focal point above; users
+                     scroll down when they need to set up webcam triggers.
+                     Cross-tab sync is automatic (PopulateWebcamDeviceCombos,
+                     FillMonitorCombo, and RefreshBlinkTrainerWebcamColumn all
+                     fan out to the DeeperWebcam_* widgets too). -->
+                <Border Grid.Row="4" x:Name="DeeperWebcamSetupCard"
+                        Background="{DynamicResource PanelBgBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10" Padding="14,12" Margin="0,14,0,0">
+                    <Border.BorderBrush>
+                        <SolidColorBrush Color="{DynamicResource PinkColor}" Opacity="0.25"/>
+                    </Border.BorderBrush>
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="📷" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock Text="{loc:Str blink_trainer_section_webcam}"
+                                       Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="13" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock Text="Webcam-driven Deeper triggers (gaze, blink, face-lost) need camera consent + a calibration. Both are free and configured right here."
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                   TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                        <!-- Two-column layout: left = device/monitor pickers; right = consent + calibration -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="{loc:Str blink_trainer_camera_device}" Foreground="White" FontSize="11" FontWeight="Medium" Margin="0,0,0,4"/>
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox Grid.Column="0" x:Name="CmbDeeperWebcamDevice"
+                                              Foreground="Black" Background="White" FontSize="10"
+                                              SelectionChanged="CmbDeeperWebcamDevice_SelectionChanged"/>
+                                    <Button Grid.Column="1" Content="{loc:Str blink_trainer_camera_refresh}"
+                                            Margin="6,0,0,0" Padding="8,3" FontSize="10"
+                                            Style="{StaticResource OutlineButton}"
+                                            Click="BtnDeeperWebcamRefresh_Click"/>
+                                </Grid>
+
+                                <TextBlock Text="{loc:Str webcam_monitor_label}"
+                                           Foreground="White" FontSize="11" FontWeight="Medium" Margin="0,0,0,4"/>
+                                <ComboBox x:Name="CmbDeeperWebcamMonitor"
+                                          Foreground="Black" Background="White" FontSize="10"
+                                          Margin="0,0,0,10"
+                                          ToolTip="{loc:Str webcam_monitor_tooltip}"
+                                          SelectionChanged="CmbDeeperWebcamMonitor_SelectionChanged"/>
+
+                                <CheckBox x:Name="ChkDeeperWebcamRestrictGazeToCalScreen"
+                                          Content="Restrict gaze-reactive effects to the calibrated screen"
+                                          ToolTip="Advanced: leave on unless you know what you're doing. Affects how gaze-reactive effects map to your monitors."
+                                          Foreground="#AAAAAA" FontSize="10"
+                                          Margin="0,4,0,0"
+                                          Checked="ChkDeeperWebcamRestrictGazeToCalScreen_Changed"
+                                          Unchecked="ChkDeeperWebcamRestrictGazeToCalScreen_Changed"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2">
+                                <Border x:Name="DeeperWebcamConsentCard"
+                                        CornerRadius="6" Padding="10,8" Margin="0,0,0,10"
+                                        Background="#1A4ADE80"
+                                        BorderBrush="#4ADE80" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock x:Name="DeeperWebcamConsentStatus"
+                                                   Foreground="White" FontSize="11" FontWeight="Medium"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                            <Button x:Name="BtnDeeperWebcamManageConsent"
+                                                    Padding="8,3" FontSize="10"
+                                                    Style="{StaticResource OutlineButton}"
+                                                    Click="BtnDeeperWebcamManageConsent_Click"/>
+                                            <Button x:Name="BtnDeeperWebcamRevokeConsent"
+                                                    Margin="6,0,0,0" Padding="8,3" FontSize="10"
+                                                    Visibility="Collapsed"
+                                                    Background="Transparent" Foreground="#FF6060"
+                                                    BorderBrush="#FF6060" BorderThickness="1"
+                                                    Cursor="Hand"
+                                                    Content="{loc:Str blink_trainer_consent_revoke}"
+                                                    ToolTip="{loc:Str blink_trainer_consent_revoke_tooltip}"
+                                                    Click="BtnDeeperWebcamRevokeConsent_Click"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <TextBlock Text="{loc:Str blink_trainer_calibration_label}" Foreground="White" FontSize="11" FontWeight="Medium" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="DeeperWebcamCalibrationStatus"
+                                           Text="{loc:Str blink_trainer_calibration_none}"
+                                           Foreground="{DynamicResource TextMutedBrush}" FontSize="10"
+                                           TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                <WrapPanel Orientation="Horizontal" ItemHeight="26">
+                                    <Button Content="{loc:Str blink_trainer_calibration_btn}"
+                                            Padding="10,4" Margin="0,0,6,6" FontSize="10"
+                                            Style="{StaticResource OutlineButton}"
+                                            Click="BtnDeeperWebcamCalibrate_Click"/>
+                                    <Button Content="{loc:Str blink_trainer_calibration_quick}"
+                                            Padding="10,4" Margin="0,0,6,6" FontSize="10"
+                                            Style="{StaticResource OutlineButton}"
+                                            Click="BtnDeeperWebcamQuickRecal_Click"/>
+                                    <!-- Start/Stop tracker. Required to actually
+                                         calibrate: the calibration window needs
+                                         the camera streaming. Label is kept in
+                                         sync with the Blink Trainer toggle via
+                                         RefreshBlinkTrainerTrackerButton. -->
+                                    <Button x:Name="BtnDeeperWebcamStartStopTracker"
+                                            Content="Start tracker"
+                                            Padding="10,4" Margin="0,0,0,6" FontSize="10"
+                                            Style="{StaticResource OutlineButton}"
+                                            Click="BtnDeeperWebcamStartStopTracker_Click"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
             </Grid>
+            </ScrollViewer>
         </ContentControl>
 
         <!-- Awareness Engine Tab -->

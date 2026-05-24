@@ -5030,20 +5030,15 @@ namespace ConditioningControlPanel
 
         private void ChkRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
         {
-            if (_isLoading || ChkRestrictGazeToCalScreen == null || App.Settings?.Current == null) return;
+            if (_isLoading || _restrictGazeCheckboxSyncing) return;
+            if (ChkRestrictGazeToCalScreen == null || App.Settings?.Current == null) return;
             bool v = ChkRestrictGazeToCalScreen.IsChecked == true;
             App.Settings.Current.RestrictGazeContentToCalibratedScreen = v;
-            // Mirror to the Blink Trainer copy without re-entering the save path.
-            if (ChkBlinkTrainerRestrictGazeToCalScreen != null
-                && ChkBlinkTrainerRestrictGazeToCalScreen.IsChecked != v)
-            {
-                _restrictGazeCheckboxSyncing = true;
-                try { ChkBlinkTrainerRestrictGazeToCalScreen.IsChecked = v; }
-                finally { _restrictGazeCheckboxSyncing = false; }
-            }
+            MirrorRestrictGazeToOtherCards(v, except: ChkRestrictGazeToCalScreen);
         }
 
-        // Re-entrancy guard for cross-tab Restrict-gaze checkbox sync.
+        // Re-entrancy guard for cross-tab Restrict-gaze checkbox sync (Lab,
+        // Blink Trainer, Deeper hub all bind the same AppSettings flag).
         private bool _restrictGazeCheckboxSyncing;
 
         private void ChkBlinkTrainerRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
@@ -5052,13 +5047,36 @@ namespace ConditioningControlPanel
             if (ChkBlinkTrainerRestrictGazeToCalScreen == null || App.Settings?.Current == null) return;
             bool v = ChkBlinkTrainerRestrictGazeToCalScreen.IsChecked == true;
             App.Settings.Current.RestrictGazeContentToCalibratedScreen = v;
-            if (ChkRestrictGazeToCalScreen != null
-                && ChkRestrictGazeToCalScreen.IsChecked != v)
+            MirrorRestrictGazeToOtherCards(v, except: ChkBlinkTrainerRestrictGazeToCalScreen);
+        }
+
+        /// <summary>
+        /// Sync the Restrict-gaze checkbox across the three cards (Lab, Blink
+        /// Trainer, Deeper hub) without re-entering the change-handler save
+        /// path. The guard makes the mirrored .IsChecked assignment a no-op
+        /// from each handler's POV.
+        /// </summary>
+        private void MirrorRestrictGazeToOtherCards(bool value, System.Windows.Controls.CheckBox? except)
+        {
+            _restrictGazeCheckboxSyncing = true;
+            try
             {
-                _restrictGazeCheckboxSyncing = true;
-                try { ChkRestrictGazeToCalScreen.IsChecked = v; }
-                finally { _restrictGazeCheckboxSyncing = false; }
+                if (ChkRestrictGazeToCalScreen != null
+                    && ChkRestrictGazeToCalScreen != except
+                    && ChkRestrictGazeToCalScreen.IsChecked != value)
+                    ChkRestrictGazeToCalScreen.IsChecked = value;
+
+                if (ChkBlinkTrainerRestrictGazeToCalScreen != null
+                    && ChkBlinkTrainerRestrictGazeToCalScreen != except
+                    && ChkBlinkTrainerRestrictGazeToCalScreen.IsChecked != value)
+                    ChkBlinkTrainerRestrictGazeToCalScreen.IsChecked = value;
+
+                if (ChkDeeperWebcamRestrictGazeToCalScreen != null
+                    && ChkDeeperWebcamRestrictGazeToCalScreen != except
+                    && ChkDeeperWebcamRestrictGazeToCalScreen.IsChecked != value)
+                    ChkDeeperWebcamRestrictGazeToCalScreen.IsChecked = value;
             }
+            finally { _restrictGazeCheckboxSyncing = false; }
         }
 
 
@@ -5087,6 +5105,7 @@ namespace ConditioningControlPanel
             {
                 PopulateWebcamCombo(CmbWebcamDevice, devices);
                 PopulateWebcamCombo(CmbBlinkTrainerWebcamDevice, devices);
+                PopulateWebcamCombo(CmbDeeperWebcamDevice, devices);
             }
             finally
             {
@@ -5137,6 +5156,7 @@ namespace ConditioningControlPanel
             {
                 SelectComboByDeviceIndex(CmbWebcamDevice, idx);
                 SelectComboByDeviceIndex(CmbBlinkTrainerWebcamDevice, idx);
+                SelectComboByDeviceIndex(CmbDeeperWebcamDevice, idx);
             }
             finally { _webcamDevicePopulating = false; }
         }
@@ -5203,6 +5223,7 @@ namespace ConditioningControlPanel
 
                 FillMonitorCombo(CmbWebcamMonitor, screens, saved);
                 FillMonitorCombo(CmbBlinkTrainerWebcamMonitor, screens, saved);
+                FillMonitorCombo(CmbDeeperWebcamMonitor, screens, saved);
             }
             finally
             {
@@ -5259,6 +5280,7 @@ namespace ConditioningControlPanel
             }
 
             SyncMonitorComboSelection(CmbBlinkTrainerWebcamMonitor, deviceName);
+            SyncMonitorComboSelection(CmbDeeperWebcamMonitor, deviceName);
             AppendWebcamDebugLog($"Calibration monitor set to {item.Content}.");
         }
 
@@ -5276,6 +5298,7 @@ namespace ConditioningControlPanel
             }
 
             SyncMonitorComboSelection(CmbWebcamMonitor, deviceName);
+            SyncMonitorComboSelection(CmbDeeperWebcamMonitor, deviceName);
         }
 
         private void SyncMonitorComboSelection(ComboBox? cb, string deviceName)
@@ -6357,6 +6380,13 @@ namespace ConditioningControlPanel
                         DeeperTab.Visibility = Visibility.Visible;
                         AnimateTabIn(DeeperTab);
                         RefreshDeeperLibraryUI();
+                        // Populate the Deeper-hub webcam card (device + monitor
+                        // combos populate empty until something asks). Refresh
+                        // also fills the consent + calibration status cells.
+                        try { PopulateWebcamDeviceCombos(); } catch { }
+                        try { RefreshWebcamMonitorList(); } catch { }
+                        RefreshDeeperWebcamColumn();
+                        RefreshBlinkTrainerTrackerButton();
                     }
                     if (BtnDeeper != null) BtnDeeper.Style = FindResource("TabButtonDeeperActive") as Style;
                     break;
@@ -6848,11 +6878,16 @@ namespace ConditioningControlPanel
 
         // Keeps the BT tracker toggle in sync with WebcamTrackingService.IsRunning.
         // Called from RefreshBlinkTrainerTab and after any local start/stop.
+        // Also mirrors the label onto the Deeper-hub Start/Stop button so the
+        // duplicated setup card stays consistent.
         private void RefreshBlinkTrainerTrackerButton()
         {
-            if (BtnBlinkTrainerStartStopTracker == null) return;
             bool running = App.Webcam?.IsRunning == true;
-            BtnBlinkTrainerStartStopTracker.Content = running ? "Stop tracker" : "Start tracker";
+            var label = running ? "Stop tracker" : "Start tracker";
+            if (BtnBlinkTrainerStartStopTracker != null)
+                BtnBlinkTrainerStartStopTracker.Content = label;
+            if (BtnDeeperWebcamStartStopTracker != null)
+                BtnDeeperWebcamStartStopTracker.Content = label;
         }
 
         private void BtnBlinkTrainerGateUnlock_Click(object sender, RoutedEventArgs e)
@@ -7792,6 +7827,12 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "RefreshBlinkTrainerWebcamColumn failed");
             }
+
+            // Fan out to the Deeper hub's duplicate card (same state, same
+            // service). Null-safe — Deeper card may not be loaded yet.
+            RefreshDeeperWebcamColumn();
+            // Tracker button label is shared state across both cards.
+            RefreshBlinkTrainerTrackerButton();
         }
 
         private void CmbBlinkTrainerWebcamDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -7918,6 +7959,160 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "BtnBlinkTrainerQuickRecal_Click failed");
+            }
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // Deeper hub webcam setup card. The card is a 1:1 visual copy of
+        // the Blink Trainer setup card so non-Patreon users can grant
+        // consent + calibrate without bumping into the Blink Trainer gate.
+        // State is shared (AppSettings + App.Webcam), so handlers here
+        // either delegate to the Blink Trainer handler (consent dialogs,
+        // calibration windows) or replicate the device/monitor combo logic
+        // with the same _webcamDevicePopulating / _webcamMonitorPopulating
+        // guards. RefreshBlinkTrainerWebcamColumn fans out to the Deeper
+        // card via RefreshDeeperWebcamColumn so any state change updates
+        // both surfaces.
+        // ──────────────────────────────────────────────────────────────
+
+        private void CmbDeeperWebcamDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_webcamDevicePopulating) return;
+            if (CmbDeeperWebcamDevice?.SelectedItem is not ComboBoxItem item) return;
+            if (item.Tag is not int idx || idx < 0) return;
+
+            if (App.Settings?.Current is { } s)
+            {
+                if (s.WebcamDeviceIndex == idx) return;
+                s.WebcamDeviceIndex = idx;
+                s.WebcamDeviceName = item.Content?.ToString() ?? "";
+                App.Settings?.Save();
+            }
+
+            SyncWebcamComboSelections(idx);
+        }
+
+        private void BtnDeeperWebcamRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            try { PopulateWebcamDeviceCombos(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BtnDeeperWebcamRefresh_Click failed"); }
+        }
+
+        private void CmbDeeperWebcamMonitor_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_webcamMonitorPopulating) return;
+            if (CmbDeeperWebcamMonitor?.SelectedItem is not ComboBoxItem item) return;
+            if (item.Tag is not string deviceName) return;
+
+            if (App.Settings?.Current is { } s)
+            {
+                if (string.Equals(s.WebcamCalibrationScreen, deviceName, StringComparison.OrdinalIgnoreCase)) return;
+                s.WebcamCalibrationScreen = deviceName;
+                App.Settings.Save();
+            }
+
+            SyncMonitorComboSelection(CmbWebcamMonitor, deviceName);
+            SyncMonitorComboSelection(CmbBlinkTrainerWebcamMonitor, deviceName);
+        }
+
+        private void BtnDeeperWebcamManageConsent_Click(object sender, RoutedEventArgs e)
+            => BtnBlinkTrainerManageConsent_Click(sender, e);
+
+        private void BtnDeeperWebcamRevokeConsent_Click(object sender, RoutedEventArgs e)
+            => BtnBlinkTrainerRevokeConsent_Click(sender, e);
+
+        private void BtnDeeperWebcamCalibrate_Click(object sender, RoutedEventArgs e)
+            => BtnBlinkTrainerCalibrate_Click(sender, e);
+
+        private void BtnDeeperWebcamQuickRecal_Click(object sender, RoutedEventArgs e)
+            => BtnBlinkTrainerQuickRecal_Click(sender, e);
+
+        private void BtnDeeperWebcamStartStopTracker_Click(object sender, RoutedEventArgs e)
+            => BtnBlinkTrainerStartStopTracker_Click(sender, e);
+
+        private void ChkDeeperWebcamRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading || _restrictGazeCheckboxSyncing) return;
+            if (ChkDeeperWebcamRestrictGazeToCalScreen == null || App.Settings?.Current == null) return;
+            bool v = ChkDeeperWebcamRestrictGazeToCalScreen.IsChecked == true;
+            App.Settings.Current.RestrictGazeContentToCalibratedScreen = v;
+            MirrorRestrictGazeToOtherCards(v, except: ChkDeeperWebcamRestrictGazeToCalScreen);
+        }
+
+        /// <summary>
+        /// Mirrors RefreshBlinkTrainerWebcamColumn for the Deeper hub's setup
+        /// card. Called from inside RefreshBlinkTrainerWebcamColumn so every
+        /// existing consent/calibration trigger fans out here automatically.
+        /// All element accesses are null-guarded — the Deeper hub UI may not
+        /// be loaded yet on the first refresh (e.g. before the tab is shown).
+        /// </summary>
+        private void RefreshDeeperWebcamColumn()
+        {
+            try
+            {
+                if (App.Webcam == null) return;
+                var consented = WebcamTrackingService.IsConsentCurrent();
+
+                if (DeeperWebcamConsentCard != null)
+                {
+                    if (consented)
+                    {
+                        DeeperWebcamConsentCard.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x1A, 0x4A, 0xDE, 0x80));
+                        DeeperWebcamConsentCard.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80));
+                    }
+                    else
+                    {
+                        DeeperWebcamConsentCard.Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x1A, 0xFF, 0xD0, 0x80));
+                        DeeperWebcamConsentCard.BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xD0, 0x80));
+                    }
+                }
+                if (DeeperWebcamConsentStatus != null)
+                {
+                    DeeperWebcamConsentStatus.Text = Localization.Loc.Get(
+                        consented ? "blink_trainer_consent_granted" : "blink_trainer_consent_required");
+                }
+                if (BtnDeeperWebcamManageConsent != null)
+                {
+                    BtnDeeperWebcamManageConsent.Content = Localization.Loc.Get(
+                        consented ? "blink_trainer_consent_manage" : "blink_trainer_consent_grant");
+                }
+                if (BtnDeeperWebcamRevokeConsent != null)
+                {
+                    BtnDeeperWebcamRevokeConsent.Visibility = consented ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                if (DeeperWebcamCalibrationStatus != null)
+                {
+                    var cal = App.Webcam.Calibration;
+                    if (cal == null)
+                    {
+                        DeeperWebcamCalibrationStatus.Text = Localization.Loc.Get("blink_trainer_calibration_none");
+                    }
+                    else if (cal.MonitorBounds != null && !string.IsNullOrEmpty(cal.MonitorBounds.DeviceName))
+                    {
+                        DeeperWebcamCalibrationStatus.Text = Localization.Loc.GetF(
+                            "blink_trainer_calibration_calibrated_format", cal.MonitorBounds.DeviceName);
+                    }
+                    else
+                    {
+                        DeeperWebcamCalibrationStatus.Text = Localization.Loc.Get("blink_trainer_calibration_outdated");
+                    }
+                }
+
+                if (ChkDeeperWebcamRestrictGazeToCalScreen != null && App.Settings?.Current is { } s)
+                {
+                    bool want = s.RestrictGazeContentToCalibratedScreen;
+                    if (ChkDeeperWebcamRestrictGazeToCalScreen.IsChecked != want)
+                    {
+                        _restrictGazeCheckboxSyncing = true;
+                        try { ChkDeeperWebcamRestrictGazeToCalScreen.IsChecked = want; }
+                        finally { _restrictGazeCheckboxSyncing = false; }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "RefreshDeeperWebcamColumn failed");
             }
         }
 
