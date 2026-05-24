@@ -398,6 +398,15 @@
   "deeper_friendly_effect_overlay": "Overlay effect",
   "deeper_friendly_effect_haptic": "Haptic effect",
 
+  "deeper_editor_lane_rules": "Rules",
+  "deeper_editor_lane_regions": "Regions",
+  "deeper_editor_lane_haptics": "Haptics",
+  "deeper_editor_lane_effects": "Effects",
+  "deeper_editor_tt_lane_rules": "Rules — trigger → action pairs. Right-click the timeline, or use + Rule, to add one.",
+  "deeper_editor_tt_lane_regions": "Regions — coloured bands on the timeline. Press R to drop a 5-second region at the playhead.",
+  "deeper_editor_tt_lane_haptics": "Haptic events — vibration pulses bound to the connected toy. Press H to drop one at the playhead.",
+  "deeper_editor_tt_lane_effects": "Effects — flash, bubble, subliminal, overlay. Use + Effect or right-click the timeline.",
+
   "deeper_tut_tab_intro_title": "Welcome to Deeper",
   "deeper_tut_tab_intro_body": "Deeper lets you wire haptics, gaze triggers, and timed cues into any audio or video. The file you create (.ccpenh.json) is portable — anyone running CCP can play it.\n\nThis tour takes about a minute.",
   "deeper_tut_tab_player_title": "The Player",

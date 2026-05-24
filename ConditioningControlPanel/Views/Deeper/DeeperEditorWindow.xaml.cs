@@ -1120,11 +1120,11 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             UpdatePlayheadPosition();
             UpdateWaveformPath();
-            UpdateLaneDivider();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
             RebuildRuleVisuals();
+            RefreshLaneCounts();
         }
 
         // -- Timeline zoom -----------------------------------------------------
@@ -1803,13 +1803,6 @@ namespace ConditioningControlPanel.Views.Deeper
             if (TimelineCanvas.Children.Contains(PlayheadLine))
                 TimelineCanvas.Children.Remove(PlayheadLine);
             TimelineCanvas.Children.Add(PlayheadLine);
-        }
-
-        private void UpdateLaneDivider()
-        {
-            // No-op: lanes were merged into a single unified timeline. The method
-            // remains as a stable hook for callers in case future split-lane modes
-            // are reintroduced.
         }
 
         private void RegionRect_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -3781,6 +3774,9 @@ namespace ConditioningControlPanel.Views.Deeper
             // Mission 1 sidebar restructure: the items overview list is gone;
             // the selection summary strip is fed from the SelectXxx setters
             // instead, so MarkDirty has no per-mutation list to refresh.
+            // Lane counts piggyback here (cheap) so the chrome stays in sync
+            // with any add/remove/edit that touches the data model.
+            RefreshLaneCounts();
         }
 
         private void ScheduleValidation()

@@ -526,29 +526,129 @@
                                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
                         </DockPanel>
 
-                        <!-- Timeline canvas inside a ScrollViewer so we can zoom horizontally
-                             (Ctrl+Wheel or the +/- buttons above). At zoom=1 the canvas
-                             fills the viewport; higher zoom widens it and shows a scrollbar. -->
-                        <ScrollViewer x:Name="TimelineScroll" Grid.Row="1"
-                                      HorizontalScrollBarVisibility="Auto"
-                                      VerticalScrollBarVisibility="Disabled"
-                                      PanningMode="HorizontalOnly"
-                                      PreviewMouseWheel="TimelineScroll_PreviewMouseWheel"
-                                      SizeChanged="TimelineScroll_SizeChanged">
-                            <Canvas x:Name="TimelineCanvas" Background="#15151F"
-                                    Cursor="Hand" ClipToBounds="True"
-                                    ToolTip="{loc:Str deeper_editor_tt_timeline}"
-                                    MouseLeftButtonDown="TimelineCanvas_MouseLeftButtonDown"
-                                    MouseRightButtonDown="TimelineCanvas_MouseRightButtonDown"
-                                    MouseMove="TimelineCanvas_MouseMove"
-                                    MouseLeftButtonUp="TimelineCanvas_MouseLeftButtonUp"
-                                    SizeChanged="TimelineCanvas_SizeChanged">
-                                <!-- Playhead -->
-                                <Line x:Name="PlayheadLine" X1="0" X2="0" Y1="0" Y2="0"
-                                      Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="2"
-                                      Panel.ZIndex="100"/>
-                            </Canvas>
-                        </ScrollViewer>
+                        <!-- Mission 1 commit 4 — lane chrome.
+                             4 named lane headers stack down the left column (96 px) so
+                             tutorial steps can target them by x:Name. Rendering still
+                             goes to the single TimelineCanvas (current y-band layout
+                             preserved); a follow-up mission will split into separate
+                             per-lane canvases with independent collapse + resize. -->
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid Grid.Column="0" Background="{DynamicResource DeeperLaneHeaderBrush}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <Border x:Name="TimelineRulesLaneHeader" Grid.Row="0"
+                                        Background="{DynamicResource DeeperLaneHeaderBrush}"
+                                        BorderBrush="{DynamicResource DeeperLaneSeparatorBrush}"
+                                        BorderThickness="0,0,1,1" Padding="6,2"
+                                        ToolTip="{loc:Str deeper_editor_tt_lane_rules}">
+                                    <DockPanel LastChildFill="True">
+                                        <TextBlock DockPanel.Dock="Left" Text="🎯" FontSize="11"
+                                                   Foreground="{DynamicResource DeeperAccentBrush}"
+                                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock x:Name="TxtRulesLaneCount" DockPanel.Dock="Right"
+                                                   Foreground="{DynamicResource TextDimBrush}"
+                                                   FontSize="10" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str deeper_editor_lane_rules}"
+                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </Border>
+
+                                <Border x:Name="TimelineRegionsLaneHeader" Grid.Row="1"
+                                        Background="{DynamicResource DeeperLaneHeaderBrush}"
+                                        BorderBrush="{DynamicResource DeeperLaneSeparatorBrush}"
+                                        BorderThickness="0,0,1,1" Padding="6,2"
+                                        ToolTip="{loc:Str deeper_editor_tt_lane_regions}">
+                                    <DockPanel LastChildFill="True">
+                                        <TextBlock DockPanel.Dock="Left" Text="▦" FontSize="11"
+                                                   Foreground="{DynamicResource DeeperAccentBrush}"
+                                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock x:Name="TxtRegionsLaneCount" DockPanel.Dock="Right"
+                                                   Foreground="{DynamicResource TextDimBrush}"
+                                                   FontSize="10" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str deeper_editor_lane_regions}"
+                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </Border>
+
+                                <Border x:Name="TimelineHapticsLaneHeader" Grid.Row="2"
+                                        Background="{DynamicResource DeeperLaneHeaderBrush}"
+                                        BorderBrush="{DynamicResource DeeperLaneSeparatorBrush}"
+                                        BorderThickness="0,0,1,1" Padding="6,2"
+                                        ToolTip="{loc:Str deeper_editor_tt_lane_haptics}">
+                                    <DockPanel LastChildFill="True">
+                                        <TextBlock DockPanel.Dock="Left" Text="📳" FontSize="11"
+                                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock x:Name="TxtHapticsLaneCount" DockPanel.Dock="Right"
+                                                   Foreground="{DynamicResource TextDimBrush}"
+                                                   FontSize="10" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str deeper_editor_lane_haptics}"
+                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </Border>
+
+                                <Border x:Name="TimelineEffectsLaneHeader" Grid.Row="3"
+                                        Background="{DynamicResource DeeperLaneHeaderBrush}"
+                                        BorderBrush="{DynamicResource DeeperLaneSeparatorBrush}"
+                                        BorderThickness="0,0,1,0" Padding="6,2"
+                                        ToolTip="{loc:Str deeper_editor_tt_lane_effects}">
+                                    <DockPanel LastChildFill="True">
+                                        <TextBlock DockPanel.Dock="Left" Text="✨" FontSize="11"
+                                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock x:Name="TxtEffectsLaneCount" DockPanel.Dock="Right"
+                                                   Foreground="{DynamicResource TextDimBrush}"
+                                                   FontSize="10" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Str deeper_editor_lane_effects}"
+                                                   Foreground="{DynamicResource TextLightBrush}"
+                                                   FontSize="11" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </Border>
+                            </Grid>
+
+                            <!-- Timeline canvas inside a ScrollViewer so we can zoom horizontally
+                                 (Ctrl+Wheel or the +/- buttons above). At zoom=1 the canvas
+                                 fills the viewport; higher zoom widens it and shows a scrollbar. -->
+                            <ScrollViewer x:Name="TimelineScroll" Grid.Column="1"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Disabled"
+                                          PanningMode="HorizontalOnly"
+                                          PreviewMouseWheel="TimelineScroll_PreviewMouseWheel"
+                                          SizeChanged="TimelineScroll_SizeChanged">
+                                <Canvas x:Name="TimelineCanvas" Background="{DynamicResource DeeperLaneCanvasBrush}"
+                                        Cursor="Hand" ClipToBounds="True"
+                                        ToolTip="{loc:Str deeper_editor_tt_timeline}"
+                                        MouseLeftButtonDown="TimelineCanvas_MouseLeftButtonDown"
+                                        MouseRightButtonDown="TimelineCanvas_MouseRightButtonDown"
+                                        MouseMove="TimelineCanvas_MouseMove"
+                                        MouseLeftButtonUp="TimelineCanvas_MouseLeftButtonUp"
+                                        SizeChanged="TimelineCanvas_SizeChanged">
+                                    <!-- Playhead -->
+                                    <Line x:Name="PlayheadLine" X1="0" X2="0" Y1="0" Y2="0"
+                                          Stroke="{DynamicResource DeeperAccentBrush}" StrokeThickness="2"
+                                          Panel.ZIndex="100"/>
+                                </Canvas>
+                            </ScrollViewer>
+                        </Grid>
                     </Grid>
                 </Border>
             </Grid>
