@@ -2235,5 +2235,20 @@
   "deeper_itut_ht_step16_body": "Your .ccpenh.json now contains: a Haptic effect at 5s + a TimeReached rule at 15s that triggers a screen-shake. To play it later, open the Deeper Player from the Deeper tab and load this file. The effect and rule will fire at their configured times. You can also share the .ccpenh.json with other CCP users.",
   "deeper_itut_ht_followup_open_folder": "Open File Location",
   "deeper_itut_ht_followup_open_player": "Open Deeper Player",
-  "deeper_itut_ht_followup_done": "Done"
+  "deeper_itut_ht_followup_done": "Done",
+  "label_remote_emotes": "Эмоции",
+  "btn_emote_send": "Отправить",
+  "watermark_emote_custom": "Введите сообщение...",
+  "btn_emote_edit_tooltip": "Изменить пресет",
+  "label_emote_edit_title": "Изменить пресет эмоции",
+  "label_emote_edit_icon": "Значок",
+  "label_emote_edit_text": "Текст",
+  "btn_emote_edit_save": "Сохранить",
+  "btn_emote_edit_cancel": "Отмена",
+  "status_emote_sent": "Отправлено ✓",
+  "status_emote_failed": "Не удалось отправить эмоцию",
+  "status_emote_rate_limited": "Помедленнее - попробуйте снова через {0}с",
+  "status_emote_no_session": "Сначала запустите удалённый сеанс",
+  "label_remote_share_avatar": "Показывать мой аватар Discord контроллерам",
+  "desc_remote_share_avatar": "По умолчанию выключено. Когда включено, ваш привязанный аватар Discord виден всем, кто управляет вашим сеансом. Когда выключено, вы остаётесь за силуэтом."
 }

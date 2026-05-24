@@ -386,6 +386,16 @@
                             </MenuItem.ItemContainerStyle>
                         </MenuItem>
                         <MenuItem x:Name="MenuItemMute" Header="{loc:Str section_mute_avatar}" Click="MenuItemMute_Click"/>
+                        <!-- Emote MenuItems replace the 5 items above (Engine, TriggerMode, BambiTakeover,
+                             Personality, Mute) whenever a remote controller is connected. Header strings
+                             and Tag references are populated in AvatarContextMenu_Opened from
+                             App.Settings.Current.RemoteEmotePresets. Edits via the small picker propagate
+                             here automatically because Header is re-read on every menu open. -->
+                        <MenuItem x:Name="MenuItemEmote1" Header="" Visibility="Collapsed" Click="MenuItemEmote_Click"/>
+                        <MenuItem x:Name="MenuItemEmote2" Header="" Visibility="Collapsed" Click="MenuItemEmote_Click"/>
+                        <MenuItem x:Name="MenuItemEmote3" Header="" Visibility="Collapsed" Click="MenuItemEmote_Click"/>
+                        <MenuItem x:Name="MenuItemEmote4" Header="" Visibility="Collapsed" Click="MenuItemEmote_Click"/>
+                        <MenuItem x:Name="MenuItemEmote5" Header="" Visibility="Collapsed" Click="MenuItemEmote_Click"/>
                         <Separator/>
                         <MenuItem x:Name="MenuItemShowChatHistory" Header="{loc:Str section_show_chat_history}" Click="MenuItemShowChatHistory_Click"/>
                         <MenuItem x:Name="MenuItemMuteWhispers" Header="{loc:Str section_mute_whispers}" Click="MenuItemMuteWhispers_Click"/>

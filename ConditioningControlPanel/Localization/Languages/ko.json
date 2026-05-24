@@ -2253,5 +2253,20 @@
   "deeper_itut_ht_step16_body": "Your .ccpenh.json now contains: a Haptic effect at 5s + a TimeReached rule at 15s that triggers a screen-shake. To play it later, open the Deeper Player from the Deeper tab and load this file. The effect and rule will fire at their configured times. You can also share the .ccpenh.json with other CCP users.",
   "deeper_itut_ht_followup_open_folder": "Open File Location",
   "deeper_itut_ht_followup_open_player": "Open Deeper Player",
-  "deeper_itut_ht_followup_done": "Done"
+  "deeper_itut_ht_followup_done": "Done",
+  "label_remote_emotes": "이모트",
+  "btn_emote_send": "보내기",
+  "watermark_emote_custom": "메시지 입력...",
+  "btn_emote_edit_tooltip": "프리셋 편집",
+  "label_emote_edit_title": "이모트 프리셋 편집",
+  "label_emote_edit_icon": "아이콘",
+  "label_emote_edit_text": "텍스트",
+  "btn_emote_edit_save": "저장",
+  "btn_emote_edit_cancel": "취소",
+  "status_emote_sent": "전송됨 ✓",
+  "status_emote_failed": "이모트를 보낼 수 없습니다",
+  "status_emote_rate_limited": "천천히 - {0}초 후 다시 시도",
+  "status_emote_no_session": "먼저 원격 세션을 시작하세요",
+  "label_remote_share_avatar": "컨트롤러에게 내 Discord 아바타 표시",
+  "desc_remote_share_avatar": "기본값은 꺼짐. 켜면 연결된 Discord 아바타가 세션을 제어하는 사람에게 표시됩니다. 끄면 실루엣 뒤에 가려집니다."
 }

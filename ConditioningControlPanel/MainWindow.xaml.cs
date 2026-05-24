@@ -12991,6 +12991,183 @@ namespace ConditioningControlPanel
             App.Settings.Save();
         }
 
+        // Privacy toggle: share linked avatar with controllers. Persists to settings,
+        // and if a remote session is currently active pushes status immediately so the
+        // controller's pinned strip flips within their next poll (~3s) rather than
+        // waiting up to ~15s for the next scheduled status push.
+        private async void ChkRemoteShareAvatar_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (App.Settings?.Current == null) return;
+            App.Settings.Current.RemoteShareAvatar = ChkRemoteShareAvatar.IsChecked ?? false;
+            App.Settings.Save();
+            if (App.RemoteControl?.IsActive == true)
+            {
+                try { await App.RemoteControl.PushStatusNowAsync(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "[RemoteShareAvatar] immediate status push failed"); }
+            }
+        }
+
+        // Emote picker — preset click, custom send, edit popup. The preset list
+        // is bound to App.Settings.Current.RemoteEmotePresets in LoadSettings().
+        // Watermark on TxtEmoteCustom is driven by EmoteHelper.LastSentEmoteHint
+        // (session-only state, reset on app restart) with EmoteHelper.PlaceholderText
+        // as the localized fallback.
+        private Models.EmotePreset? _editingPreset;
+
+        private async void BtnEmotePreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not Models.EmotePreset preset) return;
+            if (string.IsNullOrWhiteSpace(preset.Text)) return; // can't send a label-less slot
+            await SendEmoteAndReportAsync(preset.Text, preset.Icon ?? "", "preset", TxtEmoteStatus);
+        }
+
+        private async void BtnEmoteCustomSend_Click(object sender, RoutedEventArgs e)
+        {
+            await SendCustomEmoteAsync(TxtEmoteCustom, TxtEmoteStatus);
+        }
+
+        private async void TxtEmoteCustom_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                await SendCustomEmoteAsync(TxtEmoteCustom, TxtEmoteStatus);
+            }
+        }
+
+        // Splash-overlay (big) picker. Shares the same source list, same service,
+        // same debounce (per-RemoteControlService instance), different UI targets.
+        private async void BtnEmotePresetBig_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not Models.EmotePreset preset) return;
+            if (string.IsNullOrWhiteSpace(preset.Text)) return;
+            await SendEmoteAndReportAsync(preset.Text, preset.Icon ?? "", "preset", TxtEmoteStatusBig);
+        }
+
+        private async void BtnEmoteCustomSendBig_Click(object sender, RoutedEventArgs e)
+        {
+            await SendCustomEmoteAsync(TxtEmoteCustomBig, TxtEmoteStatusBig);
+        }
+
+        private async void TxtEmoteCustomBig_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                await SendCustomEmoteAsync(TxtEmoteCustomBig, TxtEmoteStatusBig);
+            }
+        }
+
+        private async Task SendCustomEmoteAsync(TextBox? textbox, TextBlock? statusTarget)
+        {
+            var raw = textbox?.Text ?? "";
+            var trimmed = raw.Trim();
+            if (trimmed.Length == 0) return; // whitespace-only / empty: silent no-op
+            var sent = await SendEmoteAndReportAsync(trimmed, "", "custom", statusTarget);
+            if (sent && textbox != null)
+            {
+                // Clear the box; the watermark switches to the ghost-of-last-sent
+                // on THIS textbox only — the small and big custom boxes maintain
+                // independent ghost state because each has its own attached prop.
+                textbox.Text = "";
+                Helpers.EmoteHelper.SetLastSentEmoteHint(textbox, trimmed);
+            }
+        }
+
+        // Returns true on successful send (so the custom path knows to clear the box).
+        // Internal so the avatar context-menu surface (AvatarTubeWindow.MenuItemEmote_Click)
+        // can route through the same centralized helper for step 3.6 speech-bubble feedback.
+        internal async Task<bool> SendEmoteAndReportAsync(string text, string icon, string kind, TextBlock? statusTarget)
+        {
+            if (App.RemoteControl == null) return false;
+
+            // Step 3.6: flash the avatar speech bubble before the await so the user gets
+            // instant feedback regardless of which surface they fired from. Skip when the
+            // call would immediately bounce (no active session or still in debounce window)
+            // to avoid a "Sending..." flicker that would never resolve to "Sent: ...".
+            var willActuallySend = App.RemoteControl.IsActive && !App.RemoteControl.IsWithinDebounceWindow;
+            if (willActuallySend)
+            {
+                App.AvatarWindow?.ShowEmoteFeedback(text, isPending: true);
+            }
+
+            var (ok, error, retry) = await App.RemoteControl.SendEmoteAsync(text, icon, kind);
+
+            if (ok)
+            {
+                // Update the bubble to "Sent: ..." once the server confirms 200.
+                App.AvatarWindow?.ShowEmoteFeedback(text, isPending: false);
+                if (statusTarget != null)
+                {
+                    statusTarget.Foreground = System.Windows.Media.Brushes.LightGreen;
+                    statusTarget.Text = Localization.Loc.Get("status_emote_sent");
+                }
+                return true;
+            }
+            if (error == "debounced")
+            {
+                // Silent — debounce is a UX guard, not a user-facing condition.
+                return false;
+            }
+            if (statusTarget != null)
+            {
+                statusTarget.Foreground = System.Windows.Media.Brushes.Salmon;
+                if (error == "rate_limited" && retry.HasValue)
+                {
+                    statusTarget.Text = Localization.Loc.GetF("status_emote_rate_limited", retry.Value);
+                }
+                else if (error == "session not active")
+                {
+                    statusTarget.Text = Localization.Loc.Get("status_emote_no_session");
+                }
+                else
+                {
+                    statusTarget.Text = Localization.Loc.Get("status_emote_failed");
+                }
+            }
+            return false;
+        }
+
+        private void BtnEmoteEdit_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not Models.EmotePreset preset) return;
+            _editingPreset = preset;
+            if (TxtEditEmoteIcon != null) TxtEditEmoteIcon.Text = preset.Icon ?? "";
+            if (TxtEditEmoteText != null) TxtEditEmoteText.Text = preset.Text ?? "";
+            if (BtnEditEmoteSave != null) BtnEditEmoteSave.IsEnabled = !string.IsNullOrWhiteSpace(preset.Text);
+            if (EmoteEditPopup != null)
+            {
+                EmoteEditPopup.PlacementTarget = btn;
+                EmoteEditPopup.IsOpen = true;
+            }
+            TxtEditEmoteText?.Focus();
+        }
+
+        private void TxtEditEmoteText_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (BtnEditEmoteSave == null || TxtEditEmoteText == null) return;
+            BtnEditEmoteSave.IsEnabled = !string.IsNullOrWhiteSpace(TxtEditEmoteText.Text);
+        }
+
+        private void BtnEditEmoteSave_Click(object sender, RoutedEventArgs e)
+        {
+            if (_editingPreset == null) return;
+            var newText = (TxtEditEmoteText?.Text ?? "").Trim();
+            if (newText.Length == 0) return; // defense in depth — Save button should already be disabled
+            _editingPreset.Icon = (TxtEditEmoteIcon?.Text ?? "");
+            _editingPreset.Text = newText;
+            App.Settings?.Save();
+            if (EmoteEditPopup != null) EmoteEditPopup.IsOpen = false;
+            _editingPreset = null;
+        }
+
+        private void BtnEditEmoteCancel_Click(object sender, RoutedEventArgs e)
+        {
+            if (EmoteEditPopup != null) EmoteEditPopup.IsOpen = false;
+            _editingPreset = null;
+        }
+
         // =====================================================================
         // SP5 layer 3 — Available Subjects tab (controller side)
         // =====================================================================
@@ -21666,6 +21843,32 @@ namespace ConditioningControlPanel
             ChkNoPanic.IsChecked = !s.PanicKeyEnabled;
             ChkOfflineMode.IsChecked = s.OfflineMode;
             ChkStopEffectsOnRemoteDisconnect.IsChecked = s.StopEffectsOnRemoteDisconnect;
+            if (ChkRemoteShareAvatar != null) ChkRemoteShareAvatar.IsChecked = s.RemoteShareAvatar;
+
+            // Emote picker preset list (bound here so OnDeserialized normalization
+            // has already run and the ItemsControl always sees exactly 5 entries).
+            if (LstEmotePresets != null) LstEmotePresets.ItemsSource = s.RemoteEmotePresets;
+
+            // Splash-overlay (big) picker — same source list, split into two rows
+            // around the End Session button via index-keyed ListCollectionView filters.
+            // Items are the SAME EmotePreset references as the small picker, so edits
+            // in the small picker propagate via INotifyPropertyChanged.
+            if (LstEmotePresetsBigTop != null)
+            {
+                var topView = new System.Windows.Data.ListCollectionView(s.RemoteEmotePresets)
+                {
+                    Filter = item => s.RemoteEmotePresets.IndexOf((Models.EmotePreset)item) < 3
+                };
+                LstEmotePresetsBigTop.ItemsSource = topView;
+            }
+            if (LstEmotePresetsBigBottom != null)
+            {
+                var bottomView = new System.Windows.Data.ListCollectionView(s.RemoteEmotePresets)
+                {
+                    Filter = item => s.RemoteEmotePresets.IndexOf((Models.EmotePreset)item) >= 3
+                };
+                LstEmotePresetsBigBottom.ItemsSource = bottomView;
+            }
 
             // Deeper
             if (ChkEnableDeeper != null) ChkEnableDeeper.IsChecked = s.EnableDeeper;

@@ -2195,5 +2195,20 @@
   "deeper_itut_ht_step16_body": "Your .ccpenh.json now contains: a Haptic effect at 5s + a TimeReached rule at 15s that triggers a screen-shake. To play it later, open the Deeper Player from the Deeper tab and load this file. The effect and rule will fire at their configured times. You can also share the .ccpenh.json with other CCP users.",
   "deeper_itut_ht_followup_open_folder": "Open File Location",
   "deeper_itut_ht_followup_open_player": "Open Deeper Player",
-  "deeper_itut_ht_followup_done": "Done"
+  "deeper_itut_ht_followup_done": "Done",
+  "label_remote_emotes": "表情",
+  "btn_emote_send": "发送",
+  "watermark_emote_custom": "输入消息...",
+  "btn_emote_edit_tooltip": "编辑预设",
+  "label_emote_edit_title": "编辑表情预设",
+  "label_emote_edit_icon": "图标",
+  "label_emote_edit_text": "文本",
+  "btn_emote_edit_save": "保存",
+  "btn_emote_edit_cancel": "取消",
+  "status_emote_sent": "已发送 ✓",
+  "status_emote_failed": "无法发送表情",
+  "status_emote_rate_limited": "请慢一点 - {0}秒后重试",
+  "status_emote_no_session": "请先开启远程会话",
+  "label_remote_share_avatar": "向控制者显示我的 Discord 头像",
+  "desc_remote_share_avatar": "默认关闭。开启后，您链接的 Discord 头像将向控制您会话的任何人显示。关闭后保持剪影状态。"
 }

@@ -2,10 +2,39 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
 using Newtonsoft.Json;
 
 namespace ConditioningControlPanel.Models
 {
+    /// <summary>
+    /// A single emote slot: an icon (usually an emoji, may be empty) and a short
+    /// text label. Persisted as part of AppSettings.RemoteEmotePresets — exactly
+    /// 5 entries are kept; OnDeserialized pads/truncates.
+    /// </summary>
+    public class EmotePreset : INotifyPropertyChanged
+    {
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        private string _icon = "";
+        [JsonProperty("Icon")]
+        public string Icon
+        {
+            get => _icon;
+            set { _icon = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _text = "";
+        [JsonProperty("Text")]
+        public string Text
+        {
+            get => _text;
+            set { _text = value ?? ""; OnPropertyChanged(); }
+        }
+    }
+
     /// <summary>
     /// Legacy content mode enum. Kept for settings deserialization backward compatibility.
     /// Use App.Mods (ModService) instead.
@@ -54,6 +83,46 @@ namespace ConditioningControlPanel.Models
         {
             get => _userPresets;
             set { _userPresets = value ?? new(); OnPropertyChanged(); }
+        }
+
+        // Remote-control emote slots (5 fixed, user-editable). OnDeserialized
+        // pads or truncates to exactly 5 so the UI never has to defend against
+        // odd counts. Default set lives in DefaultRemoteEmotePresets() below.
+        private List<EmotePreset> _remoteEmotePresets = DefaultRemoteEmotePresets();
+        public List<EmotePreset> RemoteEmotePresets
+        {
+            get => _remoteEmotePresets;
+            set { _remoteEmotePresets = value ?? DefaultRemoteEmotePresets(); OnPropertyChanged(); }
+        }
+
+        internal static List<EmotePreset> DefaultRemoteEmotePresets() => new()
+        {
+            new EmotePreset { Icon = "🙏", Text = "yes" },
+            new EmotePreset { Icon = "🥺", Text = "more" },
+            new EmotePreset { Icon = "🫠", Text = "drifting" },
+            new EmotePreset { Icon = "💜", Text = "thank you" },
+            new EmotePreset { Icon = "⚠️", Text = "too much" },
+        };
+
+        [OnDeserialized]
+        internal void OnDeserializedNormalizeEmotePresets(StreamingContext _)
+        {
+            if (_remoteEmotePresets == null)
+            {
+                _remoteEmotePresets = DefaultRemoteEmotePresets();
+                return;
+            }
+            // Pad short → use defaults for the missing tail slots.
+            var defaults = DefaultRemoteEmotePresets();
+            while (_remoteEmotePresets.Count < 5)
+            {
+                _remoteEmotePresets.Add(defaults[_remoteEmotePresets.Count]);
+            }
+            // Truncate long → keep the first 5 only.
+            if (_remoteEmotePresets.Count > 5)
+            {
+                _remoteEmotePresets = _remoteEmotePresets.GetRange(0, 5);
+            }
         }
 
         #endregion
@@ -3222,6 +3291,21 @@ namespace ConditioningControlPanel.Models
         {
             get => _stopEffectsOnRemoteDisconnect;
             set { _stopEffectsOnRemoteDisconnect = value; OnPropertyChanged(); }
+        }
+
+        // Subject-side opt-in for exposing the linked Discord avatar to whoever's
+        // currently controlling the session. Default false — privacy fails closed;
+        // controller sees a silhouette unless the user explicitly flips this on.
+        // Patreon avatars are not surfaced anywhere in the app, so this is purely
+        // about the Discord avatar URL. Distinct from `share_profile_picture`
+        // (legacy field on profile:* records governing leaderboard / Subjects
+        // directory display). Do not conflate; different audience, different
+        // threat model.
+        private bool _remoteShareAvatar = false;
+        public bool RemoteShareAvatar
+        {
+            get => _remoteShareAvatar;
+            set { _remoteShareAvatar = value; OnPropertyChanged(); }
         }
 
         // SP5 layer 3 — Available Subjects directory opt-in.
