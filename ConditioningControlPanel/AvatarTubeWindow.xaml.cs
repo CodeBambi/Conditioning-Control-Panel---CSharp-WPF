@@ -3395,7 +3395,9 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Plays a voice line audio file
+        /// Plays a voice line audio file. Suppressed entirely when the avatar
+        /// menu's "Mute Whispers" toggle is on (SubAudioEnabled=false) — the
+        /// bubble + text still show, only the attached voiceline goes silent.
         /// </summary>
         private void PlayVoiceLineAudio(string filePath)
         {
@@ -3405,6 +3407,7 @@ namespace ConditioningControlPanel
                 StopVoiceLineAudio();
 
                 if (!System.IO.File.Exists(filePath)) return;
+                if (App.Settings?.Current?.SubAudioEnabled != true) return;
 
                 var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
                 var volume = (float)Math.Pow(masterVolume, 1.5);
@@ -4056,12 +4059,15 @@ namespace ConditioningControlPanel
         /// </summary>
         /// <summary>
         /// Plays a custom phrase audio file (NAudio pattern from PlayGiggleSound).
+        /// Suppressed when "Mute Whispers" is on so the phrase bubble still
+        /// appears but the attached audio doesn't play.
         /// </summary>
         private void PlayPhraseAudio(string audioPath)
         {
             try
             {
                 if (!System.IO.File.Exists(audioPath)) return;
+                if (App.Settings?.Current?.SubAudioEnabled != true) return;
 
                 var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
                 var volume = (float)Math.Pow(masterVolume, 1.5) * 0.7f;

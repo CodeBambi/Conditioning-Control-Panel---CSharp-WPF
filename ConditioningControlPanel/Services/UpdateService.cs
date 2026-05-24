@@ -48,8 +48,11 @@ restart. Tools sharper. Room bigger.
   achievements, browser defaults, and avatars.
 - Dronification now ships its full asset pack (avatars, sounds, achievement
   art) bundled inside the installer instead of falling back to baseline.
-- Remote control: emote picker (small + splash), avatar context menu, bubble
-  feedback, privacy toggle on outgoing emotes.
+- Remote control rework: viewers can now send emotes BACK to the streamer -
+  small quick-pick or a splash board with the full set. Emotes pop as
+  bubbles next to the streamer's avatar. Avatar right-click menu surfaces
+  recent emotes; per-session privacy toggle gates whether outgoing emotes
+  broadcast at all.
 - Subjects tab: tag pills + ""Become a subject!"" CTA.
 
 🎨 UI/UX
@@ -59,6 +62,9 @@ restart. Tools sharper. Room bigger.
 - CCP Default uses a neutral logo (no gradient halo on the anchor).
 
 🔧 BUG FIXES
+- ""Mute Whispers"" (avatar menu) now also silences attached voicelines and
+  custom phrase audio — the bubble + text still show, but no audio plays.
+  Previously only the subliminal-whisper audio was gated.
 - Mandatory videos: ESC again dismisses the current video.
 - Deeper hub: ▶ button no longer opens enhancement as audio file.
 - Audio: validate preferred LibVLC device before SetOutputDevice (no more

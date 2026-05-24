@@ -1815,7 +1815,7 @@
                                   ItemsSource="{Binding AvailableMods, RelativeSource={RelativeSource AncestorType=Window}}"
                                   SelectedValuePath="Id"
                                   SelectionChanged="ModSelectorCombo_SelectionChanged"
-                                  MinWidth="160" Height="22" VerticalAlignment="Center"
+                                  MinWidth="100" Height="22" VerticalAlignment="Center"
                                   FontSize="11" FontWeight="SemiBold"
                                   ToolTip="{loc:Str tooltip_switch_mod}">
                             <ComboBox.ItemTemplate>
