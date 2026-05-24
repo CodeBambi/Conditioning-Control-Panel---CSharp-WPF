@@ -466,7 +466,10 @@
                 <Canvas x:Name="MiniTimelineCanvas" ClipToBounds="True"
                         Background="Transparent"
                         SizeChanged="MiniTimelineCanvas_SizeChanged"
-                        MouseLeftButtonDown="MiniTimelineCanvas_MouseLeftButtonDown"/>
+                        MouseLeftButtonDown="MiniTimelineCanvas_MouseLeftButtonDown"
+                        MouseMove="MiniTimelineCanvas_MouseMove"
+                        MouseLeftButtonUp="MiniTimelineCanvas_MouseLeftButtonUp"
+                        LostMouseCapture="MiniTimelineCanvas_LostMouseCapture"/>
             </Border>
         </StackPanel>
 

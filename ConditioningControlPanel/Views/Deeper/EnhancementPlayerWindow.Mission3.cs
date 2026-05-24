@@ -680,22 +680,78 @@ namespace ConditioningControlPanel.Views.Deeper
             return Math.Max(media, content);
         }
 
+        // Drag-to-scrub state. Capture is taken on mouse-down and released
+        // on mouse-up so the user can drag past the edge of the canvas
+        // without losing the seek.
+        private bool _miniScrubbing;
+
         private void MiniTimelineCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Audio-mode seek. Video mode seeking through the JS bridge is
-            // race-prone right after navigation; skip for v1 (see report).
             try
             {
                 if (_miniEnhancement == null) return;
                 var w = MiniTimelineCanvas.ActualWidth;
                 if (w <= 0 || _miniTotalSeconds <= 0) return;
-                if (_videoSource != null) return;
-                if (_player.DurationMs <= 0) return;
-                var frac = Math.Clamp(e.GetPosition(MiniTimelineCanvas).X / w, 0, 1);
-                _player.Seek(frac * _player.DurationMs / 1000.0);
-                UpdateMiniPlayheadX();
+                // For audio we need DurationMs > 0 (NAudio reports as soon
+                // as Play() returns). For video the duration comes back via
+                // _miniTotalSeconds once metadata loads; the JS Seek call
+                // no-ops gracefully if the <video> isn't ready yet.
+                if (_videoSource == null && _player.DurationMs <= 0) return;
+
+                MiniTimelineCanvas.CaptureMouse();
+                _miniScrubbing = true;
+                SeekToMiniPosition(e.GetPosition(MiniTimelineCanvas).X);
+                e.Handled = true;
             }
             catch { }
+        }
+
+        private void MiniTimelineCanvas_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_miniScrubbing) return;
+            try { SeekToMiniPosition(e.GetPosition(MiniTimelineCanvas).X); } catch { }
+        }
+
+        private void MiniTimelineCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_miniScrubbing) return;
+            try
+            {
+                _miniScrubbing = false;
+                MiniTimelineCanvas.ReleaseMouseCapture();
+                // Final seek to the release point — covers the rare case
+                // where the last MouseMove fired before the click landed.
+                SeekToMiniPosition(e.GetPosition(MiniTimelineCanvas).X);
+            }
+            catch { }
+        }
+
+        private void MiniTimelineCanvas_LostMouseCapture(object sender, MouseEventArgs e)
+        {
+            // Defensive: if anything yanks capture away (alt-tab, modal
+            // popup), end the scrub cleanly so the next click starts fresh.
+            _miniScrubbing = false;
+        }
+
+        private void SeekToMiniPosition(double xInCanvas)
+        {
+            var w = MiniTimelineCanvas.ActualWidth;
+            if (w <= 0 || _miniTotalSeconds <= 0) return;
+            var frac = Math.Clamp(xInCanvas / w, 0, 1);
+            var targetSec = frac * _miniTotalSeconds;
+            if (_videoSource != null)
+            {
+                _videoSource.Seek(targetSec);
+            }
+            else if (_player.DurationMs > 0)
+            {
+                // Audio uses media-duration as the scrub denominator so we
+                // never seek past the actual file even when the mini-
+                // timeline total includes enhancement content past it.
+                var audioFrac = Math.Clamp(targetSec / (_player.DurationMs / 1000.0), 0, 1);
+                _player.Seek(audioFrac * _player.DurationMs / 1000.0);
+            }
+            UpdateMiniPlayheadX();
         }
 
         private static double ComputeMiniTotalSeconds(Enhancement enh)
