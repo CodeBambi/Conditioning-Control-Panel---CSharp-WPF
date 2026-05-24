@@ -347,6 +347,29 @@ namespace ConditioningControlPanel
             if (BtnDeeperPillWebcam  != null) BtnDeeperPillWebcam.IsChecked  = _deeperFilterWebcam;
         }
 
+        // Opens the web catalogue in the user's default browser. The URL is a
+        // constant pointing at the public CCP web frontend (cclabs-web,
+        // Next.js + Supabase). Process.Start with UseShellExecute=true is the
+        // standard "open externally" pattern — bypasses any embedded browser
+        // and respects the user's OS default. Errors are non-fatal: the user
+        // can always type the URL by hand if shell-execute is locked down.
+        private void BtnDeeperCatalogue_Click(object sender, RoutedEventArgs e)
+        {
+            const string url = "https://app.cclabs.app/catalogue";
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Failed to open Deeper catalogue URL");
+            }
+        }
+
         private void DeeperSort_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
             if (!_deeperHubInitDone || CmbDeeperSort?.SelectedItem is not System.Windows.Controls.ComboBoxItem item) return;

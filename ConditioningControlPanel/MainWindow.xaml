@@ -8914,6 +8914,28 @@
                             </ToggleButton>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Bright CTA pointing at the web catalogue. Solid
+                                 accent fill so it reads as the loud "go shop"
+                                 affordance next to the muted Sort dropdown.
+                                 Opens app.cclabs.app/catalogue in the user's
+                                 default browser via Process.Start (ShellExecute). -->
+                            <Button x:Name="BtnDeeperCatalogue"
+                                    Click="BtnDeeperCatalogue_Click"
+                                    ToolTip="{loc:Str deeper_hub_tip_catalogue}"
+                                    Padding="12,5" Margin="0,0,12,0" Cursor="Hand" FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Background="{DynamicResource DeeperAccentBrush}"
+                                    Foreground="White"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🛍 " VerticalAlignment="Center"/>
+                                    <TextBlock Text="{loc:Str deeper_hub_catalogue_btn}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text=" ↗" Margin="2,0,0,0"
+                                               Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                             <TextBlock Text="{loc:Str deeper_hub_sort_label}"
                                        Foreground="{DynamicResource TextDimBrush}" FontSize="11"
                                        VerticalAlignment="Center" Margin="0,0,6,0"/>

@@ -176,6 +176,8 @@
   "deeper_hub_pill_haptics": "Haptics",
   "deeper_hub_pill_webcam": "Webcam",
   "deeper_hub_sort_label": "Sort:",
+  "deeper_hub_catalogue_btn": "Enhancements Catalogue",
+  "deeper_hub_tip_catalogue": "Browse community-shared enhancements at app.cclabs.app/catalogue (opens in your default browser).",
   "deeper_hub_sort_recent": "Recent",
   "deeper_hub_sort_name": "Name",
   "deeper_hub_sort_creator": "Creator",
