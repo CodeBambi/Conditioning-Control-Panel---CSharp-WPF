@@ -2558,6 +2558,16 @@ namespace ConditioningControlPanel
         // correct media loader (remote URL / local video / audio) based on the
         // enhancement's MediaType + MediaSource. Used by the hub row's ▶
         // button — distinct from OpenInDeeperPlayer (which takes a media path).
+        // Mission 3: opens the editor for an existing .ccpenh.json file. Used
+        // by the Player's "Open in editor" jump (header button + event log
+        // link). Routes through OpenDeeperFile so the same load/error path
+        // and library-refresh-on-close behavior applies as the hub row click.
+        public void OpenDeeperEditorFromPlayer(string ccpenhJsonPath)
+        {
+            if (string.IsNullOrWhiteSpace(ccpenhJsonPath)) return;
+            OpenDeeperFile(ccpenhJsonPath);
+        }
+
         public void OpenDeeperEnhancementInPlayer(string ccpenhJsonPath)
         {
             try

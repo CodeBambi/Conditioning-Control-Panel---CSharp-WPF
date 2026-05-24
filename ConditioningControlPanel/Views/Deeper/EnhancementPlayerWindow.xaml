@@ -10,11 +10,49 @@
         Closing="Window_Closing">
 
     <Window.Resources>
-        <!-- Polish pass: implicit rounded-button style so every Button in the
-             player picks up CornerRadius + hover/press feedback without per-
-             button edits. Inline Background/Foreground/BorderBrush setters
-             keep working (template uses TemplateBinding). -->
+        <!-- Implicit rounded-button style: every Button in the player picks up
+             CornerRadius + hover/press feedback without per-button edits.
+             Inline Background/Foreground/BorderBrush setters keep working
+             (template uses TemplateBinding). Same trick the editor uses. -->
         <Style TargetType="Button" BasedOn="{StaticResource DeeperRoundButton}"/>
+
+        <!-- Filter pill — single-select toggle for the event log filter strip.
+             Same visual vocabulary as the hub's DeeperPillStyle (Mission 2)
+             so users learn the pill language once. -->
+        <Style x:Key="EventFilterPill" TargetType="ToggleButton">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="9,3"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentTransparent40Brush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="bd" CornerRadius="10"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource DeeperAccentBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <!-- Dark-themed ScrollBar (DeeperAccent variant) — same as the editor's.
              Default WPF ScrollBar is a white Windows-style bar that fights
@@ -106,113 +144,233 @@
         </Style>
     </Window.Resources>
 
-    <Grid Margin="18,16">
+    <Grid Margin="18,14">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/> <!-- header -->
-            <RowDefinition Height="Auto"/> <!-- audio file (audio mode only) -->
-            <RowDefinition Height="Auto"/> <!-- enhancement file -->
-            <RowDefinition Height="*"/>    <!-- media pane (audio waveform OR video webview) -->
-            <RowDefinition Height="Auto"/> <!-- transport -->
-            <RowDefinition Height="Auto"/> <!-- status -->
-            <RowDefinition Height="Auto"/> <!-- event log -->
+            <RowDefinition Height="Auto"/>  <!-- 0: header strip -->
+            <RowDefinition Height="Auto"/>  <!-- 1: file context strip -->
+            <RowDefinition Height="*"/>     <!-- 2: media pane -->
+            <RowDefinition Height="Auto"/>  <!-- 3: mini-timeline -->
+            <RowDefinition Height="Auto"/>  <!-- 4: transport -->
+            <RowDefinition Height="Auto"/>  <!-- 5: structured event log -->
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,14">
-            <TextBlock Text="🌊" FontSize="22"
+        <!-- =====================================================================
+             Row 0: HEADER STRIP — wave icon + title + status pill + Open in editor
+             Status pill states: Live (playing) / Loaded (paused) / Empty (nothing)
+             ===================================================================== -->
+        <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,10">
+            <TextBlock DockPanel.Dock="Left" Text="🌊" FontSize="22"
                        Foreground="{DynamicResource DeeperAccentBrush}"
                        VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <TextBlock Text="{loc:Str deeper_player_title}" Style="{StaticResource HeaderText}"
+            <TextBlock DockPanel.Dock="Left" Text="{loc:Str deeper_player_title}"
+                       Style="{StaticResource HeaderText}" Margin="0,0,12,0"
                        VerticalAlignment="Center" FontSize="18"/>
-        </StackPanel>
-
-        <!-- Audio file row (audio mode only) -->
-        <Grid Grid.Row="1" Margin="0,0,0,8" x:Name="AudioFileRow">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="100"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="{loc:Str deeper_player_media_label}"
-                       Foreground="{DynamicResource TextLightBrush}"
-                       VerticalAlignment="Center"/>
-            <TextBlock Grid.Column="1" x:Name="TxtAudioPath"
-                       Text="{loc:Str deeper_player_no_media}"
-                       Foreground="{DynamicResource TextMutedBrush}"
-                       VerticalAlignment="Center"
-                       TextTrimming="CharacterEllipsis"/>
-            <Button Grid.Column="2" Content="{loc:Str deeper_player_pick_media}"
-                    Click="BtnPickAudio_Click"
-                    Padding="10,4" Cursor="Hand" FontSize="11"
+            <Border DockPanel.Dock="Left" x:Name="StatusPill"
+                    CornerRadius="9" Padding="9,2"
+                    BorderThickness="1" VerticalAlignment="Center"
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
-                    Foreground="{DynamicResource DeeperAccentBrush}"
-                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
-        </Grid>
-
-        <!-- Enhancement file row -->
-        <Grid Grid.Row="2" Margin="0,0,0,14">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="100"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Str deeper_player_enh_label}"
-                       Foreground="{DynamicResource TextLightBrush}"
-                       VerticalAlignment="Center"/>
-            <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxtEnhPath"
-                       Text="{loc:Str deeper_player_no_enh}"
-                       Foreground="{DynamicResource TextMutedBrush}"
-                       VerticalAlignment="Center"
-                       TextTrimming="CharacterEllipsis"/>
-            <Button Grid.Row="0" Grid.Column="2" Content="{loc:Str deeper_player_pick_enh}"
-                    Click="BtnPickEnhancement_Click"
-                    Padding="10,4" Cursor="Hand" FontSize="11"
-                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
-                    Foreground="{DynamicResource DeeperAccentBrush}"
-                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
-            <Button Grid.Row="0" Grid.Column="3" Content="{loc:Str deeper_player_load_url}"
-                    Click="BtnLoadUrl_Click"
-                    Padding="10,4" Cursor="Hand" FontSize="11" Margin="6,0,0,0"
-                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
-                    Foreground="{DynamicResource DeeperAccentBrush}"
-                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
-            <Button Grid.Row="0" Grid.Column="4" x:Name="BtnCreateNewEnhancement"
-                    Content="{loc:Str deeper_player_create_new_btn}"
-                    Click="BtnCreateNewEnhancement_Click"
-                    Padding="10,4" Cursor="Hand" FontSize="11" Margin="6,0,0,0"
+                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}">
+                <TextBlock x:Name="StatusPillText"
+                           Text="{loc:Str deeper_player_pill_empty}"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="10" FontWeight="SemiBold"/>
+            </Border>
+            <Button DockPanel.Dock="Right" x:Name="BtnOpenInEditor"
+                    Content="{loc:Str deeper_player_open_in_editor}"
+                    Click="BtnOpenInEditor_Click"
+                    ToolTip="{loc:Str deeper_player_tip_open_in_editor}"
+                    Padding="12,4" FontSize="11"
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                     Foreground="{DynamicResource DeeperAccentBrush}"
                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
                     Visibility="Collapsed"/>
-            <Button Grid.Row="0" Grid.Column="5" x:Name="BtnUnloadEnhancement"
-                    Content="{loc:Str deeper_player_unload}"
-                    Click="BtnUnloadEnhancement_Click"
-                    Padding="8,4" Cursor="Hand" FontSize="11" Margin="6,0,0,0"
-                    Background="Transparent"
-                    Foreground="{DynamicResource TextMutedBrush}"
-                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                    Visibility="Collapsed"/>
+        </DockPanel>
 
-            <!-- Discovery-source badge: tells the user how the loaded enhancement
-                 was found (library / sidecar / embedded / manual / URL). Hidden
-                 when no enhancement is loaded. -->
-            <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="5" x:Name="TxtEnhSource"
-                       Foreground="{DynamicResource DeeperAccentSoftBrush}"
-                       FontSize="10" Margin="0,2,0,0"
-                       TextTrimming="CharacterEllipsis"
-                       Visibility="Collapsed"/>
-        </Grid>
+        <!-- =====================================================================
+             Row 1: FILE CONTEXT STRIP — single compact row that replaces the
+             old AudioFileRow + enh-file row + TxtEnhSource sub-row.
 
-        <!-- Media pane: audio waveform OR video WebView2, swapped by MediaType -->
-        <Grid Grid.Row="3" Margin="0,0,0,10">
-            <!-- Audio mode: waveform + scrub -->
-            <Border x:Name="AudioPane" Background="#15151F"
+             Layout:  [Icon 36x36] [Title + meta line]   [Source pill] [Change]
+
+             AudioFileRow / BtnPickAudio / TxtAudioPath are preserved as
+             x:Name'd controls inside the Change popover (so code paths in
+             ShowMediaPaneFor + LoadAudio that touch them still work). The
+             popover also hosts BtnPickEnhancement / BtnLoadUrl /
+             BtnCreateNewEnhancement / BtnUnloadEnhancement — their x:Names
+             are preserved so existing Click handlers wire up unchanged.
+
+             TxtEnhPath / TxtEnhSource / TxtEnhMetadata are populated by
+             OnHostLoaded — preserved here at their new positions.
+             ===================================================================== -->
+        <Border Grid.Row="1" Margin="0,0,0,10"
+                Background="{DynamicResource PanelBgBrush}"
+                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                CornerRadius="8" Padding="10,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Media-type icon (36x36 tinted square) -->
+                <Border Grid.Column="0" x:Name="MediaTypeIconBg"
+                        Width="36" Height="36" CornerRadius="6"
+                        Background="{DynamicResource DeeperHubAudioBadgeBgBrush}"
+                        Margin="0,0,10,0">
+                    <TextBlock x:Name="MediaTypeIcon" Text="🎵" FontSize="18"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- Center: title + inline meta -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtEnhName"
+                               Text="{loc:Str deeper_player_no_enh}"
+                               Foreground="{DynamicResource TextLightBrush}"
+                               FontSize="13" FontWeight="Medium"
+                               TextTrimming="CharacterEllipsis"/>
+                    <!-- Line 2: creator · source · counts. Populated by
+                         UpdateHostUi. TxtEnhMetadata preserved for code paths
+                         that wrote into it; we now drive that text through
+                         the formatted meta line. -->
+                    <DockPanel LastChildFill="True" Margin="0,2,0,0">
+                        <TextBlock x:Name="TxtEnhPath" DockPanel.Dock="Bottom"
+                                   Foreground="{DynamicResource TextDimBrush}"
+                                   FontSize="9"
+                                   TextTrimming="CharacterEllipsis"
+                                   Visibility="Collapsed"/>
+                        <TextBlock x:Name="TxtEnhMetadata"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="10"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </DockPanel>
+                </StackPanel>
+
+                <!-- Right: source pill + Change popover -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border x:Name="SourcePill" CornerRadius="9" Padding="8,2"
+                            Margin="0,0,8,0" VerticalAlignment="Center"
+                            BorderThickness="1"
+                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                            Visibility="Collapsed">
+                        <TextBlock x:Name="TxtEnhSource"
+                                   Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                                   FontSize="10" FontWeight="SemiBold"/>
+                    </Border>
+                    <Button x:Name="BtnChange"
+                            Content="{loc:Str deeper_player_change}"
+                            Click="BtnChange_Click"
+                            ToolTip="{loc:Str deeper_player_tip_change}"
+                            Padding="10,4" FontSize="11"
+                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                            Foreground="{DynamicResource DeeperAccentBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
+                    <!-- Popover with the four file-loading actions plus the
+                         audio path picker (audio mode). PlacementTarget set
+                         to BtnChange. -->
+                    <Popup x:Name="ChangePopup" PlacementTarget="{Binding ElementName=BtnChange}"
+                           Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+                           PopupAnimation="Fade">
+                        <Border Background="{DynamicResource PanelBgBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                BorderThickness="1" CornerRadius="8" Padding="6"
+                                MinWidth="220">
+                            <StackPanel>
+                                <!-- Audio-mode-only: pick a media file. The audio path is
+                                     also shown for context. Hidden via AudioFileRow's
+                                     Visibility (toggled by ShowMediaPaneFor). -->
+                                <Grid x:Name="AudioFileRow" Margin="2,2,2,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" x:Name="TxtAudioPath"
+                                               Text="{loc:Str deeper_player_no_media}"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               VerticalAlignment="Center" FontSize="10"
+                                               TextTrimming="CharacterEllipsis" Margin="6,0,6,0"/>
+                                    <Button Grid.Column="1" x:Name="BtnPickAudio"
+                                            Content="{loc:Str deeper_player_pick_media}"
+                                            Click="BtnPickAudio_Click"
+                                            ToolTip="{loc:Str deeper_player_tip_pick_media}"
+                                            Padding="8,3" FontSize="10"
+                                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                            Foreground="{DynamicResource DeeperAccentBrush}"
+                                            BorderBrush="{DynamicResource DeeperAccentBrush}"
+                                            BorderThickness="1"/>
+                                </Grid>
+
+                                <Button x:Name="BtnPickEnhancement"
+                                        Click="BtnPickEnhancement_Click"
+                                        ToolTip="{loc:Str deeper_player_tip_pick_enh}"
+                                        HorizontalContentAlignment="Left"
+                                        Padding="10,6" Margin="0,2,0,0" FontSize="11"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextLightBrush}"
+                                        BorderThickness="0">
+                                    <TextBlock>
+                                        <Run Text="📄 "/>
+                                        <Run Text="{loc:Str deeper_player_pick_enh}"/>
+                                    </TextBlock>
+                                </Button>
+                                <Button x:Name="BtnLoadUrl"
+                                        Click="BtnLoadUrl_Click"
+                                        ToolTip="{loc:Str deeper_player_tip_load_url}"
+                                        HorizontalContentAlignment="Left"
+                                        Padding="10,6" Margin="0,2,0,0" FontSize="11"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextLightBrush}"
+                                        BorderThickness="0">
+                                    <TextBlock>
+                                        <Run Text="🌐 "/>
+                                        <Run Text="{loc:Str deeper_player_load_url}"/>
+                                    </TextBlock>
+                                </Button>
+                                <Button x:Name="BtnCreateNewEnhancement"
+                                        Click="BtnCreateNewEnhancement_Click"
+                                        ToolTip="{loc:Str deeper_player_tip_create_new}"
+                                        HorizontalContentAlignment="Left"
+                                        Padding="10,6" Margin="0,2,0,0" FontSize="11"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextLightBrush}"
+                                        BorderThickness="0"
+                                        Visibility="Collapsed">
+                                    <TextBlock>
+                                        <Run Text="✨ "/>
+                                        <Run Text="{loc:Str deeper_player_create_new_btn}"/>
+                                    </TextBlock>
+                                </Button>
+                                <Button x:Name="BtnUnloadEnhancement"
+                                        Click="BtnUnloadEnhancement_Click"
+                                        ToolTip="{loc:Str deeper_player_tip_unload}"
+                                        HorizontalContentAlignment="Left"
+                                        Padding="10,6" Margin="0,2,0,0" FontSize="11"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextMutedBrush}"
+                                        BorderThickness="0"
+                                        Visibility="Collapsed">
+                                    <TextBlock>
+                                        <Run Text="✕ "/>
+                                        <Run Text="{loc:Str deeper_player_unload}"/>
+                                    </TextBlock>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- =====================================================================
+             Row 2: MEDIA PANE — audio waveform OR video WebView2.
+             Hosts a "Now: [region label]" overlay (top-right) that appears
+             when the playhead is inside a region.
+             ===================================================================== -->
+        <Grid Grid.Row="2" Margin="0,0,0,10">
+            <!-- Audio mode -->
+            <Border x:Name="AudioPane"
+                    Background="{DynamicResource DeeperLaneCanvasBrush}"
                     BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
                     CornerRadius="4" Height="80" VerticalAlignment="Top">
                 <Canvas x:Name="WaveformCanvas" ClipToBounds="True"
@@ -224,7 +382,7 @@
                 </Canvas>
             </Border>
 
-            <!-- Video mode: WebView2 hosting the embedded video page -->
+            <!-- Video mode -->
             <Border x:Name="VideoPane" Background="Black"
                     BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
                     CornerRadius="4" Visibility="Collapsed">
@@ -235,64 +393,134 @@
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                IsHitTestVisible="False"/>
-                    <!-- Zoom controls overlay: top-right corner, semi-transparent
-                         pill, 10% per click. Sits above the WebView via Z-order. -->
+                    <!-- Zoom controls overlay: top-right corner, 10% per click. -->
                     <StackPanel Orientation="Horizontal"
                                 HorizontalAlignment="Right" VerticalAlignment="Top"
                                 Margin="0,6,8,0" Panel.ZIndex="10">
                         <Button x:Name="BtnZoomOut" Content="−"
                                 Click="BtnZoomOut_Click"
                                 Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold"
-                                Background="#A0000000" Foreground="White" BorderThickness="0"
-                                Cursor="Hand"
+                                Background="{DynamicResource DeeperPlayerOverlayBgBrush}"
+                                Foreground="White" BorderThickness="0"
                                 ToolTip="{loc:Str deeper_zoom_out_tt}"/>
                         <Button x:Name="BtnZoomIn" Content="+"
                                 Click="BtnZoomIn_Click"
                                 Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold" Margin="4,0,0,0"
-                                Background="#A0000000" Foreground="White" BorderThickness="0"
-                                Cursor="Hand"
+                                Background="{DynamicResource DeeperPlayerOverlayBgBrush}"
+                                Foreground="White" BorderThickness="0"
                                 ToolTip="{loc:Str deeper_zoom_in_tt}"/>
                     </StackPanel>
                 </Grid>
             </Border>
+
+            <!-- "Now: [region]" overlay — top-right of the media pane.
+                 Updated on _uiTimer tick by RefreshNowRegionOverlay(). The
+                 background is a semi-opaque black overlay; the region label
+                 picks up the region's color. Sits above both panes so it
+                 works in audio + video modes. -->
+            <Border x:Name="NowRegionPanel"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,8,10,0" Padding="8,3" CornerRadius="6"
+                    Background="{DynamicResource DeeperPlayerOverlayBgBrush}"
+                    Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="20">
+                <StackPanel Orientation="Horizontal">
+                    <Rectangle x:Name="NowRegionSwatch" Width="8" Height="8"
+                               RadiusX="2" RadiusY="2" Margin="0,0,6,0"
+                               VerticalAlignment="Center"
+                               Fill="{DynamicResource DeeperAccentBrush}"/>
+                    <TextBlock x:Name="TxtNowRegion" Text=""
+                               Foreground="White" FontSize="10" FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
         </Grid>
 
-        <!-- Transport row -->
-        <DockPanel Grid.Row="4" LastChildFill="True" Margin="0,0,0,10">
+        <!-- =====================================================================
+             Row 3: MINI-TIMELINE READ-OUT
+             32px-tall strip showing region bands + rule pins + live playhead.
+             Click-to-seek (audio mode only; video seek goes through the JS
+             time source which would race the WebView2 navigation timing —
+             deferred for v1). Header: "Timeline" label + current/total time.
+             Hidden when no enhancement is loaded.
+             ===================================================================== -->
+        <StackPanel Grid.Row="3" x:Name="MiniTimelinePanel" Margin="0,0,0,10"
+                    Visibility="Collapsed">
+            <DockPanel LastChildFill="False" Margin="0,0,0,3">
+                <TextBlock DockPanel.Dock="Left"
+                           Text="{loc:Str deeper_player_minitimeline_label}"
+                           Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                           FontSize="10" FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+                <TextBlock DockPanel.Dock="Right" x:Name="TxtMiniTimelineReadout"
+                           Text="0:00 / 0:00"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="10" FontFamily="Consolas"
+                           VerticalAlignment="Center"/>
+            </DockPanel>
+            <Border x:Name="MiniTimelineHost"
+                    Background="{DynamicResource DeeperLaneCanvasBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                    BorderThickness="1" CornerRadius="4" Height="32"
+                    Cursor="Hand"
+                    ToolTip="{loc:Str deeper_player_tip_minitimeline}">
+                <Canvas x:Name="MiniTimelineCanvas" ClipToBounds="True"
+                        Background="Transparent"
+                        SizeChanged="MiniTimelineCanvas_SizeChanged"
+                        MouseLeftButtonDown="MiniTimelineCanvas_MouseLeftButtonDown"/>
+            </Border>
+        </StackPanel>
+
+        <!-- =====================================================================
+             Row 4: TRANSPORT — primary cluster (left) + secondary cluster (right)
+             Primary: play/stop/time readout
+             Secondary: volume / eye-tracking / PiP
+             ===================================================================== -->
+        <DockPanel Grid.Row="4" LastChildFill="False" Margin="0,0,0,10">
+            <!-- Primary cluster: play/stop + time -->
             <Button x:Name="BtnPlayPause" DockPanel.Dock="Left"
                     Content="▶" Click="BtnPlayPause_Click"
-                    Width="38" Height="32" Padding="0" Cursor="Hand"
+                    ToolTip="{loc:Str deeper_player_tip_play_pause}"
+                    Width="38" Height="32" Padding="0"
                     Background="{DynamicResource DeeperAccentBrush}"
                     Foreground="White" BorderThickness="0" FontSize="15"/>
             <Button DockPanel.Dock="Left" Content="⏹"
                     Click="BtnStop_Click"
-                    Width="32" Height="32" Padding="0" Cursor="Hand" Margin="6,0,0,0"
+                    ToolTip="{loc:Str deeper_player_tip_stop}"
+                    Width="32" Height="32" Padding="0" Margin="6,0,0,0"
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                     Foreground="{DynamicResource DeeperAccentBrush}"
                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
                     FontSize="13"/>
             <TextBlock x:Name="TxtCurrent" DockPanel.Dock="Left"
                        Text="0:00" Foreground="{DynamicResource TextLightBrush}"
-                       FontSize="12" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                       FontSize="12" FontFamily="Consolas"
+                       VerticalAlignment="Center" Margin="14,0,4,0"/>
             <TextBlock DockPanel.Dock="Left" Text="/" Foreground="{DynamicResource TextDimBrush}"
                        FontSize="12" VerticalAlignment="Center"/>
             <TextBlock x:Name="TxtTotal" DockPanel.Dock="Left"
                        Text="0:00" Foreground="{DynamicResource TextMutedBrush}"
-                       FontSize="12" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                       FontSize="12" FontFamily="Consolas"
+                       VerticalAlignment="Center" Margin="4,0,0,0"/>
+
+            <!-- Secondary cluster (right side) — PiP, eye-tracking, volume.
+                 DockPanel.Dock=Right reverses visual order — the FIRST Right
+                 child sits furthest right, so wire them right-to-left. -->
             <StackPanel x:Name="VolumePanel" DockPanel.Dock="Right"
-                        Orientation="Horizontal" VerticalAlignment="Center">
+                        Orientation="Horizontal" VerticalAlignment="Center"
+                        Margin="12,0,0,0">
                 <TextBlock Text="🔊" Foreground="{DynamicResource TextDimBrush}" FontSize="12"
-                           VerticalAlignment="Center" Margin="8,0,4,0"/>
+                           VerticalAlignment="Center" Margin="0,0,4,0"/>
                 <Slider x:Name="SliderVolume"
-                        Width="120" Minimum="0" Maximum="100" Value="80"
+                        Width="90" Minimum="0" Maximum="100" Value="80"
                         VerticalAlignment="Center"
+                        ToolTip="{loc:Str deeper_player_tip_volume}"
                         ValueChanged="SliderVolume_ValueChanged"/>
             </StackPanel>
             <Button x:Name="BtnEyeTracking" DockPanel.Dock="Right"
                     Content="{loc:Str deeper_player_btn_eye_tracking_start}"
                     Click="BtnEyeTracking_Click"
                     ToolTip="{loc:Str deeper_player_tt_eye_tracking}"
-                    Padding="12,0" Height="32" Margin="0,0,8,0" Cursor="Hand" FontSize="12"
+                    Padding="12,0" Height="32" Margin="8,0,0,0" FontSize="11"
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                     Foreground="{DynamicResource DeeperAccentBrush}"
                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
@@ -300,45 +528,163 @@
                     Content="{loc:Str deeper_player_btn_pip}"
                     Click="BtnPictureInPicture_Click"
                     ToolTip="{loc:Str deeper_player_tt_pip}"
-                    Padding="12,0" Height="32" Margin="0,0,8,0" Cursor="Hand" FontSize="12"
+                    Padding="12,0" Height="32" Margin="8,0,0,0" FontSize="11"
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                     Foreground="{DynamicResource DeeperAccentBrush}"
                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
                     Visibility="Collapsed"/>
         </DockPanel>
 
-        <!-- Status -->
-        <Border Grid.Row="5" Background="{DynamicResource PanelBgBrush}"
-                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                CornerRadius="4" Padding="12,10">
-            <StackPanel>
-                <TextBlock x:Name="TxtStatus"
-                           Text="{loc:Str deeper_player_status_idle}"
-                           Foreground="{DynamicResource TextLightBrush}"
-                           FontSize="11" TextWrapping="Wrap"/>
-                <TextBlock x:Name="TxtEnhMetadata"
-                           Foreground="{DynamicResource TextDimBrush}"
-                           FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0"/>
-            </StackPanel>
-        </Border>
+        <!-- =====================================================================
+             Row 5: STRUCTURED EVENT LOG
+             Header: label + filter pills (All / Actions / Engine / Errors) +
+                     clear + collapse chevron.
+             Body: ScrollViewer + ItemsControl bound to a filtered view of
+                   EventLogEntry. Per-row template shows timestamp, type icon
+                   tinted by rule trigger family, description (with rule label
+                   highlighted), and an "Open in editor" link for Action rows
+                   that carry a rule id.
 
-        <!-- Event log: live feed of triggered effects/rules -->
-        <Border Grid.Row="6" Background="{DynamicResource PanelBgBrush}"
+             TxtStatus is preserved (engine state messages — webcam prompts,
+             load-failed reasons, etc.) and now lives in a thin info bar at
+             the top of the event log surface.
+             ===================================================================== -->
+        <Border Grid.Row="5"
+                Background="{DynamicResource PanelBgBrush}"
                 BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                CornerRadius="4" Padding="12,8" Margin="0,8,0,0">
+                CornerRadius="6" Padding="0">
             <StackPanel>
-                <TextBlock Text="{loc:Str deeper_player_event_log}"
-                           Foreground="{DynamicResource DeeperAccentBrush}"
-                           FontSize="11" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                <ScrollViewer x:Name="EventScroll" MaxHeight="120"
-                              VerticalScrollBarVisibility="Auto">
+                <!-- Status / engine-state text. Kept thin and muted so it
+                     doesn't compete with the event rows. -->
+                <Border Background="{DynamicResource DeeperLaneHeaderBrush}"
+                        BorderThickness="0,0,0,1"
+                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                        Padding="12,6">
+                    <TextBlock x:Name="TxtStatus"
+                               Text="{loc:Str deeper_player_status_idle}"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="10" TextWrapping="Wrap"/>
+                </Border>
+
+                <!-- Filter strip -->
+                <DockPanel LastChildFill="False" Margin="10,6,10,4">
+                    <TextBlock DockPanel.Dock="Left" Text="📋"
+                               Foreground="{DynamicResource DeeperAccentBrush}"
+                               FontSize="11" VerticalAlignment="Center"
+                               Margin="0,0,6,0"/>
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="{loc:Str deeper_player_event_log}"
+                               Foreground="{DynamicResource DeeperAccentBrush}"
+                               FontSize="11" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <ToggleButton DockPanel.Dock="Left" x:Name="PillFilterAll"
+                                  Style="{StaticResource EventFilterPill}"
+                                  IsChecked="True" Margin="0,0,4,0"
+                                  Tag="all"
+                                  ToolTip="{loc:Str deeper_player_tip_pill_all}"
+                                  Click="EventFilterPill_Click">
+                        <TextBlock>
+                            <Run Text="{loc:Str deeper_player_pill_all}"/>
+                            <Run Text=" "/>
+                            <Run x:Name="TxtFilterCountAll" Text="0"/>
+                        </TextBlock>
+                    </ToggleButton>
+                    <ToggleButton DockPanel.Dock="Left" x:Name="PillFilterActions"
+                                  Style="{StaticResource EventFilterPill}"
+                                  Margin="0,0,4,0" Tag="action"
+                                  ToolTip="{loc:Str deeper_player_tip_pill_actions}"
+                                  Click="EventFilterPill_Click">
+                        <TextBlock>
+                            <Run Text="{loc:Str deeper_player_pill_actions}"/>
+                            <Run Text=" "/>
+                            <Run x:Name="TxtFilterCountActions" Text="0"/>
+                        </TextBlock>
+                    </ToggleButton>
+                    <ToggleButton DockPanel.Dock="Left" x:Name="PillFilterEngine"
+                                  Style="{StaticResource EventFilterPill}"
+                                  Margin="0,0,4,0" Tag="engine"
+                                  ToolTip="{loc:Str deeper_player_tip_pill_engine}"
+                                  Click="EventFilterPill_Click">
+                        <TextBlock>
+                            <Run Text="{loc:Str deeper_player_pill_engine}"/>
+                            <Run Text=" "/>
+                            <Run x:Name="TxtFilterCountEngine" Text="0"/>
+                        </TextBlock>
+                    </ToggleButton>
+                    <ToggleButton DockPanel.Dock="Left" x:Name="PillFilterErrors"
+                                  Style="{StaticResource EventFilterPill}"
+                                  Margin="0,0,4,0" Tag="error"
+                                  ToolTip="{loc:Str deeper_player_tip_pill_errors}"
+                                  Click="EventFilterPill_Click">
+                        <TextBlock>
+                            <Run Text="{loc:Str deeper_player_pill_errors}"/>
+                            <Run Text=" "/>
+                            <Run x:Name="TxtFilterCountErrors" Text="0"/>
+                        </TextBlock>
+                    </ToggleButton>
+                    <Button DockPanel.Dock="Right" x:Name="BtnCollapseEventLog"
+                            Content="▾" Click="BtnCollapseEventLog_Click"
+                            ToolTip="{loc:Str deeper_player_tip_collapse}"
+                            Width="22" Height="20" Padding="0" FontSize="11"
+                            Background="Transparent"
+                            Foreground="{DynamicResource TextMutedBrush}"
+                            BorderThickness="0"/>
+                    <Button DockPanel.Dock="Right" x:Name="BtnClearEvents"
+                            Content="🗑" Click="BtnClearEvents_Click"
+                            ToolTip="{loc:Str deeper_player_tip_clear}"
+                            Width="22" Height="20" Padding="0" FontSize="10"
+                            Margin="0,0,4,0"
+                            Background="Transparent"
+                            Foreground="{DynamicResource TextMutedBrush}"
+                            BorderThickness="0"/>
+                </DockPanel>
+
+                <!-- Body -->
+                <ScrollViewer x:Name="EventScroll" MaxHeight="140"
+                              VerticalScrollBarVisibility="Auto"
+                              x:FieldModifier="public" Padding="10,2,10,8">
                     <ItemsControl x:Name="LstEvents">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding}"
-                                           Foreground="{DynamicResource TextLightBrush}"
-                                           FontFamily="Consolas" FontSize="10"
-                                           TextWrapping="NoWrap"/>
+                                <Border Margin="0,1,0,1" Padding="6,3" CornerRadius="3"
+                                        Background="{Binding RowBgBrush}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="50"/>
+                                            <ColumnDefinition Width="18"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding TimestampDisplay}"
+                                                   Foreground="{DynamicResource TextDimBrush}"
+                                                   FontFamily="Consolas" FontSize="9"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding IconGlyph}"
+                                                   Foreground="{Binding IconBrush}"
+                                                   FontSize="10" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   FontFamily="Consolas" FontSize="10"
+                                                   VerticalAlignment="Center" Margin="2,0,0,0">
+                                            <Run Text="{Binding RuleLabel, Mode=OneWay}"
+                                                 Foreground="{Binding RuleLabelBrush}"
+                                                 FontWeight="SemiBold"/>
+                                            <Run Text="{Binding Description, Mode=OneWay}"
+                                                 Foreground="{DynamicResource TextLightBrush}"/>
+                                        </TextBlock>
+                                        <Button Grid.Column="3"
+                                                Content="{loc:Str deeper_player_event_open_in_editor}"
+                                                Tag="{Binding RuleId}"
+                                                Click="EventOpenInEditor_Click"
+                                                ToolTip="{loc:Str deeper_player_tip_event_open}"
+                                                Visibility="{Binding OpenInEditorVisibility}"
+                                                Padding="6,1" FontSize="9"
+                                                Background="Transparent"
+                                                Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                                BorderThickness="1"/>
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

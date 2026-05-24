@@ -26,6 +26,13 @@ namespace ConditioningControlPanel.Views.Deeper
     {
         private Enhancement _enhancement = new();
         private string? _filePath;
+        /// <summary>
+        /// Exposes the on-disk path of the currently loaded project (null
+        /// for a new/unsaved one). Read by the Player's "Open in editor"
+        /// dedupe loop so it can activate an existing editor instead of
+        /// opening a duplicate.
+        /// </summary>
+        public string? LoadedFilePath => _filePath;
         private bool _isDirty;
         private bool _suppressDirty;
 

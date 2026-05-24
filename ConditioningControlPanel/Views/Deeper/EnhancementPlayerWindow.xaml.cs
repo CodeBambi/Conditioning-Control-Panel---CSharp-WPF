@@ -55,9 +55,8 @@ namespace ConditioningControlPanel.Views.Deeper
         // media so the user starts authoring against the right file.
         private string? _lastMediaPathForCreateNew;
 
-        // Live event log (last N actions the engine fired). Newest first.
-        private const int MaxEventLogEntries = 30;
-        private readonly System.Collections.ObjectModel.ObservableCollection<string> _events = new();
+        // Mission 3: structured event log replaces the flat string collection.
+        // Implementation lives in EnhancementPlayerWindow.Mission3.cs.
 
         // Fullscreen state for the embedded video. Mirrors MainWindow's browser-fullscreen
         // path: when HT (or any HTML5 video) requests fullscreen via the WebView2 API, we
@@ -79,9 +78,11 @@ namespace ConditioningControlPanel.Views.Deeper
             _host.Loaded += OnHostLoaded;
             _host.LoadFailed += OnHostLoadFailed;
             _host.ActionLogged += OnHostActionLogged;
-            _host.Diagnostic += OnHostActionLogged;
+            // Mission 3: Diagnostic events now route to a separate handler
+            // so the event log can categorize them as Engine (vs Action).
+            _host.Diagnostic += OnHostDiagnostic;
 
-            LstEvents.ItemsSource = _events;
+            InitializeMission3();
 
             _uiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _uiTimer.Tick += UiTimer_Tick;
@@ -791,12 +792,36 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtCurrent.Text = FormatTime(t);
                 if (d > 0) TxtTotal.Text = FormatTime(d);
                 BtnPlayPause.Content = _videoSource.IsPlaying ? "⏸" : "▶";
-                return;
+            }
+            else
+            {
+                var ms = _player.CurrentTimeMs;
+                TxtCurrent.Text = FormatTime(ms / 1000.0);
+                UpdatePlayhead(_player.DurationMs > 0 ? (double)ms / _player.DurationMs : 0);
             }
 
-            var ms = _player.CurrentTimeMs;
-            TxtCurrent.Text = FormatTime(ms / 1000.0);
-            UpdatePlayhead(_player.DurationMs > 0 ? (double)ms / _player.DurationMs : 0);
+            // Mission 3 mini-timeline + overlay + status pill updates.
+            UpdateMiniPlayheadX();
+            UpdateMiniTimelineReadout();
+            RefreshNowRegionOverlay();
+            UpdateStatusPill();
+        }
+
+        private void UpdateMiniTimelineReadout()
+        {
+            try
+            {
+                if (TxtMiniTimelineReadout == null) return;
+                double curSec = _videoSource != null
+                    ? _videoSource.GetCurrentTimeSeconds()
+                    : _player.CurrentTimeMs / 1000.0;
+                double totalSec = _videoSource != null
+                    ? _videoSource.GetDurationSeconds()
+                    : _player.DurationMs / 1000.0;
+                if (totalSec <= 0) totalSec = _miniTotalSeconds;
+                TxtMiniTimelineReadout.Text = $"{FormatTime(curSec)} / {FormatTime(totalSec)}";
+            }
+            catch { }
         }
 
         // -- Waveform render + scrub ------------------------------------------
@@ -966,6 +991,11 @@ namespace ConditioningControlPanel.Views.Deeper
                 // Audio mode: if audio is already playing, attach the engine now.
                 BindEngineIfReady();
             }
+
+            // Mission 3: re-skin the file context strip + mini-timeline + status pill.
+            RefreshFileContextStrip(enh, path);
+            OnEnhancementLoadedForMini(enh);
+            UpdateStatusPill();
         }
 
         // -- Pane swap + video loading ----------------------------------------
@@ -1636,24 +1666,35 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             try
             {
-                if (Dispatcher.CheckAccess()) AppendEvent(line);
-                else Dispatcher.BeginInvoke(() => AppendEvent(line));
+                if (Dispatcher.CheckAccess()) IngestActionLine(line);
+                else Dispatcher.BeginInvoke(() => IngestActionLine(line));
             }
             catch { }
         }
 
-        private void AppendEvent(string line)
+        private void OnHostDiagnostic(string line)
         {
-            _events.Insert(0, line);
-            while (_events.Count > MaxEventLogEntries) _events.RemoveAt(_events.Count - 1);
+            try
+            {
+                if (Dispatcher.CheckAccess()) IngestDiagnosticLine(line);
+                else Dispatcher.BeginInvoke(() => IngestDiagnosticLine(line));
+            }
+            catch { }
         }
 
         private void OnHostLoadFailed(string reason)
         {
             try
             {
-                if (Dispatcher.CheckAccess()) TxtStatus.Text = string.Format(Loc.Get("deeper_player_status_enh_failed_fmt"), reason);
-                else Dispatcher.BeginInvoke(() => TxtStatus.Text = string.Format(Loc.Get("deeper_player_status_enh_failed_fmt"), reason));
+                void Apply()
+                {
+                    TxtStatus.Text = string.Format(Loc.Get("deeper_player_status_enh_failed_fmt"), reason);
+                    // Also log to the structured event log so failures don't
+                    // disappear once the user navigates to another file.
+                    IngestErrorLine(reason);
+                }
+                if (Dispatcher.CheckAccess()) Apply();
+                else Dispatcher.BeginInvoke(Apply);
             }
             catch { }
         }
@@ -1692,7 +1733,7 @@ namespace ConditioningControlPanel.Views.Deeper
             try { _host.Loaded -= OnHostLoaded; } catch { }
             try { _host.LoadFailed -= OnHostLoadFailed; } catch { }
             try { _host.ActionLogged -= OnHostActionLogged; } catch { }
-            try { _host.Diagnostic -= OnHostActionLogged; } catch { }
+            try { _host.Diagnostic -= OnHostDiagnostic; } catch { }
             try { UnsubscribeWebcamStateForButton(); } catch { }
             // If THIS player session turned the webcam on (via the pre-play
             // prompt), turn it off on the way out so we leave the system the
