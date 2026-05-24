@@ -293,6 +293,7 @@
                     <Button Grid.Row="0" Grid.Column="3" x:Name="BtnLinkedJsonSwap"
                             Content="{loc:Str deeper_editor_linked_swap_json_btn}"
                             Click="BtnLinkedJsonSwap_Click"
+                            ToolTip="{loc:Str deeper_editor_tip_linked_swap_json}"
                             Padding="8,3" Margin="6,0,0,0" Cursor="Hand" FontSize="11"
                             Background="{DynamicResource DeeperAccentTransparent20Brush}"
                             Foreground="{DynamicResource DeeperAccentBrush}"
@@ -332,6 +333,7 @@
                     <Button Grid.Row="0" Grid.Column="3" x:Name="BtnLinkedMediaChange"
                             Content="{loc:Str deeper_editor_linked_change_media_btn}"
                             Click="BtnLinkedMediaChange_Click"
+                            ToolTip="{loc:Str deeper_editor_tip_linked_change_media}"
                             Padding="8,3" Margin="6,0,0,0" Cursor="Hand" FontSize="11"
                             Background="{DynamicResource DeeperAccentTransparent20Brush}"
                             Foreground="{DynamicResource DeeperAccentBrush}"
@@ -339,6 +341,7 @@
                     <Button Grid.Row="0" Grid.Column="4" x:Name="BtnLinkedMediaClear"
                             Content="{loc:Str deeper_editor_linked_clear_media_btn}"
                             Click="BtnLinkedMediaClear_Click"
+                            ToolTip="{loc:Str deeper_editor_tip_linked_clear_media}"
                             Padding="8,3" Margin="6,0,0,0" Cursor="Hand" FontSize="11"
                             Background="Transparent"
                             Foreground="{DynamicResource TextMutedBrush}"
@@ -358,6 +361,7 @@
                         <StackPanel>
                             <Button Content="{loc:Str deeper_editor_linked_change_media_local}"
                                     Click="BtnChangeMediaLocal_Click"
+                                    ToolTip="{loc:Str deeper_editor_tip_linked_change_local}"
                                     Padding="10,6" Cursor="Hand" FontSize="11" Margin="0,0,0,2"
                                     HorizontalContentAlignment="Left"
                                     Background="Transparent"
@@ -365,6 +369,7 @@
                                     BorderThickness="0"/>
                             <Button Content="{loc:Str deeper_editor_linked_change_media_url}"
                                     Click="BtnChangeMediaUrl_Click"
+                                    ToolTip="{loc:Str deeper_editor_tip_linked_change_url}"
                                     Padding="10,6" Cursor="Hand" FontSize="11"
                                     HorizontalContentAlignment="Left"
                                     Background="Transparent"
@@ -488,14 +493,14 @@
                                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
                             <Button x:Name="BtnAddRuleHero" DockPanel.Dock="Right"
                                     Content="+ Rule" Click="BtnAddRuleHero_Click"
-                                    ToolTip="Add a rule band at the current playhead (right-click the timeline for more options)"
+                                    ToolTip="{loc:Str deeper_editor_tip_add_rule_hero}"
                                     Padding="10,4" Margin="6,0,0,0" Cursor="Hand" FontSize="11" FontWeight="SemiBold"
                                     Background="Transparent"
                                     Foreground="{DynamicResource DeeperAccentBrush}"
                                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
                             <Button x:Name="BtnAddEffectHero" DockPanel.Dock="Right"
                                     Content="+ Effect" Click="BtnAddEffectHero_Click"
-                                    ToolTip="Add an effect at the current playhead (right-click the timeline for more options)"
+                                    ToolTip="{loc:Str deeper_editor_tip_add_effect_hero}"
                                     Padding="10,4" Margin="6,0,0,0" Cursor="Hand" FontSize="11" FontWeight="SemiBold"
                                     Background="Transparent"
                                     Foreground="{DynamicResource DeeperAccentBrush}"
@@ -506,7 +511,7 @@
                             <!-- Zoom controls (Ctrl+wheel on the timeline also works). -->
                             <Button x:Name="BtnZoomOut" DockPanel.Dock="Right" Content="−"
                                     Click="BtnZoomOut_Click"
-                                    ToolTip="Zoom out (Ctrl+Wheel)"
+                                    ToolTip="{loc:Str deeper_editor_tip_zoom_out}"
                                     Width="24" Height="22" Padding="0" Margin="0,0,2,0" Cursor="Hand"
                                     FontSize="13" FontWeight="Bold"
                                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
@@ -518,7 +523,7 @@
                                        VerticalAlignment="Center"/>
                             <Button x:Name="BtnZoomIn" DockPanel.Dock="Right" Content="+"
                                     Click="BtnZoomIn_Click"
-                                    ToolTip="Zoom in (Ctrl+Wheel)"
+                                    ToolTip="{loc:Str deeper_editor_tip_zoom_in}"
                                     Width="24" Height="22" Padding="0" Margin="2,0,8,0" Cursor="Hand"
                                     FontSize="13" FontWeight="Bold"
                                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
@@ -723,7 +728,7 @@
                                           Background="Transparent"
                                           Foreground="{DynamicResource TextDimBrush}"
                                           BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                                          ToolTip="Locked when auto-filled from a HypnoTube URL. Click to override."
+                                          ToolTip="{loc:Str deeper_editor_tip_creator_lock}"
                                           Click="BtnCreatorLockToggle_Click"/>
                             <TextBlock/>
                         </DockPanel>
@@ -831,6 +836,7 @@
 
                             <Button Content="{loc:Str deeper_editor_region_delete}"
                                     Click="BtnDeleteRegion_Click"
+                                    ToolTip="{loc:Str deeper_editor_tip_region_delete}"
                                     Background="{DynamicResource DangerBrush}" Foreground="White"
                                     BorderThickness="0" Padding="10,6" Cursor="Hand"
                                     HorizontalAlignment="Left" Margin="0,4,0,0"/>
@@ -898,6 +904,7 @@
                                 </Border>
                                 <Button Content="{loc:Str deeper_editor_haptic_curve_reset}"
                                         Click="BtnResetCurve_Click"
+                                        ToolTip="{loc:Str deeper_editor_tip_haptic_reset_curve}"
                                         HorizontalAlignment="Left" Margin="0,4,0,0"
                                         Padding="8,4" Cursor="Hand" FontSize="11"
                                         Background="Transparent"
@@ -920,6 +927,7 @@
                                         FontWeight="SemiBold"/>
                                 <Button Grid.Column="2" Content="{loc:Str deeper_editor_haptic_delete}"
                                         Click="BtnDeleteHaptic_Click"
+                                        ToolTip="{loc:Str deeper_editor_tip_haptic_delete}"
                                         Background="{DynamicResource DangerBrush}" Foreground="White"
                                         BorderThickness="0" Padding="10,6" Cursor="Hand"/>
                             </Grid>
@@ -932,6 +940,7 @@
                                            FontSize="11" FontFamily="Consolas" VerticalAlignment="Center"/>
                                 <Button DockPanel.Dock="Right" Content="{loc:Str deeper_editor_rule_delete}"
                                         Click="BtnDeleteRule_Click"
+                                        ToolTip="{loc:Str deeper_editor_tip_rule_delete}"
                                         Background="{DynamicResource DangerBrush}" Foreground="White"
                                         BorderThickness="0" Padding="8,4" Cursor="Hand" FontSize="11"
                                         HorizontalAlignment="Right"/>
@@ -1011,6 +1020,7 @@
 
                                 <TextBlock Text="{loc:Str deeper_editor_region_label}" Style="{StaticResource EditorLabel}"/>
                                 <TextBox x:Name="TxtRuleBandLabel" Style="{StaticResource EditorTextBox}"
+                                         ToolTip="{loc:Str deeper_editor_tip_rule_band_label}"
                                          TextChanged="RuleBandField_TextChanged"/>
 
                                 <Grid Margin="0,0,0,4">
@@ -1045,6 +1055,7 @@
                                             Background="{DynamicResource DeeperAccentBrush}"
                                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"/>
                                     <TextBox x:Name="TxtRuleBandColor" Grid.Column="1" Style="{StaticResource EditorTextBox}"
+                                             ToolTip="{loc:Str deeper_editor_tip_rule_band_color}"
                                              TextChanged="RuleBandField_TextChanged" Margin="0"/>
                                 </Grid>
                                 <WrapPanel x:Name="RuleBandColorSwatches" Margin="0,4,0,8"/>
@@ -1059,8 +1070,10 @@
                                        TextWrapping="Wrap" Margin="0,0,0,8"/>
                             <TextBlock Text="Duration (ms)" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtFlashDuration" Style="{StaticResource EditorTextBox}"
+                                     ToolTip="{loc:Str deeper_editor_tip_flash_duration}"
                                      TextChanged="EffectField_TextChanged"/>
                             <Button Content="Delete" Click="BtnDeleteEffect_Click"
+                                    ToolTip="{loc:Str deeper_editor_tip_effect_delete}"
                                     Background="{DynamicResource DangerBrush}" Foreground="White"
                                     BorderThickness="0" Padding="10,6" Cursor="Hand"
                                     HorizontalAlignment="Left" Margin="0,4,0,0"/>
@@ -1073,13 +1086,16 @@
                                        TextWrapping="Wrap" Margin="0,0,0,8"/>
                             <TextBlock Text="Window (s)" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtBubbleWindow" Style="{StaticResource EditorTextBox}"
+                                     ToolTip="{loc:Str deeper_editor_tip_bubble_window}"
                                      TextChanged="EffectField_TextChanged"/>
                             <TextBlock Text="Intensity" Style="{StaticResource EditorLabel}"/>
                             <Slider x:Name="SliderBubbleIntensity" Minimum="0" Maximum="1"
                                     SmallChange="0.05" LargeChange="0.1" Margin="0,0,0,8"
+                                    ToolTip="{loc:Str deeper_editor_tip_bubble_intensity}"
                                     Foreground="{DynamicResource DeeperAccentBrush}"
                                     ValueChanged="SliderBubbleIntensity_ValueChanged"/>
                             <Button Content="Delete" Click="BtnDeleteEffect_Click"
+                                    ToolTip="{loc:Str deeper_editor_tip_effect_delete}"
                                     Background="{DynamicResource DangerBrush}" Foreground="White"
                                     BorderThickness="0" Padding="10,6" Cursor="Hand"
                                     HorizontalAlignment="Left" Margin="0,4,0,0"/>
@@ -1089,11 +1105,14 @@
                             <TextBlock Text="Subliminal effect" Style="{StaticResource EditorLabel}"/>
                             <TextBlock Text="Text" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtSubliminalText" Style="{StaticResource EditorTextBox}"
+                                     ToolTip="{loc:Str deeper_editor_tip_subliminal_text}"
                                      TextChanged="EffectField_TextChanged"/>
                             <TextBlock Text="Duration (ms)" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtSubliminalDuration" Style="{StaticResource EditorTextBox}"
+                                     ToolTip="{loc:Str deeper_editor_tip_subliminal_duration}"
                                      TextChanged="EffectField_TextChanged"/>
                             <Button Content="Delete" Click="BtnDeleteEffect_Click"
+                                    ToolTip="{loc:Str deeper_editor_tip_effect_delete}"
                                     Background="{DynamicResource DangerBrush}" Foreground="White"
                                     BorderThickness="0" Padding="10,6" Cursor="Hand"
                                     HorizontalAlignment="Left" Margin="0,4,0,0"/>
@@ -1104,6 +1123,7 @@
                             <TextBlock Text="Kind" Style="{StaticResource EditorLabel}"/>
                             <ComboBox x:Name="CmbOverlayKind" Style="{StaticResource EditorComboBox}"
                                       ItemContainerStyle="{StaticResource EditorComboBoxItem}"
+                                      ToolTip="{loc:Str deeper_editor_tip_overlay_kind}"
                                       SelectionChanged="CmbOverlayKind_SelectionChanged">
                                 <ComboBoxItem Content="Pink Filter" Tag="pink_filter"/>
                                 <ComboBoxItem Content="Spiral" Tag="spiral"/>
@@ -1111,13 +1131,16 @@
                             </ComboBox>
                             <TextBlock Text="Duration (ms)" Style="{StaticResource EditorLabel}"/>
                             <TextBox x:Name="TxtOverlayDuration" Style="{StaticResource EditorTextBox}"
+                                     ToolTip="{loc:Str deeper_editor_tip_overlay_duration}"
                                      TextChanged="EffectField_TextChanged"/>
                             <TextBlock Text="Opacity" Style="{StaticResource EditorLabel}"/>
                             <Slider x:Name="SliderOverlayOpacity" Minimum="0" Maximum="1"
                                     SmallChange="0.05" LargeChange="0.1" Margin="0,0,0,8"
+                                    ToolTip="{loc:Str deeper_editor_tip_overlay_opacity}"
                                     Foreground="{DynamicResource DeeperAccentBrush}"
                                     ValueChanged="SliderOverlayOpacity_ValueChanged"/>
                             <Button Content="Delete" Click="BtnDeleteEffect_Click"
+                                    ToolTip="{loc:Str deeper_editor_tip_effect_delete}"
                                     Background="{DynamicResource DangerBrush}" Foreground="White"
                                     BorderThickness="0" Padding="10,6" Cursor="Hand"
                                     HorizontalAlignment="Left" Margin="0,4,0,0"/>
