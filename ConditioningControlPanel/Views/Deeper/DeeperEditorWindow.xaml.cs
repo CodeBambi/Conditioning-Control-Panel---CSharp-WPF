@@ -2321,85 +2321,11 @@ namespace ConditioningControlPanel.Views.Deeper
             UpdateSelectionSummary();
         }
 
-        private System.Windows.UIElement BuildRuleRow(EnhancementRule rule, int index)
-        {
-            var isSelected = _selectedRule == rule;
-            var border = new Border
-            {
-                Background = isSelected
-                    ? (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent20Brush")
-                    : (System.Windows.Media.Brush)FindResource("PanelAccentBrush"),
-                BorderBrush = isSelected
-                    ? (System.Windows.Media.Brush)FindResource("DeeperAccentBrush")
-                    : (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush"),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(4),
-                Padding = new Thickness(8, 6, 6, 6),
-                Margin = new Thickness(0, 0, 0, 6),
-                Cursor = Cursors.Hand,
-                Tag = rule
-            };
-            border.MouseLeftButtonUp += (_, _) => SelectRule(rule);
-
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-            var idx = new TextBlock
-            {
-                Text = $"#{index + 1}",
-                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
-                FontSize = 10,
-                Foreground = (System.Windows.Media.Brush)FindResource("TextDimBrush"),
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 8, 0)
-            };
-            Grid.SetColumn(idx, 0);
-            grid.Children.Add(idx);
-
-            var summary = new TextBlock
-            {
-                Text = SummarizeRule(rule),
-                FontSize = 11,
-                Foreground = rule.Enabled
-                    ? (System.Windows.Media.Brush)FindResource("TextLightBrush")
-                    : (System.Windows.Media.Brush)FindResource("TextMutedBrush"),
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            Grid.SetColumn(summary, 1);
-            grid.Children.Add(summary);
-
-            var toggle = new CheckBox
-            {
-                IsChecked = rule.Enabled,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(6, 0, 0, 0),
-                ToolTip = Loc.Get("deeper_editor_rule_enabled")
-            };
-            toggle.Click += (_, e2) =>
-            {
-                rule.Enabled = toggle.IsChecked == true;
-                MarkDirty();
-                RefreshRulesList();
-                if (_selectedRule == rule) PopulateRuleEditor();
-                ScheduleValidation();
-                e2.Handled = true;
-            };
-            Grid.SetColumn(toggle, 2);
-            grid.Children.Add(toggle);
-
-            border.Child = grid;
-            return border;
-        }
-
-        private static string SummarizeRule(EnhancementRule rule)
-        {
-            var trig = FriendlyTriggerName(rule.Trigger?.Type ?? "");
-            var act = FriendlyActionName(rule.Action?.Type ?? "");
-            return $"{trig}  →  {act}";
-        }
+        // Mission 1 commit 5 — BuildRuleRow + SummarizeRule deleted. They
+        // populated the pre-unified-timeline standalone Rules section in
+        // the sidebar (gone since the unified redesign); the only remaining
+        // caller path was RefreshRulesList → BuildItemListRow, both of which
+        // were removed by Mission 1 commits 3-5.
 
         // -- Friendly names for trigger / action types ------------------------
 
@@ -2472,27 +2398,9 @@ namespace ConditioningControlPanel.Views.Deeper
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
-        private void BtnAddRule_Click(object sender, RoutedEventArgs e)
-        {
-            var isAudio = _enhancement.MediaType == MediaTypes.Audio;
-            EnhancementTrigger defaultTrigger = isAudio
-                ? new TimeReachedTrigger { Time = Math.Max(0, _currentSeconds) }
-                : new GazeTargetTrigger();
-            // Snapshot BEFORE the mutation so Ctrl+Z reaches the pre-add state
-            // instead of skipping over it and undoing the user's previous edit.
-            PushUndoSnapshot();
-            var rule = new EnhancementRule
-            {
-                Trigger = defaultTrigger,
-                Action = new TriggerHapticAction { PatternName = "Pulse" },
-                CooldownMs = 1000,
-                Enabled = true
-            };
-            _enhancement.Rules.Add(rule);
-            MarkDirty();
-            ScheduleValidation();
-            SelectRule(rule);
-        }
+        // Mission 1 commit 5 — BtnAddRule_Click deleted. No XAML referenced
+        // it; superseded by BtnAddRuleHero_Click in Unified.cs:129 (which
+        // uses AddRuleAt) and the right-click timeline "Add Rule →" menu.
 
         private void BtnDeleteRule_Click(object sender, RoutedEventArgs e)
         {
