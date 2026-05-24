@@ -2122,8 +2122,8 @@
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
-                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v5_9_9_is_out}"
-                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v5_9_9_polish_pass_iii}"
+                    <Button x:Name="BtnUpdateAvailable" Content="{loc:Str btn_v6_0_0_is_out}"
+                            Click="BtnUpdateAvailable_Click" ToolTip="{loc:Str tooltip_v6_0_0_prerelease}"
                             FontSize="11" FontWeight="Bold" Cursor="Hand">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -8706,7 +8706,8 @@
              Mission 2 (hub redesign): single-column layout, unified library
              list with virtualization, search + filter pills + sort dropdown
              replace the two-column Library/Recent grid. -->
-        <ContentControl x:Name="DeeperTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+        <ContentControl x:Name="DeeperTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}"
+                        AllowDrop="True" DragEnter="DeeperTab_DragOver" DragOver="DeeperTab_DragOver" Drop="DeeperTab_Drop">
             <ContentControl.Resources>
                 <!-- Polish pass: implicit Button style rounds every plain Button
                      in the hub. Buttons with explicit Style or local Button.Template
@@ -8938,6 +8939,15 @@
                                 Content="{loc:Str deeper_tab_open_player}"
                                 ToolTip="{loc:Str deeper_tab_open_player_tooltip}"
                                 Click="BtnDeeperOpenPlayer_Click"
+                                Padding="16,10" FontSize="12" Cursor="Hand"
+                                Background="Transparent"
+                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                                Margin="0,0,8,0"/>
+                        <Button x:Name="BtnDeeperImport"
+                                Content="📥 Import"
+                                ToolTip="Import a .ccpenh.json file into your library (or drag &amp; drop one anywhere on this tab)"
+                                Click="BtnDeeperImport_Click"
                                 Padding="16,10" FontSize="12" Cursor="Hand"
                                 Background="Transparent"
                                 Foreground="{DynamicResource DeeperAccentBrush}"

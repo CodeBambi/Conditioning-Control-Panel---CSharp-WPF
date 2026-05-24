@@ -2195,7 +2195,7 @@ namespace ConditioningControlPanel.Models
             set { _aiChatEnabled = value; OnPropertyChanged(); }
         }
 
-        private int _idleGiggleIntervalSeconds = 10; // 10-600 seconds
+        private int _idleGiggleIntervalSeconds = 25; // 10-600 seconds; default 25s on average, user can slide faster/slower
         /// <summary>
         /// How often the companion speaks when idle (in seconds)
         /// </summary>

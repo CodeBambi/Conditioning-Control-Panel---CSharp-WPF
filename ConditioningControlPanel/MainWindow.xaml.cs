@@ -2765,6 +2765,155 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void BtnDeeperImport_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Import enhancement",
+                Filter = "Deeper enhancements (*.ccpenh.json)|*.ccpenh.json|JSON files (*.json)|*.json|All files (*.*)|*.*",
+                DefaultExt = ".ccpenh.json",
+                Multiselect = true,
+                CheckFileExists = true,
+                InitialDirectory = App.EnhancementLibrary?.LastDirectory
+            };
+            if (dlg.ShowDialog(this) != true) return;
+            ImportEnhancementFiles(dlg.FileNames);
+        }
+
+        // Drag-over handler reused for both DragEnter and DragOver. Sets effect=Copy
+        // when payload contains at least one file the importer might accept (we don't
+        // pre-validate JSON shape here — just the extension), otherwise None so the
+        // cursor flips back to the no-drop glyph for media files etc.
+        private void DeeperTab_DragOver(object sender, DragEventArgs e)
+        {
+            try
+            {
+                if (e.Data.GetDataPresent(DataFormats.FileDrop))
+                {
+                    var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+                    if (files != null && files.Any(IsImportableEnhancementPath))
+                    {
+                        e.Effects = DragDropEffects.Copy;
+                        e.Handled = true;
+                        return;
+                    }
+                }
+                e.Effects = DragDropEffects.None;
+                e.Handled = true;
+            }
+            catch (Exception ex) { App.Logger?.Debug("DeeperTab_DragOver: {Error}", ex.Message); }
+        }
+
+        private void DeeperTab_Drop(object sender, DragEventArgs e)
+        {
+            try
+            {
+                if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+                var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+                if (files == null || files.Length == 0) return;
+                e.Handled = true;
+                ImportEnhancementFiles(files);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "DeeperTab_Drop failed");
+                MessageBox.Show(this, ex.Message, "Import failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private static bool IsImportableEnhancementPath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            // Accept either the canonical "*.ccpenh.json" double-suffix or a plain
+            // ".json" — the serializer will reject anything that doesn't carry the
+            // expected $schema tag, so plain .json is safe to offer.
+            return path.EndsWith(".ccpenh.json", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ImportEnhancementFiles(System.Collections.Generic.IEnumerable<string> paths)
+        {
+            var lib = App.EnhancementLibrary;
+            if (lib == null)
+            {
+                MessageBox.Show(this, "Enhancement library isn't ready yet.", "Import failed",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var imported = new System.Collections.Generic.List<string>();
+            var errors = new System.Collections.Generic.List<string>();
+            string? lastImportedPath = null;
+
+            foreach (var path in paths)
+            {
+                if (!IsImportableEnhancementPath(path))
+                {
+                    errors.Add($"{System.IO.Path.GetFileName(path)} — not a .ccpenh.json file.");
+                    continue;
+                }
+                try
+                {
+                    // Validate by loading; bad schema / oversized files throw with
+                    // a useful message from the serializer.
+                    var enhancement = Services.Deeper.EnhancementSerializer.LoadFromFile(path);
+                    var saved = lib.PromoteToLibrary(enhancement, sourceTag: "import");
+                    if (saved == null)
+                    {
+                        errors.Add($"{System.IO.Path.GetFileName(path)} — couldn't write into the library folder.");
+                        continue;
+                    }
+                    lastImportedPath = saved;
+                    imported.Add(System.IO.Path.GetFileName(saved));
+                }
+                catch (Services.Deeper.EnhancementLoadException ex)
+                {
+                    errors.Add($"{System.IO.Path.GetFileName(path)} — {ex.Message}");
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "ImportEnhancementFiles: failed on {Path}", path);
+                    errors.Add($"{System.IO.Path.GetFileName(path)} — {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            // Remember the source folder for next manual import so the file dialog
+            // opens where the user picked from.
+            if (lastImportedPath != null && App.Settings?.Current != null)
+            {
+                var src = paths.FirstOrDefault();
+                if (!string.IsNullOrEmpty(src))
+                {
+                    var dir = System.IO.Path.GetDirectoryName(src);
+                    if (!string.IsNullOrEmpty(dir))
+                    {
+                        App.Settings.Current.DeeperLastDirectory = dir;
+                        App.Settings.Save();
+                    }
+                }
+            }
+
+            // Force-refresh the hub list now in addition to the FileSystemWatcher
+            // signal, since the watcher's debounce can lag a fast manual import.
+            try { RefreshDeeperLibraryUI(); } catch { }
+
+            if (errors.Count == 0 && imported.Count > 0)
+            {
+                var msg = imported.Count == 1
+                    ? $"Imported \"{imported[0]}\" into your library."
+                    : $"Imported {imported.Count} enhancements into your library.";
+                MessageBox.Show(this, msg, "Import complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else if (errors.Count > 0)
+            {
+                var head = imported.Count > 0
+                    ? $"Imported {imported.Count}, but {errors.Count} failed:\n\n"
+                    : $"{errors.Count} file(s) couldn't be imported:\n\n";
+                MessageBox.Show(this, head + string.Join("\n", errors), "Import failed",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
         private void DeleteDeeperLibraryEntry(Services.Deeper.EnhancementLibraryEntry entry)
         {
             var label = string.IsNullOrEmpty(entry.Name) ? System.IO.Path.GetFileName(entry.FilePath) : entry.Name;
