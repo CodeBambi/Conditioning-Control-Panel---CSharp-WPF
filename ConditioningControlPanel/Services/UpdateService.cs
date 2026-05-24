@@ -20,33 +20,60 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "5.9.9";
+        public const string AppVersion = "6.0.0";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v5.9.9 - Polish Pass III
-
-A round of triage fixes after Don't Blink: dual-monitor playback restored, a tidier Blink Trainer layout, defenses against a few rare crashes, and a privacy-conscious installer tweak.
+        public const string CurrentPatchNotes = @"v6.0.0 (prerelease)
+The big one: v5.9 made Deeper a format. v6 makes it a product. The editor,
+hub, and player all got rebuilt top-to-bottom so the build → browse → play
+loop is one experience, not three. Underneath, the mod system went fully
+modular: three themed built-ins (Bambi Sleep, Sissy Hypno, Dronification)
+coexist alongside a neutral CCP Default, swappable from one picker without
+restart. Tools sharper. Room bigger.
 
 ✨ FEATURES
-• Blink Trainer: Revoke Consent button (red outline, next to Manage Consent) lets you fully un-grant webcam access without diving into Settings.
-• Blink Trainer: Start/Stop tracker button now lives right under Start session, so you can turn the webcam off without hopping over to Lab.
-• Blink Trainer: Monitor picker + the ""Restrict gaze-reactive effects to the calibrated screen"" toggle moved into the Webcam card too - both stay in sync with the Lab Webcam Tracking card.
+- Deeper editor: full restructure - sidebar drawer, region-mode overlays/
+  haptics, lane chrome on the timeline, click-to-expand validation popup,
+  region-mode catalogue auto-tags.
+- Deeper hub: unified list with search/filter/sort, tooltips, tutorial sync,
+  Enhancements Catalogue link to app.cclabs.app/catalogue.
+- Deeper player: header pill + file strip, mini-timeline that scales to media
+  duration, click+drag scrub for audio AND video, webcam pre-play prompt,
+  structured event log.
+- Modular mod system: pick between CCP Default (neutral), Bambi Sleep,
+  Sissy Hypno, and Dronification - each themes UI, phrases, triggers,
+  achievements, browser defaults, and avatars.
+- Dronification now ships its full asset pack (avatars, sounds, achievement
+  art) bundled inside the installer instead of falling back to baseline.
+- Remote control: emote picker (small + splash), avatar context menu, bubble
+  feedback, privacy toggle on outgoing emotes.
+- Subjects tab: tag pills + ""Become a subject!"" CTA.
 
 🎨 UI/UX
-• Blink Trainer layout: status row + Start session sit directly under the preview frame instead of off to the side, and Webcam + Session cards now sit side-by-side (Webcam on the left) so everything fits without scrolling.
-• Installer: ""Open with CCP"" file association is now opt-in (unchecked by default). Existing installs that didn't ask for it will have their entries cleaned up on next update - no more CCP showing up in the right-click menu on shared PCs.
-• Webcam Tracking (Lab): new Advanced toggle controls whether gaze-reactive content (gaze minigames, Blink Trainer) is pinned to the calibrated monitor. Baseline flashes and bubbles now ignore this so DualMonitorEnabled actually works again post-calibration (closes #273, #271, #269, #268).
+- Player + editor: rounded buttons, dark scrollbars, zoom cluster moved to
+  chrome strip with Ctrl+wheel zoom, timeline wheel scrolls horizontally.
+- Theming pass: GazePicker + editor hex colors promoted to theme resources.
+- CCP Default uses a neutral logo (no gradient halo on the anchor).
 
 🔧 BUG FIXES
-• OCR Awareness silently never firing: monitor-spanning flash overlays were flooding the self-exclusion list, causing every detected word to drop as ""inside CCP."" Filter now only excludes smaller CCP windows so external text gets seen again (closes #273).
-• WebView2 browser crashes (Deeper, Companion sites): subscribe to ProcessFailed, surface a ""Browser crashed - click a site to restart"" hint, and lazily re-init on the next toggle instead of throwing on the second click (addresses #264, #276).
-• Custom chat shortcut crash: assigning a combo WPF rejects (e.g. Shift+T alone) no longer takes down the app - falls back to Ctrl+T with a log entry (closes #262).
-• Video duration filter (Min/Max length) now round-trips through presets so saved presets actually restore your slider positions (closes #266).
-• Patreon/Discord OAuth: HttpListener disposal races on cancel no longer leak UnobservedTaskException to the finalizer (closes #259).
-• Defensive: Visual3D guard on AvatarTube/FeatureCard ancestor checks.";
+- Mandatory videos: ESC again dismisses the current video.
+- Deeper hub: ▶ button no longer opens enhancement as audio file.
+- Audio: validate preferred LibVLC device before SetOutputDevice (no more
+  crash on stale device names).
+- v6 migration: existing installs default to Bambi to preserve continuity;
+  CCP Default remains selectable from the mode picker.
+- Zoom-label clip fix + auto-stop webcam on player exit.
+
+📦 OTHER
+- v6 agnostic refactor: hardcoded Bambi terminology lifted out of the engine;
+  mods supply their own text via mod.json.
+- Translation-debt logs + close-out reports for Deeper Missions 1, 2, 3.
+- Dead ""coming soon"" localization keys removed.
+
+Season: Going Deeper";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
