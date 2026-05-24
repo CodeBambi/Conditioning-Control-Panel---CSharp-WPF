@@ -3,9 +3,20 @@ using System.Collections.Generic;
 using System.Windows;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Views.Deeper;
 
 namespace ConditioningControlPanel.Services
 {
+    // Mission 1 commit 7 — reusable callback for any step that targets a
+    // field inside the (default-collapsed) Metadata drawer. Hook for
+    // PrepareTargetWindowAction; safe no-op for non-editor windows.
+    internal static class DeeperTutorialPrep
+    {
+        public static readonly Action<Window> ExpandMetadataDrawer = w =>
+        {
+            try { (w as DeeperEditorWindow)?.ExpandMetadataDrawer(); } catch { }
+        };
+    }
     /// <summary>
     /// Types of tutorials available in the app
     /// </summary>
@@ -1507,7 +1518,11 @@ namespace ConditioningControlPanel.Services
                     Title = Loc.Get("deeper_tut_ed_metadata_title"),
                     Description = Loc.Get("deeper_tut_ed_metadata_body"),
                     TargetElementName = "TxtMetaName",
-                    TextPosition = TutorialStepPosition.Left
+                    TextPosition = TutorialStepPosition.Left,
+                    // Mission 1: TxtMetaName lives inside the (default-collapsed)
+                    // Metadata drawer; open it before measuring so the spotlight
+                    // doesn't strand the user on 0,0/0x0 bounds.
+                    PrepareTargetWindowAction = DeeperTutorialPrep.ExpandMetadataDrawer
                 },
                 new TutorialStep
                 {
@@ -1515,8 +1530,10 @@ namespace ConditioningControlPanel.Services
                     Icon = "\ud83d\udd17",
                     Title = Loc.Get("deeper_tut_ed_rules_title"),
                     Description = Loc.Get("deeper_tut_ed_rules_body"),
-                    TargetElementName = "RulesList",
-                    TextPosition = TutorialStepPosition.Left
+                    // Mission 1: RulesList sidebar section is gone; retarget to
+                    // the new Rules lane header (commit 4 chrome).
+                    TargetElementName = "TimelineRulesLaneHeader",
+                    TextPosition = TutorialStepPosition.Top
                 },
                 new TutorialStep
                 {
@@ -1589,7 +1606,8 @@ namespace ConditioningControlPanel.Services
                     Description = Loc.Get("deeper_itut_ht_step2_body"),
                     TargetElementName = "TxtMetaName",
                     TextPosition = TutorialStepPosition.Left,
-                    AdvanceTrigger = TutorialAdvanceTrigger.Manual
+                    AdvanceTrigger = TutorialAdvanceTrigger.Manual,
+                    PrepareTargetWindowAction = DeeperTutorialPrep.ExpandMetadataDrawer
                 },
                 new TutorialStep
                 {
@@ -1599,7 +1617,8 @@ namespace ConditioningControlPanel.Services
                     Description = Loc.Get("deeper_itut_ht_step3_body"),
                     TargetElementName = "BtnCreatorLockToggle",
                     TextPosition = TutorialStepPosition.Left,
-                    AdvanceTrigger = TutorialAdvanceTrigger.Manual
+                    AdvanceTrigger = TutorialAdvanceTrigger.Manual,
+                    PrepareTargetWindowAction = DeeperTutorialPrep.ExpandMetadataDrawer
                 },
                 new TutorialStep
                 {
@@ -1857,7 +1876,8 @@ namespace ConditioningControlPanel.Services
                     Description = Loc.Get("deeper_itut_audio_step3_body"),
                     TargetElementName = "TxtMetaName",
                     TextPosition = TutorialStepPosition.Left,
-                    AdvanceTrigger = TutorialAdvanceTrigger.Manual
+                    AdvanceTrigger = TutorialAdvanceTrigger.Manual,
+                    PrepareTargetWindowAction = DeeperTutorialPrep.ExpandMetadataDrawer
                 },
 
                 // Phase 2 - preview
@@ -2054,7 +2074,8 @@ namespace ConditioningControlPanel.Services
                     Description = Loc.Get("deeper_itut_video_step3_body"),
                     TargetElementName = "TxtMetaName",
                     TextPosition = TutorialStepPosition.Left,
-                    AdvanceTrigger = TutorialAdvanceTrigger.Manual
+                    AdvanceTrigger = TutorialAdvanceTrigger.Manual,
+                    PrepareTargetWindowAction = DeeperTutorialPrep.ExpandMetadataDrawer
                 },
 
                 // Phase 2 - preview
