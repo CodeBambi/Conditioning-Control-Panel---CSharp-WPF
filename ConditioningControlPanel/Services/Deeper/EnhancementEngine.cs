@@ -30,6 +30,8 @@ namespace ConditioningControlPanel.Services.Deeper
 
         private List<TimelineEntry> _timeline = new();
         private List<TimelineItem> _reactiveRules = new();
+        private List<BandEffect> _bandEffects = new();
+        private readonly HashSet<string> _activeBandIds = new();
         private int _lastFiredIndex = -1;
         private double _lastTickTime = -1;
         private string? _currentRegionId;
@@ -86,6 +88,7 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             var entries = new List<TimelineEntry>();
             var reactive = new List<TimelineItem>();
+            var bands = new List<BandEffect>();
             // Trigger references already represented by a TimelineItem so we
             // can skip the legacy fallback for items that round-tripped
             // through the loader's projection.
@@ -97,9 +100,22 @@ namespace ConditioningControlPanel.Services.Deeper
 
                 if (item.Kind == TimelineItemKind.Effect)
                 {
-                    var action = SynthesizeEffectAction(item);
-                    if (action != null)
-                        entries.Add(new TimelineEntry(item.Start, action, ownerItem: item));
+                    // Region-mode effects (band-active) route through the
+                    // reconciler in OnPlaybackTime; they don't fire one-shot
+                    // at item.Start. Duration-mode keeps the legacy point-fire.
+                    var activation = EffectActivationHelpers.Resolve(item.EffectActivation, item.EffectType);
+                    if (activation == EffectActivation.Region && item.Duration > 0)
+                    {
+                        var band = BandEffect.FromTimelineItem(item);
+                        if (band != null) bands.Add(band);
+                        else Diag($"timeline effect '{item.Label ?? item.Id}' has no resolvable pattern — skipped");
+                    }
+                    else
+                    {
+                        var action = SynthesizeEffectAction(item);
+                        if (action != null)
+                            entries.Add(new TimelineEntry(item.Start, action, ownerItem: item));
+                    }
                 }
                 else if (item.Kind == TimelineItemKind.Rule
                          && item.Enabled
@@ -133,9 +149,51 @@ namespace ConditioningControlPanel.Services.Deeper
                     reactive.Add(synth);
             }
 
+            // Legacy HapticTracks: never enumerated by the original Compile()
+            // (v5.9.10 fix for Mort's silent-preview bug). Each HapticEvent
+            // routes to the band reconciler in Region mode (default) or to a
+            // one-shot point fire in Duration mode.
+            int hapticIdx = 0;
+            foreach (var track in _enhancement.HapticTracks)
+            {
+                if (track == null) continue;
+                foreach (var ev in track.Events)
+                {
+                    if (ev == null) continue;
+                    bool hasPattern = !string.IsNullOrEmpty(ev.PatternName)
+                                      || (ev.CustomPattern != null && ev.CustomPattern.Count > 0);
+                    if (!hasPattern)
+                    {
+                        Diag($"haptic event at {ev.Start:0.00}s has no pattern — skipped");
+                        hapticIdx++;
+                        continue;
+                    }
+
+                    var activation = EffectActivationHelpers.Resolve(ev.Activation, EffectTypes.Haptic);
+                    var effectId = $"haptic:{track.Id}:{hapticIdx}";
+                    if (activation == EffectActivation.Region && ev.Duration > 0)
+                    {
+                        bands.Add(BandEffect.FromHapticEvent(ev, effectId));
+                    }
+                    else
+                    {
+                        entries.Add(new TimelineEntry(ev.Start, new TriggerHapticAction
+                        {
+                            PatternName = ev.PatternName,
+                            CustomPattern = ev.CustomPattern,
+                            Intensity = ev.Intensity,
+                            DurationMs = (int)Math.Max(50, ev.Duration * 1000)
+                        }, ownerItem: null));
+                    }
+                    hapticIdx++;
+                }
+            }
+
             entries.Sort((a, b) => a.Time.CompareTo(b.Time));
+            bands.Sort((a, b) => a.Start.CompareTo(b.Start));
             _timeline = entries;
             _reactiveRules = reactive;
+            _bandEffects = bands;
             _lastFiredIndex = -1;
         }
 
@@ -251,6 +309,7 @@ namespace ConditioningControlPanel.Services.Deeper
             _itemLastFired.Clear();
             _firedInCurrentEntry.Clear();
             _gazeDwellSince.Clear();
+            _activeBandIds.Clear();
             _faceLostSince = null;
             _runCts = new CancellationTokenSource();
 
@@ -305,6 +364,12 @@ namespace ConditioningControlPanel.Services.Deeper
         public void Stop()
         {
             if (!_running) return;
+            // Flush any band effects (overlays shown, haptic toy active) BEFORE
+            // clearing _running, so the dispatcher's Stop actions are not
+            // short-circuited by the running check.
+            try { FlushActiveBands(_lastTickTime >= 0 ? _lastTickTime : 0); }
+            catch (Exception ex) { App.Logger?.Debug("EnhancementEngine FlushActiveBands: {Error}", ex.Message); }
+
             // Flip _running first so any in-flight tick / dispatch short-circuits
             // before we start tearing down subscriptions.
             _running = false;
@@ -359,7 +424,8 @@ namespace ConditioningControlPanel.Services.Deeper
             {
                 // Detect seek-back: rewind the cursor to the highest entry still
                 // strictly before t, so forward-progress fires re-arm correctly.
-                if (_lastTickTime >= 0 && t + 0.05 < _lastTickTime)
+                bool seekedBack = _lastTickTime >= 0 && t + 0.05 < _lastTickTime;
+                if (seekedBack)
                     RewindCursor(t);
 
                 // Clear the per-entry latch for items whose band the playhead
@@ -400,12 +466,99 @@ namespace ConditioningControlPanel.Services.Deeper
                     DispatchSafely(entry.Action, t);
                 }
 
+                // Band-effect reconciliation: bring _activeBandIds in sync with
+                // what the playhead is now inside. Handles forward play
+                // (enter → Start, leave → Stop) and seek (jump-in → Start,
+                // jump-out → Stop). For backward seek that lands still inside an
+                // already-active band, dispatch Restart with the freshly-computed
+                // remaining-band time — required for haptics because Lovense's
+                // timeSec keeps counting from the original Start otherwise (see
+                // lovense_pattern_api_flat memory).
+                if (_running && (_bandEffects.Count > 0 || _activeBandIds.Count > 0))
+                {
+                    ReconcileBandEffects(t, seekedBack);
+                }
+
                 _lastTickTime = t;
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("EnhancementEngine tick error: {Error}", ex.Message);
             }
+        }
+
+        private void ReconcileBandEffects(double t, bool seekedBack)
+        {
+            // Two passes so we never dispatch Start while a stale Stop is still
+            // pending for the same EffectId (overlap of different bands sharing
+            // an id isn't allowed by Compile, but ordering matters anyway —
+            // Stop dispatches first to release device state cleanly).
+
+            // Pass 1: Stop bands that are no longer active.
+            List<string>? toStop = null;
+            foreach (var id in _activeBandIds)
+            {
+                var band = FindBandById(id);
+                if (band == null || !(t >= band.Start && t < band.Start + band.Duration))
+                    (toStop ??= new List<string>()).Add(id);
+            }
+            if (toStop != null)
+            {
+                foreach (var id in toStop)
+                {
+                    var band = FindBandById(id);
+                    if (band != null) DispatchSafely(band.BuildStopAction(), t);
+                    _activeBandIds.Remove(id);
+                }
+            }
+
+            // Pass 2: Start bands the playhead is now inside.
+            // Pass 2b: Restart already-active bands that survived a seek-back, so
+            // device-side timers (Lovense timeSec) are recomputed against the new t.
+            foreach (var band in _bandEffects)
+            {
+                if (!_running) return;
+                if (band.Start > t) break; // sorted by Start, can short-circuit
+                bool inside = t >= band.Start && t < band.Start + band.Duration;
+                if (!inside) continue;
+
+                int remainingMs = (int)Math.Max(50, (band.Start + band.Duration - t) * 1000);
+
+                if (_activeBandIds.Contains(band.EffectId))
+                {
+                    if (seekedBack)
+                        DispatchSafely(band.BuildRestartAction(remainingMs), t);
+                }
+                else
+                {
+                    DispatchSafely(band.BuildStartAction(remainingMs), t);
+                    _activeBandIds.Add(band.EffectId);
+                }
+            }
+        }
+
+        private BandEffect? FindBandById(string id)
+        {
+            for (int i = 0; i < _bandEffects.Count; i++)
+                if (_bandEffects[i].EffectId == id) return _bandEffects[i];
+            return null;
+        }
+
+        private void FlushActiveBands(double t)
+        {
+            if (_activeBandIds.Count == 0) return;
+            // Bypass DispatchSafely's CancellationToken — Stop() cancels _runCts
+            // immediately after, which would otherwise abort the stop-overlay /
+            // stop-toy dispatches we're firing here and leave residual state.
+            var ctx = new EnhancementDispatchContext(_enhancement, _source, t, _currentRegionId);
+            foreach (var id in _activeBandIds.ToList())
+            {
+                var band = FindBandById(id);
+                if (band == null) continue;
+                try { _ = _dispatcher.DispatchAsync(band.BuildStopAction(), ctx, CancellationToken.None); }
+                catch (Exception ex) { App.Logger?.Debug("FlushActiveBands dispatch: {Error}", ex.Message); }
+            }
+            _activeBandIds.Clear();
         }
 
         private void RewindCursor(double t)
@@ -706,6 +859,103 @@ namespace ConditioningControlPanel.Services.Deeper
                 Time = time;
                 Action = action;
                 OwnerItem = ownerItem;
+            }
+        }
+
+        /// <summary>
+        /// A band-mode effect (overlay or haptic) reconciled by OnPlaybackTime
+        /// rather than fired one-shot. Builds the dispatcher action for each
+        /// lifecycle phase (Start / Stop / Restart) on demand so the engine
+        /// doesn't have to know dispatcher internals.
+        /// </summary>
+        private sealed class BandEffect
+        {
+            public string EffectId = "";
+            public double Start;
+            public double Duration;
+            public bool IsHaptic;
+            // Overlay payload.
+            public string? OverlayKind;
+            public double Opacity = 0.5;
+            // Haptic payload.
+            public string? PatternName;
+            public List<double[]>? CustomPattern;
+            public double Intensity = 1.0;
+
+            public static BandEffect? FromTimelineItem(TimelineItem item)
+            {
+                if (item.EffectType == EffectTypes.Overlay)
+                {
+                    return new BandEffect
+                    {
+                        EffectId = $"item:{item.Id}",
+                        Start = item.Start,
+                        Duration = item.Duration,
+                        IsHaptic = false,
+                        OverlayKind = item.EffectOverlayKind ?? OverlayKinds.PinkFilter,
+                        Opacity = item.EffectOpacity
+                    };
+                }
+                if (item.EffectType == EffectTypes.Haptic)
+                {
+                    bool hasPattern = !string.IsNullOrEmpty(item.EffectPatternName)
+                                      || (item.EffectCustomPattern != null && item.EffectCustomPattern.Count > 0);
+                    if (!hasPattern) return null;
+                    return new BandEffect
+                    {
+                        EffectId = $"item:{item.Id}",
+                        Start = item.Start,
+                        Duration = item.Duration,
+                        IsHaptic = true,
+                        PatternName = item.EffectPatternName,
+                        CustomPattern = item.EffectCustomPattern,
+                        Intensity = item.EffectIntensity
+                    };
+                }
+                return null;
+            }
+
+            public static BandEffect FromHapticEvent(HapticEvent ev, string effectId)
+            {
+                return new BandEffect
+                {
+                    EffectId = effectId,
+                    Start = ev.Start,
+                    Duration = ev.Duration,
+                    IsHaptic = true,
+                    PatternName = ev.PatternName,
+                    CustomPattern = ev.CustomPattern,
+                    Intensity = ev.Intensity
+                };
+            }
+
+            public EnhancementAction BuildStartAction(int remainingMs) => BuildAction(EffectPhase.Start, remainingMs);
+            public EnhancementAction BuildStopAction()                 => BuildAction(EffectPhase.Stop, 0);
+            public EnhancementAction BuildRestartAction(int remainingMs) => BuildAction(EffectPhase.Restart, remainingMs);
+
+            private EnhancementAction BuildAction(EffectPhase phase, int durationMs)
+            {
+                if (IsHaptic)
+                {
+                    return new TriggerHapticAction
+                    {
+                        PatternName = PatternName,
+                        CustomPattern = CustomPattern,
+                        Intensity = Intensity,
+                        DurationMs = Math.Max(50, durationMs),
+                        Phase = phase,
+                        EffectId = EffectId
+                    };
+                }
+                return new TriggerEffectAction
+                {
+                    EffectType = EffectTypes.Overlay,
+                    OverlayKind = OverlayKind,
+                    Opacity = Opacity,
+                    DurationMs = Math.Max(50, durationMs),
+                    Phase = phase,
+                    EffectId = EffectId
+                };
             }
         }
     }

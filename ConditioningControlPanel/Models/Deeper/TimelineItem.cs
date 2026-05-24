@@ -36,6 +36,40 @@ namespace ConditioningControlPanel.Models.Deeper
     }
 
     /// <summary>
+    /// How an effect on the timeline relates to its band on playback.
+    /// <list type="bullet">
+    /// <item><b>Region</b> — show on entry to the band, hide on exit. Tracks the playhead through loops and scrubs.</item>
+    /// <item><b>Duration</b> — fire once at <c>Start</c>, run for <c>EffectDurationMs</c> wall-clock (legacy).</item>
+    /// </list>
+    /// The property is nullable; absent/null means "use the default for this effect type"
+    /// — see <see cref="EffectActivationHelpers.Resolve"/>.
+    /// </summary>
+    public enum EffectActivation
+    {
+        Region,
+        Duration
+    }
+
+    public static class EffectActivationHelpers
+    {
+        /// <summary>
+        /// Default activation for an effect type when no explicit value is set.
+        /// Overlay/haptic default to <see cref="EffectActivation.Region"/> (band-active).
+        /// Flash/subliminal/bubble default to <see cref="EffectActivation.Duration"/> (one-shot).
+        /// </summary>
+        public static EffectActivation Resolve(EffectActivation? explicitValue, string? effectType)
+        {
+            if (explicitValue.HasValue) return explicitValue.Value;
+            return effectType switch
+            {
+                EffectTypes.Overlay => EffectActivation.Region,
+                EffectTypes.Haptic  => EffectActivation.Region,
+                _                   => EffectActivation.Duration
+            };
+        }
+    }
+
+    /// <summary>
     /// Unified timeline item — either an Effect (rendered as a dot or short capsule)
     /// or a Rule (rendered as a colored band whose duration is the trigger's firing
     /// window). Replaces the v1 separate Region/HapticEvent/EnhancementRule trio
@@ -74,6 +108,13 @@ namespace ConditioningControlPanel.Models.Deeper
 
         [JsonProperty("effect_duration_ms")]
         public int EffectDurationMs { get; set; } = 1000;
+
+        // Null = let EffectActivationHelpers.Resolve pick the default for this EffectType.
+        // Old saved files have no field and pick up the resolver's default automatically,
+        // which is the intended migration path for the v5.9.10 Region default.
+        [JsonProperty("effect_activation", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public EffectActivation? EffectActivation { get; set; }
 
         // Haptic-specific.
         [JsonProperty("effect_pattern_name", NullValueHandling = NullValueHandling.Ignore)]

@@ -83,7 +83,7 @@ namespace ConditioningControlPanel.Services.Deeper
             LoopRegionAction lr => $"loop_region → {lr.RegionId ?? "(current)"}",
             PauseAction => "pause",
             PlayAudioAction pa => $"play_audio {Path.GetFileName(pa.Path)} vol={pa.Volume}{(pa.DuckOtherAudio ? " duck" : "")}",
-            TriggerHapticAction h => $"haptic {(h.PatternName ?? "custom")} @ {h.Intensity:0.00} for {h.DurationMs}ms",
+            TriggerHapticAction h => $"haptic {(h.PatternName ?? "custom")} @ {h.Intensity:0.00} for {h.DurationMs}ms{PhaseSuffix(h.Phase, h.DurationMs)}",
             TriggerEffectAction te => DescribeTriggerEffect(te),
             ScreenShakeAction ss => $"screen_shake {ss.Intensity:0.00} for {ss.DurationMs}ms",
             SetIntensityAction si => $"set_intensity {si.Value:0.00}",
@@ -91,14 +91,26 @@ namespace ConditioningControlPanel.Services.Deeper
             _ => a.GetType().Name
         };
 
-        private static string DescribeTriggerEffect(TriggerEffectAction te) => te.EffectType switch
+        private static string DescribeTriggerEffect(TriggerEffectAction te)
         {
-            EffectTypes.Haptic     => $"effect haptic {(te.PatternName ?? "custom")} @ {te.Intensity:0.00} for {te.DurationMs}ms",
-            EffectTypes.Flash      => $"effect flash {(te.ImagePath ?? "random")} for {te.DurationMs}ms",
-            EffectTypes.Bubble     => $"effect bubbles x{te.MaxBubbles} for {te.DurationMs}ms",
-            EffectTypes.Subliminal => $"effect subliminal \"{te.Text}\" for {te.DurationMs}ms",
-            EffectTypes.Overlay    => $"effect overlay {te.OverlayKind} @ {te.Opacity:0.00} for {te.DurationMs}ms",
-            _ => $"effect {te.EffectType}"
+            var phaseSuffix = PhaseSuffix(te.Phase, te.DurationMs);
+            return te.EffectType switch
+            {
+                EffectTypes.Haptic     => $"effect haptic {(te.PatternName ?? "custom")} @ {te.Intensity:0.00} for {te.DurationMs}ms{phaseSuffix}",
+                EffectTypes.Flash      => $"effect flash {(te.ImagePath ?? "random")} for {te.DurationMs}ms{phaseSuffix}",
+                EffectTypes.Bubble     => $"effect bubbles x{te.MaxBubbles} for {te.DurationMs}ms{phaseSuffix}",
+                EffectTypes.Subliminal => $"effect subliminal \"{te.Text}\" for {te.DurationMs}ms{phaseSuffix}",
+                EffectTypes.Overlay    => $"effect overlay {te.OverlayKind} @ {te.Opacity:0.00} for {te.DurationMs}ms{phaseSuffix}",
+                _ => $"effect {te.EffectType}{phaseSuffix}"
+            };
+        }
+
+        private static string PhaseSuffix(EffectPhase phase, int durationMs) => phase switch
+        {
+            EffectPhase.Start   => " [start]",
+            EffectPhase.Stop    => " [stop]",
+            EffectPhase.Restart => $" [restart {durationMs}ms]",
+            _                   => ""
         };
     }
 
@@ -159,6 +171,20 @@ namespace ConditioningControlPanel.Services.Deeper
     /// </summary>
     public sealed class RealActionDispatcher : IActionDispatcher
     {
+        // Per-EffectId tracking for band-mode effects. Lets Stop hide the right
+        // overlay kind and Restart re-issue a haptic with its previously dispatched
+        // samples + intensity but a freshly-computed remaining duration.
+        private readonly Dictionary<string, string> _overlayBandKind = new();
+        private readonly Dictionary<string, BandHapticState> _hapticBandState = new();
+        private readonly object _bandGate = new();
+
+        private sealed class BandHapticState
+        {
+            public float[] Samples = System.Array.Empty<float>();
+            public double Intensity = 1.0;
+            public int OriginalDurationMs;
+        }
+
         public async Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx, CancellationToken ct = default)
         {
             if (ct.IsCancellationRequested) return;
@@ -280,7 +306,7 @@ namespace ConditioningControlPanel.Services.Deeper
             }
         }
 
-        private static async Task DispatchTriggerEffect(TriggerEffectAction effect)
+        private async Task DispatchTriggerEffect(TriggerEffectAction effect)
         {
             try
             {
@@ -288,13 +314,16 @@ namespace ConditioningControlPanel.Services.Deeper
                 {
                     case EffectTypes.Haptic:
                         // Reuse the existing haptic dispatch path so timeline synthesis
-                        // and rule-fired haptics share one code path.
+                        // and rule-fired haptics share one code path. Forward Phase +
+                        // EffectId so band lifecycle routing applies.
                         await DispatchHaptic(new TriggerHapticAction
                         {
                             PatternName = effect.PatternName,
                             CustomPattern = effect.CustomPattern,
                             Intensity = effect.Intensity,
-                            DurationMs = effect.DurationMs
+                            DurationMs = effect.DurationMs,
+                            Phase = effect.Phase,
+                            EffectId = effect.EffectId
                         });
                         break;
 
@@ -318,7 +347,7 @@ namespace ConditioningControlPanel.Services.Deeper
                         break;
 
                     case EffectTypes.Overlay:
-                        App.Overlay?.ShowOverlayTimed(effect.OverlayKind ?? OverlayKinds.PinkFilter, effect.DurationMs, effect.Opacity);
+                        DispatchOverlayEffect(effect);
                         break;
 
                     default:
@@ -329,6 +358,47 @@ namespace ConditioningControlPanel.Services.Deeper
             catch (Exception ex)
             {
                 App.Logger?.Debug("Deeper trigger_effect dispatch error: {Error}", ex.Message);
+            }
+        }
+
+        private void DispatchOverlayEffect(TriggerEffectAction effect)
+        {
+            var kind = effect.OverlayKind ?? OverlayKinds.PinkFilter;
+            switch (effect.Phase)
+            {
+                case EffectPhase.Start:
+                    if (!string.IsNullOrEmpty(effect.EffectId))
+                    {
+                        lock (_bandGate) _overlayBandKind[effect.EffectId!] = kind;
+                    }
+                    App.Overlay?.ShowOverlaySustained(kind, effect.Opacity);
+                    break;
+
+                case EffectPhase.Stop:
+                    // Prefer the kind we remembered at Start in case the action's
+                    // OverlayKind has since been mutated by the editor mid-preview.
+                    var hideKind = kind;
+                    if (!string.IsNullOrEmpty(effect.EffectId))
+                    {
+                        lock (_bandGate)
+                        {
+                            if (_overlayBandKind.TryGetValue(effect.EffectId!, out var remembered))
+                                hideKind = remembered;
+                            _overlayBandKind.Remove(effect.EffectId!);
+                        }
+                    }
+                    App.Overlay?.HideOverlaySustained(hideKind);
+                    break;
+
+                case EffectPhase.Restart:
+                    // Overlay state has no "remaining time" — already shown, nothing
+                    // to recompute. No-op.
+                    break;
+
+                case EffectPhase.OneShot:
+                default:
+                    App.Overlay?.ShowOverlayTimed(kind, effect.DurationMs, effect.Opacity);
+                    break;
             }
         }
 
@@ -363,10 +433,25 @@ namespace ConditioningControlPanel.Services.Deeper
             }
         }
 
-        private static async Task DispatchHaptic(TriggerHapticAction haptic)
+        private async Task DispatchHaptic(TriggerHapticAction haptic)
         {
             try
             {
+                // Band-mode Stop is just a cancel — no pattern lookup needed.
+                if (haptic.Phase == EffectPhase.Stop)
+                {
+                    if (!string.IsNullOrEmpty(haptic.EffectId))
+                    {
+                        lock (_bandGate) _hapticBandState.Remove(haptic.EffectId!);
+                    }
+                    if (App.Haptics != null) await App.Haptics.StopAsync();
+                    return;
+                }
+
+                // Restart: recompute samples for the new remaining duration. We
+                // could cache+reuse the original samples (they're flat-averaged
+                // anyway), but resampling at the new duration is cheap and keeps
+                // the path identical to Start.
                 IList<double[]>? keyframes = null;
                 if (haptic.CustomPattern != null && haptic.CustomPattern.Count > 0)
                     keyframes = haptic.CustomPattern;
@@ -374,10 +459,37 @@ namespace ConditioningControlPanel.Services.Deeper
                          && StockHapticPatterns.TryGet(haptic.PatternName, out var named) && named != null)
                     keyframes = named;
 
-                if (keyframes == null) return;
+                if (keyframes == null)
+                {
+                    App.Logger?.Debug("Deeper haptic: skipped — no pattern (name='{Name}', custom={Count})",
+                        haptic.PatternName, haptic.CustomPattern?.Count ?? 0);
+                    return;
+                }
+
                 var samples = StockHapticPatterns.Sample(keyframes, haptic.Intensity, haptic.DurationMs);
-                if (App.Haptics != null)
-                    await App.Haptics.SetSyncPatternAsync(samples, haptic.DurationMs);
+
+                if (App.Haptics == null) return;
+
+                // Restart: send Vibrate:0 first to clear LovenseProvider's 1-second
+                // same-level debounce — without this, a same-level re-issue after a
+                // backward seek is silently dropped (see lovense_pattern_api_flat memory).
+                if (haptic.Phase == EffectPhase.Restart)
+                    await App.Haptics.StopAsync();
+
+                if (!string.IsNullOrEmpty(haptic.EffectId))
+                {
+                    lock (_bandGate)
+                    {
+                        _hapticBandState[haptic.EffectId!] = new BandHapticState
+                        {
+                            Samples = samples,
+                            Intensity = haptic.Intensity,
+                            OriginalDurationMs = haptic.DurationMs
+                        };
+                    }
+                }
+
+                await App.Haptics.SetSyncPatternAsync(samples, haptic.DurationMs);
             }
             catch (Exception ex)
             {

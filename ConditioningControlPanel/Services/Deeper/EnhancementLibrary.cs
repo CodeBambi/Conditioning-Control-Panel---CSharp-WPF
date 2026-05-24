@@ -15,6 +15,10 @@ namespace ConditioningControlPanel.Services.Deeper
         public string MediaType { get; set; } = "";
         public string MediaSource { get; set; } = "";
         public DateTime LastModified { get; set; }
+        // Hardware-gating tags detected by EnhancementAutoTagger at save time;
+        // surfaced by the catalogue browser so downloaders can see equipment
+        // requirements at a glance. May be empty for files saved by older builds.
+        public List<string> AutoTags { get; set; } = new();
     }
 
     /// <summary>
@@ -456,7 +460,8 @@ namespace ConditioningControlPanel.Services.Deeper
                     Creator = enhancement.Metadata?.Creator ?? "",
                     MediaType = enhancement.MediaType,
                     MediaSource = enhancement.MediaSource,
-                    LastModified = File.GetLastWriteTime(path)
+                    LastModified = File.GetLastWriteTime(path),
+                    AutoTags = enhancement.Metadata?.AutoTags ?? new List<string>()
                 };
             }
             catch (Exception ex)

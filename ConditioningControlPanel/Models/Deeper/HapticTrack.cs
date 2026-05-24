@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Models.Deeper
@@ -46,6 +47,11 @@ namespace ConditioningControlPanel.Models.Deeper
         // Sampled to a flat float[] at dispatch time via HapticService.SetSyncPatternAsync.
         [JsonProperty("custom_pattern", NullValueHandling = NullValueHandling.Ignore)]
         public List<double[]>? CustomPattern { get; set; }
+
+        // Null = use the resolver's default for haptics (Region). See EffectActivationHelpers.
+        [JsonProperty("activation", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public EffectActivation? Activation { get; set; }
 
         [JsonExtensionData]
         public IDictionary<string, JToken>? UnknownFields { get; set; }

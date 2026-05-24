@@ -470,6 +470,70 @@ public class OverlayService : IDisposable
         hideTimer.Start();
     }
 
+    /// <summary>
+    /// Band-mode counterpart to <see cref="ShowOverlayTimed"/> for Deeper Region-mode
+    /// effects. Shows the overlay with no hide timer; the engine reconciler is
+    /// responsible for calling <see cref="HideOverlaySustained"/> on band exit.
+    /// Idempotent — calling twice with the same kind is a no-op (the underlying
+    /// ad-hoc paths already early-return when their window list is non-empty).
+    /// </summary>
+    public void ShowOverlaySustained(string kind, double opacity)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+
+        int opacityPercent = (int)Math.Clamp(opacity * 100.0, 0, 100);
+
+        Action? show = kind switch
+        {
+            "pink_filter" => () => ShowPinkFilterAdHoc(opacityPercent),
+            "spiral"      => () => ShowSpiralAdHoc(),
+            "braindrain"  => () => StartBrainDrainBlur(Math.Max(1, opacityPercent)),
+            _ => null
+        };
+
+        if (show == null)
+        {
+            App.Logger?.Debug("ShowOverlaySustained: unknown kind {Kind}", kind);
+            return;
+        }
+
+        Action runShow = () =>
+        {
+            try { show(); }
+            catch (Exception ex) { App.Logger?.Debug("ShowOverlaySustained show: {E}", ex.Message); }
+        };
+        if (dispatcher.CheckAccess()) runShow();
+        else dispatcher.Invoke(runShow);
+    }
+
+    /// <summary>
+    /// Hides an overlay shown via <see cref="ShowOverlaySustained"/>. Idempotent.
+    /// </summary>
+    public void HideOverlaySustained(string kind)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+
+        Action? hide = kind switch
+        {
+            "pink_filter" => () => StopPinkFilter(),
+            "spiral"      => () => StopSpiral(),
+            "braindrain"  => () => StopBrainDrainBlur(),
+            _ => null
+        };
+
+        if (hide == null) return;
+
+        Action runHide = () =>
+        {
+            try { hide(); }
+            catch (Exception ex) { App.Logger?.Debug("HideOverlaySustained: {E}", ex.Message); }
+        };
+        if (dispatcher.CheckAccess()) runHide();
+        else dispatcher.Invoke(runHide);
+    }
+
     private void ShowPinkFilterAdHoc(int opacityPercent)
     {
         if (_pinkFilterWindows.Count > 0) return;

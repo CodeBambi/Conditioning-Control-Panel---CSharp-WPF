@@ -3857,6 +3857,11 @@ namespace ConditioningControlPanel.Views.Deeper
                     if (result != MessageBoxResult.Yes) return;
                 }
 
+                // Refresh hardware-gating auto-tags so the catalogue browser can
+                // surface them on the card without having to re-scan files.
+                if (_enhancement.Metadata != null)
+                    _enhancement.Metadata.AutoTags = EnhancementAutoTagger.Detect(_enhancement);
+
                 App.EnhancementLibrary?.Save(_enhancement, path);
                 _filePath = path;
                 _isDirty = false;

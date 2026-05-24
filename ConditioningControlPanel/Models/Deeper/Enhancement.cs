@@ -70,6 +70,12 @@ namespace ConditioningControlPanel.Models.Deeper
         [JsonProperty("tags")]
         public List<string> Tags { get; set; } = new();
 
+        // Detected at save time by EnhancementAutoTagger — answers
+        // "what hardware do I need before opening this?". Distinct from user-set
+        // Tags so re-saves can refresh without trampling creator input.
+        [JsonProperty("auto_tags")]
+        public List<string> AutoTags { get; set; } = new();
+
         [JsonProperty("license")]
         public string License { get; set; } = "";
 

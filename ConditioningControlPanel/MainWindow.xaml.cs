@@ -2755,8 +2755,58 @@ namespace ConditioningControlPanel
                 TextTrimming = TextTrimming.CharacterEllipsis
             });
 
+            // Auto-tag chips: hardware requirements detected at save time.
+            // Empty for files saved by builds before v5.9.10.
+            var autoTagsRow = BuildDeeperAutoTagsRow(entry.AutoTags);
+            if (autoTagsRow != null) stack.Children.Add(autoTagsRow);
+
             border.Child = stack;
             return border;
+        }
+
+        // Renders the AutoTags chip strip for a library card. Returns null when
+        // there are no tags so the layout doesn't reserve dead vertical space.
+        private System.Windows.Controls.WrapPanel? BuildDeeperAutoTagsRow(List<string> autoTags)
+        {
+            if (autoTags == null || autoTags.Count == 0) return null;
+            var row = new System.Windows.Controls.WrapPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+            var chipBg = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent20Brush");
+            var chipBorder = (System.Windows.Media.Brush)FindResource("DeeperAccentTransparent40Brush");
+            var chipFg = (System.Windows.Media.Brush)FindResource("TextLightBrush");
+            var tooltip = Loc.Get("deeper_library_autotag_tooltip");
+            foreach (var tag in autoTags)
+            {
+                var (glyph, locKey) = tag switch
+                {
+                    Services.Deeper.EnhancementAutoTagger.TagHaptics => ("📳", "deeper_library_autotag_haptics"),
+                    Services.Deeper.EnhancementAutoTagger.TagWebcam  => ("📷", "deeper_library_autotag_webcam"),
+                    _ => ("●", "")
+                };
+                var label = string.IsNullOrEmpty(locKey) ? tag : Loc.Get(locKey);
+                var chip = new Border
+                {
+                    Background = chipBg,
+                    BorderBrush = chipBorder,
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(6, 1, 6, 1),
+                    Margin = new Thickness(0, 0, 4, 0),
+                    ToolTip = tooltip,
+                    Child = new TextBlock
+                    {
+                        Text = glyph + " " + label,
+                        FontSize = 10,
+                        Foreground = chipFg,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                };
+                row.Children.Add(chip);
+            }
+            return row;
         }
 
         // Builds the small "{🎬|🎵} {basename or host}  {✓|⚠|🌐}" line that

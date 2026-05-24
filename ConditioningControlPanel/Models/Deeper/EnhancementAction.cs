@@ -25,6 +25,20 @@ namespace ConditioningControlPanel.Models.Deeper
         public const string RegionEnd = "region_end";
     }
 
+    /// <summary>
+    /// Lifecycle phase for a dispatched effect. Synthesized by the engine at
+    /// dispatch time and never serialized — controls how <see cref="RealActionDispatcher"/>
+    /// routes a band-mode effect (start on band entry, stop on exit, restart
+    /// when a seek lands inside an already-active band).
+    /// </summary>
+    public enum EffectPhase
+    {
+        OneShot,
+        Start,
+        Stop,
+        Restart
+    }
+
     [JsonConverter(typeof(EnhancementActionConverter))]
     public abstract class EnhancementAction
     {
@@ -94,6 +108,15 @@ namespace ConditioningControlPanel.Models.Deeper
 
         [JsonProperty("duration_ms")]
         public int DurationMs { get; set; } = 1000;
+
+        // Runtime-only routing for band-mode haptics. Engine sets Phase + EffectId
+        // when dispatching Start/Stop/Restart so the dispatcher can keep per-band
+        // handles (multiple overlapping bands route independently).
+        [JsonIgnore]
+        public EffectPhase Phase { get; set; } = EffectPhase.OneShot;
+
+        [JsonIgnore]
+        public string? EffectId { get; set; }
     }
 
     /// <summary>
@@ -145,6 +168,13 @@ namespace ConditioningControlPanel.Models.Deeper
         // Bubble.
         [JsonProperty("max_bubbles")]
         public int MaxBubbles { get; set; } = 3;
+
+        // Runtime-only routing for band-mode effects. See TriggerHapticAction.Phase.
+        [JsonIgnore]
+        public EffectPhase Phase { get; set; } = EffectPhase.OneShot;
+
+        [JsonIgnore]
+        public string? EffectId { get; set; }
     }
 
     public class ScreenShakeAction : EnhancementAction
