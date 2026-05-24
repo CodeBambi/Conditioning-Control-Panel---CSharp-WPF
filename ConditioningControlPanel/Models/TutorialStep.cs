@@ -1,4 +1,5 @@
 using System;
+using System.Windows;
 
 namespace ConditioningControlPanel.Models
 {
@@ -31,6 +32,15 @@ namespace ConditioningControlPanel.Models
         public string? RequiresTab { get; set; }
         public TutorialStepPosition TextPosition { get; set; } = TutorialStepPosition.Bottom;
         public Action? OnActivate { get; set; }
+
+        // Invoked by TutorialOverlay.UpdateSpotlight just before it tries to
+        // locate TargetElementName, so a step can guarantee its target is
+        // measurable. The editor uses this to ExpandMetadataDrawer() before
+        // any step that points at a field inside the (default-collapsed)
+        // metadata drawer — without it, FindElementByName returns the element
+        // but GetElementBounds reports 0,0/0x0 and the overlay's retry timer
+        // never converges (worst failure mode from the tutorials recon).
+        public Action<Window>? PrepareTargetWindowAction { get; set; }
 
         // --- Interactive on-rails support ---
 

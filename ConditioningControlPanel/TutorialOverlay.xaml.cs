@@ -571,6 +571,12 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // Give the target window a chance to prepare itself (e.g. expand
+            // a collapsed drawer that contains TargetElementName). Wrapped so
+            // a buggy callback can't break the tutorial.
+            try { step.PrepareTargetWindowAction?.Invoke(_targetWindow); } catch { }
+            try { _targetWindow.UpdateLayout(); } catch { }
+
             var targetElement = FindElementByName(_targetWindow, step.TargetElementName);
             if (targetElement == null)
             {
