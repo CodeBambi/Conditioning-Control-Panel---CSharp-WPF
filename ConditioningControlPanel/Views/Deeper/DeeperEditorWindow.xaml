@@ -19,6 +19,85 @@
         <Style TargetType="Button" BasedOn="{StaticResource DeeperRoundButton}"/>
         <Style TargetType="ToggleButton" BasedOn="{StaticResource DeeperRoundIconToggleButton}"/>
 
+        <!-- Dark-themed ScrollBar (DeeperAccent variant) — ported from
+             MainWindow's pink one. The default WPF ScrollBar is a white
+             Windows-style bar that fights the dark editor chrome. -->
+        <Style x:Key="DeeperScrollBarRepeat" TargetType="RepeatButton">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border Background="Transparent"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+        <Style x:Key="DeeperScrollBarThumb" TargetType="Thumb">
+            <Setter Property="MinWidth" Value="6"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border x:Name="Bd" CornerRadius="4"
+                                Background="{DynamicResource DeeperAccentBrush}"
+                                Opacity="0.55"
+                                SnapsToDevicePixels="True"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.80"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent" SnapsToDevicePixels="True">
+                            <Border x:Name="TrackBg"
+                                    Background="{DynamicResource DeeperLaneSeparatorBrush}"
+                                    CornerRadius="4" Opacity="0.4" Margin="1"/>
+                            <Track x:Name="PART_Track"
+                                   Orientation="{TemplateBinding Orientation}">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource DeeperScrollBarRepeat}" Command="ScrollBar.LineUpCommand"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource DeeperScrollBarRepeat}" Command="ScrollBar.LineDownCommand"/>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb x:Name="ThumbElement" Style="{StaticResource DeeperScrollBarThumb}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Orientation" Value="Horizontal">
+                                <Setter Property="Height" Value="8"/>
+                                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/>
+                                <Setter TargetName="ThumbElement" Property="MinWidth" Value="30"/>
+                                <Setter TargetName="ThumbElement" Property="MinHeight" Value="6"/>
+                            </Trigger>
+                            <Trigger Property="Orientation" Value="Vertical">
+                                <Setter Property="Width" Value="8"/>
+                                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="True"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="TrackBg" Property="Opacity" Value="0.15"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Top-level menu-bar item (e.g. "File"). Keeps the bar's light-on-dark
              appearance, but overrides the WPF default popup template so the
              dropdown body matches the editor's dark theme instead of the
@@ -472,7 +551,12 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <!-- Transport row -->
+                        <!-- Transport row. LEFT cluster: play + time + zoom (zoom
+                             lives on the left so the cramped right cluster can
+                             hold just action buttons without clipping). RIGHT
+                             cluster: Preview / + Rule / + Effect. The scrub
+                             hint TextBlock is the LastChild and fills the
+                             middle, eating slack first when the window narrows. -->
                         <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,6">
                             <Button x:Name="BtnPlayPause" DockPanel.Dock="Left"
                                     Content="▶" Click="BtnPlayPause_Click"
@@ -489,7 +573,28 @@
                                        FontSize="12" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtTotalTime" DockPanel.Dock="Left"
                                        Text="0:00" Foreground="{DynamicResource TextMutedBrush}"
-                                       FontSize="12" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                       FontSize="12" VerticalAlignment="Center" Margin="4,0,12,0"/>
+                            <!-- Zoom controls (Ctrl+wheel on the timeline also works). -->
+                            <Button x:Name="BtnZoomOut" DockPanel.Dock="Left" Content="−"
+                                    Click="BtnZoomOut_Click"
+                                    ToolTip="{loc:Str deeper_editor_tip_zoom_out}"
+                                    Width="28" Height="26" Padding="0" Margin="0,0,2,0" Cursor="Hand"
+                                    FontSize="14" FontWeight="Bold"
+                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                    Foreground="{DynamicResource DeeperAccentBrush}"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
+                            <TextBlock x:Name="TxtZoomLevel" DockPanel.Dock="Left" Text="100%"
+                                       Width="52" TextAlignment="Center"
+                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="BtnZoomIn" DockPanel.Dock="Left" Content="+"
+                                    Click="BtnZoomIn_Click"
+                                    ToolTip="{loc:Str deeper_editor_tip_zoom_in}"
+                                    Width="28" Height="26" Padding="0" Margin="2,0,12,0" Cursor="Hand"
+                                    FontSize="14" FontWeight="Bold"
+                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                    Foreground="{DynamicResource DeeperAccentBrush}"
+                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
                             <Button x:Name="BtnPreview" DockPanel.Dock="Right"
                                     Content="{loc:Str deeper_editor_preview_off}"
                                     ToolTip="{loc:Str deeper_editor_tt_preview}"
@@ -512,30 +617,13 @@
                                     Background="Transparent"
                                     Foreground="{DynamicResource DeeperAccentBrush}"
                                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
-                            <TextBlock DockPanel.Dock="Right" Foreground="{DynamicResource TextDimBrush}"
-                                       FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                            <!-- Scrub hint is LastChild (no Dock) → fills remaining
+                                 middle space and eats slack first when narrow. -->
+                            <TextBlock Foreground="{DynamicResource TextDimBrush}"
+                                       FontSize="11" VerticalAlignment="Center"
+                                       Margin="0,0,8,0"
+                                       TextTrimming="CharacterEllipsis"
                                        Text="{loc:Str deeper_editor_scrub_hint}"/>
-                            <!-- Zoom controls (Ctrl+wheel on the timeline also works). -->
-                            <Button x:Name="BtnZoomOut" DockPanel.Dock="Right" Content="−"
-                                    Click="BtnZoomOut_Click"
-                                    ToolTip="{loc:Str deeper_editor_tip_zoom_out}"
-                                    Width="28" Height="26" Padding="0" Margin="0,0,2,0" Cursor="Hand"
-                                    FontSize="14" FontWeight="Bold"
-                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
-                                    Foreground="{DynamicResource DeeperAccentBrush}"
-                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
-                            <TextBlock x:Name="TxtZoomLevel" DockPanel.Dock="Right" Text="100%"
-                                       Width="52" TextAlignment="Center"
-                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11"
-                                       VerticalAlignment="Center"/>
-                            <Button x:Name="BtnZoomIn" DockPanel.Dock="Right" Content="+"
-                                    Click="BtnZoomIn_Click"
-                                    ToolTip="{loc:Str deeper_editor_tip_zoom_in}"
-                                    Width="28" Height="26" Padding="0" Margin="2,0,8,0" Cursor="Hand"
-                                    FontSize="14" FontWeight="Bold"
-                                    Background="{DynamicResource DeeperAccentTransparent20Brush}"
-                                    Foreground="{DynamicResource DeeperAccentBrush}"
-                                    BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
                         </DockPanel>
 
                         <!-- Mission 1 commit 4 — lane chrome.

@@ -16,6 +16,84 @@
              keep working (template uses TemplateBinding). -->
         <Style TargetType="Button" BasedOn="{StaticResource DeeperRoundButton}"/>
 
+        <!-- Dark-themed ScrollBar (DeeperAccent variant) — same as the editor's.
+             Default WPF ScrollBar is a white Windows-style bar that fights
+             the dark player chrome. -->
+        <Style x:Key="DeeperScrollBarRepeat" TargetType="RepeatButton">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RepeatButton">
+                        <Border Background="Transparent"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="IsTabStop" Value="False"/>
+        </Style>
+        <Style x:Key="DeeperScrollBarThumb" TargetType="Thumb">
+            <Setter Property="MinWidth" Value="6"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border x:Name="Bd" CornerRadius="4"
+                                Background="{DynamicResource DeeperAccentBrush}"
+                                Opacity="0.55" SnapsToDevicePixels="True"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.80"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent" SnapsToDevicePixels="True">
+                            <Border x:Name="TrackBg"
+                                    Background="{DynamicResource DeeperLaneSeparatorBrush}"
+                                    CornerRadius="4" Opacity="0.4" Margin="1"/>
+                            <Track x:Name="PART_Track"
+                                   Orientation="{TemplateBinding Orientation}">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource DeeperScrollBarRepeat}" Command="ScrollBar.LineUpCommand"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource DeeperScrollBarRepeat}" Command="ScrollBar.LineDownCommand"/>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb x:Name="ThumbElement" Style="{StaticResource DeeperScrollBarThumb}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Orientation" Value="Horizontal">
+                                <Setter Property="Height" Value="8"/>
+                                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/>
+                                <Setter TargetName="ThumbElement" Property="MinWidth" Value="30"/>
+                                <Setter TargetName="ThumbElement" Property="MinHeight" Value="6"/>
+                            </Trigger>
+                            <Trigger Property="Orientation" Value="Vertical">
+                                <Setter Property="Width" Value="8"/>
+                                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="True"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="TrackBg" Property="Opacity" Value="0.15"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="HeaderText" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource DeeperAccentBrush}"/>
             <Setter Property="FontSize" Value="14"/>
