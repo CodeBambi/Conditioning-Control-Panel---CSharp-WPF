@@ -65,6 +65,16 @@
     <SolidColorBrush x:Key="DeeperAccentTransparent20Brush" Color="{DynamicResource DeeperAccentTransparent20}"/>
     <SolidColorBrush x:Key="DeeperAccentTransparent40Brush" Color="{DynamicResource DeeperAccentTransparent40}"/>
 
+    <!-- Deeper editor chrome brushes — see Colors.xaml for the role of each. -->
+    <SolidColorBrush x:Key="DeeperLaneCanvasBrush" Color="{DynamicResource DeeperLaneCanvas}"/>
+    <SolidColorBrush x:Key="DeeperLaneBgBrush" Color="{DynamicResource DeeperLaneBg}"/>
+    <SolidColorBrush x:Key="DeeperLaneHeaderBrush" Color="{DynamicResource DeeperLaneHeader}"/>
+    <SolidColorBrush x:Key="DeeperLaneHeaderHoverBrush" Color="{DynamicResource DeeperLaneHeaderHover}"/>
+    <SolidColorBrush x:Key="DeeperLaneSeparatorBrush" Color="{DynamicResource DeeperLaneSeparator}"/>
+    <SolidColorBrush x:Key="DeeperDrawerStripBrush" Color="{DynamicResource DeeperDrawerStrip}"/>
+    <SolidColorBrush x:Key="DeeperDrawerStripHoverBrush" Color="{DynamicResource DeeperDrawerStripHover}"/>
+    <SolidColorBrush x:Key="DeeperSelectionStripBrush" Color="{DynamicResource DeeperSelectionStrip}"/>
+
     <!-- SP5 layer 3: NeonPurple brushes for the Available Subjects tab. -->
     <SolidColorBrush x:Key="NeonPurpleBrush" Color="{DynamicResource NeonPurple}"/>
     <SolidColorBrush x:Key="NeonPurpleSoftBrush" Color="{DynamicResource NeonPurpleSoft}"/>

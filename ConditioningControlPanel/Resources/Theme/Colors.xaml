@@ -65,6 +65,20 @@
     <Color x:Key="DeeperAccentTransparent20">#207B5CFF</Color>
     <Color x:Key="DeeperAccentTransparent40">#407B5CFF</Color>
 
+    <!-- Deeper editor chrome — surfaces introduced by Mission 1 (Editor restructure):
+         lane headers, lane content backgrounds, the metadata drawer strip,
+         selection-summary strip. Picked to sit between DarkerBg (#121220) and
+         PanelBg (#1C1C35) so the editor reads as nested layers rather than one
+         flat wall. Selection halo reuses DeeperAccentSoft. -->
+    <Color x:Key="DeeperLaneCanvas">#FF15151F</Color>
+    <Color x:Key="DeeperLaneBg">#FF1A1A28</Color>
+    <Color x:Key="DeeperLaneHeader">#FF1F1F30</Color>
+    <Color x:Key="DeeperLaneHeaderHover">#FF2A2A42</Color>
+    <Color x:Key="DeeperLaneSeparator">#FF2E2E48</Color>
+    <Color x:Key="DeeperDrawerStrip">#FF1F1F30</Color>
+    <Color x:Key="DeeperDrawerStripHover">#FF2A2A42</Color>
+    <Color x:Key="DeeperSelectionStrip">#287B5CFF</Color>
+
     <!-- SP5 layer 3: NeonPurple — Available Subjects directory tab + page accent.
          Distinct from DeeperAccent #7B5CFF (violet, calmer); #B47BFF reads as
          bright/neon and marks the section as visually different. ~12:1 against
