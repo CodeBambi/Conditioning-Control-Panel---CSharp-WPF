@@ -1214,12 +1214,25 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void TimelineScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            if ((Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control) return;
-            // Anchor zoom on the cursor position within the viewport for a
-            // CapCut-style experience.
-            var pos = e.GetPosition(TimelineScroll);
-            var factor = e.Delta > 0 ? 1.2 : 1.0 / 1.2;
-            SetZoom(_zoomFactor * factor, pos.X);
+            if (TimelineScroll == null) return;
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                // Ctrl+wheel = zoom, anchored on the cursor position for a
+                // CapCut-style experience.
+                var pos = e.GetPosition(TimelineScroll);
+                var factor = e.Delta > 0 ? 1.2 : 1.0 / 1.2;
+                SetZoom(_zoomFactor * factor, pos.X);
+                e.Handled = true;
+                return;
+            }
+            // Plain wheel = horizontal scroll along the timeline. Wheel down
+            // advances time (HorizontalOffset += positive), wheel up rewinds.
+            // Multiplier picked so one notch moves ~half a viewport at zoom 1.
+            var newOffset = TimelineScroll.HorizontalOffset - e.Delta;
+            if (newOffset < 0) newOffset = 0;
+            var max = TimelineScroll.ExtentWidth - TimelineScroll.ViewportWidth;
+            if (newOffset > max) newOffset = max;
+            TimelineScroll.ScrollToHorizontalOffset(newOffset);
             e.Handled = true;
         }
 

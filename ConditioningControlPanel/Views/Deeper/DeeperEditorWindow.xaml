@@ -12,6 +12,13 @@
         Closing="Window_Closing">
 
     <Window.Resources>
+        <!-- Polish pass: implicit styles round every Button / ToggleButton in
+             the editor. Buttons with inline Template setters (the menu items)
+             keep their own template — implicit-style template setters lose to
+             local Button.Template values. -->
+        <Style TargetType="Button" BasedOn="{StaticResource DeeperRoundButton}"/>
+        <Style TargetType="ToggleButton" BasedOn="{StaticResource DeeperRoundIconToggleButton}"/>
+
         <!-- Top-level menu-bar item (e.g. "File"). Keeps the bar's light-on-dark
              appearance, but overrides the WPF default popup template so the
              dropdown body matches the editor's dark theme instead of the
@@ -240,7 +247,7 @@
                         Content="{loc:Str deeper_editor_help_btn}"
                         ToolTip="{loc:Str deeper_editor_help_tooltip}"
                         Click="BtnEditorHelp_Click"
-                        Width="26" Height="22" Padding="0" Cursor="Hand" FontSize="13" FontWeight="Bold"
+                        Width="30" Height="26" Padding="0" Cursor="Hand" FontSize="14" FontWeight="Bold"
                         Background="{DynamicResource DeeperAccentTransparent20Brush}"
                         Foreground="{DynamicResource DeeperAccentBrush}"
                         BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
@@ -285,7 +292,7 @@
                     <Button Grid.Row="0" Grid.Column="2" x:Name="BtnLinkedJsonOpenFolder"
                             Content="📁" Click="BtnLinkedJsonOpenFolder_Click"
                             ToolTip="{loc:Str deeper_editor_linked_open_folder_tt}"
-                            Width="26" Height="22" Padding="0" Cursor="Hand" FontSize="11"
+                            Width="30" Height="26" Padding="0" Cursor="Hand" FontSize="12"
                             Margin="6,0,0,0"
                             Background="Transparent"
                             Foreground="{DynamicResource DeeperAccentBrush}"
@@ -512,8 +519,8 @@
                             <Button x:Name="BtnZoomOut" DockPanel.Dock="Right" Content="−"
                                     Click="BtnZoomOut_Click"
                                     ToolTip="{loc:Str deeper_editor_tip_zoom_out}"
-                                    Width="24" Height="22" Padding="0" Margin="0,0,2,0" Cursor="Hand"
-                                    FontSize="13" FontWeight="Bold"
+                                    Width="28" Height="26" Padding="0" Margin="0,0,2,0" Cursor="Hand"
+                                    FontSize="14" FontWeight="Bold"
                                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                                     Foreground="{DynamicResource DeeperAccentBrush}"
                                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
@@ -524,8 +531,8 @@
                             <Button x:Name="BtnZoomIn" DockPanel.Dock="Right" Content="+"
                                     Click="BtnZoomIn_Click"
                                     ToolTip="{loc:Str deeper_editor_tip_zoom_in}"
-                                    Width="24" Height="22" Padding="0" Margin="2,0,8,0" Cursor="Hand"
-                                    FontSize="13" FontWeight="Bold"
+                                    Width="28" Height="26" Padding="0" Margin="2,0,8,0" Cursor="Hand"
+                                    FontSize="14" FontWeight="Bold"
                                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                                     Foreground="{DynamicResource DeeperAccentBrush}"
                                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>

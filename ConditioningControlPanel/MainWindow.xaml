@@ -8491,6 +8491,11 @@
              replace the two-column Library/Recent grid. -->
         <ContentControl x:Name="DeeperTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
             <ContentControl.Resources>
+                <!-- Polish pass: implicit Button style rounds every plain Button
+                     in the hub. Buttons with explicit Style or local Button.Template
+                     (BtnDeeperNewEnhancement, the per-row action buttons) override. -->
+                <Style TargetType="Button" BasedOn="{StaticResource DeeperRoundButton}"/>
+
                 <!-- Pill style for the All / Video / Audio / Haptics / Webcam toggles. -->
                 <Style x:Key="DeeperPillStyle" TargetType="ToggleButton">
                     <Setter Property="Cursor" Value="Hand"/>
