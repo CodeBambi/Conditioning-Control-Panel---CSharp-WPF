@@ -525,7 +525,7 @@
                                     Foreground="{DynamicResource DeeperAccentBrush}"
                                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
                             <TextBlock x:Name="TxtZoomLevel" DockPanel.Dock="Right" Text="100%"
-                                       Width="40" TextAlignment="Center"
+                                       Width="52" TextAlignment="Center"
                                        Foreground="{DynamicResource TextDimBrush}" FontSize="11"
                                        VerticalAlignment="Center"/>
                             <Button x:Name="BtnZoomIn" DockPanel.Dock="Right" Content="+"

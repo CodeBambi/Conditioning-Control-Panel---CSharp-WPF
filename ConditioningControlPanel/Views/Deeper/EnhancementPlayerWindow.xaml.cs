@@ -546,13 +546,24 @@ namespace ConditioningControlPanel.Views.Deeper
                         MessageBoxButton.OK, MessageBoxImage.Information);
                     return;
                 }
-                svc.Start();
+                if (svc.Start())
+                {
+                    // Remember that THIS player session started the webcam so
+                    // Window_Closing can put it back the way it found it.
+                    // Webcams the user had running before opening the player
+                    // are left alone.
+                    _playerStartedWebcam = true;
+                }
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "EnhancementPlayer: webcam start from play-prompt failed");
             }
         }
+
+        // True when MaybePromptForWebcamBeforePlay actually started the camera
+        // in this player session. Used by Window_Closing to stop it on exit.
+        private bool _playerStartedWebcam;
 
         // Webcam dependency check: AutoTags is the primary signal (saved by the
         // EnhancementAutoTagger at file-write time). Falls back to scanning the
@@ -1683,6 +1694,16 @@ namespace ConditioningControlPanel.Views.Deeper
             try { _host.ActionLogged -= OnHostActionLogged; } catch { }
             try { _host.Diagnostic -= OnHostActionLogged; } catch { }
             try { UnsubscribeWebcamStateForButton(); } catch { }
+            // If THIS player session turned the webcam on (via the pre-play
+            // prompt), turn it off on the way out so we leave the system the
+            // way we found it. Webcams the user had running before opening
+            // the player are NOT touched.
+            try
+            {
+                if (_playerStartedWebcam && App.Webcam?.IsRunning == true)
+                    App.Webcam.Stop();
+            }
+            catch (Exception ex) { App.Logger?.Debug("Player webcam auto-stop failed: {Error}", ex.Message); }
             try { UnbindEngineIfRunning(); } catch { }
             try { _player.Stop(); } catch { }
 
