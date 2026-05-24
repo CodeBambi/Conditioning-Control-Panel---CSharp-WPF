@@ -322,6 +322,17 @@ namespace ConditioningControlPanel.Services
         private const double IdleAutoDisconnectSeconds = 120.0; // 2 minutes
         private DateTime _lastStatusPushUtc = DateTime.MinValue;
         private DateTime _statusBackoffUntil = DateTime.MinValue;
+        // Debounce window for SendEmoteAsync to swallow accidental double-clicks
+        // (e.g. mash on a preset button). Server-side per-session cap is 10/min so
+        // this is purely a UX guard, not security.
+        private DateTime _lastEmoteSentUtc = DateTime.MinValue;
+        private const int EmoteDebounceMs = 300;
+
+        // Probe used by MainWindow.SendEmoteAndReportAsync to decide whether to
+        // flash a "Sending..." bubble before the await. Avoids flicker when the
+        // call would immediately bounce off the debounce gate.
+        public bool IsWithinDebounceWindow =>
+            (DateTime.UtcNow - _lastEmoteSentUtc).TotalMilliseconds < EmoteDebounceMs;
         // Set true after the first controller of the active remote session caused the
         // local engine to stop. Prevents a takeover (A leaves, B joins) from re-stopping
         // an engine the second controller would otherwise inherit. Cleared in CleanupSession.
@@ -603,7 +614,10 @@ namespace ConditioningControlPanel.Services
                     level,
                     last_executed = lastExecuted,
                     available_sessions = availableSessions,
-                    session_info = sessionInfo
+                    session_info = sessionInfo,
+                    // Subject-side opt-in: false by default, governs whether the
+                    // server exposes the resolved avatar URL on GET /remote/status.
+                    share_avatar = App.Settings?.Current?.RemoteShareAvatar == true
                 });
 
                 using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/status", body);
@@ -633,6 +647,102 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "[RemoteControl] Status update error");
+            }
+        }
+
+        /// <summary>
+        /// Public wrapper around SendStatusAsync for code paths that need the
+        /// current settings (e.g. RemoteShareAvatar) to reach the server within
+        /// seconds of a user toggle rather than waiting up to ~15s for the next
+        /// scheduled push. No-op if the session isn't active. Failures are swallowed
+        /// the same as the scheduled path — the next regular push will retry.
+        /// </summary>
+        public Task PushStatusNowAsync()
+        {
+            if (!IsActive) return Task.CompletedTask;
+            return SendStatusAsync();
+        }
+
+        /// <summary>
+        /// Sends a short text emote up to the connected controller(s). The server
+        /// merges it into remote:status:{code} as latest_emote; the controller's
+        /// existing GET /remote/status poll picks it up within its next cycle.
+        ///
+        /// Returns (ok, error, retryAfterSeconds):
+        ///   - (true, null, null)               on 200 OK
+        ///   - (false, "debounced", null)       silently dropped within EmoteDebounceMs of previous send
+        ///   - (false, "session not active", null)
+        ///   - (false, "no unified id", null)
+        ///   - (false, "rate_limited", N)       on 429 (N = retry_after_seconds from server)
+        ///   - (false, "&lt;status or message&gt;", null) on other failures
+        ///
+        /// Server enforces: text trimmed non-empty, ≤60 chars; icon ≤8 chars;
+        /// kind ∈ {"preset","custom"}. This method trims+truncates text to 60 on
+        /// the client too so a UI bug can't surprise-400 the server.
+        /// </summary>
+        public async Task<(bool ok, string? error, int? retryAfterSeconds)> SendEmoteAsync(string text, string icon, string kind)
+        {
+            if (!IsActive) return (false, "session not active", null);
+
+            var unifiedId = App.UnifiedUserId;
+            if (string.IsNullOrEmpty(unifiedId)) return (false, "no unified id", null);
+
+            // Client-side debounce. Returned silently so the caller can ignore it
+            // without surfacing an error to the user (purely UX guard against mash).
+            if ((DateTime.UtcNow - _lastEmoteSentUtc).TotalMilliseconds < EmoteDebounceMs)
+            {
+                return (false, "debounced", null);
+            }
+            _lastEmoteSentUtc = DateTime.UtcNow;
+
+            // Match server validation client-side so a UI bug surfaces locally.
+            var trimmed = (text ?? "").Trim();
+            if (trimmed.Length == 0) return (false, "text required", null);
+            if (trimmed.Length > 60) trimmed = trimmed.Substring(0, 60);
+            var safeIcon = icon ?? "";
+            if (safeIcon.Length > 8) safeIcon = safeIcon.Substring(0, 8);
+            if (kind != "preset" && kind != "custom") return (false, "invalid kind", null);
+
+            try
+            {
+                var body = JsonConvert.SerializeObject(new
+                {
+                    unified_id = unifiedId,
+                    text = trimmed,
+                    icon = safeIcon,
+                    kind
+                });
+
+                using var response = await AuthPostAsync($"{ProxyBaseUrl}/v2/remote/emote", body);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    App.Logger?.Information("[RemoteControl] Emote sent (kind={Kind}, len={Len})", kind, trimmed.Length);
+                    return (true, null, null);
+                }
+
+                var raw = await response.Content.ReadAsStringAsync();
+                if (response.StatusCode == (System.Net.HttpStatusCode)429)
+                {
+                    int? retryAfter = null;
+                    try
+                    {
+                        var obj = JObject.Parse(raw);
+                        var ra = obj["retry_after_seconds"];
+                        if (ra != null && int.TryParse(ra.ToString(), out var n)) retryAfter = n;
+                    }
+                    catch { /* keep null */ }
+                    App.Logger?.Warning("[RemoteControl] Emote rate limited (retry_after={Retry}s)", retryAfter?.ToString() ?? "?");
+                    return (false, "rate_limited", retryAfter);
+                }
+
+                App.Logger?.Warning("[RemoteControl] Emote send failed: {Status} {Body}", response.StatusCode, raw);
+                return (false, $"http {(int)response.StatusCode}", null);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[RemoteControl] Emote send error");
+                return (false, ex.Message, null);
             }
         }
 

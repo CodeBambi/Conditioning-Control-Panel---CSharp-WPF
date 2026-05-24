@@ -155,6 +155,40 @@
             </Setter>
         </Style>
 
+        <!-- v6 brand-anchor variant. Only the dashboard's primary nav tabs use this; quest sub-tabs
+             and roadmap track buttons keep TabButtonActive so they don't get pulled into the gradient.
+             On every non-CCP-Default mod AccentGradientBrush resolves to SolidColorBrush(accent), so
+             primary-nav active state renders byte-identical to today on Bambi / Sissy / Drone.
+
+             Template is overridden so hover applies a translucent white tint via an overlay Border
+             instead of swapping Background to PinkButtonHoveredBrush. The parent's swap-Background
+             trigger would flicker the gradient out to a solid pink on CCP Default hover; the overlay
+             pattern keeps the gradient intact and adds a gentle hover lift on top, which also reads
+             well on the solid-accent active state every other mod sees. -->
+        <Style x:Key="TabButtonActivePrimary" TargetType="Button" BasedOn="{StaticResource TabButtonActive}">
+            <Setter Property="Background" Value="{DynamicResource AccentGradientBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <Border x:Name="hoverOverlay" Background="Transparent" IsHitTestVisible="False"/>
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="hoverOverlay" Property="Background" Value="#1AFFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Deeper Tab Button Styles — violet accent variant of TabButton/TabButtonActive
              so the new Deeper tab carries a distinct visual identity in the tab strip. -->
         <Style x:Key="TabButtonDeeper" TargetType="Button" BasedOn="{StaticResource TabButton}">
@@ -1519,6 +1553,182 @@
             </Setter>
         </Style>
 
+
+        <!-- ════════════════════════════════════════════════════════════════
+             Emote picker (remote-control tab). See MainWindow.xaml.cs handlers:
+             BtnEmotePreset_Click, BtnEmoteCustomSend_Click, BtnEmoteEdit_Click.
+             Watermark uses helpers:EmoteHelper attached properties + the
+             HintOrPlaceholderConverter declared below.
+             ════════════════════════════════════════════════════════════════ -->
+        <helpers:HintOrPlaceholderConverter x:Key="HintOrPlaceholderConverter"/>
+
+        <!-- Circular preset button: 44x44, emoji inside, pink-on-surface. -->
+        <Style x:Key="EmoteCircleButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="44"/>
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="22">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#33335A"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#3F3F66"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Big preset circle for the splash-overlay picker (72x72 vs the small 44x44).
+             Same hover/press behavior as EmoteCircleButtonStyle; only sizing differs. -->
+        <Style x:Key="EmoteCircleButtonBigStyle" TargetType="Button">
+            <Setter Property="Width" Value="72"/>
+            <Setter Property="Height" Value="72"/>
+            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="36">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#33335A"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#3F3F66"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Small pencil overlay on top-right of each preset slot. -->
+        <Style x:Key="EmoteEditOverlayStyle" TargetType="Button">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Background" Value="#3A3A55"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="9">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource PinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Square badge matching preset-circle size; visual anchor for the custom slot. -->
+        <Style x:Key="EmoteCustomBadgeStyle" TargetType="Border">
+            <Setter Property="Width" Value="44"/>
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="BorderBrush" Value="#3A3A55"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="CornerRadius" Value="22"/>
+        </Style>
+
+        <!-- Custom-text TextBox with dynamic watermark: ghost of last-sent text
+             when EmoteHelper.LastSentEmoteHint is non-empty, else the placeholder
+             from EmoteHelper.PlaceholderText. Both are attached properties; the
+             converter picks the first non-empty. Watermark is collapsed once the
+             TextBox has any text. -->
+        <Style x:Key="EmoteCustomTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="#252542"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="CaretBrush" Value="White"/>
+            <Setter Property="BorderBrush" Value="#3A3A55"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="MaxLength" Value="60"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Grid>
+                            <Border x:Name="bd"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="6">
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              Padding="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock x:Name="WatermarkText"
+                                       Foreground="#5A5A75"
+                                       FontStyle="Italic"
+                                       IsHitTestVisible="False"
+                                       Padding="{TemplateBinding Padding}"
+                                       VerticalAlignment="Center">
+                                <TextBlock.Text>
+                                    <MultiBinding Converter="{StaticResource HintOrPlaceholderConverter}">
+                                        <Binding Path="(helpers:EmoteHelper.LastSentEmoteHint)" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                        <Binding Path="(helpers:EmoteHelper.PlaceholderText)" RelativeSource="{RelativeSource TemplatedParent}"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Text" Value="">
+                                <Setter TargetName="WatermarkText" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource Self}, Path=Text.Length}" Value="0">
+                                <Setter TargetName="WatermarkText" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
     </Window.Resources>
 
     <!-- Root grid allows browser fullscreen overlay without reparenting WebView across HWNDs -->
@@ -1598,29 +1808,35 @@
 
                 <!-- Title + Player Title + App Name + Version -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <!-- Mod Selector Button -->
-                    <Border x:Name="ModSelectorBorder" Background="{DynamicResource PanelAccentBrush}" CornerRadius="8" Padding="8,4" Margin="0,0,10,0"
-                            VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonDown="ModSelector_Click"
-                            ToolTip="{loc:Str tooltip_click_to_open_mod_manager}">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#2A2A4A"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <Border x:Name="ModColorDot" Width="8" Height="8" CornerRadius="4" Margin="0,0,6,0"
-                                    VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TxtModName" Text="{loc:Str label_bambi_sleep}" FontSize="11" FontWeight="SemiBold"
-                                       Foreground="White" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <TextBlock Text="&#xE70D;" FontFamily="Segoe MDL2 Assets" FontSize="8"
-                                       Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                    <TextBlock x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_bimbo}" Foreground="{DynamicResource PinkBrush}"
+                    <!-- v6.0 Mod Switcher: ComboBox + gear button for management -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <ComboBox x:Name="ModSelectorCombo"
+                                  Style="{StaticResource DarkComboBoxStyle}"
+                                  ItemsSource="{Binding AvailableMods, RelativeSource={RelativeSource AncestorType=Window}}"
+                                  SelectedValuePath="Id"
+                                  SelectionChanged="ModSelectorCombo_SelectionChanged"
+                                  MinWidth="160" Height="22" VerticalAlignment="Center"
+                                  FontSize="11" FontWeight="SemiBold"
+                                  ToolTip="{loc:Str tooltip_switch_mod}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,8,0"
+                                                Background="{Binding AccentBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}" Foreground="White" VerticalAlignment="Center" FontSize="11"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button x:Name="BtnManageMods" Click="BtnManageMods_Click"
+                                ToolTip="{loc:Str tooltip_manage_mods}"
+                                Margin="4,0,0,0" Width="22" Height="22"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand">
+                            <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                        </Button>
+                    </StackPanel>
+                    <TextBlock x:Name="TxtPlayerTitle" Text="{loc:Str label_basic_subject}" Foreground="{DynamicResource PinkBrush}"
                                FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"
                                MaxWidth="200" TextTrimming="CharacterEllipsis"
                                ToolTip="{Binding ElementName=TxtPlayerTitle, Path=Text}">
@@ -1659,7 +1875,7 @@
 
                 <!-- Row 1 Tab Buttons: Settings, Presets, Progression, Assets -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="BtnSettings" Tag="Settings" Style="{StaticResource TabButtonActive}"
+                    <Button x:Name="BtnSettings" Tag="Settings" Style="{StaticResource TabButtonActivePrimary}"
                             Margin="3,0" Click="BtnSettings_Click" ToolTip="{loc:Str tooltip_dashboard}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="📊" FontSize="12" Margin="0,0,4,0"/>
@@ -2152,7 +2368,7 @@
                                             </Border>
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="🤖" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                                <TextBlock x:Name="TxtSubBambiTakeover" Text="{loc:Str tab_bambi_takeover}" Foreground="White" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="TxtSubBambiTakeover" Text="{loc:Str tab_takeover}" Foreground="White" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DockPanel>
                                     </Button>
@@ -2379,7 +2595,8 @@
                                       Click="CardSpiral_Click"/>
 
                 <!-- Center logo (2x2) spanning rows 1-2, cols 1-2 -->
-                <Border Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Grid.ColumnSpan="2"
+                <Border x:Name="LogoBrandFrame"
+                        Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Grid.ColumnSpan="2"
                         Background="#01000000" Margin="6"
                         Cursor="Hand" MouseLeftButtonDown="ImgLogo_MouseLeftButtonDown"
                         ToolTip="{loc:Str tooltip_click_me_rapidly}">
@@ -6713,7 +6930,7 @@
                             <StackPanel>
                                 <TextBlock Text="{loc:Str section_support_development}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold"/>
                                 <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextMutedBrush}" FontSize="12" Margin="0,8,0,0">
-                                    <Run Text="{loc:Str section_patreon_unlocks}"/> <Run x:Name="RunPatreonFeatures" Text="{loc:Str section_ai_chat_window_awareness_slut_mode_bambi_take}" Foreground="White"/>
+                                    <Run Text="{loc:Str section_patreon_unlocks}"/> <Run x:Name="RunPatreonFeatures" Text="{loc:Str section_ai_chat_window_awareness_slut_mode_takeover}" Foreground="White"/>
                                 </TextBlock>
                                 <Button x:Name="BtnVisitPatreon" Content="{loc:Str btn_visit_patreon}"
                                         Background="{DynamicResource SecondaryBrush}" Foreground="White"
@@ -7627,7 +7844,7 @@
                                 <Button x:Name="HelpBtnLeaderboard" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Tag="Leaderboard"/>
                                 <Border Background="#1888AACC" CornerRadius="8" Padding="12,8" Margin="10,0,0,0" BorderBrush="#3388AACC" BorderThickness="1">
                                     <StackPanel>
-                                        <TextBlock Text="{loc:Str label_who_s_the_prettiest_bimbo}" FontStyle="Italic" FontSize="15" FontWeight="Bold"
+                                        <TextBlock Text="{loc:Str label_leaderboard_tagline}" FontStyle="Italic" FontSize="15" FontWeight="Bold"
                                                    Foreground="#9988AACC"/>
                                         <TextBlock Text="{loc:Str label_every_level_counts_every_quest_matters}" FontStyle="Italic" FontSize="13" FontWeight="Bold"
                                                    Foreground="#6688AACC" Margin="0,2,0,0"/>
@@ -9700,6 +9917,134 @@
                                 </Border>
                             </Grid>
 
+                            <!-- Emote picker: 5 user-editable presets + 1 custom slot. -->
+                            <Border x:Name="EmotePickerPanel"
+                                    Background="{DynamicResource SurfaceBgBrush}"
+                                    BorderBrush="#2E2E48" BorderThickness="1"
+                                    CornerRadius="10" Padding="20,16" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str label_remote_emotes}"
+                                               Foreground="#8A8AA0" FontSize="12" FontWeight="Bold"
+                                               Margin="0,0,0,12"/>
+
+                                    <!-- 5 preset slots, bound in code-behind to App.Settings.Current.RemoteEmotePresets. -->
+                                    <ItemsControl x:Name="LstEmotePresets" Margin="0,0,0,12">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,12,0" Width="80">
+                                                    <StackPanel HorizontalAlignment="Center">
+                                                        <Button Style="{StaticResource EmoteCircleButtonStyle}"
+                                                                Tag="{Binding}"
+                                                                Click="BtnEmotePreset_Click"
+                                                                ToolTip="{Binding Text}">
+                                                            <TextBlock Text="{Binding Icon}" FontSize="22"/>
+                                                        </Button>
+                                                        <TextBlock Text="{Binding Text}"
+                                                                   Foreground="White" FontSize="11"
+                                                                   HorizontalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxWidth="76" Margin="0,4,0,0"/>
+                                                    </StackPanel>
+                                                    <Button Style="{StaticResource EmoteEditOverlayStyle}"
+                                                            Tag="{Binding}"
+                                                            Click="BtnEmoteEdit_Click"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Top"
+                                                            Margin="0,-4,8,0"
+                                                            Content="✎"
+                                                            ToolTip="{loc:Str btn_emote_edit_tooltip}"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Custom slot row: circular badge + watermarked textbox + send button. -->
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Style="{StaticResource EmoteCustomBadgeStyle}">
+                                            <TextBlock Text="✏️" FontSize="18"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <TextBox Grid.Column="1" x:Name="TxtEmoteCustom"
+                                                 Style="{StaticResource EmoteCustomTextBoxStyle}"
+                                                 helpers:EmoteHelper.PlaceholderText="{loc:Str watermark_emote_custom}"
+                                                 helpers:EmoteHelper.LastSentEmoteHint=""
+                                                 Margin="12,0,8,0"
+                                                 KeyDown="TxtEmoteCustom_KeyDown"/>
+                                        <Button Grid.Column="2" x:Name="BtnEmoteCustomSend"
+                                                Content="{loc:Str btn_emote_send}"
+                                                Click="BtnEmoteCustomSend_Click"
+                                                Background="{DynamicResource PinkBrush}" Foreground="White"
+                                                FontWeight="Bold" Padding="16,8"
+                                                BorderThickness="0" Cursor="Hand"/>
+                                    </Grid>
+
+                                    <TextBlock x:Name="TxtEmoteStatus" Text=""
+                                               Foreground="#A0A0A0" FontSize="11"
+                                               Margin="0,8,0,0"/>
+
+                                    <!-- Edit popup. Lives in the visual tree (zero-size when
+                                         IsOpen=false). Placement target + tag-bound EmotePreset
+                                         set in BtnEmoteEdit_Click. Save/Cancel close it. -->
+                                    <Popup x:Name="EmoteEditPopup"
+                                           Placement="Bottom" StaysOpen="False"
+                                           AllowsTransparency="True" PopupAnimation="Fade">
+                                        <Border Background="{DynamicResource SurfaceBgBrush}"
+                                                BorderBrush="{DynamicResource PinkBrush}"
+                                                BorderThickness="2" CornerRadius="10"
+                                                Padding="16" Margin="0,6,0,0">
+                                            <StackPanel Width="260">
+                                                <TextBlock Text="{loc:Str label_emote_edit_title}"
+                                                           Foreground="White" FontWeight="Bold"
+                                                           FontSize="14" Margin="0,0,0,12"/>
+                                                <TextBlock Text="{loc:Str label_emote_edit_icon}"
+                                                           Foreground="#8A8AA0" FontSize="11"
+                                                           Margin="0,0,0,4"/>
+                                                <TextBox x:Name="TxtEditEmoteIcon" MaxLength="8"
+                                                         Background="#252542" Foreground="White"
+                                                         CaretBrush="White" BorderBrush="#3A3A55"
+                                                         Padding="8,6" FontSize="14"
+                                                         Margin="0,0,0,10"/>
+                                                <TextBlock Text="{loc:Str label_emote_edit_text}"
+                                                           Foreground="#8A8AA0" FontSize="11"
+                                                           Margin="0,0,0,4"/>
+                                                <TextBox x:Name="TxtEditEmoteText" MaxLength="60"
+                                                         Background="#252542" Foreground="White"
+                                                         CaretBrush="White" BorderBrush="#3A3A55"
+                                                         Padding="8,6" FontSize="14"
+                                                         Margin="0,0,0,14"
+                                                         TextChanged="TxtEditEmoteText_TextChanged"/>
+                                                <StackPanel Orientation="Horizontal"
+                                                            HorizontalAlignment="Right">
+                                                    <Button x:Name="BtnEditEmoteCancel"
+                                                            Content="{loc:Str btn_emote_edit_cancel}"
+                                                            Click="BtnEditEmoteCancel_Click"
+                                                            Background="#353550" Foreground="White"
+                                                            Padding="12,6" BorderThickness="0"
+                                                            Cursor="Hand" Margin="0,0,8,0"/>
+                                                    <Button x:Name="BtnEditEmoteSave"
+                                                            Content="{loc:Str btn_emote_edit_save}"
+                                                            Click="BtnEditEmoteSave_Click"
+                                                            Background="{DynamicResource PinkBrush}"
+                                                            Foreground="White" FontWeight="Bold"
+                                                            Padding="12,6" BorderThickness="0"
+                                                            Cursor="Hand"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </Popup>
+                                </StackPanel>
+                            </Border>
+
                             <!-- Behavior: stop effects when controller disconnects -->
                             <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
                                     BorderThickness="1" CornerRadius="10" Padding="20,14" Margin="0,0,0,16">
@@ -9720,6 +10065,29 @@
                                               Margin="16,0,0,0"
                                               Checked="ChkStopEffectsOnRemoteDisconnect_Changed"
                                               Unchecked="ChkStopEffectsOnRemoteDisconnect_Changed"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Privacy: opt-in to share linked Discord avatar with controllers. -->
+                            <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
+                                    BorderThickness="1" CornerRadius="10" Padding="20,14" Margin="0,0,0,16">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Str label_remote_share_avatar}" Foreground="White"
+                                                   FontSize="14" FontWeight="Bold"/>
+                                        <TextBlock Text="{loc:Str desc_remote_share_avatar}"
+                                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                                   TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="1" x:Name="ChkRemoteShareAvatar"
+                                              Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                                              Margin="16,0,0,0"
+                                              Checked="ChkRemoteShareAvatar_Changed"
+                                              Unchecked="ChkRemoteShareAvatar_Changed"/>
                                 </Grid>
                             </Border>
 
@@ -9980,7 +10348,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="🤖" FontSize="40" VerticalAlignment="Center" Margin="0,0,16,0"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock x:Name="TxtBambiTakeoverHeader" Text="{loc:Str tab_bambi_takeover}" Foreground="White" FontSize="26" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtBambiTakeoverHeader" Text="{loc:Str tab_takeover}" Foreground="White" FontSize="26" FontWeight="Bold"/>
                     </StackPanel>
                 </Grid>
 
@@ -10002,9 +10370,9 @@
                         <StackPanel Grid.Column="2" VerticalAlignment="Center">
                             <TextBlock Text="{loc:Str label_what_is_this}" Foreground="{DynamicResource PinkBrush}"
                                        FontSize="11" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="{loc:Str desc_bambi_takeover}" Foreground="White" FontSize="15"
+                            <TextBlock Text="{loc:Str desc_takeover}" Foreground="White" FontSize="15"
                                        TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="22"/>
-                            <TextBlock Text="{loc:Str desc_bambi_takeover_bullets}"
+                            <TextBlock Text="{loc:Str desc_takeover_bullets}"
                                        Foreground="{DynamicResource TextMutedBrush}" FontSize="13"
                                        TextWrapping="Wrap" LineHeight="20"/>
                         </StackPanel>
@@ -10018,7 +10386,7 @@
                 <!-- Locked State (legacy — kept hidden, replaced by gating overlay below) -->
                 <StackPanel x:Name="AutonomyLocked" Visibility="Collapsed">
                     <Grid>
-                        <TextBlock x:Name="TxtTakeoverLocked" Text="{loc:Str label_bambi_takeover}" Foreground="#666666" FontWeight="Bold" FontSize="13"/>
+                        <TextBlock x:Name="TxtTakeoverLocked" Text="{loc:Str label_takeover}" Foreground="#666666" FontWeight="Bold" FontSize="13"/>
                         <TextBlock x:Name="TxtAutonomyLockStatus" Text="{loc:Str label_patreon_only}" Foreground="{DynamicResource SecondaryBrush}" HorizontalAlignment="Right" FontSize="11"/>
                     </Grid>
                     <TextBlock x:Name="TxtAutonomyLockMessage" Text="{loc:Str label_support_on_patreon_to_unlock}" Foreground="{DynamicResource PinkBrush}" FontSize="11" Margin="0,4,0,0"/>
@@ -10136,7 +10504,7 @@
                                 </Grid.ColumnDefinitions>
                                 <Button x:Name="BtnAutonomyStartStop" Grid.Column="0" Content="{loc:Str btn_start_2}" Background="#2A1A3A" Foreground="#90EE90"
                                         FontWeight="Bold" FontSize="14" Padding="14,8"
-                                        Click="BtnAutonomyStartStop_Click" ToolTip="{loc:Str tooltip_start_stop_bambi_takeover}"/>
+                                        Click="BtnAutonomyStartStop_Click" ToolTip="{loc:Str tooltip_start_stop_takeover}"/>
                                 <Button Grid.Column="2" Content="{loc:Str btn_test}" Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="14"
                                         Padding="14,8" Click="BtnTestAutonomy_Click" ToolTip="{loc:Str tooltip_test_action}"/>
                             </Grid>
@@ -11631,6 +11999,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <Button x:Name="BtnStart" Grid.Column="0" Style="{StaticResource PinkButton}"
+                            Background="{DynamicResource AccentGradientBrush}"
                             Height="50" FontSize="18" Click="BtnStart_Click"
                             ToolTip="{loc:Str tooltip_start_stop_the_conditioning_engine}">
                         <StackPanel x:Name="StartButtonContent" Orientation="Horizontal" Height="24" VerticalAlignment="Center">
@@ -11740,6 +12109,44 @@
                         </Grid>
                     </Border>
 
+                    <!-- ════════════════════════════════════════════════════════════════
+                         Big emote picker — only visible while the splash overlay is shown
+                         (i.e. an active controller session). The small picker in the
+                         remote-control tab body stays the source-of-truth for editing.
+                         Both bind to App.Settings.Current.RemoteEmotePresets so edits
+                         propagate via INotifyPropertyChanged on EmotePreset.
+                         The 3-above / 2-below split + ItemsSource for each row is wired
+                         in LoadSettings() via two ListCollectionView filters keyed on
+                         the item's index in the source list.
+                         ════════════════════════════════════════════════════════════════ -->
+                    <ItemsControl x:Name="LstEmotePresetsBigTop"
+                                  HorizontalAlignment="Center" Margin="0,0,0,16">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="10,0" HorizontalAlignment="Center" Width="110">
+                                    <Button Style="{StaticResource EmoteCircleButtonBigStyle}"
+                                            Tag="{Binding}"
+                                            Click="BtnEmotePresetBig_Click"
+                                            HorizontalAlignment="Center"
+                                            ToolTip="{Binding Text}">
+                                        <TextBlock Text="{Binding Icon}" FontSize="32"/>
+                                    </Button>
+                                    <TextBlock Text="{Binding Text}"
+                                               Foreground="White" FontSize="13"
+                                               HorizontalAlignment="Center" TextAlignment="Center"
+                                               TextWrapping="Wrap" MaxHeight="36"
+                                               TextTrimming="CharacterEllipsis"
+                                               MaxWidth="104" Margin="0,6,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
                     <!-- End Session button -->
                     <Button Content="{loc:Str btn_end_session}" Click="BtnEndRemoteSession_Click" Cursor="Hand"
                             Foreground="White" FontSize="15" FontWeight="SemiBold" Padding="32,12"
@@ -11760,6 +12167,64 @@
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
+
+                    <!-- Bottom row of presets (4-5) -->
+                    <ItemsControl x:Name="LstEmotePresetsBigBottom"
+                                  HorizontalAlignment="Center" Margin="0,16,0,12">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="10,0" HorizontalAlignment="Center" Width="110">
+                                    <Button Style="{StaticResource EmoteCircleButtonBigStyle}"
+                                            Tag="{Binding}"
+                                            Click="BtnEmotePresetBig_Click"
+                                            HorizontalAlignment="Center"
+                                            ToolTip="{Binding Text}">
+                                        <TextBlock Text="{Binding Icon}" FontSize="32"/>
+                                    </Button>
+                                    <TextBlock Text="{Binding Text}"
+                                               Foreground="White" FontSize="13"
+                                               HorizontalAlignment="Center" TextAlignment="Center"
+                                               TextWrapping="Wrap" MaxHeight="36"
+                                               TextTrimming="CharacterEllipsis"
+                                               MaxWidth="104" Margin="0,6,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Custom textbox row, centered, max width 400. Reuses
+                         EmoteCustomTextBoxStyle; bumped FontSize/Padding for the
+                         bigger surface. Watermark uses the same EmoteHelper
+                         attached properties — independent ghost state from the
+                         small picker because it's a different TextBox instance. -->
+                    <Grid HorizontalAlignment="Center" MaxWidth="400" Width="400">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" x:Name="TxtEmoteCustomBig"
+                                 Style="{StaticResource EmoteCustomTextBoxStyle}"
+                                 helpers:EmoteHelper.PlaceholderText="{loc:Str watermark_emote_custom}"
+                                 helpers:EmoteHelper.LastSentEmoteHint=""
+                                 FontSize="16" Padding="12,10"
+                                 Margin="0,0,8,0"
+                                 KeyDown="TxtEmoteCustomBig_KeyDown"/>
+                        <Button Grid.Column="1" x:Name="BtnEmoteCustomSendBig"
+                                Content="{loc:Str btn_emote_send}"
+                                Click="BtnEmoteCustomSendBig_Click"
+                                Background="{DynamicResource PinkBrush}" Foreground="White"
+                                FontWeight="Bold" Padding="20,10"
+                                BorderThickness="0" Cursor="Hand"/>
+                    </Grid>
+
+                    <TextBlock x:Name="TxtEmoteStatusBig" Text=""
+                               Foreground="#A0A0A0" FontSize="12"
+                               HorizontalAlignment="Center" Margin="0,8,0,0"/>
                 </StackPanel>
             </Grid>
         </Border>

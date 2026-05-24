@@ -203,7 +203,7 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("Triggering Bambi Freeze (subliminals disabled but special trigger allowed)");
             }
 
-            var text = App.Mods?.GetFreezeTriggerText() ?? "Bambi Freeze";
+            var text = App.Mods?.GetFreezeTriggerText() ?? "Freeze";
             string? audioPath = FindLinkedAudio(text);
 
             if (audioPath != null)
@@ -295,7 +295,7 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private void PlayBambiReset()
         {
-            var resetText = App.Mods?.GetResetTriggerText() ?? "Bambi Reset";
+            var resetText = App.Mods?.GetResetTriggerText() ?? "Reset";
             string? resetAudio = FindLinkedAudio(resetText);
 
             if (resetAudio != null && App.Settings.Current.SubAudioEnabled)

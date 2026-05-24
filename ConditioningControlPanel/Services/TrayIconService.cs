@@ -92,7 +92,7 @@ namespace ConditioningControlPanel.Services;
             showItem.Click += (s, e) => ShowWindow();
             contextMenu.Items.Add(showItem);
 
-            var wakeLabel = App.Mods?.IsBaseMod == true ? "Wake Bambi Up!" : "Wake Up!";
+            var wakeLabel = App.Mods?.IsBambiMode == true ? "Wake Bambi Up!" : "Wake Up!";
             var wakeBambiItem = new ToolStripMenuItem(wakeLabel);
             wakeBambiItem.Click += (s, e) => OnWakeBambiRequested?.Invoke();
             contextMenu.Items.Add(wakeBambiItem);

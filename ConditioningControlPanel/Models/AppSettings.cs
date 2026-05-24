@@ -2,10 +2,39 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
 using Newtonsoft.Json;
 
 namespace ConditioningControlPanel.Models
 {
+    /// <summary>
+    /// A single emote slot: an icon (usually an emoji, may be empty) and a short
+    /// text label. Persisted as part of AppSettings.RemoteEmotePresets — exactly
+    /// 5 entries are kept; OnDeserialized pads/truncates.
+    /// </summary>
+    public class EmotePreset : INotifyPropertyChanged
+    {
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged([CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        private string _icon = "";
+        [JsonProperty("Icon")]
+        public string Icon
+        {
+            get => _icon;
+            set { _icon = value ?? ""; OnPropertyChanged(); }
+        }
+
+        private string _text = "";
+        [JsonProperty("Text")]
+        public string Text
+        {
+            get => _text;
+            set { _text = value ?? ""; OnPropertyChanged(); }
+        }
+    }
+
     /// <summary>
     /// Legacy content mode enum. Kept for settings deserialization backward compatibility.
     /// Use App.Mods (ModService) instead.
@@ -54,6 +83,46 @@ namespace ConditioningControlPanel.Models
         {
             get => _userPresets;
             set { _userPresets = value ?? new(); OnPropertyChanged(); }
+        }
+
+        // Remote-control emote slots (5 fixed, user-editable). OnDeserialized
+        // pads or truncates to exactly 5 so the UI never has to defend against
+        // odd counts. Default set lives in DefaultRemoteEmotePresets() below.
+        private List<EmotePreset> _remoteEmotePresets = DefaultRemoteEmotePresets();
+        public List<EmotePreset> RemoteEmotePresets
+        {
+            get => _remoteEmotePresets;
+            set { _remoteEmotePresets = value ?? DefaultRemoteEmotePresets(); OnPropertyChanged(); }
+        }
+
+        internal static List<EmotePreset> DefaultRemoteEmotePresets() => new()
+        {
+            new EmotePreset { Icon = "🙏", Text = "yes" },
+            new EmotePreset { Icon = "🥺", Text = "more" },
+            new EmotePreset { Icon = "🫠", Text = "drifting" },
+            new EmotePreset { Icon = "💜", Text = "thank you" },
+            new EmotePreset { Icon = "⚠️", Text = "too much" },
+        };
+
+        [OnDeserialized]
+        internal void OnDeserializedNormalizeEmotePresets(StreamingContext _)
+        {
+            if (_remoteEmotePresets == null)
+            {
+                _remoteEmotePresets = DefaultRemoteEmotePresets();
+                return;
+            }
+            // Pad short → use defaults for the missing tail slots.
+            var defaults = DefaultRemoteEmotePresets();
+            while (_remoteEmotePresets.Count < 5)
+            {
+                _remoteEmotePresets.Add(defaults[_remoteEmotePresets.Count]);
+            }
+            // Truncate long → keep the first 5 only.
+            if (_remoteEmotePresets.Count > 5)
+            {
+                _remoteEmotePresets = _remoteEmotePresets.GetRange(0, 5);
+            }
         }
 
         #endregion
@@ -849,9 +918,10 @@ namespace ConditioningControlPanel.Models
         [JsonIgnore]
         public bool IsSissyMode => ActiveModId == BuiltInMods.SissyHypnoId;
 
-        private string _activeModId = BuiltInMods.BambiSleepId;
+        private string _activeModId = BuiltInMods.CCPDefaultId;
         /// <summary>
         /// The ID of the currently active mod. Replaces ContentMode enum.
+        /// Fresh installs land on CCP Default; upgraded users retain their persisted choice.
         /// </summary>
         public string ActiveModId
         {
@@ -861,7 +931,7 @@ namespace ConditioningControlPanel.Models
                 if (_activeModId != value)
                 {
                     _activeModId = value;
-                    // Keep legacy field in sync for backward compat
+                    // Keep legacy field in sync for backward compat (only Bambi/Sissy map cleanly to the old enum)
                     _contentMode = value == BuiltInMods.SissyHypnoId ? ContentMode.SissyHypno : ContentMode.BambiSleep;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsBambiMode));
@@ -890,6 +960,28 @@ namespace ConditioningControlPanel.Models
         {
             get => _contentModeChosen;
             set => ContentModeChosen = value;
+        }
+
+        // Schema version stamped on every save by this v6.0 binary (see OnSerializingBumpSchemaVersion).
+        // Default 0 covers every pre-v6 JSON and any v6 JSON written before this field existed.
+        // MigrateFromContentModeToMod uses this as its primary gate so v6-saved settings don't
+        // re-trigger the ContentMode→mod-ID mapping (which previously forced deliberate CCP Default
+        // selections back to Bambi on second launch because ContentModeChosen=true looked like a
+        // v5.x modal acceptance).
+        private int _settingsSchemaVersion = 0;
+        [JsonProperty("SettingsSchemaVersion")]
+        public int SettingsSchemaVersion
+        {
+            get => _settingsSchemaVersion;
+            set { _settingsSchemaVersion = value; OnPropertyChanged(); }
+        }
+
+        [OnSerializing]
+        internal void OnSerializingBumpSchemaVersion(StreamingContext _)
+        {
+            // Any save written by this binary is a v6 save. Lock the migration gate so
+            // subsequent launches skip the ContentMode→mod-ID mapping unconditionally.
+            if (_settingsSchemaVersion < 6) _settingsSchemaVersion = 6;
         }
 
         /// <summary>
@@ -923,14 +1015,37 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         internal void MigrateFromContentModeToMod()
         {
-            // If ActiveModId is already set to a non-default value, migration already happened
-            if (_activeModId != BuiltInMods.BambiSleepId) return;
+            // Primary gate: a v6-saved JSON is already past this migration. Without this guard,
+            // a v6 user who deliberately picks CCP Default via the dropdown gets bumped to Bambi
+            // on next launch because ContentModeChosen=true (set by ApplyActiveModChange on every
+            // pick, including CCP Default) looks identical to "v5.x user who accepted the modal".
+            if (_settingsSchemaVersion >= 6) return;
 
-            // Check if old ContentMode was SissyHypno — if so, migrate
+            // Secondary gate: if ActiveModId already deserialized to anything non-default, the user
+            // has an explicit choice persisted and we shouldn't touch it.
+            if (_activeModId != BuiltInMods.CCPDefaultId)
+            {
+                _settingsSchemaVersion = 6;
+                return;
+            }
+
+            // Pre-v6 upgrade path: legacy users had ContentMode persisted but no ActiveModId yet.
+            // Map their old enum choice (Bambi was the implicit default) onto a real mod ID.
             if (_contentMode == ContentMode.SissyHypno)
             {
                 _activeModId = BuiltInMods.SissyHypnoId;
             }
+            else if (ContentModeChosen)
+            {
+                // ContentModeChosen=true on a legacy install means they accepted the first-launch modal
+                // and were assigned Bambi (the v5.x default). Preserve that choice on upgrade.
+                _activeModId = BuiltInMods.BambiSleepId;
+            }
+            // else: fresh-install-like state → leave on CCPDefaultId
+
+            // Lock the gate so this migration never re-fires for this user, even if a future
+            // code path resets ActiveModId back to CCPDefaultId (e.g. CCP Default deliberate pick).
+            _settingsSchemaVersion = 6;
 
             // Migrate *ByMode dictionaries to *ByMod
             if (SubliminalPoolByMode != null && SubliminalPoolByMod == null)
@@ -2361,7 +2476,7 @@ namespace ConditioningControlPanel.Models
         /// Display name for current content mode.
         /// </summary>
         [JsonIgnore]
-        public string ContentModeDisplay => App.Mods?.GetModeDisplayName() ?? (IsBambiMode ? "Bambi Sleep" : "Sissy Hypno");
+        public string ContentModeDisplay => App.Mods?.GetModeDisplayName() ?? "CCP Default";
 
         /// <summary>
         /// Gets/sets the hypnotube links for the currently active content mode.
@@ -3213,6 +3328,21 @@ namespace ConditioningControlPanel.Models
         {
             get => _stopEffectsOnRemoteDisconnect;
             set { _stopEffectsOnRemoteDisconnect = value; OnPropertyChanged(); }
+        }
+
+        // Subject-side opt-in for exposing the linked Discord avatar to whoever's
+        // currently controlling the session. Default false — privacy fails closed;
+        // controller sees a silhouette unless the user explicitly flips this on.
+        // Patreon avatars are not surfaced anywhere in the app, so this is purely
+        // about the Discord avatar URL. Distinct from `share_profile_picture`
+        // (legacy field on profile:* records governing leaderboard / Subjects
+        // directory display). Do not conflate; different audience, different
+        // threat model.
+        private bool _remoteShareAvatar = false;
+        public bool RemoteShareAvatar
+        {
+            get => _remoteShareAvatar;
+            set { _remoteShareAvatar = value; OnPropertyChanged(); }
         }
 
         // SP5 layer 3 — Available Subjects directory opt-in.

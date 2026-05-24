@@ -350,7 +350,7 @@
                                 </Setter>
                             </Style>
                         </ContextMenu.Style>
-                        <MenuItem x:Name="MenuItemTalkToBambi" Header="{loc:Str section_talk_to_bambi}" Click="MenuItemTalkToBambi_Click" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
+                        <MenuItem x:Name="MenuItemTalkToBambi" Header="{loc:Str section_talk_to_companion}" Click="MenuItemTalkToBambi_Click" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
                         <Separator/>
                         <MenuItem x:Name="MenuItemDetach" Header="{loc:Str section_detach}" Click="MenuItemDetach_Click"/>
                         <MenuItem x:Name="MenuItemAttach" Header="{loc:Str section_attach_to_main_window}" Click="MenuItemAttach_Click" Visibility="Collapsed"/>
@@ -360,7 +360,7 @@
                         <Separator/>
                         <MenuItem x:Name="MenuItemEngine" Header="{loc:Str section_start_engine}" Click="MenuItemEngine_Click" Foreground="#90EE90"/>
                         <MenuItem x:Name="MenuItemTriggerMode" Header="{loc:Str section_trigger_mode}" Click="MenuItemTriggerMode_Click"/>
-                        <MenuItem x:Name="MenuItemBambiTakeover" Header="{loc:Str section_bimbo_takeover}" Click="MenuItemBambiTakeover_Click"/>
+                        <MenuItem x:Name="MenuItemBambiTakeover" Header="{loc:Str section_takeover}" Click="MenuItemBambiTakeover_Click"/>
                         <MenuItem x:Name="MenuItemPersonality" Header="{loc:Str section_personality}" Foreground="{DynamicResource PinkBrush}">
                             <MenuItem.ItemContainerStyle>
                                 <Style TargetType="MenuItem">
@@ -386,6 +386,16 @@
                             </MenuItem.ItemContainerStyle>
                         </MenuItem>
                         <MenuItem x:Name="MenuItemMute" Header="{loc:Str section_mute_avatar}" Click="MenuItemMute_Click"/>
+                        <!-- Emote MenuItems replace the 5 items above (Engine, TriggerMode, BambiTakeover,
+                             Personality, Mute) whenever a remote controller is connected. Header strings
+                             and Tag references are populated in AvatarContextMenu_Opened from
+                             App.Settings.Current.RemoteEmotePresets. Edits via the small picker propagate
+                             here automatically because Header is re-read on every menu open. -->
+                        <MenuItem x:Name="MenuItemEmote1" Header="" Visibility="Collapsed" Click="MenuItemEmote_Click"/>
+                        <MenuItem x:Name="MenuItemEmote2" Header="" Visibility="Collapsed" Click="MenuItemEmote_Click"/>
+                        <MenuItem x:Name="MenuItemEmote3" Header="" Visibility="Collapsed" Click="MenuItemEmote_Click"/>
+                        <MenuItem x:Name="MenuItemEmote4" Header="" Visibility="Collapsed" Click="MenuItemEmote_Click"/>
+                        <MenuItem x:Name="MenuItemEmote5" Header="" Visibility="Collapsed" Click="MenuItemEmote_Click"/>
                         <Separator/>
                         <MenuItem x:Name="MenuItemShowChatHistory" Header="{loc:Str section_show_chat_history}" Click="MenuItemShowChatHistory_Click"/>
                         <MenuItem x:Name="MenuItemMuteWhispers" Header="{loc:Str section_mute_whispers}" Click="MenuItemMuteWhispers_Click"/>
@@ -457,7 +467,7 @@
                     <!-- Title and Level -->
                     <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock x:Name="TxtAvatarTitle"
-                                   Text="{loc:Str label_basic_bimbo_2}"
+                                   Text="{loc:Str label_basic_subject_2}"
                                    FontSize="16"
                                    FontWeight="Bold"
                                    Foreground="{DynamicResource PinkBrush}"

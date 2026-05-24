@@ -134,6 +134,21 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("takeoverLabel")]
         public string? TakeoverLabel { get; set; }
+
+        /// <summary>
+        /// Affirmation/praise term used in welcome screens and generic praise contexts.
+        /// e.g. "Good Girl" for Bambi, "babe" for Sissy, "Unit" for Drone, "Subject" for CCP Default.
+        /// </summary>
+        [JsonProperty("affirmation")]
+        public string? Affirmation { get; set; }
+
+        /// <summary>
+        /// Optional subject term specifically for rank/progression labels (e.g. "Beginner {RankSubject}").
+        /// Falls back to <see cref="UserTerm"/> when not supplied. Sissy uses "Babe" here while keeping
+        /// the lowercase "babe" everywhere else.
+        /// </summary>
+        [JsonProperty("rankSubject")]
+        public string? RankSubject { get; set; }
     }
 
     public class ModTriggers

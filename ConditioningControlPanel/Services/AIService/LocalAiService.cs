@@ -242,10 +242,10 @@ namespace ConditioningControlPanel.Services.AIService
 
         private static string GetFallbackResponse()
         {
-            var mode = App.Settings?.Current?.ContentMode ?? ContentMode.BambiSleep;
-            return mode == ContentMode.BambiSleep
-                ? "Bambi's head is so empty right now~ *giggles*"
-                : "My head is so empty right now~ *giggles*";
+            // Bambi keeps its flavored fallback; all other mods get a neutral one.
+            if (App.Mods?.IsBambiMode == true)
+                return "Bambi's head is so empty right now~ *giggles*";
+            return "...";
         }
 
         public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
@@ -259,12 +259,12 @@ namespace ConditioningControlPanel.Services.AIService
 
         private static readonly string[] StillThinkingPhrases =
         {
-            "Hmm... still thinking~",
-            "One sec, brain's loading...",
-            "Almost there~",
-            "Bambi's thinking real hard right now...",
-            "Hold on, my pretty pink head is buffering~",
-            "Gimme a second, hot stuff..."
+            "Hmm... still thinking.",
+            "One sec, processing...",
+            "Almost there.",
+            "Thinking...",
+            "Hold on, working on it.",
+            "Just a moment."
         };
 
         private static string GetRandomThinkingPhrase()

@@ -5442,7 +5442,127 @@ namespace ConditioningControlPanel
             {
                 UpdateQuickMenuState();
                 UpdateContextMenuForState();
+                RefreshEmoteMenuItemsForRemoteState();
             }), System.Windows.Threading.DispatcherPriority.Render);
+        }
+
+        // When a remote controller is connected, swap the 5 normally-locked items
+        // (Engine / TriggerMode / BambiTakeover / Personality / Mute) for the 5
+        // emote preset items. Existing items' IsEnabled gating is left untouched —
+        // they're just Collapsed in remote mode, so their disabled state doesn't
+        // matter. Re-runs on every Opened so preset edits show up immediately.
+        private void RefreshEmoteMenuItemsForRemoteState()
+        {
+            try
+            {
+                var remoteActive = App.RemoteControl?.ControllerConnected == true;
+                var originalVis = remoteActive ? Visibility.Collapsed : Visibility.Visible;
+                var emoteVis = remoteActive ? Visibility.Visible : Visibility.Collapsed;
+
+                if (MenuItemEngine != null) MenuItemEngine.Visibility = originalVis;
+                if (MenuItemTriggerMode != null) MenuItemTriggerMode.Visibility = originalVis;
+                if (MenuItemBambiTakeover != null) MenuItemBambiTakeover.Visibility = originalVis;
+                if (MenuItemPersonality != null) MenuItemPersonality.Visibility = originalVis;
+                if (MenuItemMute != null) MenuItemMute.Visibility = originalVis;
+
+                var emoteItems = new[] { MenuItemEmote1, MenuItemEmote2, MenuItemEmote3, MenuItemEmote4, MenuItemEmote5 };
+                foreach (var mi in emoteItems)
+                {
+                    if (mi != null) mi.Visibility = emoteVis;
+                }
+
+                if (!remoteActive) return;
+
+                var presets = App.Settings?.Current?.RemoteEmotePresets;
+                if (presets == null) return;
+
+                for (int i = 0; i < emoteItems.Length && i < presets.Count; i++)
+                {
+                    var mi = emoteItems[i];
+                    if (mi == null) continue;
+                    var p = presets[i];
+                    var icon = string.IsNullOrEmpty(p.Icon) ? "" : p.Icon + "  ";
+                    mi.Header = icon + (p.Text ?? "");
+                    mi.Tag = p;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[Avatar] Emote menu refresh failed");
+            }
+        }
+
+        private async void MenuItemEmote_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem mi || mi.Tag is not Models.EmotePreset preset) return;
+            if (string.IsNullOrWhiteSpace(preset.Text)) return; // label-less slot — silent no-op
+            // Route through MainWindow.SendEmoteAndReportAsync so this surface picks up
+            // the centralized avatar speech-bubble feedback (step 3.6). Null status target
+            // means inline status text is skipped — appropriate for a context menu that
+            // closes on click. Rate-limit / session-ended errors remain silent here.
+            if (_parentWindow is MainWindow mw)
+            {
+                await mw.SendEmoteAndReportAsync(preset.Text, preset.Icon ?? "", "preset", null);
+            }
+            else if (App.RemoteControl != null)
+            {
+                // Fallback: parent isn't MainWindow (shouldn't happen, but be defensive).
+                await App.RemoteControl.SendEmoteAsync(preset.Text, preset.Icon ?? "", "preset");
+            }
+        }
+
+        /// <summary>
+        /// Shows a speech bubble for emote feedback. isPending=true renders "Sending...";
+        /// isPending=false renders Sent: "<text>" (text truncated to 40 chars).
+        ///
+        /// Behavior:
+        ///   - Skips silently if the avatar is currently waiting on / showing an AI bubble
+        ///     (don't fight the conversational surface).
+        ///   - Otherwise interrupts any in-flight preset speech and shows immediately.
+        ///   - Does NOT add to chat history (this is transient remote-emote feedback,
+        ///     not a conversational turn).
+        ///   - Plays no audio (preset source but suppressed sound).
+        ///   - Uses Dispatcher under the hood — safe from any thread but expected to be
+        ///     called from the UI thread (SendEmoteAndReportAsync runs on UI thread).
+        /// </summary>
+        public void ShowEmoteFeedback(string text, bool isPending)
+        {
+            try
+            {
+                DispatcherHelper.RunOnUI(() =>
+                {
+                    // Don't fight the AI bubble or interrupt a pending AI response.
+                    if (_isWaitingForAi || _isShowingAiBubble) return;
+
+                    var safe = (text ?? "").Trim();
+                    if (safe.Length > 40) safe = safe.Substring(0, 40) + "...";
+                    var content = isPending ? "Sending..." : $"Sent: \"{safe}\"";
+
+                    // Clear any in-flight preset speech so the bubble updates instantly.
+                    _speechTimer?.Stop();
+                    _speechDelayTimer?.Stop();
+                    _speechQueue.Clear();
+                    _isGiggling = false;
+
+                    ShowGiggle(content, playSound: false, source: SpeechSource.Preset);
+
+                    // Bump the bubble lifetime by 1 second. The default
+                    // (App.Settings.BubbleDurationSeconds, ~2s) is tuned for
+                    // ambient preset speech but feels too fast for transient
+                    // "Sending..." / "Sent: ..." emote feedback. ShowGiggle
+                    // has just called _speechTimer.Start() with no elapsed
+                    // time, so setting Interval to (current + 1s) cleanly
+                    // extends the lifetime by exactly 1 second.
+                    if (_speechTimer != null)
+                    {
+                        _speechTimer.Interval = _speechTimer.Interval + TimeSpan.FromSeconds(1);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[Avatar] ShowEmoteFeedback failed");
+            }
         }
 
         private void MenuItemDetach_Click(object sender, RoutedEventArgs e)
@@ -5801,7 +5921,7 @@ namespace ConditioningControlPanel
         public void UpdateQuickMenuState()
         {
             // Talk to companion - mode-aware label
-            var talkToLabel = App.Mods?.GetTalkToLabel() ?? Loc.Get("menu_talk_to_bambi");
+            var talkToLabel = App.Mods?.GetTalkToLabel() ?? Loc.Get("menu_talk_to_companion");
             var chatAvailable = App.Ai?.IsAvailable == true;
             MenuItemTalkToBambi.IsEnabled = chatAvailable;
             if (chatAvailable)
@@ -5828,7 +5948,7 @@ namespace ConditioningControlPanel
             // Takeover (Patreon only) - mode-aware name
             var takeoverAvailable = App.Patreon?.HasPremiumAccess == true;
             var takeoverOn = App.Settings?.Current?.AutonomyModeEnabled == true;
-            var takeoverName = App.Mods?.GetTakeoverLabel() ?? Loc.Get("menu_bambi_takeover");
+            var takeoverName = App.Mods?.GetTakeoverLabel() ?? Loc.Get("menu_takeover");
             MenuItemBambiTakeover.Header = takeoverOn ? Loc.GetF("menu_takeover_on_format", takeoverName) : Loc.GetF("menu_takeover_off_format", takeoverName);
             MenuItemBambiTakeover.Foreground = takeoverOn ? new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")) : new SolidColorBrush(Colors.White);
             MenuItemBambiTakeover.IsEnabled = takeoverAvailable;

@@ -20,7 +20,7 @@ namespace ConditioningControlPanel.Services
         // These exact names match AvatarTubeWindow.KnownVideoLinks for clickable links
         private static string GetCoreMediaLinks()
         {
-            var isBambiMode = App.Mods?.IsBaseMod ?? true;
+            var isBambiMode = App.Mods?.IsBambiMode ?? false;
 
             if (isBambiMode)
             {
@@ -345,8 +345,8 @@ CRITICAL: Do NOT mention any specific video names. Only give generic ""go browse
             var boringDomains = "vscode, visual studio, github, stackoverflow, outlook, teams, slack, word, excel, gmail, protonmail";
 
             // Get mod-aware user term
-            var userTerm = App.Mods?.GetUserTerm() ?? "Bambi";
-            var isBambiMode = App.Mods?.IsBaseMod ?? true;
+            var userTerm = App.Mods?.GetUserTerm() ?? "Subject";
+            var isBambiMode = App.Mods?.IsBambiMode ?? false;
 
             // Example responses - use Bambi video titles (they're actual video names) but mode-aware user references
             var example1 = isBambiMode
@@ -591,8 +591,8 @@ Example responses with REAL video names:
         /// </summary>
         private string MakePromptModeAware(string prompt)
         {
-            if (App.Mods?.IsBaseMod != false)
-                return prompt; // No changes needed in base (Bambi) mod
+            if (App.Mods?.IsBambiMode == true)
+                return prompt; // Bambi prompts are written for Bambi terms; no transform needed
 
             var userTerm = App.Mods?.GetUserTerm() ?? "babe";
 
@@ -629,9 +629,9 @@ Example responses with REAL video names:
         private string GetDefaultBambiSpritePrompt()
         {
             // Get mod-aware terms
-            var companionName = App.Mods?.GetCompanionName() ?? "BambiSprite";
-            var userTerm = App.Mods?.GetUserTerm() ?? "Bambi";
-            var isBambiMode = App.Mods?.IsBaseMod ?? true;
+            var companionName = App.Mods?.GetCompanionName() ?? "Companion";
+            var userTerm = App.Mods?.GetUserTerm() ?? "Subject";
+            var isBambiMode = App.Mods?.IsBambiMode ?? false;
             var hasUserSHLinks = !string.IsNullOrWhiteSpace(App.Settings?.Current?.HypnotubeLinksSissyHypno);
 
             var sb = new StringBuilder();

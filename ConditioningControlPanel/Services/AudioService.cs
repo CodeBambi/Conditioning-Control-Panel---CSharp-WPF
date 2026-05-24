@@ -150,6 +150,14 @@ namespace ConditioningControlPanel.Services
         /// LibVLC's mmdevice aout backend accepts the same MMDevice ID strings we use here.
         /// Safe to call before or after media is set; LibVLC re-applies on next playback.
         /// </summary>
+        /// <remarks>
+        /// Validates the stored device against the player's enumerated outputs before
+        /// applying. LibVLC's SetOutputDevice silently routes audio to nowhere when the
+        /// ID no longer matches a present endpoint (USB headset unplugged, default
+        /// changed, driver reinstall), so silently calling it on a stale ID produces
+        /// mute video playback while everything else (NAudio paths) auto-fall-back to
+        /// the default device — symptom matching #270/#251/#244/#243 cluster.
+        /// </remarks>
         public void ApplyPreferredDevice(LibVLCSharp.Shared.MediaPlayer player)
         {
             if (player == null) return;
@@ -157,6 +165,37 @@ namespace ConditioningControlPanel.Services
             {
                 var deviceId = App.Settings?.Current?.AudioOutputDeviceId;
                 if (string.IsNullOrEmpty(deviceId)) return;
+
+                bool deviceFound = false;
+                try
+                {
+                    var available = player.AudioOutputDeviceEnum;
+                    if (available != null)
+                    {
+                        foreach (var d in available)
+                        {
+                            if (string.Equals(d.DeviceIdentifier, deviceId, StringComparison.Ordinal))
+                            {
+                                deviceFound = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (Exception enumEx)
+                {
+                    // If enumeration itself fails we can't validate — fall through and
+                    // apply blindly rather than blocking audio entirely.
+                    App.Logger?.Debug("ApplyPreferredDevice(MediaPlayer): enumeration failed: {Error}", enumEx.Message);
+                    deviceFound = true;
+                }
+
+                if (!deviceFound)
+                {
+                    App.Logger?.Warning("ApplyPreferredDevice(MediaPlayer): saved device {Id} not present in LibVLC outputs — using system default. Reselect in Settings → Audio if you want this routed elsewhere.", deviceId);
+                    return;
+                }
+
                 player.SetOutputDevice(deviceId);
             }
             catch (Exception ex)
