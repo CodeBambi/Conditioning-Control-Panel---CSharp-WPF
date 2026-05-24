@@ -458,6 +458,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 }
                 else
                 {
+                    MaybePromptForWebcamBeforePlay();
                     _videoSource.Play();
                     BtnPlayPause.Content = "⏸";
                 }
@@ -471,11 +472,13 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             else if (_player.IsPaused)
             {
+                MaybePromptForWebcamBeforePlay();
                 _player.Resume();
                 BtnPlayPause.Content = "⏸";
             }
             else if (!string.IsNullOrEmpty(_player.CurrentPath))
             {
+                MaybePromptForWebcamBeforePlay();
                 _player.Play(_player.CurrentPath);
                 BtnPlayPause.Content = "⏸";
                 BindEngineIfReady();
@@ -484,6 +487,7 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 // Resume after Stop: the underlying player cleared its handle,
                 // but we kept the path so the user can hit Play to start over.
+                MaybePromptForWebcamBeforePlay();
                 LoadAudio(_lastAudioPath);
             }
             else
@@ -495,6 +499,81 @@ namespace ConditioningControlPanel.Views.Deeper
                 // the wrong button.
                 TxtStatus.Text = Loc.Get("deeper_player_status_pick_first");
             }
+        }
+
+        // Suppression flag — true once we've asked about webcam for the
+        // currently-loaded enhancement, so we don't badger the user every
+        // play/pause/resume. Reset in UpdateHostUi when a new enhancement
+        // becomes the loaded one.
+        private bool _webcamPromptShownForCurrentEnh;
+
+        // Offer to start webcam tracking if the loaded enhancement has
+        // webcam-driven rules and the webcam isn't already running. No
+        // return value — the user's choice doesn't block playback, it just
+        // decides whether the webcam-gated rules will actually fire.
+        private void MaybePromptForWebcamBeforePlay()
+        {
+            if (_webcamPromptShownForCurrentEnh) return;
+            var enh = _host?.LoadedEnhancement;
+            if (enh == null) return;
+            if (!EnhancementNeedsWebcam(enh)) return;
+            var svc = App.Webcam;
+            if (svc == null || svc.IsRunning)
+            {
+                _webcamPromptShownForCurrentEnh = true;
+                return;
+            }
+
+            // Mark BEFORE the dialog so a re-entrant Play click during the
+            // modal doesn't re-trigger the prompt.
+            _webcamPromptShownForCurrentEnh = true;
+
+            var result = MessageBox.Show(this,
+                Loc.Get("deeper_player_webcam_prompt_body"),
+                Loc.Get("deeper_player_webcam_prompt_title"),
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result != MessageBoxResult.Yes) return;
+
+            try
+            {
+                if (!WebcamTrackingService.IsConsentCurrent())
+                {
+                    // Mirror the BtnEyeTracking_Click first-time path —
+                    // consent lives in the Lab tab, not here.
+                    MessageBox.Show(this,
+                        Loc.Get("deeper_player_eye_tracking_first_time"),
+                        Loc.Get("deeper_player_btn_eye_tracking_start"),
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                svc.Start();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementPlayer: webcam start from play-prompt failed");
+            }
+        }
+
+        // Webcam dependency check: AutoTags is the primary signal (saved by the
+        // EnhancementAutoTagger at file-write time). Falls back to scanning the
+        // rules' Trigger.Type so enhancements written by pre-AutoTags builds
+        // still trigger the prompt.
+        private static bool EnhancementNeedsWebcam(Models.Deeper.Enhancement enh)
+        {
+            if (enh == null) return false;
+            // AutoTags lives on Metadata, not the Enhancement root.
+            if (enh.Metadata?.AutoTags?.Contains(EnhancementAutoTagger.TagWebcam) == true) return true;
+            if (enh.Rules == null) return false;
+            foreach (var rule in enh.Rules)
+            {
+                var t = rule?.Trigger?.Type;
+                if (t == Models.Deeper.TriggerTypes.GazeTarget
+                 || t == Models.Deeper.TriggerTypes.GazeAvoid
+                 || t == Models.Deeper.TriggerTypes.AttentionLost
+                 || t == Models.Deeper.TriggerTypes.BlinkDetected
+                 || t == Models.Deeper.TriggerTypes.MouthOpen) return true;
+            }
+            return false;
         }
 
         private void BtnStop_Click(object sender, RoutedEventArgs e)
@@ -823,6 +902,9 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void UpdateHostUi(Models.Deeper.Enhancement? enh, string? path)
         {
+            // New enhancement loaded → re-arm the webcam pre-play prompt.
+            _webcamPromptShownForCurrentEnh = false;
+
             if (enh == null)
             {
                 TxtEnhPath.Text = Loc.Get("deeper_player_no_enh");

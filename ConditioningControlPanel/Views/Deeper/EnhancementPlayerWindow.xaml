@@ -10,6 +10,12 @@
         Closing="Window_Closing">
 
     <Window.Resources>
+        <!-- Polish pass: implicit rounded-button style so every Button in the
+             player picks up CornerRadius + hover/press feedback without per-
+             button edits. Inline Background/Foreground/BorderBrush setters
+             keep working (template uses TemplateBinding). -->
+        <Style TargetType="Button" BasedOn="{StaticResource DeeperRoundButton}"/>
+
         <Style x:Key="HeaderText" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource DeeperAccentBrush}"/>
             <Setter Property="FontSize" Value="14"/>
@@ -208,7 +214,7 @@
                     Content="{loc:Str deeper_player_btn_eye_tracking_start}"
                     Click="BtnEyeTracking_Click"
                     ToolTip="{loc:Str deeper_player_tt_eye_tracking}"
-                    Padding="10,4" Margin="0,0,8,0" Cursor="Hand" FontSize="12"
+                    Padding="12,0" Height="32" Margin="0,0,8,0" Cursor="Hand" FontSize="12"
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                     Foreground="{DynamicResource DeeperAccentBrush}"
                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
@@ -216,7 +222,7 @@
                     Content="{loc:Str deeper_player_btn_pip}"
                     Click="BtnPictureInPicture_Click"
                     ToolTip="{loc:Str deeper_player_tt_pip}"
-                    Padding="10,4" Margin="0,0,8,0" Cursor="Hand" FontSize="12"
+                    Padding="12,0" Height="32" Margin="0,0,8,0" Cursor="Hand" FontSize="12"
                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                     Foreground="{DynamicResource DeeperAccentBrush}"
                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"

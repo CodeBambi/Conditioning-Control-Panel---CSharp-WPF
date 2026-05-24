@@ -117,6 +117,8 @@
   "deeper_player_btn_eye_tracking_stop": "👁 Stop Eye Tracking",
   "deeper_player_tt_eye_tracking": "Turn the webcam tracker on/off so blink, gaze, and face-lost rules can fire during playback.",
   "deeper_player_btn_pip": "⧉ Pop out",
+  "deeper_player_webcam_prompt_title": "This enhancement uses webcam features",
+  "deeper_player_webcam_prompt_body": "This enhancement has gaze / blink / attention triggers. They only fire when the webcam is active.\n\nStart webcam tracking now?\n\nYes — turn on the camera, then play.\nNo — play anyway; webcam-gated rules won't fire.",
   "deeper_player_tt_pip": "Pop the video into a Picture-in-Picture window so it stays on top while you do other things. Click again to put it back.",
   "deeper_zoom_in_tt": "Zoom in 10% (browser page zoom).",
   "deeper_zoom_out_tt": "Zoom out 10% (browser page zoom).",
