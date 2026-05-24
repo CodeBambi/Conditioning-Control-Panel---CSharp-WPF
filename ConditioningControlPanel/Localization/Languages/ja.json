@@ -2206,8 +2206,6 @@
   "deeper_tutorial_local_audio_tooltip": "Interactive walkthrough for editing a local audio file. (Coming soon — for now use Browse.)",
   "deeper_tutorial_ht_btn": "🎬  HypnoTube/TikTok",
   "deeper_tutorial_ht_tooltip": "Interactive on-rails walkthrough — produces a finished .ccpenh.json from a sample HypnoTube TikTok URL. ~3 min.",
-  "deeper_tutorial_coming_soon_local_video": "The interactive Local Video tutorial isn't built yet. For now, click Browse and pick a video file. The HypnoTube tutorial is fully working if you'd like to try the system end-to-end.",
-  "deeper_tutorial_coming_soon_local_audio": "The interactive Local Audio tutorial isn't built yet. For now, click Browse and pick an audio file. The HypnoTube tutorial is fully working if you'd like to try the system end-to-end.",
   "deeper_itut_ht_step1_title": "Sample HypnoTube TikTok ready",
   "deeper_itut_ht_step1_body": "Video is selected and a working URL is pasted into Source. Click Create to open the editor.",
   "deeper_itut_ht_step2_title": "HypnoTube auto-filled your metadata",
