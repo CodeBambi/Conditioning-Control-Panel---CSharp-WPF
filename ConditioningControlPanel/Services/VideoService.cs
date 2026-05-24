@@ -969,15 +969,10 @@ namespace ConditioningControlPanel.Services
 
             win.Content = videoView;
 
-            // Local panic key handler for immediate response (CloseAll's _isCleaningUp guard prevents re-entrancy)
-            win.KeyDown += (s, e) =>
-            {
-                if (App.Settings.Current.PanicKeyEnabled &&
-                    e.Key.ToString() == App.Settings.Current.PanicKey)
-                {
-                    ForceCleanup();
-                }
-            };
+            // URL playback (PlayUrl) is never strict — just routes through the
+            // shared non-strict handler so ESC dismiss + PanicKey both behave
+            // identically to the file-based mandatory video windows.
+            SetupStrictHandlers(win, strict: false);
 
             win.Show();
             if (withAudio) win.Activate();
@@ -1643,12 +1638,26 @@ namespace ConditioningControlPanel.Services
             }
             else
             {
-                // Local panic key handler for immediate response (CloseAll's _isCleaningUp guard prevents re-entrancy)
-                win.KeyDown += (s, e) =>
+                // PreviewKeyDown (not KeyDown) so the LibVLC VideoView / MediaElement
+                // child surface can't swallow ESC before the window-level handler
+                // sees it. Two independent hotkeys:
+                //   - ESC: hardcoded, non-rebindable "dismiss current video" — calls
+                //     Cleanup() so the session keeps running and ScheduleNext() fires.
+                //   - PanicKey: user-rebindable, calls ForceCleanup() which ends the
+                //     run without scheduling a replacement.
+                // The two roles never overlap because they call different cleanup paths.
+                win.PreviewKeyDown += (s, e) =>
                 {
+                    if (e.Key == Key.Escape)
+                    {
+                        e.Handled = true;
+                        Cleanup();
+                        return;
+                    }
                     if (App.Settings.Current.PanicKeyEnabled &&
                         e.Key.ToString() == App.Settings.Current.PanicKey)
                     {
+                        e.Handled = true;
                         ForceCleanup();
                     }
                 };
