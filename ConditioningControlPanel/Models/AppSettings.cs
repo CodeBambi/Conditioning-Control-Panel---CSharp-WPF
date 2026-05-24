@@ -962,6 +962,28 @@ namespace ConditioningControlPanel.Models
             set => ContentModeChosen = value;
         }
 
+        // Schema version stamped on every save by this v6.0 binary (see OnSerializingBumpSchemaVersion).
+        // Default 0 covers every pre-v6 JSON and any v6 JSON written before this field existed.
+        // MigrateFromContentModeToMod uses this as its primary gate so v6-saved settings don't
+        // re-trigger the ContentMode→mod-ID mapping (which previously forced deliberate CCP Default
+        // selections back to Bambi on second launch because ContentModeChosen=true looked like a
+        // v5.x modal acceptance).
+        private int _settingsSchemaVersion = 0;
+        [JsonProperty("SettingsSchemaVersion")]
+        public int SettingsSchemaVersion
+        {
+            get => _settingsSchemaVersion;
+            set { _settingsSchemaVersion = value; OnPropertyChanged(); }
+        }
+
+        [OnSerializing]
+        internal void OnSerializingBumpSchemaVersion(StreamingContext _)
+        {
+            // Any save written by this binary is a v6 save. Lock the migration gate so
+            // subsequent launches skip the ContentMode→mod-ID mapping unconditionally.
+            if (_settingsSchemaVersion < 6) _settingsSchemaVersion = 6;
+        }
+
         /// <summary>
         /// [LEGACY] Per-mode pool backups. Kept for migration to *ByMod dictionaries.
         /// </summary>
@@ -993,8 +1015,19 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         internal void MigrateFromContentModeToMod()
         {
-            // Skip if ActiveModId already deserialized to anything other than the new neutral default
-            if (_activeModId != BuiltInMods.CCPDefaultId) return;
+            // Primary gate: a v6-saved JSON is already past this migration. Without this guard,
+            // a v6 user who deliberately picks CCP Default via the dropdown gets bumped to Bambi
+            // on next launch because ContentModeChosen=true (set by ApplyActiveModChange on every
+            // pick, including CCP Default) looks identical to "v5.x user who accepted the modal".
+            if (_settingsSchemaVersion >= 6) return;
+
+            // Secondary gate: if ActiveModId already deserialized to anything non-default, the user
+            // has an explicit choice persisted and we shouldn't touch it.
+            if (_activeModId != BuiltInMods.CCPDefaultId)
+            {
+                _settingsSchemaVersion = 6;
+                return;
+            }
 
             // Pre-v6 upgrade path: legacy users had ContentMode persisted but no ActiveModId yet.
             // Map their old enum choice (Bambi was the implicit default) onto a real mod ID.
@@ -1009,6 +1042,10 @@ namespace ConditioningControlPanel.Models
                 _activeModId = BuiltInMods.BambiSleepId;
             }
             // else: fresh-install-like state → leave on CCPDefaultId
+
+            // Lock the gate so this migration never re-fires for this user, even if a future
+            // code path resets ActiveModId back to CCPDefaultId (e.g. CCP Default deliberate pick).
+            _settingsSchemaVersion = 6;
 
             // Migrate *ByMode dictionaries to *ByMod
             if (SubliminalPoolByMode != null && SubliminalPoolByMod == null)
