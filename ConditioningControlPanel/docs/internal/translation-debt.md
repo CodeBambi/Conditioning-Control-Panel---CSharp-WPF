@@ -77,6 +77,40 @@ in non-en builds until a translator updates them.
 
 ---
 
+## Mission 3 (player redesign + theming cleanup)
+
+### New keys — fall back to en until translated (32 keys):
+
+#### Player UI strings (12):
+- `deeper_player_pill_empty` — "Empty"
+- `deeper_player_pill_loaded` — "Loaded"
+- `deeper_player_pill_live` — "Live"
+- `deeper_player_open_in_editor` — "Open in editor"
+- `deeper_player_change` — "Change"
+- `deeper_player_meta_counts_fmt` — "{0} regions · {1} rules · {2} haptics"
+- `deeper_player_source_missing` — "(missing)"
+- `deeper_player_minitimeline_label` — "Timeline"
+- `deeper_player_pill_all` / `_actions` / `_engine` / `_errors`
+- `deeper_player_event_open_in_editor` — "Open ↗"
+
+#### Tooltips (20):
+- `deeper_player_tip_open_in_editor`, `_change`, `_pick_media`,
+  `_pick_enh`, `_load_url`, `_create_new`, `_unload`, `_play_pause`,
+  `_stop`, `_volume`, `_minitimeline`, `_pill_all`, `_pill_actions`,
+  `_pill_engine`, `_pill_errors`, `_clear`, `_collapse`, `_event_open`.
+
+### Dead keys removed from all 9 locale files:
+- `deeper_tutorial_coming_soon_local_video`
+- `deeper_tutorial_coming_soon_local_audio`
+
+  These predated the Local Audio / Local Video Part 1 + Part 2 interactive
+  walkthroughs and were no longer referenced anywhere in code (confirmed in
+  deeper-tutorials-recon.md section 8). Removed mechanically (sed) from all
+  9 locale files in one pass — translators shouldn't see stale "coming soon"
+  copy lying around.
+
+---
+
 ## How to clear an entry
 
 When a translator picks one up:
