@@ -380,7 +380,13 @@ namespace ConditioningControlPanel
             var entry = EntryFromDataContext(sender);
             if (entry == null) return;
             e.Handled = true;
-            OpenInDeeperPlayer(entry.FilePath);
+            // Bug fix: OpenInDeeperPlayer takes a MEDIA path (mp4/mp3/etc.).
+            // entry.FilePath is the .ccpenh.json path — passing it to
+            // OpenInDeeperPlayer made the player try to play the JSON as
+            // audio and fail with "Couldn't open that audio file."
+            // OpenDeeperEnhancementInPlayer routes the JSON through the host,
+            // which knows how to load the bound media (URL or local file).
+            OpenDeeperEnhancementInPlayer(entry.FilePath);
         }
 
         private void DeeperRowDelete_Click(object sender, RoutedEventArgs e)

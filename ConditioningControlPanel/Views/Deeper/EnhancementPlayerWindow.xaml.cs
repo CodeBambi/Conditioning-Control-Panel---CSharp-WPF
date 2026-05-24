@@ -111,6 +111,27 @@ namespace ConditioningControlPanel.Views.Deeper
         }
 
         /// <summary>
+        /// Public entry for launching the player on an enhancement .ccpenh.json
+        /// file (e.g. the hub library row's ▶ button). The host fires Loaded
+        /// → OnHostLoaded → UpdateHostUi which then routes through the right
+        /// media loader (LoadVideoUrlAsync for remote URLs, LoadLocalVideoAsync
+        /// for local video files, BindEngineIfReady for audio) based on the
+        /// enhancement's MediaType + MediaSource. Defers via Loaded if the
+        /// window hasn't fully initialized.
+        /// </summary>
+        public void LoadEnhancementFile(string ccpenhJsonPath)
+        {
+            if (string.IsNullOrWhiteSpace(ccpenhJsonPath)) return;
+            void Load()
+            {
+                _lastDiscoverySource = DiscoverySource.Library;
+                _host.LoadFromFile(ccpenhJsonPath);
+            }
+            if (IsLoaded) Load();
+            else Loaded += (_, _) => Load();
+        }
+
+        /// <summary>
         /// Public entry for external launchers (Windows file association,
         /// MainWindow drag-drop dispatch). Mirrors BtnPickAudio_Click's
         /// dispatch logic but takes a path directly. Defers via Loaded if the

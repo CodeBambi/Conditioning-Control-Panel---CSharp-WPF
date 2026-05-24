@@ -2553,6 +2553,28 @@ namespace ConditioningControlPanel
             }
         }
 
+        // Opens the Player and loads a Deeper enhancement JSON. The host fires
+        // its Loaded event which routes to OnHostLoaded → UpdateHostUi → the
+        // correct media loader (remote URL / local video / audio) based on the
+        // enhancement's MediaType + MediaSource. Used by the hub row's ▶
+        // button — distinct from OpenInDeeperPlayer (which takes a media path).
+        public void OpenDeeperEnhancementInPlayer(string ccpenhJsonPath)
+        {
+            try
+            {
+                var win = new Views.Deeper.EnhancementPlayerWindow(App.DeeperPlayer, App.DeeperHost) { Owner = this };
+                win.Show();
+                win.LoadEnhancementFile(ccpenhJsonPath);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to open Deeper player for enhancement {Path}", ccpenhJsonPath);
+                MessageBox.Show(this,
+                    $"Couldn't open Deeper Player:\n\n{ex.GetType().Name}: {ex.Message}",
+                    "Open Player failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         public void OpenInDeeperEditorForMedia(string mediaPath)
         {
             try
