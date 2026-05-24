@@ -376,11 +376,14 @@
             </Grid>
         </Border>
 
-        <!-- Main 2-column body -->
+        <!-- Main 2-column body with a draggable splitter. Sidebar width
+             persists across editor sessions via AppSettings.DeeperEditorSidebarWidth
+             (clamped 320..520 by the column's Min/MaxWidth). -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="320"/>
+                <ColumnDefinition Width="4"/>
+                <ColumnDefinition x:Name="SidebarColumn" Width="380" MinWidth="320" MaxWidth="520"/>
             </Grid.ColumnDefinitions>
 
             <!-- Left: preview + timeline -->
@@ -550,17 +553,64 @@
                 </Border>
             </Grid>
 
-            <!-- Right: side panel -->
-            <Border Grid.Column="1" Background="{DynamicResource PanelBgBrush}"
-                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1,0,0,0">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,12">
-                    <StackPanel>
-                        <!-- Metadata -->
-                        <TextBlock Text="{loc:Str deeper_editor_section_metadata}"
-                                   Foreground="{DynamicResource DeeperAccentBrush}"
-                                   FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
+            <!-- GridSplitter — drag to resize the sidebar between 320 and 520 px.
+                 DragCompleted persists DeeperEditorSidebarWidth across sessions. -->
+            <GridSplitter x:Name="SidebarSplitter" Grid.Column="1"
+                          Width="4" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          Background="{DynamicResource DeeperLaneSeparatorBrush}"
+                          ShowsPreview="False" ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"
+                          DragCompleted="SidebarSplitter_DragCompleted"
+                          Cursor="SizeWE"
+                          ToolTip="{loc:Str deeper_editor_tt_sidebar_splitter}"/>
 
-                        <TextBlock Text="{loc:Str deeper_editor_label_name}" Style="{StaticResource EditorLabel}"/>
+            <!-- Right: 3-zone side panel (Mission 1 editor restructure).
+                 Zone 1: metadata drawer (default Collapsed; auto-expanded by
+                 tutorial steps via PrepareTargetWindowAction).
+                 Zone 2: selection summary strip — always visible.
+                 Zone 3: inspector — fills remaining space, internally scrollable. -->
+            <Border Grid.Column="2" Background="{DynamicResource PanelBgBrush}"
+                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="0,0,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Zone 1: Metadata drawer -->
+                    <StackPanel Grid.Row="0">
+                        <ToggleButton x:Name="MetadataDrawerToggle" Height="32"
+                                      Cursor="Hand" HorizontalContentAlignment="Stretch"
+                                      Padding="12,0"
+                                      Background="{DynamicResource DeeperDrawerStripBrush}"
+                                      BorderBrush="{DynamicResource DeeperLaneSeparatorBrush}"
+                                      BorderThickness="0,0,0,1"
+                                      Foreground="{DynamicResource TextLightBrush}"
+                                      ToolTip="{loc:Str deeper_editor_tt_metadata_drawer}"
+                                      Checked="MetadataDrawerToggle_Changed"
+                                      Unchecked="MetadataDrawerToggle_Changed">
+                            <DockPanel LastChildFill="True">
+                                <TextBlock x:Name="MetadataDrawerChevron" DockPanel.Dock="Left"
+                                           Text="▶" FontSize="10"
+                                           Foreground="{DynamicResource DeeperAccentBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock x:Name="TxtMetadataDrawerSubtitle" DockPanel.Dock="Right"
+                                           Foreground="{DynamicResource TextDimBrush}"
+                                           FontSize="11" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="220"/>
+                                <TextBlock Text="{loc:Str deeper_editor_section_metadata}"
+                                           Foreground="{DynamicResource DeeperAccentBrush}"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            </DockPanel>
+                        </ToggleButton>
+                        <Border x:Name="MetadataDrawerContent" Visibility="Collapsed"
+                                Background="{DynamicResource PanelBgBrush}"
+                                BorderBrush="{DynamicResource DeeperLaneSeparatorBrush}"
+                                BorderThickness="0,0,0,1">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="380" Padding="14,12">
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Str deeper_editor_label_name}" Style="{StaticResource EditorLabel}"/>
                         <TextBox x:Name="TxtMetaName" Style="{StaticResource EditorTextBox}"
                                  ToolTip="{loc:Str deeper_editor_tt_meta_name}"
                                  TextChanged="MetadataField_TextChanged"/>
@@ -601,64 +651,33 @@
                         <TextBox x:Name="TxtMetaLicense" Style="{StaticResource EditorTextBox}"
                                  ToolTip="{loc:Str deeper_editor_tt_meta_license}"
                                  TextChanged="MetadataField_TextChanged"/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+                    </StackPanel>
 
-                        <Separator Margin="0,10,0,14"/>
+                    <!-- Zone 2: Selection summary strip — always visible (~44px).
+                         Populated by UpdateSelectionSummary() from selection setters. -->
+                    <Border Grid.Row="1" Height="44"
+                            Background="{DynamicResource DeeperSelectionStripBrush}"
+                            BorderBrush="{DynamicResource DeeperLaneSeparatorBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="14,0">
+                        <TextBlock x:Name="TxtSelectionSummary"
+                                   Text="{loc:Str deeper_editor_selection_none}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="12" FontStyle="Italic"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </Border>
 
-                        <!-- Items overview: collapsible list of every rule + effect on this
-                             enhancement, with a row-level bin button. Lets the user delete
-                             things without first hunting them down on the timeline.
-                             ScrollViewer caps height at ~6 rows; rows beyond scroll.
-                             Themed with DeeperAccent dynamic resources so Deeper-themed
-                             mods recolor it alongside the rest of the editor. -->
-                        <StackPanel x:Name="ItemsListSection" Margin="0,0,0,12">
-                            <ToggleButton x:Name="ItemsListToggle" IsChecked="True"
-                                          Cursor="Hand" HorizontalContentAlignment="Stretch"
-                                          Padding="10,6"
-                                          Background="{DynamicResource DeeperAccentTransparent20Brush}"
-                                          BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
-                                          BorderThickness="1"
-                                          Foreground="{DynamicResource TextLightBrush}"
-                                          Checked="ItemsListToggle_Changed"
-                                          Unchecked="ItemsListToggle_Changed">
-                                <DockPanel LastChildFill="True">
-                                    <TextBlock x:Name="ItemsListChevron" DockPanel.Dock="Left"
-                                               Text="▼" FontSize="11"
-                                               Foreground="{DynamicResource DeeperAccentBrush}"
-                                               VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock x:Name="TxtItemsListCount" DockPanel.Dock="Right"
-                                               Foreground="{DynamicResource TextDimBrush}"
-                                               FontSize="11" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{loc:Str deeper_editor_section_items_list}"
-                                               Foreground="{DynamicResource DeeperAccentBrush}"
-                                               FontSize="12" FontWeight="Bold"
-                                               VerticalAlignment="Center"/>
-                                </DockPanel>
-                            </ToggleButton>
-                            <Border x:Name="ItemsListContent"
-                                    Background="{DynamicResource PanelBgBrush}"
-                                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
-                                    BorderThickness="1,0,1,1">
-                                <Grid>
-                                    <TextBlock x:Name="TxtItemsListEmpty"
-                                               Text="{loc:Str deeper_editor_items_list_empty}"
-                                               Foreground="{DynamicResource TextMutedBrush}"
-                                               FontSize="11" FontStyle="Italic"
-                                               TextWrapping="Wrap" Padding="10,8"
-                                               Visibility="Collapsed"/>
-                                    <ScrollViewer x:Name="ItemsListScroll"
-                                                  MaxHeight="240"
-                                                  VerticalScrollBarVisibility="Auto"
-                                                  HorizontalScrollBarVisibility="Disabled">
-                                        <ItemsControl x:Name="LstAllItems"/>
-                                    </ScrollViewer>
-                                </Grid>
-                            </Border>
-                        </StackPanel>
-
-                        <TextBlock Text="{loc:Str deeper_editor_section_selected}"
-                                   Foreground="{DynamicResource DeeperAccentBrush}"
-                                   FontSize="13" FontWeight="Bold" Margin="0,0,0,10"/>
-
+                    <!-- Zone 3: Inspector — internally scrollable. All per-selection
+                         editors live here as visibility-toggled siblings; see Mission 1
+                         report for the DataTemplate-vs-visibility-toggle deviation. -->
+                    <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}">
+                        <ScrollViewer x:Name="InspectorScroll"
+                                      VerticalScrollBarVisibility="Auto" Padding="14,12">
+                            <StackPanel>
                         <TextBlock x:Name="SelectedPlaceholder"
                                    Text="{loc:Str deeper_editor_section_selected_empty}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11" FontStyle="Italic"
@@ -1003,8 +1022,10 @@
                                     BorderThickness="0" Padding="10,6" Cursor="Hand"
                                     HorizontalAlignment="Left" Margin="0,4,0,0"/>
                         </StackPanel>
-                    </StackPanel>
-                </ScrollViewer>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
             </Border>
         </Grid>
 

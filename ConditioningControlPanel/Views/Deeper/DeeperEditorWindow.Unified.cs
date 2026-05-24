@@ -519,11 +519,12 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedHapticTrack = null;
             _selectedRule = null;
             UpdateSelectedSidePanelForEffect();
+            ScrollInspectorToTop();
             RebuildEffectVisuals();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildRuleVisuals();
-            RefreshItemsList();
+            UpdateSelectionSummary();
         }
 
         private void UpdateSelectedSidePanelForEffect()

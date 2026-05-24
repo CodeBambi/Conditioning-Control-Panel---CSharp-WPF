@@ -191,6 +191,10 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void DeeperEditorWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            // Restore the user's last sidebar width before InitializePreviewAsync
+            // kicks off — fast and side-effect-free.
+            ApplyPersistedSidebarWidth();
+
             _ = InitializePreviewAsync();
 
             // Legacy bus event kept for any other listeners; tutorial Part 2
@@ -335,10 +339,7 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildHapticVisuals();
             RebuildEffectVisuals();
             RebuildRuleVisuals();
-            RefreshRulesList();
-            // Initial-load population — MarkDirty is suppressed during load so
-            // its piggy-backed RefreshItemsList won't fire; do it explicitly here.
-            RefreshItemsList();
+            UpdateSelectionSummary();
 
             // Fire HT metadata auto-fill in the background. Hostname-gated inside
             // the fetcher; non-HT URLs are silent no-ops.
@@ -1553,6 +1554,7 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectionSet.Clear();
             EndGazePick(commit: false);
             UpdateSelectedSidePanel();
+            ScrollInspectorToTop();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
@@ -1568,6 +1570,7 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedEffect = null;
             EndGazePick(commit: false);
             UpdateSelectedSidePanel();
+            ScrollInspectorToTop();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
@@ -1598,6 +1601,7 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedEffect = null;
             EndGazePick(commit: false);
             UpdateSelectedSidePanel();
+            ScrollInspectorToTop();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
@@ -1614,6 +1618,7 @@ namespace ConditioningControlPanel.Views.Deeper
             _selectedEffect = null;
             EndGazePick(commit: false);
             UpdateSelectedSidePanel();
+            ScrollInspectorToTop();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
@@ -1679,6 +1684,10 @@ namespace ConditioningControlPanel.Views.Deeper
             RegionEditor.Visibility = Visibility.Collapsed;
             HapticEventEditor.Visibility = Visibility.Collapsed;
             RuleEditor.Visibility = Visibility.Collapsed;
+
+            // Keep the selection summary strip in sync even when UpdateSelectedSidePanel
+            // is called outside the SelectXxx path (e.g. drag-end). Cheap; safe to repeat.
+            UpdateSelectionSummary();
         }
 
         private void UpdateRegionColorSwatchPreview()
@@ -2312,10 +2321,11 @@ namespace ConditioningControlPanel.Views.Deeper
             // The standalone Rules section was removed in the unified-timeline
             // redesign — rules are now created via right-click on the timeline
             // and edited via the Selected Item panel when a band is selected.
-            // This method is kept as a stable hook so legacy callers don't
-            // need to be updated; it now also drives the side-panel Rules &
-            // Effects overview list (selection highlight + count).
-            RefreshItemsList();
+            // Mission 1 (sidebar restructure) removed the side-panel "Rules &
+            // Effects" overview list too; this hook now refreshes the
+            // selection summary strip so all 11 legacy call sites keep
+            // working without further edits.
+            UpdateSelectionSummary();
         }
 
         private System.Windows.UIElement BuildRuleRow(EnhancementRule rule, int index)
@@ -3768,9 +3778,9 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_suppressDirty) return;
             _isDirty = true;
             TxtDirty.Visibility = Visibility.Visible;
-            // Items overview is data-driven; every mutation refreshes it once
-            // here, instead of bolting a call onto each individual mutator.
-            RefreshItemsList();
+            // Mission 1 sidebar restructure: the items overview list is gone;
+            // the selection summary strip is fed from the SelectXxx setters
+            // instead, so MarkDirty has no per-mutation list to refresh.
         }
 
         private void ScheduleValidation()
@@ -3980,6 +3990,8 @@ namespace ConditioningControlPanel.Views.Deeper
             Title = $"Deeper — {name}";
             // Linked-files strip shows the file path; keep it in sync.
             RefreshLinkedFilesUi();
+            // Metadata drawer subtitle ("Metadata · {name}") shown when collapsed.
+            UpdateMetadataDrawerSubtitle();
         }
 
         // -- Linked Files strip ----------------------------------------------

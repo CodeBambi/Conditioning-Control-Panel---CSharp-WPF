@@ -3589,6 +3589,18 @@ namespace ConditioningControlPanel.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool HasSeenDeeperHTInteractiveTutorial { get; set; }
 
+        // Mission 1: editor sidebar restructure introduces a draggable splitter
+        // between preview and the inspector panel; persist the user's chosen
+        // width so it survives editor close + reopen. Clamped 320..520 by the
+        // GridSplitter's column MinWidth/MaxWidth.
+        private int _deeperEditorSidebarWidth = 380;
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public int DeeperEditorSidebarWidth
+        {
+            get => _deeperEditorSidebarWidth;
+            set { _deeperEditorSidebarWidth = value; OnPropertyChanged(); }
+        }
+
         private List<string> _deeperRecentFiles = new();
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<string> DeeperRecentFiles
