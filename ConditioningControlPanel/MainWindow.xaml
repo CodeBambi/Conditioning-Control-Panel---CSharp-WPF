@@ -9777,6 +9777,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="🛰️" FontSize="40" VerticalAlignment="Center" Margin="0,0,16,0"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -9786,6 +9787,51 @@
                         <TextBlock Text="{loc:Str desc_available_subjects}"
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    FontSize="13" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <!-- "Become a subject!" CTA. Free users get the button +
+                         italic subtitle pointing to Patreon; premium users get
+                         the button alone, opening the Remote Control tab. -->
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center"
+                                HorizontalAlignment="Right" MaxWidth="260" Margin="16,0,0,0">
+                        <Button x:Name="BtnBecomeASubject"
+                                Click="BtnBecomeASubject_Click"
+                                Content="{loc:Str btn_become_a_subject}"
+                                ToolTip="{loc:Str tooltip_become_a_subject}"
+                                FontSize="13" FontWeight="Bold"
+                                Padding="16,9" BorderThickness="0" Cursor="Hand"
+                                HorizontalAlignment="Right">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Background" Value="{DynamicResource NeonPurpleBrush}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="border" CornerRadius="8"
+                                                        Padding="{TemplateBinding Padding}"
+                                                        Background="{TemplateBinding Background}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="border" Property="Opacity" Value="0.9"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <TextBlock x:Name="TxtBecomeASubjectSubtitle"
+                                   Text="{loc:Str desc_become_a_subject_locked}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11" FontStyle="Italic"
+                                   Margin="0,6,0,0" TextWrapping="Wrap"
+                                   TextAlignment="Right"
+                                   Visibility="Collapsed"/>
                     </StackPanel>
                 </Grid>
 
@@ -9859,10 +9905,25 @@
                                                    FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
                                                    Visibility="{Binding HasStatusText, Converter={StaticResource BoolToVisibility}}"/>
 
-                                        <!-- Tags as a CSV line (compact for narrow card) -->
-                                        <TextBlock Text="{Binding TagsCsv}" Foreground="{DynamicResource TextMutedBrush}"
-                                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"
-                                                   Visibility="{Binding HasTags, Converter={StaticResource BoolToVisibility}}"/>
+                                        <!-- Tags as pill badges (mirrors cclabs-web /dashboard/subjects) -->
+                                        <ItemsControl ItemsSource="{Binding Tags}" Margin="0,0,0,12"
+                                                      Visibility="{Binding HasTags, Converter={StaticResource BoolToVisibility}}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="{DynamicResource NeonPurpleTransparent20Brush}"
+                                                            CornerRadius="9999" Padding="7,2" Margin="0,0,5,5">
+                                                        <TextBlock Text="{Binding}"
+                                                                   Foreground="{DynamicResource NeonPurpleBrush}"
+                                                                   FontSize="10" FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
 
                                         <!-- Connect button (or Taken disabled) -->
                                         <Button Content="{Binding ConnectButtonText}"

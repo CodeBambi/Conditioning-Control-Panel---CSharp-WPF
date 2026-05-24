@@ -9313,6 +9313,7 @@ namespace ConditioningControlPanel
             RefreshPremiumGate(RemoteControlGate);
             RefreshPremiumGate(AwarenessGate);
             RefreshPremiumGate(LockdownGate);
+            RefreshBecomeASubjectCta();
             // Blink Trainer uses its own gate refresh (also re-resolves stage
             // mode + status state since premium loss/gain flips the resolver
             // short-circuit and may swap demo↔live).
@@ -12921,6 +12922,40 @@ namespace ConditioningControlPanel
             ShowTab("availablesubjects");
         }
 
+        private void BtnBecomeASubject_Click(object sender, RoutedEventArgs e)
+        {
+            // Premium → take them straight to the Remote Control tab so they
+            // can opt into the directory. Free → open the Patreon page.
+            if (App.Patreon?.HasPremiumAccess == true)
+            {
+                ShowTab("remotecontrol");
+                return;
+            }
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://www.patreon.com/CodeBambi",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "[Subjects] failed to open Patreon URL");
+            }
+        }
+
+        /// <summary>
+        /// Shows the italic "support the project" subtitle only to free users.
+        /// Premium users see just the button (which opens the Remote Control tab).
+        /// </summary>
+        private void RefreshBecomeASubjectCta()
+        {
+            if (TxtBecomeASubjectSubtitle == null) return;
+            var hasPremium = App.Patreon?.HasPremiumAccess == true;
+            TxtBecomeASubjectSubtitle.Visibility = hasPremium ? Visibility.Collapsed : Visibility.Visible;
+        }
+
         /// <summary>
         /// One-time binding: hook the service's ObservableCollection to the
         /// ItemsControl ItemsSource and the IsEmpty/HasError flags to the
@@ -12935,6 +12970,7 @@ namespace ConditioningControlPanel
             AvailableSubjectsList.ItemsSource = App.AvailableSubjects.Entries;
             App.AvailableSubjects.PropertyChanged += OnAvailableSubjectsServicePropertyChanged;
             UpdateAvailableSubjectsEmptyAndError();
+            RefreshBecomeASubjectCta();
             _availableSubjectsBound = true;
         }
 
@@ -16070,7 +16106,17 @@ namespace ConditioningControlPanel
             // Load default presets + user presets
             _allPresets = Models.Preset.GetDefaultPresets();
             _allPresets.AddRange(App.Settings.Current.UserPresets);
-            
+
+            // Restore last-used preset selection so the Presets card panel
+            // highlights it on first nav and SaveSettings can find it. The
+            // dropdown header reflects the same selection via Tag (preset.Id),
+            // which survives mod text-replacements that the display name does not.
+            var savedName = App.Settings.Current.CurrentPresetName;
+            if (!string.IsNullOrEmpty(savedName))
+            {
+                _selectedPreset = _allPresets.FirstOrDefault(p => p.Name == savedName);
+            }
+
             // Populate the header dropdown
             RefreshPresetsDropdown();
         }
@@ -16100,14 +16146,22 @@ namespace ConditioningControlPanel
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4")) // Bright pink for visibility
             });
 
-            // Select current preset
+            // Select current preset. Match by preset Id (stored in Tag) rather
+            // than display Content — when a mod has text replacements that
+            // touch preset names (e.g. "Bimbo Basics" → "Sissy Basics"), the
+            // raw saved name no longer matches the mod-transformed display
+            // string and the dropdown would silently show nothing selected.
             var currentName = App.Settings.Current.CurrentPresetName;
-            for (int i = 0; i < CmbPresets.Items.Count; i++)
+            var matchedId = _allPresets.FirstOrDefault(p => p.Name == currentName)?.Id;
+            if (matchedId != null)
             {
-                if (CmbPresets.Items[i] is ComboBoxItem item && item.Content?.ToString() == currentName)
+                for (int i = 0; i < CmbPresets.Items.Count; i++)
                 {
-                    CmbPresets.SelectedIndex = i;
-                    break;
+                    if (CmbPresets.Items[i] is ComboBoxItem item && item.Tag as string == matchedId)
+                    {
+                        CmbPresets.SelectedIndex = i;
+                        break;
+                    }
                 }
             }
 
