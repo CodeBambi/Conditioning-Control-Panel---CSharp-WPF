@@ -1121,8 +1121,12 @@ namespace ConditioningControlPanel
         {
             try
             {
-                // Use mod resource resolver for logo — allows mod overrides
-                var logoFile = App.Settings?.Current?.IsSissyMode == true ? "logo2.png" : "logo.png";
+                // Use mod resource resolver for logo — allows mod overrides.
+                // logo.png is the Bambi-branded wordmark; logo2.png is the neutral
+                // "Conditioning Control Panel" wordmark used by CCP Default and Sissy.
+                var useNeutralLogo = App.Mods?.IsCCPDefault == true
+                                     || App.Settings?.Current?.IsSissyMode == true;
+                var logoFile = useNeutralLogo ? "logo2.png" : "logo.png";
                 var image = Services.ModResourceResolver.ResolveImage(logoFile);
                 if (image != null)
                     ImgLogo.Source = image;
@@ -1299,15 +1303,12 @@ namespace ConditioningControlPanel
                     XPBar.Background = (Brush)res["AccentGradientBrush"];
                 }
 
-                // Anchor 1: logo brand frame. CCP Default gets BrandGradient peeking around the logo;
-                // every other mod keeps its pre-v6 near-transparent background unchanged.
+                // Logo frame stays near-transparent for every mod. The Phase 3 plan put the
+                // BrandGradient behind the logo as one of the four anchors, but in practice it
+                // read as a glaring colored halo around the wordmark instead of a brand anchor.
+                // Gradient now lives only at the START button, XP bar, and active primary nav tab.
                 if (LogoBrandFrame != null)
-                {
-                    if (App.Mods?.IsCCPDefault == true && TryFindResource("BrandGradient") is Brush logoGradient)
-                        LogoBrandFrame.Background = logoGradient;
-                    else
-                        LogoBrandFrame.Background = new SolidColorBrush(Color.FromArgb(0x01, 0, 0, 0));
-                }
+                    LogoBrandFrame.Background = new SolidColorBrush(Color.FromArgb(0x01, 0, 0, 0));
 
                 // === BANNER AREA ===
                 if (TxtBannerPrimary != null)
@@ -1620,6 +1621,12 @@ namespace ConditioningControlPanel
                         return "pack://application:,,,/Resources/logo2.png";
                     if (imagePath.Contains("bambi takeover.png"))
                         return "pack://application:,,,/Resources/features/mandatory_videos.png";
+                }
+                // CCP Default uses the same neutral wordmark as Sissy.
+                if (App.Mods?.IsCCPDefault == true)
+                {
+                    if (imagePath.Contains("logo.png"))
+                        return "pack://application:,,,/Resources/logo2.png";
                 }
             }
 
