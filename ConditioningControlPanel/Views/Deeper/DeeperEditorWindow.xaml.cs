@@ -3706,30 +3706,84 @@ namespace ConditioningControlPanel.Views.Deeper
             _validationTimer?.Start();
         }
 
+        // Backing list for the click-to-expand popup (XAML: ValidationDetailsPopup).
+        // Refreshed in lockstep with the summary so the popup always shows the
+        // current set; close-then-reopen rebuilds against latest.
+        private List<Services.Deeper.ValidationError> _lastValidationIssues = new();
+
         private void RefreshValidation()
         {
-            var errors = EnhancementValidator.Validate(_enhancement);
-            int errorCount = errors.Count(x => x.Severity == ValidationSeverity.Error);
-            int warningCount = errors.Count(x => x.Severity == ValidationSeverity.Warning);
+            _lastValidationIssues = EnhancementValidator.Validate(_enhancement);
+            int errorCount = _lastValidationIssues.Count(x => x.Severity == ValidationSeverity.Error);
+            int warningCount = _lastValidationIssues.Count(x => x.Severity == ValidationSeverity.Warning);
             if (errorCount == 0 && warningCount == 0)
             {
                 TxtValidationSummary.Text = Loc.Get("deeper_editor_validation_clean");
                 TxtValidationSummary.Foreground = (System.Windows.Media.Brush)FindResource("TextLightBrush");
+                TxtValidationSummary.Cursor = null;
+                TxtValidationSummary.TextDecorations = null;
+                if (ValidationDetailsPopup != null) ValidationDetailsPopup.IsOpen = false;
             }
             else
             {
                 var bits = new System.Collections.Generic.List<string>();
                 if (errorCount > 0) bits.Add(string.Format(Loc.Get("deeper_editor_validation_errors_fmt"), errorCount));
                 if (warningCount > 0) bits.Add(string.Format(Loc.Get("deeper_editor_validation_warnings_fmt"), warningCount));
-                TxtValidationSummary.Text = string.Join("  ·  ", bits);
+                TxtValidationSummary.Text = string.Join("  ·  ", bits)
+                    + "  " + Loc.Get("deeper_editor_validation_click_for_details_hint");
                 TxtValidationSummary.Foreground = errorCount > 0
                     ? (System.Windows.Media.Brush)FindResource("DangerBrush")
                     : (System.Windows.Media.Brush)FindResource("PinkSoftBrush");
+                TxtValidationSummary.Cursor = System.Windows.Input.Cursors.Hand;
+                TxtValidationSummary.TextDecorations = System.Windows.TextDecorations.Underline;
+                TxtValidationSummary.ToolTip = Loc.Get("deeper_editor_validation_click_for_details_tip");
 
-                var first = errors.FirstOrDefault();
-                if (first != null)
-                    TxtValidationSummary.ToolTip = first.ToString();
+                // If the popup is already open (user toggled it then made an
+                // edit), refresh its contents in place rather than closing it.
+                if (ValidationDetailsPopup?.IsOpen == true) PopulateValidationPopup();
             }
+        }
+
+        private void TxtValidationSummary_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            // No issues = nothing to expand. Skip silently (RefreshValidation
+            // also clears the Cursor=Hand affordance in that case).
+            if (_lastValidationIssues == null || _lastValidationIssues.Count == 0) return;
+            if (ValidationDetailsPopup == null) return;
+            if (ValidationDetailsPopup.IsOpen)
+            {
+                ValidationDetailsPopup.IsOpen = false;
+                return;
+            }
+            PopulateValidationPopup();
+            ValidationDetailsPopup.IsOpen = true;
+            e.Handled = true;
+        }
+
+        // Builds the row VMs for LstValidationIssues. Pulls fresh from
+        // _lastValidationIssues so a popup re-open after edits always shows
+        // current state.
+        private void PopulateValidationPopup()
+        {
+            if (LstValidationIssues == null) return;
+            int errorCount = _lastValidationIssues.Count(x => x.Severity == ValidationSeverity.Error);
+            int warningCount = _lastValidationIssues.Count(x => x.Severity == ValidationSeverity.Warning);
+            if (TxtValidationPopupHeader != null)
+                TxtValidationPopupHeader.Text = string.Format(
+                    Loc.Get("deeper_editor_validation_popup_header_fmt"),
+                    errorCount, warningCount);
+
+            var vms = _lastValidationIssues
+                .OrderBy(i => i.Severity == ValidationSeverity.Error ? 0 : 1)
+                .Select(i => new
+                {
+                    Glyph = i.Severity == ValidationSeverity.Error ? "✕" : "⚠",
+                    Brush = (System.Windows.Media.Brush)FindResource(
+                        i.Severity == ValidationSeverity.Error ? "DangerBrush" : "PinkSoftBrush"),
+                    Message = i.Message ?? "",
+                })
+                .ToList();
+            LstValidationIssues.ItemsSource = vms;
         }
 
         // -- File ops ----------------------------------------------------------

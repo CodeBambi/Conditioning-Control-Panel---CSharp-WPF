@@ -1267,7 +1267,51 @@
                 <TextBlock x:Name="TxtValidationSummary" Text="{loc:Str deeper_editor_validation_clean}"
                            Foreground="{DynamicResource TextLightBrush}"
                            FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0"
-                           ToolTip="{loc:Str deeper_editor_tt_validation}"/>
+                           ToolTip="{loc:Str deeper_editor_tt_validation}"
+                           MouseLeftButtonUp="TxtValidationSummary_MouseLeftButtonUp"/>
+                <Popup x:Name="ValidationDetailsPopup"
+                       PlacementTarget="{Binding ElementName=TxtValidationSummary}"
+                       Placement="Top" StaysOpen="False" AllowsTransparency="True"
+                       PopupAnimation="Fade">
+                    <Border Background="{DynamicResource DarkerBgBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                            CornerRadius="6" Padding="12,10"
+                            MaxWidth="520" MaxHeight="360">
+                        <DockPanel LastChildFill="True">
+                            <TextBlock x:Name="TxtValidationPopupHeader"
+                                       DockPanel.Dock="Top"
+                                       Foreground="{DynamicResource DeeperAccentBrush}"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       Margin="0,0,0,8"/>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl x:Name="LstValidationIssues">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Glyph}"
+                                                           Foreground="{Binding Brush}"
+                                                           FontSize="11" FontWeight="Bold"
+                                                           VerticalAlignment="Top"
+                                                           Margin="0,0,8,0"/>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Message}"
+                                                           Foreground="{DynamicResource TextLightBrush}"
+                                                           FontSize="11"
+                                                           TextWrapping="Wrap"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </Popup>
             </DockPanel>
         </Border>
     </Grid>
