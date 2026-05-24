@@ -8485,14 +8485,190 @@
             </Grid>
         </ContentControl>
 
-        <!-- Deeper Tab — universal media enhancement system -->
+        <!-- Deeper Tab — universal media enhancement system.
+             Mission 2 (hub redesign): single-column layout, unified library
+             list with virtualization, search + filter pills + sort dropdown
+             replace the two-column Library/Recent grid. -->
         <ContentControl x:Name="DeeperTab" Grid.Row="4" Margin="10,5,10,10" Visibility="Collapsed" Template="{StaticResource AnimatedTabBackground}">
+            <ContentControl.Resources>
+                <!-- Pill style for the All / Video / Audio / Haptics / Webcam toggles. -->
+                <Style x:Key="DeeperPillStyle" TargetType="ToggleButton">
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Foreground" Value="{DynamicResource DeeperAccentBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentTransparent40Brush}"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="Padding" Value="12,5"/>
+                    <Setter Property="Margin" Value="0,0,6,0"/>
+                    <Setter Property="FontSize" Value="11"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <Border x:Name="bd"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="12"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      TextBlock.Foreground="{TemplateBinding Foreground}"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="bd" Property="Background" Value="{DynamicResource DeeperAccentTransparent20Brush}"/>
+                                        <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+
+                <!-- Row icon-button style for the per-row action cluster (play/submit/delete). -->
+                <Style x:Key="DeeperRowActionBtnStyle" TargetType="Button">
+                    <Setter Property="Width" Value="28"/>
+                    <Setter Property="Height" Value="28"/>
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="FontSize" Value="13"/>
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Foreground" Value="{DynamicResource DeeperAccentBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentTransparent40Brush}"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="Margin" Value="4,0,0,0"/>
+                </Style>
+
+                <!-- Per-row template. DataContext = DeeperLibraryRowVm; the original
+                     EnhancementLibraryEntry hangs off vm.Entry for action handlers. -->
+                <DataTemplate x:Key="DeeperLibraryRowTemplate">
+                    <Border x:Name="RowBorder"
+                            Background="{DynamicResource PanelBgBrush}"
+                            BorderBrush="{DynamicResource DeeperAccentTransparent20Brush}"
+                            BorderThickness="1" CornerRadius="6"
+                            Padding="10,8" Margin="0,0,0,6"
+                            Cursor="Hand"
+                            MouseLeftButtonUp="DeeperRow_Click"
+                            ToolTip="{loc:Str deeper_hub_tip_row_open}">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="BorderBrush" Value="{DynamicResource DeeperAccentBrush}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- LEFT: type badge -->
+                            <Border Grid.Column="0" Width="36" Height="36"
+                                    CornerRadius="6" Margin="0,0,10,0"
+                                    Background="{Binding MediaTypeBadgeBg}"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{Binding MediaTypeIcon}" FontSize="18"
+                                           Foreground="{Binding MediaTypeBadgeFg}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+
+                            <!-- CENTER: name + meta line -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}"
+                                           Foreground="{DynamicResource TextLightBrush}"
+                                           FontSize="13" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <!-- Creator -->
+                                    <TextBlock Text="{Binding CreatorDisplay}"
+                                               Visibility="{Binding ShowCreator}"
+                                               Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
+                                    <TextBlock Text=" · "
+                                               Visibility="{Binding ShowCreator}"
+                                               Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
+                                    <!-- Media source (status glyph + label) -->
+                                    <StackPanel Orientation="Horizontal"
+                                                Visibility="{Binding ShowMediaSource}">
+                                        <TextBlock Text="{Binding MediaSourceGlyph}"
+                                                   Foreground="{Binding MediaSourceBrush}"
+                                                   FontSize="11" FontWeight="Bold"
+                                                   Margin="0,0,4,0"/>
+                                        <TextBlock Text="{Binding MediaSourceLabel}"
+                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                                                   MaxWidth="220" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text=" · "
+                                                   Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
+                                    </StackPanel>
+                                    <!-- Auto-tag chips -->
+                                    <ItemsControl ItemsSource="{Binding Tags}"
+                                                  Visibility="{Binding ShowTags}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{Binding Background}"
+                                                        CornerRadius="8"
+                                                        Padding="6,1" Margin="0,0,4,0">
+                                                    <TextBlock Foreground="{Binding Foreground}" FontSize="10">
+                                                        <Run Text="{Binding Glyph, Mode=OneTime}"/><Run Text=" "/><Run Text="{Binding Label, Mode=OneTime}"/>
+                                                    </TextBlock>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <!-- Timestamp -->
+                                    <TextBlock Text="{Binding TimestampDisplay}"
+                                               Visibility="{Binding ShowTimestamp}"
+                                               Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- RIGHT: hover-only action buttons. Style trigger on
+                                 RowBorder.IsMouseOver fades the cluster in. -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Opacity" Value="0"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsMouseOver, ElementName=RowBorder}" Value="True">
+                                                <Setter Property="Opacity" Value="1"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <Button Content="📤" Click="DeeperRowSubmit_Click"
+                                        Visibility="{Binding ShowSubmitButton}"
+                                        IsEnabled="{Binding SubmitEnabled}"
+                                        ToolTip="{Binding SubmitTooltip}"
+                                        Style="{StaticResource DeeperRowActionBtnStyle}"/>
+                                <Button Content="▶" Click="DeeperRowPlay_Click"
+                                        ToolTip="{loc:Str deeper_hub_tip_row_play}"
+                                        Style="{StaticResource DeeperRowActionBtnStyle}"/>
+                                <Button Content="🗑" Click="DeeperRowDelete_Click"
+                                        ToolTip="{loc:Str deeper_hub_tip_row_delete}"
+                                        Foreground="{DynamicResource DangerBrush}"
+                                        Style="{StaticResource DeeperRowActionBtnStyle}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ContentControl.Resources>
+
             <Grid Margin="28,20,28,20" MaxWidth="1080" HorizontalAlignment="Center">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/> <!-- Header -->
-                    <RowDefinition Height="Auto"/> <!-- Pitch -->
                     <RowDefinition Height="Auto"/> <!-- Welcome card (first-run) -->
-                    <RowDefinition Height="*"/>    <!-- Library + Recent -->
+                    <RowDefinition Height="Auto"/> <!-- Filter + sort strip -->
+                    <RowDefinition Height="*"/>    <!-- Unified library list -->
                 </Grid.RowDefinitions>
 
                 <!-- Header -->
@@ -8514,7 +8690,7 @@
                                     VerticalAlignment="Center"
                                     Background="{DynamicResource DeeperAccentTransparent20Brush}"
                                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
-                                    CornerRadius="4"
+                                    CornerRadius="8"
                                     ToolTip="{loc:Str deeper_beta_notice}">
                                 <TextBlock Text="{loc:Str deeper_beta_badge}"
                                            Foreground="{DynamicResource DeeperAccentBrush}"
@@ -8541,9 +8717,9 @@
                                 ToolTip="{loc:Str deeper_tab_open_player_tooltip}"
                                 Click="BtnDeeperOpenPlayer_Click"
                                 Padding="16,10" FontSize="12" Cursor="Hand"
-                                Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                Background="Transparent"
                                 Foreground="{DynamicResource DeeperAccentBrush}"
-                                BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
                                 Margin="0,0,8,0"/>
                         <Button x:Name="BtnDeeperNewEnhancement"
                                 Content="{loc:Str deeper_empty_cta}"
@@ -8569,24 +8745,9 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Features blurb + BETA notice -->
-                <StackPanel Grid.Row="1" Margin="0,0,0,20">
-                    <TextBlock Text="{loc:Str deeper_empty_features}"
-                               Foreground="{DynamicResource TextDimBrush}" FontSize="11"
-                               TextWrapping="Wrap"/>
-                    <Border Margin="0,10,0,0" Padding="10,7"
-                            Background="{DynamicResource DeeperAccentTransparent20Brush}"
-                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                            CornerRadius="6">
-                        <TextBlock Text="{loc:Str deeper_beta_notice}"
-                                   Foreground="{DynamicResource DeeperAccentBrush}"
-                                   FontSize="11" TextWrapping="Wrap"/>
-                    </Border>
-                </StackPanel>
-
                 <!-- First-run welcome card. Visibility flipped to Collapsed in code
                      once the user clicks Tour, Open Demo, or Got it. -->
-                <Border x:Name="DeeperWelcomeCard" Grid.Row="2" Visibility="Collapsed"
+                <Border x:Name="DeeperWelcomeCard" Grid.Row="1" Visibility="Collapsed"
                         Background="{DynamicResource SurfaceBgBrush}"
                         BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"
                         CornerRadius="10" Padding="22,18" Margin="0,0,0,18">
@@ -8633,59 +8794,193 @@
                     </Grid>
                 </Border>
 
-                <!-- Library + Recent (two-column) -->
-                <Grid Grid.Row="3">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="20"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+                <!-- Filter + sort strip. x:Name DeeperLibraryFilterStrip is the
+                     retarget for the hub tour's old dp_recent step (now
+                     dp_filters per the Mission 2 tutorial sync). -->
+                <StackPanel x:Name="DeeperLibraryFilterStrip" Grid.Row="2" Margin="0,0,0,12">
+                    <!-- Row A: search + folder button -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid Grid.Column="0">
+                            <TextBox x:Name="TxtDeeperSearch"
+                                     Background="{DynamicResource PanelBgBrush}"
+                                     Foreground="{DynamicResource TextLightBrush}"
+                                     BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                     BorderThickness="1"
+                                     Padding="10,8" FontSize="12"
+                                     ToolTip="{loc:Str deeper_hub_tip_search}"
+                                     TextChanged="DeeperSearch_TextChanged"/>
+                            <TextBlock IsHitTestVisible="False"
+                                       Text="{loc:Str deeper_hub_search_placeholder}"
+                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                                       Margin="12,0,0,0"
+                                       VerticalAlignment="Center" HorizontalAlignment="Left">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=TxtDeeperSearch}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                        <Button Grid.Column="1" x:Name="BtnDeeperOpenLibraryFolder"
+                                Content="📁" Click="BtnDeeperOpenLibraryFolder_Click"
+                                ToolTip="{loc:Str deeper_library_open_folder_tooltip}"
+                                Width="36" Height="36" Padding="0" FontSize="14"
+                                Margin="8,0,0,0" Cursor="Hand"
+                                Background="Transparent"
+                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                BorderThickness="1"/>
+                    </Grid>
 
-                    <!-- Library -->
-                    <Border x:Name="DeeperLibraryCard" Grid.Column="0" Background="{DynamicResource SurfaceBgBrush}"
-                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                            CornerRadius="10" Padding="18,14"
-                            ToolTip="{loc:Str deeper_tab_library_tooltip}">
-                        <DockPanel LastChildFill="True">
-                            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10" LastChildFill="True">
-                                <Button x:Name="BtnDeeperOpenLibraryFolder" DockPanel.Dock="Right"
-                                        Content="📁" Click="BtnDeeperOpenLibraryFolder_Click"
-                                        ToolTip="{loc:Str deeper_library_open_folder_tooltip}"
-                                        Width="22" Height="20" Padding="0" FontSize="11" Cursor="Hand"
-                                        Margin="8,0,0,0"
-                                        Background="Transparent"
-                                        Foreground="{DynamicResource DeeperAccentBrush}"
-                                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
-                                        BorderThickness="1"/>
-                                <TextBlock x:Name="TxtDeeperLibraryCount" DockPanel.Dock="Right"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
-                                <TextBlock Text="{loc:Str deeper_section_library}"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource TextLightBrush}"
-                                           FontSize="12" FontWeight="Bold"/>
-                            </DockPanel>
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel x:Name="DeeperLibraryList"/>
-                            </ScrollViewer>
-                        </DockPanel>
-                    </Border>
+                    <!-- Row B: filter pills + sort dropdown -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <ToggleButton x:Name="BtnDeeperPillAll"
+                                          Style="{StaticResource DeeperPillStyle}"
+                                          Click="DeeperPillAll_Click" IsChecked="True"
+                                          ToolTip="{loc:Str deeper_hub_tip_pill_all}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{loc:Str deeper_hub_pill_all}"/>
+                                    <TextBlock x:Name="TxtDeeperPillAllCount" Text="0"
+                                               Foreground="{DynamicResource TextDimBrush}"
+                                               Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </ToggleButton>
+                            <ToggleButton x:Name="BtnDeeperPillVideo"
+                                          Style="{StaticResource DeeperPillStyle}"
+                                          Click="DeeperPillVideo_Click"
+                                          ToolTip="{loc:Str deeper_hub_tip_pill_video}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{loc:Str deeper_hub_pill_video}"/>
+                                    <TextBlock x:Name="TxtDeeperPillVideoCount" Text="0"
+                                               Foreground="{DynamicResource TextDimBrush}"
+                                               Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </ToggleButton>
+                            <ToggleButton x:Name="BtnDeeperPillAudio"
+                                          Style="{StaticResource DeeperPillStyle}"
+                                          Click="DeeperPillAudio_Click"
+                                          ToolTip="{loc:Str deeper_hub_tip_pill_audio}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{loc:Str deeper_hub_pill_audio}"/>
+                                    <TextBlock x:Name="TxtDeeperPillAudioCount" Text="0"
+                                               Foreground="{DynamicResource TextDimBrush}"
+                                               Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </ToggleButton>
+                            <Border Width="1" Margin="6,4,10,4"
+                                    Background="{DynamicResource DeeperAccentTransparent40Brush}"/>
+                            <ToggleButton x:Name="BtnDeeperPillHaptics"
+                                          Style="{StaticResource DeeperPillStyle}"
+                                          Click="DeeperPillHaptics_Click"
+                                          ToolTip="{loc:Str deeper_hub_tip_pill_haptics}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="📳 "/>
+                                    <TextBlock Text="{loc:Str deeper_hub_pill_haptics}"/>
+                                    <TextBlock x:Name="TxtDeeperPillHapticsCount" Text="0"
+                                               Foreground="{DynamicResource TextDimBrush}"
+                                               Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </ToggleButton>
+                            <ToggleButton x:Name="BtnDeeperPillWebcam"
+                                          Style="{StaticResource DeeperPillStyle}"
+                                          Click="DeeperPillWebcam_Click"
+                                          ToolTip="{loc:Str deeper_hub_tip_pill_webcam}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="📷 "/>
+                                    <TextBlock Text="{loc:Str deeper_hub_pill_webcam}"/>
+                                    <TextBlock x:Name="TxtDeeperPillWebcamCount" Text="0"
+                                               Foreground="{DynamicResource TextDimBrush}"
+                                               Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </ToggleButton>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{loc:Str deeper_hub_sort_label}"
+                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11"
+                                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="CmbDeeperSort"
+                                      SelectionChanged="DeeperSort_SelectionChanged"
+                                      ToolTip="{loc:Str deeper_hub_tip_sort}"
+                                      Background="White" Foreground="Black"
+                                      MinWidth="100" Padding="6,4">
+                                <ComboBoxItem Content="{loc:Str deeper_hub_sort_recent}"
+                                              Tag="recent" Foreground="Black" Background="White"
+                                              IsSelected="True"/>
+                                <ComboBoxItem Content="{loc:Str deeper_hub_sort_name}"
+                                              Tag="name" Foreground="Black" Background="White"/>
+                                <ComboBoxItem Content="{loc:Str deeper_hub_sort_creator}"
+                                              Tag="creator" Foreground="Black" Background="White"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
 
-                    <!-- Recent -->
-                    <Border x:Name="DeeperRecentCard" Grid.Column="2" Background="{DynamicResource SurfaceBgBrush}"
-                            BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                            CornerRadius="10" Padding="18,14"
-                            ToolTip="{loc:Str deeper_tab_recent_tooltip}">
-                        <DockPanel LastChildFill="True">
-                            <TextBlock DockPanel.Dock="Top" Text="{loc:Str deeper_section_recent}"
+                <!-- Unified library list. x:Name preserved (tutorial dp_library
+                     retargets to this element). Virtualized — VirtualizingStackPanel
+                     + CanContentScroll keeps things smooth for libraries with
+                     hundreds of entries. Empty-state hint is painted on top via
+                     the wrapping Grid, controlled from code-behind. -->
+                <Border Grid.Row="3"
+                        Background="{DynamicResource SurfaceBgBrush}"
+                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
+                        CornerRadius="10" Padding="14,12">
+                    <DockPanel LastChildFill="True">
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10" LastChildFill="True">
+                            <TextBlock x:Name="TxtDeeperLibraryCount" DockPanel.Dock="Right"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextDimBrush}" FontSize="11"/>
+                            <TextBlock Text="{loc:Str deeper_section_library}"
+                                       VerticalAlignment="Center"
                                        Foreground="{DynamicResource TextLightBrush}"
-                                       FontSize="12" FontWeight="Bold" Margin="0,0,0,10"/>
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel x:Name="DeeperRecentList"/>
-                            </ScrollViewer>
+                                       FontSize="12" FontWeight="Bold"/>
                         </DockPanel>
-                    </Border>
-                </Grid>
+                        <Grid>
+                            <ItemsControl x:Name="DeeperLibraryList"
+                                          ItemsSource="{Binding DeeperFilteredEntries, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          ItemTemplate="{StaticResource DeeperLibraryRowTemplate}"
+                                          VirtualizingPanel.IsVirtualizing="True"
+                                          VirtualizingPanel.VirtualizationMode="Recycling"
+                                          ScrollViewer.CanContentScroll="True">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.Template>
+                                    <ControlTemplate TargetType="ItemsControl">
+                                        <ScrollViewer CanContentScroll="True"
+                                                      VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled">
+                                            <ItemsPresenter/>
+                                        </ScrollViewer>
+                                    </ControlTemplate>
+                                </ItemsControl.Template>
+                            </ItemsControl>
+                            <TextBlock x:Name="TxtDeeperLibraryEmpty"
+                                       Visibility="Collapsed"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Top"
+                                       TextWrapping="Wrap" MaxWidth="500"
+                                       Margin="0,40,0,0"
+                                       TextAlignment="Center"/>
+                        </Grid>
+                    </DockPanel>
+                </Border>
             </Grid>
         </ContentControl>
 

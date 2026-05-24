@@ -65,6 +65,12 @@
     <Color x:Key="DeeperAccentTransparent20">#207B5CFF</Color>
     <Color x:Key="DeeperAccentTransparent40">#407B5CFF</Color>
 
+    <!-- Mission 2 (Hub redesign) — webcam chip needs a teal accent that
+         contrasts both DeeperAccent (violet) and PinkColor (the catch-all
+         pink). Picked to evoke "lens" / "camera". Same alpha (0x20) as the
+         haptics chip so the two read as one family. -->
+    <Color x:Key="DeeperHubWebcamChipBg">#205CFFB7</Color>
+
     <!-- Deeper editor chrome — surfaces introduced by Mission 1 (Editor restructure):
          lane headers, lane content backgrounds, the metadata drawer strip,
          selection-summary strip. Picked to sit between DarkerBg (#121220) and

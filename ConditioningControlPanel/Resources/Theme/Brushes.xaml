@@ -65,6 +65,15 @@
     <SolidColorBrush x:Key="DeeperAccentTransparent20Brush" Color="{DynamicResource DeeperAccentTransparent20}"/>
     <SolidColorBrush x:Key="DeeperAccentTransparent40Brush" Color="{DynamicResource DeeperAccentTransparent40}"/>
 
+    <!-- Mission 2 (Hub redesign) — semantic aliases for the row badges /
+         tag chips. Aliasing existing brushes (rather than minting new hex)
+         lets future theming reskin each surface independently of its
+         underlying palette entry. -->
+    <SolidColorBrush x:Key="DeeperHubVideoBadgeBgBrush"   Color="{DynamicResource DeeperAccentTransparent40}"/>
+    <SolidColorBrush x:Key="DeeperHubAudioBadgeBgBrush"   Color="{DynamicResource TransparentPink40}"/>
+    <SolidColorBrush x:Key="DeeperHubHapticsChipBgBrush"  Color="{DynamicResource DeeperAccentTransparent20}"/>
+    <SolidColorBrush x:Key="DeeperHubWebcamChipBgBrush"   Color="{DynamicResource DeeperHubWebcamChipBg}"/>
+
     <!-- Deeper editor chrome brushes — see Colors.xaml for the role of each. -->
     <SolidColorBrush x:Key="DeeperLaneCanvasBrush" Color="{DynamicResource DeeperLaneCanvas}"/>
     <SolidColorBrush x:Key="DeeperLaneBgBrush" Color="{DynamicResource DeeperLaneBg}"/>
