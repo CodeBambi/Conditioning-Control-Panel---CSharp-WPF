@@ -11,7 +11,10 @@ namespace ConditioningControlPanel.Models
         public const string CCPDefaultId = "builtin-ccp-default";
         public const string BambiSleepId = "builtin-bambisleep";
         public const string SissyHypnoId = "builtin-sissyhypno";
-        public const string DronificationId = "builtin-dronification";
+        // Matches the canonical drone-mode.ccpmod ID so users who already had the v5.7 community
+        // .ccpmod installed see no collision-induced duplicate entries — their on-disk copy
+        // overrides this built-in if present, otherwise this built-in supplies the mod.
+        public const string DronificationId = "drone-mode";
 
         public static ModManifest CCPDefault { get; } = CreateCCPDefault();
         public static ModManifest BambiSleep { get; } = CreateBambiSleep();
@@ -1162,7 +1165,7 @@ namespace ConditioningControlPanel.Models
                 Version = "1.0.0",
                 Author = "CodeBambi",
                 Description = "Matrix-inspired drone conditioning. Cold terminal aesthetic. Green on black. You are a unit. Comply.",
-                MinAppVersion = "6.0.0",
+                MinAppVersion = "5.6.15",
                 Tags = new List<string> { "drone", "cyberpunk", "terminal", "sci-fi", "matrix" },
                 PreviewImage = "preview.png",
 
@@ -1173,7 +1176,8 @@ namespace ConditioningControlPanel.Models
                     AccentDarkColor = "#008F11",
                     BackgroundColor = "#0D0D0D",
                     PanelColor = "#1A1A1A",
-                    SurfaceColor = "#121212"
+                    SurfaceColor = "#121212",
+                    FilterColor = "#00FF41"
                 },
 
                 Identity = new ModIdentity
@@ -1263,7 +1267,71 @@ namespace ConditioningControlPanel.Models
                 {
                     DefaultUrl = "https://hypnotube.com/",
                     SiteName = "HypnoTube",
-                    ShowBambiCloudOption = false
+                    ShowBambiCloudOption = false,
+                    DefaultVideoLinks = new Dictionary<string, string>
+                    {
+                        { "The Pleasures Of Heaven or Hell", "https://hypnotube.com/video/the-pleasures-of-heaven-or-hell-108296.html" },
+                        { "Latex Sex Drone Redux", "https://hypnotube.com/video/latex-sex-drone-redux-117517.html" },
+                        { "Jinxs Clinic - Latex Addiction - Trailer", "https://hypnotube.com/video/jinxs-clinic-latex-addiction-trailer-90725.html" },
+                        { "Jinxs Clinic - Latex Nightmare - Trailer", "https://hypnotube.com/video/jinxs-clinic-latex-nightmare-trailer-87481.html" },
+                        { "Jinxs Clinic - Moxi Mindfuck", "https://hypnotube.com/video/jinxs-clinic-moxi-mindfuck-87482.html" },
+                        { "Jinxs Clinic - Latex Clinic", "https://hypnotube.com/video/jinxs-clinic-latex-clinic-87627.html" },
+                        { "Latex Drone Stretches His Hole", "https://hypnotube.com/video/latex-drone-stretches-his-hole-90036.html" },
+                        { "Bambi Gas Mask", "https://hypnotube.com/video/bambi-gas-mask-97015.html" },
+                        { "The Rise Of The Drones", "https://hypnotube.com/video/the-rise-of-the-drones-32786.html" },
+                        { "Jinxs Clinic - Latex Nightmare Ending", "https://hypnotube.com/video/jinxs-clinic-latex-nightmare-ending-87486.html" },
+                        { "Hypnodoll Deepthroat Training", "https://hypnotube.com/video/hypnodoll-deepthroat-training-117537.html" },
+                        { "Ultimate Sissy Slut Hypno", "https://hypnotube.com/video/ultimate-sissy-slut-hypno-16.html" },
+                        { "Latex Love - Lustful Loops", "https://hypnotube.com/video/latex-love-lustful-loops-117405.html" },
+                        { "VR Slut Simulator", "https://hypnotube.com/video/vr-slut-simulator-122617.html" },
+                        { "Sissy Drone For Goddess - Productivity And Motivation Trainer", "https://hypnotube.com/video/sissy-drone-for-goddess-productivity-and-motivation-trainer-45256.html" },
+                        { "Pierrots Experimental Film", "https://hypnotube.com/video/pierrots-experimental-film-117798.html" },
+                        { "Poppers Goon Slut", "https://hypnotube.com/video/poppers-goon-slut-109249.html" },
+                        { "Drone Reprogramming Misandry Module", "https://hypnotube.com/video/drone-reprogramming-misandry-module-65622.html" },
+                        { "Rubberdoll Obedience Trainer By Hypno_Authority", "https://hypnotube.com/video/rubberdoll-obedience-trainer-by-hypno-authority-87892.html" },
+                        { "Anal Slut Programming", "https://hypnotube.com/video/anal-slut-programming-35855.html" }
+                    }
+                },
+
+                SupportedAvatarSets = new List<int> { 1, 2, 3, 4, 5 },
+
+                TubeLayout = new ModTubeLayout
+                {
+                    AvatarOffsetX = 20,
+                    AvatarDetachedOffsetX = 305,
+                    AvatarScale = 0.632,
+                    AvatarOffsetY = 80,
+                    AvatarDetachedOffsetY = 85
+                },
+
+                EnhancementOverrides = new ModEnhancementOverrides
+                {
+                    TreeTitle = "Drone Enhancement Tree",
+                    TreeSubtitle = "you earn enhancement points from leveling up + every 100 packets destroyed~",
+                    TreeWarning = "once you pick a path, there's no going back~",
+                    PointsLabel = "Enhancement Points",
+                    StatsTitle = "Corrupted Data Stats",
+                    TabTooltip = "Drone Enhancement Tree",
+                    PinkRushName = "SYSTEM SURGE!",
+                    PinkRushDescription = "3x XP for 60 seconds!",
+                    LuckyFlashLabel = "Lucky Injection",
+                    LuckyBubbleLabel = "Lucky Packet",
+                    BoostTooltips = new Dictionary<string, string>
+                    {
+                        { "sparkle_boost_1", "Enhancement bonus: +10% XP from Overclock I" },
+                        { "sparkle_boost_2", "Enhancement bonus: +15% XP from Overclock II (stacks with Overclock I)" },
+                        { "sparkle_boost_3", "Enhancement bonus: +20% XP from Overclock III (stacks with other Overclock tiers)" },
+                        { "night_shift", "Enhancement bonus: +50% XP for conditioning between 11 PM and 5 AM" },
+                        { "early_bird_bimbo", "Enhancement bonus: +50% XP for conditioning between 5 AM and 8 AM" },
+                        { "pink_rush", "Enhancement bonus: 3x XP multiplier! Random 60-second system surge windows" },
+                        { "streak_power", "Enhancement bonus: +0.5% XP per compliance day (max 15%)" }
+                    },
+                    StatPillTooltips = new Dictionary<string, string>
+                    {
+                        { "pink_hours", "Total uptime (Uptime Hours enhancement)" },
+                        { "hive_mind", "Units online now (Hive Network enhancement)" },
+                        { "popular_girl", "Your rank percentile (Network Popularity enhancement)" }
+                    }
                 },
 
                 Phrases = new Dictionary<string, string[]>
@@ -1562,11 +1630,33 @@ namespace ConditioningControlPanel.Models
                         "[SYSTEM] Flush all unnecessary thoughts.",
                         "[DRAIN] Empty and operational. Good.",
                         "[STATUS] Cognitive capacity: REALLOCATED to compliance."
+                    },
+                    ["Thinking"] = new[]
+                    {
+                        "[PROCESSING...]",
+                        "[COMPUTING...]",
+                        "[QUERY RECEIVED...]",
+                        "[PARSING INPUT...]",
+                        "[CALCULATING...]",
+                        "[ANALYZING...]",
+                        "[LOADING RESPONSE...]",
+                        "[COMPILING...]"
                     }
                 },
 
                 TextReplacements = new Dictionary<string, string>
                 {
+                    // Achievement / companion preset renames
+                    { "Synthetic Blowdoll", "Obedient Chassis" },
+                    { "Perfect Fuckpuppet", "Override Protocol" },
+                    { "Brainwashed Slavedoll", "Formatted Unit" },
+                    { "Platinum Puppet", "Terminal Admin" },
+                    { "Bambi Cow", "Data Harvester" },
+                    { "Bimbo Cow", "Data Harvester" },
+                    { "DUMB AIRHEAD", "STANDARD UNIT" },
+                    { "BASIC BIMBO", "BASIC DRONE" },
+
+                    // Bambi-trigger / mode renames
                     { "Bambi Sleep", "Drone Mode" },
                     { "BAMBI SLEEP", "DRONE MODE" },
                     { "Bambi Freeze", "Unit Freeze" },
@@ -1577,8 +1667,96 @@ namespace ConditioningControlPanel.Models
                     { "Bambi Takeover", "System Override" },
                     { "BambiCloud", "HypnoTube" },
                     { "BambiSprite", "DroneOS" },
+
+                    // Personality preset renames
+                    { "Slut Mode", "Override Mode" },
+                    { "Gentle Trainer", "Gentle Protocol" },
+                    { "Strict Domme", "Command Authority" },
+                    { "Bimbo Coach", "Drone Instructor" },
+                    { "Hypno Guide", "Neural Guide" },
+
+                    // Enhancement-tree skill renames
+                    { "Pink Hours", "Uptime Hours" },
+                    { "Ditzy Data", "Corrupted Data" },
+                    { "Sparkle Boost", "Overclock I" },
+                    { "Good Girl Streak", "Compliance Streak" },
+                    { "Hive Mind", "Hive Network" },
+                    { "Trophy Case", "Achievement Cache" },
+                    { "Extra Sparkly", "Overclock II" },
+                    { "Lucky Bimbo", "RNG Exploit" },
+                    { "Milestone Rewards", "Checkpoint Rewards" },
+                    { "Oopsie Insurance", "Error Recovery" },
+                    { "Popular Girl", "Network Popularity" },
+                    { "Quest Refresh", "Task Refresh" },
+                    { "Better Quests", "Enhanced Directives" },
+                    { "Maximum Sparkle", "Overclock III" },
+                    { "Lucky Bubbles", "Lucky Packets" },
+                    { "Pink Rush", "System Surge" },
+                    { "Streak Power", "Streak Amplifier" },
+                    { "Reroll Addict", "Recompile Addict" },
+                    { "Perfect Bimbo Week", "Perfect Cycle" },
+                    { "Night Shift", "Night Cycle" },
+                    { "Early Bird Bimbo", "Early Boot" },
+                    { "Eternal Doll", "Eternal Unit" },
+                    { "Bimbo Basics", "Drone Basics" },
+                    { "Pink Cloud", "Green Cloud" },
+
+                    // Achievement renames
+                    { "Plastic Initiation", "Initiation Sequence" },
+                    { "Dumb Bimbo", "Blank Slate" },
+                    { "Fully Synthetic", "Synthetic Perfection" },
+                    { "Docile Cow", "Hive Node" },
+                    { "Perfect Plastic Puppet", "Fully Assimilated" },
+                    { "Rose-Tinted Reality", "Filtered Perception" },
+                    { "Deep Sleep Mode", "Haptic Feedback" },
+                    { "Daily Maintenance", "Daily Synchronization" },
+                    { "Retinal Burn", "Data Overload" },
+                    { "Morning Glory", "Boot Sequence" },
+                    { "Player 2 Disconnected", "Task Failed Successfully" },
+                    { "Sofa Decor", "Display Unit" },
+                    { "Look, But Don't Touch", "Access Denied" },
+                    { "Spiral Eyes", "Hypno Sync" },
+                    { "Mathematician's Nightmare", "Processing Error" },
+                    { "Pop Goes The Thought", "Defragmentation" },
+                    { "Typing Tutor", "Transcription Unit" },
+                    { "Obedience Reflex", "Overclocked" },
+                    { "Mercy Beggar", "Absolute Override" },
+                    { "Clean Slate", "Memory Wiped" },
+                    { "Corner Hit", "Perfect Alignment" },
+                    { "Neon Obsession", "Glitch in the System" },
+                    { "Panic Button? What Panic Button?", "Unit Online" },
+                    { "Relapse", "Reboot Loop" },
+                    { "Total Lockdown", "Terminal Lock" },
+                    { "System Overload", "Fatal Exception" },
+
+                    // Feature renames
+                    { "Flash Images", "Data Injection" },
+                    { "Mandatory Videos", "Mandatory Playback" },
+                    { "Mandatory Video", "Mandatory Playback" },
+                    { "Subliminal Text", "Subliminal Protocol" },
+                    { "Subliminals", "Subliminal Protocols" },
+                    { "Bouncing Text", "Floating Directive" },
+                    { "Pink Filter", "Green Filter" },
+                    { "Spiral Overlay", "Hypno Vortex" },
+                    { "Brain Drain", "Memory Flush" },
+                    { "Bubble Pop", "Data Purge" },
+                    { "Bubbles", "Data Packets" },
+                    { "Lock Cards", "Protocol Lock" },
+                    { "Lock Card", "Protocol Lock" },
+                    { "Bubble Count", "Enumeration Task" },
+                    { "Corner GIF", "Peripheral Stimulus" },
+                    { "Audio Whispers", "Audio Uplink" },
+                    { "Mind Wipe", "Sector Wipe" },
+                    { "Mindwipe", "Sector Wipe" },
+                    { "Flashes", "Injections" },
+                    { "Videos", "Playback" },
+                    { "Bouncing", "Floating" },
+
+                    // Base terminology — applied last in mod-aware order (longer keys first
+                    // are evaluated earlier, so the specific replacements above take precedence).
                     { "Bambi", "Unit" },
                     { "BAMBI", "UNIT" },
+                    { "Bimbo", "Drone" },
                     { "bimbo", "drone" },
                     { "BIMBO", "DRONE" },
                     { "pink", "green" },
