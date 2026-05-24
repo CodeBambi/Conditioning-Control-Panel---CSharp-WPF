@@ -1969,7 +1969,20 @@ namespace ConditioningControlPanel.Views.Deeper
             var width = Math.Max(0, endX - startX);
 
             var isSelected = _selectedHaptic == ev || IsInSelectionSet(ev);
-            var accent = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF7B5CFF");
+            // Resolve DeeperAccent from the theme so a runtime palette
+            // change reflows the haptic stroke too. Falls back to the
+            // canonical violet if the resource lookup fails (e.g. unit
+            // tests that don't load App.xaml).
+            System.Windows.Media.Color accent;
+            try
+            {
+                var brush = (System.Windows.Media.SolidColorBrush)Application.Current.FindResource("DeeperAccentBrush");
+                accent = brush.Color;
+            }
+            catch
+            {
+                accent = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FF7B5CFF");
+            }
             var fill = System.Windows.Media.Color.FromArgb(isSelected ? (byte)180 : (byte)130, accent.R, accent.G, accent.B);
 
             var rect = new System.Windows.Shapes.Rectangle

@@ -32,6 +32,11 @@ namespace ConditioningControlPanel.Views.Deeper
         private CancellationTokenSource? _htFetchCts;
 
         // Effect-type colors used by both the timeline dots and the picker labels.
+        // The Haptic entry MUST match DeeperAccent in
+        // Resources/Theme/Colors.xaml — change both together. Kept as a
+        // string literal (not a DynamicResource) because these colors get
+        // written into the saved .ccpenh.json on every effect dot and need
+        // to round-trip stably across builds.
         private static readonly System.Collections.Generic.Dictionary<string, string> EffectColors =
             new()
             {

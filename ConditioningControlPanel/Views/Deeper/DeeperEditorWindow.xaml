@@ -133,10 +133,10 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="#3D3D60"/>
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource DeeperMenuItemHoverBgBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSubmenuOpen" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="#3D3D60"/>
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource DeeperMenuItemHoverBgBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -189,7 +189,7 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="#3D3D60"/>
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource DeeperMenuItemHoverBgBrush}"/>
                             </Trigger>
                             <Trigger Property="HasItems" Value="True">
                                 <Setter TargetName="Arrow" Property="Visibility" Value="Visible"/>
@@ -485,7 +485,7 @@
                 </Grid.RowDefinitions>
 
                 <!-- Preview pane -->
-                <Border Grid.Row="0" Background="#0A0A14" Margin="10,10,10,5">
+                <Border Grid.Row="0" Background="{DynamicResource DeeperPreviewSurfaceBgBrush}" Margin="10,10,10,5">
                     <Grid x:Name="PreviewHost">
                         <vlc:VideoView x:Name="VideoPreview" Visibility="Collapsed"/>
 
@@ -505,18 +505,18 @@
                             <Button x:Name="BtnPreviewZoomOut" Content="−"
                                     Click="BtnPreviewZoomOut_Click"
                                     Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold"
-                                    Background="#A0000000" Foreground="White" BorderThickness="0"
+                                    Background="{DynamicResource DeeperPlayerOverlayBgBrush}" Foreground="White" BorderThickness="0"
                                     Cursor="Hand"
                                     ToolTip="{loc:Str deeper_zoom_out_tt}"/>
                             <Button x:Name="BtnPreviewZoomIn" Content="+"
                                     Click="BtnPreviewZoomIn_Click"
                                     Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold" Margin="4,0,0,0"
-                                    Background="#A0000000" Foreground="White" BorderThickness="0"
+                                    Background="{DynamicResource DeeperPlayerOverlayBgBrush}" Foreground="White" BorderThickness="0"
                                     Cursor="Hand"
                                     ToolTip="{loc:Str deeper_zoom_in_tt}"/>
                         </StackPanel>
 
-                        <Canvas x:Name="WaveformCanvas" Visibility="Collapsed" Background="#10000020">
+                        <Canvas x:Name="WaveformCanvas" Visibility="Collapsed" Background="{DynamicResource DeeperWaveformBgBrush}">
                             <Path x:Name="WaveformPath" Stroke="{DynamicResource DeeperAccentBrush}"
                                   StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                         </Canvas>
@@ -990,7 +990,7 @@
                                 <TextBlock Text="{loc:Str deeper_editor_haptic_curve}"
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            FontSize="11" Margin="0,0,0,4"/>
-                                <Border Background="#10000020"
+                                <Border Background="{DynamicResource DeeperWaveformBgBrush}"
                                         BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
                                         BorderThickness="1" CornerRadius="3">
                                     <Canvas x:Name="CurveCanvas" Height="120" Background="Transparent"

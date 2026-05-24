@@ -98,6 +98,11 @@ namespace ConditioningControlPanel.Models.Deeper
         public string Label { get; set; } = "";
 
         [JsonProperty("color")]
+        // Default region color MUST match DeeperAccent in
+        // Resources/Theme/Colors.xaml — change both together. Kept as a
+        // literal (not a DynamicResource) because Region is a serialized
+        // data model object and the value lands in saved .ccpenh.json
+        // files that need to round-trip stably across builds.
         public string Color { get; set; } = "#7B5CFF";
 
         [JsonExtensionData]
