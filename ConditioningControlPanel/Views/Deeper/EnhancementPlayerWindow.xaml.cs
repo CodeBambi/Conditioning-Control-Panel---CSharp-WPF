@@ -1236,6 +1236,20 @@ namespace ConditioningControlPanel.Views.Deeper
                             postExit();
                         }
                     });
+
+                    // Ctrl+MouseWheel = page zoom. IsZoomControlEnabled is
+                    // false in WebView2 settings so the built-in shortcut is
+                    // off and we own the gesture. preventDefault stops the
+                    // page from scrolling; the WebMessage round-trips to C#
+                    // which calls CoreWebView2.ZoomFactor (10% per notch).
+                    window.addEventListener('wheel', function(e) {
+                        if (!e.ctrlKey) return;
+                        try { e.preventDefault(); } catch (_) {}
+                        try {
+                            window.chrome.webview.postMessage(
+                                e.deltaY > 0 ? 'ccp_zoom_out' : 'ccp_zoom_in');
+                        } catch (_) {}
+                    }, { passive: false, capture: true });
                 })();
             ");
 
@@ -1260,6 +1274,14 @@ namespace ConditioningControlPanel.Views.Deeper
                     {
                         Dispatcher.BeginInvoke(() => { try { ExitVideoFullscreen(); } catch { } });
                     }
+                }
+                else if (msg == "ccp_zoom_in")
+                {
+                    Dispatcher.BeginInvoke(() => { try { AdjustVideoZoom(+0.10); } catch { } });
+                }
+                else if (msg == "ccp_zoom_out")
+                {
+                    Dispatcher.BeginInvoke(() => { try { AdjustVideoZoom(-0.10); } catch { } });
                 }
             }
             catch (Exception ex)

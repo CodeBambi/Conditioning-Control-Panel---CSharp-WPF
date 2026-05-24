@@ -246,8 +246,34 @@
                     </DockPanel>
                 </StackPanel>
 
-                <!-- Right: source pill + Change popover -->
+                <!-- Right: browser zoom cluster (video mode only) + source
+                     pill + Change popover. The zoom cluster page-zooms the
+                     embedded WebView2; visibility is tied to VideoPane so
+                     it disappears in audio mode where ZoomFactor doesn't
+                     apply. Ctrl+MouseWheel inside the browser also zooms
+                     (handled via injected JS → WebMessage). -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel x:Name="BrowserZoomCluster" Orientation="Horizontal"
+                                VerticalAlignment="Center" Margin="0,0,8,0"
+                                Visibility="{Binding ElementName=VideoPane, Path=Visibility}">
+                        <TextBlock Text="🔍" FontSize="11"
+                                   Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <Button x:Name="BtnZoomOut" Content="−"
+                                Click="BtnZoomOut_Click"
+                                ToolTip="{loc:Str deeper_zoom_out_tt}"
+                                Width="22" Height="22" Padding="0" FontSize="13" FontWeight="Bold"
+                                Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"/>
+                        <Button x:Name="BtnZoomIn" Content="+"
+                                Click="BtnZoomIn_Click"
+                                ToolTip="{loc:Str deeper_zoom_in_tt}"
+                                Width="22" Height="22" Padding="0" FontSize="13" FontWeight="Bold" Margin="3,0,0,0"
+                                Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"/>
+                    </StackPanel>
                     <Border x:Name="SourcePill" CornerRadius="9" Padding="8,2"
                             Margin="0,0,8,0" VerticalAlignment="Center"
                             BorderThickness="1"
@@ -393,23 +419,12 @@
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
                                IsHitTestVisible="False"/>
-                    <!-- Zoom controls overlay: top-right corner, 10% per click. -->
-                    <StackPanel Orientation="Horizontal"
-                                HorizontalAlignment="Right" VerticalAlignment="Top"
-                                Margin="0,6,8,0" Panel.ZIndex="10">
-                        <Button x:Name="BtnZoomOut" Content="−"
-                                Click="BtnZoomOut_Click"
-                                Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold"
-                                Background="{DynamicResource DeeperPlayerOverlayBgBrush}"
-                                Foreground="White" BorderThickness="0"
-                                ToolTip="{loc:Str deeper_zoom_out_tt}"/>
-                        <Button x:Name="BtnZoomIn" Content="+"
-                                Click="BtnZoomIn_Click"
-                                Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold" Margin="4,0,0,0"
-                                Background="{DynamicResource DeeperPlayerOverlayBgBrush}"
-                                Foreground="White" BorderThickness="0"
-                                ToolTip="{loc:Str deeper_zoom_in_tt}"/>
-                    </StackPanel>
+                    <!-- Zoom controls were moved up into the file context
+                         strip (BrowserZoomCluster) — overlaying them on the
+                         video competed with the page chrome. Ctrl+MouseWheel
+                         zoom on the browser itself is wired via JS injection
+                         (see EnsureVideoBrowserReadyAsync). -->
+
                 </Grid>
             </Border>
 

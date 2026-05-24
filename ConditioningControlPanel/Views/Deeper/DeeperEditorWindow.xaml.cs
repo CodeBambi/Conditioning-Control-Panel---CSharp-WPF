@@ -528,6 +528,20 @@ namespace ConditioningControlPanel.Views.Deeper
                                     postExit();
                                 }
                             });
+
+                            // Ctrl+MouseWheel = page zoom. WebView2's built-in
+                            // ZoomControlEnabled is off so we don't fight it.
+                            // preventDefault stops the page from scrolling, and
+                            // the WebMessage round-trips to C# which calls
+                            // CoreWebView2.ZoomFactor (10% per notch).
+                            window.addEventListener('wheel', function(e) {
+                                if (!e.ctrlKey) return;
+                                try { e.preventDefault(); } catch (_) {}
+                                try {
+                                    window.chrome.webview.postMessage(
+                                        e.deltaY > 0 ? 'ccp_zoom_out' : 'ccp_zoom_in');
+                                } catch (_) {}
+                            }, { passive: false, capture: true });
                         })();
                     ");
 
@@ -618,6 +632,14 @@ namespace ConditioningControlPanel.Views.Deeper
                     {
                         Dispatcher.BeginInvoke(() => { try { ExitPreviewFullscreen(); } catch { } });
                     }
+                }
+                else if (msg == "ccp_zoom_in")
+                {
+                    Dispatcher.BeginInvoke(() => { try { AdjustPreviewZoom(+0.10); } catch { } });
+                }
+                else if (msg == "ccp_zoom_out")
+                {
+                    Dispatcher.BeginInvoke(() => { try { AdjustPreviewZoom(-0.10); } catch { } });
                 }
             }
             catch (Exception ex)

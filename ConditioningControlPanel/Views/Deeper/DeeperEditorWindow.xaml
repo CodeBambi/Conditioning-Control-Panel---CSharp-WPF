@@ -353,6 +353,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>  <!-- Browser zoom cluster -->
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
@@ -368,7 +369,36 @@
                                Foreground="{DynamicResource TextLightBrush}"
                                FontSize="12" FontWeight="SemiBold"
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                    <Button Grid.Row="0" Grid.Column="2" x:Name="BtnLinkedJsonOpenFolder"
+
+                    <!-- Browser zoom cluster: page-zooms the embedded HT/etc.
+                         preview WebView2. Visibility tied to BrowserPreview so
+                         it disappears for VLC / audio modes where ZoomFactor
+                         doesn't apply. Also reachable via Ctrl+MouseWheel
+                         (handled via injected JS → WebMessage). -->
+                    <StackPanel Grid.Row="0" Grid.Column="2" x:Name="PreviewZoomCluster"
+                                Orientation="Horizontal" VerticalAlignment="Center"
+                                Margin="8,0,0,0"
+                                Visibility="{Binding ElementName=BrowserPreview, Path=Visibility}">
+                        <TextBlock Text="🔍" FontSize="11"
+                                   Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <Button x:Name="BtnPreviewZoomOut" Content="−"
+                                Click="BtnPreviewZoomOut_Click"
+                                ToolTip="{loc:Str deeper_zoom_out_tt}"
+                                Width="22" Height="22" Padding="0" FontSize="13" FontWeight="Bold"
+                                Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"/>
+                        <Button x:Name="BtnPreviewZoomIn" Content="+"
+                                Click="BtnPreviewZoomIn_Click"
+                                ToolTip="{loc:Str deeper_zoom_in_tt}"
+                                Width="22" Height="22" Padding="0" FontSize="13" FontWeight="Bold" Margin="3,0,0,0"
+                                Background="{DynamicResource DeeperAccentTransparent20Brush}"
+                                Foreground="{DynamicResource DeeperAccentBrush}"
+                                BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"/>
+                    </StackPanel>
+
+                    <Button Grid.Row="0" Grid.Column="3" x:Name="BtnLinkedJsonOpenFolder"
                             Content="📁" Click="BtnLinkedJsonOpenFolder_Click"
                             ToolTip="{loc:Str deeper_editor_linked_open_folder_tt}"
                             Width="30" Height="26" Padding="0" Cursor="Hand" FontSize="12"
@@ -376,7 +406,7 @@
                             Background="Transparent"
                             Foreground="{DynamicResource DeeperAccentBrush}"
                             BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"/>
-                    <Button Grid.Row="0" Grid.Column="3" x:Name="BtnLinkedJsonSwap"
+                    <Button Grid.Row="0" Grid.Column="4" x:Name="BtnLinkedJsonSwap"
                             Content="{loc:Str deeper_editor_linked_swap_json_btn}"
                             Click="BtnLinkedJsonSwap_Click"
                             ToolTip="{loc:Str deeper_editor_tip_linked_swap_json}"
@@ -385,7 +415,7 @@
                             Foreground="{DynamicResource DeeperAccentBrush}"
                             BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1"/>
 
-                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" x:Name="TxtLinkedJsonPath"
+                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" x:Name="TxtLinkedJsonPath"
                                Foreground="{DynamicResource TextDimBrush}" FontSize="10"
                                TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
                 </Grid>
@@ -494,27 +524,11 @@
                              the timeline can scrub the actual <video> element via JS. -->
                         <wv2:WebView2 x:Name="BrowserPreview" Visibility="Collapsed"/>
 
-                        <!-- Zoom controls overlay (visible only when the WebView is
-                             rendering): top-right corner, semi-transparent pill,
-                             10% per click. Hidden for VLC/waveform modes since
-                             ZoomFactor doesn't apply to them. -->
-                        <StackPanel Orientation="Horizontal"
-                                    HorizontalAlignment="Right" VerticalAlignment="Top"
-                                    Margin="0,6,8,0" Panel.ZIndex="10"
-                                    Visibility="{Binding ElementName=BrowserPreview, Path=Visibility}">
-                            <Button x:Name="BtnPreviewZoomOut" Content="−"
-                                    Click="BtnPreviewZoomOut_Click"
-                                    Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold"
-                                    Background="{DynamicResource DeeperPlayerOverlayBgBrush}" Foreground="White" BorderThickness="0"
-                                    Cursor="Hand"
-                                    ToolTip="{loc:Str deeper_zoom_out_tt}"/>
-                            <Button x:Name="BtnPreviewZoomIn" Content="+"
-                                    Click="BtnPreviewZoomIn_Click"
-                                    Width="26" Height="26" Padding="0" FontSize="16" FontWeight="Bold" Margin="4,0,0,0"
-                                    Background="{DynamicResource DeeperPlayerOverlayBgBrush}" Foreground="White" BorderThickness="0"
-                                    Cursor="Hand"
-                                    ToolTip="{loc:Str deeper_zoom_in_tt}"/>
-                        </StackPanel>
+                        <!-- Zoom controls were moved up into the linked-files
+                             strip (PreviewZoomCluster) — overlaying them on
+                             the video competed with the page chrome. Ctrl+
+                             MouseWheel zoom on the browser itself is wired
+                             via JS injection (see InitializeBrowserAsync). -->
 
                         <Canvas x:Name="WaveformCanvas" Visibility="Collapsed" Background="{DynamicResource DeeperWaveformBgBrush}">
                             <Path x:Name="WaveformPath" Stroke="{DynamicResource DeeperAccentBrush}"
