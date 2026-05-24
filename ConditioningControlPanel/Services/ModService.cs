@@ -70,6 +70,11 @@ namespace ConditioningControlPanel.Services
             _installedMods[sissyMod.Id] = sissyMod;
             _installedMods[droneMod.Id] = droneMod;
 
+            // Replace hardcoded built-ins with extracted .ccpmod packages where
+            // available so their full asset set (avatars, sounds, resources)
+            // resolves via InstalledPath instead of the neutral baseline.
+            ExtractBundledBuiltInMods();
+
             // Load user-installed mods from disk
             LoadInstalledMods();
 
@@ -984,6 +989,88 @@ namespace ConditioningControlPanel.Services
         #endregion
 
         #region Private Helpers
+
+        /// <summary>
+        /// Bundled .ccpmod packages shipped with the app, paired with the built-in
+        /// ID they replace. The .ccpmod (e.g. DroneMod/drone-mode.ccpmod) is the
+        /// authoritative source for the mod's manifest AND its assets — once
+        /// extracted, the built-in registration is overwritten with one whose
+        /// InstalledPath points at the extracted folder, so ModResourceResolver
+        /// finds avatars/sounds/etc. instead of falling back to the baseline.
+        /// IsBuiltIn stays true so the mod can't be uninstalled.
+        /// </summary>
+        private static readonly (string RelativePath, string BuiltInId)[] _bundledBuiltInMods =
+        {
+            ("DroneMod/drone-mode.ccpmod", BuiltInMods.DronificationId),
+        };
+
+        private void ExtractBundledBuiltInMods()
+        {
+            var builtInRoot = Path.Combine(App.UserDataPath, "builtin_mods");
+            Directory.CreateDirectory(builtInRoot);
+
+            foreach (var (relativePath, builtInId) in _bundledBuiltInMods)
+            {
+                try
+                {
+                    var bundledPath = Path.Combine(
+                        AppDomain.CurrentDomain.BaseDirectory,
+                        relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+                    if (!File.Exists(bundledPath))
+                    {
+                        _log?.Warning("Bundled built-in mod missing on disk: {Path}", bundledPath);
+                        continue;
+                    }
+
+                    var extractDir = Path.Combine(builtInRoot, builtInId);
+                    var manifestPath = Path.Combine(extractDir, "mod.json");
+
+                    // Re-extract if missing, or if the bundled .ccpmod is newer
+                    // than our extracted copy (covers app updates that ship a
+                    // refreshed package).
+                    var needsExtract = !File.Exists(manifestPath)
+                        || File.GetLastWriteTimeUtc(bundledPath) > File.GetLastWriteTimeUtc(manifestPath);
+
+                    if (needsExtract)
+                    {
+                        if (Directory.Exists(extractDir))
+                            Directory.Delete(extractDir, recursive: true);
+                        Directory.CreateDirectory(extractDir);
+                        ZipFile.ExtractToDirectory(bundledPath, extractDir);
+                        _log?.Information("Extracted bundled built-in mod {BuiltInId} from {Path}", builtInId, bundledPath);
+                    }
+
+                    var json = File.ReadAllText(manifestPath);
+                    var manifest = JsonConvert.DeserializeObject<ModManifest>(json);
+                    if (manifest == null || string.IsNullOrWhiteSpace(manifest.Id))
+                    {
+                        _log?.Warning("Bundled built-in mod {BuiltInId} has invalid mod.json", builtInId);
+                        continue;
+                    }
+
+                    // Sanitize same as user-installed mods (defense-in-depth even
+                    // though we ship the package ourselves).
+                    var sanitizeError = SanitizeManifest(manifest);
+                    if (sanitizeError != null)
+                    {
+                        _log?.Warning("Bundled built-in mod {BuiltInId} failed sanitization: {Error}", builtInId, sanitizeError);
+                        continue;
+                    }
+
+                    // Force the manifest ID to match the built-in slot we're
+                    // filling so a tampered mod.json can't squat a different ID.
+                    manifest.Id = builtInId;
+
+                    _installedMods[builtInId] = new ModPackage(manifest, extractDir, isBuiltIn: true);
+                    _log?.Information("Registered bundled built-in mod {BuiltInId} from {Path}", builtInId, extractDir);
+                }
+                catch (Exception ex)
+                {
+                    _log?.Error(ex, "Failed to extract bundled built-in mod {BuiltInId} (falling back to hardcoded manifest)", builtInId);
+                }
+            }
+        }
 
         private void LoadInstalledMods()
         {

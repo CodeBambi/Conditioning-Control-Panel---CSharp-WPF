@@ -130,8 +130,12 @@ set_force_*.js
 # Mod packages (built artifacts, too large for git)
 *.ccpmod
 
-# DroneMod (distributed separately)
-ConditioningControlPanel/DroneMod/
+# DroneMod contents distributed separately (avatars, sounds, scripts, etc.)
+ConditioningControlPanel/DroneMod/*
+
+# ...except the canonical drone-mode.ccpmod package, which is shipped as a
+# bundled built-in mod (see ConditioningControlPanel.csproj + ModService.ExtractBundledBuiltInMods).
+!ConditioningControlPanel/DroneMod/drone-mode.ccpmod
 
 # MSBuild temp files
 *_wpftmp.csproj

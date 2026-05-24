@@ -298,6 +298,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Bundled built-in mod packages. ModService extracts these on first launch
+         into %APPDATA%/ConditioningControlPanel/builtin_mods/<id>/ and registers
+         them as non-deletable built-in mods (IsBuiltIn=true) so their full asset
+         set resolves via InstalledPath instead of the neutral baseline. -->
+    <Content Include="DroneMod\drone-mode.ccpmod">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="Themes\" />
   </ItemGroup>
 
