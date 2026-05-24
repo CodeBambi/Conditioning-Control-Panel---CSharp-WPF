@@ -1443,18 +1443,25 @@ namespace ConditioningControlPanel.Services
                     Title = Loc.Get("deeper_tut_tab_library_title"),
                     Description = Loc.Get("deeper_tut_tab_library_body"),
                     RequiresTab = "deeper",
-                    TargetElementName = "DeeperLibraryCard",
-                    TextPosition = TutorialStepPosition.Right
+                    // Mission 2: DeeperLibraryCard removed; retarget to the
+                    // unified ItemsControl (DeeperLibraryList x:Name preserved).
+                    TargetElementName = "DeeperLibraryList",
+                    TextPosition = TutorialStepPosition.Top
                 },
                 new TutorialStep
                 {
+                    // Mission 2: dp_recent repurposed as "intro the new search /
+                    // filter / sort strip" since Recent is now a sort option,
+                    // not a surface. Step id kept for save-state continuity;
+                    // loc key renamed to deeper_tut_tab_filters_body to match
+                    // the new role.
                     Id = "dp_recent",
-                    Icon = "\ud83d\udd52",
-                    Title = Loc.Get("deeper_tut_tab_recent_title"),
-                    Description = Loc.Get("deeper_tut_tab_recent_body"),
+                    Icon = "\ud83d\udd0e",
+                    Title = Loc.Get("deeper_tut_tab_filters_title"),
+                    Description = Loc.Get("deeper_tut_tab_filters_body"),
                     RequiresTab = "deeper",
-                    TargetElementName = "DeeperRecentCard",
-                    TextPosition = TutorialStepPosition.Left
+                    TargetElementName = "DeeperLibraryFilterStrip",
+                    TextPosition = TutorialStepPosition.Bottom
                 },
                 new TutorialStep
                 {
