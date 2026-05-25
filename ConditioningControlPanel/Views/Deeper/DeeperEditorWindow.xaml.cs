@@ -93,6 +93,31 @@ namespace ConditioningControlPanel.Views.Deeper
         private double _effectDragOriginalDuration;
         // Pixel band on left/right of a band where cursor switches to resize.
         private const double EdgeResizePx = 6.0;
+        // Minimum rectangle width where edge-resize handles still apply.
+        // Narrower rects (e.g. a 0.2s region on a wide timeline) become pure
+        // drag-to-move so the user can always grab and reposition them
+        // without accidentally hitting one of the resize zones.
+        private const double MinResizableRectPx = 24.0;
+        // Minimum visual width for region / haptic rectangles. Tiny durations
+        // on a wide timeline would otherwise render at sub-pixel widths and
+        // become uncatchable; 8 px stays clickable and matches the effect
+        // segment minimum (Unified.cs:BuildEffectSegment).
+        private const double MinBandVisualWidthPx = 8.0;
+
+        // Resize-zone classification shared by region / haptic / effect
+        // segment hit-test code. Disabled entirely on rects narrower than
+        // MinResizableRectPx (always drag-move). For wider rects the edge
+        // zone is clamped to at most 1/3 of the width so the middle stays
+        // grabbable even at intermediate sizes.
+        private enum EdgeHit { Body, Start, End }
+        private static EdgeHit ClassifyEdgeHit(double posX, double rectWidth)
+        {
+            if (rectWidth < MinResizableRectPx) return EdgeHit.Body;
+            var edge = Math.Min(EdgeResizePx, rectWidth / 3.0);
+            if (posX <= edge) return EdgeHit.Start;
+            if (posX >= rectWidth - edge) return EdgeHit.End;
+            return EdgeHit.Body;
+        }
         // Timeline zoom state. _zoomFactor of 1.0 = canvas fills the viewport
         // (default). Higher = horizontally scaled, with the ScrollViewer
         // showing a horizontal scrollbar.
@@ -1839,7 +1864,10 @@ namespace ConditioningControlPanel.Views.Deeper
             var laneH = h / 2.0;
             var startX = Math.Max(0, (region.Start / _totalSeconds) * w);
             var endX = Math.Min(w, (region.End / _totalSeconds) * w);
-            var width = Math.Max(0, endX - startX);
+            // Floor at MinBandVisualWidthPx so a region whose duration would
+            // otherwise render at sub-pixel width stays clickable. The data
+            // model still uses the real Start/End; only the visual is padded.
+            var width = Math.Max(MinBandVisualWidthPx, endX - startX);
 
             var color = TryParseColor(region.Color) ?? Colors.MediumPurple;
             var fill = System.Windows.Media.Color.FromArgb(80, color.R, color.G, color.B);
@@ -1868,9 +1896,9 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_dragMode != DragMode.None) return;
             if (sender is not System.Windows.Shapes.Rectangle r) return;
             var pos = e.GetPosition(r);
-            r.Cursor = (pos.X <= EdgeResizePx || pos.X >= r.ActualWidth - EdgeResizePx)
-                ? Cursors.SizeWE
-                : Cursors.SizeAll;
+            r.Cursor = ClassifyEdgeHit(pos.X, r.ActualWidth) == EdgeHit.Body
+                ? Cursors.SizeAll
+                : Cursors.SizeWE;
         }
 
         private void EnsurePlayheadOnTop()
@@ -1928,18 +1956,14 @@ namespace ConditioningControlPanel.Views.Deeper
             _regionDragOriginalLength = Math.Max(0, region.End - region.Start);
             BeginMultiDragCapture();
 
-            if (pos.X <= EdgeResizePx)
+            switch (ClassifyEdgeHit(pos.X, rectWidth))
             {
-                _dragMode = DragMode.ResizeRegionStart;
-            }
-            else if (pos.X >= rectWidth - EdgeResizePx)
-            {
-                _dragMode = DragMode.ResizeRegionEnd;
-            }
-            else
-            {
-                _dragMode = DragMode.DragRegion;
-                _regionDragOffsetSec = MouseToSeconds(e) - region.Start;
+                case EdgeHit.Start: _dragMode = DragMode.ResizeRegionStart; break;
+                case EdgeHit.End:   _dragMode = DragMode.ResizeRegionEnd; break;
+                default:
+                    _dragMode = DragMode.DragRegion;
+                    _regionDragOffsetSec = MouseToSeconds(e) - region.Start;
+                    break;
             }
             TimelineCanvas.CaptureMouse();
             e.Handled = true;
@@ -2025,7 +2049,8 @@ namespace ConditioningControlPanel.Views.Deeper
             var laneH = Math.Max(0, h / 2.0 - 4);
             var startX = Math.Max(0, (ev.Start / _totalSeconds) * w);
             var endX = Math.Min(w, ((ev.Start + ev.Duration) / _totalSeconds) * w);
-            var width = Math.Max(0, endX - startX);
+            // Floor at MinBandVisualWidthPx so very short haptics stay clickable.
+            var width = Math.Max(MinBandVisualWidthPx, endX - startX);
 
             var isSelected = _selectedHaptic == ev || IsInSelectionSet(ev);
             // Resolve DeeperAccent from the theme so a runtime palette
@@ -2071,9 +2096,9 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_dragMode != DragMode.None) return; // don't churn cursor mid-drag
             if (sender is not System.Windows.Shapes.Rectangle r) return;
             var pos = e.GetPosition(r);
-            r.Cursor = (pos.X <= EdgeResizePx || pos.X >= r.ActualWidth - EdgeResizePx)
-                ? Cursors.SizeWE
-                : Cursors.SizeAll;
+            r.Cursor = ClassifyEdgeHit(pos.X, r.ActualWidth) == EdgeHit.Body
+                ? Cursors.SizeAll
+                : Cursors.SizeWE;
         }
 
         private void HapticRect_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -2104,7 +2129,8 @@ namespace ConditioningControlPanel.Views.Deeper
             // Begin drag-shift on pointer hold (no Shift modifier — that's region-create).
             if ((Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
             {
-                if (pos.X <= EdgeResizePx)
+                var hit = ClassifyEdgeHit(pos.X, rectWidth);
+                if (hit == EdgeHit.Start)
                 {
                     _dragMode = DragMode.ResizeHapticStart;
                     _draggedHaptic = ev;
@@ -2114,7 +2140,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     e.Handled = true;
                     return;
                 }
-                if (pos.X >= rectWidth - EdgeResizePx)
+                if (hit == EdgeHit.End)
                 {
                     _dragMode = DragMode.ResizeHapticEnd;
                     _draggedHaptic = ev;

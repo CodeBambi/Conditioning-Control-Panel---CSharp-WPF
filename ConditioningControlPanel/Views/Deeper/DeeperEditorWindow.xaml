@@ -986,6 +986,7 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Grid.Column="0" Text="{Binding Icon}"
                                                            FontSize="12" VerticalAlignment="Center"
@@ -1003,7 +1004,20 @@
                                                            Foreground="{DynamicResource TextDimBrush}"
                                                            FontFamily="Consolas" FontSize="10"
                                                            VerticalAlignment="Center"
-                                                           Margin="8,0,0,0"/>
+                                                           Margin="8,0,6,0"/>
+                                                <Button Grid.Column="4"
+                                                        Content="×"
+                                                        Tag="{Binding}"
+                                                        Click="ItemsListDelete_Click"
+                                                        ToolTip="Delete this item"
+                                                        Width="18" Height="18" Padding="0"
+                                                        FontSize="14" FontWeight="Bold"
+                                                        Cursor="Hand"
+                                                        Background="Transparent"
+                                                        Foreground="{DynamicResource TextDimBrush}"
+                                                        BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                                        BorderThickness="1"
+                                                        VerticalAlignment="Center"/>
                                             </Grid>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>

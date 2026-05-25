@@ -462,9 +462,9 @@ namespace ConditioningControlPanel.Views.Deeper
             if (_dragMode != DragMode.None) return;
             if (sender is not System.Windows.Shapes.Rectangle r) return;
             var pos = e.GetPosition(r);
-            r.Cursor = (pos.X <= EdgeResizePx || pos.X >= r.ActualWidth - EdgeResizePx)
-                ? Cursors.SizeWE
-                : Cursors.SizeAll;
+            r.Cursor = ClassifyEdgeHit(pos.X, r.ActualWidth) == EdgeHit.Body
+                ? Cursors.SizeAll
+                : Cursors.SizeWE;
         }
 
         private void EffectRect_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -496,18 +496,14 @@ namespace ConditioningControlPanel.Views.Deeper
             _effectDragOriginalDuration = Math.Max(0, item.Duration);
             BeginMultiDragCapture();
 
-            if (pos.X <= EdgeResizePx)
+            switch (ClassifyEdgeHit(pos.X, rectWidth))
             {
-                _dragMode = DragMode.ResizeEffectStart;
-            }
-            else if (pos.X >= rectWidth - EdgeResizePx)
-            {
-                _dragMode = DragMode.ResizeEffectEnd;
-            }
-            else
-            {
-                _dragMode = DragMode.DragEffect;
-                _effectDragOffsetSec = MouseToSeconds(e) - item.Start;
+                case EdgeHit.Start: _dragMode = DragMode.ResizeEffectStart; break;
+                case EdgeHit.End:   _dragMode = DragMode.ResizeEffectEnd; break;
+                default:
+                    _dragMode = DragMode.DragEffect;
+                    _effectDragOffsetSec = MouseToSeconds(e) - item.Start;
+                    break;
             }
             TimelineCanvas.CaptureMouse();
             e.Handled = true;

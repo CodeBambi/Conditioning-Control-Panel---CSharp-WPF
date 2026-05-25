@@ -161,6 +161,38 @@ namespace ConditioningControlPanel.Views.Deeper
             ActivateEntry(entry);
         }
 
+        // Row-level delete (× button). Routes through the same per-type delete
+        // path each toolbar delete button uses so undo / cleanup / validation
+        // behavior stays identical. e.Handled keeps the click from also
+        // selecting the row.
+        private void ItemsListDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.Button btn) return;
+            if (btn.Tag is not TimelineListEntry entry) return;
+            e.Handled = true;
+
+            switch (entry.Target)
+            {
+                case Models.Deeper.EnhancementRule rule:
+                    _selectedRule = rule;
+                    BtnDeleteRule_Click(this, new RoutedEventArgs());
+                    break;
+                case Models.Deeper.Region region:
+                    _selectedRegion = region;
+                    BtnDeleteRegion_Click(this, new RoutedEventArgs());
+                    break;
+                case HapticEvent ev when entry.HapticTrack != null:
+                    _selectedHaptic = ev;
+                    _selectedHapticTrack = entry.HapticTrack;
+                    BtnDeleteHaptic_Click(this, new RoutedEventArgs());
+                    break;
+                case TimelineItem ti:
+                    _selectedEffect = ti;
+                    BtnDeleteEffect_Click(this, new RoutedEventArgs());
+                    break;
+            }
+        }
+
         // Double-click also seeks the playhead to the item's time so the user
         // can jump to where the effect fires.
         private void ItemsListBox_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
