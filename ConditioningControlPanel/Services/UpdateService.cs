@@ -20,64 +20,51 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.0.0";
+        public const string AppVersion = "6.0.1";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.0.0 (prerelease)
-The big one: v5.9 made Deeper a format. v6 makes it a product. The editor,
-hub, and player all got rebuilt top-to-bottom so the build → browse → play
-loop is one experience, not three. Underneath, the mod system went fully
-modular: three themed built-ins (Bambi Sleep, Sissy Hypno, Dronification)
-coexist alongside a neutral CCP Default, swappable from one picker without
-restart. Tools sharper. Room bigger.
+        public const string CurrentPatchNotes = @"v6.0.1 — Going Deeper
+
+A small follow-up to v6.0.0 focused on Deeper editor ergonomics:
+click-and-drag scrubbing, a sidebar items list, drag-and-drop loading,
+a timestamp ruler, and a handful of polish fixes from the field.
 
 ✨ FEATURES
-- Deeper editor: full restructure - sidebar drawer, region-mode overlays/
-  haptics, lane chrome on the timeline, click-to-expand validation popup,
-  region-mode catalogue auto-tags.
-- Deeper hub: unified list with search/filter/sort, tooltips, tutorial sync,
-  Enhancements Catalogue link to app.cclabs.app/catalogue.
-- Deeper player: header pill + file strip, mini-timeline that scales to media
-  duration, click+drag scrub for audio AND video, webcam pre-play prompt,
-  structured event log.
-- Modular mod system: pick between CCP Default (neutral), Bambi Sleep,
-  Sissy Hypno, and Dronification - each themes UI, phrases, triggers,
-  achievements, browser defaults, and avatars.
-- Dronification now ships its full asset pack (avatars, sounds, achievement
-  art) bundled inside the installer instead of falling back to baseline.
-- Remote control rework: viewers can now send emotes BACK to the streamer -
-  small quick-pick or a splash board with the full set. Emotes pop as
-  bubbles next to the streamer's avatar. Avatar right-click menu surfaces
-  recent emotes; per-session privacy toggle gates whether outgoing emotes
-  broadcast at all.
-- Subjects tab: tag pills + ""Become a subject!"" CTA.
+- Deeper editor + player: drag-and-drop a media file
+  (mp3/wav/m4a/aac/flac/ogg/mp4/webm/mkv/mov/avi/m4v) to load it, or a
+  *.ccpenh.json to open that project. Sidecar / embedded / library
+  matches still get auto-detected.
+- Deeper editor: sidebar Items list - every rule, region, haptic, and
+  effect rolled up into one panel with Time/Kind sort. Two-way selection
+  sync with the timeline; per-row × button deletes the item; double-click
+  seeks to it.
+- Deeper editor: timestamp ruler across the top of the timeline with
+  adaptive tick intervals (auto-tunes from 0.1s up to 1h as you zoom).
+- Deeper editor: click-and-drag scrubbing on the timeline (any video
+  player feel). Shift+drag still creates a region; Ctrl+drag is now the
+  rubber-band for multi-select.
 
 🎨 UI/UX
-- Player + editor: rounded buttons, dark scrollbars, zoom cluster moved to
-  chrome strip with Ctrl+wheel zoom, timeline wheel scrolls horizontally.
-- Theming pass: GazePicker + editor hex colors promoted to theme resources.
-- CCP Default uses a neutral logo (no gradient halo on the anchor).
+- Deeper editor: small region / haptic / effect bands default to
+  grab-and-move instead of edge-resize, so a tiny band can be
+  repositioned without accidentally getting stretched. Wider bands keep
+  edge-resize on the actual edges.
+- Deeper editor: regions and haptics get a minimum 8px visual width so
+  very short ones stay clickable at any zoom.
+- Avatar Exclusives menu: click toggles like a real dropdown, hover is
+  stickier so the panel doesn't slip away mid-mouse-move.
 
 🔧 BUG FIXES
-- ""Mute Whispers"" (avatar menu) now also silences attached voicelines and
-  custom phrase audio — the bubble + text still show, but no audio plays.
-  Previously only the subliminal-whisper audio was gated.
-- Mandatory videos: ESC again dismisses the current video.
-- Deeper hub: ▶ button no longer opens enhancement as audio file.
-- Audio: validate preferred LibVLC device before SetOutputDevice (no more
-  crash on stale device names).
-- v6 migration: existing installs default to Bambi to preserve continuity;
-  CCP Default remains selectable from the mode picker.
-- Zoom-label clip fix + auto-stop webcam on player exit.
-
-📦 OTHER
-- v6 agnostic refactor: hardcoded Bambi terminology lifted out of the engine;
-  mods supply their own text via mod.json.
-- Translation-debt logs + close-out reports for Deeper Missions 1, 2, 3.
-- Dead ""coming soon"" localization keys removed.
+- Avatar idle-speech slider: changing the interval now updates the
+  running timer immediately instead of waiting for an unrelated reset.
+- Deeper editor: the dotted rubber-band selection rectangle no longer
+  leaks on the timeline when mouse capture is stolen mid-drag
+  (Alt+Tab, popup focus, etc.).
+- Mock haptic toast no longer leaks; render-thread failures now exit
+  hard instead of leaving a zombie process.
 
 Season: Going Deeper";
 
