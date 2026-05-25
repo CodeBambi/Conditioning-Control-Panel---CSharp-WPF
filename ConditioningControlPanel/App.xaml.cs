@@ -808,6 +808,7 @@ namespace ConditioningControlPanel
 
             // Global exception handlers to catch and log crashes instead of hard crashing
             bool errorDialogShown = false;
+            int exitInProgress = 0;
             DispatcherUnhandledException += (s, args) =>
             {
                 LogCrashDetails("DISPATCHER", args.Exception);
@@ -815,7 +816,25 @@ namespace ConditioningControlPanel
                 // Check for rendering thread failure - this is unrecoverable and can cause dialog loops
                 var isRenderFailure = args.Exception.Message.Contains("RENDER") ||
                                       args.Exception.Message.Contains("0x88980406") ||
-                                      args.Exception.HResult == unchecked((int)0x88980406);
+                                      args.Exception.HResult == unchecked((int)0x88980406) ||
+                                      args.Exception is OutOfMemoryException;
+
+                // Render-thread failure / OOM in the composition channel is unrecoverable.
+                // Exit IMMEDIATELY, before any UI attempt - MessageBox.Show runs a nested
+                // dispatcher pump and the render thread keeps crashing inside that pump,
+                // so we can't safely show a dialog. (See 2026-05-25 crash storm:
+                // 10,251 cascading reports because the exit branch was gated behind a
+                // blocking MessageBox.Show that never returned.)
+                if (isRenderFailure)
+                {
+                    if (Interlocked.Exchange(ref exitInProgress, 1) == 0)
+                    {
+                        try { Logger?.Error("Render thread failure / OOM - hard exit to prevent cascade"); } catch { }
+                        Environment.Exit(1);
+                    }
+                    args.Handled = true;
+                    return;
+                }
 
                 // Only show error dialog once to prevent multiplying dialogs
                 if (!errorDialogShown)
@@ -832,13 +851,6 @@ namespace ConditioningControlPanel
                             "Error - Please report this", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                     catch { /* MessageBox may fail during shutdown */ }
-
-                    // For render failures, exit gracefully after showing error once
-                    if (isRenderFailure)
-                    {
-                        Logger?.Error("Render thread failure detected - shutting down to prevent cascading errors");
-                        Environment.Exit(1);
-                    }
                 }
 
                 args.Handled = true; // Prevent crash, just log

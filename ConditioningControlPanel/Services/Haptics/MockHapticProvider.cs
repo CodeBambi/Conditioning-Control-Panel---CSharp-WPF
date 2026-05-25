@@ -14,6 +14,10 @@ namespace ConditioningControlPanel.Services.Haptics
         public bool IsConnected { get; private set; }
         public List<string> ConnectedDevices { get; } = new();
 
+        private Window? _toastWindow;
+        private System.Windows.Controls.TextBlock? _toastText;
+        private System.Windows.Threading.DispatcherTimer? _toastTimer;
+
         public event EventHandler<bool>? ConnectionChanged;
         public event EventHandler<string>? DeviceDiscovered;
 #pragma warning disable CS0067 // Required by IHapticProvider interface
@@ -80,51 +84,66 @@ namespace ConditioningControlPanel.Services.Haptics
 
         private void ShowHapticToast(string message)
         {
-            // Create a simple toast window
-            var toast = new Window
+            // Reuse a single toast window — AudioSync fires this at video frame rate
+            // (~30Hz), so spawning a new Window per call crashed the WPF render thread
+            // with UCEERR_RENDERTHREADFAILURE after ~60s of leaked HWNDs.
+            if (_toastWindow == null)
             {
-                Width = 200,
-                Height = 50,
-                WindowStyle = WindowStyle.None,
-                AllowsTransparency = true,
-                Background = new System.Windows.Media.SolidColorBrush(
-                    System.Windows.Media.Color.FromArgb(230, 255, 105, 180)),
-                Topmost = true,
-                ShowInTaskbar = false,
-                ShowActivated = false,
-                ResizeMode = ResizeMode.NoResize
-            };
+                _toastText = new System.Windows.Controls.TextBlock
+                {
+                    Foreground = System.Windows.Media.Brushes.White,
+                    FontWeight = FontWeights.Bold,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    FontSize = 14
+                };
 
-            var text = new System.Windows.Controls.TextBlock
+                _toastWindow = new Window
+                {
+                    Width = 200,
+                    Height = 50,
+                    WindowStyle = WindowStyle.None,
+                    AllowsTransparency = true,
+                    Background = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromArgb(230, 255, 105, 180)),
+                    Topmost = true,
+                    ShowInTaskbar = false,
+                    ShowActivated = false,
+                    ResizeMode = ResizeMode.NoResize,
+                    Content = _toastText
+                };
+
+                _toastWindow.Closed += (s, e) =>
+                {
+                    _toastWindow = null;
+                    _toastText = null;
+                    _toastTimer?.Stop();
+                    _toastTimer = null;
+                };
+
+                var screen = SystemParameters.WorkArea;
+                _toastWindow.Left = screen.Right - _toastWindow.Width - 20;
+                _toastWindow.Top = screen.Bottom - _toastWindow.Height - 20;
+
+                _toastWindow.Show();
+            }
+
+            if (_toastText != null) _toastText.Text = message;
+
+            if (_toastTimer == null)
             {
-                Text = message,
-                Foreground = System.Windows.Media.Brushes.White,
-                FontWeight = FontWeights.Bold,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                FontSize = 14
-            };
-
-            toast.Content = text;
-
-            // Position bottom-right
-            var screen = SystemParameters.WorkArea;
-            toast.Left = screen.Right - toast.Width - 20;
-            toast.Top = screen.Bottom - toast.Height - 20;
-
-            toast.Show();
-
-            // Auto-close after 1 second
-            var timer = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(1000)
-            };
-            timer.Tick += (s, e) =>
-            {
-                timer.Stop();
-                toast.Close();
-            };
-            timer.Start();
+                _toastTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(1000)
+                };
+                _toastTimer.Tick += (s, e) =>
+                {
+                    _toastTimer?.Stop();
+                    _toastWindow?.Close();
+                };
+            }
+            _toastTimer.Stop();
+            _toastTimer.Start();
         }
     }
 }
