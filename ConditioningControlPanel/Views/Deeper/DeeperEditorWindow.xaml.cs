@@ -56,6 +56,7 @@ namespace ConditioningControlPanel.Views.Deeper
         private bool _browserInitInFlight;
         private bool _previewBrowserConfigured;
         private bool _isPreviewFullscreen;
+        private bool _fsTransitionInFlight;
         private Window? _previewFullscreenWindow;
 
         // Common
@@ -676,6 +677,10 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void OnPreviewFullscreenChanged(object? sender, object? e)
         {
+            // We detach this subscription for the duration of Enter/Exit, but
+            // if a page-side FS state change somehow races through anyway, the
+            // in-flight guard keeps us out.
+            if (_fsTransitionInFlight) return;
             try
             {
                 var contains = BrowserPreview?.CoreWebView2?.ContainsFullScreenElement ?? false;
@@ -689,22 +694,80 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
+        // Parent-agnostic detach. The original code only handled Panel parents
+        // and silently no-op'd everything else; that left BrowserPreview still
+        // attached and the next `Window.Content = BrowserPreview` threw
+        // "Visual already has a parent" mid-Enter, leaving state inconsistent.
+        // Returns true iff `child` is fully detached on return (no logical and
+        // no visual parent).
+        private static bool TryDetachFromUiParent(FrameworkElement child)
+        {
+            if (child == null) return false;
+            var logical = LogicalTreeHelper.GetParent(child);
+            switch (logical)
+            {
+                case Panel p:
+                    p.Children.Remove(child);
+                    break;
+                case Decorator dec when ReferenceEquals(dec.Child, child):
+                    dec.Child = null;
+                    break;
+                case ContentControl cc when ReferenceEquals(cc.Content, child):
+                    cc.Content = null;
+                    break;
+                case ContentPresenter cp when ReferenceEquals(cp.Content, child):
+                    cp.Content = null;
+                    break;
+                case null:
+                    // Already logically detached; fall through to visual check.
+                    break;
+                default:
+                    // Unknown container type — refuse to guess.
+                    return false;
+            }
+            return child.Parent == null && VisualTreeHelper.GetParent(child) == null;
+        }
+
         private void EnterPreviewFullscreen()
         {
-            if (_isPreviewFullscreen || BrowserPreview == null) return;
+            if (_fsTransitionInFlight || _isPreviewFullscreen || BrowserPreview == null) return;
+            _fsTransitionInFlight = true;
+            var hadFsSubscription = false;
+            Window? built = null;
             try
             {
-                _isPreviewFullscreen = true;
+                // Drop the during-reparent event so the page firing FS-changed
+                // mid-swap can't re-enter OnPreviewFullscreenChanged.
+                try
+                {
+                    if (BrowserPreview.CoreWebView2 != null)
+                    {
+                        BrowserPreview.CoreWebView2.ContainsFullScreenElementChanged -= OnPreviewFullscreenChanged;
+                        hadFsSubscription = true;
+                    }
+                }
+                catch { }
 
                 var screen = System.Windows.Forms.Screen.FromHandle(
                     new System.Windows.Interop.WindowInteropHelper(this).Handle);
 
-                if (BrowserPreview.Parent is Panel panel)
+                if (!TryDetachFromUiParent(BrowserPreview))
                 {
-                    panel.Children.Remove(BrowserPreview);
+                    App.Logger?.Warning(
+                        "DeeperEditor: aborting fullscreen — BrowserPreview parent is an unsupported type ({Type})",
+                        LogicalTreeHelper.GetParent(BrowserPreview)?.GetType().FullName ?? "<null>");
+                    return;
+                }
+                // Defensive double-check: must be parent-free before we hand it
+                // to Window.Content (otherwise WPF throws).
+                if (BrowserPreview.Parent != null || VisualTreeHelper.GetParent(BrowserPreview) != null)
+                {
+                    App.Logger?.Warning("DeeperEditor: detach reported success but BrowserPreview still has a parent; aborting fullscreen");
+                    SafeRestoreBrowserPreviewToHost();
+                    return;
                 }
 
-                _previewFullscreenWindow = new Window
+                built = new Window
                 {
                     WindowStyle = WindowStyle.None,
                     ResizeMode = ResizeMode.NoResize,
@@ -719,7 +782,7 @@ namespace ConditioningControlPanel.Views.Deeper
                     Content = BrowserPreview
                 };
 
-                _previewFullscreenWindow.KeyDown += (_, args) =>
+                built.KeyDown += (_, args) =>
                 {
                     if (args.Key == Key.Escape || args.Key == Key.F11)
                     {
@@ -728,22 +791,20 @@ namespace ConditioningControlPanel.Views.Deeper
                     }
                 };
 
-                _previewFullscreenWindow.Closing += (_, _) =>
+                built.Closing += (_, _) =>
                 {
                     if (_previewFullscreenWindow != null)
                         _previewFullscreenWindow.Content = null;
                 };
 
-                _previewFullscreenWindow.Closed += (_, _) =>
+                built.Closed += (_, _) =>
                 {
                     try
                     {
-                        if (BrowserPreview != null
-                            && PreviewHost != null
-                            && !PreviewHost.Children.Contains(BrowserPreview))
-                        {
-                            PreviewHost.Children.Insert(0, BrowserPreview);
-                        }
+                        // Defensive: if Closing didn't clear Content, do it now
+                        // so the reparent below can't throw "already has parent".
+                        TryDetachFromUiParent(BrowserPreview);
+                        SafeRestoreBrowserPreviewToHost();
                     }
                     catch (Exception ex)
                     {
@@ -763,29 +824,100 @@ namespace ConditioningControlPanel.Views.Deeper
                     try { BrowserPreview?.Focus(); } catch { }
                 };
 
-                _previewFullscreenWindow.Show();
-                _previewFullscreenWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
-                _previewFullscreenWindow.WindowState = WindowState.Maximized;
+                _previewFullscreenWindow = built;
+                built.Show();
+                built.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
+                built.WindowState = WindowState.Maximized;
 
                 // Flag the page so dblclick / click-pair handlers fire even
                 // when HTML5 fullscreen state was lost during reparent.
                 try { _ = BrowserPreview.CoreWebView2.ExecuteScriptAsync("window._ccpForcedFs = true;"); }
                 catch { }
 
+                // Commit state only after reparent is fully in place.
+                _isPreviewFullscreen = true;
                 App.Logger?.Information("DeeperEditor: preview entered fullscreen on {Screen}", screen.DeviceName);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "DeeperEditor: failed to enter preview fullscreen");
-                ExitPreviewFullscreen();
+                // Best-effort rollback: drop the partial window, put the
+                // WebView back where it came from, clear any page FS state.
+                try
+                {
+                    if (built != null)
+                    {
+                        try { built.Content = null; } catch { }
+                        try { built.Close(); } catch { }
+                    }
+                }
+                catch { }
+                _previewFullscreenWindow = null;
+                SafeRestoreBrowserPreviewToHost();
+                try
+                {
+                    if (BrowserPreview?.CoreWebView2 != null)
+                    {
+                        _ = BrowserPreview.CoreWebView2.ExecuteScriptAsync(
+                            "window._ccpForcedFs = false; try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
+                    }
+                }
+                catch { }
+                // _isPreviewFullscreen was never flipped, so no further unwind.
+            }
+            finally
+            {
+                if (hadFsSubscription)
+                {
+                    try
+                    {
+                        if (BrowserPreview?.CoreWebView2 != null)
+                            BrowserPreview.CoreWebView2.ContainsFullScreenElementChanged += OnPreviewFullscreenChanged;
+                    }
+                    catch { }
+                }
+                _fsTransitionInFlight = false;
+            }
+        }
+
+        // Put BrowserPreview back into PreviewHost iff it's currently parent-
+        // free. Caller is responsible for prior detach. Idempotent.
+        private void SafeRestoreBrowserPreviewToHost()
+        {
+            try
+            {
+                if (BrowserPreview == null || PreviewHost == null) return;
+                if (BrowserPreview.Parent != null) return;
+                if (VisualTreeHelper.GetParent(BrowserPreview) != null) return;
+                if (!PreviewHost.Children.Contains(BrowserPreview))
+                    PreviewHost.Children.Insert(0, BrowserPreview);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("DeeperEditor: SafeRestoreBrowserPreviewToHost failed: {Error}", ex.Message);
             }
         }
 
         private void ExitPreviewFullscreen()
         {
-            if (!_isPreviewFullscreen) return;
+            if (_fsTransitionInFlight || !_isPreviewFullscreen) return;
+            _fsTransitionInFlight = true;
+            var hadFsSubscription = false;
             try
             {
+                try
+                {
+                    if (BrowserPreview?.CoreWebView2 != null)
+                    {
+                        BrowserPreview.CoreWebView2.ContainsFullScreenElementChanged -= OnPreviewFullscreenChanged;
+                        hadFsSubscription = true;
+                    }
+                }
+                catch { }
+
+                // Commit state up front — we're past the point where Enter
+                // could win the race, and downstream code should immediately
+                // see "not fullscreen".
                 _isPreviewFullscreen = false;
                 try
                 {
@@ -805,6 +937,19 @@ namespace ConditioningControlPanel.Views.Deeper
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "DeeperEditor: failed to exit preview fullscreen");
+            }
+            finally
+            {
+                if (hadFsSubscription)
+                {
+                    try
+                    {
+                        if (BrowserPreview?.CoreWebView2 != null)
+                            BrowserPreview.CoreWebView2.ContainsFullScreenElementChanged += OnPreviewFullscreenChanged;
+                    }
+                    catch { }
+                }
+                _fsTransitionInFlight = false;
             }
         }
 
@@ -845,6 +990,18 @@ namespace ConditioningControlPanel.Views.Deeper
             }
             if (_isScrubbing) return;
             if (_browserSource == null) return;
+            // Reparent in progress — touching BrowserPreview now would race
+            // with the WebView2 swap. Drop this tick.
+            if (_fsTransitionInFlight) return;
+            // BrowserPreview is between containers (no logical and no visual
+            // parent). ExecuteScriptAsync may throw against an unattached
+            // WebView; skip until it's reattached.
+            if (BrowserPreview != null
+                && BrowserPreview.Parent == null
+                && VisualTreeHelper.GetParent(BrowserPreview) == null)
+            {
+                return;
+            }
             var dur = _browserSource.GetDurationSeconds();
             if (dur > 0 && Math.Abs(dur - _totalSeconds) > 0.5)
             {

@@ -63,6 +63,7 @@ namespace ConditioningControlPanel.Views.Deeper
         // pop the WebView out into a borderless topmost window covering the whole monitor.
         private Window? _videoFullscreenWindow;
         private bool _isVideoFullscreen;
+        private bool _fsTransitionInFlight;
         private bool _isPlayerDualMonitorActive;
 
         public EnhancementPlayerWindow(EnhancementAudioPlayer player, EnhancementHostService host)
@@ -857,6 +858,15 @@ namespace ConditioningControlPanel.Views.Deeper
         private void UiTimer_Tick(object? sender, EventArgs e)
         {
             if (_isScrubbing) return;
+            // Reparent in progress — touching VideoBrowser now would race with
+            // the WebView2 swap and can throw against an unattached browser.
+            if (_fsTransitionInFlight) return;
+            if (VideoBrowser != null
+                && VideoBrowser.Parent == null
+                && VisualTreeHelper.GetParent(VideoBrowser) == null)
+            {
+                return;
+            }
 
             if (_videoSource != null)
             {
@@ -1556,6 +1566,10 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void OnVideoFullscreenChanged(object? sender, object? e)
         {
+            // We unsubscribe for the duration of Enter/Exit, but the in-flight
+            // guard is a second line of defence if a stray FS-changed manages
+            // to fire mid-swap.
+            if (_fsTransitionInFlight) return;
             try
             {
                 var contains = VideoBrowser?.CoreWebView2?.ContainsFullScreenElement ?? false;
@@ -1595,29 +1609,77 @@ namespace ConditioningControlPanel.Views.Deeper
             }
         }
 
+        // Parent-agnostic detach. The original code only handled Panel parents
+        // and silently no-op'd everything else; that left VideoBrowser still
+        // attached and the next `Window.Content = VideoBrowser` threw
+        // "Visual already has a parent" mid-Enter, leaving state inconsistent.
+        // Returns true iff `child` is fully detached on return.
+        private static bool TryDetachFromUiParent(FrameworkElement child)
+        {
+            if (child == null) return false;
+            var logical = LogicalTreeHelper.GetParent(child);
+            switch (logical)
+            {
+                case Panel p:
+                    p.Children.Remove(child);
+                    break;
+                case Decorator dec when ReferenceEquals(dec.Child, child):
+                    dec.Child = null;
+                    break;
+                case ContentControl cc when ReferenceEquals(cc.Content, child):
+                    cc.Content = null;
+                    break;
+                case ContentPresenter cp when ReferenceEquals(cp.Content, child):
+                    cp.Content = null;
+                    break;
+                case null:
+                    break;
+                default:
+                    return false;
+            }
+            return child.Parent == null && VisualTreeHelper.GetParent(child) == null;
+        }
+
         private void EnterVideoFullscreen()
         {
-            if (_isVideoFullscreen || VideoBrowser == null) return;
+            if (_fsTransitionInFlight || _isVideoFullscreen || VideoBrowser == null) return;
+            _fsTransitionInFlight = true;
+            var hadFsSubscription = false;
+            Window? built = null;
             try
             {
-                _isVideoFullscreen = true;
+                try
+                {
+                    if (VideoBrowser.CoreWebView2 != null)
+                    {
+                        VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged -= OnVideoFullscreenChanged;
+                        hadFsSubscription = true;
+                    }
+                }
+                catch { }
 
                 // Find which monitor this Player is currently on so the fullscreen
                 // window lands on the same screen the user was looking at.
                 var screen = System.Windows.Forms.Screen.FromHandle(
                     new System.Windows.Interop.WindowInteropHelper(this).Handle);
 
-                // Detach the WebView from its current parent. Player layout uses a
-                // Grid inside VideoPane (Border > Grid > WebView), so we walk up to
-                // the Grid and remove it from there.
-                if (VideoBrowser.Parent is System.Windows.Controls.Panel panel)
+                if (!TryDetachFromUiParent(VideoBrowser))
                 {
-                    panel.Children.Remove(VideoBrowser);
+                    App.Logger?.Warning(
+                        "EnhancementPlayer: aborting fullscreen — VideoBrowser parent is an unsupported type ({Type})",
+                        LogicalTreeHelper.GetParent(VideoBrowser)?.GetType().FullName ?? "<null>");
+                    return;
+                }
+                if (VideoBrowser.Parent != null || VisualTreeHelper.GetParent(VideoBrowser) != null)
+                {
+                    App.Logger?.Warning("EnhancementPlayer: detach reported success but VideoBrowser still has a parent; aborting fullscreen");
+                    SafeRestoreVideoBrowserToPane();
+                    return;
                 }
 
                 // Build the fullscreen window with borderless properties up front
                 // (matches MainWindow.EnterBrowserFullscreen at MainWindow.xaml.cs:17675).
-                _videoFullscreenWindow = new Window
+                built = new Window
                 {
                     WindowStyle = WindowStyle.None,
                     ResizeMode = ResizeMode.NoResize,
@@ -1634,7 +1696,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
                 // Esc and F11 in the fullscreen window exit fullscreen (also clears
                 // HTML5 fullscreen state on the page so the toggle round-trips).
-                _videoFullscreenWindow.KeyDown += (_, args) =>
+                built.KeyDown += (_, args) =>
                 {
                     if (args.Key == Key.Escape || args.Key == Key.F11)
                     {
@@ -1643,21 +1705,20 @@ namespace ConditioningControlPanel.Views.Deeper
                     }
                 };
 
-                _videoFullscreenWindow.Closing += (_, _) =>
+                built.Closing += (_, _) =>
                 {
                     if (_videoFullscreenWindow != null)
                         _videoFullscreenWindow.Content = null;
                 };
 
-                _videoFullscreenWindow.Closed += (_, _) =>
+                built.Closed += (_, _) =>
                 {
-                    // Return the WebView to the Player's VideoPane.
+                    // Defensive: if Closing didn't clear Content, detach now so
+                    // the reparent below can't throw "already has parent".
                     try
                     {
-                        if (VideoBrowser != null && VideoPane.Child is Grid grid && !grid.Children.Contains(VideoBrowser))
-                        {
-                            grid.Children.Insert(0, VideoBrowser);
-                        }
+                        TryDetachFromUiParent(VideoBrowser);
+                        SafeRestoreVideoBrowserToPane();
                     }
                     catch (Exception ex)
                     {
@@ -1679,9 +1740,10 @@ namespace ConditioningControlPanel.Views.Deeper
                 // Show small first, pump render queue, then maximize — matches the
                 // pattern in MainWindow.EnterBrowserFullscreen which avoids a sizing
                 // glitch on per-monitor DPI displays.
-                _videoFullscreenWindow.Show();
-                _videoFullscreenWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
-                _videoFullscreenWindow.WindowState = WindowState.Maximized;
+                _videoFullscreenWindow = built;
+                built.Show();
+                built.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
+                built.WindowState = WindowState.Maximized;
 
                 // Flag the page so the JS click-pair / dblclick handlers fire
                 // even when the page itself lost HTML5 fullscreen during the
@@ -1692,20 +1754,85 @@ namespace ConditioningControlPanel.Views.Deeper
                 try { _ = VideoBrowser.CoreWebView2.ExecuteScriptAsync("window._ccpForcedFs = true;"); }
                 catch { }
 
+                // Commit state only after reparent is fully in place.
+                _isVideoFullscreen = true;
                 App.Logger?.Information("EnhancementPlayer: entered fullscreen on {Screen}", screen.DeviceName);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "EnhancementPlayer: failed to enter fullscreen");
-                ExitVideoFullscreen();
+                try
+                {
+                    if (built != null)
+                    {
+                        try { built.Content = null; } catch { }
+                        try { built.Close(); } catch { }
+                    }
+                }
+                catch { }
+                _videoFullscreenWindow = null;
+                SafeRestoreVideoBrowserToPane();
+                try
+                {
+                    if (VideoBrowser?.CoreWebView2 != null)
+                    {
+                        _ = VideoBrowser.CoreWebView2.ExecuteScriptAsync(
+                            "window._ccpForcedFs = false; try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (_) {}");
+                    }
+                }
+                catch { }
+                // _isVideoFullscreen never flipped, so no further unwind.
+            }
+            finally
+            {
+                if (hadFsSubscription)
+                {
+                    try
+                    {
+                        if (VideoBrowser?.CoreWebView2 != null)
+                            VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged += OnVideoFullscreenChanged;
+                    }
+                    catch { }
+                }
+                _fsTransitionInFlight = false;
+            }
+        }
+
+        // Put VideoBrowser back into the Player's VideoPane Grid iff it's
+        // currently parent-free. Caller is responsible for prior detach.
+        private void SafeRestoreVideoBrowserToPane()
+        {
+            try
+            {
+                if (VideoBrowser == null) return;
+                if (VideoBrowser.Parent != null) return;
+                if (VisualTreeHelper.GetParent(VideoBrowser) != null) return;
+                if (VideoPane?.Child is Grid grid && !grid.Children.Contains(VideoBrowser))
+                    grid.Children.Insert(0, VideoBrowser);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementPlayer: SafeRestoreVideoBrowserToPane failed: {Error}", ex.Message);
             }
         }
 
         private void ExitVideoFullscreen()
         {
-            if (!_isVideoFullscreen) return;
+            if (_fsTransitionInFlight || !_isVideoFullscreen) return;
+            _fsTransitionInFlight = true;
+            var hadFsSubscription = false;
             try
             {
+                try
+                {
+                    if (VideoBrowser?.CoreWebView2 != null)
+                    {
+                        VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged -= OnVideoFullscreenChanged;
+                        hadFsSubscription = true;
+                    }
+                }
+                catch { }
+
                 _isVideoFullscreen = false;
                 // Clear the JS flag and best-effort exit any HTML5 fullscreen
                 // that may still be active on the page. Both calls are no-ops
@@ -1729,6 +1856,19 @@ namespace ConditioningControlPanel.Views.Deeper
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "EnhancementPlayer: failed to exit fullscreen");
+            }
+            finally
+            {
+                if (hadFsSubscription)
+                {
+                    try
+                    {
+                        if (VideoBrowser?.CoreWebView2 != null)
+                            VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged += OnVideoFullscreenChanged;
+                    }
+                    catch { }
+                }
+                _fsTransitionInFlight = false;
             }
         }
 
