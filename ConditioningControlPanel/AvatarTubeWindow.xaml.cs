@@ -3134,8 +3134,29 @@ namespace ConditioningControlPanel
             App.Autonomy?.ReportUserActivity();
         }
 
+        /// <summary>
+        /// Restart idle timer with the current setting. Call when the user changes
+        /// IdleGiggleIntervalSeconds via the slider so the running timer picks up
+        /// the new value immediately instead of waiting for an unrelated reset.
+        /// </summary>
+        public void RestartIdleTimer()
+        {
+            _idleTimer?.Stop();
+            StartIdleTimer();
+        }
+
         private void OnIdleTick(object? sender, EventArgs e)
         {
+            // Re-read setting on every tick so slider changes self-heal even if
+            // RestartIdleTimer is never called (e.g. slider changed while no
+            // speech is happening). DispatcherTimer applies the new Interval
+            // after the current tick completes.
+            var configured = App.Settings?.Current?.IdleGiggleIntervalSeconds ?? 120;
+            if (_idleTimer != null && Math.Abs(_idleTimer.Interval.TotalSeconds - configured) > 0.5)
+            {
+                _idleTimer.Interval = TimeSpan.FromSeconds(configured);
+            }
+
             // Skip if speech is on cooldown or currently showing
             if (!IsSpeechReady()) return;
 

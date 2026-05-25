@@ -10738,6 +10738,7 @@ namespace ConditioningControlPanel
             TxtIdleIntervalCompanion.Text = $"{value}s";
             App.Settings.Current.IdleGiggleIntervalSeconds = value;
             App.Settings.Save();
+            _avatarTubeWindow?.RestartIdleTimer();
         }
 
         private void SliderBubbleDuration_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
