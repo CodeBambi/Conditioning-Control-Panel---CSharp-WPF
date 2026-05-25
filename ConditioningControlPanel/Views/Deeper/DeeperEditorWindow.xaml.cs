@@ -367,6 +367,7 @@ namespace ConditioningControlPanel.Views.Deeper
             UpdateCreatorLockUi();
             RefreshValidation();
             SelectNothing();
+            RebuildTimelineRuler();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
@@ -849,6 +850,7 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 _totalSeconds = dur;
                 TxtTotalTime.Text = FormatTime(_totalSeconds);
+                RebuildTimelineRuler();
                 RebuildRegionVisuals();
                 RebuildHapticVisuals();
                 RebuildEffectVisuals();
@@ -926,6 +928,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _totalSeconds = args.Length / 1000.0;
                 TxtTotalTime.Text = FormatTime(_totalSeconds);
                 UpdatePlayheadPosition();
+                RebuildTimelineRuler();
                 RebuildRegionVisuals();
                 RebuildHapticVisuals();
                 RebuildEffectVisuals();
@@ -982,6 +985,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _totalSeconds = _waveformData.DurationSeconds;
                 TxtTotalTime.Text = FormatTime(_totalSeconds);
                 UpdateWaveformPath();
+                RebuildTimelineRuler();
                 RebuildRegionVisuals();
                 RebuildHapticVisuals();
                 RebuildEffectVisuals();
@@ -1174,6 +1178,7 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             UpdatePlayheadPosition();
             UpdateWaveformPath();
+            RebuildTimelineRuler();
             RebuildRegionVisuals();
             RebuildHapticVisuals();
             RebuildEffectVisuals();
@@ -1219,6 +1224,7 @@ namespace ConditioningControlPanel.Views.Deeper
             {
                 UpdatePlayheadPosition();
                 UpdateWaveformPath();
+                RebuildTimelineRuler();
                 RebuildRegionVisuals();
                 RebuildHapticVisuals();
                 RebuildEffectVisuals();
