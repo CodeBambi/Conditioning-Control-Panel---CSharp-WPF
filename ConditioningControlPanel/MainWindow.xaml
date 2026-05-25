@@ -2323,12 +2323,17 @@
                         </Button>
                         <Popup x:Name="ExclusivesSubmenuPopup"
                                PlacementTarget="{Binding ElementName=BtnPatreonExclusives}"
-                               Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
-                               PopupAnimation="Slide"
+                               Placement="Bottom" StaysOpen="True" AllowsTransparency="True"
+                               PopupAnimation="None"
+                               Closed="ExclusivesSubmenuPopup_Closed"
                                MouseLeave="ExclusivesMenu_MouseLeave"
                                MouseEnter="ExclusivesSubmenuPopup_MouseEnter">
+                            <!-- Outer transparent border bridges the visual gap between the
+                                 launcher button and the menu so the mouse doesn't fall through
+                                 dead space (which would otherwise fire MouseLeave on the popup). -->
+                            <Border Background="Transparent" Padding="0,4,0,0">
                             <Border Background="#1A1A2E" BorderBrush="#FF69B4" BorderThickness="2"
-                                    CornerRadius="6" Padding="6" Margin="0,4,0,0" MinWidth="220">
+                                    CornerRadius="6" Padding="6" MinWidth="220">
                                 <StackPanel Orientation="Vertical">
                                     <Button x:Name="BtnSubBlinkTrainer" Style="{StaticResource ExclusivesSubmenuButton}"
                                             Click="BtnSubBlinkTrainer_Click">
@@ -2415,6 +2420,7 @@
                                         </DockPanel>
                                     </Button>
                                 </StackPanel>
+                            </Border>
                             </Border>
                         </Popup>
                     </Grid>

@@ -504,8 +504,24 @@ namespace ConditioningControlPanel
                 if (ExclusivesSubmenuPopup != null && ExclusivesSubmenuPopup.IsOpen)
                 {
                     _exclusivesMenuCloseTimer?.Stop();
+                    _exclusivesPinned = false;
                     ExclusivesSubmenuPopup.IsOpen = false;
                 }
+            };
+
+            // The Exclusives popup uses StaysOpen=True (to avoid WPF's mouse-capture
+            // quirk where StaysOpen=False swallows clicks on the placement target
+            // and holds capture until the window loses+regains focus). We close it
+            // manually here when the user clicks anywhere in the main window outside
+            // the launcher button. Clicks inside the popup never reach this handler
+            // (popup hosts its own input root), so sub-items work normally.
+            PreviewMouseDown += (_, e) =>
+            {
+                if (ExclusivesSubmenuPopup == null || !ExclusivesSubmenuPopup.IsOpen) return;
+                if (BtnPatreonExclusives == null) return;
+                if (e.OriginalSource is DependencyObject src && IsVisualDescendant(src, BtnPatreonExclusives)) return;
+                _exclusivesPinned = false;
+                ExclusivesSubmenuPopup.IsOpen = false;
             };
 
             // velvet-mosaic: highlight dashboard cards whose feature is enabled, and
@@ -5333,12 +5349,34 @@ namespace ConditioningControlPanel
 
         private void BtnPatreonExclusives_Click(object sender, RoutedEventArgs e)
         {
-            // The Exclusives tab no longer exists — this button is now purely a
-            // launcher for the submenu popup (Remote Control / Bambi Takeover /
-            // Haptics / Awareness). The account/data content that used to live in
-            // the Exclusives tab now lives in the dashboard's App Info & Data popup.
+            // Toggle the menu. With StaysOpen=True (see the Popup in XAML) the
+            // button's Click event always fires reliably — outside-click closing
+            // is handled by the window-level PreviewMouseDown handler set up in
+            // the constructor. If the popup is already pinned-open, click closes
+            // it. Otherwise click opens & pins it (so MouseLeave won't dismiss it).
+            _exclusivesMenuCloseTimer?.Stop();
+            if (ExclusivesSubmenuPopup.IsOpen && _exclusivesPinned)
+            {
+                _exclusivesPinned = false;
+                ExclusivesSubmenuPopup.IsOpen = false;
+                return;
+            }
             RefreshExclusivesSubmenuLocks();
+            _exclusivesPinned = true;
             ExclusivesSubmenuPopup.IsOpen = true;
+        }
+
+        // Walks up the visual tree (with a logical-tree fallback for content like
+        // popups) checking whether `node` is `ancestor` or descended from it.
+        private static bool IsVisualDescendant(DependencyObject? node, DependencyObject ancestor)
+        {
+            while (node != null)
+            {
+                if (node == ancestor) return true;
+                var parent = VisualTreeHelper.GetParent(node) ?? LogicalTreeHelper.GetParent(node);
+                node = parent;
+            }
+            return false;
         }
 
         /// <summary>
@@ -5360,10 +5398,15 @@ namespace ConditioningControlPanel
         #region Exclusives Submenu
 
         private DispatcherTimer? _exclusivesMenuCloseTimer;
+        // True when the popup was opened by a click — hover-leave will not
+        // dismiss a pinned popup. Outside-click and Alt+Tab close it via the
+        // window-level handlers in the constructor.
+        private bool _exclusivesPinned;
 
         private void BtnPatreonExclusives_MouseEnter(object sender, MouseEventArgs e)
         {
             _exclusivesMenuCloseTimer?.Stop();
+            if (ExclusivesSubmenuPopup.IsOpen) return;
             RefreshExclusivesSubmenuLocks();
             ExclusivesSubmenuPopup.IsOpen = true;
         }
@@ -5375,9 +5418,13 @@ namespace ConditioningControlPanel
 
         private void ExclusivesMenu_MouseLeave(object sender, MouseEventArgs e)
         {
+            // Click-pinned popups don't dismiss on hover-out — they only close
+            // via click-outside or sub-item selection.
+            if (_exclusivesPinned) return;
+
             if (_exclusivesMenuCloseTimer == null)
             {
-                _exclusivesMenuCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(280) };
+                _exclusivesMenuCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
                 _exclusivesMenuCloseTimer.Tick += ExclusivesMenuCloseTick;
             }
             _exclusivesMenuCloseTimer.Stop();
@@ -5387,42 +5434,54 @@ namespace ConditioningControlPanel
         private void ExclusivesMenuCloseTick(object? sender, EventArgs e)
         {
             _exclusivesMenuCloseTimer?.Stop();
+            if (_exclusivesPinned) return;
+            ExclusivesSubmenuPopup.IsOpen = false;
+        }
+
+        private void ExclusivesSubmenuPopup_Closed(object? sender, EventArgs e)
+        {
+            _exclusivesPinned = false;
+        }
+
+        private void CloseExclusivesSubmenu()
+        {
+            _exclusivesPinned = false;
             ExclusivesSubmenuPopup.IsOpen = false;
         }
 
         private void BtnSubRemoteControl_Click(object sender, RoutedEventArgs e)
         {
-            ExclusivesSubmenuPopup.IsOpen = false;
+            CloseExclusivesSubmenu();
             ShowTab("remotecontrol");
         }
 
         private void BtnSubBambiTakeover_Click(object sender, RoutedEventArgs e)
         {
-            ExclusivesSubmenuPopup.IsOpen = false;
+            CloseExclusivesSubmenu();
             ShowTab("bambitakeover");
         }
 
         private void BtnSubHaptics_Click(object sender, RoutedEventArgs e)
         {
-            ExclusivesSubmenuPopup.IsOpen = false;
+            CloseExclusivesSubmenu();
             ShowTab("haptics");
         }
 
         private void BtnSubAwareness_Click(object sender, RoutedEventArgs e)
         {
-            ExclusivesSubmenuPopup.IsOpen = false;
+            CloseExclusivesSubmenu();
             ShowTab("awareness");
         }
 
         private void BtnSubLockdown_Click(object sender, RoutedEventArgs e)
         {
-            ExclusivesSubmenuPopup.IsOpen = false;
+            CloseExclusivesSubmenu();
             ShowTab("lockdown");
         }
 
         private void BtnSubBlinkTrainer_Click(object sender, RoutedEventArgs e)
         {
-            ExclusivesSubmenuPopup.IsOpen = false;
+            CloseExclusivesSubmenu();
             ShowTab("blinktrainer");
         }
 
