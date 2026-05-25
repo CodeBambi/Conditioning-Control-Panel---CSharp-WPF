@@ -530,6 +530,7 @@ namespace ConditioningControlPanel.Views.Deeper
             RebuildHapticVisuals();
             RebuildRuleVisuals();
             UpdateSelectionSummary();
+            BuildItemsList();
         }
 
         private void UpdateSelectedSidePanelForEffect()
@@ -668,6 +669,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 RebuildEffectVisuals();
                 HideAllEditors();
                 if (SelectedPlaceholder != null) SelectedPlaceholder.Visibility = Visibility.Visible;
+                RefreshRulesList();
                 ScheduleValidation();
             }
             catch (Exception ex)

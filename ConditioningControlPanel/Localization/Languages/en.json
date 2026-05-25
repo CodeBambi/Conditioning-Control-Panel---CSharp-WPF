@@ -226,7 +226,7 @@
   "deeper_editor_preview_failed_title": "Preview failed",
   "deeper_editor_preview_not_initialized": "Deeper services aren't initialized yet.",
   "deeper_editor_preview_open_failed_fmt": "Couldn't open the Player:\n\n{0}",
-  "deeper_editor_scrub_hint": "Click or drag to seek · Shift+drag to mark a region · R to mark 5s · Space to play",
+  "deeper_editor_scrub_hint": "Click or drag to seek · Shift+drag to mark a region · Ctrl+drag to select · R to mark 5s · Space to play",
   "deeper_editor_region_id": "ID",
   "deeper_editor_region_label": "Label",
   "deeper_editor_region_start": "Start (s)",

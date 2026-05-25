@@ -1267,8 +1267,7 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void TimelineCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Shift+click+drag creates a region instead of scrubbing — preserved
-            // as a power-user shortcut.
+            // Shift+drag creates a region — power-user shortcut.
             if ((Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift && _totalSeconds > 0)
             {
                 _dragMode = DragMode.CreateRegion;
@@ -1279,14 +1278,26 @@ namespace ConditioningControlPanel.Views.Deeper
                 return;
             }
 
-            // Plain click on empty area: enter rubber-band mode. Defer the
-            // scrub-or-deselect decision to MouseUp so a click without drag
-            // still scrubs (existing behavior), while a drag draws a selection
-            // rectangle. The threshold check inside UpdateRubberBand prevents
-            // a tiny jitter from triggering a selection.
-            _dragMode = DragMode.RubberBand;
-            StartRubberBand(e.GetPosition(TimelineCanvas));
+            // Ctrl+drag = rubber-band multi-select (moved off the plain-drag
+            // gesture so the latter can do player-style continuous scrubbing).
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                _dragMode = DragMode.RubberBand;
+                StartRubberBand(e.GetPosition(TimelineCanvas));
+                TimelineCanvas.CaptureMouse();
+                e.Handled = true;
+                return;
+            }
+
+            // Plain click+drag on empty timeline = scrub. Insta-seek on the
+            // down-click and follow the cursor while dragging (any-video-
+            // player behavior). Clears prior selection so the inspector
+            // doesn't show a stale item.
+            SelectNothing();
+            _dragMode = DragMode.Scrub;
+            _isScrubbing = true;
             TimelineCanvas.CaptureMouse();
+            ApplyScrubFromMouse(e);
             e.Handled = true;
         }
 
@@ -1421,16 +1432,11 @@ namespace ConditioningControlPanel.Views.Deeper
         {
             if (_dragMode == DragMode.RubberBand)
             {
-                var actuallyDragged = FinishRubberBand(e.GetPosition(TimelineCanvas));
+                FinishRubberBand(e.GetPosition(TimelineCanvas));
                 TimelineCanvas.ReleaseMouseCapture();
                 _dragMode = DragMode.None;
-                if (!actuallyDragged)
-                {
-                    // Click-without-drag preserves the prior single-click
-                    // behavior: deselect everything and scrub to the click point.
-                    SelectNothing();
-                    ApplyScrubFromMouse(e);
-                }
+                // Ctrl+click without drag is a no-op — plain click handles
+                // scrubbing via DragMode.Scrub, so no fallback needed here.
                 return;
             }
             if (_dragMode == DragMode.CreateRegion)
@@ -1452,6 +1458,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 EndMultiDragCapture();
                 TimelineCanvas.ReleaseMouseCapture();
                 ScheduleValidation();
+                BuildItemsList();
                 return;
             }
             if (_dragMode == DragMode.DragRegion ||
@@ -1464,6 +1471,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 EndMultiDragCapture();
                 TimelineCanvas.ReleaseMouseCapture();
                 ScheduleValidation();
+                BuildItemsList();
                 return;
             }
             if (_dragMode == DragMode.DragEffect ||
@@ -1476,6 +1484,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 EndMultiDragCapture();
                 TimelineCanvas.ReleaseMouseCapture();
                 ScheduleValidation();
+                BuildItemsList();
                 return;
             }
             if (_dragMode == DragMode.Scrub)
@@ -1484,6 +1493,34 @@ namespace ConditioningControlPanel.Views.Deeper
                 _dragMode = DragMode.None;
                 TimelineCanvas.ReleaseMouseCapture();
             }
+        }
+
+        // WPF doesn't fire MouseUp on a canvas that lost its mouse capture
+        // mid-drag (Alt+Tab, popup steals focus, another control captures,
+        // window deactivation). Without this hook the rubber-band rectangle
+        // / drag-create preview stay on the canvas as orphan visuals, and
+        // _dragMode stays stuck in a non-None state — both of which were
+        // observed in the field on Ctrl+drag rubber-band selection.
+        private void TimelineCanvas_LostMouseCapture(object sender, MouseEventArgs e)
+        {
+            if (_rubberBandRect != null)
+            {
+                try { TimelineCanvas.Children.Remove(_rubberBandRect); } catch { }
+                _rubberBandRect = null;
+            }
+            if (_dragCreatePreview != null)
+            {
+                try { TimelineCanvas.Children.Remove(_dragCreatePreview); } catch { }
+                _dragCreatePreview = null;
+            }
+            _dragMode = DragMode.None;
+            _isScrubbing = false;
+            _dragSnapshotPushed = false;
+            _draggedHaptic = null;
+            _draggedHapticTrack = null;
+            _draggedRegion = null;
+            _draggedEffect = null;
+            EndMultiDragCapture();
         }
 
         private void ApplyScrubFromMouse(MouseEventArgs e)
@@ -2366,14 +2403,12 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void RefreshRulesList()
         {
-            // The standalone Rules section was removed in the unified-timeline
-            // redesign — rules are now created via right-click on the timeline
-            // and edited via the Selected Item panel when a band is selected.
-            // Mission 1 (sidebar restructure) removed the side-panel "Rules &
-            // Effects" overview list too; this hook now refreshes the
-            // selection summary strip so all 11 legacy call sites keep
-            // working without further edits.
+            // Refreshes the selection summary strip + the sidebar Items list.
+            // All ~11 legacy call sites (add/delete/select/drag-end) flow
+            // through here, so wiring one place keeps both views fresh
+            // without touching every caller.
             UpdateSelectionSummary();
+            BuildItemsList();
         }
 
         // Mission 1 commit 5 — BuildRuleRow + SummarizeRule deleted. They

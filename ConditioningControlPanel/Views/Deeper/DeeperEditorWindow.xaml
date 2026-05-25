@@ -755,6 +755,7 @@
                                         MouseRightButtonDown="TimelineCanvas_MouseRightButtonDown"
                                         MouseMove="TimelineCanvas_MouseMove"
                                         MouseLeftButtonUp="TimelineCanvas_MouseLeftButtonUp"
+                                        LostMouseCapture="TimelineCanvas_LostMouseCapture"
                                         SizeChanged="TimelineCanvas_SizeChanged">
                                     <!-- Playhead -->
                                     <Line x:Name="PlayheadLine" X1="0" X2="0" Y1="0" Y2="0"
@@ -786,9 +787,10 @@
                     BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="0,0,0,0">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>  <!-- metadata drawer -->
+                        <RowDefinition Height="Auto"/>  <!-- items list (rules / effects / haptics / regions) -->
+                        <RowDefinition Height="Auto"/>  <!-- selection summary strip -->
+                        <RowDefinition Height="*"/>     <!-- inspector -->
                     </Grid.RowDefinitions>
 
                     <!-- Zone 1: Metadata drawer -->
@@ -870,9 +872,155 @@
                         </Border>
                     </StackPanel>
 
+                    <!-- Zone 1.5: Items list — every rule, effect, haptic, and
+                         region on the current enhancement, with a Time / Kind
+                         sort toggle. Two-way selection sync with the timeline:
+                         clicking an entry selects + scrolls the matching item
+                         into view on the timeline; selecting on the timeline
+                         highlights the row here. ListBox height is sized for
+                         ~6 visible entries before scrolling. -->
+                    <Border Grid.Row="1"
+                            Background="{DynamicResource DeeperDrawerStripBrush}"
+                            BorderBrush="{DynamicResource DeeperLaneSeparatorBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="10,6">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,6">
+                                <TextBlock DockPanel.Dock="Left" Text="📋"
+                                           Foreground="{DynamicResource DeeperAccentSoftBrush}"
+                                           FontSize="12" VerticalAlignment="Center"
+                                           Margin="0,0,6,0"/>
+                                <TextBlock DockPanel.Dock="Left" Text="Items"
+                                           Foreground="{DynamicResource DeeperAccentBrush}"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtItemsListCount" DockPanel.Dock="Left"
+                                           Margin="6,0,0,0"
+                                           Foreground="{DynamicResource TextDimBrush}"
+                                           FontSize="11" VerticalAlignment="Center"/>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                    <TextBlock Text="Sort"
+                                               Foreground="{DynamicResource TextDimBrush}"
+                                               FontSize="10" VerticalAlignment="Center"
+                                               Margin="0,0,6,0"/>
+                                    <RadioButton x:Name="RbItemsSortTime"
+                                                 Content="Time" IsChecked="True"
+                                                 GroupName="ItemsListSort"
+                                                 ToolTip="Sort items by their position on the timeline"
+                                                 Foreground="{DynamicResource TextLightBrush}"
+                                                 FontSize="10" VerticalAlignment="Center"
+                                                 Margin="0,0,8,0"
+                                                 Checked="ItemsListSort_Changed"/>
+                                    <RadioButton x:Name="RbItemsSortKind"
+                                                 Content="Kind"
+                                                 GroupName="ItemsListSort"
+                                                 ToolTip="Group by item kind (rules · regions · haptics · effects)"
+                                                 Foreground="{DynamicResource TextLightBrush}"
+                                                 FontSize="10" VerticalAlignment="Center"
+                                                 Checked="ItemsListSort_Changed"/>
+                                </StackPanel>
+                                <TextBlock/>
+                            </DockPanel>
+
+                            <Border Grid.Row="1"
+                                    Background="{DynamicResource DarkerBgBrush}"
+                                    BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}"
+                                    BorderThickness="1" CornerRadius="4">
+                                <ListBox x:Name="ItemsListBox"
+                                         MaxHeight="186"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Foreground="{DynamicResource TextLightBrush}"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                         SelectionChanged="ItemsListBox_SelectionChanged"
+                                         MouseDoubleClick="ItemsListBox_MouseDoubleClick">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Padding" Value="6,3"/>
+                                            <Setter Property="Margin" Value="0"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                            <Setter Property="Cursor" Value="Hand"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ListBoxItem">
+                                                        <Border x:Name="Bd"
+                                                                Background="{TemplateBinding Background}"
+                                                                Padding="{TemplateBinding Padding}"
+                                                                CornerRadius="3">
+                                                            <ContentPresenter/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="Bd" Property="Background"
+                                                                        Value="{DynamicResource DeeperMenuItemHoverBgBrush}"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="Bd" Property="Background"
+                                                                        Value="{DynamicResource DeeperAccentTransparent40Brush}"/>
+                                                                <Setter Property="Foreground"
+                                                                        Value="{DynamicResource TextLightBrush}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Icon}"
+                                                           FontSize="12" VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding KindLabel}"
+                                                           Foreground="{Binding KindBrush}"
+                                                           FontSize="10" FontWeight="SemiBold"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,8,0"/>
+                                                <TextBlock Grid.Column="2" Text="{Binding Label}"
+                                                           Foreground="{DynamicResource TextLightBrush}"
+                                                           FontSize="11" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Grid.Column="3" Text="{Binding TimeText}"
+                                                           Foreground="{DynamicResource TextDimBrush}"
+                                                           FontFamily="Consolas" FontSize="10"
+                                                           VerticalAlignment="Center"
+                                                           Margin="8,0,0,0"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+
+                            <TextBlock x:Name="TxtItemsListEmpty" Grid.Row="1"
+                                       Text="No rules, effects, or regions yet"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="11" FontStyle="Italic"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Margin="0,12,0,12"
+                                       Visibility="Collapsed"
+                                       IsHitTestVisible="False"/>
+                        </Grid>
+                    </Border>
+
                     <!-- Zone 2: Selection summary strip — always visible (~44px).
                          Populated by UpdateSelectionSummary() from selection setters. -->
-                    <Border Grid.Row="1" Height="44"
+                    <Border Grid.Row="2" Height="44"
                             Background="{DynamicResource DeeperSelectionStripBrush}"
                             BorderBrush="{DynamicResource DeeperLaneSeparatorBrush}"
                             BorderThickness="0,0,0,1"
@@ -888,7 +1036,7 @@
                     <!-- Zone 3: Inspector — internally scrollable. All per-selection
                          editors live here as visibility-toggled siblings; see Mission 1
                          report for the DataTemplate-vs-visibility-toggle deviation. -->
-                    <Border Grid.Row="2" Background="{DynamicResource PanelBgBrush}">
+                    <Border Grid.Row="3" Background="{DynamicResource PanelBgBrush}">
                         <ScrollViewer x:Name="InspectorScroll"
                                       VerticalScrollBarVisibility="Auto" Padding="14,12">
                             <StackPanel>
