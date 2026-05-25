@@ -263,6 +263,18 @@ namespace ConditioningControlPanel
             // Initialize mod selector display
             InitializeModSelector();
 
+            // Apply the persisted active mod to the rest of the UI. Without
+            // these calls, a fresh launch keeps the XAML-default (Bambi)
+            // feature card icons + accent brushes regardless of which mod
+            // is actually active — the user only saw the correct theme
+            // after manually re-picking the mod in the selector
+            // (ApplyActiveModChange). Logo + selector chip + tube/avatar
+            // already painted correctly because they were on the startup
+            // path; these three were only reached through ApplyActiveModChange.
+            LoadTakeoverImage();
+            LoadFeatureImages();
+            RefreshThemeAwareElements();
+
             // Initialize tray icon
             _trayIcon = new TrayIconService(this);
             _trayIcon.OnExitRequested += () =>
@@ -1785,6 +1797,11 @@ namespace ConditioningControlPanel
             var hwndSource = HwndSource.FromHwnd(hwnd);
             hwndSource?.AddHook(WndProc);
 
+            // Browser-header Webcam Tracking toggle: keep label/tooltip in sync
+            // with the tracking service so manual starts (Lab tab, Blink Trainer,
+            // etc.) reflect on this button too.
+            EnsureBrowserWebcamStateSubscribed();
+
             // Wire the in-app notification surface. Anything App.Notifications.Show()'d
             // before this point is replayed on attach.
             App.Notifications?.AttachHost(NotificationHost);
@@ -2564,6 +2581,12 @@ namespace ConditioningControlPanel
                     var name = string.IsNullOrEmpty(enhancement.Metadata?.Name) ? "(untitled)" : enhancement.Metadata!.Name;
                     TxtDeeperBrowserBadge.Text = $"🌊 {name}";
                     DeeperBrowserBadge.Tag = $"{name}\n{pageUrl}";
+
+                    // QoL: if the bound enhancement uses webcam-driven rules and
+                    // tracking isn't already running, ask the user once whether
+                    // they want to turn it on. Mirrors the player's behavior so
+                    // gaze/blink/attention rules actually fire in the browser.
+                    MaybePromptBrowserWebcamForEnhancement(enhancement);
                 }
                 catch { }
             });
@@ -2577,9 +2600,167 @@ namespace ConditioningControlPanel
                 {
                     DeeperBrowserBadge.Visibility = Visibility.Collapsed;
                     DeeperBrowserBadge.Tag = null;
+                    _browserWebcamPromptShownForUrl = null;
                 }
                 catch { }
             });
+        }
+
+        // ────────────────────────────────────────────────────────────────────
+        // Browser Webcam Tracking toggle (button above the embedded WebView2)
+        // ────────────────────────────────────────────────────────────────────
+
+        private bool _browserWebcamStateSubscribed;
+        private Action<WebcamTrackingState>? _onBrowserWebcamStateChanged;
+        // Tracks the page URL we've already prompted about so reload-binds
+        // don't badger the user repeatedly for the same enhancement.
+        private string? _browserWebcamPromptShownForUrl;
+
+        private void EnsureBrowserWebcamStateSubscribed()
+        {
+            if (_browserWebcamStateSubscribed || App.Webcam == null) return;
+            _browserWebcamStateSubscribed = true;
+            _onBrowserWebcamStateChanged = _ => Dispatcher.BeginInvoke(RefreshBrowserWebcamButton);
+            App.Webcam.OnTrackingStateChanged += _onBrowserWebcamStateChanged;
+            RefreshBrowserWebcamButton();
+        }
+
+        private void RefreshBrowserWebcamButton()
+        {
+            try
+            {
+                if (BtnWebcamTracking == null) return;
+                var on = App.Webcam?.IsRunning == true;
+                BtnWebcamTracking.Content = Loc.Get(on
+                    ? "btn_browser_webcam_tracking_on"
+                    : "btn_browser_webcam_tracking_off");
+                BtnWebcamTracking.ToolTip = Loc.Get(on
+                    ? "tooltip_browser_webcam_tracking_on"
+                    : "tooltip_browser_webcam_tracking_off");
+            }
+            catch { }
+        }
+
+        private async void BtnWebcamTracking_Click(object sender, RoutedEventArgs e)
+        {
+            var svc = App.Webcam;
+            if (svc == null) return;
+
+            if (svc.IsRunning)
+            {
+                svc.Stop();
+                RefreshBrowserWebcamButton();
+                return;
+            }
+
+            // Consent gate. If declined or cancelled, bail silently — user can
+            // try again from this same button or from the Lab tab later.
+            if (!WebcamTrackingService.IsConsentCurrent())
+            {
+                var consent = new WebcamConsentDialog { Owner = this };
+                var ok = consent.ShowDialog();
+                if (ok != true || !consent.ConsentGiven) return;
+            }
+
+            // Needs-calibration path: the calibration window reads OnRawIris,
+            // which only fires while the tracker is running. So we start the
+            // camera FIRST, then open calibration on top of the live stream.
+            // Tell the user up front so the camera light surprising them
+            // doesn't feel like the app did something it shouldn't have.
+            bool needsCalibration = svc.Calibration == null;
+            if (needsCalibration)
+            {
+                var confirm = MessageBox.Show(this,
+                    Loc.Get("browser_webcam_calibrate_prompt_body"),
+                    Loc.Get("browser_webcam_calibrate_prompt_title"),
+                    MessageBoxButton.OKCancel, MessageBoxImage.Information);
+                if (confirm != MessageBoxResult.OK) return;
+            }
+
+            // Start off the UI thread — Start() does VideoCapture open + ONNX
+            // session ctors and can block 10-30s on slow USB negotiation.
+            bool started;
+            try
+            {
+                started = await Task.Run(() => svc.Start());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Browser webcam toggle: Start() threw");
+                started = false;
+            }
+            RefreshBrowserWebcamButton();
+
+            if (!started)
+            {
+                App.Logger?.Warning("Browser webcam toggle: Start() returned false, state={State}", svc.State);
+                return;
+            }
+
+            // Now the tracker is live — run the 16-point calibration. If the
+            // user cancels we stop the tracker again so the camera light
+            // doesn't stay on for a feature they backed out of.
+            if (needsCalibration)
+            {
+                var calibrated = WebcamCalibrationWindow.ShowDialogWithRecalibrate(this);
+                if (calibrated != true)
+                {
+                    svc.Stop();
+                    RefreshBrowserWebcamButton();
+                }
+            }
+        }
+
+        // Webcam-needing enhancement check — mirrors EnhancementPlayerWindow's
+        // EnhancementNeedsWebcam: AutoTags first, then Trigger.Type fallback for
+        // pre-AutoTags enhancements.
+        private static bool BrowserEnhancementNeedsWebcam(Models.Deeper.Enhancement enh)
+        {
+            if (enh == null) return false;
+            if (enh.Metadata?.AutoTags?.Contains(Services.Deeper.EnhancementAutoTagger.TagWebcam) == true) return true;
+            if (enh.Rules == null) return false;
+            foreach (var rule in enh.Rules)
+            {
+                var t = rule?.Trigger?.Type;
+                if (t == Models.Deeper.TriggerTypes.GazeTarget
+                 || t == Models.Deeper.TriggerTypes.GazeAvoid
+                 || t == Models.Deeper.TriggerTypes.AttentionLost
+                 || t == Models.Deeper.TriggerTypes.BlinkDetected
+                 || t == Models.Deeper.TriggerTypes.MouthOpen) return true;
+            }
+            return false;
+        }
+
+        private void MaybePromptBrowserWebcamForEnhancement(Models.Deeper.Enhancement enhancement)
+        {
+            try
+            {
+                if (enhancement == null) return;
+                if (!BrowserEnhancementNeedsWebcam(enhancement)) return;
+                var svc = App.Webcam;
+                if (svc == null || svc.IsRunning) return;
+
+                // Dedupe per-page so reload/dom-mutation doesn't re-pop the dialog.
+                var url = App.DeeperBrowserDiscovery?.ActiveUrl ?? "";
+                if (!string.IsNullOrEmpty(_browserWebcamPromptShownForUrl) &&
+                    string.Equals(_browserWebcamPromptShownForUrl, url, StringComparison.OrdinalIgnoreCase))
+                    return;
+                _browserWebcamPromptShownForUrl = url;
+
+                var result = MessageBox.Show(this,
+                    Loc.Get("browser_webcam_prompt_body"),
+                    Loc.Get("browser_webcam_prompt_title"),
+                    MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (result != MessageBoxResult.Yes) return;
+
+                // Reuse the toggle button's flow so consent + calibration
+                // gating is identical to the manual-click path.
+                BtnWebcamTracking_Click(this, new RoutedEventArgs());
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("MaybePromptBrowserWebcamForEnhancement: {Error}", ex.Message);
+            }
         }
 
         private void ToggleEnhanceIfPossible_Changed(object sender, RoutedEventArgs e)

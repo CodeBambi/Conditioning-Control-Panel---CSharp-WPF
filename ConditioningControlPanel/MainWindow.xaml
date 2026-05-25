@@ -3104,12 +3104,13 @@
                         Background="{DynamicResource ElevatedSurfaceBrush}"
                         BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                     <StackPanel>
-                        <!-- Browser Header - single row with title, tabs, status, pop out -->
+                        <!-- Browser Header - single row with title, tabs, status, webcam toggle, pop out -->
                         <Grid Margin="0,0,0,4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
@@ -3194,8 +3195,45 @@
                                            Foreground="{DynamicResource DeeperAccentBrush}"
                                            FontSize="9" FontWeight="SemiBold"/>
                             </Border>
+                            <!-- Webcam Tracking toggle - inline, sits between status badge and pop-out.
+                                 Off: "📷 Webcam"  On: "📷 Webcam On" (label updated in code-behind
+                                 from OnTrackingStateChanged). Click runs the consent → calibrate →
+                                 start flow if needed; second click stops tracking. -->
+                            <Button Grid.Column="4" x:Name="BtnWebcamTracking"
+                                    Content="{loc:Str btn_browser_webcam_tracking_off}"
+                                    Click="BtnWebcamTracking_Click"
+                                    ToolTip="{loc:Str tooltip_browser_webcam_tracking_off}"
+                                    FontSize="9" Padding="6,3" Margin="0,0,6,0" VerticalAlignment="Center">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Background" Value="#33FF69B4"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                        <Setter Property="BorderBrush" Value="{DynamicResource PinkBrush}"/>
+                                        <Setter Property="BorderThickness" Value="1"/>
+                                        <Setter Property="Cursor" Value="Hand"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                                            CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#55FF69B4"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                             <!-- Pop Out button -->
-                            <Button Grid.Column="4" x:Name="BtnPopOutBrowser" Content="{loc:Str btn_pop_out}"
+                            <Button Grid.Column="5" x:Name="BtnPopOutBrowser" Content="{loc:Str btn_pop_out}"
                                     Click="BtnPopOutBrowser_Click"
                                     ToolTip="{loc:Str tooltip_pop_out_browser_to_resizable_window}"
                                     FontSize="9" Padding="6,3" VerticalAlignment="Center">
