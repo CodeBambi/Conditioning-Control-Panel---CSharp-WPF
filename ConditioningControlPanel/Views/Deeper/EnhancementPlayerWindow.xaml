@@ -7,6 +7,9 @@
         Height="768" Width="900" MinHeight="504" MinWidth="640"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource DarkerBgBrush}"
+        AllowDrop="True"
+        DragOver="Window_DragOver"
+        Drop="Window_Drop"
         Closing="Window_Closing">
 
     <Window.Resources>

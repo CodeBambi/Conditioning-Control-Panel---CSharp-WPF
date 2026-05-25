@@ -157,6 +157,79 @@ namespace ConditioningControlPanel.Views.Deeper
             else Loaded += (_, _) => Load();
         }
 
+        // -- Drag & drop -------------------------------------------------------
+        // Accepts media (audio/video) and *.ccpenh.json files dropped onto the
+        // window. Media routes through OpenLocalMediaFile (which also runs
+        // TryAutoLoadEnhancement to pick up sidecar / library / embedded
+        // companions). Enhancement files route through LoadEnhancementFile.
+        // WebView2's HwndHost area eats drops over the video preview, but the
+        // chrome/title-bar/event-log areas still accept them.
+
+        private void Window_DragOver(object sender, DragEventArgs e)
+        {
+            try
+            {
+                e.Effects = DragDropEffects.None;
+                if (e.Data.GetDataPresent(DataFormats.FileDrop)
+                    && e.Data.GetData(DataFormats.FileDrop) is string[] files
+                    && files.Any(IsDroppablePlayerPath))
+                {
+                    e.Effects = DragDropEffects.Copy;
+                }
+            }
+            catch { }
+            e.Handled = true;
+        }
+
+        private void Window_Drop(object sender, DragEventArgs e)
+        {
+            try
+            {
+                if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+                if (e.Data.GetData(DataFormats.FileDrop) is not string[] files || files.Length == 0) return;
+                e.Handled = true;
+
+                // Enhancement (.ccpenh.json) wins over raw media so a drop
+                // containing both a media file and its sidecar opens the
+                // project; OnHostLoaded will then load the media via the
+                // enhancement's MediaSource.
+                var enhPath = files.FirstOrDefault(IsEnhancementJsonPath);
+                if (!string.IsNullOrEmpty(enhPath))
+                {
+                    _lastDiscoverySource = DiscoverySource.Manual;
+                    LoadEnhancementFile(enhPath);
+                    return;
+                }
+                var mediaPath = files.FirstOrDefault(IsLocalMediaFile);
+                if (!string.IsNullOrEmpty(mediaPath))
+                {
+                    OpenLocalMediaFile(mediaPath);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "EnhancementPlayer: drop handler failed");
+            }
+        }
+
+        private static bool IsDroppablePlayerPath(string path)
+            => IsLocalMediaFile(path) || IsEnhancementJsonPath(path);
+
+        private static bool IsLocalMediaFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+            return ext is ".mp3" or ".wav" or ".m4a" or ".aac" or ".flac" or ".ogg"
+                       or ".mp4" or ".webm" or ".mkv" or ".mov" or ".avi" or ".m4v";
+        }
+
+        private static bool IsEnhancementJsonPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            return path.EndsWith(".ccpenh.json", StringComparison.OrdinalIgnoreCase);
+        }
+
         // -- File pickers ------------------------------------------------------
 
         private void BtnPickAudio_Click(object sender, RoutedEventArgs e)

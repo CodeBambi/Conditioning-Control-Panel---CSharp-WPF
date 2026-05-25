@@ -4181,6 +4181,98 @@ namespace ConditioningControlPanel.Views.Deeper
             ApplyChangedMedia(prompt.Result, isLocal: false);
         }
 
+        // -- Drag & drop -----------------------------------------------------
+        // Accepts media (audio/video) and *.ccpenh.json files dropped onto the
+        // window. Media drops route through ApplyChangedMedia (embedded /
+        // sidecar / library auto-detection included). Enhancement drops
+        // route through LoadEnhancement with an unsaved-changes prompt.
+        // WebView2's HwndHost surface eats drop events over the embedded
+        // browser preview, but the lanes/timeline/sidebar still accept drops.
+
+        private void Window_DragOver(object sender, DragEventArgs e)
+        {
+            try
+            {
+                e.Effects = DragDropEffects.None;
+                if (e.Data.GetDataPresent(DataFormats.FileDrop)
+                    && e.Data.GetData(DataFormats.FileDrop) is string[] files
+                    && files.Any(IsDroppableEditorPath))
+                {
+                    e.Effects = DragDropEffects.Copy;
+                }
+            }
+            catch { }
+            e.Handled = true;
+        }
+
+        private void Window_Drop(object sender, DragEventArgs e)
+        {
+            try
+            {
+                if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+                if (e.Data.GetData(DataFormats.FileDrop) is not string[] files || files.Length == 0) return;
+                e.Handled = true;
+
+                // Enhancement (.ccpenh.json) wins over raw media so a drop with
+                // both a media file AND its sidecar opens the project rather
+                // than just relinking the media.
+                var enhPath = files.FirstOrDefault(IsEnhancementJsonPath);
+                if (!string.IsNullOrEmpty(enhPath))
+                {
+                    LoadEnhancementFromDrop(enhPath);
+                    return;
+                }
+                var mediaPath = files.FirstOrDefault(IsLocalMediaFile);
+                if (!string.IsNullOrEmpty(mediaPath))
+                {
+                    ApplyChangedMedia(mediaPath, isLocal: true);
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "DeeperEditor: drop handler failed");
+            }
+        }
+
+        private void LoadEnhancementFromDrop(string ccpenhJsonPath)
+        {
+            try
+            {
+                if (!ConfirmDiscardChanges()) return;
+                var enhancement = Services.Deeper.EnhancementSerializer.LoadFromFile(ccpenhJsonPath);
+                TeardownPreview();
+                LoadEnhancement(enhancement, ccpenhJsonPath);
+                _ = InitializePreviewAsync();
+            }
+            catch (Services.Deeper.EnhancementLoadException ex)
+            {
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "DeeperEditor: drop-load enhancement failed");
+                MessageBox.Show(this, ex.Message, "Deeper", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private static bool IsDroppableEditorPath(string path)
+            => IsLocalMediaFile(path) || IsEnhancementJsonPath(path);
+
+        private static bool IsLocalMediaFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+            return ext is ".mp3" or ".wav" or ".m4a" or ".aac" or ".flac" or ".ogg"
+                       or ".mp4" or ".webm" or ".mkv" or ".mov" or ".avi" or ".m4v";
+        }
+
+        private static bool IsEnhancementJsonPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            return path.EndsWith(".ccpenh.json", System.StringComparison.OrdinalIgnoreCase);
+        }
+
         private void ApplyChangedMedia(string newSource, bool isLocal)
         {
             // Detect a matching enhancement (embedded JSON, sidecar, or library)
