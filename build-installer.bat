@@ -27,6 +27,13 @@ if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (
 )
 
 echo [1/4] Cleaning previous builds...
+:: Wipe bin/Release + obj/Release in addition to the publish folder. Without
+:: this, .NET's incremental publish can decide the stale Release DLL from a
+:: prior run is "up to date" even when source code has changed, and the new
+:: single-file bundle gets wrapped around the old DLL — burning v6.0.1's
+:: bump into a v6.0.0 binary inside a v6.0.1-named installer.
+if exist "%PROJECT_DIR%\bin\Release" rmdir /s /q "%PROJECT_DIR%\bin\Release"
+if exist "%PROJECT_DIR%\obj\Release" rmdir /s /q "%PROJECT_DIR%\obj\Release"
 if exist "%PUBLISH_DIR%" rmdir /s /q "%PUBLISH_DIR%"
 if exist "%INSTALLER_OUTPUT%" rmdir /s /q "%INSTALLER_OUTPUT%"
 mkdir "%INSTALLER_OUTPUT%" 2>nul
