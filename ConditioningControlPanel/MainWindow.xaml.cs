@@ -511,15 +511,20 @@ namespace ConditioningControlPanel
 
             // The Exclusives popup uses StaysOpen=True (to avoid WPF's mouse-capture
             // quirk where StaysOpen=False swallows clicks on the placement target
-            // and holds capture until the window loses+regains focus). We close it
-            // manually here when the user clicks anywhere in the main window outside
-            // the launcher button. Clicks inside the popup never reach this handler
-            // (popup hosts its own input root), so sub-items work normally.
+            // and holds capture until the window loses+regains focus). We close
+            // it manually here when the user clicks outside both the launcher AND
+            // the popup content. Clicks inside the popup DO reach this handler
+            // (input is routed through the main window), so we must also bail on
+            // them — otherwise the popup closes before the sub-item Click can
+            // run and the tab-switch is swallowed.
             PreviewMouseDown += (_, e) =>
             {
                 if (ExclusivesSubmenuPopup == null || !ExclusivesSubmenuPopup.IsOpen) return;
                 if (BtnPatreonExclusives == null) return;
-                if (e.OriginalSource is DependencyObject src && IsVisualDescendant(src, BtnPatreonExclusives)) return;
+                if (e.OriginalSource is not DependencyObject src) return;
+                if (IsVisualDescendant(src, BtnPatreonExclusives)) return;
+                if (ExclusivesSubmenuPopup.Child is DependencyObject popupChild
+                    && IsVisualDescendant(src, popupChild)) return;
                 _exclusivesPinned = false;
                 ExclusivesSubmenuPopup.IsOpen = false;
             };
