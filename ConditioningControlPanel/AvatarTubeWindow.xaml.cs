@@ -2156,12 +2156,20 @@ namespace ConditioningControlPanel
                         // Show quick thinking indicator
                         if (!_isGiggling) Giggle("Hmm...");
 
-                        // Ask AI for a random thought/bambi-ism
-                        var aiReaction = await App.Ai.GetBambiReplyAsync("Say something random and ditzy about what we're doing (or not doing) right now.");
-                        if (!string.IsNullOrEmpty(aiReaction))
+                        // R2-NEW-H-1: migrate to typed AI API. Refusals are silently
+                        // dropped on this non-chat surface (the user didn't directly
+                        // prompt — a POLICY bubble out of nowhere is jarring). The
+                        // downstream guard in AiService already logged via ModerationLog.
+                        // IsAiGenerated propagates so canned fallbacks don't wear the badge.
+                        var aiResult = await App.Ai.GetBambiReplyExAsync("Say something random and ditzy about what we're doing (or not doing) right now.");
+                        if (aiResult.Refusal != null)
                         {
-                            reaction = aiReaction;
-                            gotAiResponse = true;
+                            // Silent drop — fall back to preset behaviour below.
+                        }
+                        else if (!string.IsNullOrEmpty(aiResult.Text))
+                        {
+                            reaction = aiResult.Text;
+                            gotAiResponse = aiResult.IsAiGenerated;
                         }
                     }
                     catch (Exception ex)
