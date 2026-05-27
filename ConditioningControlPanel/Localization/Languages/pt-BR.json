@@ -2304,5 +2304,8 @@ Desbloqueia no Nível 75.",
   "policy_warning_body_explain": "O CCP aplica moderação de conteúdo conforme as exigências do processador de pagamentos CCBill. Tentativas contínuas de gerar conteúdo proibido podem resultar em pausa do chat ou restrições de conta.",
   "policy_warning_body_link": "Consulte a política de conteúdo para a lista completa de categorias proibidas.",
   "policy_warning_ok": "Entendi",
-  "chat_cooldown_active": "Chat em pausa: {0}s restantes"
+  "chat_cooldown_active": "Chat em pausa: {0}s restantes",
+
+  "community_prompt_warning_title": "Community prompt advisory",
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
 }

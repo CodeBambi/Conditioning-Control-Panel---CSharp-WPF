@@ -2286,5 +2286,8 @@
   "policy_warning_body_explain": "CCP применяет модерацию контента в соответствии с требованиями платёжного процессора CCBill. Продолжение попыток создать запрещённый контент может привести к временной блокировке чата или ограничениям аккаунта.",
   "policy_warning_body_link": "Полный список запрещённых категорий смотрите в политике контента.",
   "policy_warning_ok": "Понятно",
-  "chat_cooldown_active": "Чат на паузе: осталось {0}с"
+  "chat_cooldown_active": "Чат на паузе: осталось {0}с",
+
+  "community_prompt_warning_title": "Community prompt advisory",
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
 }

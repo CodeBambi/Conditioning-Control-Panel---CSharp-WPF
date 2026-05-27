@@ -2304,5 +2304,8 @@ Wird bei Level 75 freigeschaltet.",
   "policy_warning_body_explain": "CCP setzt die Inhaltsmoderation gemäß den Anforderungen des Zahlungsdienstleisters CCBill durch. Weitere Versuche, verbotene Inhalte zu erzeugen, können zu einer Chat-Sperre oder Kontobeschränkungen führen.",
   "policy_warning_body_link": "Sieh dir die Inhaltsrichtlinie für die vollständige Liste der verbotenen Kategorien an.",
   "policy_warning_ok": "Verstanden",
-  "chat_cooldown_active": "Chat-Sperre: noch {0}s"
+  "chat_cooldown_active": "Chat-Sperre: noch {0}s",
+
+  "community_prompt_warning_title": "Community prompt advisory",
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
 }

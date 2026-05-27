@@ -2246,5 +2246,8 @@
   "policy_warning_body_explain": "CCP 根据支付处理商 CCBill 的要求实施内容审核。继续尝试生成禁止内容可能导致聊天暂停或账户限制。",
   "policy_warning_body_link": "请查阅内容政策以获取完整的禁止类别列表。",
   "policy_warning_ok": "知道了",
-  "chat_cooldown_active": "聊天暂停：剩余 {0} 秒"
+  "chat_cooldown_active": "聊天暂停：剩余 {0} 秒",
+
+  "community_prompt_warning_title": "Community prompt advisory",
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
 }

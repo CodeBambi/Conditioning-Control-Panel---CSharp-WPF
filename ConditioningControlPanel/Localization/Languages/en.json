@@ -3180,5 +3180,8 @@ Unlocks at Level 75.",
   "policy_warning_body_explain": "CCP enforces content moderation per CCBill payment processor requirements. Continued attempts to generate prohibited content may result in chat cooldown or account restrictions.",
   "policy_warning_body_link": "Review the content policy for the full list of prohibited categories.",
   "policy_warning_ok": "Got it",
-  "chat_cooldown_active": "Chat cooldown: {0}s remaining"
+  "chat_cooldown_active": "Chat cooldown: {0}s remaining",
+
+  "community_prompt_warning_title": "Community prompt advisory",
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
 }

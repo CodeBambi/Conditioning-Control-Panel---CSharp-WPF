@@ -2304,5 +2304,8 @@ Se débloque au Niveau 75.",
   "policy_warning_body_explain": "CCP applique la modération de contenu selon les exigences du processeur de paiement CCBill. Les tentatives répétées de générer du contenu interdit peuvent entraîner une suspension du chat ou des restrictions de compte.",
   "policy_warning_body_link": "Consulte la politique de contenu pour la liste complète des catégories interdites.",
   "policy_warning_ok": "Compris",
-  "chat_cooldown_active": "Suspension du chat : {0}s restantes"
+  "chat_cooldown_active": "Suspension du chat : {0}s restantes",
+
+  "community_prompt_warning_title": "Community prompt advisory",
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
 }

@@ -2304,5 +2304,8 @@
   "policy_warning_body_explain": "CCP는 결제 처리업체 CCBill의 요구 사항에 따라 콘텐츠 모더레이션을 시행합니다. 금지된 콘텐츠를 계속 생성하려고 하면 채팅 일시 중지 또는 계정 제한으로 이어질 수 있습니다.",
   "policy_warning_body_link": "금지된 카테고리 전체 목록은 콘텐츠 정책을 확인하세요.",
   "policy_warning_ok": "확인",
-  "chat_cooldown_active": "채팅 일시 중지: {0}초 남음"
+  "chat_cooldown_active": "채팅 일시 중지: {0}초 남음",
+
+  "community_prompt_warning_title": "Community prompt advisory",
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
 }

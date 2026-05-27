@@ -2297,5 +2297,8 @@
   "policy_warning_body_explain": "CCPは決済処理業者CCBillの要件に従ってコンテンツモデレーションを実施しています。禁止コンテンツを生成しようとし続けると、チャットの一時停止やアカウント制限につながる可能性があります。",
   "policy_warning_body_link": "禁止カテゴリの全リストについてはコンテンツポリシーをご確認ください。",
   "policy_warning_ok": "了解",
-  "chat_cooldown_active": "チャット停止中: 残り{0}秒"
+  "chat_cooldown_active": "チャット停止中: 残り{0}秒",
+
+  "community_prompt_warning_title": "Community prompt advisory",
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
 }
