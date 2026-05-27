@@ -5018,7 +5018,7 @@ namespace ConditioningControlPanel
             // displaying the Running state. Other states (Error / NeedsX) get
             // their own copy from ApplyBlinkTrainerStatusState.
             if (BlinkTrainerStatusText != null && _currentBlinkTrainerStatusState == BlinkTrainerStatusState.Running)
-                BlinkTrainerStatusText.Text = Localization.Loc.GetF("blink_trainer_status_running", $"{rem:mm\\:ss}");
+                BlinkTrainerStatusText.Text = Localization.Loc.GetF("blink_trainer_status_running", rem.ToString(rem.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss"));
         }
 
         /// <summary>
@@ -7462,7 +7462,7 @@ namespace ConditioningControlPanel
                     BlinkTrainerStatusDot.Fill = green;
                     // Initial text — BlinkTrainerTick takes over each second.
                     var rem = App.BlinkTrainer?.Remaining ?? TimeSpan.Zero;
-                    BlinkTrainerStatusText.Text = Localization.Loc.GetF("blink_trainer_status_running", $"{rem:mm\\:ss}");
+                    BlinkTrainerStatusText.Text = Localization.Loc.GetF("blink_trainer_status_running", rem.ToString(rem.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss"));
                     BlinkTrainerStatusText.Foreground = FindResource("TextMutedBrush") as Brush ?? Brushes.Gray;
                     WireBlinkTrainerStatusAction(null, null);
                     SetStartButtonState(enabled: true, content: stopLabel);
