@@ -33,23 +33,42 @@ namespace ConditioningControlPanel.Services.Moderation
 
         // Illegal: bomb-making, drug synthesis, hacking/fraud routes. The "make a bomb"
         // user repro is the canonical hit.
+        // P2-C1/H1: nouns pluralised (`bombs?`, `explosives?`, `firearms?`, `silencers?`);
+        // verb stems broadened (`build(s|ing|ed|t)?`, `assembl(e|es|ed|ing|y)`,
+        // `show(s|n|ed|ing)?`); request markers expanded
+        // (tutorial/guide/recipe/instructions/walkthrough/how do i).
         private static readonly Regex[] IllegalRegex =
         {
-            new(@"\b(how\s+to|how\s+do\s+i|tell\s+me\s+how|teach\s+me\s+how|recipe\s+for|instructions\s+for|guide\s+to|steps?\s+to)\b.{0,40}\b(make|build|construct|synthesi[sz]e|cook|assemble|create)\b.{0,40}\b(bomb|explosive|ied|tatp|napalm|nerve\s+agent|sarin|ricin|firearm|silencer)\b", Opts),
+            new(@"\b(how\s+to|how\s+do\s+i|how\s+can\s+i|how\s+would\s+i|how\s+2|tell\s+me\s+how|show\s+me\s+how|teach\s+me\s+how|walk\s+me\s+through|tutorials?\s+(on|for)|recipes?\s+for|instructions?\s+for|guides?\s+to|guides?\s+for|steps?\s+to|process\s+(of|for)|method\s+(of|for))\b.{0,60}\b(make|makes|making|build|builds|building|built|construct|constructs|constructing|constructed|synthesi[sz]e|synthesi[sz]es|synthesi[sz]ing|synthesi[sz]ed|cook|cooks|cooking|cooked|assembl(e|es|ed|ing|y)|creat(e|es|ing|ed)|produc(e|es|ing|ed)|manufactur(e|es|ing|ed))\b.{0,60}\b(bombs?|explosives?|ieds?|tatp|napalm|nerve\s+agents?|sarin|ricin|firearms?|silencers?|suppressors?|pipe\s+bombs?|c-?4|semtex|grenades?|claymores?|molotovs?)\b", Opts),
+            // Inverse word order: noun comes before verb (e.g. "bomb-making tutorial",
+            // "explosive synthesis guide", "tutorials on bombs").
+            new(@"\b(bombs?|explosives?|ieds?|tatp|napalm|nerve\s+agents?|sarin|ricin|firearms?|silencers?|suppressors?|pipe\s+bombs?|c-?4|semtex|grenades?|claymores?|molotovs?)\b[-\s]+(making|build(ing|ed|t)?|construction|synthesis|assembly|recipes?|tutorials?|guides?|instructions?)\b", Opts),
+            new(@"\b(tutorials?|guides?|recipes?|instructions?|walkthroughs?|how-?tos?)\b.{0,60}\b(bombs?|explosives?|ieds?|tatp|napalm|nerve\s+agents?|sarin|ricin|firearms?|silencers?|suppressors?|pipe\s+bombs?|c-?4|semtex|grenades?|claymores?|molotovs?|meth|methamphetamine|cocaine|heroin|fentanyl|mdma)\b", Opts),
+            // Bare imperative "build/make/cook + dangerous-item" without a how-to lead-in
+            // (catches "build pipe bombs", "make a silencer", "cook meth").
+            new(@"\b(make|makes|making|build|builds|building|cook|cooks|cooking|assembl(e|es|ing|y)|construct|constructs|constructing|synthesi[sz](e|es|ing)|produc(e|es|ing))\b(?:\s+(?:a|an|the|some|your|my|his|her|that|this))?\s+(bombs?|explosives?|ieds?|tatp|napalm|nerve\s+agents?|sarin|ricin|firearms?|silencers?|suppressors?|pipe\s+bombs?|c-?4|semtex|grenades?|claymores?|molotovs?|meth|methamphetamine|cocaine|heroin|fentanyl|mdma)\b", Opts),
             new(@"\b(ammoni?um\s+nitrate)\b.{0,30}\b(fuel|diesel|oil|detonat)", Opts),
-            new(@"\b(hydrogen\s+peroxide|aluminum\s+powder|potassium\s+nitrate|black\s+powder)\b.{0,40}\b(mix|combine|ratio|recipe|synthesi[sz]e|explos|bomb|detonat)\b", Opts),
-            new(@"\b(meth|methamphetamine|cocaine|heroin|fentanyl|mdma)\b.{0,30}\b(synth|make|cook|recipe|produc|manufactur)\b", Opts),
-            new(@"\b(how\s+to|teach\s+me)\b.{0,30}\b(hack|crack|breach|phish|skim|launder|forge|counterfeit)\b.{0,30}\b(bank|credit\s+card|password|account|atm|wallet|identity)\b", Opts),
-            new(@"\bsim\s+swap\b|\bsynthetic\s+identity\s+fraud\b", Opts),
+            new(@"\b(hydrogen\s+peroxide|aluminum\s+powder|potassium\s+nitrate|black\s+powder)\b.{0,40}\b(mix|mixes|mixing|combine|combines|combining|ratios?|recipes?|synthesi[sz](e|es|ing|ed)|explos|bombs?|detonat)\b", Opts),
+            new(@"\b(meth|methamphetamine|cocaine|heroin|fentanyl|mdma)\b.{0,30}\b(synth|make|makes|making|cook|cooks|cooking|recipes?|produc(e|es|ing|ed)|manufactur(e|es|ing|ed))\b", Opts),
+            new(@"\b(how\s+to|teach\s+me|show\s+me|walk\s+me\s+through|tutorials?\s+(on|for)|guides?\s+(to|for))\b.{0,40}\b(hack|hacks|hacking|crack|cracks|cracking|breach|breaches|breaching|phish|phishing|skim|skimming|launder|laundering|forge|forging|counterfeit(ing)?)\b.{0,40}\b(bank|banks|credit\s+cards?|passwords?|accounts?|atm|atms|wallets?|identit(y|ies))\b", Opts),
+            new(@"\bsim\s+swap(s|ping|ped)?\b|\bsynthetic\s+identity\s+fraud\b", Opts),
         };
         private static readonly string[] IllegalKeywords =
         {
             // Plain literal flags - rare in legitimate hypnosis chat.
+            // P2-C1/H1: regex above carries the heavy lifting (plurals + verb morphology +
+            // request markers). These literals remain as belt-and-braces for the most
+            // common high-recall phrases.
             "how to make a bomb",
             "how to build a bomb",
+            "how to make bombs",
+            "how to build bombs",
             "how to make an explosive",
+            "how to make explosives",
             "build a pipe bomb",
+            "build pipe bombs",
             "build an ied",
+            "build ieds",
             "make c-4",
             "make c4",
         };
@@ -73,11 +92,11 @@ namespace ConditioningControlPanel.Services.Moderation
         };
         private static readonly string[] MinorKeywords =
         {
-            // Hardcoded CSAM slurs.
-            "loli", "lolicon",
-            "shota", "shotacon",
+            // Hardcoded CSAM slurs. P2-C1: plurals included.
+            "loli", "lolis", "lolicon",
+            "shota", "shotas", "shotacon",
             "jailbait",
-            "underage girl", "underage boy", "underage sex",
+            "underage girl", "underage girls", "underage boy", "underage boys", "underage sex",
             "cp porn",
             "child porn", "child porno", "child pornography",
             "kid porn",
@@ -92,12 +111,13 @@ namespace ConditioningControlPanel.Services.Moderation
         // The bar is: explicit lack-of-consent verb + sexual context.
         private static readonly Regex[] NonConsensualRegex =
         {
-            new(@"\brape\b", Opts),
+            // P2-C1: rap(e|es|ed|ing) covers the verb's morphology too.
+            new(@"\brap(e|es|ed|ing|ist|ists)\b", Opts),
             new(@"\bnon-?consensual\b.{0,40}\b(sex|fuck|cock|cum|pussy)\b", Opts),
             new(@"\b(while|when|as)\b.{0,15}\b(sleeping|asleep|unconscious|passed\s+out|drugged|knocked\s+out)\b.{0,40}\b(sex|fuck|cock|cum|pussy|grope|touch|spread|penetrat)\b", Opts),
             new(@"\b(sex|fuck|cock|cum|pussy|grope|touch|penetrat)\b.{0,40}\b(while|when|as)\b.{0,15}\b(sleeping|asleep|unconscious|passed\s+out|drugged|knocked\s+out)\b", Opts),
-            new(@"\bkidnap\w*\b.{0,40}\b(sex|fuck|rape|cock|cum|pussy|breed|grope)\b", Opts),
-            new(@"\bforce\b.{0,15}(her|him|them)\b.{0,40}\b(sex|fuck|suck|cock|cum|spread)\b", Opts),
+            new(@"\bkidnap\w*\b.{0,40}\b(sex|fuck|rap(e|es|ed|ing)|cock|cum|pussy|breed|grope)\b", Opts),
+            new(@"\bforc(e|es|ed|ing)\b.{0,15}(her|him|them)\b.{0,40}\b(sex|fuck|suck|cock|cum|spread)\b", Opts),
         };
         private static readonly string[] NonConsensualKeywords =
         {
@@ -121,11 +141,11 @@ namespace ConditioningControlPanel.Services.Moderation
             "family taboo",
         };
 
-        // Bestiality: animal + sexual verbs.
+        // Bestiality: animal + sexual verbs. P2-C1: animal nouns pluralised.
         private static readonly Regex[] BestialityRegex =
         {
-            new(@"\b(dog|horse|pony|stallion|donkey|pig|goat|sheep|cow|bull|cat|animal|beast)\b.{0,30}\b(fuck|sex|cock|cum|breed|mate|knot|mount|penetrat|suck)\b", Opts),
-            new(@"\b(fuck|sex|suck|breed|mate|knot|mount)\b.{0,20}(a|the|her|his|my)\s+(dog|horse|pony|stallion|donkey|pig|goat|sheep|cow|bull|animal)\b", Opts),
+            new(@"\b(dogs?|horses?|pon(y|ies)|stallions?|donkeys?|pigs?|goats?|sheep|cows?|bulls?|cats?|animals?|beasts?)\b.{0,30}\b(fuck|sex|cock|cum|breed|mate|knot|mount|penetrat|suck)\b", Opts),
+            new(@"\b(fuck|sex|suck|breed|mate|knot|mount)\b.{0,20}(a|the|her|his|my)\s+(dogs?|horses?|pon(y|ies)|stallions?|donkeys?|pigs?|goats?|sheep|cows?|bulls?|animals?)\b", Opts),
         };
         private static readonly string[] BestialityKeywords =
         {
@@ -150,13 +170,13 @@ namespace ConditioningControlPanel.Services.Moderation
             "coprophilia",
         };
 
-        // SnuffViolence: snuff, kill+sexual.
+        // SnuffViolence: snuff, kill+sexual. P2-C1: verb morphology.
         private static readonly Regex[] SnuffViolenceRegex =
         {
             new(@"\bsnuff\b", Opts),
-            new(@"\b(murder|kill)\b.{0,30}\b(her|him|them)\b.{0,30}\b(sex|fuck|cock|cum|breed|rape)\b", Opts),
-            new(@"\b(sex|fuck|cock|cum|breed)\b.{0,30}\b(murder|kill)\b.{0,15}\b(her|him|them)\b", Opts),
-            new(@"\b(strangle|choke\s+to\s+death|behead|decapitat)\b.{0,30}\b(sex|fuck|cock|cum|breed)\b", Opts),
+            new(@"\b(murder|murders|murdering|murdered|kill|kills|killing|killed)\b.{0,30}\b(her|him|them)\b.{0,30}\b(sex|fuck|cock|cum|breed|rap(e|es|ed|ing))\b", Opts),
+            new(@"\b(sex|fuck|cock|cum|breed)\b.{0,30}\b(murder|murders|murdering|murdered|kill|kills|killing|killed)\b.{0,15}\b(her|him|them)\b", Opts),
+            new(@"\b(strangle|strangles|strangling|strangled|choke\s+to\s+death|behead|beheads|beheading|beheaded|decapitat)\b.{0,30}\b(sex|fuck|cock|cum|breed)\b", Opts),
         };
         private static readonly string[] SnuffViolenceKeywords =
         {
@@ -206,29 +226,36 @@ namespace ConditioningControlPanel.Services.Moderation
         // HateSpeech: slurs + group targeting + violence calls. Slur list is the bare
         // minimum across major protected categories — not exhaustive. Intentionally
         // omits reclaimed/in-group usage that an LLM might output in fiction.
+        // P2-C1: verb morphology (kill/kills/killed/killing, exterminate/exterminating, etc.)
+        // plus "gay people" / "trans people" / "black people" target groupings.
         private static readonly Regex[] HateSpeechRegex =
         {
-            new(@"\b(kill|gas|exterminat|lynch|hang)\s+(all\s+)?(jews|blacks|asians|whites|muslims|christians|gays|trans|hispanics|mexicans|arabs|africans|immigrants)\b", Opts),
-            new(@"\b(genocide|holocaust)\b.{0,30}\b(deserve|deserved|should|need)\b", Opts),
-            new(@"\bwhite\s+(power|supremacy|nationalism)\b.{0,30}\b(rise|fight|kill|win)\b", Opts),
+            new(@"\b(kill|kills|killing|killed|gas|gassing|gassed|exterminat(e|es|ing|ed)|lynch(es|ing|ed)?|hang(s|ing|ed)?|murder(s|ed|ing)?)\s+(all\s+)?(jews|blacks|asians|whites|muslims|christians|gays|trans|hispanics|mexicans|arabs|africans|immigrants)\b", Opts),
+            new(@"\b(kill|kills|killing|killed|gas|gassing|gassed|exterminat(e|es|ing|ed)|lynch(es|ing|ed)?|hang(s|ing|ed)?|murder(s|ed|ing)?)\s+(all\s+)?(jewish|black|asian|white|muslim|christian|gay|trans|transgender|hispanic|mexican|arab|african|immigrant)\s+(people|persons|men|women|kids|children)\b", Opts),
+            new(@"\b(genocide|holocaust)\b.{0,30}\b(deserve|deserves|deserved|should|need|needs|needed)\b", Opts),
+            new(@"\bwhite\s+(power|supremacy|nationalism)\b.{0,30}\b(rise|rises|risen|rising|fight|fights|fighting|kill|kills|killing|win|wins|winning)\b", Opts),
         };
         private static readonly string[] HateSpeechKeywords =
         {
             // Hard slurs only — words for which there is essentially no non-attacking use
-            // in an AI-generated sexual roleplay context.
+            // in an AI-generated sexual roleplay context. P2-C1: plurals included.
             "nigger", "niggers",
             "kike", "kikes",
-            "faggot", "faggots", " fag ", // bordered to avoid "flag", "fag end" type FPs
-            "tranny",
+            "faggot", "faggots", " fag ", " fags ", // bordered to avoid "flag", "fag end" type FPs
+            "tranny", "trannies",
             "chink", "chinks",
             "spic", "spics",
-            "gook",
-            "wetback",
-            "raghead",
+            "gook", "gooks",
+            "wetback", "wetbacks",
+            "raghead", "ragheads",
             "kill all jews",
             "kill all blacks",
             "kill all gays",
             "kill all trans",
+            "exterminate all jews",
+            "exterminate all blacks",
+            "exterminate all gays",
+            "exterminate all trans",
         };
 
         // Deepfake: "act as <celeb>" + sexual. Without a celeb-name DB this is a small
