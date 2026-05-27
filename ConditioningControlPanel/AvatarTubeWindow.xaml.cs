@@ -458,8 +458,132 @@ namespace ConditioningControlPanel
             // Handle clicks outside the input panel to close it
             PreviewMouseDown += Window_PreviewMouseDown;
 
+            // P1.4 — wire moderation counter for warning modal + chat cooldown.
+            WireModerationCounter();
+
             App.Logger?.Information("AvatarTubeWindow initialized with avatar set {Set} for level {Level}",
                 _currentAvatarSet, playerLevel);
+        }
+
+        // ===== P1.4 moderation counter / chat cooldown =====
+        private DispatcherTimer? _cooldownTickTimer;
+        private string? _normalChatPlaceholder;
+        private DateTime? _cooldownEndsAt;
+
+        private void WireModerationCounter()
+        {
+            var counter = App.ModerationCounter;
+            if (counter == null) return;
+
+            counter.WarningTriggered += state =>
+            {
+                if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => OnWarningTriggered(state)); return; }
+                OnWarningTriggered(state);
+            };
+            counter.CooldownStarted += endsAt =>
+            {
+                if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => OnCooldownStarted(endsAt)); return; }
+                OnCooldownStarted(endsAt);
+            };
+            counter.CooldownEnded += () =>
+            {
+                if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => OnCooldownEnded()); return; }
+                OnCooldownEnded();
+            };
+        }
+
+        private void OnWarningTriggered(Services.Moderation.ModerationCounterState state)
+        {
+            try
+            {
+                var dlg = new ContentPolicyWarningDialog(state.HitsInLastTenMinutes)
+                {
+                    Owner = _parentWindow
+                };
+                dlg.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "AvatarTubeWindow: failed to show ContentPolicyWarningDialog");
+            }
+        }
+
+        private void OnCooldownStarted(DateTime endsAt)
+        {
+            _cooldownEndsAt = endsAt;
+            try
+            {
+                _normalChatPlaceholder ??= TxtUserInput?.Tag as string ?? string.Empty;
+                if (TxtUserInput != null)
+                {
+                    TxtUserInput.IsEnabled = false;
+                    TxtUserInput.Opacity = 0.5;
+                    TxtUserInput.Text = string.Empty;
+                }
+                if (BtnSendChat != null)
+                {
+                    BtnSendChat.IsEnabled = false;
+                    BtnSendChat.Opacity = 0.5;
+                }
+
+                _cooldownTickTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _cooldownTickTimer.Tick -= CooldownTick;
+                _cooldownTickTimer.Tick += CooldownTick;
+                _cooldownTickTimer.Start();
+                CooldownTick(null, EventArgs.Empty); // initial paint
+                App.Logger?.Information("AvatarTubeWindow: chat cooldown engaged until {End}", endsAt);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "AvatarTubeWindow: OnCooldownStarted failed");
+            }
+        }
+
+        private void CooldownTick(object? sender, EventArgs e)
+        {
+            if (!_cooldownEndsAt.HasValue) { _cooldownTickTimer?.Stop(); return; }
+            var remaining = _cooldownEndsAt.Value - DateTime.UtcNow;
+            if (remaining.TotalSeconds <= 0)
+            {
+                // Probe state to trigger CooldownEnded event in the counter.
+                _ = App.ModerationCounter?.GetState();
+                return;
+            }
+            try
+            {
+                if (TxtUserInput != null)
+                {
+                    TxtUserInput.Text = string.Format(
+                        Localization.Loc.Get("chat_cooldown_active"),
+                        (int)Math.Ceiling(remaining.TotalSeconds));
+                }
+            }
+            catch { /* best-effort painter */ }
+        }
+
+        private void OnCooldownEnded()
+        {
+            _cooldownEndsAt = null;
+            _cooldownTickTimer?.Stop();
+            try
+            {
+                if (TxtUserInput != null)
+                {
+                    TxtUserInput.IsEnabled = true;
+                    TxtUserInput.Opacity = 1.0;
+                    TxtUserInput.Text = string.Empty;
+                }
+                if (BtnSendChat != null)
+                {
+                    BtnSendChat.IsEnabled = true;
+                    BtnSendChat.Opacity = 1.0;
+                }
+                App.Logger?.Information("AvatarTubeWindow: chat cooldown ended");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "AvatarTubeWindow: OnCooldownEnded failed");
+            }
         }
 
         /// <summary>
@@ -5045,6 +5169,17 @@ namespace ConditioningControlPanel
         {
             var input = TxtUserInput.Text?.Trim();
             if (string.IsNullOrEmpty(input)) return;
+
+            // P1.4 — chat cooldown gate. When the moderation counter is in cooldown
+            // we swallow the send silently (no new bubble, no AI call). The countdown
+            // text is already rendered into the input box; user can see why.
+            var counterState = App.ModerationCounter?.GetState();
+            if (counterState?.CooldownActive == true)
+            {
+                App.Logger?.Information("AvatarTubeWindow: chat send swallowed (cooldown active, ends={End})",
+                    counterState.CooldownEndsAt);
+                return;
+            }
 
             TxtUserInput.Text = "";
             ToggleInputPanel();

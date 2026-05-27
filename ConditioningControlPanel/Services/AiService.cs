@@ -235,6 +235,7 @@ namespace ConditioningControlPanel.Services
                 if (!inputCheck.Allow && inputCheck.Category.HasValue)
                 {
                     App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: "cloud");
+                    App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:cloud");
                     App.Logger?.Information("AiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
                     return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
                 }
@@ -362,6 +363,7 @@ namespace ConditioningControlPanel.Services
                     if (!outputCheck.Allow && outputCheck.Category.HasValue)
                     {
                         App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud");
+                        App.ModerationCounter?.RecordHit(outputCheck.Category.Value, "output:cloud");
                         App.Logger?.Information("AiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
                         return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
                     }

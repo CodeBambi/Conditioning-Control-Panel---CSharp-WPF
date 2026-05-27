@@ -1266,6 +1266,7 @@ namespace ConditioningControlPanel.Services
                     if (!pre.Allow && pre.Category.HasValue)
                     {
                         App.ModerationLog?.Record(pre.Category.Value, source: "input", modelHint: "awareness");
+                        App.ModerationCounter?.RecordHit(pre.Category.Value, "input:awareness");
                         App.Logger?.Information("KeywordTriggerService: AvatarComment dropped by ModerationGuard (category={Cat})", pre.Category);
                         return;
                     }

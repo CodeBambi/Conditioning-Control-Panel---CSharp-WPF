@@ -3172,5 +3172,12 @@ Unlocks at Level 75.",
 
   "prompt_validator_warning": "This text matches patterns associated with content policy violations ({0} matches). Saving is allowed but the change will be logged.",
   "prompt_validator_field_flagged": "Flagged",
-  "prompt_validator_banner": "{0} field(s) flagged. Review highlighted entries."
+  "prompt_validator_banner": "{0} field(s) flagged. Review highlighted entries.",
+
+  "policy_warning_title": "Content policy notice",
+  "policy_warning_body_count": "Your recent messages have triggered our content policy {0} times.",
+  "policy_warning_body_explain": "CCP enforces content moderation per CCBill payment processor requirements. Continued attempts to generate prohibited content may result in chat cooldown or account restrictions.",
+  "policy_warning_body_link": "Review the content policy for the full list of prohibited categories.",
+  "policy_warning_ok": "Got it",
+  "chat_cooldown_active": "Chat cooldown: {0}s remaining"
 }

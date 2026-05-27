@@ -349,6 +349,7 @@ namespace ConditioningControlPanel.Services.AIService
                 if (!inputCheck.Allow && inputCheck.Category.HasValue)
                 {
                     App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: modelHint);
+                    App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:local");
                     App.Logger?.Information("LocalAiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
                     return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
                 }
@@ -451,6 +452,7 @@ namespace ConditioningControlPanel.Services.AIService
                     if (!outputCheck.Allow && outputCheck.Category.HasValue)
                     {
                         App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: modelHint);
+                        App.ModerationCounter?.RecordHit(outputCheck.Category.Value, "output:local");
                         App.Logger?.Information("LocalAiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
                         // Don't fire effects from a blocked response.
                         _currentCommands = new List<AiCommandData>();

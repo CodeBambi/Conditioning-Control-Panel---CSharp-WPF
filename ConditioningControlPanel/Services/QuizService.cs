@@ -652,6 +652,7 @@ Do NOT include any other text before or after the question format. Just the ques
                     if (!outputCheck.Allow && outputCheck.Category.HasValue)
                     {
                         App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud-quiz");
+                        App.ModerationCounter?.RecordHit(outputCheck.Category.Value, "output:quiz");
                         App.Logger?.Information("QuizService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
                         return null;
                     }

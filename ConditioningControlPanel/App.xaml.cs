@@ -269,6 +269,7 @@ namespace ConditioningControlPanel
         public static Services.Moderation.ModerationLog ModerationLog { get; private set; } = null!;
         public static Services.Moderation.ModerationSession ModerationSession { get; private set; } = null!;
         public static Services.Moderation.IPromptValidator PromptValidator { get; private set; } = null!;
+        public static Services.Moderation.IModerationCounter ModerationCounter { get; private set; } = null!;
         public static WindowAwarenessService WindowAwareness { get; private set; } = null!;
         public static PatreonService Patreon { get; private set; } = null!;
         public static UpdateService Update { get; private set; } = null!;
@@ -1013,6 +1014,11 @@ namespace ConditioningControlPanel
             // QuizCategoryEditorWindow). Hits warn the user and log to moderation.log;
             // they do NOT block save. ModerationGuard is the load-bearing layer.
             PromptValidator = new Services.Moderation.PromptValidator();
+            // ModerationCounter (P1.4) sliding-window counter that escalates: 3 hits in
+            // 10 min raises a warning modal once; 5 hits engages a 5-min chat cooldown.
+            // RecordHit is called from each ModerationGuard refusal site (AiService,
+            // LocalAiService, KeywordTriggerService, QuizService).
+            ModerationCounter = new Services.Moderation.ModerationCounter();
 
             Ai = new AiServiceStrategy();
             Commands = new AiCommandService();
