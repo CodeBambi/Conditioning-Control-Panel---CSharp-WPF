@@ -106,6 +106,38 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public Dictionary<string, string> CustomDomains { get; set; } = new();
 
+        // ============================================================================
+        // CCBill AI Content Merchant Addendum — content acknowledgement state.
+        // These flags are written when the user clears the explicit-content gate or
+        // the prompt-editor policy banner. They persist across sessions so the user
+        // is not pestered repeatedly. Bumping ExplicitAcknowledgementVersion forces a
+        // re-prompt — that's intentional.
+        // ============================================================================
+
+        /// <summary>
+        /// Version string the user must match against <see cref="ExplicitAcknowledgementVersion"/>
+        /// to skip the explicit-content acknowledgement dialog. When this constant is bumped,
+        /// every user is re-prompted on next gated action.
+        /// </summary>
+        public const string ExplicitAcknowledgementVersion = "1.0";
+
+        /// <summary>
+        /// True once the user has accepted the age + content policy acknowledgement dialog.
+        /// </summary>
+        public bool ExplicitContentAcknowledged { get; set; } = false;
+
+        /// <summary>
+        /// Version of the acknowledgement the user accepted. If different from
+        /// <see cref="ExplicitAcknowledgementVersion"/>, the gate is re-shown.
+        /// </summary>
+        public string ExplicitAcknowledgedVersion { get; set; } = "";
+
+        /// <summary>
+        /// True once the user has clicked "Got it" on the full prompt-editor policy banner.
+        /// After this the banner compresses to a slim always-visible reminder.
+        /// </summary>
+        public bool PromptEditorDisclaimerAcknowledged { get; set; } = false;
+
         /// <summary>
         /// Returns default settings with the original BambiSprite prompts.
         /// </summary>

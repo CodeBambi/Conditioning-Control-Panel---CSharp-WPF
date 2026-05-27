@@ -301,6 +301,18 @@ namespace ConditioningControlPanel.Services
             var settings = App.Settings?.Current;
             if (settings == null) return false;
 
+            // CCBill AI Addendum: gate community/asset prompts that ship a SlutModePersonality
+            // when SlutMode is currently on. Caller is responsible for the modal acknowledgement;
+            // the service refuses activation if the gate has not been cleared.
+            var slutModeOn = settings.SlutModeEnabled;
+            var probe = new Models.PersonalityPreset { PromptSettings = prompt.PromptSettings };
+            if (ExplicitContentGate.RequiresAcknowledgement(probe, slutModeOn)
+                && !ExplicitContentGate.IsAlreadyAcknowledged(settings.CompanionPrompt))
+            {
+                App.Logger?.Warning("ActivatePrompt {Id} refused: explicit-content acknowledgement not granted", promptId);
+                return false;
+            }
+
             // Apply the prompt settings
             settings.CompanionPrompt = prompt.PromptSettings;
             settings.CompanionPrompt.UseCustomPrompt = true;

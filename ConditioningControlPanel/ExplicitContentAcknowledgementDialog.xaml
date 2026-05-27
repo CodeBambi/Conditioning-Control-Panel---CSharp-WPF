@@ -1,0 +1,115 @@
+<Window x:Class="ConditioningControlPanel.ExplicitContentAcknowledgementDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str explicit_ack_title}"
+        Width="560"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource DarkerBgBrush}">
+
+    <Window.Resources>
+        <Style x:Key="DlgHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="DlgBody" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E8E8E8"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="22"/>
+        </Style>
+        <Style x:Key="DlgBullet" TargetType="TextBlock" BasedOn="{StaticResource DlgBody}">
+            <Setter Property="Margin" Value="0,8,0,0"/>
+        </Style>
+        <Style x:Key="DlgButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="22,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="140"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="DlgPrimaryButton" TargetType="Button" BasedOn="{StaticResource DlgButton}">
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+        </Style>
+        <Style x:Key="DlgSecondaryButton" TargetType="Button" BasedOn="{StaticResource DlgButton}">
+            <Setter Property="Background" Value="#3A3A52"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="32,28,32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Style="{StaticResource DlgHeader}" Text="{loc:Str explicit_ack_title}"/>
+
+            <TextBlock Style="{StaticResource DlgBody}" Margin="0,18,0,0"
+                       Text="{loc:Str explicit_ack_body_intro}"/>
+
+            <Border Margin="0,18,0,0" Padding="16" CornerRadius="6"
+                    Background="#1F1F38"
+                    BorderBrush="{StaticResource PinkBrush}"
+                    BorderThickness="0,0,0,3">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource DlgBullet}" Margin="0,0,0,0">
+                        <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">•</Run>
+                        <Run Text="{loc:Str explicit_ack_body_age}"/>
+                    </TextBlock>
+                    <TextBlock Style="{StaticResource DlgBullet}">
+                        <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">•</Run>
+                        <Run Text="{loc:Str explicit_ack_body_policy}"/>
+                    </TextBlock>
+                    <TextBlock Style="{StaticResource DlgBullet}">
+                        <Run FontWeight="Bold" Foreground="{StaticResource PinkBrush}">•</Run>
+                        <Run Text="{loc:Str explicit_ack_body_ai}"/>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Style="{StaticResource DlgBody}" Margin="0,16,0,0">
+                <Hyperlink x:Name="LnkPolicy" Click="LnkPolicy_Click"
+                           Foreground="{StaticResource PinkBrush}">
+                    <Run Text="{loc:Str explicit_ack_policy_link}"/>
+                </Hyperlink>
+            </TextBlock>
+        </StackPanel>
+
+        <!-- Button row -->
+        <Grid Grid.Row="2" Margin="0,24,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="BtnCancel" Grid.Column="1"
+                    Style="{StaticResource DlgSecondaryButton}"
+                    Margin="0,0,10,0"
+                    Content="{loc:Str explicit_ack_cancel}"
+                    Click="BtnCancel_Click"/>
+
+            <Button x:Name="BtnAccept" Grid.Column="2"
+                    Style="{StaticResource DlgPrimaryButton}"
+                    Content="{loc:Str explicit_ack_accept}"
+                    Click="BtnAccept_Click"/>
+        </Grid>
+    </Grid>
+</Window>

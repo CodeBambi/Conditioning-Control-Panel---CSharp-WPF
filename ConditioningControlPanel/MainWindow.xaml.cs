@@ -9590,6 +9590,26 @@ namespace ConditioningControlPanel
                 {
                     if (s is Button btn && btn.Tag is string promptId)
                     {
+                        // CCBill AI Addendum: gate community prompts that ship a SlutModePersonality
+                        // when SlutMode is on. Synthesize a probe preset for the gate check.
+                        var probePrompt = App.CommunityPrompts?.GetInstalledPrompt(promptId);
+                        var slutModeOn = App.Settings?.Current?.SlutModeEnabled == true;
+                        var probe = new Models.PersonalityPreset { PromptSettings = probePrompt?.PromptSettings };
+                        if (Services.ExplicitContentGate.RequiresAcknowledgement(probe, slutModeOn))
+                        {
+                            var prevSettings = App.Settings?.Current?.CompanionPrompt;
+                            if (!Services.ExplicitContentGate.IsAlreadyAcknowledged(prevSettings))
+                            {
+                                var dlg = new ExplicitContentAcknowledgementDialog { Owner = this };
+                                if (dlg.ShowDialog() != true) return;
+                                if (prevSettings != null)
+                                {
+                                    Services.ExplicitContentGate.MarkAcknowledged(prevSettings);
+                                    App.Settings?.Save();
+                                }
+                            }
+                        }
+
                         App.CommunityPrompts?.ActivatePrompt(promptId);
                         UpdateCommunityPromptsUI();
                     }
@@ -11180,7 +11200,34 @@ namespace ConditioningControlPanel
             if (_isLoading) return;
             var s = App.Settings?.Current;
             if (s == null || ChkSlutMode == null) return;
-            s.SlutModeEnabled = ChkSlutMode.IsChecked == true;
+
+            var newValue = ChkSlutMode.IsChecked == true;
+
+            // CCBill AI Addendum: flipping SlutMode ON activates the explicit variant of
+            // any active preset that ships a SlutModePersonality. Gate behind acknowledgement.
+            if (newValue && !s.SlutModeEnabled)
+            {
+                var activePreset = App.Personality?.GetActivePreset();
+                if (Services.ExplicitContentGate.RequiresAcknowledgement(activePreset, slutModeOn: true))
+                {
+                    if (!Services.ExplicitContentGate.IsAlreadyAcknowledged(s.CompanionPrompt))
+                    {
+                        var dlg = new ExplicitContentAcknowledgementDialog { Owner = this };
+                        var ok = dlg.ShowDialog() == true;
+                        if (!ok)
+                        {
+                            // Revert checkbox without re-triggering this handler.
+                            _isLoading = true;
+                            try { ChkSlutMode.IsChecked = false; }
+                            finally { _isLoading = false; }
+                            return;
+                        }
+                        Services.ExplicitContentGate.MarkAcknowledged(s.CompanionPrompt);
+                    }
+                }
+            }
+
+            s.SlutModeEnabled = newValue;
             App.Settings?.Save();
         }
 

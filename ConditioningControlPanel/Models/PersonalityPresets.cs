@@ -90,6 +90,9 @@ namespace ConditioningControlPanel.Models
                 Description = "Explicit, horny, cock-obsessed",
                 IsBuiltIn = true,
                 RequiresPremium = false,
+                // CCBill AI Addendum: this preset is unconditionally explicit, so activating
+                // it always requires the 18+ acknowledgement gate.
+                RequiresExplicitAcknowledgement = true,
                 PromptSettings = new CompanionPromptSettings
                 {
                     UseCustomPrompt = true,

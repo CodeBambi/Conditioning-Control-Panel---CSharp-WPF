@@ -5861,6 +5861,26 @@ namespace ConditioningControlPanel
                 var preset = App.Personality?.GetPresetById(presetId);
                 if (preset == null) return;
 
+                // CCBill AI Addendum: gate explicit presets behind an age + content-policy
+                // acknowledgement dialog. The SlutMode state used for the rule check is the
+                // current value (we're not flipping it here, only selecting a preset).
+                var slutModeOn = App.Settings?.Current?.SlutModeEnabled == true;
+                if (Services.ExplicitContentGate.RequiresAcknowledgement(preset, slutModeOn))
+                {
+                    var promptSettings = App.Settings?.Current?.CompanionPrompt;
+                    if (!Services.ExplicitContentGate.IsAlreadyAcknowledged(promptSettings))
+                    {
+                        var dlg = new ExplicitContentAcknowledgementDialog { Owner = this };
+                        var ok = dlg.ShowDialog() == true;
+                        if (!ok) return; // Cancel: revert (no-op, since we hadn't switched yet).
+                        if (promptSettings != null)
+                        {
+                            Services.ExplicitContentGate.MarkAcknowledged(promptSettings);
+                            App.Settings?.Save();
+                        }
+                    }
+                }
+
                 // Set the new personality
                 if (App.Personality?.SetActivePreset(presetId) == true)
                 {
