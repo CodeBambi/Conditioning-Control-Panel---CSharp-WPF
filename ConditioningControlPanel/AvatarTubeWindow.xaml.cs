@@ -5195,23 +5195,26 @@ namespace ConditioningControlPanel
                     // Sets _isWaitingForAi internally so other giggles don't interrupt.
                     StartThinkingAnimation();
 
-                    // Get AI response - no truncation, scrollable bubble handles long text
-                    var reply = await App.Ai.GetBambiReplyAsync(input);
+                    // P2/C4: typed result. IsAiGenerated tells us whether the pink "AI"
+                    // badge should appear (true only for a genuine LLM reply; cloud
+                    // fallback / offline / login-required / local-Ollama-down all return
+                    // IsAiGenerated=false so the bubble appears unbadged).
+                    var result = await App.Ai.GetBambiReplyExAsync(input);
 
-                    // Moderation refusal: AI service returned a sentinel meaning the input
-                    // (or output) tripped ModerationGuard. Render the POLICY badge + the
-                    // localized refusal string instead of the normal AI bubble.
-                    var refusalSource = ModerationRefusal.GetSource(reply);
-                    if (refusalSource.HasValue)
+                    if (result.Refusal != null)
                     {
+                        // Refused — render the POLICY badge + the localized refusal string
+                        // instead of the normal AI bubble.
                         PlayDoubleBounce();
-                        ShowModerationRefusalBubble(refusalSource.Value);
+                        ShowModerationRefusalBubble(result.Refusal.Source);
                     }
                     else
                     {
-                        // Double bounce to attract attention, then show AI response
+                        // Double bounce to attract attention, then show AI response.
+                        // aiGenerated flag flows through so canned fallbacks don't wear
+                        // the AI badge (P2/C4 — audit smoke-test #1).
                         PlayDoubleBounce();
-                        GigglePriority(reply);
+                        GigglePriority(result.Text, aiGenerated: result.IsAiGenerated);
                     }
                 }
                 catch (Exception ex)

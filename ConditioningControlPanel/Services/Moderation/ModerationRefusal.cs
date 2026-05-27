@@ -12,6 +12,31 @@ namespace ConditioningControlPanel.Services.Moderation
     }
 
     /// <summary>
+    /// Structured moderation refusal carrier used by <see cref="AiReplyResult"/>.
+    /// Distinct from the legacy <see cref="ModerationRefusal"/> sentinel class so the
+    /// old string-based API and the new typed API can coexist during the WS-C
+    /// (P2/C4) migration. <see cref="Category"/> is nullable because the typed
+    /// result path crosses the legacy sentinel-string boundary inside
+    /// <c>AiService.GetAiResponseAsync</c>; the category is always recorded in
+    /// moderation.log at the point of detection, so losing it on the way up here
+    /// is non-fatal. The UI only needs <see cref="Source"/> (input vs output) to
+    /// pick the right localized bubble.
+    /// </summary>
+    public sealed record ModerationRefusalInfo(ProhibitedCategory? Category, ModerationSource Source);
+
+    /// <summary>
+    /// Discriminated result of an AI reply call. Lets the caller distinguish:
+    ///   • a real model reply (<see cref="IsAiGenerated"/> true, <see cref="Refusal"/> null)
+    ///   • a canned/fallback string (<see cref="IsAiGenerated"/> false, <see cref="Refusal"/> null)
+    ///   • a moderation refusal (<see cref="IsAiGenerated"/> false, <see cref="Refusal"/> non-null;
+    ///     <see cref="Text"/> is empty — the UI looks up the localized refusal string by
+    ///     <see cref="ModerationRefusalInfo.Source"/>).
+    /// Added in P2/C4 so the chat UI only renders the pink AI badge on genuine LLM
+    /// replies. Cloud fallbacks, login-required hints, and refusals get no badge.
+    /// </summary>
+    public sealed record AiReplyResult(string Text, bool IsAiGenerated, ModerationRefusalInfo? Refusal);
+
+    /// <summary>
     /// Sentinel strings used to bubble a moderation refusal up through the existing
     /// <see cref="ConditioningControlPanel.Services.AIService.IAiService"/> string-returning API
     /// without breaking the interface. The chat UI in <c>AvatarTubeWindow</c> detects

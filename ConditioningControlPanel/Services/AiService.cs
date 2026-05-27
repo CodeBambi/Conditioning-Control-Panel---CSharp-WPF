@@ -76,30 +76,70 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Gets an AI-generated reply in the Bambi personality.
         /// Returns fallback response if API unavailable or daily limit reached.
+        ///
+        /// Legacy string-returning API kept for non-UI callers (Autonomy, command
+        /// scripts) that only need text. New UI surfaces (chat box) should call
+        /// <see cref="GetBambiReplyExAsync"/> instead so they can distinguish real
+        /// AI replies from canned fallbacks (P2/C4 — pink "AI" badge must not
+        /// appear over fallback strings).
         /// </summary>
         public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
+        {
+            var result = await GetBambiReplyExAsync(userInput, isUserMessage);
+            // Preserve the legacy sentinel-string contract so any caller still
+            // routing through the string API can detect refusals.
+            if (result.Refusal != null)
+            {
+                return result.Refusal.Source == ModerationSource.Input
+                    ? ModerationRefusal.InputSentinel
+                    : ModerationRefusal.OutputSentinel;
+            }
+            return result.Text;
+        }
+
+        /// <summary>
+        /// Typed variant. See <see cref="IAiService.GetBambiReplyExAsync"/>.
+        /// </summary>
+        public async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
         {
             // isUserMessage is honored by the local provider for queue/drop logic;
             // cloud path has its own circuit breaker and rate limiting, so we ignore it here.
             _ = isUserMessage;
 
-            // Return a clear hint when AI is not available (not logged in / offline)
+            // Offline mode → canned phrase, never an AI reply.
             if (App.Settings?.Current?.OfflineMode == true)
-                return GetFallbackResponse();
+                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
 
             if (!IsAvailable)
             {
                 App.Logger?.Debug("AiService: AI not available — user needs to log in for AI chat");
-                return Loc.Get("ai_login_required_hint");
+                return new AiReplyResult(Loc.Get("ai_login_required_hint"), IsAiGenerated: false, Refusal: null);
             }
 
             // Get prompt from active personality preset (handles all personalities including slut mode)
             var prompt = _bambiSprite.GetSystemPrompt();
 
+            // GetAiResponseAsync returns:
+            //   • a refusal sentinel string → typed refusal result
+            //   • null on any failure (HTTP error, empty content, daily-limit, etc.) → canned fallback
+            //   • model text → genuine AI reply
             var result = await GetAiResponseAsync(userInput, prompt, returnRefusalSentinel: true);
-            // Sentinel passes through to AvatarTubeWindow which renders the refusal bubble.
-            if (ModerationRefusal.IsRefusal(result)) return result!;
-            return result ?? GetFallbackResponse();
+
+            var refusalSource = ModerationRefusal.GetSource(result);
+            if (refusalSource.HasValue)
+            {
+                // Category was already logged inside GetAiResponseAsync; the sentinel
+                // string can't carry it, so we surface only the source here.
+                return new AiReplyResult(
+                    string.Empty,
+                    IsAiGenerated: false,
+                    Refusal: new ModerationRefusalInfo(Category: null, Source: refusalSource.Value));
+            }
+
+            if (result == null)
+                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+
+            return new AiReplyResult(result, IsAiGenerated: true, Refusal: null);
         }
 
         /// <summary>

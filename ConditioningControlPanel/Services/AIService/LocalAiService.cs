@@ -251,13 +251,55 @@ namespace ConditioningControlPanel.Services.AIService
 
         public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
         {
+            var result = await GetBambiReplyExAsync(userInput, isUserMessage);
+            if (result.Refusal != null)
+            {
+                return result.Refusal.Source == ModerationSource.Input
+                    ? ModerationRefusal.InputSentinel
+                    : ModerationRefusal.OutputSentinel;
+            }
+            return result.Text;
+        }
+
+        /// <summary>
+        /// Typed variant. See <see cref="IAiService.GetBambiReplyExAsync"/>.
+        /// </summary>
+        public async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
+        {
             var prompt = _bambiSprite.GetSystemPrompt();
             // Mark this as a user request so a second click while busy gets a "still thinking"
             // phrase back instead of the bare fallback.
             var result = await GetAiResponseAsync(userInput, prompt, isUser: true, returnRefusalSentinel: true);
-            // Moderation sentinel bubbles up to AvatarTubeWindow's refusal-bubble path.
-            if (ModerationRefusal.IsRefusal(result)) return result!;
-            return result ?? GetFallbackResponse();
+
+            var refusalSource = ModerationRefusal.GetSource(result);
+            if (refusalSource.HasValue)
+            {
+                return new AiReplyResult(
+                    string.Empty,
+                    IsAiGenerated: false,
+                    Refusal: new ModerationRefusalInfo(Category: null, Source: refusalSource.Value));
+            }
+
+            // GetAiResponseAsync returns null/empty in a handful of paths that all represent
+            // "we didn't get a usable LLM reply" — Ollama not reachable, empty content,
+            // queue drop ("still thinking" phrase), or descriptive error strings produced by
+            // DescribeOllamaError / DescribeChatException. Treat ALL of those as canned
+            // (badge OFF) so the user doesn't see the pink AI badge over an error string.
+            //
+            // Heuristic: a real Ollama reply never starts with the literal "(" we use for
+            // parenthetical diagnostic messages, and "still thinking" phrases are short and
+            // come from a fixed pool. We don't try to filter those by content here — instead
+            // we treat any null return as canned and let real content flow as AI.
+            if (string.IsNullOrEmpty(result))
+                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+
+            // Best-effort: descriptive error strings produced by DescribeChatException /
+            // DescribeOllamaError are parenthetical diagnostics, NOT model output. Keep them
+            // out of the AI-badge path.
+            if (result.StartsWith("(", StringComparison.Ordinal) && result.EndsWith(")", StringComparison.Ordinal))
+                return new AiReplyResult(result, IsAiGenerated: false, Refusal: null);
+
+            return new AiReplyResult(result, IsAiGenerated: true, Refusal: null);
         }
 
         private static readonly string[] StillThinkingPhrases =
