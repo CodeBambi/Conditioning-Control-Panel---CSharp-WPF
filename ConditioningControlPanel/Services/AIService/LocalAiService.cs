@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.AIService.Enrichment;
+using ConditioningControlPanel.Services.Moderation;
 
 namespace ConditioningControlPanel.Services.AIService
 {
@@ -253,7 +254,9 @@ namespace ConditioningControlPanel.Services.AIService
             var prompt = _bambiSprite.GetSystemPrompt();
             // Mark this as a user request so a second click while busy gets a "still thinking"
             // phrase back instead of the bare fallback.
-            var result = await GetAiResponseAsync(userInput, prompt, isUser: true);
+            var result = await GetAiResponseAsync(userInput, prompt, isUser: true, returnRefusalSentinel: true);
+            // Moderation sentinel bubbles up to AvatarTubeWindow's refusal-bubble path.
+            if (ModerationRefusal.IsRefusal(result)) return result!;
             return result ?? GetFallbackResponse();
         }
 
@@ -332,8 +335,29 @@ namespace ConditioningControlPanel.Services.AIService
             return await GetAiResponseAsync(userInput, systemPrompt);
         }
 
-        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool isUser = false)
+        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool isUser = false, bool returnRefusalSentinel = false)
         {
+            // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass). Same semantics
+            // as AiService cloud path: hard categories block before the HTTP call; refusal
+            // sentinel surfaces only when the caller is the chat UI.
+            var guard = App.ModerationGuard;
+            var modelName = GetConfiguredModel();
+            var modelHint = "local:" + (string.IsNullOrWhiteSpace(modelName) ? "unknown" : modelName);
+            if (guard != null)
+            {
+                var inputCheck = guard.CheckInput(userInput ?? string.Empty);
+                if (!inputCheck.Allow && inputCheck.Category.HasValue)
+                {
+                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: modelHint);
+                    App.Logger?.Information("LocalAiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
+                    return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
+                }
+                if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                {
+                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: modelHint);
+                }
+            }
+
             if (isUser)
             {
                 if (_isUserQueued) { App.Logger?.Debug("LocalAiService: user request dropped (one already queued)"); return GetRandomThinkingPhrase(); }
@@ -415,6 +439,27 @@ namespace ConditioningControlPanel.Services.AIService
                 if (effectsEnabled)
                 {
                     App.Logger?.Information("LocalAiService: parsed {Count} command(s) from response", _currentCommands.Count);
+                }
+
+                // OUTPUT MODERATION (Layer 1). Scan the user-visible text — the JSON
+                // effects wrapper is already stripped by the parser. If the model produced
+                // prohibited content we discard the WHOLE turn (no commands executed, no
+                // text displayed) and return the refusal sentinel or null per caller.
+                if (guard != null)
+                {
+                    var outputCheck = guard.CheckOutput(parsed.CleanText ?? string.Empty);
+                    if (!outputCheck.Allow && outputCheck.Category.HasValue)
+                    {
+                        App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: modelHint);
+                        App.Logger?.Information("LocalAiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                        // Don't fire effects from a blocked response.
+                        _currentCommands = new List<AiCommandData>();
+                        return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
+                    }
+                    if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                    {
+                        App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: modelHint);
+                    }
                 }
 
                 if (_currentCommands.Count > 0 && App.Commands != null)

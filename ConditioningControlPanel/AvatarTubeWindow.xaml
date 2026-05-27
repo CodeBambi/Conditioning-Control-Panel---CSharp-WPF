@@ -153,6 +153,29 @@
                                    VerticalAlignment="Center"/>
                     </Border>
 
+                    <!-- Moderation-refusal POLICY badge (same slot as AiBadge). Shown by code-behind
+                         when ModerationGuard blocks an input or output. Mutually exclusive with the
+                         AI badge - they share the corner slot but visibility is managed in one place
+                         (ShowGiggle / ShowModerationRefusalBubble). Amber to distinguish from the pink
+                         AI badge. Part of P1.1 (CCBill substantive moderation). -->
+                    <Border x:Name="PolicyBadge"
+                            Visibility="Collapsed"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Margin="-6,-6,0,0"
+                            Width="44" Height="14"
+                            CornerRadius="4"
+                            Background="#FFC107"
+                            Panel.ZIndex="20"
+                            IsHitTestVisible="False">
+                        <TextBlock Text="{loc:Str label_policy_badge}"
+                                   Foreground="Black"
+                                   FontSize="9"
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
                     <!-- Chat history mode: scrollable WhatsApp-style log -->
                     <Grid x:Name="ChatHistoryView" Visibility="Collapsed">
                         <Grid.RowDefinitions>

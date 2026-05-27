@@ -17,6 +17,7 @@ using System.Windows.Navigation;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Moderation;
 using XamlAnimatedGif;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
@@ -2382,6 +2383,50 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Renders the moderation-refusal bubble. Called when an LLM input or output
+        /// trips <c>ModerationGuard</c>. Shows the POLICY badge (amber) and the localized
+        /// refusal string. Part of P1.1 (CCBill substantive moderation).
+        /// </summary>
+        public void ShowModerationRefusalBubble(ModerationSource source)
+        {
+            DispatcherHelper.RunOnUI(() =>
+            {
+                try
+                {
+                    StopThinkingAnimation();
+                    _isWaitingForAi = false;
+                    _speechQueue.Clear();
+                    _speechTimer?.Stop();
+                    _speechDelayTimer?.Stop();
+                    _isGiggling = false;
+
+                    var locKey = source == ModerationSource.Input
+                        ? "moderation_input_refusal"
+                        : "moderation_output_refusal";
+                    var text = Loc.Get(locKey);
+                    if (string.IsNullOrEmpty(text))
+                        text = source == ModerationSource.Input
+                            ? "This message can't be sent under our content policy."
+                            : "AI declined to respond.";
+
+                    AddToChatHistory(text, isUser: false);
+
+                    // Show via the normal pipeline first so sizing/animation runs,
+                    // then swap the badges (POLICY visible, AI hidden).
+                    ShowGiggle(text, playSound: false, source: SpeechSource.AI, aiGenerated: false);
+                    if (AiBadge != null) AiBadge.Visibility = Visibility.Collapsed;
+                    if (PolicyBadge != null) PolicyBadge.Visibility = Visibility.Visible;
+
+                    App.Logger?.Information("ShowModerationRefusalBubble: source={Source}", source);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "ShowModerationRefusalBubble failed");
+                }
+            });
+        }
+
+        /// <summary>
         /// Displays a speech bubble with text.
         /// </summary>
         /// <param name="text">The text to display</param>
@@ -2391,10 +2436,13 @@ namespace ConditioningControlPanel
         {
             // CCBill AI Addendum: show the "AI" badge only when this bubble's text actually came from
             // an AI inference. Canned/preset phrases (including AI-path fallbacks) leave it hidden.
+            // The POLICY badge is mutually exclusive — only ShowModerationRefusalBubble shows it.
             try
             {
                 if (AiBadge != null)
                     AiBadge.Visibility = aiGenerated ? Visibility.Visible : Visibility.Collapsed;
+                if (PolicyBadge != null)
+                    PolicyBadge.Visibility = Visibility.Collapsed;
             }
             catch { /* AiBadge not in template / closing — non-fatal */ }
 
@@ -5015,9 +5063,21 @@ namespace ConditioningControlPanel
                     // Get AI response - no truncation, scrollable bubble handles long text
                     var reply = await App.Ai.GetBambiReplyAsync(input);
 
-                    // Double bounce to attract attention, then show AI response
-                    PlayDoubleBounce();
-                    GigglePriority(reply);
+                    // Moderation refusal: AI service returned a sentinel meaning the input
+                    // (or output) tripped ModerationGuard. Render the POLICY badge + the
+                    // localized refusal string instead of the normal AI bubble.
+                    var refusalSource = ModerationRefusal.GetSource(reply);
+                    if (refusalSource.HasValue)
+                    {
+                        PlayDoubleBounce();
+                        ShowModerationRefusalBubble(refusalSource.Value);
+                    }
+                    else
+                    {
+                        // Double bounce to attract attention, then show AI response
+                        PlayDoubleBounce();
+                        GigglePriority(reply);
+                    }
                 }
                 catch (Exception ex)
                 {

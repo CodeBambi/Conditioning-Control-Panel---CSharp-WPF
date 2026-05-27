@@ -1248,6 +1248,34 @@ namespace ConditioningControlPanel.Services
             var promptTemplate = a.PromptTemplate;
             var fallbackCategory = a.FallbackPhraseCategory;
 
+            // Moderation pre-check on the awareness keyword/template content. If the
+            // assembled prompt would trip the guard, silently drop the whole reaction —
+            // we do NOT surface a refusal bubble here because the user didn't actively
+            // prompt; popping a "policy" badge over a background keyword hit would be
+            // jarring. We also skip the canned-phrase fallback so the dispatch is fully
+            // silent. The log entry is sufficient for CCBill record-retention.
+            try
+            {
+                var guard = App.ModerationGuard;
+                if (guard != null)
+                {
+                    var assembled = string.IsNullOrEmpty(promptTemplate)
+                        ? keyword ?? string.Empty
+                        : (promptTemplate.Replace("{keyword}", keyword ?? string.Empty));
+                    var pre = guard.CheckInput(assembled);
+                    if (!pre.Allow && pre.Category.HasValue)
+                    {
+                        App.ModerationLog?.Record(pre.Category.Value, source: "input", modelHint: "awareness");
+                        App.Logger?.Information("KeywordTriggerService: AvatarComment dropped by ModerationGuard (category={Cat})", pre.Category);
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("KeywordTriggerService: moderation pre-check failed: {Error}", ex.Message);
+            }
+
             _ = Task.Run(async () =>
             {
                 try

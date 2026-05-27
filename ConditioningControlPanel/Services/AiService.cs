@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.AIService;
+using ConditioningControlPanel.Services.Moderation;
 
 namespace ConditioningControlPanel.Services
 {
@@ -95,7 +96,9 @@ namespace ConditioningControlPanel.Services
             // Get prompt from active personality preset (handles all personalities including slut mode)
             var prompt = _bambiSprite.GetSystemPrompt();
 
-            var result = await GetAiResponseAsync(userInput, prompt);
+            var result = await GetAiResponseAsync(userInput, prompt, returnRefusalSentinel: true);
+            // Sentinel passes through to AvatarTubeWindow which renders the refusal bubble.
+            if (ModerationRefusal.IsRefusal(result)) return result!;
             return result ?? GetFallbackResponse();
         }
 
@@ -205,14 +208,41 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Core method to get an AI response with custom system prompt.
         /// Returns null if unavailable.
+        ///
+        /// Moderation: if <paramref name="returnRefusalSentinel"/> is true and the input
+        /// or output trips <see cref="App.ModerationGuard"/>, returns the appropriate
+        /// <see cref="ModerationRefusal"/> sentinel string so the chat UI can render the
+        /// refusal bubble + POLICY badge. When false (awareness, keyword, lockscreen,
+        /// video paths) a moderation hit returns null and the caller silently drops the
+        /// reaction — surfacing a refusal there would be jarring (user didn't actively
+        /// prompt).
         /// </summary>
-        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt)
+        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool returnRefusalSentinel = false)
         {
             // Check offline mode first
             if (App.Settings?.Current?.OfflineMode == true)
             {
                 App.Logger?.Debug("AiService: Offline mode enabled, skipping AI request");
                 return null;
+            }
+
+            // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass).
+            // Runs BEFORE the HTTP request so prohibited inputs never leave the client.
+            var guard = App.ModerationGuard;
+            if (guard != null)
+            {
+                var inputCheck = guard.CheckInput(userInput ?? string.Empty);
+                if (!inputCheck.Allow && inputCheck.Category.HasValue)
+                {
+                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: "cloud");
+                    App.Logger?.Information("AiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
+                    return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
+                }
+                // ProfessionalAdvice is soft (Allow=true with Category set) — log only.
+                if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                {
+                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: "cloud");
+                }
             }
 
             // Check access (cloud identity or Patreon)
@@ -321,8 +351,27 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("AiService: Got reply ({RequestCount}/{Limit} today, {Remaining} remaining)",
                     _dailyRequestCount, DailyLimit, DailyRequestsRemaining);
 
-                // Sanitize response to remove any leaked metadata tags
-                return SanitizeResponse(result.Content);
+                // Sanitize response to remove any leaked metadata tags FIRST (so context-tag
+                // echoes don't accidentally trip moderation regexes).
+                var sanitized = SanitizeResponse(result.Content);
+
+                // OUTPUT MODERATION (Layer 1). Discard prohibited model output before display.
+                if (guard != null)
+                {
+                    var outputCheck = guard.CheckOutput(sanitized ?? string.Empty);
+                    if (!outputCheck.Allow && outputCheck.Category.HasValue)
+                    {
+                        App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud");
+                        App.Logger?.Information("AiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                        return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
+                    }
+                    if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                    {
+                        App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: "cloud");
+                    }
+                }
+
+                return sanitized;
             }
             catch (TaskCanceledException)
             {

@@ -265,6 +265,9 @@ namespace ConditioningControlPanel
         public static TutorialService Tutorial { get; private set; } = null!;
         public static IAiService Ai { get; private set; } = null!;
         public static IAiCommandService Commands { get; private set; } = null!;
+        public static Services.Moderation.IModerationGuard ModerationGuard { get; private set; } = null!;
+        public static Services.Moderation.ModerationLog ModerationLog { get; private set; } = null!;
+        public static Services.Moderation.ModerationSession ModerationSession { get; private set; } = null!;
         public static WindowAwarenessService WindowAwareness { get; private set; } = null!;
         public static PatreonService Patreon { get; private set; } = null!;
         public static UpdateService Update { get; private set; } = null!;
@@ -994,6 +997,17 @@ namespace ConditioningControlPanel
             Achievements?.Progress?.AwardDeferredStreakBonus();
 
             splash.SetProgress(0.85, "Initializing companion...");
+            // Moderation guard + log: substantive content moderation that runs in C# code
+            // OUTSIDE the LLM prompt. User-editable prompt sections (Personality,
+            // SlutModePersonality, CompanionPrompt, custom Awareness templates, etc.) cannot
+            // bypass these — the wordlist is hardcoded in ModerationGuard and applies to
+            // every input that goes to an LLM and every output that comes back. See
+            // AI_AUDIT.md §15 and §13 P1 for the CCBill rationale. Must be initialized
+            // BEFORE the AI services so AiService / LocalAiService can read App.ModerationGuard.
+            ModerationSession = new Services.Moderation.ModerationSession();
+            ModerationLog = new Services.Moderation.ModerationLog(ModerationSession);
+            ModerationGuard = new Services.Moderation.ModerationGuard();
+
             Ai = new AiServiceStrategy();
             Commands = new AiCommandService();
 
