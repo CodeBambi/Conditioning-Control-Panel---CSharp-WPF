@@ -56,6 +56,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0">
@@ -92,8 +93,18 @@
             </TextBlock>
         </StackPanel>
 
+        <!-- Required age-confirmation checkbox (C3 hardening) -->
+        <CheckBox x:Name="ChkAgeConfirm" Grid.Row="2"
+                  Margin="0,20,0,0"
+                  Foreground="#E8E8E8"
+                  FontSize="13"
+                  Checked="ChkAgeConfirm_CheckedChanged"
+                  Unchecked="ChkAgeConfirm_CheckedChanged">
+            <TextBlock TextWrapping="Wrap" Text="{loc:Str explicit_ack_checkbox}"/>
+        </CheckBox>
+
         <!-- Button row -->
-        <Grid Grid.Row="2" Margin="0,24,0,0">
+        <Grid Grid.Row="3" Margin="0,20,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -108,6 +119,7 @@
 
             <Button x:Name="BtnAccept" Grid.Column="2"
                     Style="{StaticResource DlgPrimaryButton}"
+                    IsEnabled="False"
                     Content="{loc:Str explicit_ack_accept}"
                     Click="BtnAccept_Click"/>
         </Grid>

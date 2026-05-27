@@ -1,7 +1,9 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Navigation;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
 
 namespace ConditioningControlPanel
@@ -13,6 +15,10 @@ namespace ConditioningControlPanel
     /// requiring acknowledgement. Caller checks <c>DialogResult == true</c> and calls
     /// <see cref="ExplicitContentGate.MarkAcknowledged"/> + SettingsService.Save before
     /// proceeding with the original action.
+    ///
+    /// P2 C3 hardening: the user must tick a required age-confirmation checkbox before
+    /// the Accept button enables. On accept, we additionally stamp the UTC timestamp and
+    /// current locale onto the CompanionPrompt settings for the CCBill audit trail.
     /// </summary>
     public partial class ExplicitContentAcknowledgementDialog : Window
     {
@@ -23,8 +29,43 @@ namespace ConditioningControlPanel
             InitializeComponent();
         }
 
+        private void ChkAgeConfirm_CheckedChanged(object sender, RoutedEventArgs e)
+        {
+            // Accept stays disabled until the user affirms the 18+ checkbox.
+            if (BtnAccept != null)
+            {
+                BtnAccept.IsEnabled = ChkAgeConfirm?.IsChecked == true;
+            }
+        }
+
         private void BtnAccept_Click(object sender, RoutedEventArgs e)
         {
+            // Defense-in-depth: the IsEnabled binding should already prevent this click,
+            // but guard anyway in case a hosting harness invokes the handler programmatically.
+            if (ChkAgeConfirm?.IsChecked != true)
+            {
+                return;
+            }
+
+            // P2 C3: stamp the audit-trail fields BEFORE the caller's MarkAcknowledged call
+            // flips ExplicitContentAcknowledged + ExplicitAcknowledgedVersion. These two
+            // properties capture WHEN and in WHICH locale the affirmation happened.
+            try
+            {
+                CompanionPromptSettings? promptSettings = App.Settings?.Current?.CompanionPrompt;
+                if (promptSettings != null)
+                {
+                    promptSettings.ExplicitAcknowledgedAt =
+                        DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+                    promptSettings.ExplicitAcknowledgedLocale = CultureInfo.CurrentCulture.Name;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Best-effort capture; the gate itself still functions if this fails.
+                App.Logger?.Warning(ex, "ExplicitContentAcknowledgementDialog: failed to capture ack timestamp/locale");
+            }
+
             DialogResult = true;
             Close();
         }

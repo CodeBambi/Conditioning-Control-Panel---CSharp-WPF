@@ -119,7 +119,10 @@ namespace ConditioningControlPanel.Models
         /// to skip the explicit-content acknowledgement dialog. When this constant is bumped,
         /// every user is re-prompted on next gated action.
         /// </summary>
-        public const string ExplicitAcknowledgementVersion = "1.0";
+        // v2.0 (P2 C3): adds a required age-confirmation checkbox + captures
+        // ack timestamp (UTC ISO-8601) and the locale the user was running in.
+        // Bumped from "1.0" to force existing users to re-ack with the new UX.
+        public const string ExplicitAcknowledgementVersion = "2.0";
 
         /// <summary>
         /// True once the user has accepted the age + content policy acknowledgement dialog.
@@ -131,6 +134,20 @@ namespace ConditioningControlPanel.Models
         /// <see cref="ExplicitAcknowledgementVersion"/>, the gate is re-shown.
         /// </summary>
         public string ExplicitAcknowledgedVersion { get; set; } = "";
+
+        /// <summary>
+        /// UTC ISO-8601 timestamp ("o" format, InvariantCulture) of when the user accepted
+        /// the explicit-content acknowledgement dialog. Empty until first accept. Captured
+        /// for CCBill audit trail (P2 C3).
+        /// </summary>
+        public string ExplicitAcknowledgedAt { get; set; } = "";
+
+        /// <summary>
+        /// Locale (e.g. "en-US", "de-DE") the user's app was running in when they accepted
+        /// the explicit-content acknowledgement dialog. Empty until first accept. Captured
+        /// for CCBill audit trail (P2 C3).
+        /// </summary>
+        public string ExplicitAcknowledgedLocale { get; set; } = "";
 
         /// <summary>
         /// True once the user has clicked "Got it" on the full prompt-editor policy banner.
