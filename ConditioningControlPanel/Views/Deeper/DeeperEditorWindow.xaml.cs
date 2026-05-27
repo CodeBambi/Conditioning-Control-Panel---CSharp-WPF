@@ -654,8 +654,12 @@ namespace ConditioningControlPanel.Views.Deeper
                 var msg = e.TryGetWebMessageAsString();
                 if (msg == "ccp_exit_fullscreen")
                 {
-                    App.Logger?.Information("DeeperEditor: ccp_exit_fullscreen received (forced FS active = {Active})", _isPreviewFullscreen);
-                    if (_isPreviewFullscreen)
+                    App.Logger?.Information("DeeperEditor: ccp_exit_fullscreen received (forced FS active = {Active}, hasWindow = {HasWin})",
+                        _isPreviewFullscreen, _previewFullscreenWindow != null);
+                    // Honor the "force-close independent of page state" contract
+                    // documented above the JS handler — if either the flag or
+                    // the temp window says we're not clean, retry cleanup.
+                    if (_isPreviewFullscreen || _previewFullscreenWindow != null)
                     {
                         Dispatcher.BeginInvoke(() => { try { ExitPreviewFullscreen(); } catch { } });
                     }
@@ -900,7 +904,11 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void ExitPreviewFullscreen()
         {
-            if (_fsTransitionInFlight || !_isPreviewFullscreen) return;
+            if (_fsTransitionInFlight) return;
+            // Allow cleanup whenever EITHER the flag OR the temp window is
+            // still live — a partial prior exit (flag cleared but window
+            // never closed) needs to be retryable.
+            if (!_isPreviewFullscreen && _previewFullscreenWindow == null) return;
             _fsTransitionInFlight = true;
             var hadFsSubscription = false;
             try
@@ -4755,7 +4763,10 @@ namespace ConditioningControlPanel.Views.Deeper
             // Exit preview fullscreen synchronously so the reparent-on-Closed
             // lambda releases BrowserPreview back to PreviewHost BEFORE
             // DisposePlayback tries to dispose it.
-            try { if (_isPreviewFullscreen) ExitPreviewFullscreen(); } catch { }
+            // Check the window reference too — a partial prior exit can leave
+            // the borderless host alive with the flag already cleared, and
+            // skipping cleanup here would orphan it past the editor's death.
+            try { if (_isPreviewFullscreen || _previewFullscreenWindow != null) ExitPreviewFullscreen(); } catch { }
 
             DisposePlayback();
         }

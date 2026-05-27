@@ -1352,8 +1352,14 @@ namespace ConditioningControlPanel.Views.Deeper
                 var msg = e.TryGetWebMessageAsString();
                 if (msg == "ccp_exit_fullscreen")
                 {
-                    App.Logger?.Information("EnhancementPlayer: ccp_exit_fullscreen received (forced FS active = {Active})", _isVideoFullscreen);
-                    if (_isVideoFullscreen)
+                    App.Logger?.Information("EnhancementPlayer: ccp_exit_fullscreen received (forced FS active = {Active}, hasWindow = {HasWin})",
+                        _isVideoFullscreen, _videoFullscreenWindow != null);
+                    // Honor the "force-close independent of page state" contract
+                    // documented above the JS handler — if either the flag or
+                    // the temp window says we're not clean, retry cleanup. This
+                    // covers the case where ExitVideoFullscreen ran, cleared
+                    // the flag, but Close() left the window alive.
+                    if (_isVideoFullscreen || _videoFullscreenWindow != null)
                     {
                         Dispatcher.BeginInvoke(() => { try { ExitVideoFullscreen(); } catch { } });
                     }
@@ -1818,7 +1824,11 @@ namespace ConditioningControlPanel.Views.Deeper
 
         private void ExitVideoFullscreen()
         {
-            if (_fsTransitionInFlight || !_isVideoFullscreen) return;
+            if (_fsTransitionInFlight) return;
+            // Allow cleanup whenever EITHER the flag OR the temp window is
+            // still live — a partial prior exit (flag cleared but window
+            // never closed) needs to be retryable.
+            if (!_isVideoFullscreen && _videoFullscreenWindow == null) return;
             _fsTransitionInFlight = true;
             var hadFsSubscription = false;
             try
@@ -1948,7 +1958,10 @@ namespace ConditioningControlPanel.Views.Deeper
 
             // Exit fullscreen synchronously so the reparent-on-Closed lambda
             // releases VideoBrowser back to VideoPane BEFORE we dispose it.
-            try { if (_isVideoFullscreen) ExitVideoFullscreen(); } catch { }
+            // Check the window reference too — a partial prior exit can leave
+            // the borderless host alive with the flag already cleared, and
+            // skipping cleanup here would orphan it past the player's death.
+            try { if (_isVideoFullscreen || _videoFullscreenWindow != null) ExitVideoFullscreen(); } catch { }
 
             try
             {
