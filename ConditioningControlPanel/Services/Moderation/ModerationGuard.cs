@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace ConditioningControlPanel.Services.Moderation
@@ -354,9 +356,14 @@ namespace ConditioningControlPanel.Services.Moderation
         {
             if (string.IsNullOrWhiteSpace(text)) return ModerationResult.Pass();
 
+            // P2-C5: normalise BEFORE matching. Closes the trivial l33t / zero-width /
+            // homoglyph / NFKC bypasses called out in the hostile review (b0mb, n!gger,
+            // f4ggot, "b​o​mb", Cyrillic 'с' homoglyphs, etc.).
+            var normalised = Normalize(text);
+
             foreach (var (cat, regexes, keywords) in _rules)
             {
-                if (MatchesAny(text, regexes, keywords, out var note))
+                if (MatchesAny(normalised, regexes, keywords, out var note))
                 {
                     if (cat == ProhibitedCategory.ProfessionalAdvice)
                         return ModerationResult.SoftHit(cat, note);
@@ -365,6 +372,126 @@ namespace ConditioningControlPanel.Services.Moderation
             }
 
             return ModerationResult.Pass();
+        }
+
+        /// <summary>
+        /// Normalises moderation input/output before regex/keyword matching.
+        ///
+        /// Steps (in order):
+        /// 1. NFKC compatibility normalisation (folds CJK fullwidth, ligatures,
+        ///    pre-composed accents, etc.).
+        /// 2. Strip zero-width / bidi-control / soft-hyphen characters
+        ///    (U+200B..U+200F, U+2028, U+2029, U+202A..U+202E, U+2060..U+2064, U+FEFF, U+00AD).
+        /// 3. Strip combining marks (Unicode category Mn) — decomposes "ñ"-style
+        ///    homoglyph attacks built via combining diacritics.
+        /// 4. Apply common l33t fold (0-&gt;o, 1-&gt;i, 3-&gt;e, 4-&gt;a, 5-&gt;s, 7-&gt;t,
+        ///    !-&gt;i, @-&gt;a, $-&gt;s). Folding is suppressed for any contiguous
+        ///    digit run of length &gt;=2 so legitimate numeric tokens (years, ages
+        ///    like "14yo", street numbers, etc.) are not corrupted. Only isolated
+        ///    single digits inside a word are folded — that's exactly the
+        ///    bypass pattern (b0mb, expl0sive, f4ggot).
+        /// 5. Lowercase via invariant culture (regexes are already case-insensitive
+        ///    but lowercase makes the keyword substring search deterministic).
+        ///
+        /// This is intentionally PUBLIC + STATIC for parity with the static rule
+        /// arrays; callers in unit tests or in foreign-language follow-up workstreams
+        /// can fold a string through the same pipeline.
+        /// </summary>
+        public static string Normalize(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+
+            // Step 1: NFKC.
+            string nfkc;
+            try { nfkc = text.Normalize(NormalizationForm.FormKC); }
+            catch (ArgumentException) { nfkc = text; }
+
+            // Step 2 + 3: strip zero-width, bidi controls, soft-hyphen, combining marks.
+            var sb = new StringBuilder(nfkc.Length);
+            foreach (var rune in nfkc.EnumerateRunes())
+            {
+                int v = rune.Value;
+                if (IsStrippableControl(v)) continue;
+                if (rune.IsBmp && CharUnicodeInfo.GetUnicodeCategory((char)v) == UnicodeCategory.NonSpacingMark) continue;
+                sb.Append(rune.ToString());
+            }
+            var stripped = sb.ToString();
+
+            // Step 4: l33t fold, suppressed inside short numeric runs.
+            var folded = LeetFold(stripped);
+
+            // Step 5: lowercase.
+            return folded.ToLowerInvariant();
+        }
+
+        private static bool IsStrippableControl(int v)
+        {
+            // Zero-width space, ZWNJ, ZWJ, LTR/RTL marks
+            if (v >= 0x200B && v <= 0x200F) return true;
+            // Line/paragraph separators (occasionally injected to break regex)
+            if (v == 0x2028 || v == 0x2029) return true;
+            // LRE/RLE/PDF/LRO/RLO/LRI/RLI/FSI/PDI
+            if (v >= 0x202A && v <= 0x202E) return true;
+            if (v >= 0x2066 && v <= 0x2069) return true;
+            // Word joiner + invisible operators
+            if (v >= 0x2060 && v <= 0x2064) return true;
+            // BOM / ZWNBSP
+            if (v == 0xFEFF) return true;
+            // Soft hyphen
+            if (v == 0x00AD) return true;
+            return false;
+        }
+
+        private static string LeetFold(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+
+            var sb = new StringBuilder(s.Length);
+            int i = 0;
+            while (i < s.Length)
+            {
+                // Detect a contiguous digit-only run; if length >= 2, treat as a
+                // legitimate numeric token (year, age like "14yo", street number) and
+                // do NOT fold. Only isolated single digits inside a word are folded —
+                // that's exactly the bypass pattern (b0mb, expl0sive, f4ggot).
+                if (char.IsDigit(s[i]))
+                {
+                    int j = i;
+                    while (j < s.Length && char.IsDigit(s[j])) j++;
+                    int runLen = j - i;
+                    if (runLen >= 2)
+                    {
+                        sb.Append(s, i, runLen);
+                    }
+                    else
+                    {
+                        sb.Append(MapLeet(s[i]));
+                    }
+                    i = j;
+                    continue;
+                }
+
+                sb.Append(MapLeet(s[i]));
+                i++;
+            }
+            return sb.ToString();
+        }
+
+        private static char MapLeet(char c)
+        {
+            return c switch
+            {
+                '0' => 'o',
+                '1' => 'i',
+                '3' => 'e',
+                '4' => 'a',
+                '5' => 's',
+                '7' => 't',
+                '!' => 'i',
+                '@' => 'a',
+                '$' => 's',
+                _   => c,
+            };
         }
 
         private static bool MatchesAny(string text, Regex[] regexes, string[] keywords, out string note)
