@@ -38,6 +38,7 @@ namespace ConditioningControlPanel
 
             BuildColorPicker();
             BuildArchetypeRows();
+            ApplyPolicyBannerState();
 
             if (existing != null)
             {
@@ -463,6 +464,42 @@ Do NOT include any other text before or after the question format. Just the ques
         private void CloseBtn_MouseLeave(object sender, MouseEventArgs e)
         {
             if (sender is TextBlock tb) tb.Foreground = new SolidColorBrush(Color.FromRgb(0x60, 0x60, 0x80));
+        }
+
+        /// <summary>
+        /// CCBill AI Addendum: show full content-policy banner until acked, then slim version.
+        /// </summary>
+        private void ApplyPolicyBannerState()
+        {
+            var acked = App.Settings?.Current?.CompanionPrompt?.PromptEditorDisclaimerAcknowledged == true;
+            if (PolicyBannerFull != null)
+                PolicyBannerFull.Visibility = acked ? Visibility.Collapsed : Visibility.Visible;
+            if (PolicyBannerSlim != null)
+                PolicyBannerSlim.Visibility = acked ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void BtnPolicyGotIt_Click(object sender, RoutedEventArgs e)
+        {
+            var settings = App.Settings?.Current?.CompanionPrompt;
+            if (settings != null)
+            {
+                settings.PromptEditorDisclaimerAcknowledged = true;
+                App.Settings?.Save();
+            }
+            ApplyPolicyBannerState();
+        }
+
+        private void BtnPolicyRead_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                    "https://cclabs.app/policies/prohibited-content") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "QuizCategoryEditorWindow: failed to open policy URL");
+            }
         }
     }
 }

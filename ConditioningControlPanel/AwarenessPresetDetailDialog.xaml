@@ -1,6 +1,7 @@
 <Window x:Class="ConditioningControlPanel.AwarenessPresetDetailDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
         Title="Preset"
         Height="720" Width="680"
         WindowStartupLocation="CenterOwner"
@@ -96,6 +97,7 @@
     <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" CornerRadius="0">
         <Grid Margin="24">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>  <!-- Policy banner (full or slim) -->
                 <RowDefinition Height="Auto"/>  <!-- Header: icon + name -->
                 <RowDefinition Height="Auto"/>  <!-- Description -->
                 <RowDefinition Height="Auto"/>  <!-- AI badge -->
@@ -105,8 +107,55 @@
                 <RowDefinition Height="Auto"/>  <!-- Buttons -->
             </Grid.RowDefinitions>
 
+            <!-- CCBill AI Addendum: content-policy banner. Full version until acked, then slim. -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,12">
+                <Border x:Name="PolicyBannerFull" Padding="12" CornerRadius="4"
+                        Background="#3D3520" BorderBrush="#A98E3A" BorderThickness="1">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="&#9888;" FontSize="16" Foreground="#E5C76B"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock Text="{loc:Str prompt_editor_policy_full}"
+                                       Foreground="#F0E2A6" FontSize="12" TextWrapping="Wrap"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+                            <Button x:Name="BtnPolicyReadFull"
+                                    Content="{loc:Str prompt_editor_policy_read}"
+                                    Background="Transparent" Foreground="#E5C76B"
+                                    BorderThickness="0" FontSize="11" Cursor="Hand"
+                                    Padding="8,4" Margin="0,0,8,0"
+                                    Click="BtnPolicyRead_Click"/>
+                            <Button x:Name="BtnPolicyGotIt"
+                                    Content="{loc:Str prompt_editor_policy_got_it}"
+                                    Background="#A98E3A" Foreground="White"
+                                    BorderThickness="0" FontSize="11" Cursor="Hand"
+                                    Padding="12,4"
+                                    Click="BtnPolicyGotIt_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <Border x:Name="PolicyBannerSlim" Visibility="Collapsed"
+                        Padding="10,6" CornerRadius="4" Background="#2A2520"
+                        BorderBrush="#A98E3A" BorderThickness="0,0,0,2">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#9888;" FontSize="13" Foreground="#E5C76B"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="{loc:Str prompt_editor_policy_slim}"
+                                   Foreground="#C8B47A" FontSize="11" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <Button x:Name="BtnPolicyReadSlim"
+                                Content="{loc:Str prompt_editor_policy_read}"
+                                Background="Transparent" Foreground="#E5C76B"
+                                BorderThickness="0" FontSize="11" Cursor="Hand"
+                                Padding="4,0" VerticalAlignment="Center"
+                                Click="BtnPolicyRead_Click"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
             <!-- Header -->
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
                 <!-- Built-in: static icon + name (shown when preset.IsBuiltIn) -->
                 <TextBlock x:Name="TxtIcon" FontSize="36" VerticalAlignment="Center" Margin="0,0,14,0"/>
                 <StackPanel x:Name="NameReadPanel" VerticalAlignment="Center">
@@ -133,12 +182,12 @@
             </StackPanel>
 
             <!-- Description (read-only variant) -->
-            <TextBlock Grid.Row="1" x:Name="TxtDescription"
+            <TextBlock Grid.Row="2" x:Name="TxtDescription"
                        Foreground="#C8C8D6" FontSize="13"
                        TextWrapping="Wrap" Margin="0,0,0,10"/>
 
             <!-- Description (editable variant — shown for custom presets) -->
-            <TextBox Grid.Row="1" x:Name="TxtDescriptionEdit"
+            <TextBox Grid.Row="2" x:Name="TxtDescriptionEdit"
                      Foreground="White" FontSize="12"
                      Background="#1E1E32" BorderBrush="#3A3A5A" BorderThickness="1"
                      Padding="6,4" TextWrapping="Wrap" AcceptsReturn="True"
@@ -147,7 +196,7 @@
                      ToolTip="Short description shown on the card"/>
 
             <!-- AI badge -->
-            <Border Grid.Row="2" x:Name="BrdAiBadge" Visibility="Collapsed"
+            <Border Grid.Row="3" x:Name="BrdAiBadge" Visibility="Collapsed"
                     Background="#2A1A3E" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                     CornerRadius="6" Padding="10,6" HorizontalAlignment="Left" Margin="0,0,0,12">
                 <TextBlock Text="AI required for best experience — falls back to canned lines offline"
@@ -155,27 +204,27 @@
             </Border>
 
             <!-- Triggers label -->
-            <TextBlock Grid.Row="3" Text="TRIGGERS" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
+            <TextBlock Grid.Row="4" Text="TRIGGERS" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
                        Margin="0,0,0,8"/>
 
             <!-- Trigger list - rows built imperatively in code-behind so each action
                  type gets its own inline editor without needing 8 XAML DataTemplates.
                  An "+ Add trigger" button is injected at the bottom of TriggerStack
                  when the dialog is in an editable state. -->
-            <Border Grid.Row="4" Background="#1A1A2E" BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="8">
+            <Border Grid.Row="5" Background="#1A1A2E" BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="8">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="TriggerStack" Margin="10"/>
                 </ScrollViewer>
             </Border>
 
             <!-- Footer note (only visible when installed) -->
-            <TextBlock Grid.Row="5" x:Name="TxtFooterNote"
+            <TextBlock Grid.Row="6" x:Name="TxtFooterNote"
                        Text="Changes save automatically."
                        Foreground="#8A8AA0" FontSize="10" FontStyle="Italic"
                        Margin="0,8,0,0" Visibility="Collapsed"/>
 
             <!-- Buttons -->
-            <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
+            <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
                 <!-- Delete is only shown for user-created presets (replaces Clone). -->
                 <Button x:Name="BtnDeletePreset" Content="Delete preset" Padding="12,8" Margin="0,0,8,0"
                         Background="#5A3030" Foreground="White" BorderThickness="0" Cursor="Hand"
