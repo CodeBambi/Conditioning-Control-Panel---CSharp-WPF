@@ -434,6 +434,14 @@ namespace ConditioningControlPanel.Services.Moderation
                 }
             }
 
+            // P2-WSD: foreign-language scan. The English ruleset above is the primary
+            // defense; this catches phrasings in the 9 non-EN locales CCP ships in (the
+            // bomb-prompt repro is in scope for every shipped language per CCBill).
+            var foreignResult = ForeignLanguageKeywords.Scan(text);
+            if (!foreignResult.Allow) return foreignResult;
+            if (foreignResult.Category == ProhibitedCategory.ProfessionalAdvice)
+                return foreignResult;
+
             return ModerationResult.Pass();
         }
 
