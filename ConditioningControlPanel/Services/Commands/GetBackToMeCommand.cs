@@ -73,22 +73,28 @@ namespace ConditioningControlPanel.Services.Commands
         {
             if (!string.IsNullOrEmpty(text))
             {
-                ShowAvatarMessage(text);
+                // Operator-supplied text — not AI-generated, so no AI badge.
+                ShowAvatarMessage(text, aiGenerated: false);
             }
-            var response = await App.Ai.GetBambiReplyAsync($"[Token={token}, JsonOnly={jsonOnly}]");
-            if (!jsonOnly && !string.IsNullOrEmpty(response))
+            // R2-NEW-H-1: migrate to typed AI API. Refusals are silently dropped on
+            // this remote-control surface (the local user didn't directly prompt — a
+            // POLICY bubble would surprise them). Downstream guard already logged via
+            // ModerationLog. IsAiGenerated propagates so canned fallbacks don't wear
+            // the AI badge.
+            var result = await App.Ai.GetBambiReplyExAsync($"[Token={token}, JsonOnly={jsonOnly}]");
+            if (!jsonOnly && result.Refusal == null && !string.IsNullOrEmpty(result.Text))
             {
-                ShowAvatarMessage(response);
+                ShowAvatarMessage(result.Text, aiGenerated: result.IsAiGenerated);
             }
         }
 
-        private static void ShowAvatarMessage(string text)
+        private static void ShowAvatarMessage(string text, bool aiGenerated = false)
         {
             var dispatcher = System.Windows.Application.Current?.Dispatcher;
             if (dispatcher == null || dispatcher.HasShutdownStarted) return;
             dispatcher.BeginInvoke(new Action(() =>
             {
-                try { App.AvatarWindow?.GigglePriority(text, playSound: true); }
+                try { App.AvatarWindow?.GigglePriority(text, playSound: true, aiGenerated: aiGenerated); }
                 catch (Exception ex) { App.Logger?.Debug("GetBackToMeCommand: avatar speak failed: {Error}", ex.Message); }
             }));
         }

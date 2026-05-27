@@ -2265,5 +2265,40 @@
   "status_emote_rate_limited": "ゆっくり - {0}秒後にもう一度",
   "status_emote_no_session": "まずリモートセッションを開始してください",
   "label_remote_share_avatar": "コントローラーに自分のDiscordアバターを表示",
-  "desc_remote_share_avatar": "デフォルトはオフ。オンにすると、リンクされたDiscordアバターがセッションを操作している人に表示されます。オフにするとシルエットの背後に隠れます。"
+  "desc_remote_share_avatar": "デフォルトはオフ。オンにすると、リンクされたDiscordアバターがセッションを操作している人に表示されます。オフにするとシルエットの背後に隠れます。",
+  "label_ai_badge": "AI",
+  "quiz_ai_disclaimer": "質問とアーキタイプ結果はAIによって生成されます。",
+  "explicit_ack_title": "アダルトコンテンツの確認",
+  "explicit_ack_body_intro": "このパーソナリティは、AIが生成する性的に露骨な対話を出力します。",
+  "explicit_ack_body_age": "あなたは18歳以上です（現地法で必要な場合は21歳以上）。",
+  "explicit_ack_body_policy": "未成年、非合意のシナリオ、実在する識別可能な人物、家族、動物、その他コンテンツポリシーで禁止されている内容を生成するためにCCPを使用しません。",
+  "explicit_ack_body_ai": "AIの出力はすべて言語モデルによって生成されたフィクションであり、実在の人物や出来事を描写するものではありません。",
+  "explicit_ack_policy_link": "コンテンツポリシー全文を読む",
+  "explicit_ack_accept": "18歳以上で同意します",
+  "explicit_ack_cancel": "キャンセル",
+  "explicit_ack_checkbox": "I confirm I am 18 years of age or older (or 21 where required by local law).",
+  "prompt_editor_policy_full": "カスタムプロンプトとテンプレートはAIに直接指示を与えます。CC Labs Srlsは、未成年、非合意のシナリオ、実在する識別可能な人物、家族、動物、ディープフェイク、違法行為、ヘイトスピーチを描写するコンテンツの生成にこのアプリを使用することを禁止します。違反するとアカウントが停止される場合があります。",
+  "prompt_editor_policy_slim": "コンテンツポリシーはすべてのカスタムプロンプトに適用されます。",
+  "prompt_editor_policy_read": "コンテンツポリシーを読む",
+  "prompt_editor_policy_got_it": "了解",
+
+  "moderation_input_refusal": "このメッセージはコンテンツポリシーにより送信できません。",
+  "moderation_output_refusal": "AIは応答を拒否しました。",
+  "moderation_policy_link": "コンテンツポリシーを読む",
+  "moderation_quiz_refusal": "この回答はコンテンツポリシーにより送信できません。",
+  "label_policy_badge": "ポリシー",
+
+  "prompt_validator_warning": "このテキストはコンテンツポリシー違反に関連するパターンと一致しています（{0}件）。保存は可能ですが変更は記録されます。",
+  "prompt_validator_field_flagged": "フラグ付き",
+  "prompt_validator_banner": "{0}件のフィールドにフラグが付きました。強調表示された項目を確認してください。",
+
+  "policy_warning_title": "コンテンツポリシーに関する通知",
+  "policy_warning_body_count": "最近のメッセージがコンテンツポリシーに{0}回違反しました。",
+  "policy_warning_body_explain": "CCPは決済処理業者CCBillの要件に従ってコンテンツモデレーションを実施しています。禁止コンテンツを生成しようとし続けると、チャットの一時停止やアカウント制限につながる可能性があります。",
+  "policy_warning_body_link": "禁止カテゴリの全リストについてはコンテンツポリシーをご確認ください。",
+  "policy_warning_ok": "了解",
+  "chat_cooldown_active": "チャット停止中: 残り{0}秒",
+
+  "community_prompt_warning_title": "Community prompt advisory",
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
 }

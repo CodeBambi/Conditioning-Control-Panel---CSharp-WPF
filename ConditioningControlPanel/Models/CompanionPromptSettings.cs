@@ -106,6 +106,55 @@ namespace ConditioningControlPanel.Models
         /// </summary>
         public Dictionary<string, string> CustomDomains { get; set; } = new();
 
+        // ============================================================================
+        // CCBill AI Content Merchant Addendum — content acknowledgement state.
+        // These flags are written when the user clears the explicit-content gate or
+        // the prompt-editor policy banner. They persist across sessions so the user
+        // is not pestered repeatedly. Bumping ExplicitAcknowledgementVersion forces a
+        // re-prompt — that's intentional.
+        // ============================================================================
+
+        /// <summary>
+        /// Version string the user must match against <see cref="ExplicitAcknowledgementVersion"/>
+        /// to skip the explicit-content acknowledgement dialog. When this constant is bumped,
+        /// every user is re-prompted on next gated action.
+        /// </summary>
+        // v2.0 (P2 C3): adds a required age-confirmation checkbox + captures
+        // ack timestamp (UTC ISO-8601) and the locale the user was running in.
+        // Bumped from "1.0" to force existing users to re-ack with the new UX.
+        public const string ExplicitAcknowledgementVersion = "2.0";
+
+        /// <summary>
+        /// True once the user has accepted the age + content policy acknowledgement dialog.
+        /// </summary>
+        public bool ExplicitContentAcknowledged { get; set; } = false;
+
+        /// <summary>
+        /// Version of the acknowledgement the user accepted. If different from
+        /// <see cref="ExplicitAcknowledgementVersion"/>, the gate is re-shown.
+        /// </summary>
+        public string ExplicitAcknowledgedVersion { get; set; } = "";
+
+        /// <summary>
+        /// UTC ISO-8601 timestamp ("o" format, InvariantCulture) of when the user accepted
+        /// the explicit-content acknowledgement dialog. Empty until first accept. Captured
+        /// for CCBill audit trail (P2 C3).
+        /// </summary>
+        public string ExplicitAcknowledgedAt { get; set; } = "";
+
+        /// <summary>
+        /// Locale (e.g. "en-US", "de-DE") the user's app was running in when they accepted
+        /// the explicit-content acknowledgement dialog. Empty until first accept. Captured
+        /// for CCBill audit trail (P2 C3).
+        /// </summary>
+        public string ExplicitAcknowledgedLocale { get; set; } = "";
+
+        /// <summary>
+        /// True once the user has clicked "Got it" on the full prompt-editor policy banner.
+        /// After this the banner compresses to a slim always-visible reminder.
+        /// </summary>
+        public bool PromptEditorDisclaimerAcknowledged { get; set; } = false;
+
         /// <summary>
         /// Returns default settings with the original BambiSprite prompts.
         /// </summary>

@@ -1,0 +1,86 @@
+<Window x:Class="ConditioningControlPanel.ContentPolicyWarningDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="{loc:Str policy_warning_title}"
+        Width="540"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource DarkerBgBrush}">
+
+    <Window.Resources>
+        <Style x:Key="DlgHeader" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E5C76B"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="DlgBody" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E8E8E8"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="LineHeight" Value="22"/>
+        </Style>
+        <Style x:Key="DlgButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="22,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="120"/>
+            <Setter Property="Background" Value="#A98E3A"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="32,28,32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Style="{StaticResource DlgHeader}" Text="{loc:Str policy_warning_title}"/>
+
+            <TextBlock x:Name="TxtBodyCount"
+                       Style="{StaticResource DlgBody}"
+                       Margin="0,18,0,0"/>
+
+            <TextBlock Style="{StaticResource DlgBody}" Margin="0,14,0,0"
+                       Text="{loc:Str policy_warning_body_explain}"/>
+
+            <TextBlock Style="{StaticResource DlgBody}" Margin="0,14,0,0"
+                       Text="{loc:Str policy_warning_body_link}"/>
+
+            <TextBlock Style="{StaticResource DlgBody}" Margin="0,8,0,0">
+                <Hyperlink x:Name="LnkPolicy" Click="LnkPolicy_Click"
+                           Foreground="#E5C76B">
+                    <Run Text="{loc:Str moderation_policy_link}"/>
+                </Hyperlink>
+            </TextBlock>
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,24,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="BtnOk" Grid.Column="1"
+                    Style="{StaticResource DlgButton}"
+                    Content="{loc:Str policy_warning_ok}"
+                    Click="BtnOk_Click"
+                    IsDefault="True"/>
+        </Grid>
+    </Grid>
+</Window>

@@ -17,6 +17,7 @@ using System.Windows.Navigation;
 using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services;
+using ConditioningControlPanel.Services.Moderation;
 using XamlAnimatedGif;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Localization;
@@ -457,8 +458,132 @@ namespace ConditioningControlPanel
             // Handle clicks outside the input panel to close it
             PreviewMouseDown += Window_PreviewMouseDown;
 
+            // P1.4 — wire moderation counter for warning modal + chat cooldown.
+            WireModerationCounter();
+
             App.Logger?.Information("AvatarTubeWindow initialized with avatar set {Set} for level {Level}",
                 _currentAvatarSet, playerLevel);
+        }
+
+        // ===== P1.4 moderation counter / chat cooldown =====
+        private DispatcherTimer? _cooldownTickTimer;
+        private string? _normalChatPlaceholder;
+        private DateTime? _cooldownEndsAt;
+
+        private void WireModerationCounter()
+        {
+            var counter = App.ModerationCounter;
+            if (counter == null) return;
+
+            counter.WarningTriggered += state =>
+            {
+                if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => OnWarningTriggered(state)); return; }
+                OnWarningTriggered(state);
+            };
+            counter.CooldownStarted += endsAt =>
+            {
+                if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => OnCooldownStarted(endsAt)); return; }
+                OnCooldownStarted(endsAt);
+            };
+            counter.CooldownEnded += () =>
+            {
+                if (!Dispatcher.CheckAccess()) { Dispatcher.Invoke(() => OnCooldownEnded()); return; }
+                OnCooldownEnded();
+            };
+        }
+
+        private void OnWarningTriggered(Services.Moderation.ModerationCounterState state)
+        {
+            try
+            {
+                var dlg = new ContentPolicyWarningDialog(state.HitsInLastTenMinutes)
+                {
+                    Owner = _parentWindow
+                };
+                dlg.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "AvatarTubeWindow: failed to show ContentPolicyWarningDialog");
+            }
+        }
+
+        private void OnCooldownStarted(DateTime endsAt)
+        {
+            _cooldownEndsAt = endsAt;
+            try
+            {
+                _normalChatPlaceholder ??= TxtUserInput?.Tag as string ?? string.Empty;
+                if (TxtUserInput != null)
+                {
+                    TxtUserInput.IsEnabled = false;
+                    TxtUserInput.Opacity = 0.5;
+                    TxtUserInput.Text = string.Empty;
+                }
+                if (BtnSendChat != null)
+                {
+                    BtnSendChat.IsEnabled = false;
+                    BtnSendChat.Opacity = 0.5;
+                }
+
+                _cooldownTickTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _cooldownTickTimer.Tick -= CooldownTick;
+                _cooldownTickTimer.Tick += CooldownTick;
+                _cooldownTickTimer.Start();
+                CooldownTick(null, EventArgs.Empty); // initial paint
+                App.Logger?.Information("AvatarTubeWindow: chat cooldown engaged until {End}", endsAt);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "AvatarTubeWindow: OnCooldownStarted failed");
+            }
+        }
+
+        private void CooldownTick(object? sender, EventArgs e)
+        {
+            if (!_cooldownEndsAt.HasValue) { _cooldownTickTimer?.Stop(); return; }
+            var remaining = _cooldownEndsAt.Value - DateTime.UtcNow;
+            if (remaining.TotalSeconds <= 0)
+            {
+                // Probe state to trigger CooldownEnded event in the counter.
+                _ = App.ModerationCounter?.GetState();
+                return;
+            }
+            try
+            {
+                if (TxtUserInput != null)
+                {
+                    TxtUserInput.Text = string.Format(
+                        Localization.Loc.Get("chat_cooldown_active"),
+                        (int)Math.Ceiling(remaining.TotalSeconds));
+                }
+            }
+            catch { /* best-effort painter */ }
+        }
+
+        private void OnCooldownEnded()
+        {
+            _cooldownEndsAt = null;
+            _cooldownTickTimer?.Stop();
+            try
+            {
+                if (TxtUserInput != null)
+                {
+                    TxtUserInput.IsEnabled = true;
+                    TxtUserInput.Opacity = 1.0;
+                    TxtUserInput.Text = string.Empty;
+                }
+                if (BtnSendChat != null)
+                {
+                    BtnSendChat.IsEnabled = true;
+                    BtnSendChat.Opacity = 1.0;
+                }
+                App.Logger?.Information("AvatarTubeWindow: chat cooldown ended");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "AvatarTubeWindow: OnCooldownEnded failed");
+            }
         }
 
         /// <summary>
@@ -1949,7 +2074,7 @@ namespace ConditioningControlPanel
                 if (triggers != null && triggers.Count > 0)
                 {
                     var trigger = triggers[_random.Next(triggers.Count)];
-                    GigglePriority(trigger);
+                    GigglePriority(trigger, aiGenerated: false);
                     return;
                 }
             }
@@ -1963,7 +2088,7 @@ namespace ConditioningControlPanel
             if (_interactionCount % 4 != 0)
             {
                 // Show standard random Bambi phrase
-                GigglePriority(GetRandomBambiPhrase());
+                GigglePriority(GetRandomBambiPhrase(), aiGenerated: false);
                 return;
             }
 
@@ -2031,12 +2156,20 @@ namespace ConditioningControlPanel
                         // Show quick thinking indicator
                         if (!_isGiggling) Giggle("Hmm...");
 
-                        // Ask AI for a random thought/bambi-ism
-                        var aiReaction = await App.Ai.GetBambiReplyAsync("Say something random and ditzy about what we're doing (or not doing) right now.");
-                        if (!string.IsNullOrEmpty(aiReaction))
+                        // R2-NEW-H-1: migrate to typed AI API. Refusals are silently
+                        // dropped on this non-chat surface (the user didn't directly
+                        // prompt — a POLICY bubble out of nowhere is jarring). The
+                        // downstream guard in AiService already logged via ModerationLog.
+                        // IsAiGenerated propagates so canned fallbacks don't wear the badge.
+                        var aiResult = await App.Ai.GetBambiReplyExAsync("Say something random and ditzy about what we're doing (or not doing) right now.");
+                        if (aiResult.Refusal != null)
                         {
-                            reaction = aiReaction;
-                            gotAiResponse = true;
+                            // Silent drop — fall back to preset behaviour below.
+                        }
+                        else if (!string.IsNullOrEmpty(aiResult.Text))
+                        {
+                            reaction = aiResult.Text;
+                            gotAiResponse = aiResult.IsAiGenerated;
                         }
                     }
                     catch (Exception ex)
@@ -2052,8 +2185,9 @@ namespace ConditioningControlPanel
                 PlayDoubleBounce();
             }
 
-            // Display the result with priority
-            GigglePriority(reaction);
+            // Display the result with priority. The badge only fires when we actually got an
+            // AI-generated reaction — preset fallbacks are unmarked.
+            GigglePriority(reaction, aiGenerated: gotAiResponse);
         }
 
         private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
@@ -2318,6 +2452,8 @@ namespace ConditioningControlPanel
             // Swap bubble content: hide single-message view, show chat history.
             SpeechScroller.Visibility = Visibility.Collapsed;
             ChatHistoryView.Visibility = Visibility.Visible;
+            // Hide the per-message AI badge when showing the chat history list (mixed AI + user lines).
+            if (AiBadge != null) AiBadge.Visibility = Visibility.Collapsed;
 
             // Enlarge bubble for the chat history layout.
             SpeechBubble.MaxWidth = 600;
@@ -2346,7 +2482,7 @@ namespace ConditioningControlPanel
             StopZOrderRefreshTimer();
         }
 
-        public void GigglePriority(string text, bool playSound = true)
+        public void GigglePriority(string text, bool playSound = true, bool aiGenerated = true)
         {
             DispatcherHelper.RunOnUI(() =>
             {
@@ -2369,9 +2505,56 @@ namespace ConditioningControlPanel
                 // Capture AI reply for chat history
                 AddToChatHistory(text, isUser: false);
 
-                ShowGiggle(text, playSound: playSound, source: SpeechSource.AI);
+                // aiGenerated: when true, the bubble shows the "AI" badge. Most call sites that route
+                // through GigglePriority are AI replies, but the awareness keyword path can fall back
+                // to canned phrases when the AI is unavailable — those callers pass false.
+                ShowGiggle(text, playSound: playSound, source: SpeechSource.AI, aiGenerated: aiGenerated);
 
                 App.Logger?.Debug("Priority speech (queue cleared): {Text}", text);
+            });
+        }
+
+        /// <summary>
+        /// Renders the moderation-refusal bubble. Called when an LLM input or output
+        /// trips <c>ModerationGuard</c>. Shows the POLICY badge (amber) and the localized
+        /// refusal string. Part of P1.1 (CCBill substantive moderation).
+        /// </summary>
+        public void ShowModerationRefusalBubble(ModerationSource source)
+        {
+            DispatcherHelper.RunOnUI(() =>
+            {
+                try
+                {
+                    StopThinkingAnimation();
+                    _isWaitingForAi = false;
+                    _speechQueue.Clear();
+                    _speechTimer?.Stop();
+                    _speechDelayTimer?.Stop();
+                    _isGiggling = false;
+
+                    var locKey = source == ModerationSource.Input
+                        ? "moderation_input_refusal"
+                        : "moderation_output_refusal";
+                    var text = Loc.Get(locKey);
+                    if (string.IsNullOrEmpty(text))
+                        text = source == ModerationSource.Input
+                            ? "This message can't be sent under our content policy."
+                            : "AI declined to respond.";
+
+                    AddToChatHistory(text, isUser: false);
+
+                    // Show via the normal pipeline first so sizing/animation runs,
+                    // then swap the badges (POLICY visible, AI hidden).
+                    ShowGiggle(text, playSound: false, source: SpeechSource.AI, aiGenerated: false);
+                    if (AiBadge != null) AiBadge.Visibility = Visibility.Collapsed;
+                    if (PolicyBadge != null) PolicyBadge.Visibility = Visibility.Visible;
+
+                    App.Logger?.Information("ShowModerationRefusalBubble: source={Source}", source);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "ShowModerationRefusalBubble failed");
+                }
             });
         }
 
@@ -2381,8 +2564,20 @@ namespace ConditioningControlPanel
         /// <param name="text">The text to display</param>
         /// <param name="playSound">Whether to play a giggle sound</param>
         /// <param name="source">The source of the speech (for delay calculation)</param>
-        private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset, string? phraseAudioPath = null)
+        private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset, string? phraseAudioPath = null, bool aiGenerated = false)
         {
+            // CCBill AI Addendum: show the "AI" badge only when this bubble's text actually came from
+            // an AI inference. Canned/preset phrases (including AI-path fallbacks) leave it hidden.
+            // The POLICY badge is mutually exclusive — only ShowModerationRefusalBubble shows it.
+            try
+            {
+                if (AiBadge != null)
+                    AiBadge.Visibility = aiGenerated ? Visibility.Visible : Visibility.Collapsed;
+                if (PolicyBadge != null)
+                    PolicyBadge.Visibility = Visibility.Collapsed;
+            }
+            catch { /* AiBadge not in template / closing — non-fatal */ }
+
             // Chat history view owns the bubble — swap back to single-message mode before showing.
             if (_isShowingChatHistory)
             {
@@ -4243,7 +4438,7 @@ namespace ConditioningControlPanel
             }
 
             // Show the trigger message with priority
-            GigglePriority("BAMBI CUM AND COLLAPSE");
+            GigglePriority("BAMBI CUM AND COLLAPSE", aiGenerated: false);
         }
 
         private void OnVideoAboutToStart(object? sender, EventArgs e)
@@ -4420,7 +4615,7 @@ namespace ConditioningControlPanel
 
         private void OnAchievementUnlocked(object? sender, Achievement achievement)
         {
-            GigglePriority($"Achievement unlocked: {achievement.Name}! *giggles*");
+            GigglePriority($"Achievement unlocked: {achievement.Name}! *giggles*", aiGenerated: false);
         }
 
         private void OnLevelUp(object? sender, int newLevel)
@@ -4441,11 +4636,11 @@ namespace ConditioningControlPanel
             var companionName = Models.CompanionDefinition.GetById(args.Companion).Name;
             if (args.NewLevel == Models.CompanionProgress.MaxLevel)
             {
-                GigglePriority($"{companionName} reached MAX LEVEL! *sparkles*");
+                GigglePriority($"{companionName} reached MAX LEVEL! *sparkles*", aiGenerated: false);
             }
             else if (args.NewLevel % 10 == 0)
             {
-                GigglePriority($"{companionName} is now level {args.NewLevel}! Keep going!");
+                GigglePriority($"{companionName} is now level {args.NewLevel}! Keep going!", aiGenerated: false);
             }
             else
             {
@@ -4983,11 +5178,24 @@ namespace ConditioningControlPanel
             var input = TxtUserInput.Text?.Trim();
             if (string.IsNullOrEmpty(input)) return;
 
+            // P1.4 — chat cooldown gate. When the moderation counter is in cooldown
+            // we swallow the send silently (no new bubble, no AI call). The countdown
+            // text is already rendered into the input box; user can see why.
+            var counterState = App.ModerationCounter?.GetState();
+            if (counterState?.CooldownActive == true)
+            {
+                App.Logger?.Information("AvatarTubeWindow: chat send swallowed (cooldown active, ends={End})",
+                    counterState.CooldownEndsAt);
+                return;
+            }
+
             TxtUserInput.Text = "";
             ToggleInputPanel();
 
-            // Capture user prompt for chat history
-            AddToChatHistory(input, isUser: true);
+            // P2/H5: user input is NOT added to chat history yet. If the moderation
+            // guard refuses below we throw the input away — the prohibited text must
+            // not remain visible in the in-memory history view. AddToChatHistory is
+            // called only after the AI call returns with a non-refusal result.
 
             if (App.Settings?.Current?.AiChatEnabled == true && App.Ai != null && App.Ai.IsAvailable)
             {
@@ -4997,22 +5205,49 @@ namespace ConditioningControlPanel
                     // Sets _isWaitingForAi internally so other giggles don't interrupt.
                     StartThinkingAnimation();
 
-                    // Get AI response - no truncation, scrollable bubble handles long text
-                    var reply = await App.Ai.GetBambiReplyAsync(input);
+                    // P2/C4: typed result. IsAiGenerated tells us whether the pink "AI"
+                    // badge should appear (true only for a genuine LLM reply; cloud
+                    // fallback / offline / login-required / local-Ollama-down all return
+                    // IsAiGenerated=false so the bubble appears unbadged).
+                    var result = await App.Ai.GetBambiReplyExAsync(input);
 
-                    // Double bounce to attract attention, then show AI response
-                    PlayDoubleBounce();
-                    GigglePriority(reply);
+                    if (result.Refusal != null)
+                    {
+                        // Refused — render the POLICY badge + the localized refusal string
+                        // instead of the normal AI bubble. The user's prohibited input is
+                        // dropped without ever entering chat history (P2/H5). The textbox
+                        // was already cleared above, so there's nothing left for the user
+                        // to re-send by accident.
+                        PlayDoubleBounce();
+                        ShowModerationRefusalBubble(result.Refusal.Source);
+                    }
+                    else
+                    {
+                        // Allowed — NOW persist the user prompt to chat history (P2/H5).
+                        AddToChatHistory(input, isUser: true);
+
+                        // Double bounce to attract attention, then show AI response.
+                        // aiGenerated flag flows through so canned fallbacks don't wear
+                        // the AI badge (P2/C4 — audit smoke-test #1).
+                        PlayDoubleBounce();
+                        GigglePriority(result.Text, aiGenerated: result.IsAiGenerated);
+                    }
                 }
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "Failed to get AI reply");
-                    GigglePriority(GetRandomBambiPhrase()); // Clears _isWaitingForAi
+                    // Exception is NOT a moderation refusal — the user's input was a
+                    // legitimate send that failed for an infrastructure reason. Persist
+                    // it so the conversation transcript stays coherent.
+                    AddToChatHistory(input, isUser: true);
+                    GigglePriority(GetRandomBambiPhrase(), aiGenerated: false); // Clears _isWaitingForAi
                 }
             }
             else
             {
-                // Use preset phrases when AI is disabled
+                // No AI configured / disabled — still a legitimate send, persist the input
+                // and respond with a preset phrase (no AI badge, no moderation in this path).
+                AddToChatHistory(input, isUser: true);
                 Giggle(GetRandomBambiPhrase());
             }
         }
@@ -5845,6 +6080,26 @@ namespace ConditioningControlPanel
             {
                 var preset = App.Personality?.GetPresetById(presetId);
                 if (preset == null) return;
+
+                // CCBill AI Addendum: gate explicit presets behind an age + content-policy
+                // acknowledgement dialog. The SlutMode state used for the rule check is the
+                // current value (we're not flipping it here, only selecting a preset).
+                var slutModeOn = App.Settings?.Current?.SlutModeEnabled == true;
+                if (Services.ExplicitContentGate.RequiresAcknowledgement(preset, slutModeOn))
+                {
+                    var promptSettings = App.Settings?.Current?.CompanionPrompt;
+                    if (!Services.ExplicitContentGate.IsAlreadyAcknowledged(promptSettings))
+                    {
+                        var dlg = new ExplicitContentAcknowledgementDialog { Owner = this };
+                        var ok = dlg.ShowDialog() == true;
+                        if (!ok) return; // Cancel: revert (no-op, since we hadn't switched yet).
+                        if (promptSettings != null)
+                        {
+                            Services.ExplicitContentGate.MarkAcknowledged(promptSettings);
+                            App.Settings?.Save();
+                        }
+                    }
+                }
 
                 // Set the new personality
                 if (App.Personality?.SetActivePreset(presetId) == true)

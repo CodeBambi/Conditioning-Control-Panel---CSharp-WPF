@@ -67,6 +67,16 @@ namespace ConditioningControlPanel.Models
         public bool RequiresPremium { get; set; }
 
         /// <summary>
+        /// Whether activating this preset (or, for SlutMode-aware presets, flipping
+        /// SlutMode on while it's active) requires the user to first clear the
+        /// explicit-content acknowledgement gate. Set on the preset for unconditional
+        /// gating (e.g. the "slutmode" built-in). For SlutMode-conditional gating,
+        /// see <see cref="Services.ExplicitContentGate"/>.
+        /// </summary>
+        [JsonProperty("requiresExplicitAcknowledgement")]
+        public bool RequiresExplicitAcknowledgement { get; set; }
+
+        /// <summary>
         /// The prompt settings for this personality.
         /// </summary>
         [JsonProperty("promptSettings")]

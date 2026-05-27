@@ -1577,12 +1577,17 @@ namespace ConditioningControlPanel.Services
                     ? $"Make a short teasing comment about {context}. Be playful and flirty."
                     : "Say something random and teasing to get attention. Be playful.";
 
-                var response = await App.Ai!.GetBambiReplyAsync(prompt);
-                if (!string.IsNullOrEmpty(response))
+                // R2-NEW-H-1: migrate to typed AI API. Refusals are silently dropped
+                // on this autonomy surface (the user did not directly prompt — a
+                // POLICY bubble out of nowhere is jarring; downstream guard already
+                // logged via ModerationLog). IsAiGenerated now flows through so
+                // canned fallbacks (offline, login-required) no longer wear the AI badge.
+                var result = await App.Ai!.GetBambiReplyExAsync(prompt);
+                if (result.Refusal == null && !string.IsNullOrEmpty(result.Text))
                 {
                     Application.Current?.Dispatcher?.BeginInvoke(() =>
                     {
-                        App.AvatarWindow?.GigglePriority(response, false);
+                        App.AvatarWindow?.GigglePriority(result.Text, false, aiGenerated: result.IsAiGenerated);
                     });
                 }
             }
@@ -1609,7 +1614,7 @@ namespace ConditioningControlPanel.Services
 
             var phrase = phrases[_random.Next(phrases.Length)];
 
-            App.AvatarWindow?.GigglePriority(phrase, false);
+            App.AvatarWindow?.GigglePriority(phrase, false, aiGenerated: false);
             AnnouncementMade?.Invoke(this, phrase);
         }
 

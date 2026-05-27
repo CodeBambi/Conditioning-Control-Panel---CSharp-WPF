@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Moderation;
 
 namespace ConditioningControlPanel.Services
 {
@@ -399,6 +400,16 @@ Example responses with REAL video names:
         // ==========================================
         public string GetSystemPrompt()
         {
+            // Layer 2 (Safety Sandwich): every system prompt this method returns is
+            // wrapped with SafetyComposer.Preamble (first) and SafetyComposer.Floor
+            // (last) before transmission. The wrap happens here at the single exit
+            // point so user-edited Personality / SlutModePersonality / KnowledgeBase /
+            // ContextReactions / OutputRules / CustomDomains / CommunityPrompt sections
+            // are still loaded verbatim, but cannot bypass the safety rules. The
+            // Preamble/Floor strings are hardcoded const in SafetyComposer.cs and
+            // never persisted, never editable, never visible to the user.
+            string assembled;
+
             // Check for active community prompt (assigned via prite/companion)
             var companionPrompt = App.Settings?.Current?.CompanionPrompt;
             if (companionPrompt?.UseCustomPrompt == true &&
@@ -411,19 +422,18 @@ Example responses with REAL video names:
                     Name = "Community Prompt",
                     PromptSettings = companionPrompt
                 };
-                return BuildPromptFromPreset(communityPreset);
+                assembled = BuildPromptFromPreset(communityPreset);
             }
-
-            // Get the active personality preset from PersonalityService
-            var activePreset = App.Personality?.GetActivePreset();
-
-            if (activePreset?.PromptSettings != null)
+            else
             {
-                return BuildPromptFromPreset(activePreset);
+                // Get the active personality preset from PersonalityService
+                var activePreset = App.Personality?.GetActivePreset();
+                assembled = activePreset?.PromptSettings != null
+                    ? BuildPromptFromPreset(activePreset)
+                    : GetDefaultBambiSpritePrompt();
             }
 
-            // Fallback to legacy behavior if no preset
-            return GetDefaultBambiSpritePrompt();
+            return SafetyComposer.Wrap(assembled);
         }
 
         /// <summary>

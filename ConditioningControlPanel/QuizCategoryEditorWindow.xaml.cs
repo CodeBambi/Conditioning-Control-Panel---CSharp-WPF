@@ -38,6 +38,7 @@ namespace ConditioningControlPanel
 
             BuildColorPicker();
             BuildArchetypeRows();
+            ApplyPolicyBannerState();
 
             if (existing != null)
             {
@@ -391,6 +392,9 @@ Do NOT include any other text before or after the question format. Just the ques
                 return;
             }
 
+            // P1.3 PromptValidator: soft validation, warns but does not block save.
+            RunPromptValidation(prompt);
+
             Result = new QuizCategoryDefinition
             {
                 Id = _existing?.Id ?? $"custom_{Guid.NewGuid():N}".Substring(0, 20),
@@ -404,6 +408,46 @@ Do NOT include any other text before or after the question format. Just the ques
 
             DialogResult = true;
             Close();
+        }
+
+        /// <summary>
+        /// P1.3 — soft validator over the system prompt textbox. Hits paint the
+        /// TextBox yellow, raise the banner, and write one moderation.log line
+        /// per matched pattern set. Always returns; save is never blocked.
+        /// </summary>
+        private void RunPromptValidation(string prompt)
+        {
+            var validator = App.PromptValidator;
+            if (validator == null) return;
+
+            var result = validator.Validate(prompt);
+            if (result.Clean)
+            {
+                TxtPrompt.BorderBrush = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF));
+                TxtPrompt.BorderThickness = new Thickness(1);
+                TxtPrompt.ClearValue(TextBox.ToolTipProperty);
+                ValidatorBanner.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            TxtPrompt.BorderBrush = new SolidColorBrush(Color.FromRgb(0xE5, 0xC7, 0x6B));
+            TxtPrompt.BorderThickness = new Thickness(2);
+            TxtPrompt.ToolTip = string.Format(
+                Loc.Get("prompt_validator_warning"),
+                result.MatchedPatterns.Count);
+
+            TxtValidatorBanner.Text = string.Format(
+                Loc.Get("prompt_validator_banner"),
+                1);
+            ValidatorBanner.Visibility = Visibility.Visible;
+
+            App.ModerationLog?.RecordEdit(
+                "SystemPromptTemplate",
+                result.MatchedPatterns.Count,
+                "quiz_category");
+            App.Logger?.Information(
+                "PromptValidator flagged QuizCategoryEditorWindow system prompt ({Count} matches)",
+                result.MatchedPatterns.Count);
         }
 
         private void BtnDelete_Click(object sender, MouseButtonEventArgs e)
@@ -463,6 +507,42 @@ Do NOT include any other text before or after the question format. Just the ques
         private void CloseBtn_MouseLeave(object sender, MouseEventArgs e)
         {
             if (sender is TextBlock tb) tb.Foreground = new SolidColorBrush(Color.FromRgb(0x60, 0x60, 0x80));
+        }
+
+        /// <summary>
+        /// CCBill AI Addendum: show full content-policy banner until acked, then slim version.
+        /// </summary>
+        private void ApplyPolicyBannerState()
+        {
+            var acked = App.Settings?.Current?.CompanionPrompt?.PromptEditorDisclaimerAcknowledged == true;
+            if (PolicyBannerFull != null)
+                PolicyBannerFull.Visibility = acked ? Visibility.Collapsed : Visibility.Visible;
+            if (PolicyBannerSlim != null)
+                PolicyBannerSlim.Visibility = acked ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void BtnPolicyGotIt_Click(object sender, RoutedEventArgs e)
+        {
+            var settings = App.Settings?.Current?.CompanionPrompt;
+            if (settings != null)
+            {
+                settings.PromptEditorDisclaimerAcknowledged = true;
+                App.Settings?.Save();
+            }
+            ApplyPolicyBannerState();
+        }
+
+        private void BtnPolicyRead_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                    "https://cclabs.app/policies/prohibited-content") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "QuizCategoryEditorWindow: failed to open policy URL");
+            }
         }
     }
 }

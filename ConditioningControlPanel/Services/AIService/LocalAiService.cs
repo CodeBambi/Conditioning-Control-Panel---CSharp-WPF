@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.AIService.Enrichment;
+using ConditioningControlPanel.Services.Moderation;
 
 namespace ConditioningControlPanel.Services.AIService
 {
@@ -250,11 +251,55 @@ namespace ConditioningControlPanel.Services.AIService
 
         public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
         {
+            var result = await GetBambiReplyExAsync(userInput, isUserMessage);
+            if (result.Refusal != null)
+            {
+                return result.Refusal.Source == ModerationSource.Input
+                    ? ModerationRefusal.InputSentinel
+                    : ModerationRefusal.OutputSentinel;
+            }
+            return result.Text;
+        }
+
+        /// <summary>
+        /// Typed variant. See <see cref="IAiService.GetBambiReplyExAsync"/>.
+        /// </summary>
+        public async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
+        {
             var prompt = _bambiSprite.GetSystemPrompt();
             // Mark this as a user request so a second click while busy gets a "still thinking"
             // phrase back instead of the bare fallback.
-            var result = await GetAiResponseAsync(userInput, prompt, isUser: true);
-            return result ?? GetFallbackResponse();
+            var result = await GetAiResponseAsync(userInput, prompt, isUser: true, returnRefusalSentinel: true);
+
+            var refusalSource = ModerationRefusal.GetSource(result);
+            if (refusalSource.HasValue)
+            {
+                return new AiReplyResult(
+                    string.Empty,
+                    IsAiGenerated: false,
+                    Refusal: new ModerationRefusalInfo(Category: null, Source: refusalSource.Value));
+            }
+
+            // GetAiResponseAsync returns null/empty in a handful of paths that all represent
+            // "we didn't get a usable LLM reply" — Ollama not reachable, empty content,
+            // queue drop ("still thinking" phrase), or descriptive error strings produced by
+            // DescribeOllamaError / DescribeChatException. Treat ALL of those as canned
+            // (badge OFF) so the user doesn't see the pink AI badge over an error string.
+            //
+            // Heuristic: a real Ollama reply never starts with the literal "(" we use for
+            // parenthetical diagnostic messages, and "still thinking" phrases are short and
+            // come from a fixed pool. We don't try to filter those by content here — instead
+            // we treat any null return as canned and let real content flow as AI.
+            if (string.IsNullOrEmpty(result))
+                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+
+            // Best-effort: descriptive error strings produced by DescribeChatException /
+            // DescribeOllamaError are parenthetical diagnostics, NOT model output. Keep them
+            // out of the AI-badge path.
+            if (result.StartsWith("(", StringComparison.Ordinal) && result.EndsWith(")", StringComparison.Ordinal))
+                return new AiReplyResult(result, IsAiGenerated: false, Refusal: null);
+
+            return new AiReplyResult(result, IsAiGenerated: true, Refusal: null);
         }
 
         private static readonly string[] StillThinkingPhrases =
@@ -332,8 +377,30 @@ namespace ConditioningControlPanel.Services.AIService
             return await GetAiResponseAsync(userInput, systemPrompt);
         }
 
-        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool isUser = false)
+        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool isUser = false, bool returnRefusalSentinel = false)
         {
+            // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass). Same semantics
+            // as AiService cloud path: hard categories block before the HTTP call; refusal
+            // sentinel surfaces only when the caller is the chat UI.
+            var guard = App.ModerationGuard;
+            var modelName = GetConfiguredModel();
+            var modelHint = "local:" + (string.IsNullOrWhiteSpace(modelName) ? "unknown" : modelName);
+            if (guard != null)
+            {
+                var inputCheck = guard.CheckInput(userInput ?? string.Empty);
+                if (!inputCheck.Allow && inputCheck.Category.HasValue)
+                {
+                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: modelHint);
+                    App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:local");
+                    App.Logger?.Information("LocalAiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
+                    return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
+                }
+                if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                {
+                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: modelHint);
+                }
+            }
+
             if (isUser)
             {
                 if (_isUserQueued) { App.Logger?.Debug("LocalAiService: user request dropped (one already queued)"); return GetRandomThinkingPhrase(); }
@@ -406,9 +473,6 @@ namespace ConditioningControlPanel.Services.AIService
                 // Append assistant turn so future requests have context.
                 _messages.Add(new ChatMessage("assistant", content));
 
-                // Persist asynchronously so chat latency isn't impacted by disk I/O.
-                _ = Task.Run(PersistHistory);
-
                 var parsed = _parser.Parse(content);
                 _currentCommands = parsed.Commands;
 
@@ -416,6 +480,45 @@ namespace ConditioningControlPanel.Services.AIService
                 {
                     App.Logger?.Information("LocalAiService: parsed {Count} command(s) from response", _currentCommands.Count);
                 }
+
+                // OUTPUT MODERATION (Layer 1). Scan the user-visible text — the JSON
+                // effects wrapper is already stripped by the parser. If the model produced
+                // prohibited content we discard the WHOLE turn (no commands executed, no
+                // text displayed, persistence skipped) and return the refusal sentinel or
+                // null per caller.
+                //
+                // P2/H5: persistence is deferred until AFTER output moderation passes.
+                // Previously PersistHistory() ran before the output check, so a prohibited
+                // assistant turn (and its preceding user turn) would land on disk and be
+                // reloaded next launch. The user/assistant turns are also rolled back from
+                // the in-memory _messages list so future requests don't carry the rejected
+                // context.
+                if (guard != null)
+                {
+                    var outputCheck = guard.CheckOutput(parsed.CleanText ?? string.Empty);
+                    if (!outputCheck.Allow && outputCheck.Category.HasValue)
+                    {
+                        App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: modelHint);
+                        App.ModerationCounter?.RecordHit(outputCheck.Category.Value, "output:local");
+                        App.Logger?.Information("LocalAiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                        // Don't fire effects from a blocked response.
+                        _currentCommands = new List<AiCommandData>();
+                        // Roll back assistant turn first (most recent), then the user turn
+                        // that produced it. PersistHistory is NOT called — the file on disk
+                        // remains at the prior known-clean state.
+                        if (_messages.Count > 0 && _messages[^1].Role == "assistant") _messages.RemoveAt(_messages.Count - 1);
+                        if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
+                        return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
+                    }
+                    if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                    {
+                        App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: modelHint);
+                    }
+                }
+
+                // Persist asynchronously so chat latency isn't impacted by disk I/O.
+                // Runs only after output moderation passed (P2/H5).
+                _ = Task.Run(PersistHistory);
 
                 if (_currentCommands.Count > 0 && App.Commands != null)
                 {

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Windows;
+using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
 
@@ -300,6 +302,85 @@ namespace ConditioningControlPanel.Services
 
             var settings = App.Settings?.Current;
             if (settings == null) return false;
+
+            // CCBill AI Addendum: gate community/asset prompts that ship a SlutModePersonality
+            // when SlutMode is currently on. Caller is responsible for the modal acknowledgement;
+            // the service refuses activation if the gate has not been cleared.
+            var slutModeOn = settings.SlutModeEnabled;
+            var probe = new Models.PersonalityPreset { PromptSettings = prompt.PromptSettings };
+            if (ExplicitContentGate.RequiresAcknowledgement(probe, slutModeOn)
+                && !ExplicitContentGate.IsAlreadyAcknowledged(settings.CompanionPrompt))
+            {
+                App.Logger?.Warning("ActivatePrompt {Id} refused: explicit-content acknowledgement not granted", promptId);
+                return false;
+            }
+
+            // P2-H10: run PromptValidator against the user-content fields BEFORE
+            // applying them to CompanionPrompt. Soft validator (consistent with the
+            // editor surface) - we log every flagged field to moderation.log and
+            // surface a non-blocking advisory toast, but the activation proceeds.
+            // ModerationGuard at inference time remains the load-bearing layer.
+            try
+            {
+                var validator = App.PromptValidator;
+                if (validator != null && prompt.PromptSettings != null)
+                {
+                    var ps = prompt.PromptSettings;
+                    var fieldsToScan = new (string Name, string Text)[]
+                    {
+                        ("Personality", ps.Personality ?? string.Empty),
+                        ("SlutModePersonality", ps.SlutModePersonality ?? string.Empty),
+                        ("KnowledgeBase", ps.KnowledgeBase ?? string.Empty),
+                        ("ExplicitReaction", ps.ExplicitReaction ?? string.Empty),
+                        ("ContextReactions", ps.ContextReactions ?? string.Empty),
+                    };
+
+                    var flaggedFields = new List<string>();
+                    foreach (var (name, text) in fieldsToScan)
+                    {
+                        if (string.IsNullOrWhiteSpace(text)) continue;
+                        var result = validator.Validate(text);
+                        if (!result.Clean)
+                        {
+                            flaggedFields.Add(name);
+                            App.ModerationLog?.RecordEdit(name, result.MatchedPatterns.Count, surface: "community_prompt");
+                        }
+                    }
+
+                    if (flaggedFields.Count > 0)
+                    {
+                        App.Logger?.Information(
+                            "CommunityPromptService.ActivatePrompt {Id}: PromptValidator flagged {Count} field(s): {Fields}",
+                            promptId, flaggedFields.Count, string.Join(",", flaggedFields));
+
+                        try
+                        {
+                            var title = Loc.Get("community_prompt_warning_title");
+                            var body = Loc.GetF("community_prompt_warning_body", flaggedFields.Count);
+                            Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                            {
+                                try
+                                {
+                                    MessageBox.Show(body, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+                                }
+                                catch (Exception inner)
+                                {
+                                    App.Logger?.Debug("Community prompt advisory toast failed: {Error}", inner.Message);
+                                }
+                            }));
+                        }
+                        catch (Exception ex)
+                        {
+                            App.Logger?.Debug("Community prompt advisory dispatch failed: {Error}", ex.Message);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Validator failures must not block activation - soft surface.
+                App.Logger?.Debug("CommunityPromptService PromptValidator pass failed: {Error}", ex.Message);
+            }
 
             // Apply the prompt settings
             settings.CompanionPrompt = prompt.PromptSettings;

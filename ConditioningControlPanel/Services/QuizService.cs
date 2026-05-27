@@ -7,6 +7,7 @@ using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Services.Moderation;
 using Newtonsoft.Json;
 
 namespace ConditioningControlPanel.Services
@@ -175,6 +176,12 @@ namespace ConditioningControlPanel.Services
             _conversationHistory.Clear();
 
             var systemPrompt = categoryDef != null ? BuildSystemPromptFromDefinition(categoryDef) : BuildSystemPrompt(category);
+            // Safety Sandwich (Layer 2): wrap the assembled quiz system prompt with the
+            // hardcoded Preamble/Floor before it's sent to the LLM. Custom category
+            // SystemPromptTemplate strings (user-editable in QuizCategoryEditorWindow)
+            // are still applied as-is between the Preamble and Floor — they just can't
+            // bypass the safety rules. See SafetyComposer.cs.
+            systemPrompt = SafetyComposer.Wrap(systemPrompt);
             _conversationHistory.Add(new ProxyChatMessage { Role = "system", Content = systemPrompt });
             _conversationHistory.Add(new ProxyChatMessage { Role = "user", Content = "Start the quiz! Generate question 1." });
 
@@ -632,6 +639,27 @@ Do NOT include any other text before or after the question format. Just the ques
                 {
                     App.Logger?.Warning("QuizService: Empty response");
                     return null;
+                }
+
+                // OUTPUT MODERATION (Layer 1). Discard AI-generated questions / result
+                // archetype text that trips the guard. Returning null lets the existing
+                // fallback path (deterministic archetype + canned question) take over so
+                // the quiz continues without leaking prohibited content.
+                var guard = App.ModerationGuard;
+                if (guard != null)
+                {
+                    var outputCheck = guard.CheckOutput(result.Content ?? string.Empty);
+                    if (!outputCheck.Allow && outputCheck.Category.HasValue)
+                    {
+                        App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud-quiz");
+                        App.ModerationCounter?.RecordHit(outputCheck.Category.Value, "output:quiz");
+                        App.Logger?.Information("QuizService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
+                        return null;
+                    }
+                    if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
+                    {
+                        App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: "cloud-quiz");
+                    }
                 }
 
                 return result.Content;

@@ -111,8 +111,45 @@ namespace ConditioningControlPanel
             if (preset.RequiresAi)
                 BrdAiBadge.Visibility = Visibility.Visible;
 
+            ApplyPolicyBannerState();
             RebuildRows();
             UpdateInstallButton();
+        }
+
+        /// <summary>
+        /// CCBill AI Addendum: show full content-policy banner until acked, then slim version.
+        /// </summary>
+        private void ApplyPolicyBannerState()
+        {
+            var acked = App.Settings?.Current?.CompanionPrompt?.PromptEditorDisclaimerAcknowledged == true;
+            if (PolicyBannerFull != null)
+                PolicyBannerFull.Visibility = acked ? Visibility.Collapsed : Visibility.Visible;
+            if (PolicyBannerSlim != null)
+                PolicyBannerSlim.Visibility = acked ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void BtnPolicyGotIt_Click(object sender, RoutedEventArgs e)
+        {
+            var settings = App.Settings?.Current?.CompanionPrompt;
+            if (settings != null)
+            {
+                settings.PromptEditorDisclaimerAcknowledged = true;
+                App.Settings?.Save();
+            }
+            ApplyPolicyBannerState();
+        }
+
+        private void BtnPolicyRead_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                    "https://cclabs.app/policies/prohibited-content") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "AwarenessPresetDetailDialog: failed to open policy URL");
+            }
         }
 
         /// <summary>
@@ -871,6 +908,9 @@ namespace ConditioningControlPanel
             {
                 ac.PromptTemplate = string.IsNullOrWhiteSpace(promptBox.Text) ? null : promptBox.Text;
                 App.Settings?.Save();
+                // P1.3 PromptValidator — soft validation on save. Always allow; on hit,
+                // paint the textbox border + show inline warning + log to moderation.log.
+                RunAwarenessPromptValidation(promptBox);
             };
             Grid.SetColumn(promptBox, 1);
             promptRow.Children.Add(promptBox);
@@ -1238,6 +1278,42 @@ namespace ConditioningControlPanel
         // ============================================================
         // Helpers
         // ============================================================
+
+        /// <summary>
+        /// P1.3 — runs the prompt validator over a single avatar-comment prompt
+        /// textbox on LostFocus (which is when this dialog persists the field).
+        /// On hit: paint border yellow, set tooltip, log to moderation.log.
+        /// Save is never blocked.
+        /// </summary>
+        private void RunAwarenessPromptValidation(TextBox promptBox)
+        {
+            var validator = App.PromptValidator;
+            if (validator == null || promptBox == null) return;
+
+            var text = promptBox.Text ?? string.Empty;
+            var result = validator.Validate(text);
+            if (result.Clean)
+            {
+                promptBox.BorderBrush = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x5A));
+                promptBox.BorderThickness = new Thickness(1);
+                promptBox.ClearValue(TextBox.ToolTipProperty);
+                return;
+            }
+
+            promptBox.BorderBrush = new SolidColorBrush(Color.FromRgb(0xE5, 0xC7, 0x6B));
+            promptBox.BorderThickness = new Thickness(2);
+            promptBox.ToolTip = string.Format(
+                Localization.Loc.Get("prompt_validator_warning"),
+                result.MatchedPatterns.Count);
+
+            App.ModerationLog?.RecordEdit(
+                "avatarPromptTemplate",
+                result.MatchedPatterns.Count,
+                "awareness_preset");
+            App.Logger?.Information(
+                "PromptValidator flagged AwarenessPresetDetailDialog avatar prompt ({Count} matches)",
+                result.MatchedPatterns.Count);
+        }
 
         private static Button MakeChipButton(string label, bool editable)
         {

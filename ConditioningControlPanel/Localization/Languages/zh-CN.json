@@ -2214,5 +2214,40 @@
   "status_emote_rate_limited": "请慢一点 - {0}秒后重试",
   "status_emote_no_session": "请先开启远程会话",
   "label_remote_share_avatar": "向控制者显示我的 Discord 头像",
-  "desc_remote_share_avatar": "默认关闭。开启后，您链接的 Discord 头像将向控制您会话的任何人显示。关闭后保持剪影状态。"
+  "desc_remote_share_avatar": "默认关闭。开启后，您链接的 Discord 头像将向控制您会话的任何人显示。关闭后保持剪影状态。",
+  "label_ai_badge": "AI",
+  "quiz_ai_disclaimer": "问题和您的原型结果由 AI 生成。",
+  "explicit_ack_title": "成人内容确认",
+  "explicit_ack_body_intro": "此性格会生成露骨的 AI 性内容对话。",
+  "explicit_ack_body_age": "您已年满 18 岁（当地法律要求时为 21 岁）。",
+  "explicit_ack_body_policy": "您不会使用 CCP 生成涉及未成年人、非自愿场景、可识别的真实人物、家庭成员、动物或任何被我们内容政策禁止的内容。",
+  "explicit_ack_body_ai": "所有 AI 输出都是由语言模型生成的虚构内容，并不描绘真实人物或事件。",
+  "explicit_ack_policy_link": "阅读完整内容政策",
+  "explicit_ack_accept": "我已满 18 岁并同意",
+  "explicit_ack_cancel": "取消",
+  "explicit_ack_checkbox": "I confirm I am 18 years of age or older (or 21 where required by local law).",
+  "prompt_editor_policy_full": "自定义提示和模板会直接指示 AI。CC Labs Srls 禁止使用本应用生成涉及未成年人、非自愿场景、可识别的真实人物、家庭成员、动物、深度伪造、违法活动或仇恨言论的内容。违规行为可能导致账户被终止。",
+  "prompt_editor_policy_slim": "内容政策适用于所有自定义提示。",
+  "prompt_editor_policy_read": "阅读内容政策",
+  "prompt_editor_policy_got_it": "知道了",
+
+  "moderation_input_refusal": "根据我们的内容政策，无法发送此消息。",
+  "moderation_output_refusal": "AI 拒绝回复。",
+  "moderation_policy_link": "阅读内容政策",
+  "moderation_quiz_refusal": "根据我们的内容政策，无法提交此回答。",
+  "label_policy_badge": "政策",
+
+  "prompt_validator_warning": "此文本匹配了与内容政策违规相关的模式（{0} 项匹配）。允许保存，但更改将被记录。",
+  "prompt_validator_field_flagged": "已标记",
+  "prompt_validator_banner": "{0} 个字段被标记。请检查高亮的条目。",
+
+  "policy_warning_title": "内容政策提示",
+  "policy_warning_body_count": "您最近的消息已触发我们的内容政策 {0} 次。",
+  "policy_warning_body_explain": "CCP 根据支付处理商 CCBill 的要求实施内容审核。继续尝试生成禁止内容可能导致聊天暂停或账户限制。",
+  "policy_warning_body_link": "请查阅内容政策以获取完整的禁止类别列表。",
+  "policy_warning_ok": "知道了",
+  "chat_cooldown_active": "聊天暂停：剩余 {0} 秒",
+
+  "community_prompt_warning_title": "Community prompt advisory",
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
 }

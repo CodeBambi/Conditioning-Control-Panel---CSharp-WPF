@@ -1240,7 +1240,7 @@ namespace ConditioningControlPanel.Services
             {
                 var canned = PickCannedPhrase(a.FallbackPhraseCategory);
                 if (!string.IsNullOrEmpty(canned))
-                    ShowAvatarLine(canned);
+                    ShowAvatarLine(canned, aiGenerated: false);
                 return;
             }
 
@@ -1248,19 +1248,35 @@ namespace ConditioningControlPanel.Services
             var promptTemplate = a.PromptTemplate;
             var fallbackCategory = a.FallbackPhraseCategory;
 
+            // H7 (P2): the upstream ModerationGuard.CheckInput pre-check was removed.
+            // Reasoning: AiService / LocalAiService already invoke CheckInput at the HTTP
+            // boundary inside GetKeywordCommentAsync. Calling it here too produced two
+            // moderation.log entries + two ModerationCounter hits per single keyword
+            // event, accelerating the user toward the 3-hit warning / 5-hit cooldown
+            // unfairly. Awareness reactions silently drop on refusal anyway (no bubble,
+            // no badge), so the visual UX is unchanged.
+            // TODO: P2-WSC interface migration - once IAiService.GetKeywordCommentAsync
+            // returns a discriminated result (AiReplyResult), surface result.Text and
+            // map IsAiGenerated through. For now this codes against the current string
+            // return signature.
+
             _ = Task.Run(async () =>
             {
                 try
                 {
                     string? line = null;
+                    bool fromAi = false;
                     if (aiAvailable && App.Ai != null)
+                    {
                         line = await App.Ai.GetKeywordCommentAsync(keyword, promptTemplate);
+                        fromAi = !string.IsNullOrEmpty(line);
+                    }
 
                     if (string.IsNullOrEmpty(line))
                         line = PickCannedPhrase(fallbackCategory);
 
                     if (!string.IsNullOrEmpty(line))
-                        ShowAvatarLine(line);
+                        ShowAvatarLine(line, aiGenerated: fromAi);
                 }
                 catch (Exception ex)
                 {
@@ -1286,13 +1302,13 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private static void ShowAvatarLine(string line)
+        private static void ShowAvatarLine(string line, bool aiGenerated)
         {
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher == null || dispatcher.HasShutdownStarted) return;
             dispatcher.BeginInvoke(new Action(() =>
             {
-                try { App.AvatarWindow?.GigglePriority(line, playSound: true); }
+                try { App.AvatarWindow?.GigglePriority(line, playSound: true, aiGenerated: aiGenerated); }
                 catch (Exception ex) { App.Logger?.Debug("AvatarWindow.GigglePriority failed: {Error}", ex.Message); }
             }));
         }

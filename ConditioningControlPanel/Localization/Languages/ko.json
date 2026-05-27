@@ -2272,5 +2272,40 @@
   "status_emote_rate_limited": "천천히 - {0}초 후 다시 시도",
   "status_emote_no_session": "먼저 원격 세션을 시작하세요",
   "label_remote_share_avatar": "컨트롤러에게 내 Discord 아바타 표시",
-  "desc_remote_share_avatar": "기본값은 꺼짐. 켜면 연결된 Discord 아바타가 세션을 제어하는 사람에게 표시됩니다. 끄면 실루엣 뒤에 가려집니다."
+  "desc_remote_share_avatar": "기본값은 꺼짐. 켜면 연결된 Discord 아바타가 세션을 제어하는 사람에게 표시됩니다. 끄면 실루엣 뒤에 가려집니다.",
+  "label_ai_badge": "AI",
+  "quiz_ai_disclaimer": "질문과 원형 결과는 AI가 생성합니다.",
+  "explicit_ack_title": "성인 콘텐츠 확인",
+  "explicit_ack_body_intro": "이 페르소나는 성적으로 노골적인 AI 생성 대화를 만듭니다.",
+  "explicit_ack_body_age": "만 18세 이상입니다(현지 법률에서 요구하는 경우 21세 이상).",
+  "explicit_ack_body_policy": "CCP를 사용해 미성년자, 비합의 시나리오, 식별 가능한 실존 인물, 가족 구성원, 동물 또는 콘텐츠 정책에서 금지하는 콘텐츠를 생성하지 않습니다.",
+  "explicit_ack_body_ai": "모든 AI 출력은 언어 모델이 생성한 픽션이며 실존하는 인물이나 사건을 묘사하지 않습니다.",
+  "explicit_ack_policy_link": "전체 콘텐츠 정책 읽기",
+  "explicit_ack_accept": "18세 이상이며 동의합니다",
+  "explicit_ack_cancel": "취소",
+  "explicit_ack_checkbox": "I confirm I am 18 years of age or older (or 21 where required by local law).",
+  "prompt_editor_policy_full": "사용자 지정 프롬프트와 템플릿은 AI에 직접 지시합니다. CC Labs Srls는 이 앱을 사용해 미성년자, 비합의 시나리오, 식별 가능한 실존 인물, 가족 구성원, 동물, 딥페이크, 불법 행위 또는 혐오 표현을 묘사하는 콘텐츠를 생성하는 것을 금지합니다. 위반 시 계정이 종료될 수 있습니다.",
+  "prompt_editor_policy_slim": "콘텐츠 정책은 모든 사용자 지정 프롬프트에 적용됩니다.",
+  "prompt_editor_policy_read": "콘텐츠 정책 읽기",
+  "prompt_editor_policy_got_it": "확인",
+
+  "moderation_input_refusal": "이 메시지는 콘텐츠 정책에 따라 전송할 수 없습니다.",
+  "moderation_output_refusal": "AI가 응답을 거부했습니다.",
+  "moderation_policy_link": "콘텐츠 정책 읽기",
+  "moderation_quiz_refusal": "이 답변은 콘텐츠 정책에 따라 제출할 수 없습니다.",
+  "label_policy_badge": "정책",
+
+  "prompt_validator_warning": "이 텍스트는 콘텐츠 정책 위반과 관련된 패턴과 일치합니다(일치 {0}건). 저장은 허용되지만 변경 사항이 기록됩니다.",
+  "prompt_validator_field_flagged": "표시됨",
+  "prompt_validator_banner": "{0}개 필드가 표시되었습니다. 강조 표시된 항목을 확인하세요.",
+
+  "policy_warning_title": "콘텐츠 정책 알림",
+  "policy_warning_body_count": "최근 메시지가 콘텐츠 정책을 {0}회 위반했습니다.",
+  "policy_warning_body_explain": "CCP는 결제 처리업체 CCBill의 요구 사항에 따라 콘텐츠 모더레이션을 시행합니다. 금지된 콘텐츠를 계속 생성하려고 하면 채팅 일시 중지 또는 계정 제한으로 이어질 수 있습니다.",
+  "policy_warning_body_link": "금지된 카테고리 전체 목록은 콘텐츠 정책을 확인하세요.",
+  "policy_warning_ok": "확인",
+  "chat_cooldown_active": "채팅 일시 중지: {0}초 남음",
+
+  "community_prompt_warning_title": "Community prompt advisory",
+  "community_prompt_warning_body": "This community prompt contains text matching content-policy patterns ({0} field(s) flagged). Activation is allowed but flagged content is logged. Review the policy if you have concerns."
 }
