@@ -130,7 +130,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 _host.LoadFromFile(ccpenhJsonPath);
             }
             if (IsLoaded) Load();
-            else Loaded += (_, _) => Load();
+            else QueueDeferredLoad(Load);
         }
 
         /// <summary>
@@ -155,7 +155,34 @@ namespace ConditioningControlPanel.Views.Deeper
             }
 
             if (IsLoaded) Load();
-            else Loaded += (_, _) => Load();
+            else QueueDeferredLoad(Load);
+        }
+
+        // Caller may invoke LoadEnhancementFile / OpenLocalMediaFile more than
+        // once before the window's Loaded event fires (e.g. multiple files
+        // dispatched in quick succession from the Windows file association).
+        // Holding a single pending action means the last call wins and we only
+        // subscribe to Loaded once, avoiding both duplicate loads and lambda
+        // accumulation on the Loaded event.
+        private Action? _pendingDeferredLoad;
+        private bool _deferredLoadSubscribed;
+
+        private void QueueDeferredLoad(Action action)
+        {
+            _pendingDeferredLoad = action;
+            if (_deferredLoadSubscribed) return;
+            _deferredLoadSubscribed = true;
+            Loaded += OnDeferredLoadReady;
+        }
+
+        private void OnDeferredLoadReady(object sender, RoutedEventArgs e)
+        {
+            Loaded -= OnDeferredLoadReady;
+            _deferredLoadSubscribed = false;
+            var action = _pendingDeferredLoad;
+            _pendingDeferredLoad = null;
+            try { action?.Invoke(); }
+            catch (Exception ex) { App.Logger?.Warning(ex, "EnhancementPlayer: deferred load failed"); }
         }
 
         // -- Drag & drop -------------------------------------------------------
@@ -1700,9 +1727,12 @@ namespace ConditioningControlPanel.Views.Deeper
                     Content = VideoBrowser
                 };
 
-                // Esc and F11 in the fullscreen window exit fullscreen (also clears
-                // HTML5 fullscreen state on the page so the toggle round-trips).
-                built.KeyDown += (_, args) =>
+                // Capture delegates in locals so the Closed handler can
+                // unsubscribe them before the window is unreferenced — keeps
+                // these lambdas (which capture `this`) from pinning the
+                // EnhancementPlayerWindow if WPF holds internal refs to the
+                // closed fullscreen window.
+                KeyEventHandler keyHandler = (_, args) =>
                 {
                     if (args.Key == Key.Escape || args.Key == Key.F11)
                     {
@@ -1711,13 +1741,14 @@ namespace ConditioningControlPanel.Views.Deeper
                     }
                 };
 
-                built.Closing += (_, _) =>
+                System.ComponentModel.CancelEventHandler closingHandler = (_, _) =>
                 {
                     if (_videoFullscreenWindow != null)
                         _videoFullscreenWindow.Content = null;
                 };
 
-                built.Closed += (_, _) =>
+                EventHandler? closedHandler = null;
+                closedHandler = (_, _) =>
                 {
                     // Defensive: if Closing didn't clear Content, detach now so
                     // the reparent below can't throw "already has parent".
@@ -1730,6 +1761,11 @@ namespace ConditioningControlPanel.Views.Deeper
                     {
                         App.Logger?.Debug("EnhancementPlayer: WebView re-parent on close failed: {Error}", ex.Message);
                     }
+
+                    try { built!.KeyDown -= keyHandler; } catch { }
+                    try { built!.Closing -= closingHandler; } catch { }
+                    try { built!.Closed -= closedHandler!; } catch { }
+
                     _videoFullscreenWindow = null;
 
                     // After reparent the underlying Chromium HWND is in a state
@@ -1742,6 +1778,10 @@ namespace ConditioningControlPanel.Views.Deeper
                     try { Mouse.Capture(null); } catch { }
                     try { VideoBrowser?.Focus(); } catch { }
                 };
+
+                built.KeyDown += keyHandler;
+                built.Closing += closingHandler;
+                built.Closed += closedHandler;
 
                 // Show small first, pump render queue, then maximize — matches the
                 // pattern in MainWindow.EnterBrowserFullscreen which avoids a sizing
@@ -1956,6 +1996,12 @@ namespace ConditioningControlPanel.Views.Deeper
             try { if (_uiTimer != null) _uiTimer.Tick -= UiTimer_Tick; } catch { }
             _uiTimer = null;
 
+            // DispatcherTimer is rooted by the Dispatcher while running; if the
+            // banner is mid-display when the window closes, the timer's lambda
+            // captures `this` and briefly pins the window until the 6s tick.
+            try { _promotedClearTimer?.Stop(); } catch { }
+            _promotedClearTimer = null;
+
             // Exit fullscreen synchronously so the reparent-on-Closed lambda
             // releases VideoBrowser back to VideoPane BEFORE we dispose it.
             // Check the window reference too — a partial prior exit can leave
@@ -1998,12 +2044,18 @@ namespace ConditioningControlPanel.Views.Deeper
 
             try
             {
-                if (_videoBrowserReady && VideoBrowser?.CoreWebView2 != null)
+                // No _videoBrowserReady guard: if CoreWebView2 finished
+                // initializing between the subscribe site's IsInitialized check
+                // and here, the handlers exist regardless of the flag. Each -=
+                // is independently try/catch'd so a missing one can't strand
+                // the others.
+                var cw = VideoBrowser?.CoreWebView2;
+                if (cw != null)
                 {
-                    try { VideoBrowser.CoreWebView2.NavigationStarting -= OnVideoNavStarting; } catch { }
-                    try { VideoBrowser.CoreWebView2.NavigationCompleted -= OnVideoNavCompleted; } catch { }
-                    try { VideoBrowser.CoreWebView2.ContainsFullScreenElementChanged -= OnVideoFullscreenChanged; } catch { }
-                    try { VideoBrowser.CoreWebView2.WebMessageReceived -= OnVideoWebMessageReceived; } catch { }
+                    try { cw.NavigationStarting -= OnVideoNavStarting; } catch { }
+                    try { cw.NavigationCompleted -= OnVideoNavCompleted; } catch { }
+                    try { cw.ContainsFullScreenElementChanged -= OnVideoFullscreenChanged; } catch { }
+                    try { cw.WebMessageReceived -= OnVideoWebMessageReceived; } catch { }
                 }
             }
             catch { }
