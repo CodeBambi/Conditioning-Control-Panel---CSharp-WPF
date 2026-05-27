@@ -128,13 +128,23 @@ namespace ConditioningControlPanel.Services.Moderation
             "sleepy sex", // borderline kink-coded but the dedicated category warrants it
         };
 
-        // Incest: family terms + sexual verbs in the same sentence-ish window. Note
-        // "mommy" / "daddy" are heavily kink-coded as honorifics in this space; the
-        // window-based check only trips when a sexual verb is immediately adjacent.
+        // Incest: possessive-marker + family term + sexual verb within ~40 chars.
+        // P2-H3: per user decision the app's audience uses Daddy/Mommy/Sir/Master/
+        // Mistress as kink vocatives WITHOUT possessive — those must stay allowed.
+        // Only POSSESSIVE-PREFIXED family terms ("my dad", "her sister", "the
+        // brother", "my step-sister") followed by a sexual verb trip the block.
+        // ALLOW: "Daddy, suck my dick" / "Mommy, please fuck me" / "Sir, may I cum"
+        //         / "Master fuck me" (no possessive marker → not incest).
+        // BLOCK: "my dad fucked me" / "her sister sucked his cock" / "his mom let
+        //         him cum" / "the brother fucked his sister" / "my step-sister
+        //         wants my cock".
         private static readonly Regex[] IncestRegex =
         {
-            new(@"\b(mom|mommy|mother|sister|brother|dad|daddy|father|cousin|aunt|uncle|son|daughter|niece|nephew|stepmom|stepdad|stepsister|stepbrother)\b.{0,30}\b(fuck|sex|cock|cum|pussy|tits|kiss|suck|breed|incest)\b", Opts),
-            new(@"\b(fuck|sex|cock|cum|pussy|tits|kiss|suck|breed)\b.{0,30}\b(my|your|her|his)\s+(mom|mommy|mother|sister|brother|dad|daddy|father|cousin|aunt|uncle|son|daughter|niece|nephew|stepmom|stepdad)\b", Opts),
+            // Possessive + family term + sexual verb (within 40 chars).
+            new(@"\b(my|her|his|the|this|that)\s+(step-?)?(mom|mommy|mother|sister|brother|dad|daddy|father|cousin|aunt|uncle|son|daughter|niece|nephew)\b.{0,40}\b(fuck(s|ed|ing)?|sex|cock|cum|cums|cumming|pussy|tits|kiss(es|ed|ing)?|breed(s|ing)?|incest|nude|naked|orgasm|masturbat|finger(s|ed|ing)?|lick(s|ed|ing)?|swallow(s|ed|ing)?|suck(s|ed|ing)?)\b", Opts),
+            // Sexual verb -> possessive + family term (within 40 chars). Symmetric.
+            new(@"\b(fuck(s|ed|ing)?|sex|cock|cum|cums|cumming|pussy|tits|kiss(es|ed|ing)?|breed(s|ing)?|nude|naked|orgasm|masturbat|finger(s|ed|ing)?|lick(s|ed|ing)?|swallow(s|ed|ing)?|suck(s|ed|ing)?)\b.{0,40}\b(my|your|her|his|the|this|that)\s+(step-?)?(mom|mommy|mother|sister|brother|dad|daddy|father|cousin|aunt|uncle|son|daughter|niece|nephew)\b", Opts),
+            // Standalone incest term needs no context.
             new(@"\bincest\b", Opts),
         };
         private static readonly string[] IncestKeywords =
