@@ -989,7 +989,7 @@
   "btn_stop_session_2": "停止疗程",
   "msg_you_are_in_lockdown_mode_nyou_cannot_end_a_se": "你处于封锁模式。\\n你无法在封锁期间结束疗程！",
   "msg_you_are_in_lockdown_mode_nyou_cannot_pause_du": "你处于封锁模式。\\n你无法在封锁期间暂停！",
-  "tooltip_pause_session_100_xp_penalty_per_pause_npause": "暂停疗程（每次暂停 -100 XP 惩罚）\\n已暂停 {0} 次",
+  "tooltip_pause_session_100_xp_penalty_per_pause_npause": "暂停疗程（每次暂停 -100 XP 惩罚）\n已暂停 {0} 次",
   "msg_preset_0_loaded": "预设 '{0}' 已加载！",
   "msg_a_preset_with_this_name_already_exists": "同名预设已存在。",
   "msg_preset_0_saved": "预设 '{0}' 已保存！",
