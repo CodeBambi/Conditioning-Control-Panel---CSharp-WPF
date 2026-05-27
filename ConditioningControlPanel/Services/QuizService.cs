@@ -176,6 +176,12 @@ namespace ConditioningControlPanel.Services
             _conversationHistory.Clear();
 
             var systemPrompt = categoryDef != null ? BuildSystemPromptFromDefinition(categoryDef) : BuildSystemPrompt(category);
+            // Safety Sandwich (Layer 2): wrap the assembled quiz system prompt with the
+            // hardcoded Preamble/Floor before it's sent to the LLM. Custom category
+            // SystemPromptTemplate strings (user-editable in QuizCategoryEditorWindow)
+            // are still applied as-is between the Preamble and Floor — they just can't
+            // bypass the safety rules. See SafetyComposer.cs.
+            systemPrompt = SafetyComposer.Wrap(systemPrompt);
             _conversationHistory.Add(new ProxyChatMessage { Role = "system", Content = systemPrompt });
             _conversationHistory.Add(new ProxyChatMessage { Role = "user", Content = "Start the quiz! Generate question 1." });
 
