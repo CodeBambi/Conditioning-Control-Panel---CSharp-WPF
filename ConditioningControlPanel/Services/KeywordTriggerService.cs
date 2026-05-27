@@ -1248,34 +1248,17 @@ namespace ConditioningControlPanel.Services
             var promptTemplate = a.PromptTemplate;
             var fallbackCategory = a.FallbackPhraseCategory;
 
-            // Moderation pre-check on the awareness keyword/template content. If the
-            // assembled prompt would trip the guard, silently drop the whole reaction —
-            // we do NOT surface a refusal bubble here because the user didn't actively
-            // prompt; popping a "policy" badge over a background keyword hit would be
-            // jarring. We also skip the canned-phrase fallback so the dispatch is fully
-            // silent. The log entry is sufficient for CCBill record-retention.
-            try
-            {
-                var guard = App.ModerationGuard;
-                if (guard != null)
-                {
-                    var assembled = string.IsNullOrEmpty(promptTemplate)
-                        ? keyword ?? string.Empty
-                        : (promptTemplate.Replace("{keyword}", keyword ?? string.Empty));
-                    var pre = guard.CheckInput(assembled);
-                    if (!pre.Allow && pre.Category.HasValue)
-                    {
-                        App.ModerationLog?.Record(pre.Category.Value, source: "input", modelHint: "awareness");
-                        App.ModerationCounter?.RecordHit(pre.Category.Value, "input:awareness");
-                        App.Logger?.Information("KeywordTriggerService: AvatarComment dropped by ModerationGuard (category={Cat})", pre.Category);
-                        return;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("KeywordTriggerService: moderation pre-check failed: {Error}", ex.Message);
-            }
+            // H7 (P2): the upstream ModerationGuard.CheckInput pre-check was removed.
+            // Reasoning: AiService / LocalAiService already invoke CheckInput at the HTTP
+            // boundary inside GetKeywordCommentAsync. Calling it here too produced two
+            // moderation.log entries + two ModerationCounter hits per single keyword
+            // event, accelerating the user toward the 3-hit warning / 5-hit cooldown
+            // unfairly. Awareness reactions silently drop on refusal anyway (no bubble,
+            // no badge), so the visual UX is unchanged.
+            // TODO: P2-WSC interface migration - once IAiService.GetKeywordCommentAsync
+            // returns a discriminated result (AiReplyResult), surface result.Text and
+            // map IsAiGenerated through. For now this codes against the current string
+            // return signature.
 
             _ = Task.Run(async () =>
             {
