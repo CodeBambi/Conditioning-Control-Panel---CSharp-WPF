@@ -649,6 +649,21 @@ namespace ConditioningControlPanel.Services
                             }
                         }
 
+                        // Pull lifetime stats and quest streak data down from server. The V2 path
+                        // historically only synced UP — local progress (TotalBubblesPopped, TotalFlashImages,
+                        // ConsecutiveDays, daily_quest_streak, completion dates, etc.) was never refreshed
+                        // from cloud, so admin restores / cross-device progress stayed invisible until the
+                        // V1 fallback ran. Mirror MergeCloudProfile's stats merge for V2.
+                        if (v2Result?.User?.Stats != null)
+                        {
+                            if (MergeV2CloudStatsIntoLocalProgress(v2Result.User.Stats, v2Result.ForceStreakOverride == true))
+                            {
+                                App.Settings?.Save();
+                                App.Achievements?.Save();
+                                App.Achievements?.Progress?.SyncCurrentStreak();
+                            }
+                        }
+
                         // Merge total conditioning minutes from server (take higher)
                         if (v2Result?.TotalConditioningMinutes.HasValue == true && v2Result.TotalConditioningMinutes.Value > settings.TotalConditioningMinutes)
                         {
@@ -1473,6 +1488,255 @@ namespace ConditioningControlPanel.Services
                     catch (Exception ex) { App.Logger?.Error(ex, "Background quest-reset sync failed"); }
                 });
             }
+        }
+
+        /// <summary>
+        /// Pull lifetime stats and quest streak data down from a V2 sync response and merge into
+        /// local AchievementProgress / Settings / QuestProgress using max-merge semantics.
+        /// Mirrors the stats portion of MergeCloudProfile but for the V2 sync path, which previously
+        /// only synced stats UP and never pulled cloud values DOWN.
+        /// Returns true if any local data was modified.
+        /// </summary>
+        private bool MergeV2CloudStatsIntoLocalProgress(Dictionary<string, object>? cloudStats, bool forceStreakOverride)
+        {
+            if (cloudStats == null) return false;
+            var settings = App.Settings?.Current;
+            var achievements = App.Achievements;
+            if (settings == null) return false;
+
+            bool needsSave = false;
+
+            // --- Lifetime stats merge (AchievementProgress) ---
+            if (achievements?.Progress != null)
+            {
+                var progress = achievements.Progress;
+
+                if (cloudStats.TryGetValue("longest_session_minutes", out var minutes))
+                {
+                    var m = Convert.ToDouble(minutes);
+                    if (m > progress.LongestSessionMinutes) { progress.LongestSessionMinutes = m; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_flashes", out var flashes))
+                {
+                    var f = Convert.ToInt32(flashes);
+                    if (f > progress.TotalFlashImages) { progress.TotalFlashImages = f; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("consecutive_days", out var streak))
+                {
+                    var st = Convert.ToInt32(streak);
+                    if (st > progress.ConsecutiveDays) { progress.ConsecutiveDays = st; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_bubbles_popped", out var bubbles))
+                {
+                    var b = Convert.ToInt32(bubbles);
+                    if (b > progress.TotalBubblesPopped) { progress.TotalBubblesPopped = b; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_video_minutes", out var videoMin))
+                {
+                    var v = Convert.ToDouble(videoMin);
+                    if (v > progress.TotalVideoMinutes) { progress.TotalVideoMinutes = v; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_lock_cards_completed", out var lockCards))
+                {
+                    var lc = Convert.ToInt32(lockCards);
+                    if (lc > progress.TotalLockCardsCompleted) { progress.TotalLockCardsCompleted = lc; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("highest_streak", out var hStreak))
+                {
+                    var hs = Convert.ToInt32(hStreak);
+                    if (hs > settings.HighestStreak) { settings.HighestStreak = hs; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_attention_checks_passed", out var attPassed))
+                {
+                    var ap = Convert.ToInt32(attPassed);
+                    if (ap > progress.TotalAttentionChecksPassed) { progress.TotalAttentionChecksPassed = ap; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("video_attention_checks_passed", out var vidAttPassed))
+                {
+                    var vap = Convert.ToInt32(vidAttPassed);
+                    if (vap > progress.VideoAttentionChecksPassed) { progress.VideoAttentionChecksPassed = vap; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("video_attention_checks_failed", out var vidAttFailed))
+                {
+                    var vaf = Convert.ToInt32(vidAttFailed);
+                    if (vaf > progress.VideoAttentionChecksFailed) { progress.VideoAttentionChecksFailed = vaf; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_attention_check_failures", out var attFail))
+                {
+                    var af = Convert.ToInt32(attFail);
+                    if (af > progress.AttentionCheckFailures) { progress.AttentionCheckFailures = af; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_bubble_count_games", out var bcGames))
+                {
+                    var bg = Convert.ToInt32(bcGames);
+                    if (bg > progress.TotalBubbleCountGames) { progress.TotalBubbleCountGames = bg; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_bubble_count_correct", out var bcCorrect))
+                {
+                    var bc = Convert.ToInt32(bcCorrect);
+                    if (bc > progress.TotalBubbleCountCorrect) { progress.TotalBubbleCountCorrect = bc; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_bubble_count_failed", out var bcFailed))
+                {
+                    var bf = Convert.ToInt32(bcFailed);
+                    if (bf > progress.TotalBubbleCountFailed) { progress.TotalBubbleCountFailed = bf; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("bubble_count_best_streak", out var bcStreak))
+                {
+                    var bs = Convert.ToInt32(bcStreak);
+                    if (bs > progress.BubbleCountBestStreak) { progress.BubbleCountBestStreak = bs; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_sessions_started", out var sessStarted))
+                {
+                    var ss = Convert.ToInt32(sessStarted);
+                    if (ss > progress.TotalSessionsStarted) { progress.TotalSessionsStarted = ss; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_sessions_abandoned", out var sessAbandoned))
+                {
+                    var sa = Convert.ToInt32(sessAbandoned);
+                    if (sa > progress.TotalSessionsAbandoned) { progress.TotalSessionsAbandoned = sa; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_xp_earned", out var xpEarned))
+                {
+                    var xe = Convert.ToDouble(xpEarned);
+                    if (xe > progress.TotalXPEarned) { progress.TotalXPEarned = xe; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_skill_points_earned", out var spEarned))
+                {
+                    var sp = Convert.ToInt32(spEarned);
+                    if (sp > progress.TotalSkillPointsEarned) { progress.TotalSkillPointsEarned = sp; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_pink_filter_minutes", out var pinkMin))
+                {
+                    var pm = Convert.ToDouble(pinkMin);
+                    if (pm > progress.TotalPinkFilterMinutes) { progress.TotalPinkFilterMinutes = pm; needsSave = true; }
+                }
+                if (cloudStats.TryGetValue("total_spiral_minutes", out var spiralMin))
+                {
+                    var sm = Convert.ToDouble(spiralMin);
+                    if (sm > progress.TotalSpiralMinutes) { progress.TotalSpiralMinutes = sm; needsSave = true; }
+                }
+            }
+
+            // --- Quest streak data merge (skip if force_streak_override active — handled separately by ApplyForceStreakOverride) ---
+            if (!forceStreakOverride)
+            {
+                if (cloudStats.TryGetValue("daily_quest_streak", out var cloudStreak))
+                {
+                    var cs = Convert.ToInt32(cloudStreak);
+                    if (cs > settings.DailyQuestStreak)
+                    {
+                        App.Logger?.Debug("V2 Quest sync: DailyQuestStreak cloud ({Cloud}) > local ({Local})", cs, settings.DailyQuestStreak);
+                        settings.DailyQuestStreak = cs;
+                        needsSave = true;
+                    }
+                }
+
+                if (cloudStats.TryGetValue("last_daily_quest_date", out var cloudLastDate))
+                {
+                    var dateStr = cloudLastDate?.ToString();
+                    if (!string.IsNullOrEmpty(dateStr) && DateTime.TryParse(dateStr, out var cloudDate))
+                    {
+                        if (!settings.LastDailyQuestDate.HasValue || cloudDate.Date > settings.LastDailyQuestDate.Value.Date)
+                        {
+                            settings.LastDailyQuestDate = cloudDate.Date;
+                            needsSave = true;
+                        }
+                    }
+                }
+
+                var questProgress = App.Quests?.Progress;
+                if (questProgress != null && cloudStats.TryGetValue("quest_completion_dates", out var cloudDatesObj))
+                {
+                    try
+                    {
+                        var cloudDates = JsonConvert.DeserializeObject<List<string>>(cloudDatesObj?.ToString() ?? "[]");
+                        if (cloudDates != null)
+                        {
+                            var localDates = new HashSet<DateTime>(questProgress.DailyQuestCompletionDates.Select(d => d.Date));
+                            bool datesChanged = false;
+                            foreach (var ds in cloudDates)
+                            {
+                                if (DateTime.TryParse(ds, out var d) && !localDates.Contains(d.Date))
+                                {
+                                    questProgress.DailyQuestCompletionDates.Add(d.Date);
+                                    datesChanged = true;
+                                }
+                            }
+                            if (datesChanged)
+                            {
+                                var cutoff = DateTime.Today.AddDays(-90);
+                                questProgress.DailyQuestCompletionDates.RemoveAll(d => d.Date < cutoff);
+                                needsSave = true;
+                                App.Quests?.RecalculateStreak();
+
+                                if (cloudStats.TryGetValue("daily_quest_streak", out var cloudStreakAfter))
+                                {
+                                    var csAfter = Convert.ToInt32(cloudStreakAfter);
+                                    if (csAfter > settings.DailyQuestStreak)
+                                    {
+                                        settings.DailyQuestStreak = csAfter;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("V2 Quest sync: Failed to parse cloud completion dates: {Error}", ex.Message);
+                    }
+                }
+
+                if (questProgress != null)
+                {
+                    if (cloudStats.TryGetValue("total_daily_quests_completed", out var cloudDailyTotal))
+                    {
+                        var cdt = Convert.ToInt32(cloudDailyTotal);
+                        if (cdt > questProgress.TotalDailyQuestsCompleted) { questProgress.TotalDailyQuestsCompleted = cdt; needsSave = true; }
+                    }
+                    if (cloudStats.TryGetValue("total_weekly_quests_completed", out var cloudWeeklyTotal))
+                    {
+                        var cwt = Convert.ToInt32(cloudWeeklyTotal);
+                        if (cwt > questProgress.TotalWeeklyQuestsCompleted) { questProgress.TotalWeeklyQuestsCompleted = cwt; needsSave = true; }
+                    }
+                    if (cloudStats.TryGetValue("total_xp_from_quests", out var cloudQuestXp))
+                    {
+                        var cqx = Convert.ToInt32(cloudQuestXp);
+                        if (cqx > questProgress.TotalXPFromQuests) { questProgress.TotalXPFromQuests = cqx; needsSave = true; }
+                    }
+
+                    if (cloudStats.TryGetValue("daily_quests_completed_today", out var cloudDailyCompToday))
+                    {
+                        var cloudCount = Convert.ToInt32(cloudDailyCompToday);
+                        bool cloudDateIsToday = false;
+                        if (cloudStats.TryGetValue("daily_completion_reset_date", out var cloudResetDate))
+                        {
+                            if (DateTime.TryParse(cloudResetDate?.ToString(), out var resetDate))
+                                cloudDateIsToday = resetDate.Date == DateTime.Today;
+                        }
+                        if (cloudDateIsToday && cloudCount > questProgress.GetDailyQuestsCompletedToday())
+                        {
+                            bool hasCompletionEvidence = questProgress.DailyQuestCompletionDates.Any(d => d.Date == DateTime.Today);
+                            if (hasCompletionEvidence)
+                            {
+                                questProgress.DailyQuestsCompletedToday = cloudCount;
+                                questProgress.DailyCompletionResetDate = DateTime.Today;
+                                needsSave = true;
+                            }
+                        }
+                    }
+
+                    if (questProgress.DailyQuestCompletionDates.Any(d => d.Date == DateTime.Today)
+                        && questProgress.GetDailyQuestsCompletedToday() == 0)
+                    {
+                        questProgress.DailyQuestsCompletedToday = 1;
+                        questProgress.DailyCompletionResetDate = DateTime.Today;
+                        needsSave = true;
+                    }
+                }
+            }
+
+            return needsSave;
         }
 
         /// <summary>
