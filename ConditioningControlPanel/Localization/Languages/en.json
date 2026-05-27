@@ -3168,5 +3168,9 @@ Unlocks at Level 75.",
   "moderation_output_refusal": "AI declined to respond.",
   "moderation_policy_link": "Read content policy",
   "moderation_quiz_refusal": "This answer can't be submitted under our content policy.",
-  "label_policy_badge": "POLICY"
+  "label_policy_badge": "POLICY",
+
+  "prompt_validator_warning": "This text matches patterns associated with content policy violations ({0} matches). Saving is allowed but the change will be logged.",
+  "prompt_validator_field_flagged": "Flagged",
+  "prompt_validator_banner": "{0} field(s) flagged. Review highlighted entries."
 }

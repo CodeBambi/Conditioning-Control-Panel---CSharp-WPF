@@ -268,6 +268,7 @@ namespace ConditioningControlPanel
         public static Services.Moderation.IModerationGuard ModerationGuard { get; private set; } = null!;
         public static Services.Moderation.ModerationLog ModerationLog { get; private set; } = null!;
         public static Services.Moderation.ModerationSession ModerationSession { get; private set; } = null!;
+        public static Services.Moderation.IPromptValidator PromptValidator { get; private set; } = null!;
         public static WindowAwarenessService WindowAwareness { get; private set; } = null!;
         public static PatreonService Patreon { get; private set; } = null!;
         public static UpdateService Update { get; private set; } = null!;
@@ -1007,6 +1008,11 @@ namespace ConditioningControlPanel
             ModerationSession = new Services.Moderation.ModerationSession();
             ModerationLog = new Services.Moderation.ModerationLog(ModerationSession);
             ModerationGuard = new Services.Moderation.ModerationGuard();
+            // PromptValidator (P1.3) is a soft validator that runs on the prompt-editor
+            // surfaces (CompanionPromptEditorDialog, AwarenessPresetDetailDialog,
+            // QuizCategoryEditorWindow). Hits warn the user and log to moderation.log;
+            // they do NOT block save. ModerationGuard is the load-bearing layer.
+            PromptValidator = new Services.Moderation.PromptValidator();
 
             Ai = new AiServiceStrategy();
             Commands = new AiCommandService();

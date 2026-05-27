@@ -167,6 +167,21 @@
                         </DockPanel>
                     </Border>
 
+                    <!-- P1.3 PromptValidator warning banner. Hidden until Save is clicked. -->
+                    <Border x:Name="ValidatorBanner"
+                            Visibility="Collapsed"
+                            Margin="0,14,0,0"
+                            Padding="10,8"
+                            CornerRadius="4"
+                            Background="#3D3520"
+                            BorderBrush="#E5C76B"
+                            BorderThickness="1">
+                        <TextBlock x:Name="TxtValidatorBanner"
+                                   Foreground="#F0E2A6"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"/>
+                    </Border>
+
                     <!-- System prompt -->
                     <TextBlock Text="{loc:Str label_system_prompt}" Foreground="#808090" FontSize="11" FontWeight="Bold"
                                Margin="0,14,0,4"/>

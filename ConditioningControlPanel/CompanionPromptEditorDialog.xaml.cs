@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Media;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Localization;
 
@@ -299,9 +302,81 @@ namespace ConditioningControlPanel
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
+            // P1.3 PromptValidator: warn on jailbreak/extraction patterns but still
+            // allow save. Hits are logged to moderation.log (source=edit). The
+            // ModerationGuard at inference time is the load-bearing layer; this is
+            // an early-warning surface so the user knows their edit was flagged.
+            RunPromptValidation();
+
             SaveSettings();
             DialogResult = true;
             Close();
+        }
+
+        /// <summary>
+        /// P1.3 — runs the prompt validator over each editable field, paints
+        /// flagged TextBoxes yellow, shows the top banner with a per-field summary,
+        /// and records one moderation.log entry per flagged field. Always returns
+        /// (save is never blocked).
+        /// </summary>
+        private void RunPromptValidation()
+        {
+            var validator = App.PromptValidator;
+            if (validator == null) return;
+
+            var fields = new (string FieldName, TextBox Box)[]
+            {
+                ("Personality", TxtPersonality),
+                ("ExplicitReaction", TxtExplicitReaction),
+                ("SlutModePersonality", TxtSlutMode),
+                ("KnowledgeBase", TxtKnowledgeBase),
+                ("ContextReactions", TxtContextReactions),
+                ("OutputRules", TxtOutputRules),
+            };
+
+            // Default brush to restore on clean fields (matches the existing PromptTextBox
+            // style's BorderBrush; pulled from the in-style #20FFFFFF subtle outline).
+            var cleanBrush = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF));
+            var flaggedBrush = new SolidColorBrush(Color.FromRgb(0xE5, 0xC7, 0x6B));
+
+            var flaggedNames = new List<string>();
+            foreach (var (fieldName, box) in fields)
+            {
+                if (box == null) continue;
+                var result = validator.Validate(box.Text ?? string.Empty);
+                if (result.Clean)
+                {
+                    box.BorderBrush = cleanBrush;
+                    box.BorderThickness = new Thickness(1);
+                    box.ClearValue(TextBox.ToolTipProperty);
+                }
+                else
+                {
+                    box.BorderBrush = flaggedBrush;
+                    box.BorderThickness = new Thickness(2);
+                    var tip = string.Format(
+                        Loc.Get("prompt_validator_warning"),
+                        result.MatchedPatterns.Count);
+                    box.ToolTip = tip;
+                    flaggedNames.Add(fieldName);
+                    App.ModerationLog?.RecordEdit(fieldName, result.MatchedPatterns.Count, "companion_prompt");
+                }
+            }
+
+            if (flaggedNames.Count == 0)
+            {
+                ValidatorBanner.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                TxtValidatorBanner.Text = string.Format(
+                    Loc.Get("prompt_validator_banner"),
+                    flaggedNames.Count);
+                ValidatorBanner.Visibility = Visibility.Visible;
+                App.Logger?.Information(
+                    "PromptValidator flagged {Count} field(s) in CompanionPromptEditorDialog",
+                    flaggedNames.Count);
+            }
         }
 
         private void BtnCancel_Click(object sender, RoutedEventArgs e)

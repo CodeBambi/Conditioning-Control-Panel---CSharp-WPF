@@ -111,6 +111,22 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20">
             <StackPanel x:Name="ContentPanel">
 
+                <!-- P1.3 PromptValidator: shown when a save flagged one or more fields.
+                     Save is still allowed; this banner names which fields tripped. -->
+                <Border x:Name="ValidatorBanner"
+                        Visibility="Collapsed"
+                        Margin="0,0,0,12"
+                        Padding="10,8"
+                        CornerRadius="4"
+                        Background="#3D3520"
+                        BorderBrush="#E5C76B"
+                        BorderThickness="1">
+                    <TextBlock x:Name="TxtValidatorBanner"
+                               Foreground="#F0E2A6"
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
+                </Border>
+
                 <!-- CCBill AI Addendum: content-policy banner. Full version on first display;
                      after "Got it" is clicked it collapses to a non-dismissable slim reminder. -->
                 <Border x:Name="PolicyBannerFull"

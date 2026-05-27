@@ -79,6 +79,47 @@ namespace ConditioningControlPanel.Services.Moderation
             }
         }
 
+        /// <summary>
+        /// Records a PromptValidator flag from one of the prompt-editor surfaces
+        /// (CompanionPromptEditorDialog, AwarenessPresetDetailDialog,
+        /// QuizCategoryEditorWindow). Lives at <c>source=edit</c> and uses the
+        /// "PromptEditorFlag" pseudo-category so it sorts cleanly in the log.
+        ///
+        /// Detail format: <c>surface=&lt;surface&gt;;field=&lt;fieldName&gt;;matches=&lt;patternCount&gt;</c>
+        /// — surface identifies which dialog (companion_prompt | awareness_preset |
+        /// quiz_category), field identifies which textbox (Personality, SlutMode, ...),
+        /// matches is the count of regex hits (NOT the matched text).
+        /// </summary>
+        public void RecordEdit(string fieldName, int patternCount, string surface)
+        {
+            try
+            {
+                lock (_writeLock)
+                {
+                    Directory.CreateDirectory(_logDir);
+                    RotateIfNeeded();
+                    var detail = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "surface={0};field={1};matches={2}",
+                        SanitizeField(surface),
+                        SanitizeField(fieldName),
+                        patternCount);
+                    var line = string.Format(
+                        CultureInfo.InvariantCulture,
+                        "{0:yyyy-MM-ddTHH:mm:ssZ} | PromptEditorFlag | edit | {1} | {2}{3}",
+                        DateTime.UtcNow,
+                        SanitizeField(_session.GetSessionIdHash()),
+                        detail,
+                        Environment.NewLine);
+                    File.AppendAllText(_logPath, line);
+                }
+            }
+            catch
+            {
+                // Best-effort, same as Record() above.
+            }
+        }
+
         private void RotateIfNeeded()
         {
             try
