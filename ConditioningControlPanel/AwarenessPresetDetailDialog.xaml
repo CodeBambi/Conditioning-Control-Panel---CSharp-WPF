@@ -112,13 +112,14 @@
                 <Border x:Name="PolicyBannerFull" Padding="12" CornerRadius="4"
                         Background="#3D3520" BorderBrush="#A98E3A" BorderThickness="1">
                     <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <DockPanel LastChildFill="True" Margin="0,0,0,6">
                             <TextBlock Text="&#9888;" FontSize="16" Foreground="#E5C76B"
-                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                       VerticalAlignment="Top" Margin="0,0,8,0"
+                                       DockPanel.Dock="Left"/>
                             <TextBlock Text="{loc:Str prompt_editor_policy_full}"
                                        Foreground="#F0E2A6" FontSize="12" TextWrapping="Wrap"
                                        VerticalAlignment="Center"/>
-                        </StackPanel>
+                        </DockPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
                             <Button x:Name="BtnPolicyReadFull"
                                     Content="{loc:Str prompt_editor_policy_read}"
@@ -138,19 +139,21 @@
                 <Border x:Name="PolicyBannerSlim" Visibility="Collapsed"
                         Padding="10,6" CornerRadius="4" Background="#2A2520"
                         BorderBrush="#A98E3A" BorderThickness="0,0,0,2">
-                    <StackPanel Orientation="Horizontal">
+                    <DockPanel LastChildFill="True">
                         <TextBlock Text="&#9888;" FontSize="13" Foreground="#E5C76B"
-                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <TextBlock Text="{loc:Str prompt_editor_policy_slim}"
-                                   Foreground="#C8B47A" FontSize="11" TextWrapping="Wrap"
-                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                   VerticalAlignment="Center" Margin="0,0,8,0"
+                                   DockPanel.Dock="Left"/>
                         <Button x:Name="BtnPolicyReadSlim"
                                 Content="{loc:Str prompt_editor_policy_read}"
                                 Background="Transparent" Foreground="#E5C76B"
                                 BorderThickness="0" FontSize="11" Cursor="Hand"
                                 Padding="4,0" VerticalAlignment="Center"
+                                DockPanel.Dock="Right"
                                 Click="BtnPolicyRead_Click"/>
-                    </StackPanel>
+                        <TextBlock Text="{loc:Str prompt_editor_policy_slim}"
+                                   Foreground="#C8B47A" FontSize="11" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    </DockPanel>
                 </Border>
             </StackPanel>
 
