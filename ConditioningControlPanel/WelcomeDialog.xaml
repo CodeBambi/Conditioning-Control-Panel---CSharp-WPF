@@ -22,7 +22,8 @@
             <!-- Title Bar with Pink Background -->
             <Border Grid.Row="0" Background="{DynamicResource PinkBrush}" CornerRadius="8" Margin="-10,-10,-10,20" Padding="20,15">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <TextBlock Text="💖" FontSize="28" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <Image Width="30" Height="30" VerticalAlignment="Center" Margin="0,0,12,0"
+                           Source="{Binding Source='💖', Converter={StaticResource EmojiToImageSource}}"/>
                     <TextBlock Text="{loc:Str app_title}" Foreground="White" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>

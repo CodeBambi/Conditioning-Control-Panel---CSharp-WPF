@@ -38,8 +38,9 @@
         <!-- ─── Title screen ─── -->
         <Grid x:Name="TitleScreen" Background="{StaticResource TitleBg}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                <TextBlock Text="👁" Foreground="#FF69B4" FontSize="120"
-                           HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                <Image Width="130" Height="130"
+                       HorizontalAlignment="Center" Margin="0,0,0,8"
+                       Source="{Binding Source='👁', Converter={StaticResource EmojiToImageSource}}"/>
                 <TextBlock Text="Gaze Minigame" Foreground="White" FontSize="48"
                            FontWeight="Bold" HorizontalAlignment="Center"/>
                 <TextBlock Text="Train your eyes to focus on the right thing."

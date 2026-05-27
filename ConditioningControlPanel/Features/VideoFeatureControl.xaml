@@ -1,7 +1,8 @@
 <UserControl x:Class="ConditioningControlPanel.Features.VideoFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers">
 
     <StackPanel>
         <!-- Master enable -->
@@ -53,7 +54,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="{loc:Str setting_strict}" Foreground="#FFB347" FontSize="13" FontWeight="SemiBold"/>
+                    <helpers:EmojiTextBlock Text="{loc:Str setting_strict}" Foreground="#FFB347" FontSize="13" FontWeight="SemiBold"/>
                     <TextBlock Text="{loc:Str tooltip_strict_mode_videos_cannot_be_skipped_must_wat}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,2,0,0"/>
@@ -100,7 +101,7 @@
             <StackPanel>
                 <Grid Margin="0,0,0,10">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str label_mini_game}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="Bold"/>
+                        <helpers:EmojiTextBlock Text="{loc:Str label_mini_game}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="Bold"/>
                     </StackPanel>
                     <CheckBox x:Name="ChkMiniGame" Style="{StaticResource ToggleStyle}"
                               HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -118,7 +119,8 @@
                         <CheckBox x:Name="ChkRandomize" Margin="8,0,0,0" VerticalAlignment="Center"
                                   Checked="ChkRandomize_Changed" Unchecked="ChkRandomize_Changed"
                                   ToolTip="{loc:Str tooltip_randomize_target_count_1_to_max}">
-                            <TextBlock Text="🎲" FontSize="10"/>
+                            <Image Width="12" Height="12"
+                                   Source="{Binding Source='🎲', Converter={StaticResource EmojiToImageSource}}"/>
                         </CheckBox>
                     </StackPanel>
                     <TextBlock x:Name="TxtTargets" Grid.Column="1" Text="3"

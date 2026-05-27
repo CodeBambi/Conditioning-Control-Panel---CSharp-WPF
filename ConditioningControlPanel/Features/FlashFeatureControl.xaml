@@ -1,7 +1,8 @@
 <UserControl x:Class="ConditioningControlPanel.Features.FlashFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers">
 
     <StackPanel>
         <!-- Master enable -->
@@ -96,7 +97,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str setting_hydra}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <helpers:EmojiTextBlock Text="{loc:Str setting_hydra}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
                         <TextBlock Text="{loc:Str tooltip_hydra_mode_clicking_an_image_spawns_two_more}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap" Margin="0,2,0,0"/>
@@ -111,7 +112,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str setting_linked}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <helpers:EmojiTextBlock Text="{loc:Str setting_linked}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
                         <TextBlock Text="{loc:Str tooltip_linked_hydra_spawns_share_the_parent_flash_ti}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap" Margin="0,2,0,0"/>
@@ -126,7 +127,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str setting_glow}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <helpers:EmojiTextBlock Text="{loc:Str setting_glow}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
                         <TextBlock Text="{loc:Str tooltip_toggle_the_pink_sparkle_glow_effect_on_flash}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap" Margin="0,2,0,0"/>

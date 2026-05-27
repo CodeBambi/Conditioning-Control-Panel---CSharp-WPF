@@ -27,7 +27,7 @@ public partial class AchievementPopup : Window
         TxtFlavor.Text = achievement.FlavorText;
 
         // Custom header text/icon if provided
-        if (headerIcon != null) TxtHeaderIcon.Text = headerIcon;
+        if (headerIcon != null) TxtHeaderIcon.Source = ConditioningControlPanel.Helpers.EmojiImage.Get(headerIcon);
         if (headerText != null) TxtHeaderText.Text = headerText;
 
         // Load achievement image

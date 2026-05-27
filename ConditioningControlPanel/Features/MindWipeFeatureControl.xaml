@@ -1,7 +1,8 @@
 <UserControl x:Class="ConditioningControlPanel.Features.MindWipeFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers">
 
     <Grid>
         <StackPanel>
@@ -64,7 +65,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="{loc:Str setting_loop_in_background}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                        <helpers:EmojiTextBlock Text="{loc:Str setting_loop_in_background}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
                         <TextBlock Text="{loc:Str tooltip_continuously_loop_a_single_track_instead_of_r}"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                    TextWrapping="Wrap" Margin="0,2,0,0"/>

@@ -365,9 +365,9 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="📄" FontSize="13"
-                               VerticalAlignment="Center" Margin="0,0,6,0"
-                               Foreground="{DynamicResource DeeperAccentSoftBrush}"/>
+                    <Image Grid.Row="0" Grid.Column="0" Width="15" Height="15"
+                           VerticalAlignment="Center" Margin="0,0,6,0"
+                           Source="{Binding Source='📄', Converter={StaticResource EmojiToImageSource}}"/>
                     <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxtLinkedJsonName"
                                Foreground="{DynamicResource TextLightBrush}"
                                FontSize="12" FontWeight="SemiBold"
@@ -382,9 +382,9 @@
                                 Orientation="Horizontal" VerticalAlignment="Center"
                                 Margin="8,0,0,0"
                                 Visibility="{Binding ElementName=BrowserPreview, Path=Visibility}">
-                        <TextBlock Text="🔍" FontSize="11"
-                                   Foreground="{DynamicResource DeeperAccentSoftBrush}"
-                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <Image Width="13" Height="13"
+                               VerticalAlignment="Center" Margin="0,0,4,0"
+                               Source="{Binding Source='🔍', Converter={StaticResource EmojiToImageSource}}"/>
                         <Button x:Name="BtnPreviewZoomOut" Content="−"
                                 Click="BtnPreviewZoomOut_Click"
                                 ToolTip="{loc:Str deeper_zoom_out_tt}"
@@ -669,9 +669,9 @@
                                         BorderThickness="0,0,1,1" Padding="6,2"
                                         ToolTip="{loc:Str deeper_editor_tt_lane_rules}">
                                     <DockPanel LastChildFill="True">
-                                        <TextBlock DockPanel.Dock="Left" Text="🎯" FontSize="11"
-                                                   Foreground="{DynamicResource DeeperAccentBrush}"
-                                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Image DockPanel.Dock="Left" Width="13" Height="13"
+                                               VerticalAlignment="Center" Margin="0,0,4,0"
+                                               Source="{Binding Source='🎯', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock x:Name="TxtRulesLaneCount" DockPanel.Dock="Right"
                                                    Foreground="{DynamicResource TextDimBrush}"
                                                    FontSize="10" VerticalAlignment="Center"/>
@@ -709,8 +709,9 @@
                                         BorderThickness="0,0,1,1" Padding="6,2"
                                         ToolTip="{loc:Str deeper_editor_tt_lane_haptics}">
                                     <DockPanel LastChildFill="True">
-                                        <TextBlock DockPanel.Dock="Left" Text="📳" FontSize="11"
-                                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Image DockPanel.Dock="Left" Width="13" Height="13"
+                                               VerticalAlignment="Center" Margin="0,0,4,0"
+                                               Source="{Binding Source='📳', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock x:Name="TxtHapticsLaneCount" DockPanel.Dock="Right"
                                                    Foreground="{DynamicResource TextDimBrush}"
                                                    FontSize="10" VerticalAlignment="Center"/>
@@ -728,8 +729,9 @@
                                         BorderThickness="0,0,1,0" Padding="6,2"
                                         ToolTip="{loc:Str deeper_editor_tt_lane_effects}">
                                     <DockPanel LastChildFill="True">
-                                        <TextBlock DockPanel.Dock="Left" Text="✨" FontSize="11"
-                                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Image DockPanel.Dock="Left" Width="13" Height="13"
+                                               VerticalAlignment="Center" Margin="0,0,4,0"
+                                               Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock x:Name="TxtEffectsLaneCount" DockPanel.Dock="Right"
                                                    Foreground="{DynamicResource TextDimBrush}"
                                                    FontSize="10" VerticalAlignment="Center"/>
@@ -894,10 +896,9 @@
                             </Grid.RowDefinitions>
 
                             <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,6">
-                                <TextBlock DockPanel.Dock="Left" Text="📋"
-                                           Foreground="{DynamicResource DeeperAccentSoftBrush}"
-                                           FontSize="12" VerticalAlignment="Center"
-                                           Margin="0,0,6,0"/>
+                                <Image DockPanel.Dock="Left" Width="14" Height="14"
+                                       VerticalAlignment="Center" Margin="0,0,6,0"
+                                       Source="{Binding Source='📋', Converter={StaticResource EmojiToImageSource}}"/>
                                 <TextBlock DockPanel.Dock="Left" Text="Items"
                                            Foreground="{DynamicResource DeeperAccentBrush}"
                                            FontSize="12" FontWeight="SemiBold"

@@ -1561,6 +1561,8 @@
              HintOrPlaceholderConverter declared below.
              ════════════════════════════════════════════════════════════════ -->
         <helpers:HintOrPlaceholderConverter x:Key="HintOrPlaceholderConverter"/>
+        <helpers:EmojiToImageSourceConverter x:Key="EmojiToImageSource"/>
+        <helpers:EmojiFallbackVisibilityConverter x:Key="EmojiFallbackVisibility"/>
 
         <!-- Circular preset button: 44x44, emoji inside, pink-on-surface. -->
         <Style x:Key="EmoteCircleButtonStyle" TargetType="Button">
@@ -1757,7 +1759,8 @@
                 
                 <!-- Icon and Title -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
-                    <TextBlock Text="💗" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
+                           Source="{Binding Source='💗', Converter={StaticResource EmojiToImageSource}}"/>
                     <TextBlock x:Name="TxtTitleBarVersion" Text="{loc:Str app_title}" Foreground="White" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
                 </StackPanel>
 
@@ -1878,14 +1881,16 @@
                     <Button x:Name="BtnSettings" Tag="Settings" Style="{StaticResource TabButtonActivePrimary}"
                             Margin="3,0" Click="BtnSettings_Click" ToolTip="{loc:Str tooltip_dashboard}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📊" FontSize="12" Margin="0,0,4,0"/>
+                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='📊', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_dashboard}" FontSize="11"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnPresets" Tag="Presets" Style="{StaticResource TabButton}"
                             Margin="3,0" Click="BtnPresets_Click" ToolTip="{loc:Str tooltip_presets_sessions}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📋" FontSize="12" Margin="0,0,4,0"/>
+                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='📋', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_presets}" FontSize="11"/>
                         </StackPanel>
                     </Button>
@@ -1894,14 +1899,16 @@
                     <Button x:Name="BtnQuests" Tag="Quests" Style="{StaticResource TabButton}"
                             Margin="3,0" Click="BtnQuests_Click" ToolTip="{loc:Str tooltip_daily_weekly_quests}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📜" FontSize="12" Margin="0,0,4,0"/>
+                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='📜', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_quests}" FontSize="11"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnEnhancements" Tag="Enhancements" Style="{StaticResource TabButton}"
                             Margin="3,0" Click="BtnEnhancements_Click" ToolTip="{loc:Str tooltip_enhancement_tree}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="✨" FontSize="12" Margin="0,0,4,0"/>
+                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_enhancements}" FontSize="11"/>
                         </StackPanel>
                     </Button>
@@ -1912,7 +1919,8 @@
                             <ScaleTransform x:Name="BtnDeeperScale" ScaleX="1" ScaleY="1"/>
                         </Button.RenderTransform>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🌊" FontSize="12" Margin="0,0,4,0"/>
+                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_deeper}" FontSize="11"/>
                         </StackPanel>
                     </Button>
@@ -1923,14 +1931,16 @@
                             Margin="3,0" Click="BtnAvailableSubjects_Click"
                             ToolTip="{loc:Str tooltip_available_subjects}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🛰️" FontSize="12" Margin="0,0,4,0"/>
+                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='🛰️', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_available_subjects}" FontSize="11"/>
                         </StackPanel>
                     </Button>
                     <Button x:Name="BtnOpenAssetsTop" Tag="Assets" Style="{StaticResource TabButton}"
                             Margin="3,0" Click="BtnAssets_Click" ToolTip="{loc:Str tooltip_assets_packs}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📁" FontSize="12" Margin="0,0,4,0"/>
+                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='📁', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_assets}" FontSize="11"/>
                         </StackPanel>
                     </Button>
@@ -2228,21 +2238,24 @@
                     <Button Grid.Column="0" x:Name="BtnAchievements" Tag="Achievements" Style="{StaticResource TabButton}"
                             Margin="2,0" Click="BtnAchievements_Click" ToolTip="{loc:Str tab_achievements}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🏆" FontSize="10" Margin="0,0,3,0"/>
+                            <Image Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='🏆', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_achievements}" FontSize="10"/>
                         </StackPanel>
                     </Button>
                     <Button Grid.Column="1" x:Name="BtnLeaderboard" Tag="Leaderboard" Style="{StaticResource TabButton}"
                             Margin="2,0" Click="BtnLeaderboard_Click" ToolTip="{loc:Str tab_leaderboard}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="📊" FontSize="10" Margin="0,0,3,0"/>
+                            <Image Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='📊', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_leaderboard}" FontSize="10"/>
                         </StackPanel>
                     </Button>
                     <Button Grid.Column="2" x:Name="BtnCompanion" Tag="Companion" Style="{StaticResource TabButton}"
                             Margin="2,0" Click="BtnCompanion_Click" ToolTip="{loc:Str tooltip_companion_settings}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🤖" FontSize="10" Margin="0,0,3,0"/>
+                            <Image Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_companion}" FontSize="10"/>
                         </StackPanel>
                     </Button>
@@ -2275,14 +2288,16 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="👤" FontSize="10" Margin="0,0,3,0"/>
+                            <Image Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='👤', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_profile}" FontSize="10"/>
                         </StackPanel>
                     </Button>
                     <Button Grid.Column="4" x:Name="BtnLab" Tag="Lab" Style="{StaticResource TabButton}"
                             Margin="2,0" Click="BtnLab_Click" ToolTip="{loc:Str tooltip_lab}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🧪" FontSize="10" Margin="0,0,3,0"/>
+                            <Image Width="12" Height="12" Margin="0,0,3,0" VerticalAlignment="Center"
+                                   Source="{Binding Source='🧪', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str tab_lab}" FontSize="10"/>
                         </StackPanel>
                     </Button>
@@ -2344,7 +2359,8 @@
                                                 <TextBlock Text="✨" FontSize="9" Foreground="White"/>
                                             </Border>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="💫" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                       Source="{Binding Source='💫', Converter={StaticResource EmojiToImageSource}}"/>
                                                 <TextBlock Text="{loc:Str tab_blink_trainer}" Foreground="White" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DockPanel>
@@ -2358,7 +2374,8 @@
                                                 <TextBlock Text="✨" FontSize="9" Foreground="White"/>
                                             </Border>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🎮" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                       Source="{Binding Source='🎮', Converter={StaticResource EmojiToImageSource}}"/>
                                                 <TextBlock Text="{loc:Str tab_remote_control}" Foreground="White" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DockPanel>
@@ -2372,7 +2389,8 @@
                                                 <TextBlock Text="✨" FontSize="9" Foreground="White"/>
                                             </Border>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🤖" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                       Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
                                                 <TextBlock x:Name="TxtSubBambiTakeover" Text="{loc:Str tab_takeover}" Foreground="White" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DockPanel>
@@ -2386,7 +2404,8 @@
                                                 <TextBlock Text="✨" FontSize="9" Foreground="White"/>
                                             </Border>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="💜" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                       Source="{Binding Source='💜', Converter={StaticResource EmojiToImageSource}}"/>
                                                 <TextBlock Text="{loc:Str tab_haptics}" Foreground="White" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DockPanel>
@@ -2400,7 +2419,8 @@
                                                 <TextBlock Text="✨" FontSize="9" Foreground="White"/>
                                             </Border>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="👁" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                       Source="{Binding Source='👁', Converter={StaticResource EmojiToImageSource}}"/>
                                                 <TextBlock Text="{loc:Str tab_awareness}" Foreground="White" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DockPanel>
@@ -2414,7 +2434,8 @@
                                                 <TextBlock Text="✨" FontSize="9" Foreground="White"/>
                                             </Border>
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🔒" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                <Image Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                       Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                                                 <TextBlock Text="{loc:Str tab_lockdown_mode}" Foreground="White" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </DockPanel>
@@ -2445,8 +2466,9 @@
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border Background="#3D3D60" CornerRadius="13" Width="26" Height="26" Cursor="Hand">
-                                    <TextBlock Text="🐛" FontSize="13" FontFamily="Segoe UI Emoji"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Image Width="15" Height="15"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Source="{Binding Source='🐛', Converter={StaticResource EmojiToImageSource}}"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
@@ -2516,7 +2538,8 @@
                     <Border x:Name="PillOnlineUsers" Background="#2A2A4A" CornerRadius="10" Padding="10,4" Margin="0,0,8,0"
                             Visibility="Collapsed" ToolTip="{loc:Str tooltip_bimbos_online_now_hive_mind_skill}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="👯‍♀️" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <Image Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,4,0"
+                                   Source="{Binding Source='👯‍♀️', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock x:Name="TxtPillOnlineUsers" Text="0" Foreground="#00FF88" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
@@ -2525,7 +2548,8 @@
                     <Border x:Name="PillRankPercentile" Background="#2A2A4A" CornerRadius="10" Padding="10,4"
                             Visibility="Collapsed" ToolTip="{loc:Str tooltip_your_rank_percentile_popular_girl_skill}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="👑" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <Image Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,4,0"
+                                   Source="{Binding Source='👑', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock x:Name="TxtPillRankPercentile" Text="{loc:Str label_top_0}" Foreground="#FFD700" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
@@ -2675,7 +2699,7 @@
                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                         <StackPanel>
                             <Grid Margin="0,0,0,2">
-                                <TextBlock x:Name="TxtFeatureFlash" Style="{StaticResource SectionHeader}" Text="{loc:Str section_flash_images}" Margin="0"/>
+                                <helpers:EmojiTextBlock x:Name="TxtFeatureFlash" Style="{StaticResource SectionHeader}" Text="{loc:Str section_flash_images}" Margin="0"/>
                                 <Button x:Name="HelpBtnFlash" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="FlashImages"/>
                             </Grid>
                             
@@ -2711,19 +2735,19 @@
                                             ToolTip="{loc:Str tooltip_hydra_mode_clicking_an_image_spawns_two_more}">
                                     <CheckBox x:Name="ChkCorruption" Style="{StaticResource ToggleStyle}"
                                               Checked="ChkCorruption_Changed" Unchecked="ChkCorruption_Changed"/>
-                                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_hydra}" Margin="5,0,0,0" FontSize="11"/>
+                                    <helpers:EmojiTextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_hydra}" Margin="5,0,0,0" FontSize="11"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal"
                                             ToolTip="{loc:Str tooltip_linked_hydra_spawns_share_the_parent_flash_ti}">
                                     <CheckBox x:Name="ChkHydraLinked" Style="{StaticResource ToggleStyle}" IsChecked="True"
                                               Checked="ChkHydraLinked_Changed" Unchecked="ChkHydraLinked_Changed"/>
-                                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_linked}" Margin="5,0,0,0" FontSize="11"/>
+                                    <helpers:EmojiTextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_linked}" Margin="5,0,0,0" FontSize="11"/>
                                 </StackPanel>
                                 <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="6,0,0,0"
                                             ToolTip="{loc:Str tooltip_toggle_the_pink_sparkle_glow_effect_on_flash}">
                                     <CheckBox x:Name="ChkFlashGlow" Style="{StaticResource ToggleStyle}" IsChecked="True"
                                               Checked="ChkFlashGlow_Changed" Unchecked="ChkFlashGlow_Changed"/>
-                                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_glow}" Margin="5,0,0,0" FontSize="11"/>
+                                    <helpers:EmojiTextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_glow}" Margin="5,0,0,0" FontSize="11"/>
                                 </StackPanel>
                             </Grid>
                             <!-- Per Hour / Images in two columns -->
@@ -2762,7 +2786,7 @@
                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                         <StackPanel>
                             <Grid Margin="0,0,0,2">
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_visuals}" Margin="0"/>
+                                <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_visuals}" Margin="0"/>
                                 <Button x:Name="HelpBtnVisuals" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Visuals"/>
                             </Grid>
                             
@@ -2805,7 +2829,7 @@
                                     ToolTip="{loc:Str tooltip_when_enabled_flash_duration_matches_audio_len}">
                                 <Grid>
                                     <CheckBox x:Name="ChkFlashAudio" IsChecked="True" Checked="ChkFlashAudio_Changed" Unchecked="ChkFlashAudio_Changed">
-                                        <TextBlock Text="{loc:Str label_link_to_audio_trigger}" FontSize="12" FontWeight="SemiBold"/>
+                                        <helpers:EmojiTextBlock Text="{loc:Str label_link_to_audio_trigger}" FontSize="12" FontWeight="SemiBold"/>
                                     </CheckBox>
                                     <TextBlock x:Name="TxtAudioWarning" Text="{loc:Str label_max_30_h}" Foreground="#FFB347" FontSize="10" 
                                                HorizontalAlignment="Right" VerticalAlignment="Center" Visibility="Collapsed"/>
@@ -2829,7 +2853,7 @@
                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                         <StackPanel>
                             <Grid>
-                                <TextBlock x:Name="TxtFeatureVideo" Style="{StaticResource SectionHeader}" Text="{loc:Str section_mandatory_video}"/>
+                                <helpers:EmojiTextBlock x:Name="TxtFeatureVideo" Style="{StaticResource SectionHeader}" Text="{loc:Str section_mandatory_video}"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button x:Name="HelpBtnVideo" Style="{StaticResource HelpButtonStyle}" Tag="Video" Margin="0,0,8,0"/>
                                     <Button x:Name="BtnTestVideo" Content="{loc:Str btn_test_2}" Style="{StaticResource OutlineButton}"
@@ -2853,7 +2877,7 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" ToolTip="{loc:Str tooltip_strict_mode_videos_cannot_be_skipped_must_wat}">
                                     <CheckBox x:Name="ChkStrictLock" Style="{StaticResource ToggleStyle}" Checked="ChkStrictLock_Changed" Unchecked="ChkStrictLock_Changed"/>
-                                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_strict}" Foreground="#FFB347" Margin="6,0,15,0"/>
+                                    <helpers:EmojiTextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_strict}" Foreground="#FFB347" Margin="6,0,15,0"/>
                                 </StackPanel>
                                 <Slider Grid.Column="2" x:Name="SliderPerHour" Minimum="1" Maximum="20" Value="2" ValueChanged="SliderPerHour_Changed"
                                         ToolTip="{loc:Str tooltip_videos_per_hour}"/>
@@ -2865,7 +2889,7 @@
                                 <StackPanel>
                                     <Grid>
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{loc:Str label_mini_game}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
+                                            <helpers:EmojiTextBlock Text="{loc:Str label_mini_game}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="Bold"/>
                                             <Button x:Name="HelpBtnMiniGame" Style="{StaticResource HelpButtonStyle}" Tag="MiniGame"/>
                                         </StackPanel>
                                         <CheckBox x:Name="ChkMiniGameEnabled" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right"
@@ -2887,7 +2911,8 @@
                                                     <CheckBox x:Name="ChkRandomizeTargets" Margin="6,0,0,0" VerticalAlignment="Center"
                                                               ToolTip="{loc:Str tooltip_randomize_target_count_1_to_max}"
                                                               Checked="ChkRandomizeTargets_Changed" Unchecked="ChkRandomizeTargets_Changed">
-                                                        <TextBlock Text="🎲" FontSize="9" ToolTip="{loc:Str tooltip_randomize}"/>
+                                                        <Image Width="11" Height="11" ToolTip="{loc:Str tooltip_randomize}"
+                                                               Source="{Binding Source='🎲', Converter={StaticResource EmojiToImageSource}}"/>
                                                     </CheckBox>
                                                 </StackPanel>
                                                 <TextBlock x:Name="TxtTargets" Text="3" FontSize="11" Foreground="{DynamicResource TextLightBrush}" HorizontalAlignment="Right"/>
@@ -2921,7 +2946,7 @@
                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                         <StackPanel>
                             <Grid>
-                                <TextBlock x:Name="TxtFeatureSubliminal" Style="{StaticResource SectionHeader}" Text="{loc:Str section_subliminals_2}"/>
+                                <helpers:EmojiTextBlock x:Name="TxtFeatureSubliminal" Style="{StaticResource SectionHeader}" Text="{loc:Str section_subliminals_2}"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button x:Name="HelpBtnSubliminals" Style="{StaticResource HelpButtonStyle}" Tag="Subliminals" Margin="0,0,8,0"/>
                                     <Button Content="📝" Style="{StaticResource OutlineButton}" Padding="6,3" Click="BtnManageMessages_Click" Margin="0,0,4,0"
@@ -2960,7 +2985,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <CheckBox x:Name="ChkAudioWhispers" Style="{StaticResource ToggleStyle}"
                                               Checked="ChkAudioWhispers_Changed" Unchecked="ChkAudioWhispers_Changed"/>
-                                    <TextBlock x:Name="TxtFeatureWhispers" Style="{StaticResource SettingLabel}" Text="{loc:Str setting_audio_whispers}" Margin="6,0,0,0"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeatureWhispers" Style="{StaticResource SettingLabel}" Text="{loc:Str setting_audio_whispers}" Margin="6,0,0,0"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Slider x:Name="SliderWhisperVol" Minimum="0" Maximum="100" Value="50" Width="100" ValueChanged="SliderWhisperVol_Changed"/>
@@ -2976,7 +3001,7 @@
                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
                         <StackPanel>
                             <Grid>
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_system}"/>
+                                <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_system}"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button x:Name="HelpBtnSystem" Style="{StaticResource HelpButtonStyle}" Tag="System" Margin="0,0,8,0"/>
                                     <Button Content="📁" Style="{StaticResource OutlineButton}"
@@ -3031,7 +3056,7 @@
                                 <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,3"
                                             ToolTip="{loc:Str tooltip_danger_completely_disables_panic_key_you_won}">
                                     <CheckBox x:Name="ChkNoPanic" Style="{StaticResource ToggleStyle}" Checked="ChkNoPanic_Changed" Unchecked="ChkNoPanic_Changed"/>
-                                    <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_no_panic}" Margin="6,0,0,0" Foreground="#FF6B6B"/>
+                                    <helpers:EmojiTextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str setting_no_panic}" Margin="6,0,0,0" Foreground="#FF6B6B"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Horizontal" Margin="0,3"
@@ -3073,8 +3098,8 @@
                         <StackPanel>
                             <Grid>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🌊" FontSize="14" Margin="0,0,6,0"
-                                               Foreground="{DynamicResource DeeperAccentBrush}" VerticalAlignment="Center"/>
+                                    <Image Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"
+                                           Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
                                     <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_deeper}"
                                                Foreground="{DynamicResource DeeperAccentBrush}"/>
                                 </StackPanel>
@@ -3115,7 +3140,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_browser}" Margin="0"/>
+                                <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_browser}" Margin="0"/>
                                 <Button x:Name="HelpBtnBrowser" Style="{StaticResource HelpButtonStyle}" Tag="Browser"/>
                             </StackPanel>
                             <!-- Site Toggle - inline -->
@@ -3200,7 +3225,6 @@
                                  from OnTrackingStateChanged). Click runs the consent → calibrate →
                                  start flow if needed; second click stops tracking. -->
                             <Button Grid.Column="4" x:Name="BtnWebcamTracking"
-                                    Content="{loc:Str btn_browser_webcam_tracking_off}"
                                     Click="BtnWebcamTracking_Click"
                                     ToolTip="{loc:Str tooltip_browser_webcam_tracking_off}"
                                     FontSize="9" Padding="6,3" Margin="0,0,6,0" VerticalAlignment="Center">
@@ -3231,6 +3255,7 @@
                                         </Setter>
                                     </Style>
                                 </Button.Style>
+                                <helpers:EmojiTextBlock x:Name="TxtWebcamTracking" Text="{loc:Str btn_browser_webcam_tracking_off}"/>
                             </Button>
                             <!-- Pop Out button -->
                             <Button Grid.Column="5" x:Name="BtnPopOutBrowser" Content="{loc:Str btn_pop_out}"
@@ -3368,7 +3393,7 @@
                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" VerticalAlignment="Stretch">
                         <StackPanel>
                             <Grid>
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_audio}" FontSize="12"/>
+                                <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_audio}" FontSize="12"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                     <Button x:Name="HelpBtnAudio" Style="{StaticResource HelpButtonStyle}" Tag="Audio" Margin="0,0,8,0"/>
                                     <TextBlock Text="{loc:Str label_duck}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0"/>
@@ -3478,7 +3503,7 @@
                             BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1" VerticalAlignment="Stretch">
                         <StackPanel>
                             <Grid Margin="0,0,0,6">
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_quick_links}" FontSize="12" Margin="0"/>
+                                <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_quick_links}" FontSize="12" Margin="0"/>
                                 <Button x:Name="HelpBtnQuickLinks" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="QuickLinks"/>
                             </Grid>
 
@@ -3557,7 +3582,8 @@
                                                         <Border x:Name="border" Background="#5865F2" CornerRadius="5"
                                                                 Padding="0,4" HorizontalAlignment="Stretch">
                                                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                                                <TextBlock Text="💬" FontSize="11" VerticalAlignment="Center"/>
+                                                                <Image Width="13" Height="13" VerticalAlignment="Center"
+                                                                       Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
                                                                 <TextBlock Text="{loc:Str label_join_discord}" Foreground="White" FontSize="10" FontWeight="Bold"
                                                                            VerticalAlignment="Center" Margin="5,0,0,0"/>
                                                             </StackPanel>
@@ -3627,8 +3653,9 @@
                                     BorderThickness="1"
                                     CornerRadius="14">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="📅" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="{loc:Str section_scheduler}" Foreground="White" VerticalAlignment="Center"/>
+                                    <Image Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           Source="{Binding Source='📅', Converter={StaticResource EmojiToImageSource}}"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str section_scheduler}" Foreground="White" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
                             <ControlTemplate.Triggers>
@@ -3678,8 +3705,9 @@
                                     BorderThickness="1"
                                     CornerRadius="14">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="📈" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="{loc:Str section_intensity_ramp}" Foreground="White" VerticalAlignment="Center"/>
+                                    <Image Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           Source="{Binding Source='📈', Converter={StaticResource EmojiToImageSource}}"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str section_intensity_ramp}" Foreground="White" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
                             <ControlTemplate.Triggers>
@@ -3738,7 +3766,7 @@
                     <Border Grid.Row="0" Style="{StaticResource SectionPanel}" Margin="5,5,5,0" Padding="10">
                         <StackPanel>
                             <Grid Margin="0,0,0,8">
-                                <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_presets}" Margin="0"/>
+                                <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_presets}" Margin="0"/>
                                 <Button x:Name="HelpBtnPresets" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Presets"/>
                             </Grid>
                             
@@ -3789,7 +3817,7 @@
                         </Grid.RowDefinitions>
 
                         <Grid Grid.Row="0" Margin="0,0,0,10">
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_sessions}"/>
+                            <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_sessions}"/>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button x:Name="BtnSessionHistory" Click="BtnSessionHistory_Click"
                                         ToolTip="{loc:Str tooltip_recent_sessions}"
@@ -3806,7 +3834,7 @@
                                             </Border>
                                         </ControlTemplate>
                                     </Button.Template>
-                                    <TextBlock Text="{loc:Str btn_recent_sessions}" FontWeight="SemiBold"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str btn_recent_sessions}" FontWeight="SemiBold"/>
                                 </Button>
                                 <Button x:Name="HelpBtnSessions" Style="{StaticResource HelpButtonStyle}" Tag="Sessions"/>
                             </StackPanel>
@@ -3835,7 +3863,7 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{loc:Str label_morning_drift}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
+                                                <helpers:EmojiTextBlock Text="{loc:Str label_morning_drift}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
                                                 <Border Background="{DynamicResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
                                                     <TextBlock Text="{loc:Str label_30_min}" Foreground="White" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
@@ -3879,7 +3907,7 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{loc:Str label_gamer_girl}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
+                                                <helpers:EmojiTextBlock Text="{loc:Str label_gamer_girl}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
                                                 <Border Background="{DynamicResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
                                                     <TextBlock Text="{loc:Str label_45_min}" Foreground="White" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
@@ -3923,7 +3951,7 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{loc:Str label_the_distant_doll}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
+                                                <helpers:EmojiTextBlock Text="{loc:Str label_the_distant_doll}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
                                                 <Border Background="{DynamicResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
                                                     <TextBlock Text="{loc:Str label_45_min}" Foreground="White" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
@@ -3967,7 +3995,7 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{loc:Str label_good_girls_don_t_cum}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
+                                                <helpers:EmojiTextBlock Text="{loc:Str label_good_girls_don_t_cum}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
                                                 <Border Background="{DynamicResource PinkBrush}" CornerRadius="3" Padding="8,3" Margin="10,0,0,0">
                                                     <TextBlock Text="{loc:Str label_60_min}" Foreground="White" FontSize="10" FontWeight="Bold"/>
                                                 </Border>
@@ -4141,22 +4169,22 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" x:Name="PresetDetailScroller">
                         <StackPanel x:Name="DetailContentPanel">
                             <!-- Preset details will show here -->
-                            <TextBlock x:Name="TxtDetailFlashLabel" Text="{loc:Str section_flash_images}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <helpers:EmojiTextBlock x:Name="TxtDetailFlashLabel" Text="{loc:Str section_flash_images}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailFlash" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
 
-                            <TextBlock x:Name="TxtDetailVideoLabel" Text="{loc:Str label_mandatory_videos}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <helpers:EmojiTextBlock x:Name="TxtDetailVideoLabel" Text="{loc:Str label_mandatory_videos}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailVideo" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
 
-                            <TextBlock x:Name="TxtDetailSubLabel" Text="{loc:Str section_subliminals_2}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+                            <helpers:EmojiTextBlock x:Name="TxtDetailSubLabel" Text="{loc:Str section_subliminals_2}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailSubliminal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
-                            
-                            <TextBlock Text="{loc:Str section_audio}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+
+                            <helpers:EmojiTextBlock Text="{loc:Str section_audio}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailAudio" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
-                            
-                            <TextBlock Text="{loc:Str label_overlays}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+
+                            <helpers:EmojiTextBlock Text="{loc:Str label_overlays}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailOverlays" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
-                            
-                            <TextBlock Text="{loc:Str label_advanced}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
+
+                            <helpers:EmojiTextBlock Text="{loc:Str label_advanced}" Foreground="White" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4"/>
                             <TextBlock x:Name="TxtDetailAdvanced" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,12"/>
                         </StackPanel>
                     </ScrollViewer>
@@ -4177,7 +4205,7 @@
                                                    FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                                        <TextBlock Text="{loc:Str label_reward}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" HorizontalAlignment="Center"/>
+                                        <helpers:EmojiTextBlock Text="{loc:Str label_reward}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" HorizontalAlignment="Center"/>
                                         <TextBlock x:Name="TxtSessionXP" Text="{loc:Str label_50_xp}" Foreground="#90EE90" 
                                                    FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,0"/>
                                     </StackPanel>
@@ -4289,19 +4317,19 @@
                                                FontWeight="Bold" HorizontalAlignment="Center"/>
                                 </Border>
                                 
-                                <TextBlock x:Name="TxtSessionFlashLabel" Text="{loc:Str section_flash_images}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <helpers:EmojiTextBlock x:Name="TxtSessionFlashLabel" Text="{loc:Str section_flash_images}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="TxtSessionFlash" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
 
-                                <TextBlock x:Name="TxtSessionSubLabel" Text="{loc:Str section_subliminals_2}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <helpers:EmojiTextBlock x:Name="TxtSessionSubLabel" Text="{loc:Str section_subliminals_2}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="TxtSessionSubliminal" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10"/>
                                 
-                                <TextBlock Text="{loc:Str section_audio}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <helpers:EmojiTextBlock Text="{loc:Str section_audio}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="TxtSessionAudio" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10"/>
                                 
-                                <TextBlock Text="{loc:Str label_overlays}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <helpers:EmojiTextBlock Text="{loc:Str label_overlays}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="TxtSessionOverlays" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 
-                                <TextBlock Text="{loc:Str label_extras}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
+                                <helpers:EmojiTextBlock Text="{loc:Str label_extras}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
                                 <TextBlock x:Name="TxtSessionExtras" Text="—" Foreground="#909090" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 
                                 <TextBlock Text="{loc:Str label_timeline}" Foreground="White" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,3"/>
@@ -4352,7 +4380,7 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <Grid>
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_unlockables}" Margin="0"/>
+                        <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_unlockables}" Margin="0"/>
                         <Button x:Name="HelpBtnUnlockables" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Unlockables"/>
                     </Grid>
                     
@@ -4369,8 +4397,8 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="SpiralLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock x:Name="TxtFeatureSpiralLocked" Text="{loc:Str label_spiral_overlay}" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                    <TextBlock Text="{loc:Str label_lvl_10}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeatureSpiralLocked" Text="{loc:Str label_spiral_overlay}" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_lvl_10}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <TextBlock Text="{loc:Str label_reach_level_10_to_unlock}" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
@@ -4379,8 +4407,8 @@
                             <!-- Unlocked State -->
                             <StackPanel x:Name="SpiralUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock x:Name="TxtFeatureSpiral" Text="{loc:Str label_spiral_overlay}" Foreground="White" FontWeight="Bold" FontSize="14"/>
-                                    <TextBlock Text="{loc:Str label_unlocked}" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeatureSpiral" Text="{loc:Str label_spiral_overlay}" Foreground="White" FontWeight="Bold" FontSize="14"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_unlocked}" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str btn_enable}"
@@ -4434,8 +4462,8 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="PinkFilterLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock x:Name="TxtFeaturePinkFilterLocked" Text="{loc:Str label_pink_filter}" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                    <TextBlock Text="{loc:Str label_lvl_10}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeaturePinkFilterLocked" Text="{loc:Str label_pink_filter}" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_lvl_10}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <TextBlock Text="{loc:Str label_reach_level_10_to_unlock}" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
@@ -4444,8 +4472,8 @@
                             <!-- Unlocked State -->
                             <StackPanel x:Name="PinkFilterUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock x:Name="TxtFeaturePinkFilter" Text="{loc:Str label_pink_filter}" Foreground="White" FontWeight="Bold" FontSize="14"/>
-                                    <TextBlock Text="{loc:Str label_unlocked}" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeaturePinkFilter" Text="{loc:Str label_pink_filter}" Foreground="White" FontWeight="Bold" FontSize="14"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_unlocked}" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str btn_enable}"
@@ -4493,8 +4521,8 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="BubblesLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock x:Name="TxtFeatureBubblePopLocked" Text="{loc:Str label_bubble_pop}" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                    <TextBlock Text="{loc:Str label_lvl_20}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeatureBubblePopLocked" Text="{loc:Str label_bubble_pop}" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_lvl_20}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <TextBlock Text="{loc:Str label_reach_level_20_to_unlock}" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
@@ -4503,8 +4531,8 @@
                             <!-- Unlocked State -->
                             <StackPanel x:Name="BubblesUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock x:Name="TxtFeatureBubblePop" Text="{loc:Str label_bubble_pop}" Foreground="White" FontWeight="Bold" FontSize="14"/>
-                                    <TextBlock Text="{loc:Str label_unlocked}" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeatureBubblePop" Text="{loc:Str label_bubble_pop}" Foreground="White" FontWeight="Bold" FontSize="14"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_unlocked}" Foreground="#00E676" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
                                     <TextBlock Style="{StaticResource SettingLabel}" Text="{loc:Str btn_enable}"
@@ -4565,8 +4593,8 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="LockCardLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock x:Name="TxtFeatureLockCardLocked" Text="{loc:Str label_lock_card}" Foreground="#666666" FontWeight="Bold"/>
-                                    <TextBlock Text="{loc:Str label_lvl_35}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeatureLockCardLocked" Text="{loc:Str label_lock_card}" Foreground="#666666" FontWeight="Bold"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_lvl_35}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <TextBlock Text="{loc:Str label_reach_level_35_to_unlock}" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
@@ -4575,13 +4603,13 @@
                             <!-- Unlocked State -->
                             <StackPanel x:Name="LockCardUnlocked" Visibility="Collapsed">
                                 <Grid>
-                                    <TextBlock x:Name="TxtFeatureLockCard" Text="{loc:Str label_lock_card}" Foreground="White" FontWeight="Bold"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeatureLockCard" Text="{loc:Str label_lock_card}" Foreground="White" FontWeight="Bold"/>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                         <Button Content="{loc:Str btn_test_2}" Style="{StaticResource OutlineButton}" 
                                                 Padding="10,4" FontSize="11" Margin="0,0,8,0"
                                                 Click="BtnTestLockCard_Click"
                                                 ToolTip="{loc:Str tooltip_test_a_lock_card_now}"/>
-                                        <TextBlock Text="{loc:Str label_unlocked}" Foreground="#00E676" VerticalAlignment="Center"/>
+                                        <helpers:EmojiTextBlock Text="{loc:Str label_unlocked}" Foreground="#00E676" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Grid>
                                 <Grid Margin="0,8,0,0">
@@ -4662,8 +4690,8 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="Level50Locked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock x:Name="TxtFeatureBubbleCountLocked" Text="{loc:Str label_bubble_count}" Foreground="#666666" FontWeight="Bold"/>
-                                    <TextBlock Text="{loc:Str label_lvl_50}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeatureBubbleCountLocked" Text="{loc:Str label_bubble_count}" Foreground="#666666" FontWeight="Bold"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_lvl_50}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <TextBlock Text="{loc:Str label_reach_level_50_to_unlock}" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
@@ -4673,8 +4701,8 @@
                             <StackPanel x:Name="Level50Unlocked" Visibility="Collapsed">
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="TxtFeatureBubbleCount" Text="{loc:Str label_bubble_count}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
-                                        <TextBlock Text="{loc:Str label_lvl_50_2}" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
+                                        <helpers:EmojiTextBlock x:Name="TxtFeatureBubbleCount" Text="{loc:Str label_bubble_count}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
+                                        <helpers:EmojiTextBlock Text="{loc:Str label_lvl_50_2}" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
                                     </StackPanel>
                                     <CheckBox x:Name="ChkBubbleCountEnabled" Style="{StaticResource ToggleStyle}" 
                                               HorizontalAlignment="Right"
@@ -4753,8 +4781,8 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="Level60Locked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock x:Name="TxtFeatureBouncingLocked" Text="{loc:Str label_bouncing_text}" Foreground="#666666" FontWeight="Bold"/>
-                                    <TextBlock Text="{loc:Str label_lvl_60}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeatureBouncingLocked" Text="{loc:Str label_bouncing_text}" Foreground="#666666" FontWeight="Bold"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_lvl_60}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <TextBlock Text="{loc:Str label_reach_level_60_to_unlock}" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
@@ -4764,8 +4792,8 @@
                             <StackPanel x:Name="Level60Unlocked" Visibility="Collapsed">
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="TxtFeatureBouncing" Text="{loc:Str label_bouncing_text}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
-                                        <TextBlock Text="{loc:Str label_lvl_60_2}" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
+                                        <helpers:EmojiTextBlock x:Name="TxtFeatureBouncing" Text="{loc:Str label_bouncing_text}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold"/>
+                                        <helpers:EmojiTextBlock Text="{loc:Str label_lvl_60_2}" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
                                     </StackPanel>
                                     <CheckBox x:Name="ChkBouncingTextEnabled" Style="{StaticResource ToggleStyle}" 
                                               HorizontalAlignment="Right"
@@ -4846,8 +4874,8 @@
                             <Grid Grid.Column="0">
                                 <StackPanel>
                                     <Grid>
-                                        <TextBlock x:Name="TxtFeatureBrainDrain" Text="{loc:Str section_brain_drain}" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                        <TextBlock Text="{loc:Str section_rework}" Foreground="#FFA500" HorizontalAlignment="Right" FontSize="13" FontWeight="Bold"/>
+                                        <helpers:EmojiTextBlock x:Name="TxtFeatureBrainDrain" Text="{loc:Str section_brain_drain}" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                        <helpers:EmojiTextBlock Text="{loc:Str section_rework}" Foreground="#FFA500" HorizontalAlignment="Right" FontSize="13" FontWeight="Bold"/>
                                     </Grid>
                                     <Border Background="#2A2A4A" CornerRadius="4" Padding="8" Margin="0,8,0,0">
                                         <TextBlock Text="{loc:Str section_up_for_rework_this_feature_is_temporarily_dis}"
@@ -4889,8 +4917,8 @@
                             <!-- Locked State -->
                             <StackPanel x:Name="MindWipeLocked" Visibility="Visible">
                                 <Grid>
-                                    <TextBlock x:Name="TxtFeatureMindWipeLocked" Text="{loc:Str label_mind_wipe}" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
-                                    <TextBlock Text="{loc:Str label_lvl_75}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
+                                    <helpers:EmojiTextBlock x:Name="TxtFeatureMindWipeLocked" Text="{loc:Str label_mind_wipe}" Foreground="#666666" FontWeight="Bold" FontSize="14"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_lvl_75}" Foreground="#666666" HorizontalAlignment="Right" FontSize="13"/>
                                 </Grid>
                                 <TextBlock Text="{loc:Str label_reach_level_75_to_unlock}" Foreground="{DynamicResource PinkBrush}"
                                            FontSize="12" Margin="0,8,0,0"/>
@@ -4900,8 +4928,8 @@
                             <StackPanel x:Name="MindWipeUnlocked" Visibility="Collapsed">
                                 <Grid>
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="TxtFeatureMindWipe" Text="{loc:Str label_mind_wipe}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
-                                        <TextBlock Text="{loc:Str label_lvl_75_2}" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
+                                        <helpers:EmojiTextBlock x:Name="TxtFeatureMindWipe" Text="{loc:Str label_mind_wipe}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
+                                        <helpers:EmojiTextBlock Text="{loc:Str label_lvl_75_2}" Foreground="{DynamicResource PinkBrush}" Margin="8,0,0,0"/>
                                     </StackPanel>
                                     <CheckBox x:Name="ChkMindWipeEnabled" Style="{StaticResource ToggleStyle}"
                                               HorizontalAlignment="Right"
@@ -4976,7 +5004,7 @@
                 <Border x:Name="SchedulerPanel" Style="{StaticResource SectionPanel}" Margin="5">
                     <StackPanel>
                         <Grid>
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_scheduler}" FontSize="14" Margin="0"/>
+                            <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_scheduler}" FontSize="14" Margin="0"/>
                             <Button x:Name="HelpBtnScheduler" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Scheduler"/>
                         </Grid>
                         
@@ -5021,7 +5049,7 @@
                 <Border x:Name="RampPanel" Style="{StaticResource SectionPanel}" Margin="5">
                     <StackPanel>
                         <Grid>
-                            <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_intensity_ramp}" FontSize="14" Margin="0"/>
+                            <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_intensity_ramp}" FontSize="14" Margin="0"/>
                             <Button x:Name="HelpBtnRamp" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="IntensityRamp"/>
                         </Grid>
                         
@@ -5298,7 +5326,7 @@
                             <!-- Header -->
                             <Grid Margin="0,0,0,20">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{loc:Str label_quests}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_quests}" Foreground="{DynamicResource PinkBrush}" FontSize="18" FontWeight="Bold"/>
                                     <Button x:Name="HelpBtnQuests" Style="{StaticResource HelpButtonStyle}" Tag="Quests"/>
                                 </StackPanel>
                                 <TextBlock x:Name="TxtQuestStats" Text="{loc:Str label_0_completed_this_week}"
@@ -5321,7 +5349,8 @@
                                     <!-- Card Header -->
                                     <Grid Margin="0,0,0,15">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="☀️" FontSize="20"/>
+                                            <Image Width="22" Height="22"
+                                                   Source="{Binding Source='☀️', Converter={StaticResource EmojiToImageSource}}"/>
                                             <TextBlock Text="{loc:Str label_daily_quest}" Foreground="#FFD700"
                                                        FontSize="16" FontWeight="Bold" Margin="8,0,0,0"
                                                        VerticalAlignment="Center"/>
@@ -5366,8 +5395,8 @@
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                <TextBlock x:Name="TxtDailyQuestIcon" Text=""
-                                                           FontSize="24" HorizontalAlignment="Left" Visibility="Collapsed"/>
+                                                <helpers:EmojiTextBlock x:Name="TxtDailyQuestIcon" Text=""
+                                                                        FontSize="24" HorizontalAlignment="Left" Visibility="Collapsed"/>
                                                 <TextBlock x:Name="TxtDailyQuestName" Text="{loc:Str label_loading_2}"
                                                            Foreground="White" FontSize="16" FontWeight="Bold"
                                                            HorizontalAlignment="Left" Margin="0,0,0,5"/>
@@ -5437,7 +5466,8 @@
                                     <Border x:Name="DailyAllCompletedMessage" Background="#2D4A2D" CornerRadius="10"
                                             Padding="15" MinHeight="180" Visibility="Collapsed">
                                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                            <TextBlock Text="✅" FontSize="40" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                            <Image Width="44" Height="44" HorizontalAlignment="Center" Margin="0,0,0,10"
+                                                   Source="{Binding Source='✅', Converter={StaticResource EmojiToImageSource}}"/>
                                             <TextBlock Text="{loc:Str label_all_daily_quests_completed}" Foreground="#00E676"
                                                        FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"
                                                        Margin="0,0,0,5"/>
@@ -5461,7 +5491,8 @@
                                     <!-- Card Header -->
                                     <Grid Margin="0,0,0,15">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="🌙" FontSize="20"/>
+                                            <Image Width="22" Height="22"
+                                                   Source="{Binding Source='🌙', Converter={StaticResource EmojiToImageSource}}"/>
                                             <TextBlock Text="{loc:Str label_weekly_quest}" Foreground="#9370DB"
                                                        FontSize="16" FontWeight="Bold" Margin="8,0,0,0"
                                                        VerticalAlignment="Center"/>
@@ -5483,8 +5514,8 @@
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                <TextBlock x:Name="TxtWeeklyQuestIcon" Text=""
-                                                           FontSize="24" HorizontalAlignment="Left" Visibility="Collapsed"/>
+                                                <helpers:EmojiTextBlock x:Name="TxtWeeklyQuestIcon" Text=""
+                                                                        FontSize="24" HorizontalAlignment="Left" Visibility="Collapsed"/>
                                                 <TextBlock x:Name="TxtWeeklyQuestName" Text="{loc:Str label_loading_2}"
                                                            Foreground="White" FontSize="16" FontWeight="Bold"
                                                            HorizontalAlignment="Left" Margin="0,0,0,5"/>
@@ -5563,11 +5594,11 @@
                             <Border x:Name="QuestCompleteBanner" Background="#2D4A2D" CornerRadius="10"
                                     Padding="15" Margin="0,20,0,0" Visibility="Collapsed">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                    <TextBlock Text="✨" FontSize="24"/>
+                                    <Image Width="26" Height="26" Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
                                     <TextBlock x:Name="TxtQuestComplete" Text="{loc:Str label_quest_complete}"
                                                Foreground="#00E676" FontSize="18" FontWeight="Bold"
                                                Margin="10,0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="✨" FontSize="24"/>
+                                    <Image Width="26" Height="26" Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
                                 </StackPanel>
                             </Border>
 
@@ -5580,7 +5611,7 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{loc:Str label_quest_streak}" Foreground="White" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str label_quest_streak}" Foreground="White" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
                                         <TextBlock x:Name="TxtQuestStreakCount" Grid.Column="1" Text="" Foreground="#FFD700"
                                                    FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                         <Button x:Name="BtnFixStreak" Grid.Column="2" Content="{loc:Str btn_fix_day}"
@@ -5648,7 +5679,7 @@
                                     CornerRadius="6" Padding="14,10" Margin="20,0,20,14" MaxWidth="700"
                                     HorizontalAlignment="Center">
                                 <StackPanel>
-                                    <TextBlock Text="{loc:Str label_what_is_the_bimbo_journal}" Foreground="#FFD700" FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
+                                    <helpers:EmojiTextBlock Text="{loc:Str label_what_is_the_bimbo_journal}" Foreground="#FFD700" FontSize="14" FontWeight="Bold" Margin="0,0,0,6"/>
                                     <TextBlock TextWrapping="Wrap" Foreground="#DDFFFFFF" FontSize="12" LineHeight="18">
                                         <Run Text="{loc:Str label_each_track_has_steps_that_ask_you_to_take_a_p}"/>
                                         <LineBreak/>
@@ -5690,7 +5721,8 @@
                                     <StackPanel x:Name="BadgeIndicator" Orientation="Horizontal"
                                                 HorizontalAlignment="Right" VerticalAlignment="Center"
                                                 Visibility="Collapsed">
-                                        <TextBlock Text="🏆" FontSize="24"/>
+                                        <Image Width="26" Height="26"
+                                               Source="{Binding Source='🏆', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str label_badge_earned}" Foreground="#FFD700" FontSize="14"
                                                    FontWeight="Bold" VerticalAlignment="Center" Margin="5,0,0,0"/>
                                     </StackPanel>
@@ -5701,7 +5733,7 @@
                             <Border x:Name="TrackLockedOverlay" Background="#CC1A1A2E" CornerRadius="10"
                                     Padding="40" Visibility="Collapsed">
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                                    <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                                     <TextBlock x:Name="TxtLockReason" Text="{loc:Str label_complete_the_previous_track_to_unlock}"
                                                Foreground="White" FontSize="16" Margin="0,15,0,0"
                                                HorizontalAlignment="Center"/>
@@ -5764,7 +5796,7 @@
             <!-- Login Required Overlay -->
             <Border x:Name="QuestsLoginOverlay" Background="#E6151528" CornerRadius="12" Visibility="Collapsed">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
-                    <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                    <Image Width="52" Height="52" HorizontalAlignment="Center" Margin="0,0,0,15" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                     <TextBlock Text="{loc:Str label_login_required}" Foreground="{DynamicResource PinkBrush}" FontSize="22" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,0,0,10"/>
                     <TextBlock Text="{loc:Str label_log_in_with_discord_or_patreon_to_access_ques}"
@@ -5782,7 +5814,7 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <Grid Margin="0,0,0,10">
-                        <TextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_achievements}" Margin="0"/>
+                        <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_achievements}" Margin="0"/>
                         <Button x:Name="HelpBtnAchievements" Style="{StaticResource HelpButtonStyle}" HorizontalAlignment="Right" Tag="Achievements"/>
                     </Grid>
                     <TextBlock Text="{loc:Str label_complete_challenges_to_unlock_achievements_lo}" 
@@ -5895,7 +5927,8 @@
                                                 BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                                                 Padding="10,4" FontSize="12" Cursor="Hand" VerticalAlignment="Top">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="💬" FontSize="13" Margin="0,0,6,0"/>
+                                                <Image Width="15" Height="15" Margin="0,0,6,0"
+                                                       Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
                                                 <TextBlock x:Name="TxtChatShortcutLabel" Text="Ctrl+T" Foreground="{DynamicResource PinkBrush}" FontWeight="SemiBold"/>
                                             </StackPanel>
                                         </Button>
@@ -5952,7 +5985,8 @@
                                                           Checked="ChkAvatarEnabled_Changed" Unchecked="ChkAvatarEnabled_Changed"/>
                                             </StackPanel>
                                             <StackPanel Orientation="Horizontal" Margin="4,2,4,2" VerticalAlignment="Center">
-                                                <TextBlock Text="🔇" FontSize="17" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                                <Image Width="19" Height="19" VerticalAlignment="Center" Margin="0,0,5,0"
+                                                       Source="{Binding Source='🔇', Converter={StaticResource EmojiToImageSource}}"/>
                                                 <CheckBox x:Name="ChkMuteAvatarCompanion" Style="{StaticResource ToggleStyle}"
                                                           Checked="ChkMuteAvatar_Changed" Unchecked="ChkMuteAvatar_Changed"
                                                           ToolTip="{loc:Str label_mute_avatar}"/>
@@ -6255,7 +6289,7 @@
 
                             <Border x:Name="AiFeaturesLockOverlay" Background="#CC1A1A2E" CornerRadius="14" Panel.ZIndex="100">
                                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,15">
-                                    <TextBlock Text="🔒" FontSize="38" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                    <Image Width="42" Height="42" HorizontalAlignment="Center" Margin="0,0,0,8" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                                     <TextBlock Text="{loc:Str label_login_required}" Foreground="{DynamicResource PinkBrush}" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center">
                                         <TextBlock.Effect>
                                             <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.5"/>
@@ -6758,7 +6792,7 @@
                         <!-- Patreon-Only Overlay for entire features grid -->
                         <Border x:Name="PatreonFeaturesOverlay" Background="#CC1A1A2E" CornerRadius="12" Panel.ZIndex="100">
                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                <Image Width="52" Height="52" HorizontalAlignment="Center" Margin="0,0,0,10" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                                 <TextBlock Text="{loc:Str section_patreon_exclusive_features}" Foreground="{DynamicResource PinkBrush}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center">
                                     <TextBlock.Effect>
                                         <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
@@ -7112,7 +7146,7 @@
                                                         Cursor="Hand" VerticalAlignment="Center"
                                                         ToolTip="{loc:Str tooltip_change_display_name}"
                                                         Click="BtnChangeDisplayName_Click">
-                                                    <TextBlock Text="{loc:Str label_text}" Foreground="#888" FontSize="14" VerticalAlignment="Center"/>
+                                                    <helpers:EmojiTextBlock Text="{loc:Str label_text}" Foreground="#888" FontSize="14" VerticalAlignment="Center"/>
                                                 </Button>
                                                 <!-- Delete profile button (own profile only) -->
                                                 <Button x:Name="BtnDeleteProfile" Visibility="Collapsed"
@@ -7121,7 +7155,7 @@
                                                         Cursor="Hand" VerticalAlignment="Center"
                                                         ToolTip="{loc:Str tooltip_delete_your_profile}"
                                                         Click="BtnDeleteProfile_Click">
-                                                    <TextBlock Text="{loc:Str label_text_2}" Foreground="#FF4444" FontSize="13" VerticalAlignment="Center"/>
+                                                    <helpers:EmojiTextBlock Text="{loc:Str label_text_2}" Foreground="#FF4444" FontSize="13" VerticalAlignment="Center"/>
                                                 </Button>
                                                 <!-- OG GOOD GIRL Banner -->
                                                 <Border x:Name="OgBannerBadge" Visibility="Collapsed" Margin="10,0,0,0" Padding="8,3" CornerRadius="4"
@@ -7157,7 +7191,8 @@
                                                         </ControlTemplate>
                                                     </Button.Template>
                                                     <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="💬" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                        <Image Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                               Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
                                                         <TextBlock x:Name="TxtProfileDiscordId" Text="{loc:Str label_message_on_discord}" Foreground="White" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                                     </StackPanel>
                                                 </Button>
@@ -7312,7 +7347,8 @@
                         <!-- No profile selected message -->
                         <Border x:Name="NoProfileSelected" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10" Padding="30">
                             <StackPanel HorizontalAlignment="Center">
-                                <TextBlock Text="👤" FontSize="40" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                                <Image Width="44" Height="44" HorizontalAlignment="Center" Margin="0,0,0,10"
+                                       Source="{Binding Source='👤', Converter={StaticResource EmojiToImageSource}}"/>
                                 <TextBlock Text="{loc:Str label_search_for_a_user}" Foreground="{DynamicResource TextMutedBrush}" FontSize="14" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{loc:Str label_or_click_my_profile}" Foreground="#606080" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                             </StackPanel>
@@ -7551,7 +7587,8 @@
                             <StackPanel>
                                 <Grid Margin="0,0,0,6">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="👁" Foreground="#FF69B4" FontSize="16" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                        <Image Width="18" Height="18" Margin="0,0,6,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='👁', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str label_webcam_games}" Foreground="White" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
                                         <TextBlock Text="{loc:Str label_beta_2}" Foreground="#FF8800" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"/>
                                     </StackPanel>
@@ -7568,7 +7605,8 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="🎯" Foreground="#FF69B4" FontSize="13" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                            <Image Width="15" Height="15" Margin="0,0,5,0" VerticalAlignment="Center"
+                                                   Source="{Binding Source='🎯', Converter={StaticResource EmojiToImageSource}}"/>
                                             <TextBlock Text="{loc:Str label_gaze_minigame}" Foreground="White" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
                                             <Button x:Name="HelpBtnGazeMinigame" Style="{StaticResource HelpButtonStyle}" Tag="GazeMinigame" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                         </StackPanel>
@@ -7597,7 +7635,8 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                         <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="✨" Foreground="#FF69B4" FontSize="13" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                            <Image Width="15" Height="15" Margin="0,0,5,0" VerticalAlignment="Center"
+                                                   Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
                                             <TextBlock Text="{loc:Str label_focus_gaze}" Foreground="White" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center"/>
                                             <Button x:Name="HelpBtnFocusGaze" Style="{StaticResource HelpButtonStyle}" Tag="FocusGaze" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                         </StackPanel>
@@ -7623,8 +7662,8 @@
                                      see where it went. Phase F of the Blink Trainer flagship migration. -->
                                 <StackPanel Margin="0,8,0,0">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                        <TextBlock Text="💫" Foreground="{DynamicResource PinkBrush}"
-                                                   FontSize="13" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                        <Image Width="15" Height="15" Margin="0,0,5,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='💫', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str tab_blink_trainer}"
                                                    Foreground="White" FontWeight="SemiBold"
                                                    FontSize="13" VerticalAlignment="Center"/>
@@ -7854,7 +7893,7 @@
                         <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="30" ShadowDepth="0" Opacity="0.3"/>
                     </Border.Effect>
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="{loc:Str label_text_3}" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                        <helpers:EmojiTextBlock Text="{loc:Str label_text_3}" FontSize="36" HorizontalAlignment="Center" Margin="0,0,0,8"/>
                         <Border Background="{DynamicResource TransparentPinkBrush}" CornerRadius="8" Padding="12,4" HorizontalAlignment="Center" Margin="0,0,0,12">
                             <TextBlock Text="{loc:Str label_beta_testing}" Foreground="{DynamicResource PinkBrush}" FontWeight="Bold" FontSize="14"/>
                         </Border>
@@ -8491,7 +8530,7 @@
                     <!-- Header -->
                     <Grid Grid.Row="0" Margin="0,0,0,8">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="{loc:Str section_asset_browser}" Style="{StaticResource SectionHeader}"/>
+                            <helpers:EmojiTextBlock Text="{loc:Str section_asset_browser}" Style="{StaticResource SectionHeader}"/>
                             <Button x:Name="HelpBtnAssetBrowser" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="AssetBrowser"/>
                         </StackPanel>
                         <TextBlock x:Name="TxtAssetCounts" Text="{loc:Str label_0_images_0_videos}"
@@ -8613,7 +8652,8 @@
                                                       Checked="FolderCheckBox_Changed"
                                                       Unchecked="FolderCheckBox_Changed"
                                                       VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                            <TextBlock Text="📁" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                            <Image Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"
+                                                   Source="{Binding Source='📁', Converter={StaticResource EmojiToImageSource}}"/>
                                             <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
                                             <TextBlock Text="{Binding FileCountDisplay}"
                                                        Foreground="{StaticResource TextMutedBrush}"
@@ -8662,7 +8702,8 @@
                                                                 <!-- Video placeholder icon (shows when IsVideo and no thumbnail) -->
                                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
                                                                             Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
-                                                                    <TextBlock Text="🎬" FontSize="32" HorizontalAlignment="Center"/>
+                                                                    <Image Width="36" Height="36" HorizontalAlignment="Center"
+                                                                           Source="{Binding Source='🎬', Converter={StaticResource EmojiToImageSource}}"/>
                                                                     <TextBlock Text="{loc:Str label_video}" FontSize="9" Foreground="#888" HorizontalAlignment="Center" Margin="0,4,0,0"/>
                                                                 </StackPanel>
                                                                 <!-- Image thumbnail (for images, or video if we had one) -->
@@ -8714,7 +8755,7 @@
                 <StackPanel Visibility="Collapsed">
                     <TextBlock x:Name="TxtSkillPoints" Text="0"/>
                     <TextBlock x:Name="TxtXpMultiplier" Text="1.00x"/>
-                    <TextBlock x:Name="TxtPinkRushIndicator" Text="{loc:Str label_rush}"/>
+                    <helpers:EmojiTextBlock x:Name="TxtPinkRushIndicator" Text="{loc:Str label_rush}"/>
                     <TextBlock x:Name="TxtConditioningTime" Text="{loc:Str label_0h_0m}"/>
                     <WrapPanel x:Name="ActiveBonusesList"/>
                     <Border x:Name="ActiveBonusesPanel"/>
@@ -8735,7 +8776,7 @@
                 <!-- Login Required Overlay -->
                 <Border x:Name="EnhancementsLoginOverlay" Background="#E6151528" CornerRadius="12" Visibility="Collapsed">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40">
-                        <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                        <Image Width="52" Height="52" HorizontalAlignment="Center" Margin="0,0,0,15" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                         <TextBlock Text="{loc:Str label_login_required}" Foreground="{DynamicResource PinkBrush}" FontSize="22" FontWeight="Bold"
                                    HorizontalAlignment="Center" Margin="0,0,0,10"/>
                         <TextBlock Text="{loc:Str label_log_in_with_discord_or_patreon_to_access_enha}"
@@ -8840,9 +8881,9 @@
                                     CornerRadius="6" Margin="0,0,10,0"
                                     Background="{Binding MediaTypeBadgeBg}"
                                     VerticalAlignment="Center">
-                                <TextBlock Text="{Binding MediaTypeIcon}" FontSize="18"
-                                           Foreground="{Binding MediaTypeBadgeFg}"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Image Width="20" Height="20"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Source="{Binding MediaTypeIcon, Converter={StaticResource EmojiToImageSource}}"/>
                             </Border>
 
                             <!-- CENTER: name + meta line -->
@@ -8947,9 +8988,9 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="🌊" FontSize="34"
-                               Foreground="{DynamicResource DeeperAccentBrush}"
-                               VerticalAlignment="Center" Margin="0,0,14,0"/>
+                    <Image Grid.Column="0" Width="38" Height="38"
+                           VerticalAlignment="Center" Margin="0,0,14,0"
+                           Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{loc:Str deeper_empty_title}"
@@ -8973,14 +9014,15 @@
                     </StackPanel>
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button x:Name="BtnDeeperTutorial"
-                                Content="{loc:Str deeper_tab_tutorial_btn}"
                                 ToolTip="{loc:Str deeper_tab_tutorial_tooltip}"
                                 Click="BtnDeeperTutorial_Click"
                                 Padding="14,10" FontSize="12" Cursor="Hand"
                                 Background="Transparent"
                                 Foreground="{DynamicResource DeeperAccentBrush}"
                                 BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                                Margin="0,0,8,0"/>
+                                Margin="0,0,8,0">
+                            <helpers:EmojiTextBlock Text="{loc:Str deeper_tab_tutorial_btn}"/>
+                        </Button>
                         <Button x:Name="BtnDeeperOpenPlayer"
                                 Content="{loc:Str deeper_tab_open_player}"
                                 ToolTip="{loc:Str deeper_tab_open_player_tooltip}"
@@ -8991,14 +9033,15 @@
                                 BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
                                 Margin="0,0,8,0"/>
                         <Button x:Name="BtnDeeperImport"
-                                Content="📥 Import"
                                 ToolTip="Import a .ccpenh.json file into your library (or drag &amp; drop one anywhere on this tab)"
                                 Click="BtnDeeperImport_Click"
                                 Padding="16,10" FontSize="12" Cursor="Hand"
                                 Background="Transparent"
                                 Foreground="{DynamicResource DeeperAccentBrush}"
                                 BorderBrush="{DynamicResource DeeperAccentTransparent40Brush}" BorderThickness="1"
-                                Margin="0,0,8,0"/>
+                                Margin="0,0,8,0">
+                            <helpers:EmojiTextBlock Text="📥 Import"/>
+                        </Button>
                         <Button x:Name="BtnDeeperNewEnhancement"
                                 Content="{loc:Str deeper_empty_cta}"
                                 ToolTip="{loc:Str deeper_tab_new_enh_tooltip}"
@@ -9034,9 +9077,9 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="✨" FontSize="34"
-                                   Foreground="{DynamicResource DeeperAccentBrush}"
-                                   VerticalAlignment="Top" Margin="0,0,18,0"/>
+                        <Image Grid.Column="0" Width="38" Height="38"
+                               VerticalAlignment="Top" Margin="0,0,18,0"
+                               Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="{loc:Str deeper_welcome_card_title}"
                                        Foreground="{DynamicResource DeeperAccentBrush}"
@@ -9166,7 +9209,8 @@
                                           Click="DeeperPillHaptics_Click"
                                           ToolTip="{loc:Str deeper_hub_tip_pill_haptics}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="📳 "/>
+                                    <Image Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,5,0"
+                                           Source="{Binding Source='📳', Converter={StaticResource EmojiToImageSource}}"/>
                                     <TextBlock Text="{loc:Str deeper_hub_pill_haptics}"/>
                                     <TextBlock x:Name="TxtDeeperPillHapticsCount" Text="0"
                                                Foreground="{DynamicResource TextDimBrush}"
@@ -9178,7 +9222,8 @@
                                           Click="DeeperPillWebcam_Click"
                                           ToolTip="{loc:Str deeper_hub_tip_pill_webcam}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="📷 "/>
+                                    <Image Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,5,0"
+                                           Source="{Binding Source='📷', Converter={StaticResource EmojiToImageSource}}"/>
                                     <TextBlock Text="{loc:Str deeper_hub_pill_webcam}"/>
                                     <TextBlock x:Name="TxtDeeperPillWebcamCount" Text="0"
                                                Foreground="{DynamicResource TextDimBrush}"
@@ -9201,7 +9246,8 @@
                                     Foreground="White"
                                     BorderBrush="{DynamicResource DeeperAccentBrush}" BorderThickness="1">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🛍 " VerticalAlignment="Center"/>
+                                    <Image Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,5,0"
+                                           Source="{Binding Source='🛍', Converter={StaticResource EmojiToImageSource}}"/>
                                     <TextBlock Text="{loc:Str deeper_hub_catalogue_btn}"
                                                VerticalAlignment="Center"/>
                                     <TextBlock Text=" ↗" Margin="2,0,0,0"
@@ -9299,7 +9345,8 @@
                     </Border.BorderBrush>
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                            <TextBlock Text="📷" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <Image Width="15" Height="15" VerticalAlignment="Center" Margin="0,0,8,0"
+                                   Source="{Binding Source='📷', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str blink_trainer_section_webcam}"
                                        Foreground="{DynamicResource PinkBrush}"
                                        FontSize="13" FontWeight="SemiBold"
@@ -9430,7 +9477,8 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="👁" FontSize="34" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                        <Image Grid.Column="0" Width="38" Height="38" VerticalAlignment="Center" Margin="0,0,14,0"
+                               Source="{Binding Source='👁', Converter={StaticResource EmojiToImageSource}}"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock Text="Awareness Engine" Foreground="White" FontSize="22" FontWeight="Bold"/>
                             <TextBlock Text="She's watching your screen and your typing. React in real time."
@@ -9604,7 +9652,8 @@
                                         </ToolTip>
                                     </Grid.ToolTip>
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="🖵" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <Image Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center"
+                                               Source="{Binding Source='🖵', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel VerticalAlignment="Center">
                                             <TextBlock Text="Screen OCR" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
                                             <TextBlock Text="Reads words from what's on your screen"
@@ -9800,14 +9849,15 @@
                     Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
                     CornerRadius="10" IsHitTestVisible="True">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                    <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                     <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
                                FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                     <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
                                Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                    <Button Content="{loc:Str gate_unlock_with_patreon}"
-                            Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
-                            Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+                    <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                            Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
+                        <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
+                    </Button>
                 </StackPanel>
             </Border>
           </Grid>
@@ -9826,7 +9876,8 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="🎮" FontSize="40" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                        <Image Grid.Column="0" Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,16,0"
+                               Source="{Binding Source='🎮', Converter={StaticResource EmojiToImageSource}}"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock Text="{loc:Str tab_remote_control}" Foreground="White" FontSize="26" FontWeight="Bold"/>
                         </StackPanel>
@@ -9851,7 +9902,8 @@
                             <Border Grid.Column="0" Width="56" Height="56" CornerRadius="28"
                                     Background="{DynamicResource PanelBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
                                     BorderThickness="2" VerticalAlignment="Top">
-                                <TextBlock Text="🎮" FontSize="28" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Image Width="32" Height="32" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Source="{Binding Source='🎮', Converter={StaticResource EmojiToImageSource}}"/>
                             </Border>
                             <StackPanel Grid.Column="2">
                                 <TextBlock Text="{loc:Str label_what_is_this}" Foreground="{DynamicResource PinkBrush}"
@@ -9883,7 +9935,8 @@
                                         BorderBrush="#FF69B4" BorderThickness="2" CornerRadius="10" Padding="20,16"
                                         MinHeight="140" Cursor="Hand" Tag="0" MouseLeftButtonUp="TierCard_Click">
                                     <StackPanel>
-                                        <TextBlock Text="✨" FontSize="26"/>
+                                        <Image Width="28" Height="28" HorizontalAlignment="Left"
+                                               Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str label_remote_tier_light}" Foreground="White"
                                                    FontSize="17" FontWeight="Bold" Margin="0,6,0,6"/>
                                         <TextBlock Text="Visual triggers only"
@@ -9898,7 +9951,8 @@
                                         BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="10" Padding="20,16"
                                         MinHeight="140" Cursor="Hand" Tag="1" MouseLeftButtonUp="TierCard_Click">
                                     <StackPanel>
-                                        <TextBlock Text="🎯" FontSize="26"/>
+                                        <Image Width="28" Height="28" HorizontalAlignment="Left"
+                                               Source="{Binding Source='🎯', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str label_remote_tier_standard}" Foreground="White"
                                                    FontSize="17" FontWeight="Bold" Margin="0,6,0,6"/>
                                         <TextBlock Text="Light + audio + overlays"
@@ -9913,7 +9967,8 @@
                                         BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="10" Padding="20,16"
                                         MinHeight="140" Cursor="Hand" Tag="2" MouseLeftButtonUp="TierCard_Click">
                                     <StackPanel>
-                                        <TextBlock Text="🔥" FontSize="26"/>
+                                        <Image Width="28" Height="28" HorizontalAlignment="Left"
+                                               Source="{Binding Source='🔥', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str label_remote_tier_full}" Foreground="White"
                                                    FontSize="17" FontWeight="Bold" Margin="0,6,0,6"/>
                                         <TextBlock Text="Everything including session control"
@@ -10123,7 +10178,15 @@
                                                                 Tag="{Binding}"
                                                                 Click="BtnEmotePreset_Click"
                                                                 ToolTip="{Binding Text}">
-                                                            <TextBlock Text="{Binding Icon}" FontSize="22"/>
+                                                            <Grid>
+                                                                <Image Width="26" Height="26"
+                                                                       Source="{Binding Icon, Converter={StaticResource EmojiToImageSource}}"/>
+                                                                <!-- Fallback when user typed plain text (or unmapped glyph)
+                                                                     instead of an emoji; Image source is null in that case. -->
+                                                                <TextBlock Text="{Binding Icon}" FontSize="20"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                           Visibility="{Binding Icon, Converter={StaticResource EmojiFallbackVisibility}}"/>
+                                                            </Grid>
                                                         </Button>
                                                         <TextBlock Text="{Binding Text}"
                                                                    Foreground="White" FontSize="11"
@@ -10152,8 +10215,8 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <Border Grid.Column="0" Style="{StaticResource EmoteCustomBadgeStyle}">
-                                            <TextBlock Text="✏️" FontSize="18"
-                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <Image Width="22" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Source="{Binding Source='✏️', Converter={StaticResource EmojiToImageSource}}"/>
                                         </Border>
                                         <TextBox Grid.Column="1" x:Name="TxtEmoteCustom"
                                                  Style="{StaticResource EmoteCustomTextBoxStyle}"
@@ -10289,14 +10352,15 @@
                                 Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
                                 CornerRadius="10" IsHitTestVisible="True">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                                <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                                 <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
                                            FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
                                            Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                                <Button Content="{loc:Str gate_unlock_with_patreon}"
-                                        Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
-                                        Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+                                <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                                        Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
+                                    <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
+                                </Button>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -10328,7 +10392,8 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="🛰️" FontSize="40" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                    <Image Grid.Column="0" Width="44" Height="44" VerticalAlignment="Center" Margin="0,0,16,0"
+                           Source="{Binding Source='🛰️', Converter={StaticResource EmojiToImageSource}}"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{loc:Str tab_available_subjects}"
                                    Foreground="{DynamicResource NeonPurpleBrush}"
@@ -10527,7 +10592,8 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="🤖" FontSize="40" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                    <Image Grid.Column="0" Width="44" Height="44" VerticalAlignment="Center" Margin="0,0,16,0"
+                           Source="{Binding Source='🤖', Converter={StaticResource EmojiToImageSource}}"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock x:Name="TxtBambiTakeoverHeader" Text="{loc:Str tab_takeover}" Foreground="White" FontSize="26" FontWeight="Bold"/>
                     </StackPanel>
@@ -10567,8 +10633,8 @@
                 <!-- Locked State (legacy — kept hidden, replaced by gating overlay below) -->
                 <StackPanel x:Name="AutonomyLocked" Visibility="Collapsed">
                     <Grid>
-                        <TextBlock x:Name="TxtTakeoverLocked" Text="{loc:Str label_takeover}" Foreground="#666666" FontWeight="Bold" FontSize="13"/>
-                        <TextBlock x:Name="TxtAutonomyLockStatus" Text="{loc:Str label_patreon_only}" Foreground="{DynamicResource SecondaryBrush}" HorizontalAlignment="Right" FontSize="11"/>
+                        <helpers:EmojiTextBlock x:Name="TxtTakeoverLocked" Text="{loc:Str label_takeover}" Foreground="#666666" FontWeight="Bold" FontSize="13"/>
+                        <helpers:EmojiTextBlock x:Name="TxtAutonomyLockStatus" Text="{loc:Str label_patreon_only}" Foreground="{DynamicResource SecondaryBrush}" HorizontalAlignment="Right" FontSize="11"/>
                     </Grid>
                     <TextBlock x:Name="TxtAutonomyLockMessage" Text="{loc:Str label_support_on_patreon_to_unlock}" Foreground="{DynamicResource PinkBrush}" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
@@ -10706,14 +10772,15 @@
                             Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
                             CornerRadius="10" IsHitTestVisible="True">
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                            <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                             <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
                                        FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                             <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
                                        Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                            <Button Content="{loc:Str gate_unlock_with_patreon}"
-                                    Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
-                                    Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+                            <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                                    Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
+                                <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
+                            </Button>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -10735,7 +10802,8 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="💜" FontSize="40" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                        <Image Grid.Column="0" Width="44" Height="44" VerticalAlignment="Center" Margin="0,0,16,0"
+                               Source="{Binding Source='💜', Converter={StaticResource EmojiToImageSource}}"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock Text="{loc:Str tab_haptics}" Foreground="White" FontSize="26" FontWeight="Bold"/>
                         </StackPanel>
@@ -10787,7 +10855,8 @@
                                 <!-- Header: title + master toggle -->
                                 <Grid Margin="0,0,0,16">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="🔌" FontSize="20" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                        <Image Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,10,0"
+                                               Source="{Binding Source='🔌', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str label_haptic_connection}" Foreground="{DynamicResource PinkBrush}"
                                                    FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
                                         <Button x:Name="HelpBtnHaptics" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="8,0,0,0" Tag="Haptics"/>
@@ -10931,7 +11000,7 @@
                         <!-- Lock Overlay (legacy, hidden — gating handled by HapticsGate) -->
                         <Border x:Name="HapticsConnectionLock" Background="#80000000" CornerRadius="10" Visibility="Collapsed">
                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center"/>
+                                <Image Width="36" Height="36" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                                 <TextBlock Text="{loc:Str label_patreon_only_2}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
                             </StackPanel>
                         </Border>
@@ -10944,7 +11013,8 @@
                             <StackPanel>
                                 <!-- Header -->
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                    <TextBlock Text="✨" FontSize="20" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <Image Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,10,0"
+                                           Source="{Binding Source='✨', Converter={StaticResource EmojiToImageSource}}"/>
                                     <TextBlock Text="{loc:Str section_feature_intensity}" Foreground="{DynamicResource PinkBrush}"
                                                FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
                                 </StackPanel>
@@ -11245,7 +11315,8 @@
                                         <!-- Title and Description -->
                                         <StackPanel Grid.Column="0">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="🎵" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <Image Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,6,0"
+                                                       Source="{Binding Source='🎵', Converter={StaticResource EmojiToImageSource}}"/>
                                                 <TextBlock Text="{loc:Str label_video_haptic_sync}" Foreground="{DynamicResource SecondaryBrush}"
                                                            FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
                                             </StackPanel>
@@ -11398,7 +11469,7 @@
                 <!-- Lock Overlay for Right Box -->
                 <Border x:Name="HapticsFeatureLock" Background="#80000000" CornerRadius="8" Visibility="Collapsed">
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <TextBlock Text="🔒" FontSize="32" HorizontalAlignment="Center"/>
+                        <Image Width="36" Height="36" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                         <TextBlock Text="{loc:Str label_patreon_only_2}" Foreground="{DynamicResource SecondaryBrush}" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
@@ -11426,14 +11497,15 @@
                                 Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
                                 CornerRadius="10" IsHitTestVisible="True">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                                <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                                 <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
                                            FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
                                            Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                                <Button Content="{loc:Str gate_unlock_with_patreon}"
-                                        Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
-                                        Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+                                <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                                        Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
+                                    <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
+                                </Button>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -11455,7 +11527,7 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="🔒" FontSize="40" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                            <Image Grid.Column="0" Width="44" Height="44" VerticalAlignment="Center" Margin="0,0,16,0" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock Text="{loc:Str tab_lockdown_mode}" Foreground="White" FontSize="26" FontWeight="Bold"/>
                                 <TextBlock Text="{loc:Str label_lock_yourself_into_a_timed_conditioning_sessi}"
@@ -11543,14 +11615,15 @@
                                     Background="#99000010" BorderBrush="#FF69B4" BorderThickness="2"
                                     CornerRadius="12" IsHitTestVisible="True">
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="🔒" FontSize="48" HorizontalAlignment="Center"/>
+                                    <Image Width="52" Height="52" HorizontalAlignment="Center" Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                                     <TextBlock Text="{loc:Str gate_premium_locked}" FontSize="22"
                                                FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
                                     <TextBlock Text="{loc:Str gate_premium_subtitle}" FontSize="14"
                                                Foreground="#CCCCCC" HorizontalAlignment="Center" Margin="0,4,0,12"/>
-                                    <Button Content="{loc:Str gate_unlock_with_patreon}"
-                                            Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
-                                            Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+                                    <Button Click="BtnGateUnlock_Click" Padding="20,8" Background="#FF69B4"
+                                            Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
+                                        <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
+                                    </Button>
                                 </StackPanel>
                             </Border>
                         </Grid>
@@ -12126,9 +12199,10 @@
                                     </Border.Effect>
 
                                     <StackPanel HorizontalAlignment="Center">
-                                        <TextBlock Text="🔒" FontSize="40"
-                                                   HorizontalAlignment="Center"
-                                                   Margin="0,0,0,12"/>
+                                        <Image Width="44" Height="44"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,12"
+                                               Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str blink_trainer_gate_headline}"
                                                    Foreground="White"
                                                    FontSize="22" FontWeight="Bold"
@@ -12259,7 +12333,8 @@
 
                 <!-- Center content -->
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="🎮" FontSize="56" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <Image Width="60" Height="60" HorizontalAlignment="Center" Margin="0,0,0,10"
+                           Source="{Binding Source='🎮', Converter={StaticResource EmojiToImageSource}}"/>
                     <TextBlock Text="{loc:Str label_remote_controlled}" Foreground="#00FF88" FontSize="28" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,0,0,8"/>
                     <TextBlock x:Name="TxtOverlaySessionCode" Text="" Foreground="{DynamicResource TextMutedBrush}" FontSize="18"
@@ -12274,14 +12349,15 @@
                         <Grid>
                             <!-- Idle state: no session running -->
                             <StackPanel x:Name="RemoteSessionIdle" HorizontalAlignment="Center">
-                                <TextBlock Text="📋" FontSize="28" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                                <Image Width="32" Height="32" HorizontalAlignment="Center" Margin="0,0,0,4"
+                                       Source="{Binding Source='📋', Converter={StaticResource EmojiToImageSource}}"/>
                                 <TextBlock Text="{loc:Str label_no_active_session}" Foreground="#606080" FontSize="14"
                                            HorizontalAlignment="Center"/>
                             </StackPanel>
                             <!-- Active state: session name + timer -->
                             <StackPanel x:Name="RemoteSessionActive" Visibility="Collapsed" HorizontalAlignment="Center">
-                                <TextBlock x:Name="TxtRemoteSessionName" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="20" FontWeight="Bold"
-                                           HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                <helpers:EmojiTextBlock x:Name="TxtRemoteSessionName" Text="" Foreground="{DynamicResource PinkBrush}" FontSize="20" FontWeight="Bold"
+                                                        HorizontalAlignment="Center" Margin="0,0,0,8"/>
                                 <TextBlock x:Name="TxtRemoteSessionTime" Text="" Foreground="#FFFFFF" FontSize="28"
                                            FontFamily="Consolas" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,6"/>
                                 <TextBlock x:Name="TxtRemoteSessionPhase" Text="" Foreground="#A0A0B0" FontSize="13"
@@ -12315,7 +12391,13 @@
                                             Click="BtnEmotePresetBig_Click"
                                             HorizontalAlignment="Center"
                                             ToolTip="{Binding Text}">
-                                        <TextBlock Text="{Binding Icon}" FontSize="32"/>
+                                        <Grid>
+                                            <Image Width="40" Height="40"
+                                                   Source="{Binding Icon, Converter={StaticResource EmojiToImageSource}}"/>
+                                            <TextBlock Text="{Binding Icon}" FontSize="32"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       Visibility="{Binding Icon, Converter={StaticResource EmojiFallbackVisibility}}"/>
+                                        </Grid>
                                     </Button>
                                     <TextBlock Text="{Binding Text}"
                                                Foreground="White" FontSize="13"
@@ -12365,7 +12447,13 @@
                                             Click="BtnEmotePresetBig_Click"
                                             HorizontalAlignment="Center"
                                             ToolTip="{Binding Text}">
-                                        <TextBlock Text="{Binding Icon}" FontSize="32"/>
+                                        <Grid>
+                                            <Image Width="40" Height="40"
+                                                   Source="{Binding Icon, Converter={StaticResource EmojiToImageSource}}"/>
+                                            <TextBlock Text="{Binding Icon}" FontSize="32"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       Visibility="{Binding Icon, Converter={StaticResource EmojiFallbackVisibility}}"/>
+                                        </Grid>
                                     </Button>
                                     <TextBlock Text="{Binding Text}"
                                                Foreground="White" FontSize="13"
@@ -12456,7 +12544,8 @@
                                 <!-- Quick Tip -->
                                 <Border Background="#3A2542" CornerRadius="8" Padding="12" Margin="0,0,0,15" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="💡" FontSize="16" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                        <Image Width="18" Height="18" VerticalAlignment="Center" Margin="0,0,10,0"
+                                               Source="{Binding Source='💡', Converter={StaticResource EmojiToImageSource}}"/>
                                         <TextBlock Text="{loc:Str label_hover_over_any_control_for_tooltips_click_a_g}"
                                                    Foreground="#D0B0C0" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center"/>
                                     </StackPanel>
@@ -12470,7 +12559,8 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="🚀" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,12,0"
+                                               Source="{Binding Source='🚀', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="{loc:Str label_getting_started}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="{loc:Str label_quick_overview_of_the_basics_start_button_add}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
@@ -12506,7 +12596,8 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="💾" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,12,0"
+                                               Source="{Binding Source='💾', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="{loc:Str label_presets_sessions}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="{loc:Str label_save_configurations_run_timed_sessions_create}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
@@ -12524,7 +12615,8 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="📊" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,12,0"
+                                               Source="{Binding Source='📊', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="{loc:Str tab_progression}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="{loc:Str label_xp_system_level_unlocks_scheduler_and_intensi}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
@@ -12542,7 +12634,8 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="🏆" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,12,0"
+                                               Source="{Binding Source='🏆', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="{loc:Str tab_achievements}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="{loc:Str label_unlock_achievements_by_reaching_milestones_an}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
@@ -12560,7 +12653,8 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="💬" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,12,0"
+                                               Source="{Binding Source='💬', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="{loc:Str label_companion_settings_2}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="{loc:Str label_speech_bubbles_trigger_messages_and_ai_person}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
@@ -12578,7 +12672,8 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="💎" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,12,0"
+                                               Source="{Binding Source='💎', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="{loc:Str label_patreon_exclusives}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="{loc:Str label_ai_chat_window_awareness_slut_mode_and_premiu}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
@@ -12596,7 +12691,8 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="👁" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,12,0"
+                                               Source="{Binding Source='👁', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="{loc:Str label_awareness_engine}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="{loc:Str label_awareness_engine_desc}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
@@ -12614,7 +12710,8 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="💗" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,12,0"
+                                               Source="{Binding Source='💗', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="{loc:Str label_avatar_companion}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="{loc:Str label_interacting_detaching_resizing_evolution_stag}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
@@ -12632,7 +12729,7 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{loc:Str label_text_4}" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <helpers:EmojiTextBlock Grid.Column="0" Text="{loc:Str label_text_4}" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="{loc:Str label_modding_guide}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="{loc:Str label_opens_the_mod_creator_with_a_step_by_step_wal}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
@@ -12650,7 +12747,8 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="🐞" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <Image Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center" Margin="0,0,12,0"
+                                               Source="{Binding Source='🐞', Converter={StaticResource EmojiToImageSource}}"/>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock Text="{loc:Str btn_report_bug}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold"/>
                                             <TextBlock Text="{loc:Str bug_report_privacy_notice}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" TextWrapping="Wrap"/>
@@ -12663,7 +12761,7 @@
                                 <!-- Pro Tips -->
                                 <Border Background="#3A2542" CornerRadius="8" Padding="12" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Margin="0,8,0,0">
                                     <StackPanel>
-                                        <TextBlock Text="{loc:Str label_pro_tips}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <helpers:EmojiTextBlock Text="{loc:Str label_pro_tips}" Foreground="{DynamicResource PinkBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
                                         <TextBlock Foreground="#D0B0C0" FontSize="11" TextWrapping="Wrap">
                                             <Run Text="•"/><Run Text="{loc:Str label_assets_images}" FontWeight="SemiBold"/><Run Text="{loc:Str label_add_your_flash_images_here}"/>
                                         </TextBlock>

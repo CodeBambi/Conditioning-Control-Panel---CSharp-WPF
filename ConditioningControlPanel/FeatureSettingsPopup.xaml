@@ -15,7 +15,8 @@
 
             <!-- Header -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,15">
-                <TextBlock x:Name="TxtIcon" Text="⚡" FontSize="24" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <Image x:Name="TxtIcon" Width="26" Height="26" VerticalAlignment="Center" Margin="0,0,10,0"
+                       Source="{Binding Source='⚡', Converter={StaticResource EmojiToImageSource}}"/>
                 <StackPanel>
                     <TextBlock x:Name="TxtFeatureName" Text="Feature Name"
                                Foreground="{DynamicResource PinkBrush}" FontSize="16" FontWeight="SemiBold"/>

@@ -2631,9 +2631,10 @@ namespace ConditioningControlPanel
             {
                 if (BtnWebcamTracking == null) return;
                 var on = App.Webcam?.IsRunning == true;
-                BtnWebcamTracking.Content = Loc.Get(on
-                    ? "btn_browser_webcam_tracking_on"
-                    : "btn_browser_webcam_tracking_off");
+                if (TxtWebcamTracking != null)
+                    TxtWebcamTracking.Text = Loc.Get(on
+                        ? "btn_browser_webcam_tracking_on"
+                        : "btn_browser_webcam_tracking_off");
                 BtnWebcamTracking.ToolTip = Loc.Get(on
                     ? "tooltip_browser_webcam_tracking_on"
                     : "tooltip_browser_webcam_tracking_off");
@@ -13166,10 +13167,12 @@ namespace ConditioningControlPanel
             };
             stack.Children.Add(topRow);
 
-            topRow.Children.Add(new System.Windows.Controls.TextBlock
+            topRow.Children.Add(new System.Windows.Controls.Image
             {
-                Text = preset.Icon,
-                FontSize = 26,
+                Source = Helpers.EmojiImage.Get(preset.Icon),
+                Width = 28,
+                Height = 28,
+                Stretch = System.Windows.Media.Stretch.Uniform,
             });
 
             if (preset.RequiresAi)
@@ -16540,10 +16543,12 @@ namespace ConditioningControlPanel
 
             var stack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
 
-            stack.Children.Add(new TextBlock
+            stack.Children.Add(new Image
             {
-                Text = skill.Icon,
-                FontSize = 18,
+                Source = Helpers.EmojiImage.Get(skill.Icon),
+                Width = 22,
+                Height = 22,
+                Stretch = System.Windows.Media.Stretch.Uniform,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 3)
             });

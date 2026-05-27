@@ -162,9 +162,9 @@
              Status pill states: Live (playing) / Loaded (paused) / Empty (nothing)
              ===================================================================== -->
         <DockPanel Grid.Row="0" LastChildFill="False" Margin="0,0,0,10">
-            <TextBlock DockPanel.Dock="Left" Text="🌊" FontSize="22"
-                       Foreground="{DynamicResource DeeperAccentBrush}"
-                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <Image DockPanel.Dock="Left" Width="24" Height="24"
+                   VerticalAlignment="Center" Margin="0,0,8,0"
+                   Source="{Binding Source='🌊', Converter={StaticResource EmojiToImageSource}}"/>
             <TextBlock DockPanel.Dock="Left" Text="{loc:Str deeper_player_title}"
                        Style="{StaticResource HeaderText}" Margin="0,0,12,0"
                        VerticalAlignment="Center" FontSize="18"/>
@@ -221,8 +221,9 @@
                         Width="36" Height="36" CornerRadius="6"
                         Background="{DynamicResource DeeperHubAudioBadgeBgBrush}"
                         Margin="0,0,10,0">
-                    <TextBlock x:Name="MediaTypeIcon" Text="🎵" FontSize="18"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Image x:Name="MediaTypeIcon" Width="20" Height="20"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Source="{Binding Source='🎵', Converter={StaticResource EmojiToImageSource}}"/>
                 </Border>
 
                 <!-- Center: title + inline meta -->
@@ -259,9 +260,9 @@
                     <StackPanel x:Name="BrowserZoomCluster" Orientation="Horizontal"
                                 VerticalAlignment="Center" Margin="0,0,8,0"
                                 Visibility="{Binding ElementName=VideoPane, Path=Visibility}">
-                        <TextBlock Text="🔍" FontSize="11"
-                                   Foreground="{DynamicResource DeeperAccentSoftBrush}"
-                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <Image Width="13" Height="13"
+                               VerticalAlignment="Center" Margin="0,0,4,0"
+                               Source="{Binding Source='🔍', Converter={StaticResource EmojiToImageSource}}"/>
                         <Button x:Name="BtnZoomOut" Content="−"
                                 Click="BtnZoomOut_Click"
                                 ToolTip="{loc:Str deeper_zoom_out_tt}"
@@ -529,8 +530,9 @@
             <StackPanel x:Name="VolumePanel" DockPanel.Dock="Right"
                         Orientation="Horizontal" VerticalAlignment="Center"
                         Margin="12,0,0,0">
-                <TextBlock Text="🔊" Foreground="{DynamicResource TextDimBrush}" FontSize="12"
-                           VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <Image Width="14" Height="14"
+                       VerticalAlignment="Center" Margin="0,0,4,0"
+                       Source="{Binding Source='🔊', Converter={StaticResource EmojiToImageSource}}"/>
                 <Slider x:Name="SliderVolume"
                         Width="90" Minimum="0" Maximum="100" Value="80"
                         VerticalAlignment="Center"
@@ -589,9 +591,8 @@
 
                 <!-- Filter strip -->
                 <DockPanel LastChildFill="False" Margin="10,6,10,4">
-                    <TextBlock DockPanel.Dock="Left" Text="📋"
-                               Foreground="{DynamicResource DeeperAccentBrush}"
-                               FontSize="11" VerticalAlignment="Center"
+                    <Image DockPanel.Dock="Left" Width="13" Height="13" VerticalAlignment="Center"
+                           Source="{Binding Source='📋', Converter={StaticResource EmojiToImageSource}}"
                                Margin="0,0,6,0"/>
                     <TextBlock DockPanel.Dock="Left"
                                Text="{loc:Str deeper_player_event_log}"

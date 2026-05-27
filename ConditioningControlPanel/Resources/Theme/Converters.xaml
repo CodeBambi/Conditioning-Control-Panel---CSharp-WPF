@@ -6,4 +6,10 @@
     <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
     <helpers:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
 
+    <!-- Color-emoji rendering via Twemoji SVG set. WPF can't draw COLR/CPAL color
+         fonts, so any color emoji in the UI binds an Image's Source through this
+         converter. See Helpers/EmojiImage.cs. -->
+    <helpers:EmojiToImageSourceConverter x:Key="EmojiToImageSource"/>
+    <helpers:EmojiFallbackVisibilityConverter x:Key="EmojiFallbackVisibility"/>
+
 </ResourceDictionary>

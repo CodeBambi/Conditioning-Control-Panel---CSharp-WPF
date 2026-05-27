@@ -1,7 +1,8 @@
 <UserControl x:Class="ConditioningControlPanel.Features.VisualsFeatureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization">
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+             xmlns:helpers="clr-namespace:ConditioningControlPanel.Helpers">
 
     <StackPanel>
         <Border Background="{DynamicResource SurfaceBgBrush}"
@@ -82,7 +83,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock Text="{loc:Str label_link_to_audio_trigger}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                    <helpers:EmojiTextBlock Text="{loc:Str label_link_to_audio_trigger}" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
                     <TextBlock Text="{loc:Str tooltip_when_enabled_flash_duration_matches_audio_len}"
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
                                TextWrapping="Wrap" Margin="0,2,0,0"/>

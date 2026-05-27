@@ -106,10 +106,9 @@
                     CornerRadius="12"
                     Visibility="Collapsed">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="🔒"
-                               FontSize="28"
-                               HorizontalAlignment="Center"
-                               Foreground="{DynamicResource PinkBrush}"/>
+                    <Image Width="30" Height="30"
+                           HorizontalAlignment="Center"
+                           Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
                     <TextBlock x:Name="TxtLockLabel"
                                Text="Lvl 10"
                                Margin="0,4,0,0"

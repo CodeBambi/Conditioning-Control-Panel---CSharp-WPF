@@ -21,7 +21,8 @@
 
             <!-- Title -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
-                <TextBlock Text="📥" FontSize="26" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <Image Width="28" Height="28" VerticalAlignment="Center" Margin="0,0,12,0"
+                       Source="{Binding Source='📥', Converter={StaticResource EmojiToImageSource}}"/>
                 <TextBlock Text="{loc:Str dialog_catalogue_picker_title}"
                            Foreground="{DynamicResource PinkBrush}"
                            FontSize="22" FontWeight="Bold" VerticalAlignment="Center" TextWrapping="Wrap"/>

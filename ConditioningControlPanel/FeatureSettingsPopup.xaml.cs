@@ -44,7 +44,7 @@ namespace ConditioningControlPanel
             if (_feature == null) return;
 
             // Update header
-            TxtIcon.Text = _feature.Icon;
+            TxtIcon.Source = ConditioningControlPanel.Helpers.EmojiImage.Get(_feature.Icon);
             TxtFeatureName.Text = _feature.Name;
             TxtEventType.Text = evt.EventType == TimelineEventType.Start ? "Start Event" : "Stop Event";
 

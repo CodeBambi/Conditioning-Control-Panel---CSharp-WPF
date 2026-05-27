@@ -397,7 +397,7 @@ namespace ConditioningControlPanel.Views.Deeper
                 TxtEnhName.Text = Loc.Get("deeper_player_no_enh");
                 TxtEnhMetadata.Text = "";
                 if (TxtEnhPath != null) TxtEnhPath.Visibility = Visibility.Collapsed;
-                if (MediaTypeIcon != null) MediaTypeIcon.Text = "🎵";
+                if (MediaTypeIcon != null) MediaTypeIcon.Source = ConditioningControlPanel.Helpers.EmojiImage.Get("🎵");
                 if (MediaTypeIconBg != null)
                     MediaTypeIconBg.Background = (Brush)Application.Current.FindResource("DeeperHubAudioBadgeBgBrush");
                 if (SourcePill != null) SourcePill.Visibility = Visibility.Collapsed;
@@ -409,7 +409,7 @@ namespace ConditioningControlPanel.Views.Deeper
             TxtEnhName.Text = name;
 
             var isVideo = string.Equals(enh.MediaType, MediaTypes.Video, StringComparison.OrdinalIgnoreCase);
-            if (MediaTypeIcon != null) MediaTypeIcon.Text = isVideo ? "🎬" : "🎵";
+            if (MediaTypeIcon != null) MediaTypeIcon.Source = ConditioningControlPanel.Helpers.EmojiImage.Get(isVideo ? "🎬" : "🎵");
             if (MediaTypeIconBg != null)
                 MediaTypeIconBg.Background = (Brush)Application.Current.FindResource(
                     isVideo ? "DeeperHubVideoBadgeBgBrush" : "DeeperHubAudioBadgeBgBrush");

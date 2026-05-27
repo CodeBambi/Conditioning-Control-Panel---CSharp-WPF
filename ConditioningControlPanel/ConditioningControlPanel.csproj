@@ -108,6 +108,11 @@
     <PackageReference Include="OpenCvSharp4" Version="4.9.0.20240103" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.9.0.20240103" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
+
+    <!-- SVG rendering for color emoji (Twemoji) — WPF can't render Segoe UI Emoji
+         in color, so we ship the Twemoji SVG set and render via SharpVectors.
+         See Helpers/EmojiImage.cs. -->
+    <PackageReference Include="SharpVectors" Version="1.8.4.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -232,6 +237,11 @@
 
     <!-- Skill tree images (individual skill files) -->
     <Resource Include="Resources\skills\*.png" />
+
+    <!-- Twemoji SVG set for color-emoji rendering across the UI.
+         ~4000 files, ~19 MB on disk, MIT/CC-BY 4.0. Source: github.com/jdecked/twemoji.
+         Resolved at runtime via Helpers/EmojiImage.cs (codepoint -> pack:// URI). -->
+    <Resource Include="Resources\Twemoji\*.svg" />
   </ItemGroup>
 
   <ItemGroup>

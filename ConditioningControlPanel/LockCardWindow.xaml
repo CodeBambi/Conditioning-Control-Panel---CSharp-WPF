@@ -39,7 +39,8 @@
 
             <StackPanel>
                 <!-- Lock icon and title -->
-                <TextBlock Text="🔐" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                <Image Width="52" Height="52" HorizontalAlignment="Center" Margin="0,0,0,10"
+                       Source="{Binding Source='🔐', Converter={StaticResource EmojiToImageSource}}"/>
                 <TextBlock x:Name="TxtTitle" Text="{loc:Str label_type_to_unlock_2}" 
                            FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,25">
                     <TextBlock.Foreground>
