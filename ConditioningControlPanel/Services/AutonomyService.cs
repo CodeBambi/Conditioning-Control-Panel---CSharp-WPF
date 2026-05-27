@@ -1582,7 +1582,7 @@ namespace ConditioningControlPanel.Services
                 {
                     Application.Current?.Dispatcher?.BeginInvoke(() =>
                     {
-                        App.AvatarWindow?.GigglePriority(response, false);
+                        App.AvatarWindow?.GigglePriority(response, false, aiGenerated: true);
                     });
                 }
             }
@@ -1609,7 +1609,7 @@ namespace ConditioningControlPanel.Services
 
             var phrase = phrases[_random.Next(phrases.Length)];
 
-            App.AvatarWindow?.GigglePriority(phrase, false);
+            App.AvatarWindow?.GigglePriority(phrase, false, aiGenerated: false);
             AnnouncementMade?.Invoke(this, phrase);
         }
 

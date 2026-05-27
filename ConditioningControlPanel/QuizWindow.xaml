@@ -207,27 +207,38 @@
             </Grid.RowDefinitions>
 
             <!-- Top bar: progress dots + score -->
-            <Grid Grid.Row="0" Margin="40,16,40,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+            <StackPanel Grid.Row="0" Margin="40,16,40,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                <!-- Progress dots -->
-                <StackPanel x:Name="ProgressDotsPanel" Orientation="Horizontal" VerticalAlignment="Center"/>
+                    <!-- Progress dots -->
+                    <StackPanel x:Name="ProgressDotsPanel" Orientation="Horizontal" VerticalAlignment="Center"/>
 
-                <!-- Score -->
-                <TextBlock x:Name="ScoreText" Grid.Column="1" FontSize="28" FontWeight="Bold"
-                           Foreground="{DynamicResource PinkBrush}" VerticalAlignment="Center"
-                           RenderTransformOrigin="0.5,0.5">
-                    <TextBlock.RenderTransform>
-                        <ScaleTransform ScaleX="1" ScaleY="1"/>
-                    </TextBlock.RenderTransform>
-                    <TextBlock.Effect>
-                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.4"/>
-                    </TextBlock.Effect>
-                </TextBlock>
-            </Grid>
+                    <!-- Score -->
+                    <TextBlock x:Name="ScoreText" Grid.Column="1" FontSize="28" FontWeight="Bold"
+                               Foreground="{DynamicResource PinkBrush}" VerticalAlignment="Center"
+                               RenderTransformOrigin="0.5,0.5">
+                        <TextBlock.RenderTransform>
+                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                        </TextBlock.RenderTransform>
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="15" ShadowDepth="0" Opacity="0.4"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                </Grid>
+
+                <!-- CCBill AI Addendum: AI-generated content disclaimer under the progress bar. -->
+                <TextBlock Text="{loc:Str quiz_ai_disclaimer}"
+                           FontSize="11"
+                           FontStyle="Italic"
+                           Foreground="#808090"
+                           TextWrapping="Wrap"
+                           Margin="0,6,0,0"
+                           HorizontalAlignment="Left"/>
+            </StackPanel>
 
             <!-- Scrollable question + answers -->
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -434,6 +445,15 @@
                             </Button.Resources>
                         </Button>
                     </StackPanel>
+
+                    <!-- CCBill AI Addendum: AI-generated content disclaimer pinned at result screen bottom. -->
+                    <TextBlock Text="{loc:Str quiz_ai_disclaimer}"
+                               FontSize="11"
+                               FontStyle="Italic"
+                               Foreground="#808090"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               Margin="0,24,0,0"/>
                 </StackPanel>
             </ScrollViewer>
         </Grid>

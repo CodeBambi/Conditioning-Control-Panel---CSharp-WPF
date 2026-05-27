@@ -1240,7 +1240,7 @@ namespace ConditioningControlPanel.Services
             {
                 var canned = PickCannedPhrase(a.FallbackPhraseCategory);
                 if (!string.IsNullOrEmpty(canned))
-                    ShowAvatarLine(canned);
+                    ShowAvatarLine(canned, aiGenerated: false);
                 return;
             }
 
@@ -1253,14 +1253,18 @@ namespace ConditioningControlPanel.Services
                 try
                 {
                     string? line = null;
+                    bool fromAi = false;
                     if (aiAvailable && App.Ai != null)
+                    {
                         line = await App.Ai.GetKeywordCommentAsync(keyword, promptTemplate);
+                        fromAi = !string.IsNullOrEmpty(line);
+                    }
 
                     if (string.IsNullOrEmpty(line))
                         line = PickCannedPhrase(fallbackCategory);
 
                     if (!string.IsNullOrEmpty(line))
-                        ShowAvatarLine(line);
+                        ShowAvatarLine(line, aiGenerated: fromAi);
                 }
                 catch (Exception ex)
                 {
@@ -1286,13 +1290,13 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private static void ShowAvatarLine(string line)
+        private static void ShowAvatarLine(string line, bool aiGenerated)
         {
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher == null || dispatcher.HasShutdownStarted) return;
             dispatcher.BeginInvoke(new Action(() =>
             {
-                try { App.AvatarWindow?.GigglePriority(line, playSound: true); }
+                try { App.AvatarWindow?.GigglePriority(line, playSound: true, aiGenerated: aiGenerated); }
                 catch (Exception ex) { App.Logger?.Debug("AvatarWindow.GigglePriority failed: {Error}", ex.Message); }
             }));
         }

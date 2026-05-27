@@ -1949,7 +1949,7 @@ namespace ConditioningControlPanel
                 if (triggers != null && triggers.Count > 0)
                 {
                     var trigger = triggers[_random.Next(triggers.Count)];
-                    GigglePriority(trigger);
+                    GigglePriority(trigger, aiGenerated: false);
                     return;
                 }
             }
@@ -1963,7 +1963,7 @@ namespace ConditioningControlPanel
             if (_interactionCount % 4 != 0)
             {
                 // Show standard random Bambi phrase
-                GigglePriority(GetRandomBambiPhrase());
+                GigglePriority(GetRandomBambiPhrase(), aiGenerated: false);
                 return;
             }
 
@@ -2052,8 +2052,9 @@ namespace ConditioningControlPanel
                 PlayDoubleBounce();
             }
 
-            // Display the result with priority
-            GigglePriority(reaction);
+            // Display the result with priority. The badge only fires when we actually got an
+            // AI-generated reaction — preset fallbacks are unmarked.
+            GigglePriority(reaction, aiGenerated: gotAiResponse);
         }
 
         private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
@@ -2318,6 +2319,8 @@ namespace ConditioningControlPanel
             // Swap bubble content: hide single-message view, show chat history.
             SpeechScroller.Visibility = Visibility.Collapsed;
             ChatHistoryView.Visibility = Visibility.Visible;
+            // Hide the per-message AI badge when showing the chat history list (mixed AI + user lines).
+            if (AiBadge != null) AiBadge.Visibility = Visibility.Collapsed;
 
             // Enlarge bubble for the chat history layout.
             SpeechBubble.MaxWidth = 600;
@@ -2346,7 +2349,7 @@ namespace ConditioningControlPanel
             StopZOrderRefreshTimer();
         }
 
-        public void GigglePriority(string text, bool playSound = true)
+        public void GigglePriority(string text, bool playSound = true, bool aiGenerated = true)
         {
             DispatcherHelper.RunOnUI(() =>
             {
@@ -2369,7 +2372,10 @@ namespace ConditioningControlPanel
                 // Capture AI reply for chat history
                 AddToChatHistory(text, isUser: false);
 
-                ShowGiggle(text, playSound: playSound, source: SpeechSource.AI);
+                // aiGenerated: when true, the bubble shows the "AI" badge. Most call sites that route
+                // through GigglePriority are AI replies, but the awareness keyword path can fall back
+                // to canned phrases when the AI is unavailable — those callers pass false.
+                ShowGiggle(text, playSound: playSound, source: SpeechSource.AI, aiGenerated: aiGenerated);
 
                 App.Logger?.Debug("Priority speech (queue cleared): {Text}", text);
             });
@@ -2381,8 +2387,17 @@ namespace ConditioningControlPanel
         /// <param name="text">The text to display</param>
         /// <param name="playSound">Whether to play a giggle sound</param>
         /// <param name="source">The source of the speech (for delay calculation)</param>
-        private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset, string? phraseAudioPath = null)
+        private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset, string? phraseAudioPath = null, bool aiGenerated = false)
         {
+            // CCBill AI Addendum: show the "AI" badge only when this bubble's text actually came from
+            // an AI inference. Canned/preset phrases (including AI-path fallbacks) leave it hidden.
+            try
+            {
+                if (AiBadge != null)
+                    AiBadge.Visibility = aiGenerated ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch { /* AiBadge not in template / closing — non-fatal */ }
+
             // Chat history view owns the bubble — swap back to single-message mode before showing.
             if (_isShowingChatHistory)
             {
@@ -4243,7 +4258,7 @@ namespace ConditioningControlPanel
             }
 
             // Show the trigger message with priority
-            GigglePriority("BAMBI CUM AND COLLAPSE");
+            GigglePriority("BAMBI CUM AND COLLAPSE", aiGenerated: false);
         }
 
         private void OnVideoAboutToStart(object? sender, EventArgs e)
@@ -4420,7 +4435,7 @@ namespace ConditioningControlPanel
 
         private void OnAchievementUnlocked(object? sender, Achievement achievement)
         {
-            GigglePriority($"Achievement unlocked: {achievement.Name}! *giggles*");
+            GigglePriority($"Achievement unlocked: {achievement.Name}! *giggles*", aiGenerated: false);
         }
 
         private void OnLevelUp(object? sender, int newLevel)
@@ -4441,11 +4456,11 @@ namespace ConditioningControlPanel
             var companionName = Models.CompanionDefinition.GetById(args.Companion).Name;
             if (args.NewLevel == Models.CompanionProgress.MaxLevel)
             {
-                GigglePriority($"{companionName} reached MAX LEVEL! *sparkles*");
+                GigglePriority($"{companionName} reached MAX LEVEL! *sparkles*", aiGenerated: false);
             }
             else if (args.NewLevel % 10 == 0)
             {
-                GigglePriority($"{companionName} is now level {args.NewLevel}! Keep going!");
+                GigglePriority($"{companionName} is now level {args.NewLevel}! Keep going!", aiGenerated: false);
             }
             else
             {
@@ -5007,7 +5022,7 @@ namespace ConditioningControlPanel
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "Failed to get AI reply");
-                    GigglePriority(GetRandomBambiPhrase()); // Clears _isWaitingForAi
+                    GigglePriority(GetRandomBambiPhrase(), aiGenerated: false); // Clears _isWaitingForAi
                 }
             }
             else
