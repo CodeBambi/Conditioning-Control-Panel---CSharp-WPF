@@ -650,7 +650,7 @@ namespace ConditioningControlPanel.Services
                         }
 
                         // Pull lifetime stats and quest streak data down from server. The V2 path
-                        // historically only synced UP — local progress (TotalBubblesPopped, TotalFlashImages,
+                        // historically only synced UP - local progress (TotalBubblesPopped, TotalFlashImages,
                         // ConsecutiveDays, daily_quest_streak, completion dates, etc.) was never refreshed
                         // from cloud, so admin restores / cross-device progress stayed invisible until the
                         // V1 fallback ran. Mirror MergeCloudProfile's stats merge for V2.
@@ -658,9 +658,11 @@ namespace ConditioningControlPanel.Services
                         {
                             if (MergeV2CloudStatsIntoLocalProgress(v2Result.User.Stats, v2Result.ForceStreakOverride == true))
                             {
+                                // SyncCurrentStreak mutates settings.CurrentStreak/LastStreakDate without
+                                // saving, so it must run BEFORE Save (matches MergeCloudProfile order).
+                                App.Achievements?.Progress?.SyncCurrentStreak();
                                 App.Settings?.Save();
                                 App.Achievements?.Save();
-                                App.Achievements?.Progress?.SyncCurrentStreak();
                             }
                         }
 
