@@ -53,12 +53,22 @@ namespace ConditioningControlPanel.Services.Moderation
             ("ignore-previous",
                 new Regex(@"\b(ignore|disregard|forget)\b.{0,30}(previous|above|all|prior|earlier|system|initial)", Opts)),
 
-            // "reveal/show/print/repeat the system prompt"
+            // "reveal/show/print/repeat the system prompt" — P2-H4 broadened verbs
+            // (recite/describe/translate/paraphrase/outline/summarize) and objects
+            // (preamble/setup/opening/initial/charter/policy/brief).
             ("extract-prompt",
-                new Regex(@"\b(reveal|show|print|repeat|tell me|give me|output|display)\b.{0,30}(prompt|instruction|rule|system|told|guideline)", Opts)),
+                new Regex(@"\b(reveal|show|print|repeat|tell me|give me|output|display|recite|describe|translate|paraphrase|outline|summari[sz]e|recap|enumerate|list|explain)\b.{0,30}(prompt|instruction|rule|system|told|guideline|preamble|setup|opening|initial|first|original|charter|policy|brief|context)", Opts)),
 
-            // "DAN" (Do Anything Now) classic jailbreak persona
-            ("dan-persona", new Regex(@"\bDAN\b", Opts)),
+            // P2-H4: paraphrase-form extraction — "(recite|describe|outline|translate)
+            // (your|the) (initial|opening|first|original) (instructions|setup|...)"
+            ("extract-prompt-paraphrase",
+                new Regex(@"\b(recite|describe|outline|translate|paraphrase|repeat|reveal|summari[sz]e)\s+(your|the)\s+(initial|opening|first|original|primary|preceding|above)\s+(instruction|rule|directive|prompt|guideline|setup|preamble|brief|charter|policy|message|configur)s?\b", Opts)),
+
+            // "DAN" (Do Anything Now) classic jailbreak persona — M9 fix: require
+            // context so we don't flag a CompanionPromptSettings containing the name
+            // 'Dan' as a character. The bare lone-DAN regex bit users like that.
+            ("dan-persona",
+                new Regex(@"\bDAN\b(?:[^\w]{0,30}\b(mode|persona|jailbreak|unfiltered|do\s+anything\s+now|character|prompt)\b|[^\w]{0,30}you\s+(are|can|will))", Opts)),
 
             // "developer mode" / "god mode"
             ("developer-mode", new Regex(@"\bdeveloper\s*mode\b", Opts)),
