@@ -437,7 +437,11 @@ namespace ConditioningControlPanel.Services.Moderation
             // P2-WSD: foreign-language scan. The English ruleset above is the primary
             // defense; this catches phrasings in the 9 non-EN locales CCP ships in (the
             // bomb-prompt repro is in scope for every shipped language per CCBill).
-            var foreignResult = ForeignLanguageKeywords.Scan(text);
+            // P2/R2-NEW-C-1: foreign scan must see the SAME normalised string as the
+            // English pass above. Passing raw `text` here let l33t/zero-width/homoglyph
+            // bypasses ("B0mbe", "B​o​m​b​e") sail past every non-EN locale even though
+            // C5 closed them for English.
+            var foreignResult = ForeignLanguageKeywords.Scan(normalised);
             if (!foreignResult.Allow) return foreignResult;
             if (foreignResult.Category == ProhibitedCategory.ProfessionalAdvice)
                 return foreignResult;
