@@ -223,6 +223,7 @@ namespace ConditioningControlPanel
         private const uint SWP_NOACTIVATE = 0x0010;
         private const uint SWP_SHOWWINDOW = 0x0040;
         private const uint SWP_NOZORDER = 0x0004;
+        private const uint SWP_FRAMECHANGED = 0x0020;
         private const uint GW_HWNDPREV = 3;
         private const int GWL_EXSTYLE = -20;
         private const int GWL_STYLE = -16;
@@ -320,6 +321,16 @@ namespace ConditioningControlPanel
             
             // Get handles when loaded
             Loaded += OnLoaded;
+
+            // AllowsTransparency=True + SizeToContent=WidthAndHeight + Viewbox
+            // creates a layered window whose surface is sized at Show() before
+            // the content has been measured. Without a forced refresh after
+            // first composition, the surface stays blank until WM_NCCALCSIZE
+            // fires from a user window-move — the bug the user reported as
+            // "tube doesn't render until I move main". ContentRendered fires
+            // ONCE after the first paint, so it's the right place to flush
+            // the layered surface via a SizeToContent toggle.
+            ContentRendered += OnFirstContentRendered;
 
             // Refresh tube image from mod on startup (XAML hardcodes pack:// URI)
             SetTubeStyle(!_isAttached);
@@ -1162,6 +1173,39 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void OnFirstContentRendered(object? sender, EventArgs e)
+        {
+            // One-shot: clear the subscription so this only runs after the
+            // very first composition.
+            ContentRendered -= OnFirstContentRendered;
+            try
+            {
+                // Toggle SizeToContent to force WPF to re-measure the window
+                // against the now-composed Viewbox content and resize the
+                // layered surface to match. Without this, the layered surface
+                // stays at its pre-content size and renders blank until the
+                // user moves the window (which triggers WM_NCCALCSIZE → resize).
+                var sc = SizeToContent;
+                SizeToContent = SizeToContent.Manual;
+                SizeToContent = sc;
+
+                // Belt-and-suspenders: also flush the Win32 frame so the
+                // layered window picks up any cached style/size deltas from
+                // the SetWindowLong(WS_EX_TOOLWINDOW) call in OnLoaded.
+                if (_tubeHandle != IntPtr.Zero)
+                {
+                    SetWindowPos(_tubeHandle, IntPtr.Zero, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                }
+
+                InvalidateVisual();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("AvatarTube first-paint kick failed: {Error}", ex.Message);
+            }
+        }
+
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             _tubeHandle = new WindowInteropHelper(this).Handle;
@@ -1171,9 +1215,16 @@ namespace ConditioningControlPanel
             _hwndSource = HwndSource.FromHwnd(_tubeHandle);
             _hwndSource?.AddHook(WndProc);
 
-            // Hide from Alt+Tab by adding WS_EX_TOOLWINDOW style
+            // Hide from Alt+Tab by adding WS_EX_TOOLWINDOW style.
+            // SetWindowLong caches frame data; without a follow-up SetWindowPos
+            // with SWP_FRAMECHANGED the layered window (AllowsTransparency=True)
+            // doesn't get a WM_NCCALCSIZE/WM_PAINT pass and the tube stays
+            // invisible until the user moves the window. Forcing the frame
+            // recalc here gives it that initial paint.
             int exStyle = GetWindowLong(_tubeHandle, GWL_EXSTYLE);
             SetWindowLong(_tubeHandle, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+            SetWindowPos(_tubeHandle, IntPtr.Zero, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
             // Ensure NOT topmost when attached (starts attached)
             Topmost = false;
@@ -1447,6 +1498,10 @@ namespace ConditioningControlPanel
             {
                 SetWindowLong(_tubeHandle, GWL_EXSTYLE, exStyle & ~WS_EX_TOOLWINDOW);
             }
+            // SetWindowLong frame data is cached — flush with SWP_FRAMECHANGED
+            // so the new style takes effect without requiring a window move.
+            SetWindowPos(_tubeHandle, IntPtr.Zero, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
 
         private DispatcherTimer? _floatTimer;
@@ -3148,6 +3203,13 @@ namespace ConditioningControlPanel
             SetWindowPos(_tubeHandle, IntPtr.Zero, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
+
+        /// <summary>
+        /// Public hook for App.ForceWindowToFront: after main pulses Topmost
+        /// to defeat ForegroundLockTimeout, the tube needs to be re-raised so
+        /// the attached pair stays paired. Wraps the existing private method.
+        /// </summary>
+        public void RaiseAttachedTubeAboveOwner() => BringAttachedPairToFront();
 
         /// <summary>
         /// Bring both the parent window and the tube to the top of z-order together.

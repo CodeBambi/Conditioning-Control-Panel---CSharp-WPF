@@ -1233,6 +1233,16 @@ namespace ConditioningControlPanel
             // Drop Topmost FIRST so deferred dialogs (What's New, Age Verification) aren't hidden behind it
             splash.Topmost = false;
             splash.SetProgress(1.0, "Ready!");
+
+            // Activate the main window before AND after the splash fades. Show()
+            // alone doesn't reliably foreground the window because the splash
+            // was Topmost during init and Windows can give focus to whatever
+            // was foreground before launch (Explorer, prior app) when the
+            // splash closes. Topmost-pulse is the standard WPF workaround for
+            // ForegroundLockTimeout blocking Activate().
+            ForceWindowToFront(mainWindow);
+            splash.Closed += (_, _) => ForceWindowToFront(mainWindow);
+
             splash.FadeOutAndClose();
             _splash = null;
 
@@ -1261,7 +1271,34 @@ namespace ConditioningControlPanel
                 }), System.Windows.Threading.DispatcherPriority.Loaded);
             }
         }
-        
+
+        // Standard WPF "bring to front" sequence. Activate() alone is silently
+        // ignored when Windows' ForegroundLockTimeout is active (e.g. another
+        // app was foregrounded recently). Pulsing Topmost true→false is the
+        // documented workaround — it bypasses the lock without leaving the
+        // window stuck on top.
+        private static void ForceWindowToFront(Window window)
+        {
+            try
+            {
+                if (window == null) return;
+                if (window.WindowState == WindowState.Minimized)
+                    window.WindowState = WindowState.Normal;
+                window.Activate();
+                bool wasTopmost = window.Topmost;
+                window.Topmost = true;
+                window.Topmost = wasTopmost;
+                window.Focus();
+
+                // Topmost-pulse on main moves it to the top of the regular
+                // z-band, which can leave the avatar tube buried behind it
+                // (tube was Show()'n above main but the pulse rearranges).
+                // Raise the tube too so the attached pair stays paired.
+                AvatarWindow?.RaiseAttachedTubeAboveOwner();
+            }
+            catch (Exception ex) { Logger?.Debug("ForceWindowToFront failed: {Error}", ex.Message); }
+        }
+
         private void OnAchievementUnlocked(object? sender, Models.Achievement achievement)
         {
             Logger.Information("OnAchievementUnlocked handler called for: {Name}", achievement.Name);
