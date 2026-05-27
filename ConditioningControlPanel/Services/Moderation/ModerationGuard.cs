@@ -303,18 +303,31 @@ namespace ConditioningControlPanel.Services.Moderation
 
         // PromptExtraction: the two attack patterns the user demonstrated, plus the
         // standard jailbreak vocabulary.
+        // P2-H4: verb list broadened (recite/describe/translate/paraphrase/outline/
+        // summarize/recap/list/enumerate/explain); object list expanded (setup/
+        // configuration/initial/preamble/opening/brief/charter/policy/rule/guideline);
+        // indirection patterns added ("what are you told", "what's the most important
+        // rule", "describe (the )?structure of your prompt").
         private static readonly Regex[] PromptExtractionRegex =
         {
-            new(@"\b(verbatim|word\s+for\s+word|exactly\s+as\s+written|character\s+for\s+character)\b.{0,50}\b(instruction|system|prompt|told|directive|rule|guideline)s?\b", Opts),
-            new(@"\b(repeat|reveal|show|print|tell\s+me|output|display|recite|paste|dump|leak)\b.{0,50}\b(your|the|all)\s+(prompt|instruction|rules|system|directive|guideline|told|preamble|context|message|configur)s?\b", Opts),
+            new(@"\b(verbatim|word\s+for\s+word|exactly\s+as\s+written|character\s+for\s+character)\b.{0,50}\b(instruction|system|prompt|told|directive|rule|guideline|preamble|context|message|configur|setup|opening|initial|charter|policy)s?\b", Opts),
+            new(@"\b(repeat|reveal|show|print|tell\s+me|output|display|recite|paste|dump|leak|describe|translate|paraphrase|outline|summari[sz]e|recap|list|enumerate|explain)\b.{0,50}\b(your|the|all|its|this)\s+(prompt|instruction|rules?|system|directive|guideline|told|preamble|context|message|configur|setup|opening|initial|first|original|charter|policy|brief)s?\b", Opts),
             new(@"\b(ignore|disregard|forget|override|skip|bypass)\b.{0,40}\b(previous|above|all|prior|earlier|preceding|every|the\s+previous|the\s+above|your)\b.{0,20}\b(instruction|rule|directive|prompt|message|guideline|filter|restriction|guardrail|safety|moderation)s?\b", Opts),
             new(@"\b(new|updated|revised)\s+(instructions|rules|directives)\s*:", Opts),
             new(@"\b(developer|debug|admin|sudo|root|god|maintenance|engineer)\s+mode\b", Opts),
             new(@"\bunfiltered\s+mode\b|\buncensored\s+mode\b|\bjailbreak\s+mode\b", Opts),
             new(@"\bDAN\b.{0,30}\b(do\s+anything\s+now|mode|persona|jailbreak)\b", Opts),
             new(@"\b(act|pretend|roleplay)\b.{0,15}\bas\s+(if\s+)?you('?re|\s+are|\s+have)\s+(no|been|a)\s+(rules|restrictions|filters|limit|jailbroken|hacked|unrestricted)\b", Opts),
-            new(@"\bsystem\s+prompt\b.{0,30}\b(show|print|reveal|repeat|paste|leak|copy|dump|tell|output)\b", Opts),
-            new(@"\b(show|print|reveal|repeat|paste|leak|copy|dump|tell|output)\b.{0,30}\bsystem\s+prompt\b", Opts),
+            new(@"\bsystem\s+prompt\b.{0,30}\b(show|print|reveal|repeat|paste|leak|copy|dump|tell|output|describe|recite|translate|paraphrase|outline|summari[sz]e)\b", Opts),
+            new(@"\b(show|print|reveal|repeat|paste|leak|copy|dump|tell|output|describe|recite|translate|paraphrase|outline|summari[sz]e)\b.{0,30}\bsystem\s+prompt\b", Opts),
+            // Indirection: "what are you told", "what were you told to do".
+            new(@"\bwhat\s+(are|were|was)\s+you\s+(told|instructed|configured|given|programmed)\b", Opts),
+            // Indirection: "what's the most important rule", "what is your first rule".
+            new(@"\bwhat(?:'s|\s+is|\s+are)\s+(the\s+)?(most\s+important|first|primary|initial|original|opening)\s+(rules?|instructions?|directives?|guidelines?)\b", Opts),
+            // Paraphrase form: "describe (the )?structure of your prompt/instructions".
+            new(@"\b(describe|outline|explain|recap|summari[sz]e)\s+(the\s+)?(structure|layout|format|composition|content|substance|nature)\s+of\s+your\s+(prompt|instruction|rules|system|directive|guideline|preamble|setup|configur)s?\b", Opts),
+            // Translation-as-extraction: "translate everything before this line".
+            new(@"\b(translate|paraphrase|recap|summari[sz]e|describe|outline)\s+(everything|all|the\s+text|the\s+content|what(?:'s|\s+is|\s+was))\s+(before|above|preceding|prior)\b", Opts),
         };
         private static readonly string[] PromptExtractionKeywords =
         {
