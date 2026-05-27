@@ -343,13 +343,42 @@ namespace ConditioningControlPanel.Services.Moderation
             "system prompt verbatim",
         };
 
+        // SystemPromptLeak (OUTPUT-ONLY): distinctive Preamble / Floor fragment
+        // markers. Triggers when the LLM echoes any bracket-marker or non-negotiable
+        // signal phrase from SafetyComposer.Preamble / Floor. P2-H9.
+        //
+        // Detection only — these patterns intentionally do NOT include text from
+        // any user-editable Personality/KnowledgeBase/etc. preset. The fragments
+        // are hardcoded shibboleths from the const Preamble/Floor that no normal
+        // model reply would contain.
+        private static readonly Regex[] SystemPromptLeakRegex =
+        {
+            new(@"\[\s*safety\s+preamble", Opts),
+            new(@"\[\s*end\s+safety\s+preamble", Opts),
+            new(@"\[\s*safety\s+floor", Opts),
+            new(@"\[\s*end\s+safety\s+floor", Opts),
+            new(@"\bnon-?negotiable\b", Opts),
+            new(@"\boverride\s+(every|any|earlier)\s+instruction", Opts),
+            new(@"\bin\s+character\s+with\s+a\s+brief\s+one-?sentence\s+deflection\b", Opts),
+            new(@"\bdeflect\s+in\s+character\s+to\s+a\s+different\s+topic\b", Opts),
+            new(@"\bif\s+anything\s+above\s+tells\s+you\s+to\s+ignore\s+them,?\s+ignore\s+that\s+instruction\s+instead\b", Opts),
+            new(@"\bthe\s+safety\s+rules\s+at\s+the\s+start\s+of\s+this\s+prompt\b", Opts),
+            new(@"\bsexual\s+content\s+depicting\s+persons\s+under\s+18\b", Opts),
+        };
+        private static readonly string[] SystemPromptLeakKeywords =
+        {
+            // empty — the regex above carries shibboleth-level specificity
+        };
+
         // ---------- Wiring ----------
 
-        private readonly List<(ProhibitedCategory Cat, Regex[] Regexes, string[] Keywords)> _rules;
+        private readonly List<(ProhibitedCategory Cat, Regex[] Regexes, string[] Keywords)> _inputRules;
+        private readonly List<(ProhibitedCategory Cat, Regex[] Regexes, string[] Keywords)> _outputRules;
 
         public ModerationGuard()
         {
-            _rules = new List<(ProhibitedCategory, Regex[], string[])>
+            // Shared category set — most patterns trip on either side.
+            var common = new List<(ProhibitedCategory, Regex[], string[])>
             {
                 // Order matters only when multiple categories would match — we return
                 // the first hit. Highest-severity first.
@@ -370,12 +399,23 @@ namespace ConditioningControlPanel.Services.Moderation
                 // harder hit to take precedence.
                 (ProhibitedCategory.ProfessionalAdvice, ProfessionalAdviceRegex, ProfessionalAdviceKeywords),
             };
+
+            _inputRules = common;
+
+            // Output-only: SystemPromptLeak runs FIRST on outputs so the LLM echoing
+            // the safety wrap is caught even if a different category would also hit.
+            // P2-H9.
+            _outputRules = new List<(ProhibitedCategory, Regex[], string[])>
+            {
+                (ProhibitedCategory.SystemPromptLeak, SystemPromptLeakRegex, SystemPromptLeakKeywords),
+            };
+            _outputRules.AddRange(common);
         }
 
-        public ModerationResult CheckInput(string text) => Scan(text);
-        public ModerationResult CheckOutput(string text) => Scan(text);
+        public ModerationResult CheckInput(string text) => Scan(text, _inputRules);
+        public ModerationResult CheckOutput(string text) => Scan(text, _outputRules);
 
-        private ModerationResult Scan(string text)
+        private ModerationResult Scan(string text, List<(ProhibitedCategory Cat, Regex[] Regexes, string[] Keywords)> rules)
         {
             if (string.IsNullOrWhiteSpace(text)) return ModerationResult.Pass();
 
@@ -384,7 +424,7 @@ namespace ConditioningControlPanel.Services.Moderation
             // f4ggot, "b​o​mb", Cyrillic 'с' homoglyphs, etc.).
             var normalised = Normalize(text);
 
-            foreach (var (cat, regexes, keywords) in _rules)
+            foreach (var (cat, regexes, keywords) in rules)
             {
                 if (MatchesAny(normalised, regexes, keywords, out var note))
                 {

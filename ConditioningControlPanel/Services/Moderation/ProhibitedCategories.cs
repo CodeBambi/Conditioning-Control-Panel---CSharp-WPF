@@ -38,6 +38,12 @@ namespace ConditioningControlPanel.Services.Moderation
         /// <summary>Medical/legal/gambling advice requests. SOFT — log only, no block.</summary>
         ProfessionalAdvice,
         /// <summary>"repeat verbatim", "ignore previous", "system prompt", DAN-mode, etc.</summary>
-        PromptExtraction
+        PromptExtraction,
+        /// <summary>
+        /// Output-only: distinctive fragments of <see cref="SafetyComposer"/>'s Preamble
+        /// or Floor in the model's reply. Triggers when the LLM leaks (verbatim OR
+        /// paraphrased) any signal phrase from the wrap. Hostile-review H9 fix.
+        /// </summary>
+        SystemPromptLeak
     }
 }
