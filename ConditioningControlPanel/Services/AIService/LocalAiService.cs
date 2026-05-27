@@ -473,9 +473,6 @@ namespace ConditioningControlPanel.Services.AIService
                 // Append assistant turn so future requests have context.
                 _messages.Add(new ChatMessage("assistant", content));
 
-                // Persist asynchronously so chat latency isn't impacted by disk I/O.
-                _ = Task.Run(PersistHistory);
-
                 var parsed = _parser.Parse(content);
                 _currentCommands = parsed.Commands;
 
@@ -487,7 +484,15 @@ namespace ConditioningControlPanel.Services.AIService
                 // OUTPUT MODERATION (Layer 1). Scan the user-visible text — the JSON
                 // effects wrapper is already stripped by the parser. If the model produced
                 // prohibited content we discard the WHOLE turn (no commands executed, no
-                // text displayed) and return the refusal sentinel or null per caller.
+                // text displayed, persistence skipped) and return the refusal sentinel or
+                // null per caller.
+                //
+                // P2/H5: persistence is deferred until AFTER output moderation passes.
+                // Previously PersistHistory() ran before the output check, so a prohibited
+                // assistant turn (and its preceding user turn) would land on disk and be
+                // reloaded next launch. The user/assistant turns are also rolled back from
+                // the in-memory _messages list so future requests don't carry the rejected
+                // context.
                 if (guard != null)
                 {
                     var outputCheck = guard.CheckOutput(parsed.CleanText ?? string.Empty);
@@ -498,6 +503,11 @@ namespace ConditioningControlPanel.Services.AIService
                         App.Logger?.Information("LocalAiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
                         // Don't fire effects from a blocked response.
                         _currentCommands = new List<AiCommandData>();
+                        // Roll back assistant turn first (most recent), then the user turn
+                        // that produced it. PersistHistory is NOT called — the file on disk
+                        // remains at the prior known-clean state.
+                        if (_messages.Count > 0 && _messages[^1].Role == "assistant") _messages.RemoveAt(_messages.Count - 1);
+                        if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
                         return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
                     }
                     if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
@@ -505,6 +515,10 @@ namespace ConditioningControlPanel.Services.AIService
                         App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: modelHint);
                     }
                 }
+
+                // Persist asynchronously so chat latency isn't impacted by disk I/O.
+                // Runs only after output moderation passed (P2/H5).
+                _ = Task.Run(PersistHistory);
 
                 if (_currentCommands.Count > 0 && App.Commands != null)
                 {

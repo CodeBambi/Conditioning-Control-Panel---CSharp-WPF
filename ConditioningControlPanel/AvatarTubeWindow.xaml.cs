@@ -5184,8 +5184,10 @@ namespace ConditioningControlPanel
             TxtUserInput.Text = "";
             ToggleInputPanel();
 
-            // Capture user prompt for chat history
-            AddToChatHistory(input, isUser: true);
+            // P2/H5: user input is NOT added to chat history yet. If the moderation
+            // guard refuses below we throw the input away — the prohibited text must
+            // not remain visible in the in-memory history view. AddToChatHistory is
+            // called only after the AI call returns with a non-refusal result.
 
             if (App.Settings?.Current?.AiChatEnabled == true && App.Ai != null && App.Ai.IsAvailable)
             {
@@ -5204,12 +5206,18 @@ namespace ConditioningControlPanel
                     if (result.Refusal != null)
                     {
                         // Refused — render the POLICY badge + the localized refusal string
-                        // instead of the normal AI bubble.
+                        // instead of the normal AI bubble. The user's prohibited input is
+                        // dropped without ever entering chat history (P2/H5). The textbox
+                        // was already cleared above, so there's nothing left for the user
+                        // to re-send by accident.
                         PlayDoubleBounce();
                         ShowModerationRefusalBubble(result.Refusal.Source);
                     }
                     else
                     {
+                        // Allowed — NOW persist the user prompt to chat history (P2/H5).
+                        AddToChatHistory(input, isUser: true);
+
                         // Double bounce to attract attention, then show AI response.
                         // aiGenerated flag flows through so canned fallbacks don't wear
                         // the AI badge (P2/C4 — audit smoke-test #1).
@@ -5220,12 +5228,18 @@ namespace ConditioningControlPanel
                 catch (Exception ex)
                 {
                     App.Logger?.Warning(ex, "Failed to get AI reply");
+                    // Exception is NOT a moderation refusal — the user's input was a
+                    // legitimate send that failed for an infrastructure reason. Persist
+                    // it so the conversation transcript stays coherent.
+                    AddToChatHistory(input, isUser: true);
                     GigglePriority(GetRandomBambiPhrase(), aiGenerated: false); // Clears _isWaitingForAi
                 }
             }
             else
             {
-                // Use preset phrases when AI is disabled
+                // No AI configured / disabled — still a legitimate send, persist the input
+                // and respond with a preset phrase (no AI badge, no moderation in this path).
+                AddToChatHistory(input, isUser: true);
                 Giggle(GetRandomBambiPhrase());
             }
         }
