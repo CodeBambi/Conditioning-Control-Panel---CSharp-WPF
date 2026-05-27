@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
 
 namespace ConditioningControlPanel.Services.Moderation
 {
     /// <summary>
-    /// Per-launch moderation hit counter with sliding-window escalation.
+    /// Sliding-window moderation hit counter with escalation, persisted across launches.
     ///
     /// Flow:
     ///   * 1-2 hits within <see cref="WindowMinutes"/> -&gt; silent (log only).
@@ -18,11 +21,24 @@ namespace ConditioningControlPanel.Services.Moderation
     ///
     /// Window is sliding: we keep timestamps in a list and prune entries older
     /// than <see cref="WindowMinutes"/> on every read. Lock-protected, thread-safe.
+    ///
+    /// Persistence (P2-H8): state is hydrated from / saved to
+    /// <c>%APPDATA%/ConditioningControlPanel/moderation-counter.json</c>. Without
+    /// persistence the cooldown could be bypassed in 3 seconds by restarting the app
+    /// (the H8 finding in C:\tmp\HOSTILE_REVIEW.md). Saves are fire-and-forget
+    /// best-effort; failures don't break the counter pipeline.
     /// </summary>
     public interface IModerationCounter
     {
         void RecordHit(ProhibitedCategory category, string source);
         ModerationCounterState GetState();
+
+        /// <summary>
+        /// Hydrates in-memory state from the persisted JSON file. Safe to call once
+        /// at startup. Prunes timestamps older than <see cref="ModerationCounter.WindowMinutes"/>
+        /// and discards any cooldown that has already expired.
+        /// </summary>
+        void LoadFromDisk();
 
         /// <summary>
         /// Raised on the UI dispatcher when the counter crosses
@@ -49,6 +65,20 @@ namespace ConditioningControlPanel.Services.Moderation
         bool CooldownActive,
         DateTime? CooldownEndsAt);
 
+    /// <summary>
+    /// Persisted on-disk shape. Kept stable across releases — extending fields is
+    /// allowed but renaming requires a migration. ISO-8601 UTC strings (round-trip
+    /// "o" format) so the file is human-readable.
+    /// </summary>
+    internal sealed class ModerationCounterPersistedState
+    {
+        [JsonProperty("hits")]
+        public List<string> Hits { get; set; } = new();
+
+        [JsonProperty("cooldownEndsAt")]
+        public string? CooldownEndsAt { get; set; }
+    }
+
     public sealed class ModerationCounter : IModerationCounter
     {
         public const int WarningThreshold = 3;
@@ -60,10 +90,20 @@ namespace ConditioningControlPanel.Services.Moderation
         private readonly List<DateTime> _hits = new();
         private bool _warningShown;
         private DateTime? _cooldownEndsAt;
+        private readonly string _persistencePath;
 
         public event Action<ModerationCounterState>? WarningTriggered;
         public event Action<DateTime>? CooldownStarted;
         public event Action? CooldownEnded;
+
+        public ModerationCounter()
+        {
+            // Same path computation pattern as ModerationLog — we cannot reference
+            // App.UserDataPath here without a circular dependency at startup.
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var dir = Path.Combine(appData, "ConditioningControlPanel");
+            _persistencePath = Path.Combine(dir, "moderation-counter.json");
+        }
 
         public void RecordHit(ProhibitedCategory category, string source)
         {
@@ -96,6 +136,10 @@ namespace ConditioningControlPanel.Services.Moderation
                 }
             }
 
+            // Persist after every hit + every cooldown state transition. Fire-and-forget
+            // — a failed write must not break the moderation pipeline.
+            SaveToDiskAsync();
+
             try
             {
                 if (fireCooldown)
@@ -115,6 +159,9 @@ namespace ConditioningControlPanel.Services.Moderation
 
         public ModerationCounterState GetState()
         {
+            bool cooldownEndedThisCall = false;
+
+            ModerationCounterState state;
             lock (_lock)
             {
                 PruneExpired_NoLock();
@@ -129,8 +176,7 @@ namespace ConditioningControlPanel.Services.Moderation
                         _hits.Clear();
                         _warningShown = false;
                         endsAt = null;
-                        // Fire the ended event outside the lock.
-                        try { CooldownEnded?.Invoke(); } catch { /* ignore */ }
+                        cooldownEndedThisCall = true;
                     }
                     else
                     {
@@ -138,12 +184,21 @@ namespace ConditioningControlPanel.Services.Moderation
                     }
                 }
 
-                return new ModerationCounterState(
+                state = new ModerationCounterState(
                     HitsInLastTenMinutes: _hits.Count,
                     WarningTriggered: _warningShown,
                     CooldownActive: cooldownActive,
                     CooldownEndsAt: endsAt);
             }
+
+            if (cooldownEndedThisCall)
+            {
+                // Persist the cleared state + fire the ended event outside the lock.
+                SaveToDiskAsync();
+                try { CooldownEnded?.Invoke(); } catch { /* ignore */ }
+            }
+
+            return state;
         }
 
         private void PruneExpired_NoLock()
@@ -165,6 +220,97 @@ namespace ConditioningControlPanel.Services.Moderation
             {
                 _warningShown = false;
             }
+        }
+
+        /// <summary>
+        /// Hydrates from <c>moderation-counter.json</c>. Called once from
+        /// <c>App.OnStartup</c> after the counter is constructed. Idempotent;
+        /// safe if the file is missing or corrupt.
+        /// </summary>
+        public void LoadFromDisk()
+        {
+            try
+            {
+                if (!File.Exists(_persistencePath)) return;
+
+                var json = File.ReadAllText(_persistencePath);
+                if (string.IsNullOrWhiteSpace(json)) return;
+
+                var persisted = JsonConvert.DeserializeObject<ModerationCounterPersistedState>(json);
+                if (persisted == null) return;
+
+                lock (_lock)
+                {
+                    _hits.Clear();
+                    var cutoff = DateTime.UtcNow.AddMinutes(-WindowMinutes);
+                    foreach (var s in persisted.Hits)
+                    {
+                        if (DateTime.TryParse(s, null, System.Globalization.DateTimeStyles.RoundtripKind, out var ts))
+                        {
+                            var utc = ts.ToUniversalTime();
+                            if (utc >= cutoff) _hits.Add(utc);
+                        }
+                    }
+
+                    _cooldownEndsAt = null;
+                    if (!string.IsNullOrEmpty(persisted.CooldownEndsAt) &&
+                        DateTime.TryParse(persisted.CooldownEndsAt, null, System.Globalization.DateTimeStyles.RoundtripKind, out var endsAt))
+                    {
+                        var utc = endsAt.ToUniversalTime();
+                        if (utc > DateTime.UtcNow) _cooldownEndsAt = utc;
+                    }
+
+                    // If hits exist at-or-above warning threshold, treat the warning
+                    // latch as already shown so the user is not re-prompted on every
+                    // restart. (The dialog is one-shot per threshold-cross anyway.)
+                    _warningShown = _hits.Count >= WarningThreshold || _cooldownEndsAt != null;
+                }
+            }
+            catch
+            {
+                // Best-effort hydration. Same pattern as ModerationLog.
+            }
+        }
+
+        /// <summary>
+        /// Snapshots current state under the lock then writes it on a thread-pool
+        /// task. Best-effort; swallows IO errors.
+        /// </summary>
+        private void SaveToDiskAsync()
+        {
+            List<string> hits;
+            string? cooldownIso;
+            lock (_lock)
+            {
+                hits = new List<string>(_hits.Count);
+                foreach (var t in _hits) hits.Add(t.ToUniversalTime().ToString("o"));
+                cooldownIso = _cooldownEndsAt?.ToUniversalTime().ToString("o");
+            }
+
+            var payload = new ModerationCounterPersistedState
+            {
+                Hits = hits,
+                CooldownEndsAt = cooldownIso,
+            };
+            var path = _persistencePath;
+
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    var dir = Path.GetDirectoryName(path);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
+                    var json = JsonConvert.SerializeObject(payload, Formatting.Indented);
+                    File.WriteAllText(path, json);
+                }
+                catch
+                {
+                    // Best-effort, same as ModerationLog.
+                }
+            });
         }
     }
 }

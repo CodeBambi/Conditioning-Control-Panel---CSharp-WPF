@@ -1019,6 +1019,10 @@ namespace ConditioningControlPanel
             // RecordHit is called from each ModerationGuard refusal site (AiService,
             // LocalAiService, KeywordTriggerService, QuizService).
             ModerationCounter = new Services.Moderation.ModerationCounter();
+            // P2-H8: hydrate counter + cooldown from disk so a restart doesn't bypass
+            // an in-flight cooldown. Best-effort; logs nothing on a missing file.
+            try { ModerationCounter.LoadFromDisk(); }
+            catch (Exception ex) { Logger?.Debug("ModerationCounter.LoadFromDisk failed: {Error}", ex.Message); }
 
             Ai = new AiServiceStrategy();
             Commands = new AiCommandService();
