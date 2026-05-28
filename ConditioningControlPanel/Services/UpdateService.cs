@@ -20,53 +20,42 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.0.1";
+        public const string AppVersion = "6.0.2";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.0.1 — Going Deeper
-
-A small follow-up to v6.0.0 focused on Deeper editor ergonomics:
-click-and-drag scrubbing, a sidebar items list, drag-and-drop loading,
-a timestamp ruler, and a handful of polish fixes from the field.
-
-✨ FEATURES
-- Deeper editor + player: drag-and-drop a media file
-  (mp3/wav/m4a/aac/flac/ogg/mp4/webm/mkv/mov/avi/m4v) to load it, or a
-  *.ccpenh.json to open that project. Sidecar / embedded / library
-  matches still get auto-detected.
-- Deeper editor: sidebar Items list - every rule, region, haptic, and
-  effect rolled up into one panel with Time/Kind sort. Two-way selection
-  sync with the timeline; per-row × button deletes the item; double-click
-  seeks to it.
-- Deeper editor: timestamp ruler across the top of the timeline with
-  adaptive tick intervals (auto-tunes from 0.1s up to 1h as you zoom).
-- Deeper editor: click-and-drag scrubbing on the timeline (any video
-  player feel). Shift+drag still creates a region; Ctrl+drag is now the
-  rubber-band for multi-select.
+        public const string CurrentPatchNotes = @"v6.0.2 — Deeper Drop
 
 🎨 UI/UX
-- Deeper editor: small region / haptic / effect bands default to
-  grab-and-move instead of edge-resize, so a tiny band can be
-  repositioned without accidentally getting stretched. Wider bands keep
-  edge-resize on the actual edges.
-- Deeper editor: regions and haptics get a minimum 8px visual width so
-  very short ones stay clickable at any zoom.
-- Avatar Exclusives menu: click toggles like a real dropdown, hover is
-  stickier so the panel doesn't slip away mid-mouse-move.
+- Color emojis everywhere — bundled Twemoji SVG set replaces WPF's
+  monochrome silhouettes across nav, cards, popups, premium gates,
+  section headers, Remote Control emote presets, and more.
+- Blink Trainer ""Revoke"" button shortened + smaller font.
+
+🔒 HARDENING
+- Ongoing AI safety hardening across moderation, prompt validation,
+  and output filtering.
+
+✨ FEATURES
+- Webcam tracking toggle above browser + auto-prompt on bound
+  enhancements.
 
 🔧 BUG FIXES
-- Avatar idle-speech slider: changing the interval now updates the
-  running timer immediately instead of waiting for an unrelated reset.
-- Deeper editor: the dotted rubber-band selection rectangle no longer
-  leaks on the timeline when mouse capture is stolen mid-drag
-  (Alt+Tab, popup focus, etc.).
-- Mock haptic toast no longer leaks; render-thread failures now exit
-  hard instead of leaving a zombie process.
-
-Season: Going Deeper";
+- Main window now reliably comes to front on launch.
+- Avatar tube now renders on first paint instead of requiring a
+  window move.
+- Plugged small lambda/timer leaks in the Deeper enhancement player.
+- Pause-session tooltip showed literal \n instead of a newline.
+- Blink Trainer remaining time wrapped past 60min.
+- Stats merge order: SyncCurrentStreak now runs before Save.
+- Deeper player + editor fullscreen no longer orphans a window on
+  partial exit.
+- Banner text wrapping in prompt editor dialogs.
+- V2 sync now pulls cloud stats down into local AchievementProgress.
+- Exclusives sub-items now switch tabs after click.
+- Deeper editor + player WebView fullscreen reparent crash.";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
