@@ -286,12 +286,9 @@ namespace ConditioningControlPanel.Views.Deeper
             TryAutoLoadEnhancement(path);
         }
 
-        private static bool IsLocalVideoFile(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path)) return false;
-            var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
-            return ext is ".mp4" or ".webm" or ".mkv" or ".mov" or ".avi" or ".m4v";
-        }
+        // Canonical definition lives in EnhancementResolver so the player and
+        // the video bridge agree on what counts as a local video file.
+        private static bool IsLocalVideoFile(string path) => EnhancementResolver.IsLocalVideoFile(path);
 
         // Local video playback path: navigate the WebView2 directly to the
         // file:// URL of the chosen file. Edge's built-in media viewer renders
@@ -383,65 +380,63 @@ namespace ConditioningControlPanel.Views.Deeper
             BtnCreateNewEnhancement.Visibility = Visibility.Collapsed;
             try
             {
-                if (EnhancementMediaBundler.IsSupportedExtension(mediaPath)
-                    && EnhancementMediaBundler.TryExtract(mediaPath, out var embedded, out _)
-                    && embedded != null)
+                // Detection ladder (embedded -> sidecar -> library) now lives in
+                // the shared EnhancementResolver so the mandatory/asset video
+                // bridge resolves identically. The player keeps the tier-specific
+                // side effects (library promotion, badge, banner, "create new"
+                // fallback). ResolveForLocalMedia may throw on IO errors; the
+                // existing outer catch handles that exactly as before (button
+                // stays collapsed, no status set).
+                var resolved = EnhancementResolver.ResolveForLocalMedia(mediaPath);
+                switch (resolved.Source)
                 {
-                    var mediaType = IsLocalVideoFile(mediaPath)
-                        ? Models.Deeper.MediaTypes.Video
-                        : Models.Deeper.MediaTypes.Audio;
-                    // Auto-promote: if the library doesn't already have a
-                    // matching entry for this media, save the embedded JSON
-                    // into the user's library so the project survives next time
-                    // the file is opened and shows up in the Deeper tab.
-                    var existing = App.EnhancementLibrary?.FindMatch(mediaPath, mediaType);
-                    if (existing == null)
+                    case EnhancementDiscoverySource.Embedded:
                     {
-                        var saved = App.EnhancementLibrary?.PromoteToLibrary(embedded, mediaPath);
-                        if (!string.IsNullOrEmpty(saved))
+                        var embedded = resolved.Enhancement!;
+                        var mediaType = IsLocalVideoFile(mediaPath)
+                            ? Models.Deeper.MediaTypes.Video
+                            : Models.Deeper.MediaTypes.Audio;
+                        // Auto-promote: if the library doesn't already have a
+                        // matching entry for this media, save the embedded JSON
+                        // into the user's library so the project survives next time
+                        // the file is opened and shows up in the Deeper tab.
+                        var existing = App.EnhancementLibrary?.FindMatch(mediaPath, mediaType);
+                        if (existing == null)
                         {
-                            _lastDiscoverySource = DiscoverySource.PromotedFromEmbedded;
-                            _host.LoadFromFile(saved!);
-                            ShowPromotedBanner(Path.GetFileName(saved!));
-                            return;
+                            var saved = App.EnhancementLibrary?.PromoteToLibrary(embedded, mediaPath);
+                            if (!string.IsNullOrEmpty(saved))
+                            {
+                                _lastDiscoverySource = DiscoverySource.PromotedFromEmbedded;
+                                _host.LoadFromFile(saved!);
+                                ShowPromotedBanner(Path.GetFileName(saved!));
+                                return;
+                            }
+                            // Promotion failed (e.g. read-only library) — fall back
+                            // to the original in-memory load so the user still gets
+                            // their enhancement this session.
                         }
-                        // Promotion failed (e.g. read-only library) — fall back
-                        // to the original in-memory load so the user still gets
-                        // their enhancement this session.
-                    }
-                    _lastDiscoverySource = DiscoverySource.Embedded;
-                    _host.LoadFromMemory(embedded, "embedded:" + Path.GetFileName(mediaPath));
-                    return;
-                }
-
-                var dir = Path.GetDirectoryName(mediaPath);
-                var baseName = Path.GetFileNameWithoutExtension(mediaPath);
-                if (!string.IsNullOrEmpty(dir) && !string.IsNullOrEmpty(baseName))
-                {
-                    var candidate = Path.Combine(dir, baseName + ".ccpenh.json");
-                    if (File.Exists(candidate))
-                    {
-                        _lastDiscoverySource = DiscoverySource.Sidecar;
-                        _host.LoadFromFile(candidate);
+                        _lastDiscoverySource = DiscoverySource.Embedded;
+                        _host.LoadFromMemory(embedded, "embedded:" + Path.GetFileName(mediaPath));
                         return;
                     }
-                }
 
-                var mediaTypeForMatch = IsLocalVideoFile(mediaPath)
-                    ? Models.Deeper.MediaTypes.Video
-                    : Models.Deeper.MediaTypes.Audio;
-                var match = App.EnhancementLibrary?.FindMatch(mediaPath, mediaTypeForMatch);
-                if (match != null)
-                {
-                    _lastDiscoverySource = DiscoverySource.Library;
-                    _host.LoadFromFile(match.FilePath);
-                    return;
-                }
+                    case EnhancementDiscoverySource.Sidecar:
+                        _lastDiscoverySource = DiscoverySource.Sidecar;
+                        _host.LoadFromFile(resolved.FilePath!);
+                        return;
 
-                // Nothing found. Surface the "Create new enhancement..." button
-                // so the user can author against this media in the editor.
-                BtnCreateNewEnhancement.Visibility = Visibility.Visible;
-                TxtStatus.Text = Loc.Get("deeper_player_no_enh_for_media");
+                    case EnhancementDiscoverySource.Library:
+                        _lastDiscoverySource = DiscoverySource.Library;
+                        _host.LoadFromFile(resolved.FilePath!);
+                        return;
+
+                    default:
+                        // Nothing found. Surface the "Create new enhancement..."
+                        // button so the user can author against this media.
+                        BtnCreateNewEnhancement.Visibility = Visibility.Visible;
+                        TxtStatus.Text = Loc.Get("deeper_player_no_enh_for_media");
+                        return;
+                }
             }
             catch (Exception ex)
             {
