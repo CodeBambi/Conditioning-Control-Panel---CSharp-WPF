@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using System.Windows.Media;
 
 namespace ConditioningControlPanel.Services.Deeper
 {
@@ -15,6 +16,12 @@ namespace ConditioningControlPanel.Services.Deeper
     {
         private readonly VideoService _video;
         private bool _attached;
+
+        // Display aspect ratio (w/h, SAR-corrected) of the playing video, cached
+        // once LibVLC reports a non-zero size. -1 = not known yet. The bridge
+        // builds a fresh time source per video, so this never goes stale across
+        // videos.
+        private double _cachedAspect = -1;
 
         public event Action<double>? PlaybackTimeChanged;
 
@@ -78,9 +85,102 @@ namespace ConditioningControlPanel.Services.Deeper
             {
                 var w = _video.PrimaryVideoWindow;
                 if (w == null) return Rect.Empty;
-                return new Rect(w.Left, w.Top, w.Width, w.Height);
+                if (w.ActualWidth <= 0 || w.ActualHeight <= 0) return Rect.Empty;
+
+                // The video window is borderless + maximized, so its
+                // Left/Top/Width/Height report stale restore bounds (~400x300 in
+                // the corner). Derive the true on-screen client rect in DIPs from
+                // the rendered size (ActualWidth/Height are already DIPs) and the
+                // PointToScreen origin (device px -> DIPs via this window's DPI).
+                // This also avoids the screen-bounds-vs-working-area ambiguity a
+                // maximized borderless window has.
+                var dpi = VisualTreeHelper.GetDpi(w);
+                var sx = dpi.DpiScaleX <= 0 ? 1.0 : dpi.DpiScaleX;
+                var sy = dpi.DpiScaleY <= 0 ? 1.0 : dpi.DpiScaleY;
+                var originPx = w.PointToScreen(new Point(0, 0));
+                var outer = new Rect(originPx.X / sx, originPx.Y / sy, w.ActualWidth, w.ActualHeight);
+
+                var aspect = GetVideoAspect();
+                if (aspect <= 0) return outer; // native size not known yet -> full area
+
+                return FitContain(outer, aspect);
             }
             catch { return Rect.Empty; }
+        }
+
+        /// <summary>
+        /// Contain-fit (letterbox/pillarbox) the content of the given aspect
+        /// ratio inside <paramref name="outer"/>, returning the rendered picture
+        /// box. Pure helper — the one piece reusable for the browser path later.
+        /// </summary>
+        internal static Rect FitContain(Rect outer, double contentAspect)
+        {
+            if (outer.Width <= 0 || outer.Height <= 0 || contentAspect <= 0) return outer;
+            var outerAspect = outer.Width / outer.Height;
+            double w, h, offX, offY;
+            if (contentAspect >= outerAspect)
+            {
+                // Wider than the frame -> full width, bars top & bottom.
+                w = outer.Width;
+                h = outer.Width / contentAspect;
+                offX = 0;
+                offY = (outer.Height - h) / 2.0;
+            }
+            else
+            {
+                // Narrower than the frame -> full height, bars left & right.
+                h = outer.Height;
+                w = outer.Height * contentAspect;
+                offX = (outer.Width - w) / 2.0;
+                offY = 0;
+            }
+            return new Rect(outer.X + offX, outer.Y + offY, w, h);
+        }
+
+        // Lazily resolve the display aspect ratio of the playing video. Native
+        // size is NOT valid at VideoStarted (fires before first frame), so this
+        // returns 0 until LibVLC has a frame; GetVideoRect then falls back to the
+        // full-screen rect. Cached once known.
+        private double GetVideoAspect()
+        {
+            if (_cachedAspect > 0) return _cachedAspect;
+            try
+            {
+                var mp = _video.PrimaryMediaPlayer;
+                if (mp == null) return 0;
+
+                // Preferred: SAR-corrected display aspect from the video track.
+                var media = mp.Media;
+                if (media?.Tracks != null)
+                {
+                    foreach (var track in media.Tracks)
+                    {
+                        if (track.TrackType != LibVLCSharp.Shared.TrackType.Video) continue;
+                        var v = track.Data.Video;
+                        if (v.Width == 0 || v.Height == 0) continue;
+                        double num = v.Width * (v.SarNum > 0 ? v.SarNum : 1u);
+                        double den = v.Height * (v.SarDen > 0 ? v.SarDen : 1u);
+                        if (num > 0 && den > 0)
+                        {
+                            _cachedAspect = num / den;
+                            return _cachedAspect;
+                        }
+                    }
+                }
+
+                // Fallback: decoded output size (square-pixel assumption).
+                uint px = 0, py = 0;
+                if (mp.Size(0, ref px, ref py) && px > 0 && py > 0)
+                {
+                    _cachedAspect = (double)px / py;
+                    return _cachedAspect;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("VideoServiceTimeSource.GetVideoAspect error: {Error}", ex.Message);
+            }
+            return 0;
         }
 
         public void Dispose() => Detach();
