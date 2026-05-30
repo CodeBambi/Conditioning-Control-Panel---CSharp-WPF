@@ -3753,6 +3753,17 @@ namespace ConditioningControlPanel.Models
             set { _browserEnhanceIfPossible = value; OnPropertyChanged(); }
         }
 
+        // Apply matching .ccpenh.json enhancements to mandatory + asset-folder
+        // videos (the VideoService.PlayVideo path). Default OFF — opt-in, mirrors
+        // BrowserEnhanceIfPossible but conservative since it drives effects over
+        // mandatory video playback.
+        private bool _videoEnhanceIfPossible = false;
+        public bool VideoEnhanceIfPossible
+        {
+            get => _videoEnhanceIfPossible;
+            set { _videoEnhanceIfPossible = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Migrations

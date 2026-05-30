@@ -133,6 +133,12 @@ namespace ConditioningControlPanel
         public static string UserAssetsPath => Path.Combine(UserDataPath, "assets");
 
         /// <summary>
+        /// Base URL for hosted tutorial pages. "Watch full tutorial" links in the
+        /// video help system resolve against this. Placeholder - confirm before release.
+        /// </summary>
+        public const string TutorialBaseUrl = "https://cclabs.app/docs/tutorials/";
+
+        /// <summary>
         /// Effective assets path - returns custom path if set, otherwise default UserAssetsPath.
         /// Use this for all asset loading (images, videos).
         /// </summary>
@@ -260,6 +266,7 @@ namespace ConditioningControlPanel
         public static MindWipeService MindWipe { get; private set; } = null!;
         public static BrainDrainService BrainDrain { get; private set; } = null!;
         public static AchievementService Achievements { get; private set; } = null!;
+        public static GamificationBridge? Gamification { get; private set; }
         public static QuestDefinitionService QuestDefinitions { get; private set; } = null!;
         public static QuestService Quests { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
@@ -319,6 +326,10 @@ namespace ConditioningControlPanel
         // Bridge that ties dashboard browser navigation to the local enhancement
         // library; created lazily by MainWindow when the WebView2 spins up.
         public static Services.Deeper.BrowserEnhancementBridge? BrowserEnhanceBridge { get; set; }
+        // Bridge that ties VideoService playback (mandatory + asset-folder videos)
+        // to the enhancement runtime. Owns its own host; gated by
+        // AppSettings.VideoEnhanceIfPossible (default off).
+        public static Services.Deeper.VideoEnhancementBridge? VideoEnhanceBridge { get; private set; }
 
         /// <summary>
         /// Whether user is logged in with Patreon, Discord, or email (required for progression tracking).
@@ -982,6 +993,9 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.75, "Loading achievements...");
             Achievements = new AchievementService();
+            // Single seam between feature events and achievement tracking. Constructed
+            // here; Start() is called later in OnStartup once feature services exist.
+            Gamification = new GamificationBridge();
             QuestDefinitions = new QuestDefinitionService();
             _ = QuestDefinitions.InitializeAsync(); // Fire and forget - will load from cache first
             Quests = new QuestService();
@@ -1140,6 +1154,13 @@ namespace ConditioningControlPanel
             DeeperFetcher = new Services.Deeper.EnhancementFetcher();
             DeeperBrowserDiscovery = new Services.Deeper.BrowserAutoDiscovery(DeeperFetcher, DeeperHost);
 
+            // Mandatory + asset-folder video enhancement runtime. Subscribes to
+            // VideoService start/end and binds the engine to the primary player
+            // when the played file has a matching .ccpenh.json. Owns its own host
+            // (no conflict with the Deeper player on DeeperHost). No-ops unless
+            // AppSettings.VideoEnhanceIfPossible is on (default off).
+            VideoEnhanceBridge = new Services.Deeper.VideoEnhancementBridge(Video);
+
             // Initialize lockdown service (ephemeral — not persisted). Recover from a
             // prior run that was killed mid-lockdown so the panic key isn't stuck off.
             LockdownService.RecoverIfNeeded();
@@ -1181,6 +1202,11 @@ namespace ConditioningControlPanel
             // Check daily maintenance achievement (7 days streak)
             Achievements.CheckDailyMaintenance();
             Logger.Information("Checked daily maintenance achievement");
+
+            // Start the gamification bridge now that all feature services it subscribes
+            // to (Mods, Companion, KeywordTriggers, RemoteControl, Webcam, BlinkTrainer,
+            // Lockdown) have been constructed above.
+            Gamification?.Start();
 
             // Update quest streak tracking
             Quests?.TrackStreak(Achievements.Progress.ConsecutiveDays);
