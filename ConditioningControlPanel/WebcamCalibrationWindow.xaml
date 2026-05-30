@@ -50,8 +50,32 @@
         </Canvas>
 
         <StackPanel x:Name="StatusPanel" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
-            <TextBlock x:Name="TxtTitle" Text="Webcam Calibration" Foreground="White"
-                       FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock x:Name="TxtTitle" Text="Webcam Calibration" Foreground="White"
+                           FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+                <!-- Inline "?" (HelpButtonStyle lives only in MainWindow, not reachable
+                     from this top-level Window). Always visible, even when gated/locked. -->
+                <Button x:Name="BtnCalibrationHelp" Content="?" Click="BtnCalibrationHelp_Click"
+                        Width="24" Height="24" Margin="12,0,0,0" VerticalAlignment="Center"
+                        Cursor="Help" Foreground="White" Background="Transparent"
+                        BorderBrush="#FF69B4" BorderThickness="1" FontWeight="Bold" FontSize="12"
+                        ToolTip="Calibration help">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="bd" Property="Background" Value="#FF69B4"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </StackPanel>
             <TextBlock x:Name="TxtStatus" Text="Look at the pink dot. Press ESC to cancel."
                        Foreground="#AAAAAA" FontSize="14" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             <TextBlock x:Name="TxtProgress" Text="" Foreground="#FF69B4" FontSize="13"

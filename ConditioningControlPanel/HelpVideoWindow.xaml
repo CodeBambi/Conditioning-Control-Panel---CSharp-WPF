@@ -1,0 +1,131 @@
+<Window x:Class="ConditioningControlPanel.HelpVideoWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Localization"
+        Title="Help"
+        Width="480"
+        SizeToContent="Height"
+        MinWidth="480"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource DarkerBgBrush}"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        ShowInTaskbar="False">
+
+    <Border BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Titlebar -->
+            <Border Grid.Row="0"
+                    Background="{DynamicResource ElevatedSurfaceBrush}"
+                    BorderBrush="{DynamicResource GlassBorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    MouseLeftButtonDown="Titlebar_MouseLeftButtonDown">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Icon (glyph) -->
+                    <Border Grid.Column="0"
+                            Width="28" Height="28"
+                            Margin="14,10,10,10"
+                            CornerRadius="6"
+                            Background="{DynamicResource TransparentPinkBrush}">
+                        <TextBlock x:Name="TxtGlyph"
+                                   FontSize="16"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource PinkBrush}"/>
+                    </Border>
+
+                    <!-- Title -->
+                    <TextBlock Grid.Column="1"
+                               x:Name="TxtTitle"
+                               Text="Help"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource PinkBrush}"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"/>
+
+                    <!-- Close button -->
+                    <Button Grid.Column="2"
+                            x:Name="BtnClose"
+                            Click="BtnClose_Click"
+                            Cursor="Hand"
+                            Width="38" Height="38"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource TextMutedBrush}"
+                            ToolTip="{loc:Str tooltip_close_escape}">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="border"
+                                        Background="{TemplateBinding Background}"
+                                        CornerRadius="0">
+                                    <TextBlock Text="✕"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               FontSize="14"
+                                               Foreground="{TemplateBinding Foreground}"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="border" Property="Background" Value="{DynamicResource DangerBrush}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Video surface (collapsed when no clip / LibVLC unavailable: fail soft) -->
+            <Border x:Name="VideoContainer"
+                    Grid.Row="1"
+                    Height="270"
+                    Background="#000000"
+                    Visibility="Collapsed">
+                <!-- VideoView added programmatically -->
+            </Border>
+
+            <!-- Caption (below the clip) -->
+            <TextBlock x:Name="TxtCaption"
+                       Grid.Row="2"
+                       Margin="16,14,16,8"
+                       Foreground="{DynamicResource TextLightBrush}"
+                       FontSize="13"
+                       TextWrapping="Wrap"
+                       LineHeight="19"
+                       Visibility="Collapsed"/>
+
+            <!-- Watch full tutorial (hidden when no URL) -->
+            <Button x:Name="BtnFullTutorial"
+                    Grid.Row="3"
+                    Margin="16,4,16,16"
+                    HorizontalAlignment="Left"
+                    Padding="14,7"
+                    Cursor="Hand"
+                    Click="BtnFullTutorial_Click"
+                    Background="{DynamicResource TransparentPinkBrush}"
+                    Foreground="{DynamicResource PinkBrush}"
+                    BorderBrush="{DynamicResource PinkBrush}"
+                    BorderThickness="1"
+                    FontSize="13"
+                    FontWeight="SemiBold"
+                    Content="{loc:Str help_video_watch_full_tutorial}"
+                    Visibility="Collapsed"/>
+        </Grid>
+    </Border>
+</Window>

@@ -305,6 +305,13 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Bundled tutorial video clips (short, low-res, muted loops) played by
+         HelpVideoWindow. File-based access via LibVLC requires disk copy. -->
+    <Content Include="Resources\tutorial_videos\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -331,12 +338,14 @@
       <AwarenessPresetFiles Include="$(ProjectDir)Resources\AwarenessPresets\**\*" />
       <DeeperDemoFiles Include="$(ProjectDir)Resources\DeeperDemos\**\*" />
       <SpiralFiles Include="$(ProjectDir)Spirals\**\*" />
+      <TutorialVideoFiles Include="$(ProjectDir)Resources\tutorial_videos\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(SoundFiles)" DestinationFolder="$(PublishDir)Resources\sounds\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SubAudioFiles)" DestinationFolder="$(PublishDir)Resources\sub_audio\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(AwarenessPresetFiles)" DestinationFolder="$(PublishDir)Resources\AwarenessPresets\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(DeeperDemoFiles)" DestinationFolder="$(PublishDir)Resources\DeeperDemos\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SpiralFiles)" DestinationFolder="$(PublishDir)Spirals\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(TutorialVideoFiles)" DestinationFolder="$(PublishDir)Resources\tutorial_videos\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Message Importance="High" Text="Copied content files to publish folder" />
   </Target>
 

@@ -271,6 +271,31 @@ namespace ConditioningControlPanel.Services
                              "images that appear in screen corners during the session."
             },
 
+            ["SessionEditor"] = new HelpContent
+            {
+                SectionId = "SessionEditor",
+                ClipFile = "timeline_editor.mp4",
+                CaptionKey = "help_caption_timeline_editor",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
+                Icon = "🎚", // 🎚 level slider - connotes timeline tracks
+                Title = "Session Editor",
+                WhatItDoes = "Build your own conditioning session on a timeline. Drag features onto the track and " +
+                             "set exactly when each effect starts, how long it runs, and how it layers with the rest, " +
+                             "then save it to replay or share.",
+                Tips = new List<string>
+                {
+                    "Drag a feature from the palette onto the timeline to add it, then drag its edges to set duration",
+                    "Stack effects across overlapping time ranges to layer them during the session",
+                    "Click an event to open its settings and fine-tune intensity and options",
+                    "Set the overall session length first - events are positioned relative to it",
+                    "Save your session to replay it later, or export the .session.json to share it"
+                },
+                HowItWorks = "The editor stores a session as an ordered list of timed events. Each event references a " +
+                             "feature plus a start time, duration, and its own settings. On playback the session engine " +
+                             "fires each event at its start offset and stops it after its duration, reproducing the exact " +
+                             "arrangement you laid out."
+            },
+
             // ==================== PROGRESSION TAB ====================
 
             ["Unlockables"] = new HelpContent
@@ -800,6 +825,9 @@ namespace ConditioningControlPanel.Services
             ["KeywordTriggers"] = new HelpContent
             {
                 SectionId = "KeywordTriggers",
+                ClipFile = "keyword_triggers.mp4",
+                CaptionKey = "help_caption_keyword_triggers",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\u2328",
                 Title = "Keyword Triggers",
                 WhatItDoes = "Your everyday typing becomes part of your conditioning. Keywords you encounter while browsing, " +
@@ -1079,6 +1107,9 @@ namespace ConditioningControlPanel.Services
             ["Modding"] = new HelpContent
             {
                 SectionId = "Modding",
+                ClipFile = "mod_creator.mp4",
+                CaptionKey = "help_caption_mod_creator",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDD27",
                 Title = "Modding Guide",
                 WhatItDoes = "Create custom mods that completely transform the app experience. " +
@@ -1126,6 +1157,31 @@ namespace ConditioningControlPanel.Services
                              "coordinates via the polynomial fit captured during 16-point calibration. Game targets use " +
                              "an enlarged hitbox (\u00d73 of their visual size) for forgiveness, and dwell timers ensure " +
                              "a quick glance doesn't count as a deliberate look."
+            },
+
+            ["WebcamCalibration"] = new HelpContent
+            {
+                SectionId = "WebcamCalibration",
+                ClipFile = "calibration.mp4",
+                CaptionKey = "help_caption_calibration",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
+                Icon = "\ud83c\udfaf", // \ud83c\udfaf target - "look at the dot"
+                Title = "Webcam Calibration",
+                WhatItDoes = "A one-time setup that teaches the app where you're looking. You follow a pink dot " +
+                             "through 16 points so it can map your eye position to the screen. Frames are processed " +
+                             "locally - nothing is recorded or uploaded.",
+                Tips = new List<string>
+                {
+                    "Calibrate in even, frontal lighting - hard side-light from a window throws iris detection off",
+                    "Sit roughly 50-70 cm from the camera so your whole face is comfortably in frame",
+                    "Hold your head fairly still and move your eyes to follow the dot",
+                    "Re-run calibration if you change seating, monitor height, or move the laptop - it's posture-specific",
+                    "Press ESC at any time to cancel and start over"
+                },
+                HowItWorks = "MediaPipe FaceMesh tracks your facial landmarks on each local webcam frame. During " +
+                             "calibration you fixate 16 known on-screen points; the app records the iris position for " +
+                             "each and fits a polynomial mapping from eye position to screen coordinates that the gaze " +
+                             "games then use."
             },
 
             ["GazeMinigame"] = new HelpContent

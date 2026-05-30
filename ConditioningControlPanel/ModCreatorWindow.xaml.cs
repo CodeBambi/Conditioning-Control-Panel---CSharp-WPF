@@ -226,7 +226,18 @@ namespace ConditioningControlPanel
         private void BtnMinimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
         private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
 
-        private void BtnHelp_Click(object sender, RoutedEventArgs e) => LaunchTutorial();
+        private void BtnHelp_Click(object sender, RoutedEventArgs e)
+        {
+            // Prefer the tutorial video when the topic ships a clip; otherwise fall
+            // back to the existing coach-mark tutorial.
+            var content = Services.HelpContentService.GetContent("Modding");
+            if (content.HasClip)
+            {
+                HelpVideoWindow.Show(content, this);
+                return;
+            }
+            LaunchTutorial();
+        }
 
         private void LaunchTutorial()
         {

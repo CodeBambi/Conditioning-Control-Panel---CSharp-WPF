@@ -178,6 +178,13 @@ namespace ConditioningControlPanel
             Close();
         }
 
+        private void BtnCalibrationHelp_Click(object sender, RoutedEventArgs e)
+        {
+            // topmost: true so the popup layers above this full-screen calibration window.
+            var content = Services.HelpContentService.GetContent("WebcamCalibration");
+            HelpVideoWindow.Show(content, this, topmost: true);
+        }
+
         private void OnRawIris(double dx, double dy)
         {
             var pose = _lastPose;

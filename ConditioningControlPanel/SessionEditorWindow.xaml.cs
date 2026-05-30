@@ -118,6 +118,14 @@ namespace ConditioningControlPanel
 
         private void BtnHelp_Click(object sender, RoutedEventArgs e)
         {
+            // Prefer the tutorial video when the topic ships a clip; otherwise fall
+            // back to the existing coach-mark overlay.
+            var content = Services.HelpContentService.GetContent("SessionEditor");
+            if (content.HasClip)
+            {
+                HelpVideoWindow.Show(content, this);
+                return;
+            }
             TutorialOverlay.Visibility = Visibility.Visible;
         }
 

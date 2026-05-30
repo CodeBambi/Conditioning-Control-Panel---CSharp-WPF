@@ -231,6 +231,16 @@ namespace ConditioningControlPanel.Features
         {
             // Prevent the help click from also opening the feature popup.
             e.Handled = true;
+
+            // When the topic ships a tutorial clip, click opens the video popup.
+            // Otherwise behaviour is unchanged - the rich hover tooltip still applies.
+            var id = HelpSectionId;
+            if (string.IsNullOrWhiteSpace(id)) return;
+            var content = Services.HelpContentService.GetContent(id);
+            if (content.HasClip)
+            {
+                HelpVideoWindow.Show(content, Window.GetWindow(this));
+            }
         }
 
         private static bool IsDescendantOf(DependencyObject node, DependencyObject ancestor)
