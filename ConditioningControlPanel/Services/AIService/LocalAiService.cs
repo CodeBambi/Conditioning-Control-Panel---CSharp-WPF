@@ -46,6 +46,27 @@ namespace ConditioningControlPanel.Services.AIService
         public bool IsAvailable => true;
         public int DailyRequestsRemaining => -1;
 
+        // Number of user/assistant turns seeded from disk at construction (a prior
+        // session's conversation). Non-zero means persistent memory is in play.
+        private int _restoredTurnCount;
+        // Signal she_remembers at most once per session.
+        private bool _memoryRecallSignaled;
+
+        /// <summary>
+        /// Raised once per session when the local companion produces a reply while the
+        /// chat history contains turns restored from a previous session — i.e. persistent
+        /// memory actually surfacing across launches. Static because the provider instance
+        /// is owned by the AI strategy; GamificationBridge subscribes for the app lifetime.
+        /// (Cloud AiService has no cross-session memory, so this is local-AI only.)
+        /// </summary>
+        public static event EventHandler? PersistentMemoryRecalled;
+
+        private static void RaisePersistentMemoryRecalled()
+        {
+            try { PersistentMemoryRecalled?.Invoke(null, EventArgs.Empty); }
+            catch (Exception ex) { App.Logger?.Debug("PersistentMemoryRecalled subscriber error: {Error}", ex.Message); }
+        }
+
         public LocalAiService()
         {
             _bambiSprite = new BambiSprite();
@@ -99,6 +120,10 @@ namespace ConditioningControlPanel.Services.AIService
                     if (t.Role != "user" && t.Role != "assistant") continue;
                     _messages.Add(new ChatMessage(t.Role, t.Content));
                 }
+
+                // At construction _messages holds only restored turns (system/enrichment
+                // are inserted later, per request), so this is the prior-session turn count.
+                _restoredTurnCount = _messages.Count;
             }
             catch (Exception ex)
             {
@@ -519,6 +544,15 @@ namespace ConditioningControlPanel.Services.AIService
                 // Persist asynchronously so chat latency isn't impacted by disk I/O.
                 // Runs only after output moderation passed (P2/H5).
                 _ = Task.Run(PersistHistory);
+
+                // she_remembers: a reply was produced while turns restored from a previous
+                // session are in context — persistent memory surfacing across launches.
+                // Signal once per session; GamificationBridge entitlement-gates the unlock.
+                if (_restoredTurnCount > 0 && !_memoryRecallSignaled)
+                {
+                    _memoryRecallSignaled = true;
+                    RaisePersistentMemoryRecalled();
+                }
 
                 if (_currentCommands.Count > 0 && App.Commands != null)
                 {

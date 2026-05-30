@@ -127,10 +127,66 @@ public class AchievementProgress
     // ========== COMBINATION TRACKING ==========
     /// <summary>Has had Strict Lock + No Panic + Pink Filter all active</summary>
     public bool HasTotalLockdown { get; set; }
-    
+
     /// <summary>Has had Bubbles + Bouncing Text + Spiral all active</summary>
     public bool HasSystemOverload { get; set; }
-    
+
+    // ========== GAMIFICATION BRIDGE STATS (achievements v2) ==========
+    // Persisted lifetime counters fed by GamificationBridge subscriptions.
+
+    /// <summary>Deeper enhancements played to completion (Phase 2)</summary>
+    public int EnhancementsPlayed { get; set; }
+
+    /// <summary>Total minutes spent in the Deeper player (Phase 2)</summary>
+    public double DeeperMinutes { get; set; }
+
+    /// <summary>Enhancements built/saved in the Deeper editor</summary>
+    public int EnhancementsBuilt { get; set; }
+
+    /// <summary>Mods installed (proxied by first activation today)</summary>
+    public int ModsInstalled { get; set; }
+
+    /// <summary>Distinct mod ids ever activated (for the Curator count)</summary>
+    public HashSet<string> ActivatedModIds { get; set; } = new();
+
+    /// <summary>Distinct community (non-builtin) mod ids activated (for Community Supported)</summary>
+    public HashSet<string> CommunityModIds { get; set; } = new();
+
+    /// <summary>Quiz category ids the user has perfected (for Honor Roll)</summary>
+    public HashSet<string> PerfectedQuizCategories { get; set; } = new();
+
+    /// <summary>Lifetime keyword triggers fired</summary>
+    public int KeywordTriggersFired { get; set; }
+
+    /// <summary>Messages the user has sent to the companion</summary>
+    public int CompanionMessages { get; set; }
+
+    /// <summary>Quizzes passed (Phase 2)</summary>
+    public int QuizzesPassed { get; set; }
+
+    /// <summary>Consecutive quizzes failed; resets to 0 on a pass (Phase 2)</summary>
+    public int QuizFailStreak { get; set; }
+
+    /// <summary>Blinks logged while the Blink Trainer is running</summary>
+    public int BlinkTrainerBlinks { get; set; }
+
+    /// <summary>Bubbles/flashes popped by gaze dwell (Phase 2 — needs GazePopped event)</summary>
+    public int GazePops { get; set; }
+
+    // ----- transient per-run trackers (not persisted) -----
+
+    /// <summary>Remote commands received in the current remote session</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public int RemoteCommandsThisSession { get; set; }
+
+    /// <summary>Distinct Deeper trigger types fired during the current play (Phase 2)</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public HashSet<string> DistinctTriggerTypesThisPlay { get; set; } = new();
+
+    /// <summary>When the current lockdown began (for the 60-minute achievement)</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public DateTime? LockdownStartTime { get; set; }
+
     // ========== HELPER METHODS ==========
     
     public bool IsUnlocked(string achievementId) => UnlockedAchievements.Contains(achievementId);

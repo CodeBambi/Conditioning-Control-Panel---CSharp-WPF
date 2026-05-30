@@ -5254,6 +5254,11 @@ namespace ConditioningControlPanel
             TxtUserInput.Text = "";
             ToggleInputPanel();
 
+            // EMIT hook for GamificationBridge companion-chat achievements. Fired once
+            // per genuine user send (past the cooldown gate, non-empty input), before
+            // the moderation/AI path so it counts the attempt regardless of outcome.
+            App.Companion?.NotifyUserMessageSent();
+
             // P2/H5: user input is NOT added to chat history yet. If the moderation
             // guard refuses below we throw the input away — the prohibited text must
             // not remain visible in the in-memory history view. AddToChatHistory is

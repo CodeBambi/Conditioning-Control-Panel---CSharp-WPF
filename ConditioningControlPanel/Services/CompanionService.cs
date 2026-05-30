@@ -73,6 +73,16 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<double>? XPDrained; // For Brain Parasite
         public event EventHandler<(CompanionId Companion, double Amount, double Modifier)>? XPAwarded;
 
+        /// <summary>
+        /// Raised when the user sends a chat message to the companion. EMIT hook for
+        /// GamificationBridge (companion-chat achievements). Fired from the chat-send
+        /// handler in AvatarTubeWindow; carries no payload (the bridge just counts).
+        /// </summary>
+        public event EventHandler? UserMessageSent;
+
+        /// <summary>Notify subscribers that the user sent a companion chat message.</summary>
+        public void NotifyUserMessageSent() => UserMessageSent?.Invoke(this, EventArgs.Empty);
+
         // XP Drain timer (for Brain Parasite / Brainwashed Slavedoll)
         private DispatcherTimer? _drainTimer;
         private const double DRAIN_XP_PER_TICK = 3.0;

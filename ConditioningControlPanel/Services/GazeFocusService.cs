@@ -78,6 +78,9 @@ public class GazeFocusService : IDisposable
     /// <summary>Fires when IsActive flips, on the UI thread.</summary>
     public event Action<bool>? OnActiveChanged;
 
+    /// <summary>Fires when a BUBBLE is popped by gaze (dwell or blink). UI thread.</summary>
+    public event Action? GazePopped;
+
     public GazeFocusService()
     {
         // ShutdownMode=OnLastWindowClose means subsystems holding hidden
@@ -194,7 +197,7 @@ public class GazeFocusService : IDisposable
 
             if (hit.Value.Bubble is Bubble b)
             {
-                try { b.Pop(); }
+                try { b.Pop(); GazePopped?.Invoke(); }
                 catch (Exception ex) { App.Logger?.Debug("Gaze blink-pop bubble failed: {Error}", ex.Message); }
             }
             else if (hit.Value.Flash is FlashWindow fw)
@@ -445,7 +448,7 @@ public class GazeFocusService : IDisposable
 
         if (elapsedMs >= DwellMs)
         {
-            try { b.Pop(); }
+            try { b.Pop(); GazePopped?.Invoke(); }
             catch (Exception ex) { App.Logger?.Debug("Gaze bubble pop failed: {Error}", ex.Message); }
             _currentBubble = null;
             _cooldownUntil = DateTime.UtcNow.AddMilliseconds(CooldownMs);

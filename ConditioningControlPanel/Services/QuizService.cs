@@ -128,8 +128,32 @@ namespace ConditioningControlPanel.Services
         public int DeltaPercent { get; set; }
     }
 
+    /// <summary>Payload for <see cref="QuizService.QuizCompleted"/>.</summary>
+    public class QuizCompletedEventArgs : EventArgs
+    {
+        public int Score { get; init; }
+        public bool Passed { get; init; }
+        public bool Perfect { get; init; }
+        public string Category { get; init; } = "";
+    }
+
     public class QuizService : IDisposable
     {
+        /// <summary>
+        /// Raised once when a quiz run finalizes (from QuizWindow.ShowResult). Static
+        /// because QuizService is a per-window instance with no app-wide handle; a
+        /// single-purpose static event lets GamificationBridge subscribe for the
+        /// lifetime of the app (mirrors the TutorialEventBus pattern).
+        /// </summary>
+        public static event EventHandler<QuizCompletedEventArgs>? QuizCompleted;
+
+        /// <summary>Fire the QuizCompleted signal. Called by QuizWindow on finalization.</summary>
+        public static void RaiseQuizCompleted(int score, bool passed, bool perfect, string category)
+        {
+            try { QuizCompleted?.Invoke(null, new QuizCompletedEventArgs { Score = score, Passed = passed, Perfect = perfect, Category = category }); }
+            catch (Exception ex) { App.Logger?.Debug("QuizCompleted subscriber error: {Error}", ex.Message); }
+        }
+
         private readonly HttpClient _httpClient;
         private List<ProxyChatMessage> _conversationHistory = new();
         private QuizCategory _currentCategory;

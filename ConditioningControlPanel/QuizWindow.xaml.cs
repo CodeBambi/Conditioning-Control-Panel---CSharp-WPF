@@ -519,6 +519,18 @@ namespace ConditioningControlPanel
 
             TxtProfileText.Text = result.ProfileText;
 
+            // EMIT hook for GamificationBridge quiz achievements. perfect/passed are
+            // defined here (the quiz has no native pass/perfect concept): perfect =
+            // full marks, passed = >= 60%. Category uses the definition id.
+            try
+            {
+                var perfect = result.MaxScore > 0 && result.TotalScore == result.MaxScore;
+                var passed = percentage >= 60;
+                var categoryId = catDef?.Id ?? result.Category.ToString();
+                QuizService.RaiseQuizCompleted(result.TotalScore, passed, perfect, categoryId);
+            }
+            catch (Exception ex) { App.Logger?.Debug("QuizWindow: RaiseQuizCompleted failed: {Error}", ex.Message); }
+
             // Build trend display and start session generation
             if (savedEntry != null)
             {

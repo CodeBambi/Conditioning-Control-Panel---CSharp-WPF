@@ -55,6 +55,44 @@ namespace ConditioningControlPanel.Services.Deeper
         private bool _running;
         private bool _disposed;
 
+        // -- Per-play gamification stats (read by the host on PlaybackCompleted) --
+        // Webcam trigger type strings, used to flag "webcam-trigger-used".
+        private static readonly HashSet<string> WebcamTriggerTypes = new()
+        {
+            TriggerTypes.GazeTarget, TriggerTypes.GazeAvoid, TriggerTypes.AttentionLost,
+            TriggerTypes.BlinkDetected, TriggerTypes.MouthOpen
+        };
+        private readonly HashSet<string> _firedTriggerTypes = new();
+        private bool _webcamTriggerUsed;
+        private bool _faceLostDuringPlay;
+        private bool _completedFired;
+        // Highest playback position reached this play. Used by the stop-time fallback
+        // to credit duration-less sources (streamed/embedded video that never reports a
+        // duration, so the normal end-of-media completion path can't fire).
+        private double _maxPlaybackTime;
+        private const double MinFallbackPlaySeconds = 60.0;
+
+        /// <summary>Distinct trigger TYPES that have fired during the current play.</summary>
+        public int DistinctTriggerTypesFired => _firedTriggerTypes.Count;
+        /// <summary>True if any gaze/blink/face/mouth trigger fired during this play.</summary>
+        public bool WebcamTriggerUsed => _webcamTriggerUsed;
+        /// <summary>True if a webcam enhancement was played without the face ever being lost.</summary>
+        public bool GazeHeldFull => _webcamTriggerUsed && !_faceLostDuringPlay;
+
+        /// <summary>
+        /// Fires once when playback reaches the media's natural end (elapsed >= duration).
+        /// Covers audio and video uniformly via the time source. Raised from the playback
+        /// tick while the engine is still alive, so stat getters are readable in the handler.
+        /// </summary>
+        public event Action? PlaybackCompleted;
+
+        private void RecordTriggerFired(EnhancementTrigger? trigger)
+        {
+            if (trigger == null) return;
+            _firedTriggerTypes.Add(trigger.Type);
+            if (WebcamTriggerTypes.Contains(trigger.Type)) _webcamTriggerUsed = true;
+        }
+
         // Token source canceled by Stop so in-flight DispatchSafely calls
         // (haptic patterns, audio playback chains) can short-circuit instead
         // of running on after the user pressed stop.
@@ -311,6 +349,11 @@ namespace ConditioningControlPanel.Services.Deeper
             _gazeDwellSince.Clear();
             _activeBandIds.Clear();
             _faceLostSince = null;
+            _firedTriggerTypes.Clear();
+            _webcamTriggerUsed = false;
+            _faceLostDuringPlay = false;
+            _completedFired = false;
+            _maxPlaybackTime = 0;
             _runCts = new CancellationTokenSource();
 
             // Prime the cursor to the current playback position so events that
@@ -331,7 +374,13 @@ namespace ConditioningControlPanel.Services.Deeper
                     _webcam.OnMouthOpen += OnMouthOpen;
                 if (HasActiveTrigger<GazeTargetTrigger>() || HasActiveTrigger<GazeAvoidTrigger>())
                     _webcam.OnGazeMove += OnGazeMove;
-                if (HasActiveTrigger<AttentionLostTrigger>())
+                // Subscribe face events whenever ANY webcam trigger is active (not just
+                // attention_lost) so the "gaze held the full duration" achievement can
+                // observe look-aways. With no attention_lost rule, OnFaceFoundCore simply
+                // finds zero eligible rules and fires nothing — behaviour is unchanged.
+                if (HasActiveTrigger<AttentionLostTrigger>() || HasActiveTrigger<BlinkDetectedTrigger>()
+                    || HasActiveTrigger<MouthOpenTrigger>() || HasActiveTrigger<GazeTargetTrigger>()
+                    || HasActiveTrigger<GazeAvoidTrigger>())
                 {
                     _webcam.OnFaceLost += OnFaceLost;
                     _webcam.OnFaceFound += OnFaceFound;
@@ -364,6 +413,25 @@ namespace ConditioningControlPanel.Services.Deeper
         public void Stop()
         {
             if (!_running) return;
+
+            // Fallback completion for duration-less sources (streamed/embedded web video
+            // that never reports a duration): the normal end-of-media path can't fire, so
+            // a genuinely-played enhancement would otherwise never credit any Deeper
+            // achievement. Fire here once a minimum amount was actually played. The
+            // _completedFired guard ensures normally-completing media never double-fires;
+            // the dur<=0 guard ensures duration-having media stopped early does NOT credit.
+            if (!_completedFired)
+            {
+                double dur = 0;
+                try { dur = _source.GetDurationSeconds(); } catch { /* unknown duration */ }
+                if (dur <= 0 && _maxPlaybackTime >= MinFallbackPlaySeconds)
+                {
+                    _completedFired = true;
+                    try { PlaybackCompleted?.Invoke(); }
+                    catch (Exception ex) { App.Logger?.Debug("EnhancementEngine fallback PlaybackCompleted error: {Error}", ex.Message); }
+                }
+            }
+
             // Flush any band effects (overlays shown, haptic toy active) BEFORE
             // clearing _running, so the dispatcher's Stop actions are not
             // short-circuited by the running check.
@@ -464,6 +532,7 @@ namespace ConditioningControlPanel.Services.Deeper
                     var entry = _timeline[_lastFiredIndex];
                     if (entry.OwnerItem != null && !PassesRuleGate(entry.OwnerItem, t)) continue;
                     DispatchSafely(entry.Action, t);
+                    RecordTriggerFired(entry.OwnerItem?.Trigger);
                 }
 
                 // Band-effect reconciliation: bring _activeBandIds in sync with
@@ -480,6 +549,21 @@ namespace ConditioningControlPanel.Services.Deeper
                 }
 
                 _lastTickTime = t;
+                if (t > _maxPlaybackTime) _maxPlaybackTime = t;
+
+                // One-shot natural-completion detection: the playhead reached the end
+                // of the media. Covers audio and video uniformly via the time source.
+                // Stats getters are read by the host's handler while the engine is alive.
+                if (!_completedFired && _running)
+                {
+                    var dur = _source.GetDurationSeconds();
+                    if (dur > 0 && t >= dur - 0.75)
+                    {
+                        _completedFired = true;
+                        try { PlaybackCompleted?.Invoke(); }
+                        catch (Exception ex) { App.Logger?.Debug("EnhancementEngine PlaybackCompleted subscriber error: {Error}", ex.Message); }
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -695,6 +779,7 @@ namespace ConditioningControlPanel.Services.Deeper
         {
             if (!_running) return;
             _faceLostSince = DateTime.UtcNow;
+            _faceLostDuringPlay = true; // breaks the "held gaze the whole time" achievement
             Diag("• face_lost");
         }
 
@@ -732,6 +817,7 @@ namespace ConditioningControlPanel.Services.Deeper
                     if (PassesRuleGate(item, t))
                     {
                         DispatchSafely(item.Action!, t);
+                        RecordTriggerFired(item.Trigger);
                         // Reset dwell window so we don't immediately re-fire next frame.
                         _gazeDwellSince[item] = now;
                     }
@@ -766,6 +852,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 if (!predicate(trig)) continue;
                 if (!PassesRuleGate(item, t)) continue;
                 DispatchSafely(item.Action!, t);
+                RecordTriggerFired(item.Trigger);
                 fired++;
             }
             return fired;
@@ -783,6 +870,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 // RegionId still resolves on RegionExited (where the playhead
                 // has just left the band, so _currentRegionId is null).
                 DispatchSafely(item.Action!, t, regionId);
+                RecordTriggerFired(item.Trigger);
             }
         }
 

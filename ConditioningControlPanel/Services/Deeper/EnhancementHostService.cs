@@ -25,6 +25,18 @@ namespace ConditioningControlPanel.Services.Deeper
 
         public bool IsRunning => _engine?.IsRunning ?? false;
 
+        /// <summary>
+        /// True only while a bound enhancement's media is actually advancing (not
+        /// paused). Used by the AchievementService poller to accumulate Deeper minutes.
+        /// </summary>
+        public bool IsActivelyPlaying => _engine?.IsRunning == true && (_activeSource?.IsPlaying ?? false);
+
+        /// <summary>
+        /// Fires once when the loaded enhancement plays to its natural end. Consumed
+        /// by GamificationBridge for the Deeper achievements.
+        /// </summary>
+        public event EventHandler<EnhancementCompletedEventArgs>? EnhancementCompleted;
+
         public event Action<Enhancement?, string?>? Loaded;   // null = unloaded
         public event Action<string>? LoadFailed;              // human-readable reason
 
@@ -176,6 +188,7 @@ namespace ConditioningControlPanel.Services.Deeper
                 // mid-session and saw the events register everywhere else.
                 var webcam = App.Webcam;
                 _engine = new EnhancementEngine(LoadedEnhancement, source, _activeRecorder, webcam, EmitDiagnostic);
+                _engine.PlaybackCompleted += OnEnginePlaybackCompleted;
                 _engine.Start();
                 App.Logger?.Information("Deeper engine bound and started");
                 return true;
@@ -188,11 +201,37 @@ namespace ConditioningControlPanel.Services.Deeper
             }
         }
 
+        private void OnEnginePlaybackCompleted()
+        {
+            // Read stats off the still-alive engine and snapshot the loaded metadata,
+            // then surface a single app-wide completion event for gamification.
+            try
+            {
+                var eng = _engine;
+                var meta = LoadedEnhancement?.Metadata;
+                if (eng == null) return;
+                var args = new EnhancementCompletedEventArgs(
+                    id: meta?.Name ?? LoadedFilePath ?? "(untitled)",
+                    featured: meta?.Featured ?? false,
+                    distinctTriggerTypes: eng.DistinctTriggerTypesFired,
+                    webcamTriggerUsed: eng.WebcamTriggerUsed,
+                    gazeHeldFull: eng.GazeHeldFull);
+                EnhancementCompleted?.Invoke(this, args);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EnhancementHostService.OnEnginePlaybackCompleted error: {Error}", ex.Message);
+            }
+        }
+
         public void UnbindEngine()
         {
             try
             {
+                // Stop() BEFORE unsubscribing: it may fire the duration-less fallback
+                // PlaybackCompleted, which must still reach OnEnginePlaybackCompleted.
                 _engine?.Stop();
+                if (_engine != null) _engine.PlaybackCompleted -= OnEnginePlaybackCompleted;
                 _engine?.Dispose();
             }
             catch (Exception ex)
@@ -245,6 +284,26 @@ namespace ConditioningControlPanel.Services.Deeper
             // Strip a trailing wildcard if present.
             var p = pattern.TrimEnd('*');
             return path.Contains(p, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>Payload for <see cref="EnhancementHostService.EnhancementCompleted"/>.</summary>
+    public sealed class EnhancementCompletedEventArgs : EventArgs
+    {
+        public string Id { get; }
+        public bool Featured { get; }
+        public int DistinctTriggerTypes { get; }
+        public bool WebcamTriggerUsed { get; }
+        public bool GazeHeldFull { get; }
+
+        public EnhancementCompletedEventArgs(string id, bool featured, int distinctTriggerTypes,
+            bool webcamTriggerUsed, bool gazeHeldFull)
+        {
+            Id = id;
+            Featured = featured;
+            DistinctTriggerTypes = distinctTriggerTypes;
+            WebcamTriggerUsed = webcamTriggerUsed;
+            GazeHeldFull = gazeHeldFull;
         }
     }
 }

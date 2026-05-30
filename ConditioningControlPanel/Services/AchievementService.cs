@@ -23,6 +23,7 @@ public class AchievementService : IDisposable
     private DateTime _lastSpiralCheck = DateTime.Now;
     private DateTime _lastBrainDrainCheck = DateTime.Now;
     private DateTime _lastMindWipeCheck = DateTime.Now;
+    private DateTime _lastDeeperCheck = DateTime.Now;
     
     public event EventHandler<Achievement>? AchievementUnlocked;
 
@@ -224,6 +225,29 @@ public class AchievementService : IDisposable
         {
             // Reset timer when inactive to prevent time accumulation bugs
             _lastBrainDrainCheck = now;
+        }
+
+        // Track Deeper player time — only while an enhancement is actively playing.
+        // Mirrors the spiral/pink-filter accumulation pattern above. Feeds the
+        // "permanent_resident" achievement (10 hours = 600 minutes). DeeperMinutes is
+        // a lifetime counter persisted on AchievementProgress.
+        if (App.DeeperHost?.IsActivelyPlaying == true)
+        {
+            var elapsed = (now - _lastDeeperCheck).TotalMinutes;
+            if (elapsed > 0 && elapsed < 0.1) // sanity: max ~6s between ticks
+            {
+                _progress.DeeperMinutes += elapsed;
+                _isDirty = true;
+                if (_progress.DeeperMinutes >= 600)
+                {
+                    TryUnlock("permanent_resident");
+                }
+            }
+            _lastDeeperCheck = now;
+        }
+        else
+        {
+            _lastDeeperCheck = now;
         }
 
         // Check System Overload (Bubbles + Bouncing Text + Spiral all active)
@@ -750,6 +774,13 @@ public class AchievementService : IDisposable
     }
 
     /// <summary>
+    /// Mark progress dirty so the next autosave persists it. Used by GamificationBridge
+    /// after it mutates a counter on <see cref="Progress"/> without going through a
+    /// dedicated Track* method (which would otherwise leave the change unsaved).
+    /// </summary>
+    public void MarkDirty() => _isDirty = true;
+
+    /// <summary>
     /// Reset all achievement progress (used on logout to clear account-specific data)
     /// </summary>
     public void ResetProgress()
@@ -761,14 +792,65 @@ public class AchievementService : IDisposable
     }
 
     /// <summary>
-    /// Get unlock count
+    /// Get unlock count (all achievements, free + exclusive)
     /// </summary>
     public int GetUnlockedCount() => _progress.UnlockedAchievements.Count;
-    
+
     /// <summary>
-    /// Get total achievement count
+    /// Get total achievement count (all achievements, free + exclusive)
     /// </summary>
     public int GetTotalCount() => Achievement.All.Count;
+
+    /// <summary>
+    /// Get unlock count filtered by exclusivity. The free (false) and patron (true)
+    /// counts are deliberately separate and must never be summed into one number.
+    /// </summary>
+    public int GetUnlockedCount(bool exclusive)
+    {
+        var count = 0;
+        foreach (var id in _progress.UnlockedAchievements)
+        {
+            if (Achievement.All.TryGetValue(id, out var a) && a.IsExclusive == exclusive)
+                count++;
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// Get total achievement count filtered by exclusivity.
+    /// </summary>
+    public int GetTotalCount(bool exclusive)
+    {
+        var count = 0;
+        foreach (var a in Achievement.All.Values)
+        {
+            if (a.IsExclusive == exclusive) count++;
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// Whether the current user is entitled to EARN patron-exclusive achievements.
+    /// Note: this gates only NEW earns via <see cref="TryUnlockExclusive"/>. Cloud
+    /// restore uses the ungated <see cref="TryUnlock"/>, so a user who earned an
+    /// exclusive and later downgraded keeps it.
+    /// </summary>
+    public bool CanUnlockExclusive => App.Patreon?.HasPremiumAccess == true;
+
+    /// <summary>
+    /// Entitlement-gated unlock for patron-exclusive achievements. No-op (returns
+    /// false) for non-entitled users; otherwise behaves exactly like TryUnlock.
+    /// </summary>
+    public bool TryUnlockExclusive(string achievementId)
+    {
+        if (_progress.IsUnlocked(achievementId)) return false;
+        if (!CanUnlockExclusive)
+        {
+            App.Logger?.Debug("Exclusive achievement {Id} withheld — user not entitled", achievementId);
+            return false;
+        }
+        return TryUnlock(achievementId);
+    }
     
     public void Dispose()
     {

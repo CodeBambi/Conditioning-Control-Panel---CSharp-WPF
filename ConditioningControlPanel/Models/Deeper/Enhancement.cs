@@ -79,6 +79,12 @@ namespace ConditioningControlPanel.Models.Deeper
         [JsonProperty("license")]
         public string License { get; set; } = "";
 
+        // Set by the catalogue/bundled-content pipeline when an enhancement is
+        // officially featured. No client path sets it true today; the Director's
+        // Cut achievement reads it and stays dormant until a source populates it.
+        [JsonProperty("featured")]
+        public bool Featured { get; set; }
+
         [JsonExtensionData]
         public IDictionary<string, JToken>? UnknownFields { get; set; }
     }

@@ -41,6 +41,12 @@ namespace ConditioningControlPanel.Services
         public event EventHandler<ModPackage>? ModChanged;
 
         /// <summary>
+        /// Fired when a user mod is successfully installed from a .ccpmod file.
+        /// (Built-in mods are extracted/loaded via other paths and do not fire this.)
+        /// </summary>
+        public event EventHandler<ModPackage>? ModInstalled;
+
+        /// <summary>
         /// The currently active mod package.
         /// </summary>
         public ModPackage ActiveMod => _activeMod;
@@ -176,6 +182,7 @@ namespace ConditioningControlPanel.Services
                     _installedMods[manifest.Id] = package;
 
                     _log?.Information("Mod installed: {ModId} v{Version} by {Author}", manifest.Id, manifest.Version, manifest.Author);
+                    try { ModInstalled?.Invoke(this, package); } catch (Exception ex) { _log?.Debug("ModInstalled subscriber error: {Error}", ex.Message); }
                     return new ModInstallResult { Success = true, ModId = manifest.Id };
                 }
                 finally

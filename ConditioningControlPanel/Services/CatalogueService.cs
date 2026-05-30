@@ -50,6 +50,12 @@ namespace ConditioningControlPanel.Services
         private string? _cachedToken;
         private DateTimeOffset _cachedExpiry = DateTimeOffset.MinValue;
 
+        /// <summary>
+        /// Fired when a catalogue submission succeeds (HTTP 201). Consumed by
+        /// GamificationBridge for the "published to catalogue" achievement.
+        /// </summary>
+        public event EventHandler<SubmissionResult.Success>? SubmissionSucceeded;
+
         private static HttpClient BuildHttpClient()
         {
             var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
@@ -159,7 +165,9 @@ namespace ConditioningControlPanel.Services
                     var id = parsed?["id"]?.ToString() ?? "";
                     var rowStatus = parsed?["status"]?.ToString() ?? "pending";
                     App.Logger?.Information("[CatalogueService] Submission succeeded id={Id}", id);
-                    return new SubmissionResult.Success(id, rowStatus);
+                    var success = new SubmissionResult.Success(id, rowStatus);
+                    try { SubmissionSucceeded?.Invoke(this, success); } catch (Exception ex) { App.Logger?.Debug("SubmissionSucceeded subscriber error: {Error}", ex.Message); }
+                    return success;
                 }
                 case 409:
                 {
