@@ -5823,9 +5823,47 @@
                     <!-- Achievement Grid (populated in code-behind) -->
                     <UniformGrid x:Name="AchievementGrid" Columns="7" Margin="0,5">
                     </UniformGrid>
-                    
+
                     <TextBlock x:Name="TxtAchievementCount" Text="{loc:Str label_0_25_achievements_unlocked}" Foreground="#888888" FontSize="14"
                                HorizontalAlignment="Center" Margin="0,15,0,0"/>
+
+                    <!-- Patron-exclusive achievements: separate section with its OWN counter.
+                         Free and patron counts are never summed. Free users see the locked
+                         collection via the overlay (content stays in the tree, just covered). -->
+                    <Border Height="1" Background="#33FFFFFF" Margin="0,24,0,0"/>
+                    <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}"
+                               Text="{loc:Str section_patron_achievements}" Margin="0,18,0,0"/>
+                    <TextBlock Text="{loc:Str label_patron_achievements_subtitle}"
+                               Foreground="#888888" FontSize="12" Margin="0,0,0,12"/>
+
+                    <Grid Margin="0,5,0,0">
+                        <StackPanel>
+                            <UniformGrid x:Name="PatronAchievementGrid" Columns="7" Margin="0,5">
+                            </UniformGrid>
+                            <TextBlock x:Name="TxtPatronAchievementCount" Foreground="#888888" FontSize="14"
+                                       HorizontalAlignment="Center" Margin="0,15,0,0"/>
+                        </StackPanel>
+
+                        <!-- Lock overlay for free users (mirrors PatreonFeaturesOverlay) -->
+                        <Border x:Name="PatronAchievementsOverlay" Background="#CC1A1A2E" CornerRadius="12"
+                                Panel.ZIndex="100" Visibility="Collapsed">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="20">
+                                <Image Width="52" Height="52" HorizontalAlignment="Center" Margin="0,0,0,15"
+                                       Source="{Binding Source='🔒', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock Text="{loc:Str section_patron_achievements}" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,10">
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                                    </TextBlock.Effect>
+                                </TextBlock>
+                                <TextBlock Text="{loc:Str label_patron_achievements_locked}" Foreground="#AAAAAA" FontSize="14"
+                                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="380"/>
+                                <Button Content="{loc:Str btn_visit_patreon}" Background="#FF424D" Foreground="White"
+                                        BorderThickness="0" Padding="18,8" Margin="0,15,0,0" Cursor="Hand"
+                                        HorizontalAlignment="Center" Click="BtnVisitPatreon_Click"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
                 </StackPanel>
             </ScrollViewer>
             </Border>
@@ -6854,7 +6892,8 @@
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                             <Button x:Name="HelpBtnKeywordTriggers" Style="{StaticResource HelpButtonStyle}"
-                                                    VerticalAlignment="Center" Margin="0,0,8,0" Tag="KeywordTriggers" Panel.ZIndex="1"/>
+                                                    VerticalAlignment="Center" Margin="0,0,8,0" Tag="KeywordTriggers" Panel.ZIndex="1"
+                                                    Click="HelpVideoButton_Click"/>
                                             <Button x:Name="BtnKeywordTriggersStartStop" Content="{loc:Str btn_start}"
                                                     Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="11"
                                                     Padding="14,4" BorderThickness="0" Cursor="Hand"
@@ -10626,8 +10665,16 @@
                     </Grid>
                 </Border>
 
-                <!-- Interactive controls + translucent gating overlay -->
+                <!-- Interactive controls (2/3) + explanatory guide (1/3) -->
                 <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="22"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Controls + translucent gating overlay (column 0) -->
+                    <Grid Grid.Column="0">
                     <StackPanel x:Name="BambiTakeoverControls">
                 <!-- Lifted from old Bambi Expander — every x:Name preserved -->
                 <!-- Locked State (legacy — kept hidden, replaced by gating overlay below) -->
@@ -10781,6 +10828,53 @@
                                     Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0">
                                 <helpers:EmojiTextBlock Text="{loc:Str gate_unlock_with_patreon}"/>
                             </Button>
+                        </StackPanel>
+                    </Border>
+                    </Grid>
+                    <!-- end controls column -->
+
+                    <!-- Explanatory guide (column 2) -->
+                    <Border Grid.Column="2" VerticalAlignment="Top"
+                            Background="{DynamicResource SurfaceBgBrush}" BorderBrush="{DynamicResource PinkBrush}"
+                            BorderThickness="1" CornerRadius="10" Padding="18,16">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                <Image Width="18" Height="18" VerticalAlignment="Center" Margin="0,0,8,0"
+                                       Source="{Binding Source='💡', Converter={StaticResource EmojiToImageSource}}"/>
+                                <TextBlock Text="{loc:Str guide_takeover_title}" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Step 1 -->
+                            <TextBlock Text="{loc:Str guide_takeover_step1_title}" Foreground="White"
+                                       FontSize="13" FontWeight="Bold" Margin="0,0,0,2"/>
+                            <TextBlock Text="{loc:Str guide_takeover_step1_body}" Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,12"/>
+                            <!-- Step 2 -->
+                            <TextBlock Text="{loc:Str guide_takeover_step2_title}" Foreground="White"
+                                       FontSize="13" FontWeight="Bold" Margin="0,0,0,2"/>
+                            <TextBlock Text="{loc:Str guide_takeover_step2_body}" Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,12"/>
+                            <!-- Step 3 -->
+                            <TextBlock Text="{loc:Str guide_takeover_step3_title}" Foreground="White"
+                                       FontSize="13" FontWeight="Bold" Margin="0,0,0,2"/>
+                            <TextBlock Text="{loc:Str guide_takeover_step3_body}" Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,4"/>
+
+                            <Border Height="1" Background="#2E2E48" Margin="0,8,0,12"/>
+
+                            <TextBlock Text="{loc:Str guide_takeover_settings_title}" Foreground="{DynamicResource PinkBrush}"
+                                       FontSize="12" FontWeight="Bold" Margin="0,0,0,6"/>
+                            <TextBlock Text="{loc:Str guide_takeover_settings_body}" Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12" TextWrapping="Wrap" LineHeight="18" Margin="0,0,0,12"/>
+
+                            <Border Background="#22FF69B4" CornerRadius="6" Padding="10,8" Margin="0,0,0,10">
+                                <TextBlock Text="{loc:Str guide_takeover_tip}" Foreground="{DynamicResource PinkBrush}"
+                                           FontSize="12" TextWrapping="Wrap" LineHeight="17"/>
+                            </Border>
+
+                            <TextBlock Text="{loc:Str guide_takeover_patreon}" Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="11" TextWrapping="Wrap" LineHeight="16" FontStyle="Italic"/>
                         </StackPanel>
                     </Border>
                 </Grid>

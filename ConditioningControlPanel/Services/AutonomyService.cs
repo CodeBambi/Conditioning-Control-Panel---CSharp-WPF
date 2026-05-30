@@ -75,8 +75,6 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class AutonomyService : IDisposable
     {
-        private const int LEVEL_REQUIREMENT = 100;
-
         // Timers
         private DispatcherTimer? _idleTimer;
         private DispatcherTimer? _randomTimer;
@@ -239,7 +237,7 @@ namespace ConditioningControlPanel.Services
                 "Settings:",
                 $"  AutonomyModeEnabled: {settings?.AutonomyModeEnabled}",
                 $"  AutonomyConsentGiven: {settings?.AutonomyConsentGiven}",
-                $"  PlayerLevel: {settings?.PlayerLevel} (need 100+)",
+                $"  PlayerLevel: {settings?.PlayerLevel}",
                 $"  IdleTriggerEnabled: {settings?.AutonomyIdleTriggerEnabled}",
                 $"  RandomTriggerEnabled: {settings?.AutonomyRandomTriggerEnabled}",
                 $"  RandomIntervalMinutes: {settings?.AutonomyRandomIntervalMinutes}",
@@ -275,7 +273,15 @@ namespace ConditioningControlPanel.Services
             if (!_isEnabled)
             {
                 App.Logger?.Warning("AutonomyService: Test failed - service not enabled. Enable Autonomy Mode first!");
-                System.Windows.MessageBox.Show($"Autonomy Mode is not enabled!\n\nDiagnostic Status:\n{status}", "Test Failed");
+
+                var hasPatreon = App.Patreon?.HasPremiumAccess == true;
+                var reason = !hasPatreon
+                    ? "Bambi Takeover requires Patreon access."
+                    : "Click the green \"Start\" button to enable it, then press Test again.";
+
+                System.Windows.MessageBox.Show(
+                    $"Autonomy Mode isn't running yet.\n\n{reason}\n\nDiagnostic Status:\n{status}",
+                    "Autonomy Not Running");
                 return;
             }
 

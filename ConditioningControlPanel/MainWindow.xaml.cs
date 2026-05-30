@@ -9285,11 +9285,29 @@ namespace ConditioningControlPanel
 
         private void UpdateAchievementCount()
         {
-            if (TxtAchievementCount != null && App.Achievements != null)
+            if (App.Achievements == null) return;
+
+            // Free and patron counts are kept strictly separate — never summed.
+            if (TxtAchievementCount != null)
             {
-                var unlocked = App.Achievements.GetUnlockedCount();
-                var total = App.Achievements.GetTotalCount();
+                var unlocked = App.Achievements.GetUnlockedCount(exclusive: false);
+                var total = App.Achievements.GetTotalCount(exclusive: false);
                 TxtAchievementCount.Text = Loc.GetF("label_0_1_achievements_unlocked", unlocked, total);
+            }
+
+            if (TxtPatronAchievementCount != null)
+            {
+                var pUnlocked = App.Achievements.GetUnlockedCount(exclusive: true);
+                var pTotal = App.Achievements.GetTotalCount(exclusive: true);
+                TxtPatronAchievementCount.Text = Loc.GetF("label_0_1_achievements_unlocked", pUnlocked, pTotal);
+            }
+
+            // Free users see the patron collection as a labeled, locked section.
+            if (PatronAchievementsOverlay != null)
+            {
+                PatronAchievementsOverlay.Visibility = App.Patreon?.HasPremiumAccess == true
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
             }
         }
 
@@ -9987,6 +10005,9 @@ namespace ConditioningControlPanel
 
             // Master overlay for the entire features grid
             PatreonFeaturesOverlay.Visibility = hasPremiumAccess ? Visibility.Collapsed : Visibility.Visible;
+
+            // Keep the patron-achievements section lock + counts in sync with entitlement.
+            UpdateAchievementCount();
 
             // Haptics - unlock for all Patreon supporters
             var hasHapticsAccess = hasPremiumAccess;
@@ -15215,11 +15236,12 @@ namespace ConditioningControlPanel
             if (AchievementGrid == null) return;
             
             AchievementGrid.Children.Clear();
+            PatronAchievementGrid?.Children.Clear();
             _achievementImages.Clear();
-            
+
             var tileStyle = FindResource("AchievementTile") as Style;
-            
-            // Add all achievements
+
+            // Add all achievements (patron-exclusive ones routed to the separate grid)
             foreach (var kvp in Models.Achievement.All)
             {
                 var achievement = kvp.Value;
@@ -15246,7 +15268,11 @@ namespace ConditioningControlPanel
                 }
 
                 border.Child = image;
-                AchievementGrid.Children.Add(border);
+
+                if (achievement.IsExclusive)
+                    PatronAchievementGrid?.Children.Add(border);
+                else
+                    AchievementGrid.Children.Add(border);
 
                 // Store reference for later updates
                 _achievementImages[achievement.Id] = image;
@@ -16998,6 +17024,24 @@ namespace ConditioningControlPanel
         {
             var content = Services.HelpContentService.GetContent(sectionId);
             helpButton.ToolTip = Services.HelpTooltipBuilder.Build(content, this);
+        }
+
+        /// <summary>
+        /// Click handler for help "?" buttons that should open the tutorial video
+        /// popup when their topic ships a clip. The section id comes from the
+        /// button's Tag. When there's no clip the rich hover tooltip (set via
+        /// <see cref="SetHelpContent"/>) remains the only behaviour.
+        /// </summary>
+        private void HelpVideoButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement fe || fe.Tag is not string sectionId ||
+                string.IsNullOrWhiteSpace(sectionId))
+                return;
+            var content = Services.HelpContentService.GetContent(sectionId);
+            if (content.HasClip)
+            {
+                HelpVideoWindow.Show(content, this);
+            }
         }
 
         #endregion
@@ -20910,8 +20954,10 @@ namespace ConditioningControlPanel
             if (TxtProfileViewerLockCards != null) TxtProfileViewerLockCards.Text = FormatNumber(progress?.TotalLockCardsCompleted ?? 0);
             if (TxtProfileViewerAchievements != null)
             {
-                var unlocked = App.Achievements?.GetUnlockedCount() ?? 0;
-                var total = Models.Achievement.All.Values.Count;
+                // Free-only count so the patron-exclusive set is never folded into this number.
+                var unlocked = App.Achievements?.GetUnlockedCount(exclusive: false) ?? 0;
+                var total = App.Achievements?.GetTotalCount(exclusive: false)
+                            ?? System.Linq.Enumerable.Count(Models.Achievement.All.Values, a => !a.IsExclusive);
                 TxtProfileViewerAchievements.Text = $"{unlocked} / {total}";
             }
 
@@ -23362,7 +23408,7 @@ namespace ConditioningControlPanel
             if (TxtAutoFlash != null) TxtAutoFlash.Text = ML("Flashes", "tab_flashes");
             if (TxtAutoVideo != null) TxtAutoVideo.Text = ML("Videos", "tab_videos");
             if (TxtAutoSubliminal != null) TxtAutoSubliminal.Text = ML("Subliminals", "tab_subliminals");
-            if (TxtAutoBubbles != null) TxtAutoBubbles.Text = ML("Bubbles", "label_haptic_bubbles");
+            if (TxtAutoBubbles != null) TxtAutoBubbles.Text = ML("Bubbles", "label_bubbles");
             if (TxtAutoPinkFilter != null) TxtAutoPinkFilter.Text = ML("Pink Filter", "label_pink_filter");
             if (TxtAutoLockCards != null) TxtAutoLockCards.Text = ML("Lock Cards", "label_lock_card");
             if (TxtAutoBouncing != null) TxtAutoBouncing.Text = ML("Bouncing", "label_bouncing_text");
@@ -24746,7 +24792,7 @@ namespace ConditioningControlPanel
 
         #endregion
 
-        #region Autonomy Mode (Lvl 100)
+        #region Autonomy Mode
 
         private void ChkAutonomyEnabled_Changed(object sender, RoutedEventArgs e)
         {
