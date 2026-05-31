@@ -676,7 +676,10 @@ Do NOT include any other text before or after the question format. Just the ques
                     if (!outputCheck.Allow && outputCheck.Category.HasValue)
                     {
                         App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud-quiz");
-                        App.ModerationCounter?.RecordHit(outputCheck.Category.Value, "output:quiz");
+                        // Quiz questions are AI-generated OUTPUT, never user-typed input, so
+                        // a hit is logged for the compliance record but does NOT escalate
+                        // the user-facing Content Policy Notice. The batch is still
+                        // discarded fail-closed (return null) so nothing prohibited leaks.
                         App.Logger?.Information("QuizService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
                         return null;
                     }

@@ -22,7 +22,7 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class ExplicitContentAcknowledgementDialog : Window
     {
-        private const string PolicyUrl = "https://cclabs.app/policies/prohibited-content";
+        private const string PolicyUrl = "https://app.cclabs.app/policies/prohibited-content";
 
         public ExplicitContentAcknowledgementDialog()
         {

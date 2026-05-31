@@ -275,7 +275,14 @@ namespace ConditioningControlPanel.Services
                 if (!inputCheck.Allow && inputCheck.Category.HasValue)
                 {
                     App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: "cloud");
-                    App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:cloud");
+                    // Only escalate the user-facing Content Policy Notice for content the
+                    // user actually typed. returnRefusalSentinel is true only on the
+                    // interactive chat path; every background/auto reaction (awareness,
+                    // keyword, lockscreen, video-done) leaves it false and must not pop
+                    // the warning — that filtering is "on us, not on them". The hit is
+                    // still logged above for the CCBill compliance record either way.
+                    if (returnRefusalSentinel)
+                        App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:cloud");
                     App.Logger?.Information("AiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
                     return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
                 }
@@ -403,7 +410,9 @@ namespace ConditioningControlPanel.Services
                     if (!outputCheck.Allow && outputCheck.Category.HasValue)
                     {
                         App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud");
-                        App.ModerationCounter?.RecordHit(outputCheck.Category.Value, "output:cloud");
+                        // Model OUTPUT that trips the filter is never the user's doing, so
+                        // it does NOT escalate the Content Policy Notice (logged above for
+                        // compliance only). The warning is reserved for user-typed input.
                         App.Logger?.Information("AiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
                         return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
                     }

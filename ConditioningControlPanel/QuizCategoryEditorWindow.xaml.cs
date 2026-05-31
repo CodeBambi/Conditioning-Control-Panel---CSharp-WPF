@@ -537,7 +537,7 @@ Do NOT include any other text before or after the question format. Just the ques
             try
             {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
-                    "https://cclabs.app/policies/prohibited-content") { UseShellExecute = true });
+                    "https://app.cclabs.app/policies/prohibited-content") { UseShellExecute = true });
             }
             catch (Exception ex)
             {

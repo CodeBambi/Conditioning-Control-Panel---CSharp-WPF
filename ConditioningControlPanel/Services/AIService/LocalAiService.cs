@@ -416,7 +416,12 @@ namespace ConditioningControlPanel.Services.AIService
                 if (!inputCheck.Allow && inputCheck.Category.HasValue)
                 {
                     App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: modelHint);
-                    App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:local");
+                    // Only escalate the user-facing Content Policy Notice for content the
+                    // user actually typed (interactive chat path). Background/auto
+                    // reactions leave returnRefusalSentinel false and must not pop the
+                    // warning. Still logged above for the compliance record either way.
+                    if (returnRefusalSentinel)
+                        App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:local");
                     App.Logger?.Information("LocalAiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
                     return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
                 }
@@ -524,7 +529,9 @@ namespace ConditioningControlPanel.Services.AIService
                     if (!outputCheck.Allow && outputCheck.Category.HasValue)
                     {
                         App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: modelHint);
-                        App.ModerationCounter?.RecordHit(outputCheck.Category.Value, "output:local");
+                        // Model OUTPUT tripping the filter is not the user's doing — log
+                        // for compliance (above) but do NOT escalate the Content Policy
+                        // Notice. The warning is reserved for user-typed input.
                         App.Logger?.Information("LocalAiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
                         // Don't fire effects from a blocked response.
                         _currentCommands = new List<AiCommandData>();
