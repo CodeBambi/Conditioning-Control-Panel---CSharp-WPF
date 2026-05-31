@@ -28,6 +28,15 @@ namespace ConditioningControlPanel.Services
             return tooltip;
         }
 
+        /// <summary>
+        /// Resolves a themed resource by walking <paramref name="host"/>'s logical
+        /// tree (to pick up Window.Resources) then falling back to app resources.
+        /// Exposed so reusable hosts (e.g. <see cref="Controls.HelpPopover"/>) can
+        /// match the tooltip's styling without duplicating the lookup logic.
+        /// </summary>
+        public static T? FindThemeResource<T>(FrameworkElement host, string key) where T : class
+            => TryFind<T>(host, key);
+
         private static T? TryFind<T>(FrameworkElement host, string key) where T : class
         {
             // Walk the host's logical tree first (picks up Window.Resources).
@@ -38,7 +47,12 @@ namespace ConditioningControlPanel.Services
             return r as T;
         }
 
-        private static StackPanel BuildPanel(HelpContent content, FrameworkElement host)
+        /// <summary>
+        /// Builds the rich help body (header / What It Does / Tips / How It Works)
+        /// as a standalone panel. Shared by the legacy <see cref="Build"/> ToolTip
+        /// wrapper and the interactive <see cref="Controls.HelpPopover"/>.
+        /// </summary>
+        public static StackPanel BuildPanel(HelpContent content, FrameworkElement host)
         {
             var pinkBrush = TryFind<Brush>(host, "PinkBrush") ?? new SolidColorBrush(Color.FromRgb(255, 105, 180));
 

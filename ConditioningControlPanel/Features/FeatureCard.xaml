@@ -126,8 +126,7 @@
                     VerticalAlignment="Top"
                     Margin="0,8,8,0"
                     Panel.ZIndex="10"
-                    Visibility="Collapsed"
-                    Click="BtnHelp_Click"/>
+                    Visibility="Collapsed"/>
         </Grid>
     </Border>
 </UserControl>

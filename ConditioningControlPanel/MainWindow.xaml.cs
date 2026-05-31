@@ -853,6 +853,9 @@ namespace ConditioningControlPanel
 
         private void HandlePanicKeyPress()
         {
+            // Dismiss any open/pinned help popover so it never lingers over a panic.
+            Controls.HelpPopover.CloseActive();
+
             // Stop standalone Lab minigames first — they run independently of
             // the main engine, so the rest of the panic flow won't touch them.
             App.BlinkTrainer?.Stop();
@@ -17023,7 +17026,11 @@ namespace ConditioningControlPanel
         private void SetHelpContent(Button helpButton, string sectionId)
         {
             var content = Services.HelpContentService.GetContent(sectionId);
-            helpButton.ToolTip = Services.HelpTooltipBuilder.Build(content, this);
+            // Retire the non-interactive WPF ToolTip in favour of the interactive
+            // HelpPopover (cursor can move into it; click pins it). Clearing ToolTip
+            // guarantees no ToolTip + Popup double-render on these buttons.
+            helpButton.ToolTip = null;
+            Controls.HelpPopover.Attach(helpButton, content);
         }
 
         /// <summary>

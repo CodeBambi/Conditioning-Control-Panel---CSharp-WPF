@@ -179,6 +179,7 @@ namespace ConditioningControlPanel.Features
             {
                 BtnHelp.Visibility = Visibility.Collapsed;
                 BtnHelp.ToolTip = null;
+                Controls.HelpPopover.Clear(BtnHelp);
                 return;
             }
             // If we haven't been added to the visual tree yet, resource lookup
@@ -188,8 +189,10 @@ namespace ConditioningControlPanel.Features
                 BtnHelp.Visibility = Visibility.Visible;
                 return;
             }
-            BtnHelp.ToolTip = Services.HelpTooltipBuilder.Build(
-                Services.HelpContentService.GetContent(id), this);
+            // Interactive popover replaces the old non-interactive ToolTip; clear
+            // ToolTip so the two never double-render. Attach is idempotent.
+            BtnHelp.ToolTip = null;
+            Controls.HelpPopover.Attach(BtnHelp, Services.HelpContentService.GetContent(id));
             BtnHelp.Visibility = Visibility.Visible;
         }
 

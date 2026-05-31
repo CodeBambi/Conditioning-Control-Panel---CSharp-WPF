@@ -6892,8 +6892,7 @@
                                         </StackPanel>
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                             <Button x:Name="HelpBtnKeywordTriggers" Style="{StaticResource HelpButtonStyle}"
-                                                    VerticalAlignment="Center" Margin="0,0,8,0" Tag="KeywordTriggers" Panel.ZIndex="1"
-                                                    Click="HelpVideoButton_Click"/>
+                                                    VerticalAlignment="Center" Margin="0,0,8,0" Tag="KeywordTriggers" Panel.ZIndex="1"/>
                                             <Button x:Name="BtnKeywordTriggersStartStop" Content="{loc:Str btn_start}"
                                                     Background="{DynamicResource PinkBrush}" Foreground="White" FontWeight="Bold" FontSize="11"
                                                     Padding="14,4" BorderThickness="0" Cursor="Hand"

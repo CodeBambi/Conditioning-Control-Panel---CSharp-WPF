@@ -10,6 +10,9 @@ namespace ConditioningControlPanel.Services
             ["FlashImages"] = new HelpContent
             {
                 SectionId = "FlashImages",
+                ClipFile = "flash_images.mov",
+                CaptionKey = "help_caption_flash_images",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\u26A1",
                 Title = "Flash Images",
                 WhatItDoes = "Displays random images from your assets/images folder on screen at set intervals. " +
@@ -53,6 +56,9 @@ namespace ConditioningControlPanel.Services
             ["Video"] = new HelpContent
             {
                 SectionId = "Video",
+                ClipFile = "mandatory_video.mov",
+                CaptionKey = "help_caption_mandatory_video",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83C\uDFAC",
                 Title = "Mandatory Video",
                 WhatItDoes = "Plays fullscreen videos from your assets/videos folder on a schedule. " +
@@ -97,6 +103,9 @@ namespace ConditioningControlPanel.Services
             ["Subliminals"] = new HelpContent
             {
                 SectionId = "Subliminals",
+                ClipFile = "subliminals.mov",
+                CaptionKey = "help_caption_subliminals",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDCAD",
                 Title = "Subliminal Messages",
                 WhatItDoes = "Brief text messages that flash on screen for fractions of a second, " +
@@ -274,7 +283,7 @@ namespace ConditioningControlPanel.Services
             ["SessionEditor"] = new HelpContent
             {
                 SectionId = "SessionEditor",
-                ClipFile = "timeline_editor.mp4",
+                ClipFile = "sessioneditor.mov",
                 CaptionKey = "help_caption_timeline_editor",
                 FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "🎚", // 🎚 level slider - connotes timeline tracks
@@ -955,6 +964,9 @@ namespace ConditioningControlPanel.Services
             ["SpiralOverlay"] = new HelpContent
             {
                 SectionId = "SpiralOverlay",
+                ClipFile = "spiral.mov",
+                CaptionKey = "help_caption_spiral_overlay",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83C\uDF00",
                 Title = "Spiral Overlay",
                 WhatItDoes = "Displays a hypnotic spiral animation overlaid on all monitors. " +
@@ -977,6 +989,9 @@ namespace ConditioningControlPanel.Services
             ["PinkFilter"] = new HelpContent
             {
                 SectionId = "PinkFilter",
+                ClipFile = "pinkfilter.mov",
+                CaptionKey = "help_caption_pink_filter",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDC97",
                 Title = "Pink Filter",
                 WhatItDoes = "Tints every screen with a soft pink overlay — subtle or intense, your choice. " +
@@ -999,6 +1014,9 @@ namespace ConditioningControlPanel.Services
             ["BubblePop"] = new HelpContent
             {
                 SectionId = "BubblePop",
+                ClipFile = "bubblepop.mov",
+                CaptionKey = "help_caption_bubble_pop",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83E\uDEE7",
                 Title = "Bubble Pop",
                 WhatItDoes = "A playful mini-game that spawns floating bubbles on your screen. Pop them " +
@@ -1021,6 +1039,9 @@ namespace ConditioningControlPanel.Services
             ["LockCard"] = new HelpContent
             {
                 SectionId = "LockCard",
+                ClipFile = "lockcard.mov",
+                CaptionKey = "help_caption_lock_card",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDD12",
                 Title = "Lock Card",
                 WhatItDoes = "Periodically locks your screen with a card that requires you to type a phrase " +
@@ -1043,6 +1064,9 @@ namespace ConditioningControlPanel.Services
             ["BouncingText"] = new HelpContent
             {
                 SectionId = "BouncingText",
+                ClipFile = "bouncingtext.mov",
+                CaptionKey = "help_caption_bouncing_text",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83D\uDCFA",
                 Title = "Bouncing Text",
                 WhatItDoes = "DVD-screensaver-style text that bounces around your screen with customizable " +
@@ -1086,6 +1110,9 @@ namespace ConditioningControlPanel.Services
             ["BubbleCount"] = new HelpContent
             {
                 SectionId = "BubbleCount",
+                ClipFile = "bubblecount.mov",
+                CaptionKey = "help_caption_bubble_count",
+                FullTutorialUrl = null, // docs page not live yet; button hides while null
                 Icon = "\uD83E\uDEE7",
                 Title = "Bubble Count",
                 WhatItDoes = "A memory and attention challenge: bubbles appear on screen briefly, then you " +
