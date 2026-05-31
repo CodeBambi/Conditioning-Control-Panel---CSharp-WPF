@@ -83,6 +83,7 @@ namespace ConditioningControlPanel.Services
                     nameof(HapticSettings.LevelUpEnabled) when _currentEventType == "LevelUp" => !Settings.LevelUpEnabled,
                     nameof(HapticSettings.AchievementEnabled) when _currentEventType == "Achievement" => !Settings.AchievementEnabled,
                     nameof(HapticSettings.BouncingTextEnabled) when _currentEventType == "BouncingText" => !Settings.BouncingTextEnabled,
+                    nameof(HapticSettings.BlinkEnabled) when _currentEventType == "Blink" => !Settings.BlinkEnabled,
                     _ => false
                 };
 
@@ -297,6 +298,7 @@ namespace ConditioningControlPanel.Services
                 "LevelUp" => Settings.LevelUpEnabled,
                 "Achievement" => Settings.AchievementEnabled,
                 "BouncingText" => Settings.BouncingTextEnabled,
+                "Blink" => Settings.BlinkEnabled,
                 _ => true
             };
         }
@@ -700,6 +702,27 @@ namespace ConditioningControlPanel.Services
 
             // Quick 60ms pattern using selected mode
             await ApplyVibrationModeAsync(intensity, 60, Settings.BouncingTextMode);
+            _currentEventType = null;
+        }
+
+        // === BLINK TRAINER ===
+
+        /// <summary>
+        /// Fire a short pulse on each blink detected by the Lab "Blink Trainer".
+        /// Mirrors the other discrete-event features (BubblePop / BouncingText):
+        /// slider directly controls device power, BlinkMode picks the pattern.
+        /// </summary>
+        public async Task BlinkPulseAsync()
+        {
+            if (!Settings.Enabled || !Settings.BlinkEnabled || _activeProvider == null || !_activeProvider.IsConnected)
+                return;
+
+            _currentEventType = "Blink";
+            // Slider directly controls device power
+            var intensity = GetSliderIntensity(Settings.BlinkIntensity);
+            HapticTriggered?.Invoke(this, $"Blink: {(int)(intensity * 100)}%");
+
+            await ApplyVibrationModeAsync(intensity, 150, Settings.BlinkMode);
             _currentEventType = null;
         }
 

@@ -36,6 +36,7 @@ namespace ConditioningControlPanel.Models
         private bool _levelUpEnabled = true;
         private bool _achievementEnabled = true;
         private bool _bouncingTextEnabled = true;
+        private bool _blinkEnabled = true;
 
         // Per-event intensity (0.0 to 1.0) - slider directly controls device power
         // 50% default so users can increase or decrease from baseline
@@ -48,6 +49,7 @@ namespace ConditioningControlPanel.Models
         private double _levelUpIntensity = 0.5;
         private double _achievementIntensity = 0.5;
         private double _bouncingTextIntensity = 0.5;
+        private double _blinkIntensity = 0.6;
 
         // Per-event vibration mode - user selects pattern type
         private VibrationMode _bubblePopMode = VibrationMode.Constant;
@@ -59,6 +61,7 @@ namespace ConditioningControlPanel.Models
         private VibrationMode _levelUpMode = VibrationMode.Escalate;
         private VibrationMode _achievementMode = VibrationMode.Heartbeat;
         private VibrationMode _bouncingTextMode = VibrationMode.Pulse;
+        private VibrationMode _blinkMode = VibrationMode.Pulse;
 
         // Connection URLs - defaults shown in tooltip guide
         private string _lovenseUrl = "http://192.168.1.1:30010";
@@ -142,6 +145,17 @@ namespace ConditioningControlPanel.Models
             set { _bouncingTextEnabled = value; OnPropertyChanged(); }
         }
 
+        /// <summary>
+        /// Pulse the device on each blink detected by the Lab "Blink Trainer".
+        /// Defaults on; no Haptics-tab UI yet (configurable via settings JSON) —
+        /// dedicated toggle/slider deferred to a polish pass.
+        /// </summary>
+        public bool BlinkEnabled
+        {
+            get => _blinkEnabled;
+            set { _blinkEnabled = value; OnPropertyChanged(); }
+        }
+
         // Per-event intensity properties
         public double BubblePopIntensity
         {
@@ -197,6 +211,12 @@ namespace ConditioningControlPanel.Models
             set { _bouncingTextIntensity = Math.Clamp(value, 0, 1); OnPropertyChanged(); }
         }
 
+        public double BlinkIntensity
+        {
+            get => _blinkIntensity;
+            set { _blinkIntensity = Math.Clamp(value, 0, 1); OnPropertyChanged(); }
+        }
+
         // Per-event vibration mode properties
         public VibrationMode BubblePopMode
         {
@@ -250,6 +270,12 @@ namespace ConditioningControlPanel.Models
         {
             get => _bouncingTextMode;
             set { _bouncingTextMode = value; OnPropertyChanged(); }
+        }
+
+        public VibrationMode BlinkMode
+        {
+            get => _blinkMode;
+            set { _blinkMode = value; OnPropertyChanged(); }
         }
 
         public string LovenseUrl

@@ -224,6 +224,25 @@ public class BlinkTrainerService : IDisposable
         // OnBlink is already dispatcher-marshaled by WebcamTrackingService.
         if (!IsRunning) return;
         ShowRandom();
+        TriggerBlinkHaptic();
+    }
+
+    /// <summary>
+    /// Pulse the connected haptic device on each blink. No-ops unless the user
+    /// has haptics enabled, the Blink feature on, and a device connected (all
+    /// checked inside HapticService.BlinkPulseAsync). Fire-and-forget off the
+    /// UI thread so blink handling never blocks on the device's HTTP round-trip.
+    /// </summary>
+    private static void TriggerBlinkHaptic()
+    {
+        var haptics = App.Haptics;
+        if (haptics == null) return;
+
+        _ = Task.Run(async () =>
+        {
+            try { await haptics.BlinkPulseAsync(); }
+            catch (Exception ex) { App.Logger?.Debug(ex, "BlinkTrainer: blink haptic failed"); }
+        });
     }
 
     private void ShowRandom()
