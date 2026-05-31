@@ -10,6 +10,8 @@
         <ResourceDictionary Source="Resources/Theme/Brushes.xaml"/>
         <ResourceDictionary Source="Resources/Theme/Controls.xaml"/>
         <ResourceDictionary Source="Resources/Theme/Converters.xaml"/>
+        <!-- Season Recap card palette (scoped v6 dark-violet tokens) -->
+        <ResourceDictionary Source="Resources/Theme/SeasonRecapCard.xaml"/>
 
         <!-- Keep any existing app-level dictionaries below -->
       </ResourceDictionary.MergedDictionaries>

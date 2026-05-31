@@ -194,6 +194,21 @@ namespace ConditioningControlPanel.Models
             set { _lastSeasonResetSeen = value ?? ""; OnPropertyChanged(); }
         }
 
+        private bool _seasonResetPending = false;
+        /// <summary>
+        /// Set by ProfileSyncService when the server returns <c>level_reset</c> (monthly rollover
+        /// OR an admin reset of this account). Tells MainWindow.TryPresentSeasonRecap to surface
+        /// the recap card even when the UTC month already matches LastSeasonResetSeen (i.e. a
+        /// mid-month admin reset). Cleared once the card has been presented. Persisted so a reset
+        /// that arrives late in a session still surfaces on the next launch.
+        /// </summary>
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool SeasonResetPending
+        {
+            get => _seasonResetPending;
+            set { _seasonResetPending = value; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Skill Tree / Enhancements
@@ -3003,6 +3018,114 @@ namespace ConditioningControlPanel.Models
             get => _highestLevelEver;
             set { _highestLevelEver = Math.Max(0, value); OnPropertyChanged(); }
         }
+
+        #region Season Recap (local-only, per-device)
+
+        // The Season Recap Card surfaces a snapshot of the just-ended season at rollover.
+        // These counters are accumulated LOCALLY ONLY (no server, no new endpoints — locked
+        // decision #2). They are scoped to SeasonStatsSeason; SeasonRecapService snapshots
+        // them BEFORE rolling to a new season. None of these participate in the server-driven
+        // level/XP reset, so the all-time figures they sit beside (TotalConditioningMinutes,
+        // TotalSessionsStarted) are unaffected. First season after deploy will undercount
+        // because tracking starts at install — by design.
+
+        private string? _seasonStatsSeason = null;
+        /// <summary>
+        /// "YYYY-MM" the live season counters below currently belong to. Null until the first
+        /// session/launch initializes it. Advanced only by SeasonRecapService at rollover
+        /// (after the snapshot is written), never mid-increment.
+        /// </summary>
+        public string? SeasonStatsSeason
+        {
+            get => _seasonStatsSeason;
+            set { _seasonStatsSeason = value; OnPropertyChanged(); }
+        }
+
+        private double _seasonConditioningMinutes = 0;
+        /// <summary>Conditioning minutes accumulated during SeasonStatsSeason (resets each season).</summary>
+        public double SeasonConditioningMinutes
+        {
+            get => _seasonConditioningMinutes;
+            set { _seasonConditioningMinutes = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _seasonSessionsStarted = 0;
+        /// <summary>Sessions started during SeasonStatsSeason (resets each season).</summary>
+        public int SeasonSessionsStarted
+        {
+            get => _seasonSessionsStarted;
+            set { _seasonSessionsStarted = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private List<string> _seasonActiveDays = new();
+        /// <summary>
+        /// Distinct "yyyy-MM-dd" dates the user was active this season (resets each season).
+        /// Count gives "Days Active". Stored as strings for JSON friendliness.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public List<string> SeasonActiveDays
+        {
+            get => _seasonActiveDays;
+            set { _seasonActiveDays = value ?? new(); OnPropertyChanged(); }
+        }
+
+        private int _seasonPeakStreak = 0;
+        /// <summary>
+        /// Highest ConsecutiveDays streak reached during SeasonStatsSeason. Tracked separately
+        /// from CurrentStreak because the server-driven reset can zero CurrentStreak before the
+        /// snapshot runs — the peak must survive that.
+        /// </summary>
+        public int SeasonPeakStreak
+        {
+            get => _seasonPeakStreak;
+            set { _seasonPeakStreak = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _seasonPeakRank = 0;
+        /// <summary>
+        /// Best (lowest) leaderboard rank sampled during SeasonStatsSeason while the app was
+        /// open (decision #1: client-sampled, no server field). 0 = never sampled.
+        /// </summary>
+        public int SeasonPeakRank
+        {
+            get => _seasonPeakRank;
+            set { _seasonPeakRank = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _seasonPeakRankTotal = 0;
+        /// <summary>Total leaderboard users at the moment SeasonPeakRank was captured (for "of N").</summary>
+        public int SeasonPeakRankTotal
+        {
+            get => _seasonPeakRankTotal;
+            set { _seasonPeakRankTotal = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private Dictionary<string, int> _seasonFeatureUse = new();
+        /// <summary>
+        /// Per-feature engagement counts for SeasonStatsSeason, keyed by SeasonFeatureKeys.*.
+        /// Counted once per session per enabled feature (plus standalone hooks). Top entries
+        /// drive the card badge row. Lightest-touch ranking signal, not heavy analytics.
+        /// </summary>
+        [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        public Dictionary<string, int> SeasonFeatureUse
+        {
+            get => _seasonFeatureUse;
+            set { _seasonFeatureUse = value ?? new(); OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// Increment the per-season engagement count for a feature key. No-op on null/empty key.
+        /// Does not Save() — callers batch saves at natural points (session start, etc.).
+        /// </summary>
+        public void TrackSeasonFeature(string featureKey)
+        {
+            if (string.IsNullOrWhiteSpace(featureKey)) return;
+            _seasonFeatureUse.TryGetValue(featureKey, out var n);
+            _seasonFeatureUse[featureKey] = n + 1;
+            OnPropertyChanged(nameof(SeasonFeatureUse));
+        }
+
+        #endregion
 
         private bool _hasAcceptedAgeVerification = false;
         /// <summary>

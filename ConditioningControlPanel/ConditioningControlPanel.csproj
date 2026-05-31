@@ -161,6 +161,8 @@
   <ItemGroup>
     <!-- App icon -->
     <Resource Include="Resources\app.ico" />
+    <Resource Include="Resources\february.png" />
+    <Resource Include="Resources\february_drone.png" />
     <Resource Include="Resources\logo.png" />
     <Resource Include="Resources\logo2.png" />
     <Resource Include="Resources\bubble.png" />

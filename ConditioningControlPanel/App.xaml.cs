@@ -952,6 +952,26 @@ namespace ConditioningControlPanel
             Mods = new ModService();
             Mods.Initialize(Settings?.Current?.ActiveModId);
 
+            // Mod-coded title bars: tint every window's OS caption with the active mod accent.
+            // One class handler covers all windows (current + future) with no per-window code;
+            // chromeless/transparent windows are unaffected (DWM caption attrs no-op there).
+            EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent,
+                new RoutedEventHandler((s, _) => Services.WindowChromeHelper.ApplyDarkTitleBar((Window)s)));
+            // Recolor the Season Recap card palette from the active mod.
+            Services.RecapTheme.ApplyForActiveMod();
+            // On mod switch: re-tint open window title bars and re-skin the recap palette (UI thread).
+            Mods.ModChanged += (_, __) =>
+            {
+                void Recolor()
+                {
+                    Services.RecapTheme.ApplyForActiveMod();
+                    foreach (Window w in Current.Windows)
+                        Services.WindowChromeHelper.ApplyDarkTitleBar(w);
+                }
+                if (Current?.Dispatcher?.CheckAccess() == true) Recolor();
+                else Current?.Dispatcher?.Invoke(Recolor);
+            };
+
             splash.SetProgress(0.3, "Initializing audio...");
             Audio = new AudioService();
             Audio.RunStartupDiagnostics();

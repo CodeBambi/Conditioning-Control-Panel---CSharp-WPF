@@ -197,6 +197,29 @@ namespace ConditioningControlPanel.Services
             // Track session start for achievements (e.g., Relapse)
             App.Achievements?.TrackSessionStart();
 
+            // Season Recap (local-only): count this season's session, and record which
+            // features were engaged — once per session, from the enabled flags, so pause/
+            // resume can't double-count. Drives the card's session count + badge row.
+            try
+            {
+                SeasonRecapService.IncrementSessionStarted();
+                var ss = session.Settings;
+                if (ss.FlashEnabled) SeasonRecapService.TrackFeature(SeasonFeatureKeys.Flash);
+                if (ss.MandatoryVideosEnabled) SeasonRecapService.TrackFeature(SeasonFeatureKeys.Video);
+                if (ss.SubliminalEnabled) SeasonRecapService.TrackFeature(SeasonFeatureKeys.Subliminal);
+                if (ss.SpiralEnabled || ss.PinkFilterEnabled) SeasonRecapService.TrackFeature(SeasonFeatureKeys.Overlay);
+                if (ss.BubblesEnabled) SeasonRecapService.TrackFeature(SeasonFeatureKeys.Bubbles);
+                if (ss.BubbleCountEnabled) SeasonRecapService.TrackFeature(SeasonFeatureKeys.BubbleCount);
+                if (ss.BouncingTextEnabled) SeasonRecapService.TrackFeature(SeasonFeatureKeys.BouncingText);
+                if (ss.LockCardEnabled) SeasonRecapService.TrackFeature(SeasonFeatureKeys.LockCard);
+                if (ss.MindWipeEnabled) SeasonRecapService.TrackFeature(SeasonFeatureKeys.MindWipe);
+                App.Settings?.Save();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "SeasonRecap: failed to record session feature use");
+            }
+
             // Begin capturing the post-session media log (videos played + flash images shown)
             App.SessionLog?.BeginSession(session);
 

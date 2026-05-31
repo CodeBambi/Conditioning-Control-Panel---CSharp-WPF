@@ -211,6 +211,13 @@ public class AchievementProgress
     /// </summary>
     public void UpdateDailyStreak()
     {
+        // Season Recap (local-only): mark today as an active day this season, and capture the
+        // current streak as a season peak. Done BEFORE the same-day early-return below so a
+        // relaunch on a day we already counted still records the peak (the end-of-method call
+        // only fires when the streak actually changes).
+        SeasonRecapService.MarkActiveToday();
+        SeasonRecapService.TrackStreakPeak(ConsecutiveDays);
+
         var today = DateTime.Today;
         var lastDate = LastLaunchDate.Date;
 
@@ -268,6 +275,11 @@ public class AchievementProgress
 
         // Sync CurrentStreak in AppSettings with ConsecutiveDays
         SyncCurrentStreak();
+
+        // Season Recap (local-only): keep the season peak streak. Tracked separately from
+        // CurrentStreak because the server-driven season reset can zero CurrentStreak before
+        // the recap snapshot runs — the peak must survive that.
+        SeasonRecapService.TrackStreakPeak(ConsecutiveDays);
     }
 
     /// <summary>

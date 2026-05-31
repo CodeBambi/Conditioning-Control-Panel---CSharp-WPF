@@ -720,7 +720,20 @@ namespace ConditioningControlPanel.Services
                             settings.PlayerXP = serverLevelXp;
                             // Use server's highest_level_ever (preserved across resets for permanent unlocks)
                             settings.HighestLevelEver = v2Result.User.HighestLevelEver ?? 0;
+
+                            // Season Recap: a level_reset IS the reset — flag the recap so it
+                            // surfaces even mid-month (monthly rollover otherwise also triggers it
+                            // via the month check). Then nudge the UI to present it now if MainWindow
+                            // is already up (e.g. reset arrived during a running session). level_reset
+                            // is one-shot from the server (subsequent syncs return false once the
+                            // server advances the user's season), so this won't loop.
+                            settings.SeasonResetPending = true;
                             App.Settings?.Save();
+
+                            System.Windows.Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                            {
+                                (System.Windows.Application.Current?.MainWindow as ConditioningControlPanel.MainWindow)?.TryPresentSeasonRecap();
+                            }));
                         }
                         // Adopt server XP after sync. Two cases:
                         // 1. Server > local: server has more (admin boost, other device). Adopt.

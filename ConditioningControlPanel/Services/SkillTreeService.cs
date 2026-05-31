@@ -729,6 +729,8 @@ public class SkillTreeService : IDisposable
         if (settings == null) return;
 
         settings.TotalConditioningMinutes += minutes;
+        // Mirror into the per-season counter for the Season Recap card (local-only).
+        SeasonRecapService.AddConditioningMinutes(minutes);
         App.Settings?.Save();
     }
 

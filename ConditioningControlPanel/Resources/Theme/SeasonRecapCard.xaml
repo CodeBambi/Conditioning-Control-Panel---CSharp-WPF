@@ -1,0 +1,81 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ======================================================================
+         Season Recap Card palette.
+
+         These are DEFAULTS (the original v6 dark-violet look). At runtime
+         Services/RecapTheme.cs overrides the mod-driven color keys in
+         Application.Resources from the active mod's accent, and the brushes
+         below — which reference their colors via DynamicResource — recolor
+         automatically (same pattern as the app's PinkColor theming). Keys NOT
+         overridden by RecapTheme stay constant (void/panel darks, gold, ink,
+         foil cyan) for legibility and the holographic edge.
+         ====================================================================== -->
+
+    <!-- Structural darks / constants -->
+    <Color x:Key="RecapVoid">#FF0A0414</Color>
+    <Color x:Key="RecapPanel">#FF150A26</Color>
+    <Color x:Key="RecapPanelMid">#FF2A103F</Color>
+    <Color x:Key="RecapFoilCyan">#FF34E0E8</Color>
+    <Color x:Key="RecapGold">#FFFFD166</Color>
+    <Color x:Key="RecapInk">#FFF3ECFF</Color>
+    <Color x:Key="RecapInkDim">#FFA78FD6</Color>
+
+    <!-- Mod-driven accents (overridden per active mod by RecapTheme) -->
+    <Color x:Key="RecapViolet">#FF7C3AED</Color>
+    <Color x:Key="RecapVioletLite">#FFB18CFF</Color>
+    <Color x:Key="RecapMagenta">#FFE84CF2</Color>
+    <Color x:Key="RecapLine">#2EB18CFF</Color>
+    <Color x:Key="RecapAvatarInner">#FF3A1860</Color>
+    <Color x:Key="RecapStatFill">#0FB18CFF</Color>
+
+    <!-- Mod-driven alpha tints used by inline gradients on the card -->
+    <Color x:Key="RecapHeroTint">#3D7C3AED</Color>
+    <Color x:Key="RecapVerdictTintTop">#24E84CF2</Color>
+    <Color x:Key="RecapVerdictTintBottom">#147C3AED</Color>
+    <Color x:Key="RecapEdgeTint">#45E84CF2</Color>
+    <Color x:Key="RecapOgPillBg">#2EE84CF2</Color>
+    <Color x:Key="RecapOgPillBorder">#73E84CF2</Color>
+
+    <!-- Solid brushes (colors via DynamicResource so they react to mod overrides) -->
+    <SolidColorBrush x:Key="RecapVoidBrush" Color="{DynamicResource RecapVoid}"/>
+    <SolidColorBrush x:Key="RecapPanelBrush" Color="{DynamicResource RecapPanel}"/>
+    <SolidColorBrush x:Key="RecapVioletBrush" Color="{DynamicResource RecapViolet}"/>
+    <SolidColorBrush x:Key="RecapVioletLiteBrush" Color="{DynamicResource RecapVioletLite}"/>
+    <SolidColorBrush x:Key="RecapMagentaBrush" Color="{DynamicResource RecapMagenta}"/>
+    <SolidColorBrush x:Key="RecapFoilCyanBrush" Color="{DynamicResource RecapFoilCyan}"/>
+    <SolidColorBrush x:Key="RecapGoldBrush" Color="{DynamicResource RecapGold}"/>
+    <SolidColorBrush x:Key="RecapInkBrush" Color="{DynamicResource RecapInk}"/>
+    <SolidColorBrush x:Key="RecapInkDimBrush" Color="{DynamicResource RecapInkDim}"/>
+    <SolidColorBrush x:Key="RecapLineBrush" Color="{DynamicResource RecapLine}"/>
+    <SolidColorBrush x:Key="RecapStatFillBrush" Color="{DynamicResource RecapStatFill}"/>
+
+    <!-- Status pill: accent -> accent-light -->
+    <LinearGradientBrush x:Key="RecapStatusPillBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="{DynamicResource RecapMagenta}" Offset="0"/>
+        <GradientStop Color="{DynamicResource RecapVioletLite}" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Hero numerals: white -> accent-light -->
+    <LinearGradientBrush x:Key="RecapHeroTextBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#FFFFFFFF" Offset="0"/>
+        <GradientStop Color="{DynamicResource RecapVioletLite}" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Verdict handle: foil-cyan -> accent -> accent-light -->
+    <LinearGradientBrush x:Key="RecapNameBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="{DynamicResource RecapFoilCyan}" Offset="0"/>
+        <GradientStop Color="{DynamicResource RecapMagenta}" Offset="0.55"/>
+        <GradientStop Color="{DynamicResource RecapVioletLite}" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- Inner card background: radial accent-dark -> panel -> void -->
+    <RadialGradientBrush x:Key="RecapInnerBgBrush" GradientOrigin="0.5,0.38" Center="0.5,0.38"
+                         RadiusX="0.75" RadiusY="0.6">
+        <GradientStop Color="{DynamicResource RecapPanelMid}" Offset="0"/>
+        <GradientStop Color="{DynamicResource RecapPanel}" Offset="0.55"/>
+        <GradientStop Color="{DynamicResource RecapVoid}" Offset="1"/>
+    </RadialGradientBrush>
+
+</ResourceDictionary>

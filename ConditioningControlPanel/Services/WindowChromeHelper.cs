@@ -20,13 +20,11 @@ namespace ConditioningControlPanel.Services
         private const int DWMWA_CAPTION_COLOR = 35;
         private const int DWMWA_TEXT_COLOR    = 36;
 
-        // COLORREF is 0x00BBGGRR. Mirrors Resources/Theme/Colors.xaml:
-        //   DarkerBg     #121220 → 0x00201212 (matches window body bg)
-        //   DeeperAccent #7B5CFF → 0x00FF5C7B (violet edge)
-        //   TextLight    #F0F0F5 → 0x00F5F0F0
-        private const int CaptionColor = 0x00201212;
-        private const int BorderColor  = 0x00FF5C7B;
-        private const int TextColor    = 0x00F5F0F0;
+        // Accent used when no mod color is available (CCP default pink #FF69B4).
+        private static readonly (byte R, byte G, byte B) FallbackAccent = (0xFF, 0x69, 0xB4);
+
+        // COLORREF is 0x00BBGGRR.
+        private static int Colorref(byte r, byte g, byte b) => r | (g << 8) | (b << 16);
 
         // Apply on `window`. Safe to call before the hwnd exists — the helper
         // hooks SourceInitialized and retries. Idempotent.
@@ -56,17 +54,23 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // Caption + border take the active mod's accent color so every window's
+                // title bar matches the mod theme (pink for BASIC BIMBO, etc.).
+                var (r, g, b) = App.Mods?.GetAccentColorRgb() ?? FallbackAccent;
+
                 int dark = 1;
                 DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
 
-                int caption = CaptionColor;
+                int caption = Colorref(r, g, b);
                 DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref caption, sizeof(int));
 
-                int text = TextColor;
-                DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ref text, sizeof(int));
-
-                int border = BorderColor;
+                int border = caption;
                 DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ref border, sizeof(int));
+
+                // Auto-contrast caption text: dark ink on a bright accent, white on a dark one.
+                double luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+                int text = luminance > 150 ? Colorref(0x16, 0x08, 0x26) : Colorref(0xFF, 0xFF, 0xFF);
+                DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ref text, sizeof(int));
             }
             catch
             {

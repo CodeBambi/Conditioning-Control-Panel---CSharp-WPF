@@ -1,0 +1,86 @@
+<Window x:Class="ConditioningControlPanel.Controls.SeasonRecapWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Season Recap"
+        SizeToContent="WidthAndHeight"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource RecapVoidBrush}"
+        FontFamily="Segoe UI">
+    <Window.Resources>
+        <!-- Share pill button -->
+        <Style x:Key="SharePill" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource RecapInkBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="5,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" CornerRadius="13" Padding="14,9"
+                                Background="#14B18CFF"
+                                BorderBrush="{StaticResource RecapLineBrush}" BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#29B18CFF"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource RecapVioletLiteBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Continue button (primary) -->
+        <Style x:Key="ContinueBtn" TargetType="Button">
+            <Setter Property="Foreground" Value="#FF160826"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" CornerRadius="13" Padding="22,11"
+                                Background="{StaticResource RecapStatusPillBrush}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="26,22,26,20" HorizontalAlignment="Center">
+        <!-- live animated card -->
+        <Border x:Name="PART_CardHost" HorizontalAlignment="Center"/>
+
+        <!-- share row -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0">
+            <Button x:Name="BtnCopy" Style="{StaticResource SharePill}" Click="OnCopy"/>
+            <Button x:Name="BtnSave" Style="{StaticResource SharePill}" Click="OnSave"/>
+            <Button x:Name="BtnShareX" Style="{StaticResource SharePill}" Click="OnShareX"/>
+            <Button x:Name="BtnShareReddit" Style="{StaticResource SharePill}" Click="OnShareReddit"/>
+        </StackPanel>
+
+        <!-- in-window status line (the recap window sits above the MainWindow toast host, so
+             share confirmations surface here instead) -->
+        <TextBlock x:Name="PART_Status" FontSize="11.5" TextAlignment="Center" TextWrapping="Wrap"
+                   Foreground="{StaticResource RecapInkDimBrush}" Margin="0,12,0,0"
+                   MaxWidth="420" Visibility="Collapsed"/>
+
+        <!-- continue to next season -->
+        <Button x:Name="BtnContinue" Style="{StaticResource ContinueBtn}" Click="OnContinue"
+                HorizontalAlignment="Center" Margin="0,16,0,0"/>
+
+        <TextBlock x:Name="PART_Note" FontSize="10.5" TextAlignment="Center" TextWrapping="Wrap"
+                   Foreground="{StaticResource RecapInkDimBrush}" Margin="0,12,0,0" MaxWidth="420"/>
+    </StackPanel>
+</Window>

@@ -428,7 +428,7 @@ namespace ConditioningControlPanel
             {
                 // Not first launch - check if we need to show "What's New" after an update
                 ShowWhatsNewIfNeeded();
-                ShowSeasonResetIfNeeded();
+                TryPresentSeasonRecap();
             }
 
             // Initialize scheduler timer (checks every 30 seconds)
@@ -548,6 +548,9 @@ namespace ConditioningControlPanel
             {
                 settingsInpc.PropertyChanged += OnSettingsPropertyChangedForCards;
             }
+            // velvet-mosaic: right-clicking a card quick-toggles its feature on/off.
+            VelvetFeatureGrid.AddHandler(Features.FeatureCard.ToggleRequestedEvent,
+                new RoutedEventHandler(OnFeatureCardToggleRequested));
         }
 
         private void OnXPChanged(object? sender, double xp)
@@ -4546,6 +4549,38 @@ namespace ConditioningControlPanel
         private void BtnLeaderboard_Click(object sender, RoutedEventArgs e)
         {
             ShowTab("leaderboard");
+            // Surface the Season Recap re-view button only when a persisted snapshot exists.
+            try
+            {
+                if (BtnViewSeasonRecap != null)
+                    BtnViewSeasonRecap.Visibility = Services.SeasonRecapService.HasAnySnapshot()
+                        ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "SeasonRecap: failed to update re-view button visibility");
+            }
+        }
+
+        /// <summary>Re-view the most recent season's recap card from its persisted snapshot.</summary>
+        private void BtnViewSeasonRecap_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var snapshot = Services.SeasonRecapService.LoadLatest();
+                if (snapshot == null)
+                {
+                    App.Notifications?.Show(Loc.Get("recap_toast_none"), Services.NotificationType.Info);
+                    return;
+                }
+                var vm = new ViewModels.SeasonRecapViewModel(snapshot);
+                var win = new Controls.SeasonRecapWindow(vm) { Owner = this };
+                win.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "SeasonRecap: failed to open re-view window");
+            }
         }
 
         private void BtnLab_Click(object sender, RoutedEventArgs e)
@@ -15050,76 +15085,106 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Shows a "What's New" dialog if the app was updated since last launch
         /// </summary>
+        // Season Recap is shown at most once per app run; guards the two trigger paths
+        // (startup month-check and the server-reset nudge from ProfileSyncService).
+        private bool _seasonRecapShown;
+
         /// <summary>
-        /// Shows a one-time-per-month notice when the monthly leaderboard season has rotated.
-        /// The server resets <c>level</c>/<c>xp</c>/<c>daily_quest_streak</c> on the 1st of every
-        /// month UTC; achievements, HighestLevelEver, skills, and lifetime XP are preserved.
-        /// Without this notice, returning users on the 1st think they lost their progress and
-        /// file bug reports. Only shown to users with HighestLevelEver >= 2 (anyone with progression).
+        /// Presents the Season Recap card when the user has been reset. Triggers on EITHER:
+        ///   • a monthly rollover (UTC month != LastSeasonResetSeen) — fires on any day of the
+        ///     new month, not just the 1st; or
+        ///   • a server-driven reset (AppSettings.SeasonResetPending, set by ProfileSyncService
+        ///     when the server returns level_reset) — this is how an admin reset of a single
+        ///     account surfaces the card mid-month, and makes the feature testable.
+        ///
+        /// Snapshots the just-ended season BEFORE clearing its counters, then shows the card
+        /// (or the legacy textual notice when there's no season data yet). The actual level/XP/
+        /// streak reset still happens via the server + SkillTreeService — this only wraps it.
+        /// Safe to call repeatedly; shows at most once per app run. Public so ProfileSyncService
+        /// can nudge it the moment a reset arrives.
         /// </summary>
-        private void ShowSeasonResetIfNeeded()
+        public void TryPresentSeasonRecap()
         {
             try
             {
+                if (_seasonRecapShown) return;
                 if (App.Settings?.Current == null) return;
 
                 var currentSeason = DateTime.UtcNow.ToString("yyyy-MM");
                 var lastSeasonSeen = App.Settings.Current.LastSeasonResetSeen ?? "";
                 var highestLevel = App.Settings.Current.HighestLevelEver;
+                var resetPending = App.Settings.Current.SeasonResetPending;
 
-                // Brand-new users (never leveled up) skip this. They'll see it next month if they progress.
+                // Brand-new users (never leveled up) skip this. They'll see it once they progress.
                 if (highestLevel < 2) return;
 
-                // Already shown for this season
-                if (lastSeasonSeen == currentSeason) return;
+                var monthRolled = lastSeasonSeen != currentSeason;
+                if (!monthRolled && !resetPending) return;
 
-                App.Logger?.Information("Season changed from {Old} to {New}, showing season reset notice (HighestLevel={Highest})",
-                    string.IsNullOrEmpty(lastSeasonSeen) ? "(none)" : lastSeasonSeen, currentSeason, highestLevel);
+                _seasonRecapShown = true;
+                App.Logger?.Information("Presenting season recap (monthRolled={Month}, resetPending={Pending}, last={Old}, current={New}, highestLevel={Highest})",
+                    monthRolled, resetPending, string.IsNullOrEmpty(lastSeasonSeen) ? "(none)" : lastSeasonSeen, currentSeason, highestLevel);
 
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     try
                     {
                         IsStartupDialogShowing = true;
-                        App.Logger?.Information("Season reset dialog showing, setting IsStartupDialogShowing=true");
 
-                        var message =
-                            "The monthly leaderboard season has rotated. This happens at the start of every month so everyone has a fresh chance to climb the rankings.\n\n" +
-                            "What resets:\n" +
-                            "  - Current Level and XP\n" +
-                            "  - Daily quest streak\n" +
-                            "  - Monthly leaderboard position\n\n" +
-                            "What's preserved:\n" +
-                            "  - All achievements\n" +
-                            "  - Highest Level Ever (yours: " + highestLevel + ")\n" +
-                            "  - Skill points and unlocked enhancements\n" +
-                            "  - Total lifetime XP\n" +
-                            "  - Patreon perks and whitelist\n\n" +
-                            "Welcome to season " + currentSeason + "!";
+                        // Snapshot the just-ended season BEFORE its counters are cleared, then roll
+                        // the bucket. CaptureAndRollover writes the JSON first and only then clears —
+                        // order is load-bearing (an empty snapshot = an empty card).
+                        var snapshot = Services.SeasonRecapService.CaptureAndRollover(currentSeason);
 
-                        MessageBox.Show(
-                            message,
-                            "New Season Started",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
+                        if (snapshot != null)
+                        {
+                            var vm = new ViewModels.SeasonRecapViewModel(snapshot);
+                            var recapWindow = new Controls.SeasonRecapWindow(vm) { Owner = this };
+                            recapWindow.ShowDialog();
+                        }
+                        else
+                        {
+                            // No meaningful season data yet (e.g. first reset after this feature
+                            // shipped, before any tracking accrued) — fall back to the legacy notice
+                            // so the user still understands what happened.
+                            var message =
+                                "The monthly leaderboard season has rotated. This happens at the start of every month so everyone has a fresh chance to climb the rankings.\n\n" +
+                                "What resets:\n" +
+                                "  - Current Level and XP\n" +
+                                "  - Daily quest streak\n" +
+                                "  - Monthly leaderboard position\n\n" +
+                                "What's preserved:\n" +
+                                "  - All achievements\n" +
+                                "  - Highest Level Ever (yours: " + highestLevel + ")\n" +
+                                "  - Skill points and unlocked enhancements\n" +
+                                "  - Total lifetime XP\n" +
+                                "  - Patreon perks and whitelist\n\n" +
+                                "Welcome to season " + currentSeason + "!";
+
+                            MessageBox.Show(
+                                message,
+                                "New Season Started",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Information);
+                        }
 
                         App.Settings.Current.LastSeasonResetSeen = currentSeason;
+                        App.Settings.Current.SeasonResetPending = false;
                         App.Settings.Save();
                     }
                     catch (Exception ex)
                     {
-                        App.Logger?.Warning(ex, "Failed to show season reset dialog");
+                        App.Logger?.Warning(ex, "Failed to present season recap");
                     }
                     finally
                     {
                         IsStartupDialogShowing = false;
-                        App.Logger?.Information("Season reset dialog dismissed, setting IsStartupDialogShowing=false");
                     }
                 }), System.Windows.Threading.DispatcherPriority.Loaded);
             }
             catch (Exception ex)
             {
-                App.Logger?.Warning(ex, "Error checking for season reset");
+                App.Logger?.Warning(ex, "Error checking for season recap");
             }
         }
 
@@ -17657,6 +17722,39 @@ namespace ConditioningControlPanel
             if (CardBouncingText != null) CardBouncingText.IsActive = s.BouncingTextEnabled;
             if (CardMindWipe != null) CardMindWipe.IsActive = s.MindWipeEnabled;
             // Visuals and System cards have no single "enabled" toggle; they stay neutral.
+        }
+
+        // Quick-toggle: right-clicking a card flips its feature on/off. Mirrors the
+        // per-feature toggle side effects in the FeatureControl popups so the running
+        // effect actually starts/stops, not just the persisted flag.
+        private void OnFeatureCardToggleRequested(object sender, RoutedEventArgs e)
+        {
+            if (e.OriginalSource is not Features.FeatureCard card) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            var running = App.IsEngineRunning;
+            try
+            {
+                if (card == CardFlash) { var on = s.FlashEnabled = !s.FlashEnabled; if (running) { if (on) App.Flash?.Start(); else App.Flash?.Stop(); } }
+                else if (card == CardVideo) { var on = s.MandatoryVideosEnabled = !s.MandatoryVideosEnabled; if (running) { if (on) App.Video?.Start(); else App.Video?.Stop(); } }
+                else if (card == CardSubliminal) { var on = s.SubliminalEnabled = !s.SubliminalEnabled; if (running) { if (on) App.Subliminal?.Start(); else App.Subliminal?.Stop(); } }
+                else if (card == CardSpiral) { s.SpiralEnabled = !s.SpiralEnabled; App.Overlay?.RefreshOverlays(); }
+                else if (card == CardPinkFilter) { s.PinkFilterEnabled = !s.PinkFilterEnabled; App.Overlay?.RefreshOverlays(); }
+                else if (card == CardBubblePop) { var on = s.BubblesEnabled = !s.BubblesEnabled; if (running) { if (on) App.Bubbles?.Start(); else App.Bubbles?.Stop(); } }
+                else if (card == CardLockCard) { var on = s.LockCardEnabled = !s.LockCardEnabled; if (running) { if (on) App.LockCard?.Start(); else App.LockCard?.Stop(); } }
+                else if (card == CardBubbleCount) { var on = s.BubbleCountEnabled = !s.BubbleCountEnabled; if (running) { if (on) App.BubbleCount?.Start(); else App.BubbleCount?.Stop(); } }
+                else if (card == CardBouncingText) { var on = s.BouncingTextEnabled = !s.BouncingTextEnabled; if (running) { if (on) App.BouncingText?.Start(); else App.BouncingText?.Stop(); } }
+                else if (card == CardMindWipe) { s.MindWipeEnabled = !s.MindWipeEnabled; }
+                else return; // Visuals / System cards have no single on/off toggle.
+                App.Settings?.Save();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "Feature card quick-toggle failed for {Card}", card.Title);
+            }
+            // Flipping the flag fires OnSettingsPropertyChangedForCards which updates the
+            // highlight; refresh explicitly too in case INPC didn't surface the change.
+            RefreshFeatureCardActiveStates();
         }
 
         private void OnSettingsPropertyChangedForCards(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

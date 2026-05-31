@@ -8047,6 +8047,25 @@
                                                 </ControlTemplate>
                                             </Button.Template>
                                         </Button>
+                                        <!-- Season Recap re-view entry: regenerates the most recent
+                                             season's card from its persisted snapshot. Hidden until a
+                                             snapshot exists (shown by code-behind). -->
+                                        <Button x:Name="BtnViewSeasonRecap" Content="{loc:Str recap_btn_view}" Padding="15,8" Margin="0,6,0,0"
+                                                Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}" FontSize="12" FontWeight="SemiBold"
+                                                Click="BtnViewSeasonRecap_Click" Cursor="Hand" Visibility="Collapsed">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource PanelAccentHoverBrush}"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
                                     </StackPanel>
                                 </StackPanel>
                             </StackPanel>

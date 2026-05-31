@@ -115,6 +115,12 @@ public class LeaderboardService : IDisposable
                 OnlineUsers = result.OnlineUsers;
                 YourRank = result.YourRank;
                 YourTotal = result.YourTotal;
+
+                // Season Recap (decision #1): client-sampled season peak rank. Only the
+                // monthly board maps to a season; ignore the all-time board.
+                if (mode != "all-time" && YourRank.HasValue)
+                    SeasonRecapService.SampleRank(YourRank.Value, YourTotal ?? TotalUsers);
+
                 CurrentSortBy = sortBy;
                 CurrentMode = mode;
                 LastRefreshTime = DateTime.Now;
