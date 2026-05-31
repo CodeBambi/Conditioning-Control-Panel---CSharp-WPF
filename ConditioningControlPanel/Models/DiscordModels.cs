@@ -101,6 +101,15 @@ namespace ConditioningControlPanel.Models
         public string? Error { get; set; }
 
         /// <summary>
+        /// A re-issued CCP auth token, present only when the server healed a
+        /// divergent/mismatched token during this validate (BUG-7DCJHDP3JZ).
+        /// When non-empty the client stores it; it is not cached.
+        /// </summary>
+        [JsonProperty("auth_token")]
+        [JsonPropertyName("auth_token")]
+        public string? AuthToken { get; set; }
+
+        /// <summary>
         /// Get the display name (global_name if set, otherwise username)
         /// </summary>
         [Newtonsoft.Json.JsonIgnore]

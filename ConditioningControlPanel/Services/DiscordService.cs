@@ -411,11 +411,18 @@ namespace ConditioningControlPanel.Services
 
                 IsVerifying = true;
 
-                // Validate via proxy
-                _httpClient.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+                // Validate via proxy. Per-request message so the CCP auth token
+                // rides along without polluting DefaultRequestHeaders; the server
+                // uses it to heal a divergent/mismatched token (BUG-7DCJHDP3JZ).
+                using var validateRequest = new HttpRequestMessage(HttpMethod.Get, "/discord/validate");
+                validateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+                var currentAuthToken = App.Settings?.Current?.AuthToken;
+                if (!string.IsNullOrEmpty(currentAuthToken))
+                {
+                    validateRequest.Headers.Add("X-Auth-Token", currentAuthToken);
+                }
 
-                var response = await _httpClient.GetAsync("/discord/validate");
+                var response = await _httpClient.SendAsync(validateRequest);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
@@ -446,6 +453,15 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Logger?.Warning("Discord validation error: {Error}", user?.Error);
                     return;
+                }
+
+                // Server healed a divergent auth token — store immediately. Only
+                // present on mismatch; not cached, so no stale replay (BUG-7DCJHDP3JZ).
+                if (!string.IsNullOrEmpty(user.AuthToken) && App.Settings?.Current != null)
+                {
+                    App.Settings.Current.AuthToken = user.AuthToken;
+                    App.Settings.Save();
+                    App.Logger?.Information("[Auth] Stored re-issued auth token from Discord validate (token recovery)");
                 }
 
                 // Update state and cache

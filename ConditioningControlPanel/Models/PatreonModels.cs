@@ -118,6 +118,17 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("error")]
         [JsonPropertyName("error")]
         public string? Error { get; set; }
+
+        /// <summary>
+        /// A re-issued CCP auth token, present only when the server healed a
+        /// divergent/mismatched token during this validate (BUG-7DCJHDP3JZ).
+        /// When non-empty the client must store it; it is NOT persisted into
+        /// <see cref="PatreonCachedState"/> — a stale cached replay would
+        /// re-break auth.
+        /// </summary>
+        [JsonProperty("auth_token")]
+        [JsonPropertyName("auth_token")]
+        public string? AuthToken { get; set; }
     }
 
     /// <summary>

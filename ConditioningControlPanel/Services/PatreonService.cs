@@ -451,11 +451,20 @@ namespace ConditioningControlPanel.Services
 
                 IsVerifying = true;
 
-                // Validate via hosted proxy
-                _httpClient.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+                // Validate via hosted proxy. Use a per-request message so the
+                // CCP auth token rides along without polluting DefaultRequestHeaders
+                // (a duplicate X-Auth-Token would otherwise accumulate across calls).
+                // The server uses this token to detect a divergent/mismatched token
+                // and heal it in the response (BUG-7DCJHDP3JZ).
+                using var validateRequest = new HttpRequestMessage(HttpMethod.Get, "/patreon/validate");
+                validateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+                var currentAuthToken = App.Settings?.Current?.AuthToken;
+                if (!string.IsNullOrEmpty(currentAuthToken))
+                {
+                    validateRequest.Headers.Add("X-Auth-Token", currentAuthToken);
+                }
 
-                var response = await _httpClient.GetAsync("/patreon/validate");
+                var response = await _httpClient.SendAsync(validateRequest);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                 {
@@ -486,6 +495,16 @@ namespace ConditioningControlPanel.Services
                 {
                     App.Logger?.Warning("Patreon validation error: {Error}", subscription?.Error);
                     return CurrentTier;
+                }
+
+                // Server healed a divergent auth token — store it immediately so
+                // subsequent authed requests stop 401ing. Only present on mismatch;
+                // never cached, so a stale replay can't re-break auth (BUG-7DCJHDP3JZ).
+                if (!string.IsNullOrEmpty(subscription.AuthToken) && App.Settings?.Current != null)
+                {
+                    App.Settings.Current.AuthToken = subscription.AuthToken;
+                    App.Settings.Save();
+                    App.Logger?.Information("[Auth] Stored re-issued auth token from Patreon validate (token recovery)");
                 }
 
                 // Get whitelist status from server response
