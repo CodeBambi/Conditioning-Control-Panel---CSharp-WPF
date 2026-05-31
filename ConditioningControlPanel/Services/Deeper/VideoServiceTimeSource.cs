@@ -46,6 +46,29 @@ namespace ConditioningControlPanel.Services.Deeper
 
         private void OnTimeMs(long ms)
         {
+            // LibVLC raises TimeChanged on its own (non-UI) thread. The other two
+            // IPlaybackTimeSource implementations (audio timer, WebView2) raise their
+            // tick on the UI thread, and the EnhancementEngine assumes that: it mutates
+            // its band/fired-state collections from this tick AND from webcam handlers
+            // (which marshal to the UI thread). Forwarding the raw LibVLC-thread callback
+            // straight through would race those collections and dispatch WPF effects
+            // off-thread. Marshal to the UI thread so this source matches the others.
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+
+            if (dispatcher.CheckAccess())
+            {
+                Fire(ms);
+            }
+            else
+            {
+                try { dispatcher.BeginInvoke(new Action(() => Fire(ms))); }
+                catch (Exception ex) { App.Logger?.Debug("VideoServiceTimeSource marshal error: {Error}", ex.Message); }
+            }
+        }
+
+        private void Fire(long ms)
+        {
             try { PlaybackTimeChanged?.Invoke(ms / 1000.0); }
             catch (Exception ex) { App.Logger?.Debug("VideoServiceTimeSource handler error: {Error}", ex.Message); }
         }

@@ -2519,6 +2519,11 @@ Application State:
 
             SessionLog?.Dispose();
             Flash?.Dispose();
+            // Dispose the enhancement bridge BEFORE the VideoService it subscribes to,
+            // so it unsubscribes (VideoStarted/VideoEnded/time-source) and tears down its
+            // host/engine + webcam handlers while VideoService is still alive. Disposing
+            // Video first would leave those subscriptions dangling against a dead player.
+            VideoEnhanceBridge?.Dispose();
             Video?.Dispose();
             Subliminal?.Dispose();
             Overlay?.Dispose();

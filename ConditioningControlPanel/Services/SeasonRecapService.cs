@@ -184,7 +184,7 @@ namespace ConditioningControlPanel.Services
 
         public static bool HasMeaningfulData(SeasonRecapSnapshot s) =>
             s.SeasonMinutes > 0 || s.SessionCount > 0 || s.FeatureUse.Count > 0
-            || s.LongestStreak > 0 || s.DaysActive > 0;
+            || s.LongestStreak > 0 || s.DaysActive > 0 || s.PeakRank > 0;
 
         // ---------- persistence / re-view ----------
 

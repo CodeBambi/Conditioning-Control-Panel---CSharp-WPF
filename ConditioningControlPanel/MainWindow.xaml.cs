@@ -15136,6 +15136,18 @@ namespace ConditioningControlPanel
                         // order is load-bearing (an empty snapshot = an empty card).
                         var snapshot = Services.SeasonRecapService.CaptureAndRollover(currentSeason);
 
+                        // Advance the persisted idempotency latch IMMEDIATELY after the
+                        // destructive roll and BEFORE presenting the card. CaptureAndRollover
+                        // has already written the snapshot (if any) and cleared the live
+                        // counters. If we deferred this write until after ShowDialog and the
+                        // window threw (XAML resource lookups in a DataTemplate are a known
+                        // hazard in this codebase), the catch below would swallow it, the latch
+                        // would never advance, and the next launch would re-roll the now-empty
+                        // season — permanently losing the real recap. Persist the latch first.
+                        App.Settings.Current.LastSeasonResetSeen = currentSeason;
+                        App.Settings.Current.SeasonResetPending = false;
+                        App.Settings.Save();
+
                         if (snapshot != null)
                         {
                             var vm = new ViewModels.SeasonRecapViewModel(snapshot);
@@ -15167,10 +15179,6 @@ namespace ConditioningControlPanel
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Information);
                         }
-
-                        App.Settings.Current.LastSeasonResetSeen = currentSeason;
-                        App.Settings.Current.SeasonResetPending = false;
-                        App.Settings.Save();
                     }
                     catch (Exception ex)
                     {
