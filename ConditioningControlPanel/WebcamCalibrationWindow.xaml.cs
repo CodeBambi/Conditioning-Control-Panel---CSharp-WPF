@@ -537,7 +537,7 @@ namespace ConditioningControlPanel
                 // Roll back: don't write to disk, restore the previous in-memory state.
                 App.Webcam?.SetCalibrationLive(previousCalibration);
                 ShowError(
-                    "The system couldn't reliably detect your gaze, blinks, mouth-open, or tongue with this calibration. " +
+                    "The system couldn't reliably detect your gaze, blinks, or mouth-open with this calibration. " +
                     "Tips: sit closer to the camera, make sure your face is well-lit and unshadowed, " +
                     "remove reflective glasses if possible, and try again.");
                 return;
@@ -590,7 +590,20 @@ namespace ConditioningControlPanel
             bool? final;
             while (true)
             {
-                var dlg = new WebcamCalibrationWindow { Owner = owner };
+                var dlg = new WebcamCalibrationWindow();
+
+                // Only parent to the owner if it's still a live, loaded window.
+                // Setting Owner to a window that has already been closed throws
+                // "Cannot set Owner property to a Window that has been closed"
+                // (the May-22 crash in bug #297 / BUG-988DL9V99S) — e.g. when the
+                // caller window was closed between requesting calibration and this
+                // dialog opening. Fall back to an unparented dialog in that case.
+                if (owner != null && owner.IsLoaded)
+                {
+                    try { dlg.Owner = owner; }
+                    catch (InvalidOperationException) { /* owner closed mid-flight */ }
+                }
+
                 App.ApplyCalibrationScreenPlacement(dlg);
                 final = dlg.ShowDialog();
                 if (!dlg.WantsRecalibrate) break;
@@ -681,13 +694,17 @@ namespace ConditioningControlPanel
             await Task.Delay(1400);
             if (_cancelled) return false;
 
-            // Sequence: L, R, L, R, blink×2, mouth-open×3, tongue-out×1.
+            // Sequence: L, R, L, R, blink×2, mouth-open×3.
             // Each step gets up to 3 attempts (12 s timeout each) before failing
             // the whole calibration. Mouth uses 3 passes (the MAR ratio is
-            // steady, gestures are unambiguous). Tongue stays at 1 — the HSV-
-            // color heuristic is reliable enough for a single deliberate
-            // protrusion, but stacking 3 cycles in 12 s with a 700 ms cooldown
-            // ran into too many missed detections from lighting/angle variance.
+            // steady, gestures are unambiguous).
+            //
+            // Tongue-out was dropped from the required sequence: its HSV-color
+            // heuristic was too unreliable across lighting/angle variance, and as
+            // the final gate a missed detection rolled back the user's entire
+            // gaze+blink+mouth calibration (bug #297 / BUG-988DL9V99S). The
+            // detection plumbing (OnTongueOut / WaitForTongueOutsAsync /
+            // ValidateTongueOutStepAsync) is left in place but unused.
             if (!await ValidateGazeStepAsync(GazeSide.Left,  "Look LEFT",  "←", roundLabel: "1 of 4")) return false;
             if (_cancelled) return false;
             if (!await ValidateGazeStepAsync(GazeSide.Right, "Look RIGHT", "→", roundLabel: "2 of 4")) return false;
@@ -699,8 +716,6 @@ namespace ConditioningControlPanel
             if (!await ValidateBlinkStepAsync(needed: 2)) return false;
             if (_cancelled) return false;
             if (!await ValidateMouthOpenStepAsync(needed: 3)) return false;
-            if (_cancelled) return false;
-            if (!await ValidateTongueOutStepAsync(needed: 1)) return false;
             return true;
         }
 

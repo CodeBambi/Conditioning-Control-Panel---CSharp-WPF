@@ -776,8 +776,22 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Information("[RemoteControl] Stopping all remote effects");
 
                 App.KillAllAudio();
+
+                // Halt autonomy's in-flight pulses and the running service so the
+                // panic actually stops everything. But Autonomy Mode is a persistent
+                // user setting, not a remote-session effect — Stop() only flips the
+                // runtime _isEnabled flag and leaves Settings.AutonomyModeEnabled (which
+                // the UI toggle binds to) untouched. If we leave it stopped, the toggle
+                // reads ON while the service is dead and the test trigger reports
+                // "service not enabled" (bug #299 / BUG-6Y5DZ8BSLC). Re-arm it when the
+                // user still has it enabled so runtime state stays consistent with the
+                // toggle; a remote controller shouldn't be able to silently disable it.
                 App.Autonomy?.CancelActivePulses();
                 App.Autonomy?.Stop();
+                if (App.Settings?.Current?.AutonomyModeEnabled == true)
+                {
+                    App.Autonomy?.Start();
+                }
 
                 // Stop any vibration the remote was driving. Without this, the device
                 // keeps running on its last commanded level until the per-command
