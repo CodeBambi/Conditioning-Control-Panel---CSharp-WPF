@@ -1,0 +1,60 @@
+[
+  {
+    "id": "sample_session_greeting",
+    "trigger": "SessionStarted",
+    "priority": 10,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm",
+    "class": "normal",
+    "variant_pool": [
+      "There you are. Let's begin.",
+      "Good girl. Settle in for me."
+    ]
+  },
+  {
+    "id": "sample_levelup_cheer",
+    "trigger": "LevelUp",
+    "conditions": { "level_gte": 1 },
+    "priority": 20,
+    "cooldown_ms": 5000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "proud",
+    "class": "normal",
+    "variant_pool": [
+      "Level up! You're getting deeper.",
+      "Another level. So obedient."
+    ]
+  },
+  {
+    "id": "sample_video_attention_fail",
+    "trigger": "AttentionCheckFail",
+    "conditions": { "video_playing": true },
+    "priority": 40,
+    "cooldown_ms": 60000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "taunt",
+    "class": "normal",
+    "variant_pool": [
+      "Eyes on the screen, dummy.",
+      "You looked away. Try again."
+    ]
+  },
+  {
+    "id": "sample_marathon_egg",
+    "trigger": "SessionPhaseChanged",
+    "conditions": { "session_elapsed_sec_gte": 1800 },
+    "priority": 550,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "impressed",
+    "class": "easter_egg",
+    "variant_pool": [
+      "Thirty minutes deep. Look at you go."
+    ]
+  }
+]

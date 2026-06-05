@@ -267,6 +267,7 @@ namespace ConditioningControlPanel
         public static BrainDrainService BrainDrain { get; private set; } = null!;
         public static AchievementService Achievements { get; private set; } = null!;
         public static GamificationBridge? Gamification { get; private set; }
+        public static BarkService? Bark { get; private set; }
         public static QuestDefinitionService QuestDefinitions { get; private set; } = null!;
         public static QuestService Quests { get; private set; } = null!;
         public static TutorialService Tutorial { get; private set; } = null!;
@@ -1040,6 +1041,9 @@ namespace ConditioningControlPanel
             // Single seam between feature events and achievement tracking. Constructed
             // here; Start() is called later in OnStartup once feature services exist.
             Gamification = new GamificationBridge();
+            // Reactive companion-dialogue ("bark") seam. Like GamificationBridge it is
+            // constructed here and Start()ed later once feature services exist.
+            Bark = new BarkService();
             QuestDefinitions = new QuestDefinitionService();
             _ = QuestDefinitions.InitializeAsync(); // Fire and forget - will load from cache first
             Quests = new QuestService();
@@ -1251,6 +1255,10 @@ namespace ConditioningControlPanel
             // to (Mods, Companion, KeywordTriggers, RemoteControl, Webcam, BlinkTrainer,
             // Lockdown) have been constructed above.
             Gamification?.Start();
+
+            // Start the bark system (loads rule manifests, wires its own direct event
+            // subscriptions). SessionEngine/TrayIcon are attached later by MainWindow.
+            Bark?.Start();
 
             // Update quest streak tracking
             Quests?.TrackStreak(Achievements.Progress.ConsecutiveDays);

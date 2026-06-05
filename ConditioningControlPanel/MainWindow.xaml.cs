@@ -277,6 +277,8 @@ namespace ConditioningControlPanel
 
             // Initialize tray icon
             _trayIcon = new TrayIconService(this);
+            // Let the bark system observe tray-driven events (e.g. "wake Bambi").
+            App.Bark?.AttachTray(_trayIcon);
             _trayIcon.OnExitRequested += () =>
             {
                 if (App.Lockdown?.IsActive == true) return;
@@ -15392,6 +15394,9 @@ namespace ConditioningControlPanel
                     _sessionEngine.PhaseChanged += OnSessionPhaseChanged;
                     _sessionEngine.SessionStarted += OnSessionStarted;
                     _sessionEngine.SessionStopped += OnSessionStopped;
+                    // Attach the bark system to this session engine (it's MainWindow-owned
+                    // and created lazily, so BarkService can't subscribe at its own Start()).
+                    App.Bark?.AttachSessionEngine(_sessionEngine);
                 }
 
                 // Call StartEngine directly — BtnStart_Click returns early
