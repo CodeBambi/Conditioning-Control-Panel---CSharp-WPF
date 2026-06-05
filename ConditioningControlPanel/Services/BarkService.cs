@@ -119,6 +119,12 @@ namespace ConditioningControlPanel.Services
         public void Dispose() => Stop();
 
         /// <summary>
+        /// External entry point for the panic/abort key (MainWindow.HandlePanicKeyPress). Raises the
+        /// safety-class "Panic" bark, which bypasses the gate and holds the floor.
+        /// </summary>
+        public void NotifyPanic() => Raise("Panic");
+
+        /// <summary>
         /// Reload rules from disk (e.g. after a mod switch so the new mod's manifest applies).
         /// </summary>
         public void ReloadRules()
@@ -187,7 +193,9 @@ namespace ConditioningControlPanel.Services
                 Wire<Action>(h => App.AttentionCheck.OnPass += h, h => App.AttentionCheck.OnPass -= h,
                     () => { if (App.Video?.IsPlaying == true) Raise("AttentionCheckPass", c => c.Set("video_playing", true)); });
                 Wire<Action>(h => App.AttentionCheck.OnFail += h, h => App.AttentionCheck.OnFail -= h,
-                    () => { if (App.Video?.IsPlaying == true) Raise("AttentionCheckFail", c => c.Set("video_playing", true)); });
+                    () => { if (App.Video?.IsPlaying == true) Raise("AttentionCheckFail", c => c
+                        .Set("video_playing", true)
+                        .Set("fail_count", App.Video?.PlaythroughFailCount ?? 0)); });
             }
 
             // ---- Bubble minigames ----
@@ -237,13 +245,19 @@ namespace ConditioningControlPanel.Services
             // ---- Awareness / keywords ----
             if (App.KeywordTriggers != null)
                 Wire<EventHandler<KeywordTrigger>>(h => App.KeywordTriggers.TriggerFired += h, h => App.KeywordTriggers.TriggerFired -= h,
-                    (_, kt) => Raise("KeywordTriggerFired", c => c.Set("keyword", kt?.Keyword ?? "")));
+                    (_, kt) => Raise("KeywordTriggerFired", c => c
+                        .Set("keyword", kt?.Keyword ?? "")
+                        .Set("kw_effect", kt?.VisualEffect.ToString() ?? "")));
             if (App.WindowAwareness != null)
             {
                 Wire<EventHandler<ActivityChangedEventArgs>>(h => App.WindowAwareness.ActivityChanged += h, h => App.WindowAwareness.ActivityChanged -= h,
-                    (_, a) => Raise("ActivityChanged", c => c.Set("activity", a?.ToString() ?? "")));
+                    (_, a) => Raise("ActivityChanged", c => c
+                        .Set("activity", a?.ServiceName ?? "")
+                        .Set("category", a?.Category.ToString() ?? "")));
                 Wire<EventHandler<ActivityChangedEventArgs>>(h => App.WindowAwareness.StillOnActivity += h, h => App.WindowAwareness.StillOnActivity -= h,
-                    (_, a) => Raise("StillOnActivity", c => c.Set("activity", a?.ToString() ?? "")));
+                    (_, a) => Raise("StillOnActivity", c => c
+                        .Set("activity", a?.ServiceName ?? "")
+                        .Set("still_minutes", App.WindowAwareness?.CurrentActivityDuration.TotalMinutes ?? 0)));
             }
 
             // ---- Progression / companion / skills ----
@@ -351,6 +365,9 @@ namespace ConditioningControlPanel.Services
             if (App.Discord != null)
                 Wire<EventHandler<bool>>(h => App.Discord.AuthenticationChanged += h, h => App.Discord.AuthenticationChanged -= h,
                     (_, ok) => Raise("DiscordAuthChanged", c => c.Set("authenticated", ok)));
+            if (App.Tutorial != null)
+                Wire<EventHandler>(h => App.Tutorial.TutorialCompleted += h, h => App.Tutorial.TutorialCompleted -= h,
+                    (_, __) => Raise("TutorialCompleted"));
 
             // LocalAiService.PersistentMemoryRecalled is a STATIC event — unsubscribe in Stop().
             {
@@ -377,7 +394,13 @@ namespace ConditioningControlPanel.Services
                 EventHandler stopped = (_, __) => Raise("SessionStopped");
                 EventHandler<SessionCompletedEventArgs> completed = (_, __) => Raise("SessionCompleted");
                 EventHandler<SessionPhaseChangedEventArgs> phase = (_, e) =>
-                    Raise("SessionPhaseChanged", c => c.Set("phase_index", e?.PhaseIndex ?? -1));
+                {
+                    _state.SetPhase(e?.Phase?.Name);
+                    Raise("SessionPhaseChanged", c => c
+                        .Set("phase_index", e?.PhaseIndex ?? -1)
+                        .Set("phase_name", e?.Phase?.Name ?? "")
+                        .Set("phase_is_deepener", _state.CurrentPhaseIsDeepener));
+                };
                 // Periodic in-session tick — drives time-threshold eggs (e.g. marathon: session_elapsed_sec >= 3h).
                 EventHandler<SessionProgressEventArgs> progress = (_, __) =>
                     Raise("SessionProgress", c => c.Set("session_elapsed_sec", _state.SessionElapsedSeconds));
@@ -632,8 +655,17 @@ namespace ConditioningControlPanel.Services
                 }
                 // (max-level egg uses the existing "player_level_gte" condition — there is no level cap.)
 
-                // --- date egg ---
-                case "is_nye": return DateTime.Now.Month == 12 && DateTime.Now.Day == 31;
+                // --- date / time-of-day ---
+                case "is_nye":
+                {
+                    var now = DateTime.Now; // Dec 31 or Jan 1 (local)
+                    return (now.Month == 12 && now.Day == 31) || (now.Month == 1 && now.Day == 1);
+                }
+                case "local_hour": return (double)DateTime.Now.Hour;
+
+                // --- session phase (for deepener conditions on non-phase events) ---
+                case "phase_name": return _state.CurrentPhaseName;
+                case "phase_is_deepener": return _state.CurrentPhaseIsDeepener;
 
                 default:
                     return ctx.Values.TryGetValue(field, out var v) ? v : null;

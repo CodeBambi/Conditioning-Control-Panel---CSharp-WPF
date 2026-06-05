@@ -85,6 +85,20 @@
     ]
   },
   {
+    "id": "sample_safety_panic",
+    "trigger": "Panic",
+    "priority": 1000,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "calm",
+    "class": "safety",
+    "variant_pool": [
+      "Okay. Everything's off. You're safe — take a breath.",
+      "All stopped. You're in control now. Breathe."
+    ]
+  },
+  {
     "id": "sample_mute_egg",
     "trigger": "FlashDisplayed",
     "conditions": { "mute": true },

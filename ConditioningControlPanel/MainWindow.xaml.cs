@@ -861,6 +861,10 @@ namespace ConditioningControlPanel
 
         private void HandlePanicKeyPress()
         {
+            // Let the companion say a calm, persona-neutral safety line (highest priority,
+            // bypasses the bark gate). Fired before the stop flow so it's not suppressed.
+            App.Bark?.NotifyPanic();
+
             // Dismiss any open/pinned help popover so it never lingers over a panic.
             Controls.HelpPopover.CloseActive();
 

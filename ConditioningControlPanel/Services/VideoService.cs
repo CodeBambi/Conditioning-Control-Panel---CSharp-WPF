@@ -162,6 +162,13 @@ namespace ConditioningControlPanel.Services
         public bool IsRunning => _isRunning;
 
         /// <summary>
+        /// Number of failed attention attempts in the CURRENT video playthrough (the per-video
+        /// penalty counter; reset when a new video starts). Exposed for the bark system's
+        /// "failed this video N times" reaction.
+        /// </summary>
+        public int PlaythroughFailCount => _penalties;
+
+        /// <summary>
         /// Get the shared LibVLC instance (used by BubbleCountWindow).
         /// Returns null if not yet initialized - caller should handle this.
         /// LibVLC is initialized via PreloadLibVLC() during app startup.

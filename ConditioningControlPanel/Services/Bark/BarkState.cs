@@ -67,11 +67,18 @@ namespace ConditioningControlPanel.Services.Bark
         private readonly HashSet<int> _crossedMarathon = new();
         public bool MarkMarathonCrossed(int thresholdSeconds) => _crossedMarathon.Add(thresholdSeconds);
 
+        // --- current session phase name (for "deepener" conditions on non-phase events) ---
+        public string CurrentPhaseName { get; private set; } = "";
+        public void SetPhase(string? name) => CurrentPhaseName = name ?? "";
+        public bool CurrentPhaseIsDeepener =>
+            CurrentPhaseName.IndexOf("deep", StringComparison.OrdinalIgnoreCase) >= 0;
+
         /// <summary>Reset per-session state (called on session start).</summary>
         public void ResetSessionScoped()
         {
             _crossedMarathon.Clear();
             _faceLostSinceUtc = null;
+            CurrentPhaseName = "";
         }
     }
 }
