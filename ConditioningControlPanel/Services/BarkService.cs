@@ -36,6 +36,9 @@ namespace ConditioningControlPanel.Services
         private readonly Dictionary<string, DateTime> _lastFiredUtc = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _firedOnceSession = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, HashSet<int>> _usedVariants = new(StringComparer.OrdinalIgnoreCase);
+        // Last variant index fired per rule — used to avoid an immediate repeat when a repeatable
+        // pool is exhausted and recycled (see EvaluateGate).
+        private readonly Dictionary<string, int> _lastVariantIndex = new(StringComparer.OrdinalIgnoreCase);
         private DateTime _globalLastFireUtc = DateTime.MinValue;
 
         /// <summary>Global minimum gap between any two barks.</summary>
@@ -126,13 +129,25 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Reload rules from disk (e.g. after a mod switch so the new mod's manifest applies).
+        /// Rotation / cooldown / session one-shot state is keyed by rule id, and ids are SHARED
+        /// across mods (same id → different content), so it is cleared here: otherwise a line
+        /// fired under the old mod would suppress the same-id line under the new one. Persisted
+        /// lifetime/tier latches (AppSettings) are intentionally NOT cleared — those are once-ever.
         /// </summary>
         public void ReloadRules()
         {
             try
             {
-                _rules = BarkRuleLoader.Load();
-                App.Logger?.Information("BarkService: reloaded {Count} rules", _rules.Count);
+                var fresh = BarkRuleLoader.Load();
+                lock (_gate)
+                {
+                    _rules = fresh;
+                    _usedVariants.Clear();
+                    _firedOnceSession.Clear();
+                    _lastFiredUtc.Clear();
+                    _lastVariantIndex.Clear();
+                }
+                App.Logger?.Information("BarkService: reloaded {Count} rules (per-rule rotation state reset)", fresh.Count);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "BarkService: rule reload failed"); }
         }
@@ -345,9 +360,18 @@ namespace ConditioningControlPanel.Services
             }
             if (App.Mods != null)
                 Wire<EventHandler<ModPackage>>(h => App.Mods.ModChanged += h, h => App.Mods.ModChanged -= h,
-                    (_, mod) => { _state.RegisterModSwitch(); Raise("ModChanged", c => c
-                        .Set("mod", mod?.Id ?? "")
-                        .Set("mod_switches_60s", _state.ModSwitchesWithin(RapidModSwitchWindow))); });
+                    (_, mod) =>
+                    {
+                        _state.RegisterModSwitch();
+                        // The new mod ships its own bark manifest — reload so its lines/voicelines
+                        // apply. ModChanged fires after ModService sets the active mod, so the
+                        // loader reads the new ActiveModId. (Raise the switch bark off the OLD set
+                        // first, since the new set may not define a ModChanged rule.)
+                        Raise("ModChanged", c => c
+                            .Set("mod", mod?.Id ?? "")
+                            .Set("mod_switches_60s", _state.ModSwitchesWithin(RapidModSwitchWindow)));
+                        ReloadRules();
+                    });
             if (App.ActivityTracker != null)
                 Wire<EventHandler<bool>>(h => App.ActivityTracker.IdleStateChanged += h, h => App.ActivityTracker.IdleStateChanged -= h,
                     (_, idle) => Raise("IdleStateChanged", c => c.Set("idle", idle)));
@@ -787,21 +811,34 @@ namespace ConditioningControlPanel.Services
                 }
             }
 
-            // Variant selection: repeatable rotates unused (no repeat in-session); one-shot uses index 0.
+            // Variant selection:
+            //  • repeatable, pool>1 → rotate through unused; when ALL are used, RECYCLE the pool
+            //    (clear the used-set) so the bark keeps talking instead of going silent forever,
+            //    reseeding with the last index so we don't immediately repeat the line just spoken.
+            //  • one-shot, pool>1 → pick a random line (it only fires once, so use the whole pool
+            //    rather than always line 0; otherwise the extra authored variants are dead content).
             int idx = 0;
-            if (rule.Repeatable && pool.Count > 1)
+            if (pool.Count > 1)
             {
-                var used = _usedVariants.TryGetValue(rule.Id, out var set) ? set : null;
-                idx = -1;
-                for (int i = 0; i < pool.Count; i++)
+                if (rule.Repeatable)
                 {
-                    if (used == null || !used.Contains(i)) { idx = i; break; }
+                    var used = _usedVariants.TryGetValue(rule.Id, out var set) ? set : null;
+                    idx = FirstUnused(pool.Count, used);
+                    if (idx < 0)
+                    {
+                        // Exhausted → recycle. Reseed the used-set with the last-fired index so the
+                        // next pick avoids repeating the line we just played.
+                        var reseed = new HashSet<int>();
+                        if (_lastVariantIndex.TryGetValue(rule.Id, out var lastIdx))
+                            reseed.Add(lastIdx);
+                        _usedVariants[rule.Id] = reseed;
+                        idx = FirstUnused(pool.Count, reseed);
+                        if (idx < 0) idx = 0; // safety (pool>1 means reseed has ≤1 entry, so unreachable)
+                    }
                 }
-                if (idx < 0)
+                else
                 {
-                    // Exhausted: a guaranteed reaction reuses the first line; a normal bark stays quiet.
-                    if (bypass) idx = 0;
-                    else return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "variants-exhausted (session)" };
+                    idx = _rng.Next(pool.Count); // one-shot: random line from the pool
                 }
             }
 
@@ -854,7 +891,16 @@ namespace ConditioningControlPanel.Services
                     _usedVariants[rule.Id] = set;
                 }
                 set.Add(variantIndex);
+                _lastVariantIndex[rule.Id] = variantIndex; // for no-immediate-repeat on pool recycle
             }
+        }
+
+        /// <summary>First index in [0,count) not present in <paramref name="used"/>, or -1 if all are used.</summary>
+        private static int FirstUnused(int count, HashSet<int>? used)
+        {
+            for (int i = 0; i < count; i++)
+                if (used == null || !used.Contains(i)) return i;
+            return -1;
         }
 
         // ===================== speak =====================
