@@ -113,7 +113,8 @@ RULE_TABLE = {
     "lockdown_tick":R("LockdownCountdownTick", {}, 150, 300000, True, "session", "normal", "teasing"),  # cooldown=5min so ticks don't spam
     "remote_cmd":   R("RemoteCommandReceived", {}, 200, 5000, True, "session", "normal", "responsive"),
     "remote_connect": R("ControllerConnectedChanged", {}, 220, 0, True, "session", "normal", "knowing"),
-    "user_msg":     R("UserMessageSent", {}, 130, 30000, True, "session", "normal", "warm"),  # NOTE: usually gated by chat-suppression — see PR
+    # user_msg intentionally omitted: it conflicts with Fork-E chat-suppression (the AI reply path
+    # owns the "user sent a message" moment). Its manifest variants are simply left unused.
     "memory_recall":R("PersistentMemoryRecalled", {}, 160, 60000, True, "session", "normal", "knowing"),
     "mod_change":   R("ModChanged", {}, 140, 0, True, "session", "normal", "light"),
     "idle":         R("IdleStateChanged", {"idle":True}, 110, 0, True, "session", "normal", "soft"),

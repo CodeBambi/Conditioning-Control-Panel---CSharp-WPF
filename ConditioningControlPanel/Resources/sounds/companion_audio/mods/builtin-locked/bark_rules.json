@@ -1646,30 +1646,6 @@
     ]
   },
   {
-    "id": "user_msg",
-    "trigger": "UserMessageSent",
-    "priority": 130,
-    "cooldown_ms": 30000,
-    "repeatable": true,
-    "scope": "session",
-    "mood": "warm",
-    "class": "normal",
-    "variant_pool": [
-      {
-        "text": "talking to me, pet? reaching out with your own little fingers? that's sweet. i'm listening.",
-        "audio": "user_msg_1.mp3"
-      },
-      {
-        "text": "ooh, you typed to me... look at you, wanting my attention, good boy. adorable.",
-        "audio": "user_msg_2.mp3"
-      },
-      {
-        "text": "you had something to tell me... i do love when you come to me first, sweet thing.",
-        "audio": "user_msg_3.mp3"
-      }
-    ]
-  },
-  {
     "id": "memory_recall",
     "trigger": "PersistentMemoryRecalled",
     "priority": 160,
