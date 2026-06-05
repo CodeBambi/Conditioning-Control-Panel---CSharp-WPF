@@ -56,6 +56,7 @@ namespace ConditioningControlPanel.Services
         private readonly Random _rng = new();
         private DateTime _lastUserMessageUtc = DateTime.MinValue;
         private DateTime _safetyHoldUntilUtc = DateTime.MinValue;
+        private PatreonTier _lastTier = PatreonTier.None; // to detect tier-up for the upgrade egg
 
         /// <summary>
         /// When true the matcher evaluates and logs ("[BARK dry-run] …") but never renders to the
@@ -80,7 +81,9 @@ namespace ConditioningControlPanel.Services
                     DryRun = true;
 
                 _rules = BarkRuleLoader.Load();
-                _state.CaptureLaunchRecency(App.Settings?.Current?.LastSeenUtc);
+                // Instant-relaunch egg threshold: relaunched within 60s of last seen.
+                _state.CaptureLaunchRecency(App.Settings?.Current?.LastSeenUtc, instantThresholdSeconds: 60);
+                _lastTier = App.Patreon?.CurrentTier ?? PatreonTier.None;
 
                 WireSubscriptions();
 
@@ -145,8 +148,10 @@ namespace ConditioningControlPanel.Services
                     _ => Raise("LongStare"));
                 Wire<Action>(h => App.Webcam.OnFaceLost += h, h => App.Webcam.OnFaceLost -= h,
                     () => { _state.FaceLost(); Raise("FaceLost"); });
+                // Raise BEFORE clearing so face_lost_sec still reads the elapsed lost-duration
+                // (enables the prolonged-FaceLost egg's distinct very-long threshold).
                 Wire<Action>(h => App.Webcam.OnFaceFound += h, h => App.Webcam.OnFaceFound -= h,
-                    () => { _state.FaceFound(); Raise("FaceFound"); });
+                    () => { Raise("FaceFound"); _state.FaceFound(); });
                 Wire<Action<WebcamTrackingState>>(h => App.Webcam.OnTrackingStateChanged += h, h => App.Webcam.OnTrackingStateChanged -= h,
                     s => Raise("TrackingStateChanged", c => c.Set("state", s.ToString())));
             }
@@ -201,8 +206,13 @@ namespace ConditioningControlPanel.Services
                     (_, __) => Raise("BubbleCountFailed"));
             }
             if (App.BouncingText != null)
+            {
                 Wire<EventHandler>(h => App.BouncingText.OnBounce += h, h => App.BouncingText.OnBounce -= h,
                     (_, __) => Raise("BouncingTextBounce"));
+                // DVD corner hit (true/near corner) — distinct from a plain wall bounce.
+                Wire<EventHandler>(h => App.BouncingText.OnCornerHit += h, h => App.BouncingText.OnCornerHit -= h,
+                    (_, __) => Raise("BouncingTextCorner"));
+            }
 
             // ---- Lock card (sole subscriber; Fork-D 50/50 coin flip in HandleLockCardCompleted) ----
             if (App.LockCard != null)
@@ -332,7 +342,12 @@ namespace ConditioningControlPanel.Services
                     (_, __) => Raise("UpdateAvailable"));
             if (App.Patreon != null)
                 Wire<EventHandler<PatreonTier>>(h => App.Patreon.TierChanged += h, h => App.Patreon.TierChanged -= h,
-                    (_, tier) => Raise("PatreonTierChanged", c => c.Set("tier", tier.ToString())));
+                    (_, tier) =>
+                    {
+                        bool up = tier > _lastTier; // enum is ordinal (None < Level1 < …)
+                        _lastTier = tier;
+                        Raise("PatreonTierChanged", c => c.Set("tier", tier.ToString()).Set("tier_up", up));
+                    });
             if (App.Discord != null)
                 Wire<EventHandler<bool>>(h => App.Discord.AuthenticationChanged += h, h => App.Discord.AuthenticationChanged -= h,
                     (_, ok) => Raise("DiscordAuthChanged", c => c.Set("authenticated", ok)));
@@ -363,16 +378,21 @@ namespace ConditioningControlPanel.Services
                 EventHandler<SessionCompletedEventArgs> completed = (_, __) => Raise("SessionCompleted");
                 EventHandler<SessionPhaseChangedEventArgs> phase = (_, e) =>
                     Raise("SessionPhaseChanged", c => c.Set("phase_index", e?.PhaseIndex ?? -1));
+                // Periodic in-session tick — drives time-threshold eggs (e.g. marathon: session_elapsed_sec >= 3h).
+                EventHandler<SessionProgressEventArgs> progress = (_, __) =>
+                    Raise("SessionProgress", c => c.Set("session_elapsed_sec", _state.SessionElapsedSeconds));
 
                 engine.SessionStarted += started;
                 engine.SessionStopped += stopped;
                 engine.SessionCompleted += completed;
                 engine.PhaseChanged += phase;
+                engine.ProgressUpdated += progress;
 
                 _engineUnsubscribe.Add(() => engine.SessionStarted -= started);
                 _engineUnsubscribe.Add(() => engine.SessionStopped -= stopped);
                 _engineUnsubscribe.Add(() => engine.SessionCompleted -= completed);
                 _engineUnsubscribe.Add(() => engine.PhaseChanged -= phase);
+                _engineUnsubscribe.Add(() => engine.ProgressUpdated -= progress);
 
                 App.Logger?.Debug("BarkService: attached to SessionEngine");
             }
@@ -598,6 +618,23 @@ namespace ConditioningControlPanel.Services
                 case "total_sessions": return (double)(App.Settings?.Current?.TotalSessions ?? 0);
                 case "daily_quest_streak": return (double)(App.Settings?.Current?.DailyQuestStreak ?? 0);
                 case "current_streak": return (double)(App.Settings?.Current?.CurrentStreak ?? 0);
+
+                // --- lifetime-completion egg conditions ---
+                case "achievements_all_unlocked":
+                {
+                    var total = App.Achievements?.GetTotalCount() ?? 0;
+                    return total > 0 && (App.Achievements?.GetUnlockedCount() ?? 0) >= total;
+                }
+                case "all_skills_unlocked":
+                {
+                    var total = SkillDefinition.All?.Count ?? 0;
+                    return total > 0 && (App.SkillTree?.GetUnlockedSkills().Count ?? 0) >= total;
+                }
+                // (max-level egg uses the existing "player_level_gte" condition — there is no level cap.)
+
+                // --- date egg ---
+                case "is_nye": return DateTime.Now.Month == 12 && DateTime.Now.Day == 31;
+
                 default:
                     return ctx.Values.TryGetValue(field, out var v) ? v : null;
             }
@@ -774,6 +811,16 @@ namespace ConditioningControlPanel.Services
 
             string line = ApplySubstitutions(pool[variantIndex], ctx);
             if (string.IsNullOrWhiteSpace(line)) return;
+
+            // Mute egg (Fork F): an easter_egg bark while audio is fully muted shows a silent, text-only
+            // bubble via Giggle (the PlayGiggleSound MasterVolume==0 guard keeps it from making sound).
+            bool muted = (App.Settings?.Current?.MasterVolume ?? 0) == 0;
+            if (rule.Class == BarkClass.EasterEgg && muted)
+            {
+                avatar.Giggle(line);
+                App.KeywordTriggers?.MuteKeywordEcho(line, SelfEchoMuteMs);
+                return;
+            }
 
             // Route by class/priority: non-Normal or high-priority barks preempt (GigglePriority);
             // ordinary barks queue (Giggle). Safety is non-Normal, so it preempts and clears the queue.

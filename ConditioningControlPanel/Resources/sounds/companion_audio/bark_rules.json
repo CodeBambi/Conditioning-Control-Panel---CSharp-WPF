@@ -59,8 +59,8 @@
   },
   {
     "id": "sample_marathon_egg",
-    "trigger": "SessionPhaseChanged",
-    "conditions": { "session_elapsed_sec_gte": 1800 },
+    "trigger": "SessionProgress",
+    "conditions": { "session_elapsed_sec_gte": 10800 },
     "priority": 550,
     "cooldown_ms": 0,
     "repeatable": false,
@@ -68,7 +68,34 @@
     "mood": "impressed",
     "class": "easter_egg",
     "variant_pool": [
-      "Thirty minutes deep. Look at you go."
+      "Three hours deep. Look at you go."
+    ]
+  },
+  {
+    "id": "sample_dvd_corner_egg",
+    "trigger": "BouncingTextCorner",
+    "priority": 520,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "delighted",
+    "class": "easter_egg",
+    "variant_pool": [
+      "It hit the corner! Do you know how rare that is?"
+    ]
+  },
+  {
+    "id": "sample_mute_egg",
+    "trigger": "FlashDisplayed",
+    "conditions": { "mute": true },
+    "priority": 505,
+    "cooldown_ms": 600000,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "knowing",
+    "class": "easter_egg",
+    "variant_pool": [
+      "Muted? I can still see you reading me."
     ]
   }
 ]

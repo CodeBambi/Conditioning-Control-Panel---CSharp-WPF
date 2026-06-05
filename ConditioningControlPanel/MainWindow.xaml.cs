@@ -26604,6 +26604,19 @@ namespace ConditioningControlPanel
             if (Application.Current?.Dispatcher == null || Application.Current.Dispatcher.HasShutdownStarted)
                 return;
 
+            // Once ever: add the companion's recorded voice on top of the written note (additive —
+            // the note dialog still shows as before). The recording is bundled later; PlayNoteClip
+            // no-ops if the file is missing, and we only latch the flag once it actually plays, so it
+            // still fires the first time the clip exists. Start it before the modal note so the voice
+            // plays while the note is read.
+            if (App.Settings?.Current?.NewYearNoteReactionSeen != true)
+            {
+                var notePath = System.IO.Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "note_newyear.wav");
+                if (App.AvatarWindow?.PlayNoteClip(notePath) == true)
+                    App.Settings.Current.NewYearNoteReactionSeen = true;
+            }
+
             var easterEggWindow = new EasterEggWindow(readerCount);
             easterEggWindow.Owner = this;
             easterEggWindow.ShowDialog();

@@ -79,6 +79,10 @@ namespace ConditioningControlPanel
         private bool _isMuted = false; // Mute avatar speech and sounds
         private bool _isMouseOverSpeechBubble = false; // Track mouse over speech bubble to keep it open
         private bool _isShowingAiBubble = false; // Track when AI bubble is visible (presets get discarded)
+        // While true a real recorded clip (e.g. the New Year note) owns the bubble — nothing may
+        // preempt it. The clip's own bubble renders via ShowGiggle(..., bypassClipLock: true).
+        private bool _isPlayingUninterruptibleClip = false;
+        private const string NoteClipCaption = "♡"; // ♡ — placeholder caption while the clip plays; replace with real content
         private readonly DateTime _startupTime = DateTime.Now; // Track startup to prevent race conditions
         private const double StartupCooldownSeconds = 3.0; // Don't allow non-greeting speech for 3 seconds
 
@@ -2496,6 +2500,8 @@ namespace ConditioningControlPanel
         /// </summary>
         public void Giggle(string text, string? phraseAudioPath = null)
         {
+            if (_isPlayingUninterruptibleClip) return; // an uninterruptible clip is speaking
+
             // Block if waiting for AI response
             if (_isWaitingForAi)
             {
@@ -2642,6 +2648,7 @@ namespace ConditioningControlPanel
 
         public void GigglePriority(string text, bool playSound = true, bool aiGenerated = true)
         {
+            if (_isPlayingUninterruptibleClip) return; // an uninterruptible clip is speaking
             DispatcherHelper.RunOnUI(() =>
             {
                 // Only genuine AI replies anchor the chat-suppression window; bark output
@@ -2726,8 +2733,11 @@ namespace ConditioningControlPanel
         /// <param name="text">The text to display</param>
         /// <param name="playSound">Whether to play a giggle sound</param>
         /// <param name="source">The source of the speech (for delay calculation)</param>
-        private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset, string? phraseAudioPath = null, bool aiGenerated = false)
+        private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset, string? phraseAudioPath = null, bool aiGenerated = false, bool bypassClipLock = false)
         {
+            // An uninterruptible recorded clip owns the bubble — only its own (bypassing) call may render.
+            if (_isPlayingUninterruptibleClip && !bypassClipLock) return;
+
             // CCBill AI Addendum: show the "AI" badge only when this bubble's text actually came from
             // an AI inference. Canned/preset phrases (including AI-path fallbacks) leave it hidden.
             // The POLICY badge is mutually exclusive — only ShowModerationRefusalBubble shows it.
@@ -4468,6 +4478,63 @@ namespace ConditioningControlPanel
         /// Suppressed when "Mute Whispers" is on so the phrase bubble still
         /// appears but the attached audio doesn't play.
         /// </summary>
+        /// <summary>
+        /// Play a real recorded clip (e.g. the New Year note) uninterruptibly: no giggle sound, no
+        /// dom voice, just the file. Holds <c>_isPlayingUninterruptibleClip</c> so nothing preempts
+        /// it and shows a silent priority bubble for the clip's duration. No-ops gracefully (returns
+        /// false) if the file is missing, so it can be wired before the recording ships. Returns true
+        /// only if a real clip actually started — callers latch their once-ever flag on true.
+        /// </summary>
+        public bool PlayNoteClip(string clipPath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(clipPath) || !System.IO.File.Exists(clipPath))
+                {
+                    App.Logger?.Information("PlayNoteClip: no clip at {Path} — skipping gracefully", clipPath);
+                    return false;
+                }
+
+                DispatcherHelper.RunOnUI(() =>
+                {
+                    _isPlayingUninterruptibleClip = true;
+                    // Silent, top-priority bubble for the clip's duration. Source=AI suppresses the
+                    // fallback pop; playSound:false means no giggle; bypassClipLock renders past the latch.
+                    ShowGiggle(NoteClipCaption, playSound: false, source: SpeechSource.AI,
+                        phraseAudioPath: null, aiGenerated: false, bypassClipLock: true);
+                });
+
+                var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
+                var volume = (float)Math.Pow(masterVolume, 1.5) * 0.9f; // a touch louder — it's a once-ever moment
+
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        using var audioFile = new NAudio.Wave.AudioFileReader(clipPath);
+                        audioFile.Volume = volume;
+                        using var outputDevice = new NAudio.Wave.WaveOutEvent();
+                        outputDevice.Init(audioFile);
+                        outputDevice.Play();
+                        while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
+                            System.Threading.Thread.Sleep(50);
+                    }
+                    catch (Exception ex) { App.Logger?.Warning(ex, "PlayNoteClip: playback failed"); }
+                    finally
+                    {
+                        DispatcherHelper.RunOnUI(() => _isPlayingUninterruptibleClip = false);
+                    }
+                });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "PlayNoteClip failed");
+                _isPlayingUninterruptibleClip = false;
+                return false;
+            }
+        }
+
         private void PlayPhraseAudio(string audioPath)
         {
             try
@@ -4520,6 +4587,9 @@ namespace ConditioningControlPanel
                     var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
                     // Apply volume curve, cap at 70% of master to not be too loud
                     var volume = (float)Math.Pow(masterVolume, 1.5) * 0.7f;
+
+                    // Mute egg / silenced audio (Fork F): MasterVolume == 0 means don't attempt audio.
+                    if (masterVolume <= 0f) return;
 
                     // Use NAudio for async playback
                     Task.Run(() =>

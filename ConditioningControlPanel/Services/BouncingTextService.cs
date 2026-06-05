@@ -87,6 +87,8 @@ public class BouncingTextService : IDisposable
     }
 
     public event EventHandler? OnBounce;
+    /// <summary>Fires on a true/near DVD corner hit (distinct from a plain wall bounce). Used by the bark egg.</summary>
+    public event EventHandler? OnCornerHit;
 
     public void Start(bool bypassLevelCheck = false, List<string>? pool = null)
     {
@@ -315,6 +317,7 @@ public class BouncingTextService : IDisposable
         {
             App.Logger?.Information("🎯 CORNER HIT! Position: ({X}, {Y})", _posX, _posY);
             App.Achievements?.TrackCornerHit();
+            OnCornerHit?.Invoke(this, EventArgs.Empty);
         }
         // Also check for "near corner" hits - when very close to a corner during a single-axis bounce
         else if (bounced)
@@ -324,6 +327,7 @@ public class BouncingTextService : IDisposable
             {
                 App.Logger?.Information("🎯 NEAR-CORNER HIT! Position: ({X}, {Y})", _posX, _posY);
                 App.Achievements?.TrackCornerHit();
+                OnCornerHit?.Invoke(this, EventArgs.Empty);
             }
         }
         
