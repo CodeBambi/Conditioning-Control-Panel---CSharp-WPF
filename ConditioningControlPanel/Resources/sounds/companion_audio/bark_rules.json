@@ -9,7 +9,7 @@
     "mood": "warm",
     "class": "normal",
     "variant_pool": [
-      "There you are. Let's begin.",
+      { "text": "There you are. Let's begin.", "audio": "session_start_recent_1.mp3" },
       "Good girl. Settle in for me."
     ]
   },

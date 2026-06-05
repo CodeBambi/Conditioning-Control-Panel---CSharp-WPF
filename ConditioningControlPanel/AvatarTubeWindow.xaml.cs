@@ -2498,7 +2498,7 @@ namespace ConditioningControlPanel
         /// Blocked while waiting for AI response or while AI bubble is visible.
         /// Plays giggle sound 1 in 5 times for preset phrases.
         /// </summary>
-        public void Giggle(string text, string? phraseAudioPath = null)
+        public void Giggle(string text, string? phraseAudioPath = null, bool barkVoice = false)
         {
             if (_isPlayingUninterruptibleClip) return; // an uninterruptible clip is speaking
 
@@ -2539,17 +2539,22 @@ namespace ConditioningControlPanel
 
                 if (timeSinceLastSpeech < requiredDelay)
                 {
-                    // Queue it and let the delay system handle it
+                    // Queue it and let the delay system handle it. NOTE: the queue tuple carries
+                    // text only, so a queued bark voiceline plays text-only. In practice barks
+                    // fire idle (global min-gap + chat-suppression), so this immediate path is the
+                    // common case; widening the queue to carry audio is a future refinement.
                     _speechQueue.Enqueue((text, SpeechSource.Preset));
                     _isGiggling = true;
                     ProcessNextSpeech();
                 }
                 else
                 {
-                    // Determine if we should play giggle sound (1 in 5 for presets)
+                    // Determine if we should play giggle sound (1 in 5 for presets). A bark voiceline
+                    // (barkVoice + phraseAudioPath) takes the audio path in ShowGiggle, so the giggle
+                    // sound is suppressed automatically.
                     _presetGiggleCounter++;
                     bool playSound = _presetGiggleCounter % 5 == 0;
-                    ShowGiggle(text, playSound, SpeechSource.Preset, phraseAudioPath);
+                    ShowGiggle(text, playSound, SpeechSource.Preset, phraseAudioPath, barkVoice: barkVoice);
                 }
             });
         }
@@ -2646,7 +2651,7 @@ namespace ConditioningControlPanel
             return windowMs > 0 && (DateTime.UtcNow - _lastAiBubbleUtc).TotalMilliseconds < windowMs;
         }
 
-        public void GigglePriority(string text, bool playSound = true, bool aiGenerated = true)
+        public void GigglePriority(string text, bool playSound = true, bool aiGenerated = true, string? phraseAudioPath = null, bool barkVoice = false)
         {
             if (_isPlayingUninterruptibleClip) return; // an uninterruptible clip is speaking
             DispatcherHelper.RunOnUI(() =>
@@ -2677,7 +2682,8 @@ namespace ConditioningControlPanel
                 // aiGenerated: when true, the bubble shows the "AI" badge. Most call sites that route
                 // through GigglePriority are AI replies, but the awareness keyword path can fall back
                 // to canned phrases when the AI is unavailable — those callers pass false.
-                ShowGiggle(text, playSound: playSound, source: SpeechSource.AI, aiGenerated: aiGenerated);
+                ShowGiggle(text, playSound: playSound, source: SpeechSource.AI, aiGenerated: aiGenerated,
+                    phraseAudioPath: phraseAudioPath, barkVoice: barkVoice);
 
                 App.Logger?.Debug("Priority speech (queue cleared): {Text}", text);
             });
@@ -2733,7 +2739,7 @@ namespace ConditioningControlPanel
         /// <param name="text">The text to display</param>
         /// <param name="playSound">Whether to play a giggle sound</param>
         /// <param name="source">The source of the speech (for delay calculation)</param>
-        private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset, string? phraseAudioPath = null, bool aiGenerated = false, bool bypassClipLock = false)
+        private void ShowGiggle(string text, bool playSound = false, SpeechSource source = SpeechSource.Preset, string? phraseAudioPath = null, bool aiGenerated = false, bool bypassClipLock = false, bool barkVoice = false)
         {
             // An uninterruptible recorded clip owns the bubble — only its own (bypassing) call may render.
             if (_isPlayingUninterruptibleClip && !bypassClipLock) return;
@@ -2777,8 +2783,12 @@ namespace ConditioningControlPanel
             // Play sound for the speech bubble
             if (phraseAudioPath != null)
             {
-                // Custom phrase audio overrides default sounds
-                PlayPhraseAudio(phraseAudioPath);
+                // Custom phrase audio overrides default sounds. Bark voicelines play through the
+                // companion-voice path (MasterVolume-gated), not the SubAudio-gated phrase path.
+                if (barkVoice)
+                    PlayBarkVoice(phraseAudioPath);
+                else
+                    PlayPhraseAudio(phraseAudioPath);
             }
             else if (playSound)
             {
@@ -4532,6 +4542,42 @@ namespace ConditioningControlPanel
                 App.Logger?.Warning(ex, "PlayNoteClip failed");
                 _isPlayingUninterruptibleClip = false;
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Play a companion bark voiceline. Like <see cref="PlayPhraseAudio"/> but gated on
+        /// MasterVolume only (NOT SubAudioEnabled — that toggle is for subliminal whispers), so
+        /// the companion's spoken barks follow the master/mute control.
+        /// </summary>
+        private void PlayBarkVoice(string audioPath)
+        {
+            try
+            {
+                if (!System.IO.File.Exists(audioPath)) return;
+
+                var masterVolume = (App.Settings?.Current?.MasterVolume ?? 0) / 100f;
+                if (masterVolume <= 0f) return; // muted
+                var volume = (float)Math.Pow(masterVolume, 1.5) * 0.85f;
+
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        using var audioFile = new NAudio.Wave.AudioFileReader(audioPath);
+                        audioFile.Volume = volume;
+                        using var outputDevice = new NAudio.Wave.WaveOutEvent();
+                        outputDevice.Init(audioFile);
+                        outputDevice.Play();
+                        while (outputDevice.PlaybackState == NAudio.Wave.PlaybackState.Playing)
+                            System.Threading.Thread.Sleep(50);
+                    }
+                    catch { /* Ignore audio errors */ }
+                });
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Failed to play bark voice: {Error}", ex.Message);
             }
         }
 

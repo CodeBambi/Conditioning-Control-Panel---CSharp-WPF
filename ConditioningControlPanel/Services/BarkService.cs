@@ -454,7 +454,7 @@ namespace ConditioningControlPanel.Services
                 // Decide under the lock; render after releasing it (GigglePriority/Giggle marshal to UI).
                 BarkRule? toSpeak = null;
                 int variantIndex = -1;
-                List<string>? pool = null;
+                List<BarkVariant>? pool = null;
 
                 lock (_gate)
                 {
@@ -670,15 +670,33 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private List<string> ResolvePool(BarkRule rule)
+        private List<BarkVariant> ResolvePool(BarkRule rule)
         {
             if (rule.VariantPool != null && rule.VariantPool.Count > 0) return rule.VariantPool;
             if (!string.IsNullOrWhiteSpace(rule.PoolRef))
             {
                 var phrases = App.Mods?.GetPhrases(rule.PoolRef!);
-                if (phrases != null && phrases.Length > 0) return phrases.ToList();
+                if (phrases != null && phrases.Length > 0)
+                    return phrases.Select(p => new BarkVariant(p)).ToList(); // pool-ref lines are text-only
             }
-            return new List<string>();
+            return new List<BarkVariant>();
+        }
+
+        /// <summary>
+        /// Resolve a variant's voiceline filename to a full path: active mod's
+        /// companion_audio folder first, embedded fallback second. Null if absent/missing.
+        /// </summary>
+        private static string? ResolveBarkAudio(string? file)
+        {
+            if (string.IsNullOrWhiteSpace(file)) return null;
+            var modPath = App.Mods?.ActiveMod?.InstalledPath;
+            if (!string.IsNullOrEmpty(modPath))
+            {
+                var p = System.IO.Path.Combine(modPath, "resources", "sounds", "companion_audio", file);
+                if (System.IO.File.Exists(p)) return p;
+            }
+            var embedded = System.IO.Path.Combine(CompanionPhraseService.CompanionAudioFolder, file);
+            return System.IO.File.Exists(embedded) ? embedded : null;
         }
 
         private readonly struct GateDecision
@@ -688,7 +706,7 @@ namespace ConditioningControlPanel.Services
             public string Reason { get; init; }
         }
 
-        private GateDecision EvaluateGate(BarkRule rule, List<string> pool, bool guaranteed)
+        private GateDecision EvaluateGate(BarkRule rule, List<BarkVariant> pool, bool guaranteed)
         {
             if (pool.Count == 0)
                 return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "empty-pool" };
@@ -799,7 +817,7 @@ namespace ConditioningControlPanel.Services
 
         // ===================== speak =====================
 
-        private void Speak(BarkRule rule, int variantIndex, BarkContext ctx, List<string> pool)
+        private void Speak(BarkRule rule, int variantIndex, BarkContext ctx, List<BarkVariant> pool)
         {
             if (variantIndex < 0 || variantIndex >= pool.Count) return;
             var avatar = App.AvatarWindow;
@@ -809,7 +827,8 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            string line = ApplySubstitutions(pool[variantIndex], ctx);
+            var variant = pool[variantIndex];
+            string line = ApplySubstitutions(variant.Text, ctx);
             if (string.IsNullOrWhiteSpace(line)) return;
 
             // Mute egg (Fork F): an easter_egg bark while audio is fully muted shows a silent, text-only
@@ -822,13 +841,18 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
+            // Resolve the variant's voiceline (if any) to a real path under the active mod.
+            string? audioPath = ResolveBarkAudio(variant.Audio);
+
             // Route by class/priority: non-Normal or high-priority barks preempt (GigglePriority);
             // ordinary barks queue (Giggle). Safety is non-Normal, so it preempts and clears the queue.
+            // When a voiceline exists it plays as the bubble's audio (no giggle sound on top).
             bool priority = rule.Class != BarkClass.Normal || rule.Priority >= PriorityBarkThreshold;
             if (priority)
-                avatar.GigglePriority(line, playSound: true, aiGenerated: false);
+                avatar.GigglePriority(line, playSound: audioPath == null, aiGenerated: false,
+                    phraseAudioPath: audioPath, barkVoice: audioPath != null);
             else
-                avatar.Giggle(line);
+                avatar.Giggle(line, phraseAudioPath: audioPath, barkVoice: audioPath != null);
 
             // Self-echo guard so the bubble text can't trip awareness/OCR off its own output.
             App.KeywordTriggers?.MuteKeywordEcho(line, SelfEchoMuteMs);
@@ -860,7 +884,7 @@ namespace ConditioningControlPanel.Services
         {
             var pool = ResolvePool(rule);
             string preview = decision.VariantIndex >= 0 && decision.VariantIndex < pool.Count
-                ? Truncate(pool[decision.VariantIndex], 48)
+                ? Truncate(pool[decision.VariantIndex].Text, 48)
                 : "(n/a)";
             string tag = DryRun ? "[BARK dry-run]" : "[BARK]";
 

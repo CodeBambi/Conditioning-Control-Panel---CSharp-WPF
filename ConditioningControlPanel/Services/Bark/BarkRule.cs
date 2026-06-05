@@ -75,9 +75,12 @@ namespace ConditioningControlPanel.Services.Bark
         [JsonProperty("class")]
         public string ClassRaw { get; set; } = "normal";
 
-        /// <summary>Inline line pool. Either this or <see cref="PoolRef"/> supplies variants.</summary>
+        /// <summary>
+        /// Inline variant pool. Either this or <see cref="PoolRef"/> supplies variants. Each entry is
+        /// a bare string (text-only) or <c>{ text, audio }</c> (a voiced line). See <see cref="BarkVariant"/>.
+        /// </summary>
         [JsonProperty("variant_pool")]
-        public List<string>? VariantPool { get; set; }
+        public List<BarkVariant>? VariantPool { get; set; }
 
         /// <summary>Optional reference to an existing CompanionPhraseService category (reuses recorded voicelines).</summary>
         [JsonProperty("pool_ref")]
