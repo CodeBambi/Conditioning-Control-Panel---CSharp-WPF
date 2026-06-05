@@ -28,7 +28,7 @@ namespace ConditioningControlPanel.Services.Bark
         public static string EmbeddedManifestPath =>
             Path.Combine(CompanionPhraseService.CompanionAudioFolder, ManifestFileName);
 
-        /// <summary>Active mod's manifest, if the mod ships one. Null when no mod / no file.</summary>
+        /// <summary>Active mod's manifest from its InstalledPath (Locked/Drone-style packaged mods). Null if none.</summary>
         public static string? ActiveModManifestPath
         {
             get
@@ -36,6 +36,23 @@ namespace ConditioningControlPanel.Services.Bark
                 var modPath = App.Mods?.ActiveMod?.InstalledPath;
                 if (string.IsNullOrEmpty(modPath)) return null;
                 var p = Path.Combine(modPath, "resources", "sounds", "companion_audio", ManifestFileName);
+                return File.Exists(p) ? p : null;
+            }
+        }
+
+        /// <summary>
+        /// Active mod's manifest from the EMBEDDED per-mod folder
+        /// (Resources/sounds/companion_audio/mods/{modId}/). This is how built-in mods that have
+        /// no InstalledPath (Bambi/Sissy) ship their bark content; it also covers Locked/Drone
+        /// uniformly. Null if the active mod has no embedded manifest.
+        /// </summary>
+        public static string? EmbeddedModManifestPath
+        {
+            get
+            {
+                var modId = App.Mods?.ActiveModId;
+                if (string.IsNullOrEmpty(modId)) return null;
+                var p = Path.Combine(CompanionPhraseService.CompanionAudioFolder, "mods", modId, ManifestFileName);
                 return File.Exists(p) ? p : null;
             }
         }
@@ -58,7 +75,8 @@ namespace ConditioningControlPanel.Services.Bark
 
             int baseCount = MergeFile(merged, EmbeddedManifestPath, "embedded");
             int modCount = 0;
-            var modPath = ActiveModManifestPath;
+            // Prefer a packaged-mod manifest (InstalledPath); otherwise the embedded per-mod folder.
+            var modPath = ActiveModManifestPath ?? EmbeddedModManifestPath;
             if (modPath != null)
                 modCount = MergeFile(merged, modPath, "mod");
 

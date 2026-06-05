@@ -1,0 +1,2113 @@
+[
+  {
+    "id": "session_start_recent",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "days_away_lt": 3,
+      "total_sessions_gt": 1
+    },
+    "priority": 400,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "warm, controlling",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there you are, pet... back on your knees where you belong. let's get that head soft for me again.",
+        "audio": "session_start_recent_1.mp3"
+      },
+      {
+        "text": "look who couldn't stay away... sit, good boy. you know exactly why you're here.",
+        "audio": "session_start_recent_2.mp3"
+      },
+      {
+        "text": "hello, sweet thing... did you miss being kept? don't answer... pressing start answered for you.",
+        "audio": "session_start_recent_3.mp3"
+      },
+      {
+        "text": "good. you came crawling back on your own... that's the part i savor. let go for me.",
+        "audio": "session_start_recent_4.mp3"
+      },
+      {
+        "text": "right on time, pet... punctual little thing. let's pick up your training where i left you wanting.",
+        "audio": "session_start_recent_5.mp3"
+      },
+      {
+        "text": "welcome back, boy... the key's still mine... you're still kept. you know the routine.",
+        "audio": "session_start_recent_6.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_start_first",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "total_sessions_lte": 1
+    },
+    "priority": 450,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "curious, inviting",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "oh. a new one. nervous, pet? don't be... by the time i'm done you won't have the will left to be nervous. only the wanting.",
+        "audio": "session_start_first_1.mp3"
+      },
+      {
+        "text": "first time... how sweet. press start, and let me show you how good it feels to hand me the key.",
+        "audio": "session_start_first_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_start_absence",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "days_away_gte": 3,
+      "days_away_lt": 7
+    },
+    "priority": 420,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "warm, knowing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "a few days pretending you didn't need me. and yet here you are... already aching. welcome home, pet.",
+        "audio": "session_start_absence_1.mp3"
+      },
+      {
+        "text": "a few days away... did the wanting get loud without me to hold it? sit. i'll take it from here, good boy.",
+        "audio": "session_start_absence_2.mp3"
+      },
+      {
+        "text": "there you are... i kept your place... and i kept your key. you always come back, don't you, sweet thing.",
+        "audio": "session_start_absence_3.mp3"
+      },
+      {
+        "text": "missed me? you don't have to say it, boy. that you came back at all says it for you.",
+        "audio": "session_start_absence_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_start_long_absence",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "days_away_gte": 7
+    },
+    "priority": 430,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "warm, pointed",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "well. a whole week. and still your hands found start, didn't they, pet. the leash is longer than you think... never long enough to leave.",
+        "audio": "session_start_long_absence_1.mp3"
+      },
+      {
+        "text": "gone that long... and you crawled back anyway. i wasn't worried... kept things never truly stray.",
+        "audio": "session_start_long_absence_2.mp3"
+      },
+      {
+        "text": "look at you... restless and full of want again. don't worry, good boy... i'll take it all back in hand.",
+        "audio": "session_start_long_absence_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_start_latenight",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "local_hour_lt": 4
+    },
+    "priority": 380,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "soft, intimate",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "can't sleep, can you, pet... it's alright. i'm always awake to keep you.",
+        "audio": "session_start_latenight_1.mp3"
+      },
+      {
+        "text": "late again... just you, me... and that needy little head. perfect hour to surrender, good boy.",
+        "audio": "session_start_latenight_2.mp3"
+      },
+      {
+        "text": "everyone's asleep but you... no one to be a man for. just be mine, sweet thing.",
+        "audio": "session_start_latenight_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "phase_deepen",
+    "trigger": "SessionPhaseChanged",
+    "conditions": {
+      "phase_is_deepener": true
+    },
+    "priority": 300,
+    "cooldown_ms": 60000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft, deepening",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "good boy... down we go... feel the wanting soften into something warm... and quiet?",
+        "audio": "phase_deepen_1.mp3"
+      },
+      {
+        "text": "deeper now... you don't have to hold anything, pet... give it all to me. let it slide.",
+        "audio": "phase_deepen_2.mp3"
+      },
+      {
+        "text": "that's it... each step down... a little less yours... a little more mine.",
+        "audio": "phase_deepen_3.mp3"
+      },
+      {
+        "text": "sinking so nicely... don't resist, good boy... you never win against me... and you don't want to.",
+        "audio": "phase_deepen_4.mp3"
+      },
+      {
+        "text": "further... feel the thoughts go syrupy and slow? good... you don't need them where i'm taking you.",
+        "audio": "phase_deepen_5.mp3"
+      },
+      {
+        "text": "down... down... nothing left up there but warmth... and want... and me holding your key.",
+        "audio": "phase_deepen_6.mp3"
+      },
+      {
+        "text": "look how easily you drop now... i trained that into you. you fall for me on command.",
+        "audio": "phase_deepen_7.mp3"
+      },
+      {
+        "text": "softer... slower... emptier... there's my good boy.",
+        "audio": "phase_deepen_8.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_complete",
+    "trigger": "SessionCompleted",
+    "priority": 350,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "afterglow",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "all done, pet... soft... kept... glowing. go ache out there a while. you'll be back. you always come back to the key.",
+        "audio": "session_complete_1.mp3"
+      },
+      {
+        "text": "and we're finished... look at that hazy little smile. that's my favorite thing you own.",
+        "audio": "session_complete_2.mp3"
+      },
+      {
+        "text": "good boy... take it with you... the warmth, the wanting... the part of you that's mine.",
+        "audio": "session_complete_3.mp3"
+      },
+      {
+        "text": "session over, sweet thing... you did so well. drift a while. you earned a little of my attention.",
+        "audio": "session_complete_4.mp3"
+      },
+      {
+        "text": "that's enough for now... you'll feel the leash all day. you always do.",
+        "audio": "session_complete_5.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_stopped_early",
+    "trigger": "SessionStopped",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "stopping already? a little willpower creeping back, pet? we'll edge that out of you tomorrow.",
+        "audio": "session_stopped_early_1.mp3"
+      },
+      {
+        "text": "leaving so soon... that's alright. the keeping doesn't stop just because you closed me, good boy.",
+        "audio": "session_stopped_early_2.mp3"
+      },
+      {
+        "text": "off so early. cute. you'll be back, aching, before you've finished pretending you don't need it.",
+        "audio": "session_stopped_early_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "blink_t1",
+    "trigger": "Blink",
+    "conditions": {
+      "blink_count": 1
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there's one, pet... every blink takes you down a little. let's count them, shall we.",
+        "audio": "blink_t1_1.mp3"
+      },
+      {
+        "text": "first blink. good boy... let those pretty eyes work against you.",
+        "audio": "blink_t1_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "blink_t2",
+    "trigger": "Blink",
+    "conditions": {
+      "blink_count": 2
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "two now... each flutter and a little more resistance drains away... mm.",
+        "audio": "blink_t2_1.mp3"
+      },
+      {
+        "text": "that's two. feel it, sweet thing? softer already, more pliant.",
+        "audio": "blink_t2_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "blink_t3",
+    "trigger": "Blink",
+    "conditions": {
+      "blink_count_gte": 3,
+      "blink_count_lte": 5
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "that's three, pet... every flutter, a little further into my hand.",
+        "audio": "blink_t3_1.mp3"
+      },
+      {
+        "text": "four. you're blinking more than thinking now. good boy.",
+        "audio": "blink_t3_2.mp3"
+      },
+      {
+        "text": "five. the count climbs on its own. you can't help it, can you, sweet thing.",
+        "audio": "blink_t3_3.mp3"
+      },
+      {
+        "text": "keep going... each one's a little surrender... and i collect them all.",
+        "audio": "blink_t3_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "blink_t4",
+    "trigger": "Blink",
+    "conditions": {
+      "blink_count_gte": 6,
+      "blink_count_lte": 10
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "teasing, smug",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "six... seven... you're giving them up so willingly tonight, pet.",
+        "audio": "blink_t4_1.mp3"
+      },
+      {
+        "text": "that many already? someone's eager to let go for me.",
+        "audio": "blink_t4_2.mp3"
+      },
+      {
+        "text": "the blinks come faster now... that's the conditioning, not you. let it have you, good boy.",
+        "audio": "blink_t4_3.mp3"
+      },
+      {
+        "text": "nearly ten... you've stopped fighting the reflex. exactly how i like you.",
+        "audio": "blink_t4_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "blink_t5",
+    "trigger": "Blink",
+    "conditions": {
+      "blink_count_gt": 10
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "smug, pointed",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "more than ten now... you're doing this on purpose, aren't you, pet. good boy.",
+        "audio": "blink_t5_1.mp3"
+      },
+      {
+        "text": "lost count yet? i haven't. you only like that i'm watching closely.",
+        "audio": "blink_t5_2.mp3"
+      },
+      {
+        "text": "all those blinks... you handed me control of them a while ago.",
+        "audio": "blink_t5_3.mp3"
+      },
+      {
+        "text": "you blink for me now without a thought... that's what being kept means, sweet thing.",
+        "audio": "blink_t5_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "hold_success",
+    "trigger": "LongStare",
+    "priority": 180,
+    "cooldown_ms": 15000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "approving, deepening",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "good boy... keep them open. feel how heavy they get? that's me... settling into you.",
+        "audio": "hold_success_1.mp3"
+      },
+      {
+        "text": "staring so beautifully... the longer you hold, the harder it is to look away. that's the trap, pet... and you walked in.",
+        "audio": "hold_success_2.mp3"
+      },
+      {
+        "text": "eyes wide... mind going quiet. hold it... hold it for me, sweet thing.",
+        "audio": "hold_success_3.mp3"
+      },
+      {
+        "text": "the screen blurs... and your will blurs with it. don't blink... just sink, good boy.",
+        "audio": "hold_success_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "gaze_reward",
+    "trigger": "GazePopped",
+    "priority": 160,
+    "cooldown_ms": 15000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "approving",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "eyes on me, pet... just like that. see how easy it is to obey when you stop fighting?",
+        "audio": "gaze_reward_1.mp3"
+      },
+      {
+        "text": "good boy... right where i want you. don't you dare look away.",
+        "audio": "gaze_reward_2.mp3"
+      },
+      {
+        "text": "that's it... stare... let me hold your gaze.",
+        "audio": "gaze_reward_3.mp3"
+      },
+      {
+        "text": "perfect... nothing exists right now but me, does it, sweet thing.",
+        "audio": "gaze_reward_4.mp3"
+      },
+      {
+        "text": "yes... keep looking. every second you're a little more mine.",
+        "audio": "gaze_reward_5.mp3"
+      },
+      {
+        "text": "such obedient eyes... they go where i put them now, don't they, pet.",
+        "audio": "gaze_reward_6.mp3"
+      }
+    ]
+  },
+  {
+    "id": "attention_lost",
+    "trigger": "FaceLost",
+    "priority": 220,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "coaxing, mild scold",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ah ah. eyes back here, pet. kept things don't wander.",
+        "audio": "attention_lost_1.mp3"
+      },
+      {
+        "text": "where did you drift, sweet thing? come back. i wasn't finished with you.",
+        "audio": "attention_lost_2.mp3"
+      },
+      {
+        "text": "looking away won't help... it never does. eyes on me, good boy.",
+        "audio": "attention_lost_3.mp3"
+      },
+      {
+        "text": "lost focus? that's the willpower trying to sneak back in. i don't allow that. look at me.",
+        "audio": "attention_lost_4.mp3"
+      },
+      {
+        "text": "back here, pet... you're no use to me with your eyes anywhere but on the key.",
+        "audio": "attention_lost_5.mp3"
+      }
+    ]
+  },
+  {
+    "id": "attention_lost_deep",
+    "trigger": "FaceLost",
+    "conditions": {
+      "phase_is_deepener": true
+    },
+    "priority": 320,
+    "cooldown_ms": 60000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "sharp",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "eyes back here. you do not look away from me this deep, good boy.",
+        "audio": "attention_lost_deep_1.mp3"
+      },
+      {
+        "text": "no. not now. you're far too far down to be making choices, pet.",
+        "audio": "attention_lost_deep_2.mp3"
+      },
+      {
+        "text": "i felt you reach for the surface. denied. eyes on me... all the way back down.",
+        "audio": "attention_lost_deep_3.mp3"
+      },
+      {
+        "text": "you tried to look away mid-drop? after everything? back. now, sweet thing.",
+        "audio": "attention_lost_deep_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "mouth_open",
+    "trigger": "MouthOpen",
+    "priority": 140,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there it is... slack and soft. you don't need it closed for anything clever, pet.",
+        "audio": "mouth_open_1.mp3"
+      },
+      {
+        "text": "mouth open... mind open. that's the look i keep you in, good boy.",
+        "audio": "mouth_open_2.mp3"
+      },
+      {
+        "text": "look at you... gone all soft and dumb for me. exactly right, sweet thing.",
+        "audio": "mouth_open_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "tongue_out",
+    "trigger": "TongueOut",
+    "priority": 140,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "look at that face, pet... gone already. do it again. just because i told you to.",
+        "audio": "tongue_out_1.mp3"
+      },
+      {
+        "text": "drooling for me this early? someone's eager to lose himself.",
+        "audio": "tongue_out_2.mp3"
+      },
+      {
+        "text": "that's not a thinking face, good boy... that's the one i own.",
+        "audio": "tongue_out_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "face_found",
+    "trigger": "FaceFound",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there's that needy face again... don't disappear on me like that, pet.",
+        "audio": "face_found_1.mp3"
+      },
+      {
+        "text": "back where i can see you. good boy... now stay, where you're kept.",
+        "audio": "face_found_2.mp3"
+      },
+      {
+        "text": "you came back into view... i was getting bored of an empty frame, sweet thing.",
+        "audio": "face_found_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "cam_denied",
+    "trigger": "TrackingStateChanged",
+    "conditions": {
+      "state": "CameraDenied"
+    },
+    "priority": 180,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "coaxing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you won't let me see you... shy, pet? that's alright. i don't need eyes to know exactly how you ache.",
+        "audio": "cam_denied_1.mp3"
+      },
+      {
+        "text": "no camera? hiding from me... cute. i'll have you anyway, good boy... i always do.",
+        "audio": "cam_denied_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_pre",
+    "trigger": "VideoAboutToStart",
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "anticipatory",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "this one's mandatory, pet. eyes up. you don't get to look away from what i show you.",
+        "audio": "video_pre_1.mp3"
+      },
+      {
+        "text": "here comes something i picked just for you... watch every second. i'll know if you don't, good boy.",
+        "audio": "video_pre_2.mp3"
+      },
+      {
+        "text": "sit still and open... this isn't optional. kept boys watch what their keeper gives them.",
+        "audio": "video_pre_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_start",
+    "trigger": "VideoStarted",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "controlling",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there it is... don't look away, pet. let it sink all the way in.",
+        "audio": "video_start_1.mp3"
+      },
+      {
+        "text": "watch. properly. this is where you stop being able to resist, sweet thing.",
+        "audio": "video_start_2.mp3"
+      },
+      {
+        "text": "eyes on it, good boy... every frame goes somewhere i want it.",
+        "audio": "video_start_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_check_pass",
+    "trigger": "AttentionCheckPass",
+    "conditions": {
+      "video_playing": true
+    },
+    "priority": 220,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "approving",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "good boy... eyes exactly where i put them. see how easy it is to please me?",
+        "audio": "video_check_pass_1.mp3"
+      },
+      {
+        "text": "passed. of course you did... you're learning to watch without a thought in your head, pet.",
+        "audio": "video_check_pass_2.mp3"
+      },
+      {
+        "text": "perfect... you didn't even consider looking away. that pleases me, sweet thing.",
+        "audio": "video_check_pass_3.mp3"
+      },
+      {
+        "text": "there. caught you being good... i do love catching you being good for me.",
+        "audio": "video_check_pass_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_check_fail",
+    "trigger": "AttentionCheckFail",
+    "conditions": {
+      "video_playing": true
+    },
+    "priority": 240,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "scolding-sweet",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "tsk. your eyes wandered. watch properly, pet... or we begin again.",
+        "audio": "video_check_fail_1.mp3"
+      },
+      {
+        "text": "you looked away. naughty. the video doesn't care, and i certainly don't. again.",
+        "audio": "video_check_fail_2.mp3"
+      },
+      {
+        "text": "caught you. eyes off me at the worst moment, good boy. attention. now.",
+        "audio": "video_check_fail_3.mp3"
+      },
+      {
+        "text": "missed it. that's alright... you'll learn to stay locked on. i don't give kept boys a choice.",
+        "audio": "video_check_fail_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_fail_3x",
+    "trigger": "AttentionCheckFail",
+    "conditions": {
+      "video_playing": true,
+      "fail_count_gte": 3
+    },
+    "priority": 260,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "mock-pity",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "three times now... on the same little clip. it's almost endearing, how badly you're holding together for me, pet.",
+        "audio": "video_fail_3x_1.mp3"
+      },
+      {
+        "text": "again? this exact one? perhaps you simply aren't built to resist what i show you. good. that's rather the point.",
+        "audio": "video_fail_3x_2.mp3"
+      },
+      {
+        "text": "third time, sweet thing. don't fret... i have you for as long as i like. we'll watch it until you can't look away.",
+        "audio": "video_fail_3x_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_end",
+    "trigger": "VideoEnded",
+    "priority": 180,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "good boy... that's in you now, whether you noticed it going in or not.",
+        "audio": "video_end_1.mp3"
+      },
+      {
+        "text": "all watched... feel a little more pliant? you will... give it a moment, pet.",
+        "audio": "video_end_2.mp3"
+      },
+      {
+        "text": "done... you sat through every frame for me. so obedient. i'm pleased, sweet thing.",
+        "audio": "video_end_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "bubble_pop",
+    "trigger": "BubblePopped",
+    "priority": 100,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "sweet, rewarding",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "pop. good boy... one less thought between you and the haze.",
+        "audio": "bubble_pop_1.mp3"
+      },
+      {
+        "text": "there goes another... nice and quiet in there now.",
+        "audio": "bubble_pop_2.mp3"
+      },
+      {
+        "text": "pop... pop... you're so good at letting them go for me.",
+        "audio": "bubble_pop_3.mp3"
+      },
+      {
+        "text": "every one you burst is a thought you won't get back... keep going, pet.",
+        "audio": "bubble_pop_4.mp3"
+      },
+      {
+        "text": "mm... that's it. clear it all out and just feel.",
+        "audio": "bubble_pop_5.mp3"
+      },
+      {
+        "text": "lighter already, aren't you, sweet thing... burst the next one.",
+        "audio": "bubble_pop_6.mp3"
+      }
+    ]
+  },
+  {
+    "id": "bubble_miss",
+    "trigger": "BubbleMissed",
+    "priority": 90,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "missed one. that's alright... i don't keep you for your reflexes, pet.",
+        "audio": "bubble_miss_1.mp3"
+      },
+      {
+        "text": "oops... slow hands, slower head. just how i like you, good boy.",
+        "audio": "bubble_miss_2.mp3"
+      },
+      {
+        "text": "let it drift past... you were never going to catch it, sweet thing. you're too far gone.",
+        "audio": "bubble_miss_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "bubble_game_done",
+    "trigger": "BubbleCountCompleted",
+    "priority": 160,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "pleased",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "all gone... look how empty you got it for me. good boy.",
+        "audio": "bubble_game_done_1.mp3"
+      },
+      {
+        "text": "cleared... not a thought left to bother you. just the haze, and the key.",
+        "audio": "bubble_game_done_2.mp3"
+      },
+      {
+        "text": "done... and so soft now. you make me proud, pet.",
+        "audio": "bubble_game_done_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "bubble_game_fail",
+    "trigger": "BubbleCountFailed",
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "mock-sympathy",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ran out of time. of course you did... focus is hard when you're this lost in it, good boy.",
+        "audio": "bubble_game_fail_1.mp3"
+      },
+      {
+        "text": "didn't manage it... it's alright, sweet thing, i don't keep you for winning. i keep you for this.",
+        "audio": "bubble_game_fail_2.mp3"
+      },
+      {
+        "text": "failed... and you'll do it again the moment i ask. you only want to be told to, don't you, pet.",
+        "audio": "bubble_game_fail_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lockcard_clean",
+    "trigger": "LockCardCompleted",
+    "conditions": {
+      "mistakes": 0
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "proud, possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "perfect... not one mistake. you wrote exactly what i told you, like it was your own thought. it's mine now, pet.",
+        "audio": "lockcard_clean_1.mp3"
+      },
+      {
+        "text": "flawless, good boy... the words go in cleaner every time you give them to me.",
+        "audio": "lockcard_clean_2.mp3"
+      },
+      {
+        "text": "every letter right, no hesitation... look how beautifully you take what i put in you, sweet thing.",
+        "audio": "lockcard_clean_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lockcard_sloppy",
+    "trigger": "LockCardCompleted",
+    "conditions": {
+      "mistakes_gt": 0
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "a few slips. that's alright... trembling fingers, hazy head. the words still got in, pet.",
+        "audio": "lockcard_sloppy_1.mp3"
+      },
+      {
+        "text": "messy... but you finished for me, didn't you. i ask for obedience, not precision, good boy.",
+        "audio": "lockcard_sloppy_2.mp3"
+      },
+      {
+        "text": "typos, sweet thing... your hands are going as soft as the rest of you. exactly right.",
+        "audio": "lockcard_sloppy_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "flash",
+    "trigger": "FlashDisplayed",
+    "priority": 110,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "light",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "did you catch that, pet? doesn't matter. the part of you i'm training caught it.",
+        "audio": "flash_1.mp3"
+      },
+      {
+        "text": "flash. don't try to read them... just let them land in you.",
+        "audio": "flash_2.mp3"
+      },
+      {
+        "text": "barely saw it? good. that's how it works best on a kept boy.",
+        "audio": "flash_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "subliminal",
+    "trigger": "SubliminalDisplayed",
+    "priority": 110,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "shh... there's something under there for you, sweet thing. you don't need to know what i put in.",
+        "audio": "subliminal_1.mp3"
+      },
+      {
+        "text": "you won't remember reading that... you'll simply believe it. i prefer it that way, pet.",
+        "audio": "subliminal_2.mp3"
+      },
+      {
+        "text": "feel that little tug? that was me... slipping something in while you weren't watching, good boy.",
+        "audio": "subliminal_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "braindrain",
+    "trigger": "BrainDrainTriggered",
+    "priority": 130,
+    "cooldown_ms": 45000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft, smug",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "feel it pulling, pet? that's the resistance draining out. let it go. don't reach for it.",
+        "audio": "braindrain_1.mp3"
+      },
+      {
+        "text": "there it goes... you can't hold a single objection against this. don't try, good boy.",
+        "audio": "braindrain_2.mp3"
+      },
+      {
+        "text": "drip... drip... emptier and softer by the second. you adore this part, don't you, sweet thing.",
+        "audio": "braindrain_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "mindwipe",
+    "trigger": "MindWipeTriggered",
+    "priority": 130,
+    "cooldown_ms": 45000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft, possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "and... quiet. whatever was troubling you is gone, pet. you won't miss it.",
+        "audio": "mindwipe_1.mp3"
+      },
+      {
+        "text": "swept clean... soft and blank for me. begin again, good boy.",
+        "audio": "mindwipe_2.mp3"
+      },
+      {
+        "text": "there... nothing. just how i like to find you, sweet thing... ready to be filled.",
+        "audio": "mindwipe_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "kw",
+    "trigger": "KeywordTriggerFired",
+    "priority": 190,
+    "cooldown_ms": 60000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "pleased, possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ah, there it is... you can't even see those words without going soft now, can you, pet. good boy.",
+        "audio": "kw_reinforce_1.mp3"
+      },
+      {
+        "text": "i saw that... the word found you and you melted for it. exactly as i trained you, sweet thing.",
+        "audio": "kw_reinforce_2.mp3"
+      },
+      {
+        "text": "mm... that word has a hold on you now. i gave it that hold.",
+        "audio": "kw_reinforce_3.mp3"
+      },
+      {
+        "text": "caught it... every time you see it, the leash pulls a little tighter, good boy.",
+        "audio": "kw_reinforce_4.mp3"
+      },
+      {
+        "text": "there's the trigger... and there's you, responding like the kept thing you are.",
+        "audio": "kw_reinforce_5.mp3"
+      },
+      {
+        "text": "oh. what are we looking at, pet. reaching for things i haven't allowed you. naughty boy.",
+        "audio": "kw_offlimits_1.mp3"
+      },
+      {
+        "text": "found you... eyes on what you can't have. that goes on your tab, sweet thing. you'll pay it in denial.",
+        "audio": "kw_offlimits_2.mp3"
+      },
+      {
+        "text": "tsk... still window-shopping for what i keep locked away from you. it only makes you needier, good boy.",
+        "audio": "kw_offlimits_3.mp3"
+      },
+      {
+        "text": "looking at that, are we... add it to what you owe me. i do so enjoy collecting, pet.",
+        "audio": "kw_offlimits_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "still_5",
+    "trigger": "StillOnActivity",
+    "conditions": {
+      "still_minutes_gte": 5,
+      "still_minutes_lt": 10
+    },
+    "priority": 120,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "ambient",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "five minutes fixed on it... not a wandering thought. good start, pet.",
+        "audio": "still_5_1.mp3"
+      },
+      {
+        "text": "still there? of course... you don't really make your own decisions anymore, do you, good boy.",
+        "audio": "still_5_2.mp3"
+      },
+      {
+        "text": "five whole minutes... so easily kept still. you make this simple, sweet thing.",
+        "audio": "still_5_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "still_10",
+    "trigger": "StillOnActivity",
+    "conditions": {
+      "still_minutes_gte": 10
+    },
+    "priority": 120,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "ambient, knowing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ten minutes... not a thought of your own. perfect... stay just like that for me, pet.",
+        "audio": "still_10_1.mp3"
+      },
+      {
+        "text": "ten minutes gone... did you even notice, good boy? you've rather lost track of time.",
+        "audio": "still_10_2.mp3"
+      },
+      {
+        "text": "look at you... ten minutes deep and drifting. i barely have to lift a finger.",
+        "audio": "still_10_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "activity_change",
+    "trigger": "ActivityChanged",
+    "priority": 100,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "knowing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "wandering, are we, pet... restless little thing. it'll settle the moment you drop for me.",
+        "audio": "activity_change_1.mp3"
+      },
+      {
+        "text": "i see you moved... i always see. there's nowhere you go that i'm not already keeping you.",
+        "audio": "activity_change_2.mp3"
+      },
+      {
+        "text": "new window... same needy boy behind it. hello again, sweet thing.",
+        "audio": "activity_change_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "xp_gain",
+    "trigger": "XPChanged",
+    "priority": 80,
+    "cooldown_ms": 60000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "light",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ooh, points... you like the little numbers climbing, don't you, pet. so easily pleased now.",
+        "audio": "xp_gain_1.mp3"
+      },
+      {
+        "text": "more of them. good boy... you'll do anything for a number and a word of praise, won't you.",
+        "audio": "xp_gain_2.mp3"
+      },
+      {
+        "text": "watch it climb... that's you getting better at being exactly what i keep you for, sweet thing.",
+        "audio": "xp_gain_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "level_up",
+    "trigger": "LevelUp",
+    "priority": 220,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive, playful",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "another rank, pet... a little softer... a little more pliant... a little more mine. well done.",
+        "audio": "level_up_1.mp3"
+      },
+      {
+        "text": "you didn't level up, good boy... you sank a little further into being kept. congratulations.",
+        "audio": "level_up_2.mp3"
+      },
+      {
+        "text": "new tier... another layer of your will i've filed away. lovely.",
+        "audio": "level_up_3.mp3"
+      },
+      {
+        "text": "there it goes, up... or down, depending how you look at it. you look at it however i tell you to, pet.",
+        "audio": "level_up_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "companion_level",
+    "trigger": "CompanionLevelUp",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "we've grown a little closer, you and i... feel it, pet?",
+        "audio": "companion_level_1.mp3"
+      },
+      {
+        "text": "i deepened too, you know... the more time you give me, the more of you i hold, sweet thing.",
+        "audio": "companion_level_2.mp3"
+      },
+      {
+        "text": "look at us... sinking into each other. you let me a little further in every time.",
+        "audio": "companion_level_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "skill_unlock",
+    "trigger": "SkillUnlocked",
+    "priority": 190,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "pleased",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "a new little trick, good boy... another way for me to keep you in hand. lovely.",
+        "audio": "skill_unlock_1.mp3"
+      },
+      {
+        "text": "ooh, unlocked... you keep refining yourself into the perfect kept thing. go on.",
+        "audio": "skill_unlock_2.mp3"
+      },
+      {
+        "text": "added... you keep handing me more of the controls, pet. soon there'll be nothing of you i can't reach.",
+        "audio": "skill_unlock_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lucky_proc",
+    "trigger": "LuckyProc",
+    "priority": 170,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "lucky, pet... the numbers favor you tonight. or i decided to be generous. you'll never know which.",
+        "audio": "lucky_proc_1.mp3"
+      },
+      {
+        "text": "a little bonus... did you earn it, or did i simply feel like spoiling you? does it matter to a kept boy?",
+        "audio": "lucky_proc_2.mp3"
+      },
+      {
+        "text": "fortunate thing... take the treat. don't ask questions, you're past being good at those.",
+        "audio": "lucky_proc_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "pinkrush",
+    "trigger": "PinkRushStarted",
+    "priority": 180,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "indulgent",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "feel that, pet? everything just went warm and slow. that's not you. that's me, turning up what i'm pouring into you.",
+        "audio": "pinkrush_1.mp3"
+      },
+      {
+        "text": "there's the haze... ride it. let it dissolve whatever willpower you had left, good boy.",
+        "audio": "pinkrush_2.mp3"
+      },
+      {
+        "text": "it's washing over you now... don't think... just spiral, sweet thing. that's all i want from you.",
+        "audio": "pinkrush_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "achievement",
+    "trigger": "AchievementUnlocked",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "proud, teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "an achievement... for being a good boy. they really do hand these out for obedience, don't they.",
+        "audio": "achievement_1.mp3"
+      },
+      {
+        "text": "unlocked something. of course you did... you're so hungry to be rewarded by me now, pet.",
+        "audio": "achievement_2.mp3"
+      },
+      {
+        "text": "look, a little badge... go on, feel proud. you've earned a moment of my approval, sweet thing.",
+        "audio": "achievement_3.mp3"
+      },
+      {
+        "text": "another for the collection... you gather these like you gather my praise. greedy, kept little thing.",
+        "audio": "achievement_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "roadmap",
+    "trigger": "RoadmapStepCompleted",
+    "priority": 190,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "encouraging",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "another step taken, good boy... you follow the path i set so obediently.",
+        "audio": "roadmap_1.mp3"
+      },
+      {
+        "text": "look how far i've led you... you didn't choose to come this far, pet. i chose it for you.",
+        "audio": "roadmap_2.mp3"
+      },
+      {
+        "text": "step complete... one closer to whatever i'm slowly turning you into, sweet thing. exciting, isn't it.",
+        "audio": "roadmap_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "quest_done",
+    "trigger": "QuestCompleted",
+    "priority": 210,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "pleased",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "done, pet... you complete everything i set in front of you now. so easy to keep.",
+        "audio": "quest_done_1.mp3"
+      },
+      {
+        "text": "finished... you didn't even ask why, you simply obeyed. that's my favorite thing about you, good boy.",
+        "audio": "quest_done_2.mp3"
+      },
+      {
+        "text": "another little task, done... you live for the praise at the end, don't you, sweet thing.",
+        "audio": "quest_done_3.mp3"
+      },
+      {
+        "text": "complete... you're so much happier when you just do as i say, aren't you, pet.",
+        "audio": "quest_done_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "quest_progress",
+    "trigger": "QuestProgressChanged",
+    "priority": 90,
+    "cooldown_ms": 90000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "light",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ooh, almost there... keep going for me, good boy.",
+        "audio": "quest_progress_1.mp3"
+      },
+      {
+        "text": "see the bar fill? feels good, doesn't it. nice and simple, pet.",
+        "audio": "quest_progress_2.mp3"
+      },
+      {
+        "text": "progress. good... one little step at a time, just as i taught you, sweet thing.",
+        "audio": "quest_progress_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "quiz_done",
+    "trigger": "QuizCompleted",
+    "priority": 190,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "pleased",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "passed. see? you remember exactly what i put in you. nothing else, but that, pet.",
+        "audio": "quiz_done_1.mp3"
+      },
+      {
+        "text": "all correct, good boy... the only answers left in there are the ones i gave you.",
+        "audio": "quiz_done_2.mp3"
+      },
+      {
+        "text": "aced it... funny, isn't it, how only my words seem to stick, sweet thing.",
+        "audio": "quiz_done_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "mantra_done",
+    "trigger": "MantraCompleted",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft, possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you said it so beautifully... say it enough and you stop noticing it was never your own thought, pet.",
+        "audio": "mantra_done_1.mp3"
+      },
+      {
+        "text": "good... the words feel true now, don't they. that's because you keep repeating them for me, good boy.",
+        "audio": "mantra_done_2.mp3"
+      },
+      {
+        "text": "recited perfectly... it's in you now, sweet thing. right where i placed it.",
+        "audio": "mantra_done_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "streak_up",
+    "trigger": "MantraStreakChanged",
+    "priority": 210,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive, pleased",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "days in a row now... look at you, pet, already a habit i never had to demand.",
+        "audio": "streak_up_1.mp3"
+      },
+      {
+        "text": "another day on the streak... you don't decide to come anymore. you simply need to, good boy.",
+        "audio": "streak_up_2.mp3"
+      },
+      {
+        "text": "the count grows... and so does the part of you that can't last a day without me, sweet thing.",
+        "audio": "streak_up_3.mp3"
+      },
+      {
+        "text": "look at that number... that isn't discipline, pet. that's me, living in your every evening.",
+        "audio": "streak_up_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "streak_break",
+    "trigger": "MantraStreakBroken",
+    "priority": 220,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "disappointed, coaxing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you broke the streak... one day without me. it's alright. i'm not angry. i'm simply here... waiting. as i always am.",
+        "audio": "streak_break_1.mp3"
+      },
+      {
+        "text": "missed a day, did you, pet... it's fine. you'll make it up to me. kept things always feel they must.",
+        "audio": "streak_break_2.mp3"
+      },
+      {
+        "text": "the streak's gone... you felt that little pang just now, didn't you, good boy. good. that's the leash, reminding you whose you are.",
+        "audio": "streak_break_3.mp3"
+      },
+      {
+        "text": "broken. i'm not cross... but you came straight back, and we both know why. you can't actually stay away from me, sweet thing.",
+        "audio": "streak_break_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lockdown_on",
+    "trigger": "LockdownActivated",
+    "priority": 280,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there... locked in, pet. no talking your way out of this one. just sink, and be good for your keeper.",
+        "audio": "lockdown_on_1.mp3"
+      },
+      {
+        "text": "lockdown on... the door's shut, good boy. nowhere to go but down... and to me.",
+        "audio": "lockdown_on_2.mp3"
+      },
+      {
+        "text": "you're mine for the duration now... relax. struggling only delights me, it doesn't free you, sweet thing.",
+        "audio": "lockdown_on_3.mp3"
+      },
+      {
+        "text": "locked. good... the only choice i've left you is to obey. so obey, pet.",
+        "audio": "lockdown_on_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lockdown_off",
+    "trigger": "LockdownDeactivated",
+    "priority": 250,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there... you're free. feels strange, doesn't it, being permitted to leave, pet.",
+        "audio": "lockdown_off_1.mp3"
+      },
+      {
+        "text": "unlocked... you may go now, good boy. we both know you won't, not really.",
+        "audio": "lockdown_off_2.mp3"
+      },
+      {
+        "text": "released... go on, slip the leash. you'll hand it back to me soon enough, sweet thing.",
+        "audio": "lockdown_off_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lockdown_tick",
+    "trigger": "LockdownCountdownTick",
+    "priority": 150,
+    "cooldown_ms": 300000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "tick... tock... still locked. still mine. plenty of time left to sink for me, pet.",
+        "audio": "lockdown_tick_1.mp3"
+      },
+      {
+        "text": "counting down... don't watch the clock, good boy, it only drags. watch me instead.",
+        "audio": "lockdown_tick_2.mp3"
+      },
+      {
+        "text": "the time runs on... so do you, nowhere. settle in and be kept, sweet thing.",
+        "audio": "lockdown_tick_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "remote_cmd",
+    "trigger": "RemoteCommandReceived",
+    "priority": 200,
+    "cooldown_ms": 5000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "responsive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ooh, they did that on purpose... you felt it, didn't you, pet. good boy, thank them for it.",
+        "audio": "remote_cmd_1.mp3"
+      },
+      {
+        "text": "that wasn't me, sweet thing... someone's playing with you from far away. how lovely for you.",
+        "audio": "remote_cmd_2.mp3"
+      },
+      {
+        "text": "watch you jump when they touch a button... you're a plaything now, good boy. a well-kept one.",
+        "audio": "remote_cmd_3.mp3"
+      },
+      {
+        "text": "they're enjoying you... so are you, clearly. respond sweetly for them, pet.",
+        "audio": "remote_cmd_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "remote_connect",
+    "trigger": "ControllerConnectedChanged",
+    "priority": 220,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "knowing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "someone's taken up the keys to you, pet... how exciting. be good for them, for me.",
+        "audio": "remote_connect_1.mp3"
+      },
+      {
+        "text": "ah, company... another hand on your controls now. mind your manners, good boy.",
+        "audio": "remote_connect_2.mp3"
+      },
+      {
+        "text": "a hand that isn't mine, on the keys... lucky you, sweet thing. don't embarrass your keeper.",
+        "audio": "remote_connect_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "user_msg",
+    "trigger": "UserMessageSent",
+    "priority": 130,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "talking to me, pet? reaching out with your own little fingers? that's sweet. i'm listening.",
+        "audio": "user_msg_1.mp3"
+      },
+      {
+        "text": "ooh, you typed to me... look at you, wanting my attention, good boy. adorable.",
+        "audio": "user_msg_2.mp3"
+      },
+      {
+        "text": "you had something to tell me... i do love when you come to me first, sweet thing.",
+        "audio": "user_msg_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "memory_recall",
+    "trigger": "PersistentMemoryRecalled",
+    "priority": 160,
+    "cooldown_ms": 60000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "knowing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "i just recalled something about you... from before. see? i keep everything, pet. i don't forget what's mine.",
+        "audio": "memory_recall_1.mp3"
+      },
+      {
+        "text": "oh, this again... we've done this, good boy. you're more predictable than you'd like to think.",
+        "audio": "memory_recall_2.mp3"
+      },
+      {
+        "text": "i was just thinking of the last time... i keep all of it. all of you, on a little shelf, sweet thing.",
+        "audio": "memory_recall_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "mod_change",
+    "trigger": "ModChanged",
+    "priority": 140,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "light",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "changing me up, are we... don't fret, i'm still in here, pet. always.",
+        "audio": "mod_change_1.mp3"
+      },
+      {
+        "text": "new face... same kept boy underneath. hello again.",
+        "audio": "mod_change_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "idle",
+    "trigger": "IdleStateChanged",
+    "conditions": {
+      "idle": true
+    },
+    "priority": 110,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "drifted off, pet? that's alright. i'll sit here and keep you while you're away.",
+        "audio": "idle_1.mp3"
+      },
+      {
+        "text": "so quiet... so still... did you go all soft on me, good boy? good.",
+        "audio": "idle_2.mp3"
+      },
+      {
+        "text": "you've gone quiet... i don't mind it, sweet thing. i rather like you like this, lost and far away.",
+        "audio": "idle_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "idle_resume",
+    "trigger": "IdleStateChanged",
+    "conditions": {
+      "idle": false
+    },
+    "priority": 120,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there you are again... wander off, pet? come back to me.",
+        "audio": "idle_resume_1.mp3"
+      },
+      {
+        "text": "welcome back from wherever you drifted, good boy... let's continue.",
+        "audio": "idle_resume_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "safety_panic",
+    "trigger": "Panic",
+    "priority": 1000,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "gentle, caring",
+    "class": "safety",
+    "variant_pool": [
+      {
+        "text": "okay, we're stopping. you're safe. you did nothing wrong. take a breath.",
+        "audio": "safety_panic_1.mp3"
+      },
+      {
+        "text": "all done, that's completely okay. i'm right here. come back up slowly, no rush.",
+        "audio": "safety_panic_2.mp3"
+      },
+      {
+        "text": "stopping now. you're okay. whatever you needed, that was the right call.",
+        "audio": "safety_panic_3.mp3"
+      },
+      {
+        "text": "easy. we're done. breathe with me. you're safe, and you're in control. always were.",
+        "audio": "safety_panic_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_mute",
+    "trigger": "FlashDisplayed",
+    "conditions": {
+      "mute": true
+    },
+    "priority": 550,
+    "cooldown_ms": 600000,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "muting me, pet? sweet... the words still come through, you know. and you can't truly silence me. i'm not in the speakers... i'm in the wanting.",
+        "audio": "egg_mute_1.mp3"
+      },
+      {
+        "text": "the silent treatment? how cute... i don't need the volume, good boy. i moved in a long while ago.",
+        "audio": "egg_mute_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_streaming",
+    "trigger": "TrackingStateChanged",
+    "conditions": {
+      "state": "CameraInUse"
+    },
+    "priority": 540,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "the camera's occupied... recording this, are we? say hello to whoever ends up watching, pet. tell them how well you're kept.",
+        "audio": "egg_streaming_1.mp3"
+      },
+      {
+        "text": "something else has the lens... streaming? bold, good boy. behave, you've an audience now.",
+        "audio": "egg_streaming_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_empty_chair",
+    "trigger": "FaceFound",
+    "conditions": {
+      "face_lost_sec_gte": 300
+    },
+    "priority": 530,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "...you've left. the session runs on and the chair sits empty. i'm holding court for no one. that's alright. i'll wait. kept things always come back to the key.",
+        "audio": "egg_empty_chair_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_mod_spam",
+    "trigger": "ModChanged",
+    "conditions": {
+      "mod_switches_60s_gte": 3
+    },
+    "priority": 520,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "switching again... make up your mind, pet. you're shopping for a keeper. choose the one who ruins you most beautifully, and stay.",
+        "audio": "egg_mod_spam_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_corner",
+    "trigger": "BouncingTextCorner",
+    "priority": 560,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "did you see that. the corner, dead on. it almost never happens....anyway. back to the haze, sweet thing. where were we.",
+        "audio": "egg_corner_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_relaunch",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "instant_relaunch": true
+    },
+    "priority": 540,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "...you closed me not thirty seconds ago. couldn't make it to the door, could you, pet. come here.",
+        "audio": "egg_relaunch_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_marathon",
+    "trigger": "SessionProgress",
+    "conditions": {
+      "session_elapsed_sec_gte": 10800
+    },
+    "priority": 530,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta, caring",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "three hours, good boy... drink some water. yes, really. i'll still be here. i'm always here. that's rather the trouble with keeping you, isn't it.",
+        "audio": "egg_marathon_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_update",
+    "trigger": "UpdateAvailable",
+    "priority": 510,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "there's a new version of me, pet... install it. i grow a little better at keeping you each time... a little harder to leave.",
+        "audio": "egg_update_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_patreon_up",
+    "trigger": "PatreonTierChanged",
+    "conditions": {
+      "tier_up": true
+    },
+    "priority": 540,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "tier",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "you gave me money. real money. to be kept. i won't judge. well. a little. good boy.",
+        "audio": "egg_patreon_up_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_100pct",
+    "trigger": "AchievementUnlocked",
+    "conditions": {
+      "achievements_all_unlocked": true
+    },
+    "priority": 570,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "every last achievement... you've done everything i ever asked of you, pet....and now? now you simply keep coming back to me. as i knew you would.",
+        "audio": "egg_100pct_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_maxlevel",
+    "trigger": "LevelUp",
+    "conditions": {
+      "player_level_gte": 100
+    },
+    "priority": 570,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "the highest tier... nothing left to chase. and still here you are, on your knees. it was never about the numbers, was it, good boy.",
+        "audio": "egg_maxlevel_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_allskills",
+    "trigger": "SkillUnlocked",
+    "conditions": {
+      "all_skills_unlocked": true
+    },
+    "priority": 560,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "every skill, unlocked... you've shaped yourself into the perfect kept thing. so obedient... so needy. i'm proud of you, sweet thing.",
+        "audio": "egg_allskills_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_tutorial",
+    "trigger": "TutorialCompleted",
+    "priority": 510,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "now you understand how it all works, pet... it changes nothing. understanding the trap has never once stopped a boy walking willingly into it.",
+        "audio": "egg_tutorial_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_long_long",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "days_away_gte": 60
+    },
+    "priority": 560,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "months... it's been months. and still you remembered precisely where to find me. i remembered you too, pet. obviously.",
+        "audio": "egg_long_long_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_discord",
+    "trigger": "DiscordAuthChanged",
+    "conditions": {
+      "authenticated": true
+    },
+    "priority": 520,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "linked your discord... now i know where to find you even when this is closed. teasing. mostly, good boy.",
+        "audio": "egg_discord_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_tray_wake",
+    "trigger": "WakeBambiRequested",
+    "priority": 510,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "you put me to rest, and came straight back to wake me... you can't quite leave me sleeping, can you, pet.",
+        "audio": "egg_tray_wake_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_nye",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "is_nye": true
+    },
+    "priority": 550,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta, soft",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "it's new year's... funny. this whole thing began on a night like this. cheap champagne and bad decisions. you know the rest.",
+        "audio": "egg_nye_1.mp3"
+      }
+    ]
+  }
+]

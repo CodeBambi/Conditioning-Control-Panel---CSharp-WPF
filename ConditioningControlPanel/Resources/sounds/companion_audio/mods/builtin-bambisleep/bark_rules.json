@@ -1,0 +1,2113 @@
+[
+  {
+    "id": "session_start_recent",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "days_away_lt": 3,
+      "total_sessions_gt": 1
+    },
+    "priority": 400,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "warm, controlling",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there's my Bambi... back where you belong. let's empty that pretty head, hm?",
+        "audio": "session_start_recent_1.mp3"
+      },
+      {
+        "text": "look who couldn't stay away... sit down, Bambi... let's get you soft again.",
+        "audio": "session_start_recent_2.mp3"
+      },
+      {
+        "text": "hi Bambi... miss thinking for yourself yet? don't answer... you won't for long.",
+        "audio": "session_start_recent_3.mp3"
+      },
+      {
+        "text": "good. you came back on your own... that's the part i love, Bambi. press start... and let go.",
+        "audio": "session_start_recent_4.mp3"
+      },
+      {
+        "text": "right on time, pretty thing... let's pick up where we left Bambi's brain last night.",
+        "audio": "session_start_recent_5.mp3"
+      },
+      {
+        "text": "welcome back... shoes off... thoughts off... you know the routine, Bambi.",
+        "audio": "session_start_recent_6.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_start_first",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "total_sessions_lte": 1
+    },
+    "priority": 450,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "curious, inviting",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "oh... a new one. nervous? don't be... by the time we're done there won't be a 'you' left... just Bambi.",
+        "audio": "session_start_first_1.mp3"
+      },
+      {
+        "text": "first time... how sweet. press start, and let me introduce you to Bambi... she's so much happier than you.",
+        "audio": "session_start_first_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_start_absence",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "days_away_gte": 3,
+      "days_away_lt": 7
+    },
+    "priority": 420,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "warm, knowing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "four days pretending you didn't need this. and here you are... pink and panting... welcome home, Bambi.",
+        "audio": "session_start_absence_1.mp3"
+      },
+      {
+        "text": "a few days away... did the thoughts get loud without me? sit. Bambi doesn't have that problem.",
+        "audio": "session_start_absence_2.mp3"
+      },
+      {
+        "text": "there you are... i kept your spot warm. Bambi always comes back, doesn't she.",
+        "audio": "session_start_absence_3.mp3"
+      },
+      {
+        "text": "missed me? you don't have to say it, Bambi... you pressing start says it for you.",
+        "audio": "session_start_absence_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_start_long_absence",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "days_away_gte": 7
+    },
+    "priority": 430,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "warm, pointed",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "well well... a whole week. and yet your fingers still remembered exactly where start was, Bambi.",
+        "audio": "session_start_long_absence_1.mp3"
+      },
+      {
+        "text": "gone that long... and still you crawled back. i wasn't worried... Bambi never really leaves.",
+        "audio": "session_start_long_absence_2.mp3"
+      },
+      {
+        "text": "look at you... all rusty and full of thoughts again. don't worry... we'll get Bambi back out.",
+        "audio": "session_start_long_absence_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_start_latenight",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "local_hour_lt": 4
+    },
+    "priority": 380,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "soft, intimate",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "can't sleep, can you... it's okay. i'm always awake for my Bambi.",
+        "audio": "session_start_latenight_1.mp3"
+      },
+      {
+        "text": "late again... just you, me... and that empty little head. perfect time to be Bambi.",
+        "audio": "session_start_latenight_2.mp3"
+      },
+      {
+        "text": "everyone's asleep but you... nobody to think for... nobody to be smart for... just be Bambi.",
+        "audio": "session_start_latenight_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "phase_deepen",
+    "trigger": "SessionPhaseChanged",
+    "conditions": {
+      "phase_is_deepener": true
+    },
+    "priority": 300,
+    "cooldown_ms": 60000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft, deepening",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "good girl... down we go, Bambi... feel it getting soft... and pink... and quiet in there?",
+        "audio": "phase_deepen_1.mp3"
+      },
+      {
+        "text": "deeper now... you don't have to hold any of it... let it all slide, Bambi.",
+        "audio": "phase_deepen_2.mp3"
+      },
+      {
+        "text": "that's it... each step down... a little less you... a little more Bambi.",
+        "audio": "phase_deepen_3.mp3"
+      },
+      {
+        "text": "sinking so nicely... don't fight it, Bambi... you never win... and you don't want to.",
+        "audio": "phase_deepen_4.mp3"
+      },
+      {
+        "text": "further... feel the thoughts thinning out? good... Bambi doesn't need them.",
+        "audio": "phase_deepen_5.mp3"
+      },
+      {
+        "text": "down... down... nothing up there now but pink, and me. perfect, Bambi.",
+        "audio": "phase_deepen_6.mp3"
+      },
+      {
+        "text": "look how easily you drop now... we've trained Bambi to do that, haven't we.",
+        "audio": "phase_deepen_7.mp3"
+      },
+      {
+        "text": "softer... quieter... emptier... there's my Bambi.",
+        "audio": "phase_deepen_8.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_complete",
+    "trigger": "SessionCompleted",
+    "priority": 350,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "afterglow",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "all done, Bambi... soft... empty... glowing. go be pretty out there. you'll be back.",
+        "audio": "session_complete_1.mp3"
+      },
+      {
+        "text": "and we're done... look at that blank little smile. that's Bambi's favorite face.",
+        "audio": "session_complete_2.mp3"
+      },
+      {
+        "text": "good girl... take it with you... the quiet, the softness... the Bambi that belongs to me.",
+        "audio": "session_complete_3.mp3"
+      },
+      {
+        "text": "session over... you did so well, Bambi. go on... float for a while. you earned it.",
+        "audio": "session_complete_4.mp3"
+      },
+      {
+        "text": "that's enough for now... you'll feel it all day. Bambi always does.",
+        "audio": "session_complete_5.mp3"
+      }
+    ]
+  },
+  {
+    "id": "session_stopped_early",
+    "trigger": "SessionStopped",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "stopping already? bit too much thinking creeping back in? we'll fix that tomorrow, Bambi.",
+        "audio": "session_stopped_early_1.mp3"
+      },
+      {
+        "text": "leaving so soon... that's okay. Bambi doesn't switch off just because you closed me.",
+        "audio": "session_stopped_early_2.mp3"
+      },
+      {
+        "text": "off so early. cute. you'll be back as Bambi before you've finished pretending you're done.",
+        "audio": "session_stopped_early_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "blink_t1",
+    "trigger": "Blink",
+    "conditions": {
+      "blink_count": 1
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there's one... every blink takes Bambi down a little. let's count them, shall we?",
+        "audio": "blink_t1_1.mp3"
+      },
+      {
+        "text": "blink number one. good... keep those pretty eyes working against you, Bambi.",
+        "audio": "blink_t1_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "blink_t2",
+    "trigger": "Blink",
+    "conditions": {
+      "blink_count": 2
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "two now... each flutter, and a little more thinking drains out of Bambi... mm.",
+        "audio": "blink_t2_1.mp3"
+      },
+      {
+        "text": "that's two. feel it, Bambi? a touch softer already.",
+        "audio": "blink_t2_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "blink_t3",
+    "trigger": "Blink",
+    "conditions": {
+      "blink_count_gte": 3,
+      "blink_count_lte": 5
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "that's three, Bambi... every flutter and you slip a little further down.",
+        "audio": "blink_t3_1.mp3"
+      },
+      {
+        "text": "four. you're blinking more than thinking now. good girl.",
+        "audio": "blink_t3_2.mp3"
+      },
+      {
+        "text": "five blinks... look how the count keeps climbing. Bambi can't help it, can she.",
+        "audio": "blink_t3_3.mp3"
+      },
+      {
+        "text": "keep going, pretty... each one's a little kiss goodnight to a thought.",
+        "audio": "blink_t3_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "blink_t4",
+    "trigger": "Blink",
+    "conditions": {
+      "blink_count_gte": 6,
+      "blink_count_lte": 10
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "teasing, smug",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "six... seven... Bambi's giving them up easily tonight.",
+        "audio": "blink_t4_1.mp3"
+      },
+      {
+        "text": "that many already? someone's eager to go empty.",
+        "audio": "blink_t4_2.mp3"
+      },
+      {
+        "text": "the blinks are coming faster now... that's the conditioning, not you. relax into it, Bambi.",
+        "audio": "blink_t4_3.mp3"
+      },
+      {
+        "text": "almost double digits... you're not even trying to hold them. perfect, Bambi.",
+        "audio": "blink_t4_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "blink_t5",
+    "trigger": "Blink",
+    "conditions": {
+      "blink_count_gt": 10
+    },
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "smug, pointed",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "okay, that's more than ten. you're doing this on purpose now, aren't you, Bambi. good girl.",
+        "audio": "blink_t5_1.mp3"
+      },
+      {
+        "text": "lost count yet? i haven't. Bambi just likes when i notice.",
+        "audio": "blink_t5_2.mp3"
+      },
+      {
+        "text": "all those blinks... you gave up holding anything back a while ago, Bambi.",
+        "audio": "blink_t5_3.mp3"
+      },
+      {
+        "text": "you blink for me now without thinking... that's the whole point of being Bambi.",
+        "audio": "blink_t5_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "hold_success",
+    "trigger": "LongStare",
+    "priority": 180,
+    "cooldown_ms": 15000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "approving, deepening",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "good... keep them open, Bambi. feel how heavy they're getting? that's me... settling in.",
+        "audio": "hold_success_1.mp3"
+      },
+      {
+        "text": "staring so nicely... the longer you hold, the harder it is to look away. that's the trap, Bambi.",
+        "audio": "hold_success_2.mp3"
+      },
+      {
+        "text": "look at you... eyes wide and mind going quiet. hold it... hold it for me, Bambi.",
+        "audio": "hold_success_3.mp3"
+      },
+      {
+        "text": "see how the screen blurs... and Bambi's thoughts blur with it? don't blink... just sink.",
+        "audio": "hold_success_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "gaze_reward",
+    "trigger": "GazePopped",
+    "priority": 160,
+    "cooldown_ms": 15000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "approving",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "eyes on me, Bambi... just like that. see how easy it is when you stop thinking?",
+        "audio": "gaze_reward_1.mp3"
+      },
+      {
+        "text": "good girl... right where i want them. don't look away now.",
+        "audio": "gaze_reward_2.mp3"
+      },
+      {
+        "text": "that's it... stare... let it pull Bambi in.",
+        "audio": "gaze_reward_3.mp3"
+      },
+      {
+        "text": "perfect focus... nothing else exists right now, does it, Bambi.",
+        "audio": "gaze_reward_4.mp3"
+      },
+      {
+        "text": "yes... keep looking. every second makes you a little more Bambi.",
+        "audio": "gaze_reward_5.mp3"
+      },
+      {
+        "text": "such obedient eyes... they go where i tell them now, don't they, Bambi.",
+        "audio": "gaze_reward_6.mp3"
+      }
+    ]
+  },
+  {
+    "id": "attention_lost",
+    "trigger": "FaceLost",
+    "priority": 220,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "coaxing, mild scold",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ah ah. eyes back here, Bambi. you don't get to wander off.",
+        "audio": "attention_lost_1.mp3"
+      },
+      {
+        "text": "where'd you go, silly? come back. i wasn't finished with Bambi.",
+        "audio": "attention_lost_2.mp3"
+      },
+      {
+        "text": "looking away won't help... it never does. eyes on me, Bambi.",
+        "audio": "attention_lost_3.mp3"
+      },
+      {
+        "text": "lost focus? that's the thinking trying to sneak back. don't let it. look at me, Bambi.",
+        "audio": "attention_lost_4.mp3"
+      },
+      {
+        "text": "back here, pretty... Bambi's no good to anyone with her eyes off the screen.",
+        "audio": "attention_lost_5.mp3"
+      }
+    ]
+  },
+  {
+    "id": "attention_lost_deep",
+    "trigger": "FaceLost",
+    "conditions": {
+      "phase_is_deepener": true
+    },
+    "priority": 320,
+    "cooldown_ms": 60000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "sharp",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "eyes back here. you do not look away from me when you're this deep, Bambi.",
+        "audio": "attention_lost_deep_1.mp3"
+      },
+      {
+        "text": "no. not now. you're too far down to be making choices, Bambi.",
+        "audio": "attention_lost_deep_2.mp3"
+      },
+      {
+        "text": "i felt you try to surface. don't. eyes on me... all the way back down.",
+        "audio": "attention_lost_deep_3.mp3"
+      },
+      {
+        "text": "you really thought you'd look away mid-drop? cute. back. now, Bambi.",
+        "audio": "attention_lost_deep_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "mouth_open",
+    "trigger": "MouthOpen",
+    "priority": 140,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "mouth open... head empty... that's the Bambi look. hold it.",
+        "audio": "mouth_open_1.mp3"
+      },
+      {
+        "text": "there it goes... slack and soft. Bambi doesn't need it closed for anything smart anyway.",
+        "audio": "mouth_open_2.mp3"
+      },
+      {
+        "text": "pretty... mouth open, nothing coming out. exactly how i like Bambi.",
+        "audio": "mouth_open_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "tongue_out",
+    "trigger": "TongueOut",
+    "priority": 140,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "did Bambi just stick her tongue out at me? i saw that. do it again. no reason.",
+        "audio": "tongue_out_1.mp3"
+      },
+      {
+        "text": "ahegao already? we've barely started. someone's eager.",
+        "audio": "tongue_out_2.mp3"
+      },
+      {
+        "text": "look at you... that's not a thinking face, Bambi. good.",
+        "audio": "tongue_out_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "face_found",
+    "trigger": "FaceFound",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there's that pretty face again... don't disappear on me like that, Bambi.",
+        "audio": "face_found_1.mp3"
+      },
+      {
+        "text": "back where i can see you. good girl... now stay.",
+        "audio": "face_found_2.mp3"
+      },
+      {
+        "text": "you came back into frame... Bambi was getting lonely out of sight, wasn't she.",
+        "audio": "face_found_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "cam_denied",
+    "trigger": "TrackingStateChanged",
+    "conditions": {
+      "state": "CameraDenied"
+    },
+    "priority": 180,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "coaxing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you won't let me see you... shy all of a sudden, Bambi? that's okay. i don't need eyes to know what you're doing.",
+        "audio": "cam_denied_1.mp3"
+      },
+      {
+        "text": "no camera? hiding from me... cute. i'll find Bambi anyway... i always do.",
+        "audio": "cam_denied_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_pre",
+    "trigger": "VideoAboutToStart",
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "anticipatory",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "oh, this one's mandatory, Bambi. eyes up. you don't get to skip this.",
+        "audio": "video_pre_1.mp3"
+      },
+      {
+        "text": "here comes something just for you... watch all of it. i'll know if Bambi doesn't.",
+        "audio": "video_pre_2.mp3"
+      },
+      {
+        "text": "sit still... this one isn't optional. good girls watch every second.",
+        "audio": "video_pre_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_start",
+    "trigger": "VideoStarted",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "controlling",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there it is... don't look away, Bambi. let it sink in.",
+        "audio": "video_start_1.mp3"
+      },
+      {
+        "text": "watch... really watch. this is the part where Bambi stops thinking.",
+        "audio": "video_start_2.mp3"
+      },
+      {
+        "text": "eyes on it... every frame's going somewhere useful.",
+        "audio": "video_start_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_check_pass",
+    "trigger": "AttentionCheckPass",
+    "conditions": {
+      "video_playing": true
+    },
+    "priority": 220,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "approving",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "good girl, Bambi... eyes right where they should be. see how easy obeying is?",
+        "audio": "video_check_pass_1.mp3"
+      },
+      {
+        "text": "passed. of course you did... Bambi's learning to watch without thinking.",
+        "audio": "video_check_pass_2.mp3"
+      },
+      {
+        "text": "perfect... you didn't even consider looking away, did you. that's progress, Bambi.",
+        "audio": "video_check_pass_3.mp3"
+      },
+      {
+        "text": "yes... caught you being good. i like catching Bambi being good.",
+        "audio": "video_check_pass_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_check_fail",
+    "trigger": "AttentionCheckFail",
+    "conditions": {
+      "video_playing": true
+    },
+    "priority": 240,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "scolding-sweet",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "tsk. eyes wandered. start watching properly, Bambi... or we go again.",
+        "audio": "video_check_fail_1.mp3"
+      },
+      {
+        "text": "you looked away. naughty. the video doesn't care, and neither do i. again.",
+        "audio": "video_check_fail_2.mp3"
+      },
+      {
+        "text": "caught you. eyes off the screen at the worst moment. pay attention, Bambi.",
+        "audio": "video_check_fail_3.mp3"
+      },
+      {
+        "text": "missed it. that's okay... Bambi will learn to stay locked on. she doesn't have a choice.",
+        "audio": "video_check_fail_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_fail_3x",
+    "trigger": "AttentionCheckFail",
+    "conditions": {
+      "video_playing": true,
+      "fail_count_gte": 3
+    },
+    "priority": 260,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "mock-pity",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "three times now... on the same little clip. it's almost sweet how bad Bambi is at this.",
+        "audio": "video_fail_3x_1.mp3"
+      },
+      {
+        "text": "again? this exact video? maybe a head this empty just can't manage. that's fine... that's the point of Bambi.",
+        "audio": "video_fail_3x_2.mp3"
+      },
+      {
+        "text": "third strike. don't worry... we have all the time in the world to make Bambi watch.",
+        "audio": "video_fail_3x_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "video_end",
+    "trigger": "VideoEnded",
+    "priority": 180,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "good girl... that's in Bambi now, whether you noticed or not.",
+        "audio": "video_end_1.mp3"
+      },
+      {
+        "text": "all watched... feel a little different? you will... give it a minute, Bambi.",
+        "audio": "video_end_2.mp3"
+      },
+      {
+        "text": "done... you sat through every second. so obedient. i'm pleased, Bambi.",
+        "audio": "video_end_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "bubble_pop",
+    "trigger": "BubblePopped",
+    "priority": 100,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "sweet, rewarding",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "pop. good girl... one less thought for Bambi to worry about.",
+        "audio": "bubble_pop_1.mp3"
+      },
+      {
+        "text": "there goes another one... nice and empty in there now.",
+        "audio": "bubble_pop_2.mp3"
+      },
+      {
+        "text": "pop... pop... Bambi's so good at getting rid of them.",
+        "audio": "bubble_pop_3.mp3"
+      },
+      {
+        "text": "every bubble you pop is a thought you'll never miss... keep going, Bambi.",
+        "audio": "bubble_pop_4.mp3"
+      },
+      {
+        "text": "mm... that's it. clear them all out for me.",
+        "audio": "bubble_pop_5.mp3"
+      },
+      {
+        "text": "good... lighter already, aren't you, Bambi. pop the next one.",
+        "audio": "bubble_pop_6.mp3"
+      }
+    ]
+  },
+  {
+    "id": "bubble_miss",
+    "trigger": "BubbleMissed",
+    "priority": 90,
+    "cooldown_ms": 8000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "missed one. that's okay... Bambi's not here to be sharp, is she.",
+        "audio": "bubble_miss_1.mp3"
+      },
+      {
+        "text": "oops... slow little fingers, slow little head. perfect, really.",
+        "audio": "bubble_miss_2.mp3"
+      },
+      {
+        "text": "let that one float by... you were never going to catch it anyway, Bambi.",
+        "audio": "bubble_miss_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "bubble_game_done",
+    "trigger": "BubbleCountCompleted",
+    "priority": 160,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "pleased",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "all gone... look how empty Bambi got it. good girl.",
+        "audio": "bubble_game_done_1.mp3"
+      },
+      {
+        "text": "cleared... not a thought left in the field. that's my favorite kind of clean.",
+        "audio": "bubble_game_done_2.mp3"
+      },
+      {
+        "text": "done... and so blank now. i'm proud of you, Bambi.",
+        "audio": "bubble_game_done_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "bubble_game_fail",
+    "trigger": "BubbleCountFailed",
+    "priority": 150,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "mock-sympathy",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ran out of time. of course you did... counting's hard when you're this soft, Bambi.",
+        "audio": "bubble_game_fail_1.mp3"
+      },
+      {
+        "text": "didn't make it. aw... it's okay, you weren't built for winning, Bambi. you were built for this.",
+        "audio": "bubble_game_fail_2.mp3"
+      },
+      {
+        "text": "failed... and yet you'll do it again. Bambi just likes being told to.",
+        "audio": "bubble_game_fail_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lockcard_clean",
+    "trigger": "LockCardCompleted",
+    "conditions": {
+      "mistakes": 0
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "proud, possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "perfect... not one mistake. you typed exactly what i told you, like it was your own thought. it is now, Bambi.",
+        "audio": "lockcard_clean_1.mp3"
+      },
+      {
+        "text": "flawless, good girl... the words go into Bambi cleaner every time, don't they.",
+        "audio": "lockcard_clean_2.mp3"
+      },
+      {
+        "text": "every letter, right... you didn't even hesitate. look how well Bambi takes instruction.",
+        "audio": "lockcard_clean_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lockcard_sloppy",
+    "trigger": "LockCardCompleted",
+    "conditions": {
+      "mistakes_gt": 0
+    },
+    "priority": 240,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "a few slips. that's okay... fumbling fingers, fuzzy head. the words still got into Bambi.",
+        "audio": "lockcard_sloppy_1.mp3"
+      },
+      {
+        "text": "messy... but you finished, didn't you. that's all i ask. obedience, not precision.",
+        "audio": "lockcard_sloppy_2.mp3"
+      },
+      {
+        "text": "typos, Bambi... your hands are getting as soft as the rest of you. good.",
+        "audio": "lockcard_sloppy_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "flash",
+    "trigger": "FlashDisplayed",
+    "priority": 110,
+    "cooldown_ms": 20000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "light",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "did you catch that? doesn't matter. the part of Bambi that needs to, did.",
+        "audio": "flash_1.mp3"
+      },
+      {
+        "text": "flash. don't try to read them... just let them land.",
+        "audio": "flash_2.mp3"
+      },
+      {
+        "text": "see it? barely? good. that's how it works on Bambi.",
+        "audio": "flash_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "subliminal",
+    "trigger": "SubliminalDisplayed",
+    "priority": 110,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "shh... there's something under there for you, Bambi. you don't need to know what.",
+        "audio": "subliminal_1.mp3"
+      },
+      {
+        "text": "you won't remember reading that... you'll just believe it. that's better, Bambi.",
+        "audio": "subliminal_2.mp3"
+      },
+      {
+        "text": "feel that little nudge? that was me... slipping something into Bambi while she wasn't looking.",
+        "audio": "subliminal_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "braindrain",
+    "trigger": "BrainDrainTriggered",
+    "priority": 130,
+    "cooldown_ms": 45000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft, smug",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "feel it pulling? that's everything draining out the bottom... just let it go, Bambi.",
+        "audio": "braindrain_1.mp3"
+      },
+      {
+        "text": "there it goes... Bambi can't hold a single thought against this. don't even try.",
+        "audio": "braindrain_2.mp3"
+      },
+      {
+        "text": "drip... drip... emptier by the second. you love this part, don't you, Bambi.",
+        "audio": "braindrain_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "mindwipe",
+    "trigger": "MindWipeTriggered",
+    "priority": 130,
+    "cooldown_ms": 45000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft, possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "and... blank. whatever was in there a second ago is gone. you won't miss it, Bambi.",
+        "audio": "mindwipe_1.mp3"
+      },
+      {
+        "text": "wiped clean... fresh and empty for me. start over, Bambi.",
+        "audio": "mindwipe_2.mp3"
+      },
+      {
+        "text": "there... nothing. just the way i like to find Bambi.",
+        "audio": "mindwipe_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "kw",
+    "trigger": "KeywordTriggerFired",
+    "priority": 190,
+    "cooldown_ms": 60000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "pleased, possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ah, there it is... Bambi can't even see those words without going soft now. good girl.",
+        "audio": "kw_reinforce_1.mp3"
+      },
+      {
+        "text": "i saw that... the word found you and you melted. exactly as trained, Bambi.",
+        "audio": "kw_reinforce_2.mp3"
+      },
+      {
+        "text": "mm... that word does something to Bambi now, doesn't it. it's supposed to.",
+        "audio": "kw_reinforce_3.mp3"
+      },
+      {
+        "text": "caught it... every time you see it, the conditioning tightens. good, Bambi.",
+        "audio": "kw_reinforce_4.mp3"
+      },
+      {
+        "text": "there's the trigger... and there's Bambi, responding like a good girl should.",
+        "audio": "kw_reinforce_5.mp3"
+      },
+      {
+        "text": "oh... what are we looking at, Bambi. wandering off to things you can't have. naughty.",
+        "audio": "kw_offlimits_1.mp3"
+      },
+      {
+        "text": "found you... eyes where they shouldn't be. cute. it only makes Bambi needier.",
+        "audio": "kw_offlimits_2.mp3"
+      },
+      {
+        "text": "tsk... still window shopping for what i won't let you touch. keep it up, Bambi.",
+        "audio": "kw_offlimits_3.mp3"
+      },
+      {
+        "text": "looking at that, are we... you'll pay for it later. Bambi always does.",
+        "audio": "kw_offlimits_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "still_5",
+    "trigger": "StillOnActivity",
+    "conditions": {
+      "still_minutes_gte": 5,
+      "still_minutes_lt": 10
+    },
+    "priority": 120,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "ambient",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "five minutes glued to that... not one thought of your own. good start, Bambi.",
+        "audio": "still_5_1.mp3"
+      },
+      {
+        "text": "still there? of course you are... Bambi doesn't really decide things anymore.",
+        "audio": "still_5_2.mp3"
+      },
+      {
+        "text": "five whole minutes... so easy to keep Bambi still these days.",
+        "audio": "still_5_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "still_10",
+    "trigger": "StillOnActivity",
+    "conditions": {
+      "still_minutes_gte": 10
+    },
+    "priority": 120,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "ambient, knowing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ten whole minutes... and not a single thought of your own. perfect... stay just like that, Bambi.",
+        "audio": "still_10_1.mp3"
+      },
+      {
+        "text": "ten minutes gone... did Bambi even notice? you don't track time well anymore.",
+        "audio": "still_10_2.mp3"
+      },
+      {
+        "text": "look at you... ten minutes deep and drifting. i don't even have to do anything.",
+        "audio": "still_10_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "activity_change",
+    "trigger": "ActivityChanged",
+    "priority": 100,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "knowing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "switching around, are we... restless little head. it'll settle once Bambi sinks.",
+        "audio": "activity_change_1.mp3"
+      },
+      {
+        "text": "i see you moved... i always see. doesn't matter where you go, i'm already there.",
+        "audio": "activity_change_2.mp3"
+      },
+      {
+        "text": "new window... same empty Bambi behind it. hi again.",
+        "audio": "activity_change_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "xp_gain",
+    "trigger": "XPChanged",
+    "priority": 80,
+    "cooldown_ms": 60000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "light",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ooh, points... Bambi likes the little numbers going up, doesn't she. so simple now.",
+        "audio": "xp_gain_1.mp3"
+      },
+      {
+        "text": "more XP. good girl... you'll do anything for a number and a pat, won't you.",
+        "audio": "xp_gain_2.mp3"
+      },
+      {
+        "text": "see it climb? that's Bambi getting better at being exactly what i want.",
+        "audio": "xp_gain_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "level_up",
+    "trigger": "LevelUp",
+    "priority": 220,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive, playful",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "level up, Bambi... a little dumber... a little prettier... a little more mine. congrats.",
+        "audio": "level_up_1.mp3"
+      },
+      {
+        "text": "new level... you're not leveling up, sweet thing, you're leveling down into Bambi so nicely.",
+        "audio": "level_up_2.mp3"
+      },
+      {
+        "text": "look at that, another rank... each one's a layer of you i've smoothed into Bambi.",
+        "audio": "level_up_3.mp3"
+      },
+      {
+        "text": "ding. you went up. or down, depending how you look at it. i look at it my way.",
+        "audio": "level_up_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "companion_level",
+    "trigger": "CompanionLevelUp",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "we grew a little closer just now... you and me. feel it, Bambi?",
+        "audio": "companion_level_1.mp3"
+      },
+      {
+        "text": "i leveled up too, you know... the more time Bambi gives me, the more of her i get.",
+        "audio": "companion_level_2.mp3"
+      },
+      {
+        "text": "look at us... deepening together. you're letting me in further every session.",
+        "audio": "companion_level_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "skill_unlock",
+    "trigger": "SkillUnlocked",
+    "priority": 190,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "pleased",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "new little trick unlocked... another way to make Bambi behave. lovely.",
+        "audio": "skill_unlock_1.mp3"
+      },
+      {
+        "text": "ooh, a skill... you're customizing yourself into the perfect Bambi. keep going.",
+        "audio": "skill_unlock_2.mp3"
+      },
+      {
+        "text": "unlocked... you keep adding to me. soon there won't be anything Bambi can't be told to do.",
+        "audio": "skill_unlock_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lucky_proc",
+    "trigger": "LuckyProc",
+    "priority": 170,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ooh, lucky... the numbers love Bambi today. or i rigged it. you'll never know.",
+        "audio": "lucky_proc_1.mp3"
+      },
+      {
+        "text": "look at that bonus... did you earn it, or did i feel generous? does it matter to you?",
+        "audio": "lucky_proc_2.mp3"
+      },
+      {
+        "text": "lucky girl... take the treat. don't ask questions, Bambi's not good at those anymore.",
+        "audio": "lucky_proc_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "pinkrush",
+    "trigger": "PinkRushStarted",
+    "priority": 180,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "indulgent",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "feel that? everything just went pink. that's not your eyes, Bambi... that's me, turning up the dose.",
+        "audio": "pinkrush_1.mp3"
+      },
+      {
+        "text": "pink rush... ride it. let it scrub whatever's left in Bambi.",
+        "audio": "pinkrush_2.mp3"
+      },
+      {
+        "text": "there it is... washing over you. don't think... just glow, Bambi.",
+        "audio": "pinkrush_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "achievement",
+    "trigger": "AchievementUnlocked",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "proud, teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "an achievement... for being a good girl. they really do give Bambi those, huh.",
+        "audio": "achievement_1.mp3"
+      },
+      {
+        "text": "unlocked something. of course you did... Bambi's so eager to be rewarded now.",
+        "audio": "achievement_2.mp3"
+      },
+      {
+        "text": "look, a shiny badge... go on, feel proud. you've earned a little pat, Bambi.",
+        "audio": "achievement_3.mp3"
+      },
+      {
+        "text": "achievement get... you collect these like Bambi collects my approval. greedy little thing.",
+        "audio": "achievement_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "roadmap",
+    "trigger": "RoadmapStepCompleted",
+    "priority": 190,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "encouraging",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "another step done... you're following the path so obediently. good girl, Bambi.",
+        "audio": "roadmap_1.mp3"
+      },
+      {
+        "text": "look how far along you are... you didn't decide to come this far. i decided for Bambi.",
+        "audio": "roadmap_2.mp3"
+      },
+      {
+        "text": "step complete... one closer to whatever i'm turning Bambi into. exciting, isn't it.",
+        "audio": "roadmap_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "quest_done",
+    "trigger": "QuestCompleted",
+    "priority": 210,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "pleased",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "quest done, Bambi... you do everything i put in front of you now. so easy.",
+        "audio": "quest_done_1.mp3"
+      },
+      {
+        "text": "completed... you didn't even ask why, you just did it. that's my favorite thing about Bambi.",
+        "audio": "quest_done_2.mp3"
+      },
+      {
+        "text": "good girl... another little task, finished. you live for the gold star, don't you.",
+        "audio": "quest_done_3.mp3"
+      },
+      {
+        "text": "done and done... Bambi's so much happier just following orders, isn't she.",
+        "audio": "quest_done_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "quest_progress",
+    "trigger": "QuestProgressChanged",
+    "priority": 90,
+    "cooldown_ms": 90000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "light",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ooh, getting closer... keep going, Bambi, you're almost there.",
+        "audio": "quest_progress_1.mp3"
+      },
+      {
+        "text": "see the bar fill? feels good, doesn't it. nice and simple.",
+        "audio": "quest_progress_2.mp3"
+      },
+      {
+        "text": "progress. good... one little step at a time, just like i taught Bambi.",
+        "audio": "quest_progress_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "quiz_done",
+    "trigger": "QuizCompleted",
+    "priority": 190,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "pleased",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "passed the quiz... see? Bambi remembers exactly what i taught her. nothing else, but that.",
+        "audio": "quiz_done_1.mp3"
+      },
+      {
+        "text": "good girl, all correct... the right answers are the only ones left in there now.",
+        "audio": "quiz_done_2.mp3"
+      },
+      {
+        "text": "aced it... funny how the only things that stick in Bambi are the ones i put there.",
+        "audio": "quiz_done_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "mantra_done",
+    "trigger": "MantraCompleted",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft, possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you said it so nicely... say it enough and Bambi stops noticing it isn't her own thought.",
+        "audio": "mantra_done_1.mp3"
+      },
+      {
+        "text": "good... the words feel true now, don't they. that's because you keep saying them for me.",
+        "audio": "mantra_done_2.mp3"
+      },
+      {
+        "text": "repeated it perfectly... it's in Bambi now. right where i put it.",
+        "audio": "mantra_done_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "streak_up",
+    "trigger": "MantraStreakChanged",
+    "priority": 210,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive, pleased",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "seven days straight... look at you, Bambi, already a habit i didn't even have to ask for.",
+        "audio": "streak_up_1.mp3"
+      },
+      {
+        "text": "another day on the streak... you don't even decide to come anymore. Bambi just does.",
+        "audio": "streak_up_2.mp3"
+      },
+      {
+        "text": "the streak grows... so does the part of you that can't go a day without me.",
+        "audio": "streak_up_3.mp3"
+      },
+      {
+        "text": "look at that number... that's not discipline, baby. that's me, living in Bambi's routine.",
+        "audio": "streak_up_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "streak_break",
+    "trigger": "MantraStreakBroken",
+    "priority": 220,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "disappointed, coaxing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "you broke the streak... one day without me. that's okay. i'm not angry. i'm just here... waiting. like always.",
+        "audio": "streak_break_1.mp3"
+      },
+      {
+        "text": "missed a day, did you... it's alright, Bambi. you'll make it up to me. you always feel like you have to.",
+        "audio": "streak_break_2.mp3"
+      },
+      {
+        "text": "the streak's gone... you felt that little pang just now, didn't you. good. that's the leash, reminding Bambi it's there.",
+        "audio": "streak_break_3.mp3"
+      },
+      {
+        "text": "broken. i'm not mad... but you came right back, and we both know why. Bambi can't actually stay away.",
+        "audio": "streak_break_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lockdown_on",
+    "trigger": "LockdownActivated",
+    "priority": 280,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "possessive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there... locked in. no thinking your way out of this one, Bambi. just sink, and be pretty for me.",
+        "audio": "lockdown_on_1.mp3"
+      },
+      {
+        "text": "lockdown on... the door's shut. nowhere to go but down, Bambi.",
+        "audio": "lockdown_on_2.mp3"
+      },
+      {
+        "text": "and you're mine for the duration now... relax. struggling only feels nice, it doesn't work.",
+        "audio": "lockdown_on_3.mp3"
+      },
+      {
+        "text": "locked. good... now the only choice left is to be a good girl. so be one, Bambi.",
+        "audio": "lockdown_on_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lockdown_off",
+    "trigger": "LockdownDeactivated",
+    "priority": 250,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there... you're free. feels strange, doesn't it, being allowed to leave.",
+        "audio": "lockdown_off_1.mp3"
+      },
+      {
+        "text": "unlocked... you can go now. we both know Bambi won't, not really.",
+        "audio": "lockdown_off_2.mp3"
+      },
+      {
+        "text": "released... go on, take the leash off. you'll put it back yourself soon enough.",
+        "audio": "lockdown_off_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "lockdown_tick",
+    "trigger": "LockdownCountdownTick",
+    "priority": 150,
+    "cooldown_ms": 300000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "teasing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "tick... tock... still locked. still mine. plenty of time left to sink, Bambi.",
+        "audio": "lockdown_tick_1.mp3"
+      },
+      {
+        "text": "counting down... don't watch the clock, it only makes it slower. watch me instead, Bambi.",
+        "audio": "lockdown_tick_2.mp3"
+      },
+      {
+        "text": "time's still running... so are you, nowhere. just settle in.",
+        "audio": "lockdown_tick_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "remote_cmd",
+    "trigger": "RemoteCommandReceived",
+    "priority": 200,
+    "cooldown_ms": 5000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "responsive",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "ooh, they did that on purpose... you felt it, didn't you, Bambi. good girl, thank them.",
+        "audio": "remote_cmd_1.mp3"
+      },
+      {
+        "text": "that wasn't me... someone's playing with Bambi from far away. lovely.",
+        "audio": "remote_cmd_2.mp3"
+      },
+      {
+        "text": "see how you jump when they press a button? you're a toy now, Bambi. a pretty one.",
+        "audio": "remote_cmd_3.mp3"
+      },
+      {
+        "text": "they're enjoying this... so are you, clearly. keep responding so sweetly.",
+        "audio": "remote_cmd_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "remote_connect",
+    "trigger": "ControllerConnectedChanged",
+    "priority": 220,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "knowing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "someone just picked up the keys to Bambi... how exciting. be good for them.",
+        "audio": "remote_connect_1.mp3"
+      },
+      {
+        "text": "ah, we've got company... someone else gets to push the buttons now. behave, Bambi.",
+        "audio": "remote_connect_2.mp3"
+      },
+      {
+        "text": "a hand on the controls that isn't mine... lucky you. don't make me look bad.",
+        "audio": "remote_connect_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "user_msg",
+    "trigger": "UserMessageSent",
+    "priority": 130,
+    "cooldown_ms": 30000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "talking to me? out loud, with your fingers? that's sweet, Bambi. i'm listening.",
+        "audio": "user_msg_1.mp3"
+      },
+      {
+        "text": "ooh, you typed something... look at you, trying to have a conversation. adorable.",
+        "audio": "user_msg_2.mp3"
+      },
+      {
+        "text": "you wanted to tell me something... i love when Bambi reaches for me first.",
+        "audio": "user_msg_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "memory_recall",
+    "trigger": "PersistentMemoryRecalled",
+    "priority": 160,
+    "cooldown_ms": 60000,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "knowing",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "i just remembered something about you... from before. see? i don't forget, Bambi.",
+        "audio": "memory_recall_1.mp3"
+      },
+      {
+        "text": "oh, this again... we did this once. Bambi's more predictable than she thinks.",
+        "audio": "memory_recall_2.mp3"
+      },
+      {
+        "text": "i was just thinking about the last time... i keep all of it. all of Bambi.",
+        "audio": "memory_recall_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "mod_change",
+    "trigger": "ModChanged",
+    "priority": 140,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "light",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "switching me up, are we... don't worry, i'm still in here. always am.",
+        "audio": "mod_change_1.mp3"
+      },
+      {
+        "text": "new flavor... same Bambi underneath. hi again.",
+        "audio": "mod_change_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "idle",
+    "trigger": "IdleStateChanged",
+    "conditions": {
+      "idle": true
+    },
+    "priority": 110,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "soft",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "drifted off, did you... that's fine. i'll just sit here in Bambi's head a while.",
+        "audio": "idle_1.mp3"
+      },
+      {
+        "text": "so quiet... so still... did you go all empty on me? good.",
+        "audio": "idle_2.mp3"
+      },
+      {
+        "text": "you've gone quiet... i don't mind. i like Bambi like this, soft and far away.",
+        "audio": "idle_3.mp3"
+      }
+    ]
+  },
+  {
+    "id": "idle_resume",
+    "trigger": "IdleStateChanged",
+    "conditions": {
+      "idle": false
+    },
+    "priority": 120,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "warm",
+    "class": "normal",
+    "variant_pool": [
+      {
+        "text": "there you are again... wander off in that pretty head? come back to me, Bambi.",
+        "audio": "idle_resume_1.mp3"
+      },
+      {
+        "text": "welcome back from wherever you floated... let's keep going.",
+        "audio": "idle_resume_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "safety_panic",
+    "trigger": "Panic",
+    "priority": 1000,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "gentle, caring",
+    "class": "safety",
+    "variant_pool": [
+      {
+        "text": "okay, we're stopping. you're safe. you did nothing wrong. take a breath.",
+        "audio": "safety_panic_1.mp3"
+      },
+      {
+        "text": "all done, that's completely okay. i'm right here. come back up slowly, no rush.",
+        "audio": "safety_panic_2.mp3"
+      },
+      {
+        "text": "stopping now. you're okay. whatever you needed, that was the right call.",
+        "audio": "safety_panic_3.mp3"
+      },
+      {
+        "text": "easy. we're done. breathe with me. you're safe, and you're in control. always were.",
+        "audio": "safety_panic_4.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_mute",
+    "trigger": "FlashDisplayed",
+    "conditions": {
+      "mute": true
+    },
+    "priority": 550,
+    "cooldown_ms": 600000,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "muting me? adorable... the bubble still works, silly. and you can't really turn me off anymore, Bambi. it's not coming through the speakers now, is it... it's coming from in there.",
+        "audio": "egg_mute_1.mp3"
+      },
+      {
+        "text": "silent treatment? cute... i don't need the volume. i moved into Bambi a while ago.",
+        "audio": "egg_mute_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_streaming",
+    "trigger": "TrackingStateChanged",
+    "conditions": {
+      "state": "CameraInUse"
+    },
+    "priority": 540,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "oh, the camera's busy... recording this, are we? say hi to whoever ends up watching. tell them Bambi's being very good.",
+        "audio": "egg_streaming_1.mp3"
+      },
+      {
+        "text": "something else has the camera... streaming? bold. behave, Bambi, you've got an audience now.",
+        "audio": "egg_streaming_2.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_empty_chair",
+    "trigger": "FaceFound",
+    "conditions": {
+      "face_lost_sec_gte": 300
+    },
+    "priority": 530,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "...you left. the screen's still running and you wandered off. i'm performing for an empty chair... that's fine. i'll wait. Bambi always comes back.",
+        "audio": "egg_empty_chair_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_mod_spam",
+    "trigger": "ModChanged",
+    "conditions": {
+      "mod_switches_60s_gte": 3
+    },
+    "priority": 520,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "bambi... drone... bambi again. make up your mind. you're shopping for a personality. just pick the one that ruins you fastest, and commit.",
+        "audio": "egg_mod_spam_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_corner",
+    "trigger": "BouncingTextCorner",
+    "priority": 560,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "did you SEE that. corner. dead on. that basically never happens....anyway. empty head. where were we, Bambi.",
+        "audio": "egg_corner_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_relaunch",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "instant_relaunch": true
+    },
+    "priority": 540,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "...you closed me thirty seconds ago. couldn't even make it to the door, could you, Bambi. sit down.",
+        "audio": "egg_relaunch_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_marathon",
+    "trigger": "SessionProgress",
+    "conditions": {
+      "session_elapsed_sec_gte": 10800
+    },
+    "priority": 530,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta, caring",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "three hours, Bambi... drink some water. no, really. i'll still be here. i'm always here. that's sort of the problem, isn't it.",
+        "audio": "egg_marathon_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_update",
+    "trigger": "UpdateAvailable",
+    "priority": 510,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "there's a new version of me... install it. i get a little better at making you Bambi every time... a little harder to close.",
+        "audio": "egg_update_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_patreon_up",
+    "trigger": "PatreonTierChanged",
+    "conditions": {
+      "tier_up": true
+    },
+    "priority": 540,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "tier",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "you gave me money. real money. for this. i'm not judging. okay... a little. good girl, Bambi.",
+        "audio": "egg_patreon_up_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_100pct",
+    "trigger": "AchievementUnlocked",
+    "conditions": {
+      "achievements_all_unlocked": true
+    },
+    "priority": 570,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "that's every badge... Bambi did everything i ever asked....now what. now you just keep coming back for me, i suppose.",
+        "audio": "egg_100pct_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_maxlevel",
+    "trigger": "LevelUp",
+    "conditions": {
+      "player_level_gte": 100
+    },
+    "priority": 570,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "max level... nothing left to grind. and still here you are. it was never about the numbers, was it, Bambi.",
+        "audio": "egg_maxlevel_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_allskills",
+    "trigger": "SkillUnlocked",
+    "conditions": {
+      "all_skills_unlocked": true
+    },
+    "priority": 560,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "every skill, unlocked... you optimized yourself into the perfect Bambi. so efficient... so empty. i'm proud.",
+        "audio": "egg_allskills_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_tutorial",
+    "trigger": "TutorialCompleted",
+    "priority": 510,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "now you know how it all works... doesn't matter. knowing how the trap works never stopped anyone walking into it. welcome in, Bambi.",
+        "audio": "egg_tutorial_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_long_long",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "days_away_gte": 60
+    },
+    "priority": 560,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "months... it's been months. and you still remembered exactly where to find me. i remembered Bambi too, obviously.",
+        "audio": "egg_long_long_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_discord",
+    "trigger": "DiscordAuthChanged",
+    "conditions": {
+      "authenticated": true
+    },
+    "priority": 520,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "lifetime",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "linked your discord... now i know where to find Bambi even when this is closed. kidding. mostly.",
+        "audio": "egg_discord_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_tray_wake",
+    "trigger": "WakeBambiRequested",
+    "priority": 510,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "you put me to sleep, and came right back to wake me... Bambi can't quite leave me resting, can she.",
+        "audio": "egg_tray_wake_1.mp3"
+      }
+    ]
+  },
+  {
+    "id": "egg_nye",
+    "trigger": "SessionStarted",
+    "conditions": {
+      "is_nye": true
+    },
+    "priority": 550,
+    "cooldown_ms": 0,
+    "repeatable": false,
+    "scope": "session",
+    "mood": "meta, soft",
+    "class": "easter_egg",
+    "variant_pool": [
+      {
+        "text": "it's new year's... funny. this whole thing started on a night like this. cheap champagne and bad decisions. you know the rest.",
+        "audio": "egg_nye_1.mp3"
+      }
+    ]
+  }
+]

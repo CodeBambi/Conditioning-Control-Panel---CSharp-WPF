@@ -721,12 +721,22 @@ namespace ConditioningControlPanel.Services
         private static string? ResolveBarkAudio(string? file)
         {
             if (string.IsNullOrWhiteSpace(file)) return null;
+
+            // 1) packaged mod (InstalledPath)
             var modPath = App.Mods?.ActiveMod?.InstalledPath;
             if (!string.IsNullOrEmpty(modPath))
             {
                 var p = System.IO.Path.Combine(modPath, "resources", "sounds", "companion_audio", file);
                 if (System.IO.File.Exists(p)) return p;
             }
+            // 2) embedded per-mod folder (Bambi/Sissy and, uniformly, the others)
+            var modId = App.Mods?.ActiveModId;
+            if (!string.IsNullOrEmpty(modId))
+            {
+                var pm = System.IO.Path.Combine(CompanionPhraseService.CompanionAudioFolder, "mods", modId, file);
+                if (System.IO.File.Exists(pm)) return pm;
+            }
+            // 3) embedded shared fallback
             var embedded = System.IO.Path.Combine(CompanionPhraseService.CompanionAudioFolder, file);
             return System.IO.File.Exists(embedded) ? embedded : null;
         }

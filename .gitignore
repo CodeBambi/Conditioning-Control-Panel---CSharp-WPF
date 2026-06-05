@@ -1,6 +1,12 @@
 # Project briefing (contains operational details)
 project-briefing.md
 
+# Bark voiceline audio (~85MB across 3 mods). Generated/copied locally by
+# tools/bark/build_bark_rules.py --copy-audio. NOT committed yet — pending the
+# delivery decision (raw commit vs Git LFS vs downloadable content pack). The
+# per-mod bark_rules.json files ARE tracked; until the mp3s ship, barks play text-only.
+ConditioningControlPanel/Resources/sounds/companion_audio/mods/**/*.mp3
+
 # Local survey/recon notes (not for commit)
 ccp-desktop-survey-*.md
 ConditioningControlPanel/docs/surveys/
