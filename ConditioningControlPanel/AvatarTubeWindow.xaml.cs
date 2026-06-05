@@ -379,8 +379,9 @@ namespace ConditioningControlPanel
                 App.Video.VideoEnded += OnVideoEnded;
             }
 
-            if (App.LockCard != null)
-                App.LockCard.LockCardCompleted += OnLockCardCompleted;
+            // Lock-card reaction is now owned by BarkService (Fork D 50/50 coin flip): it is the
+            // sole subscriber to LockCardCompleted and invokes PlayLockCardAiReactionAsync on heads.
+            // This window no longer self-subscribes.
 
             // Wire up game completion events
             if (App.BubbleCount != null)
@@ -2022,8 +2023,7 @@ namespace ConditioningControlPanel
                     App.Video.VideoEnded -= OnVideoEnded;
                 }
 
-                if (App.LockCard != null)
-                    App.LockCard.LockCardCompleted -= OnLockCardCompleted;
+                // LockCardCompleted is owned by BarkService now (no self-subscription to remove).
 
                 // Unsubscribe from game events
                 if (App.BubbleCount != null)
@@ -2625,10 +2625,29 @@ namespace ConditioningControlPanel
             StopZOrderRefreshTimer();
         }
 
+        // Timestamp of the last genuine AI reply bubble (not bark output). Lets the bark
+        // system suppress barks for a window after a chat exchange. See IsCompanionBusy.
+        private DateTime _lastAiBubbleUtc = DateTime.MinValue;
+
+        /// <summary>
+        /// True while the companion is mid-chat: an AI request is in flight, an AI bubble is
+        /// on screen, or a genuine AI reply occurred within <paramref name="windowMs"/>.
+        /// The bark system checks this to avoid talking over a conversation (Fork E).
+        /// </summary>
+        public bool IsCompanionBusy(int windowMs)
+        {
+            if (_isWaitingForAi || _isShowingAiBubble) return true;
+            return windowMs > 0 && (DateTime.UtcNow - _lastAiBubbleUtc).TotalMilliseconds < windowMs;
+        }
+
         public void GigglePriority(string text, bool playSound = true, bool aiGenerated = true)
         {
             DispatcherHelper.RunOnUI(() =>
             {
+                // Only genuine AI replies anchor the chat-suppression window; bark output
+                // (aiGenerated: false) must not suppress subsequent barks via this path.
+                if (aiGenerated) _lastAiBubbleUtc = DateTime.UtcNow;
+
                 // Stop any in-flight thinking animation before showing the reply.
                 StopThinkingAnimation();
 
@@ -4658,20 +4677,31 @@ namespace ConditioningControlPanel
             Giggle("Good girl! So smart!");
         }
 
-        private async void OnLockCardCompleted(object? sender, Services.LockCardCompletedEventArgs e)
+        /// <summary>
+        /// Play the AI-generated lock-screen reaction for a completed lock card. Invoked by
+        /// BarkService (the sole LockCardCompleted subscriber) on a "heads" coin flip. Returns
+        /// true if it actually spoke, so the caller can fall through to a pool bark when the AI
+        /// produced nothing — guaranteeing exactly one reaction fires (Fork D).
+        /// </summary>
+        public async Task<bool> PlayLockCardAiReactionAsync(Services.LockCardCompletedEventArgs e)
         {
             if (App.Settings?.Current?.AiChatEnabled != true || App.Ai?.IsAvailable != true)
-                return;
+                return false;
 
             try
             {
                 var reaction = await App.Ai.GetLockScreenReaction(e.Phrase, e.Mistakes, e.Repeats);
                 if (!string.IsNullOrWhiteSpace(reaction))
+                {
                     GigglePriority(reaction);
+                    return true;
+                }
+                return false;
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "Failed to get AI lock-screen reaction");
+                return false;
             }
         }
 

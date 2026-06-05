@@ -117,6 +117,13 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Public self-echo guard for the bark system: after a bark renders its line on-screen,
+        /// the bark service calls this so the bubble text can't re-trigger awareness/OCR off
+        /// its own output. Thin wrapper over <see cref="ForceMuteKeyword"/>.
+        /// </summary>
+        public void MuteKeywordEcho(string text, int muteMs) => ForceMuteKeyword(text, muteMs);
+
+        /// <summary>
         /// Snapshot the trigger's current action list as a set of display keys
         /// used by the "Last Detected" pulse feed to render chip icons. Captured
         /// at fire time so the feed still shows the right icons even after the

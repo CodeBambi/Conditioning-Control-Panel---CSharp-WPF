@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.AIService;
 using ConditioningControlPanel.Services.Bark;
@@ -37,13 +38,30 @@ namespace ConditioningControlPanel.Services
         private readonly Dictionary<string, HashSet<int>> _usedVariants = new(StringComparer.OrdinalIgnoreCase);
         private DateTime _globalLastFireUtc = DateTime.MinValue;
 
-        /// <summary>Global minimum gap between any two barks. (Speak-path PR will surface this as a setting.)</summary>
+        /// <summary>Global minimum gap between any two barks.</summary>
         private const int GlobalMinGapMs = 4000;
+
+        /// <summary>Barks at/above this priority (or any non-Normal class) speak via GigglePriority; lower ones queue via Giggle.</summary>
+        private const int PriorityBarkThreshold = 100;
+
+        /// <summary>After rendering a bark, mute its line this long so it can't re-trigger awareness/OCR.</summary>
+        private const int SelfEchoMuteMs = 8000;
+
+        /// <summary>How long a safety bark holds the floor (no non-safety bark may fire). Approximate — we have no speech-duration callback.</summary>
+        private const int SafetyHoldMs = 6000;
 
         private static readonly TimeSpan RapidModSwitchWindow = TimeSpan.FromSeconds(60);
 
-        /// <summary>PR1 has no speak path; the matcher only logs. Always true for now.</summary>
-        public bool DryRun { get; set; } = true;
+        // Coin flip is varied per call; not security-sensitive.
+        private readonly Random _rng = new();
+        private DateTime _lastUserMessageUtc = DateTime.MinValue;
+        private DateTime _safetyHoldUntilUtc = DateTime.MinValue;
+
+        /// <summary>
+        /// When true the matcher evaluates and logs ("[BARK dry-run] …") but never renders to the
+        /// avatar and never writes persisted latches. Speak path is otherwise fully exercised.
+        /// </summary>
+        public bool DryRun { get; set; } = false;
 
         public BarkState State => _state;
 
@@ -56,6 +74,11 @@ namespace ConditioningControlPanel.Services
 
             try
             {
+                // Opt-in log-only mode for validation: run with CCP_BARK_DRYRUN=1 to exercise the
+                // full matcher (logs "[BARK dry-run] …") without rendering to the avatar.
+                if (string.Equals(Environment.GetEnvironmentVariable("CCP_BARK_DRYRUN"), "1", StringComparison.Ordinal))
+                    DryRun = true;
+
                 _rules = BarkRuleLoader.Load();
                 _state.CaptureLaunchRecency(App.Settings?.Current?.LastSeenUtc);
 
@@ -181,14 +204,11 @@ namespace ConditioningControlPanel.Services
                 Wire<EventHandler>(h => App.BouncingText.OnBounce += h, h => App.BouncingText.OnBounce -= h,
                     (_, __) => Raise("BouncingTextBounce"));
 
-            // ---- Lock card (single subscriber; Fork-D coin flip lands with the speak path) ----
+            // ---- Lock card (sole subscriber; Fork-D 50/50 coin flip in HandleLockCardCompleted) ----
             if (App.LockCard != null)
                 Wire<EventHandler<LockCardCompletedEventArgs>>(
                     h => App.LockCard.LockCardCompleted += h, h => App.LockCard.LockCardCompleted -= h,
-                    (_, e) => Raise("LockCardCompleted", c => c
-                        .Set("phrase", e.Phrase ?? "")
-                        .Set("mistakes", e.Mistakes)
-                        .Set("repeats", e.Repeats)));
+                    (_, e) => HandleLockCardCompleted(e));
 
             // ---- Visual fx ----
             if (App.Flash != null)
@@ -230,7 +250,7 @@ namespace ConditioningControlPanel.Services
                     h => App.Companion.CompanionLevelUp += h, h => App.Companion.CompanionLevelUp -= h,
                     (_, e) => Raise("CompanionLevelUp", c => c.Set("level", e.NewLevel)));
                 Wire<EventHandler>(h => App.Companion.UserMessageSent += h, h => App.Companion.UserMessageSent -= h,
-                    (_, __) => Raise("UserMessageSent"));
+                    (_, __) => { _lastUserMessageUtc = DateTime.UtcNow; Raise("UserMessageSent"); });
             }
             if (App.SkillTree != null)
             {
@@ -394,9 +414,14 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        // ===================== matcher (dry-run) =====================
+        // ===================== matcher =====================
 
-        private void Raise(string trigger, Action<BarkContext>? fill = null)
+        /// <param name="guaranteed">
+        /// When true the gate is bypassed (cooldown / min-gap / one-fire / chat-suppression /
+        /// safety-hold) and a variant is always selected — used for direct reactions that must
+        /// fire exactly once (e.g. the lock-card pool bark on a tails coin flip).
+        /// </param>
+        private void Raise(string trigger, Action<BarkContext>? fill = null, bool guaranteed = false)
         {
             try
             {
@@ -406,9 +431,13 @@ namespace ConditioningControlPanel.Services
                 var ctx = new BarkContext(trigger);
                 fill?.Invoke(ctx);
 
+                // Decide under the lock; render after releasing it (GigglePriority/Giggle marshal to UI).
+                BarkRule? toSpeak = null;
+                int variantIndex = -1;
+                List<string>? pool = null;
+
                 lock (_gate)
                 {
-                    // Highest-priority rule whose conditions pass.
                     BarkRule? winner = null;
                     foreach (var rule in rules) // already priority-descending
                     {
@@ -417,23 +446,90 @@ namespace ConditioningControlPanel.Services
 
                     if (winner == null)
                     {
-                        App.Logger?.Debug("[BARK dry-run] trigger={Trigger} no rule matched conditions", trigger);
+                        App.Logger?.Debug("[BARK] trigger={Trigger} no rule matched conditions", trigger);
                         return;
                     }
 
-                    var pool = ResolvePool(winner);
-                    var decision = EvaluateGate(winner, pool);
-                    LogDecision(trigger, winner, decision, ctx);
+                    var resolved = ResolvePool(winner);
+                    var decision = EvaluateGate(winner, resolved, guaranteed);
+                    LogDecision(trigger, winner, decision);
 
                     if (decision.WouldFire)
+                    {
                         CommitFire(winner, decision.VariantIndex);
+                        if (!DryRun)
+                        {
+                            toSpeak = winner;
+                            variantIndex = decision.VariantIndex;
+                            pool = resolved;
+                        }
+                    }
                 }
+
+                if (toSpeak != null && pool != null)
+                    Speak(toSpeak, variantIndex, ctx, pool);
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "BarkService: Raise('{Trigger}') failed", trigger);
             }
         }
+
+        // ===================== lock card (Fork D: single coin flip, exactly one fires) =====================
+
+        private void HandleLockCardCompleted(LockCardCompletedEventArgs e)
+        {
+            try
+            {
+                bool heads = _rng.Next(2) == 0;
+                bool aiAvailable = App.AvatarWindow != null
+                    && App.Settings?.Current?.AiChatEnabled == true
+                    && App.Ai?.IsAvailable == true;
+
+                if (heads && aiAvailable)
+                {
+                    if (DryRun)
+                    {
+                        App.Logger?.Information("[BARK dry-run] LockCard coin=heads -> WOULD play AI lock reaction");
+                        return;
+                    }
+                    App.Logger?.Information("[BARK] LockCard coin=heads -> AI lock reaction");
+                    _ = PlayLockReactionThenMaybePool(e);
+                }
+                else
+                {
+                    // tails, or heads-but-AI-unavailable -> guaranteed pool bark (never neither).
+                    var why = heads ? "heads(ai-unavailable)" : "tails";
+                    App.Logger?.Information("[BARK] LockCard coin={Why} -> pool bark", why);
+                    FireLockCardPoolBark(e);
+                }
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BarkService: lock-card handler failed"); }
+        }
+
+        private async System.Threading.Tasks.Task PlayLockReactionThenMaybePool(LockCardCompletedEventArgs e)
+        {
+            bool spoke = false;
+            try
+            {
+                var avatar = App.AvatarWindow;
+                if (avatar != null) spoke = await avatar.PlayLockCardAiReactionAsync(e);
+            }
+            catch (Exception ex) { App.Logger?.Warning(ex, "BarkService: AI lock reaction threw"); }
+
+            if (!spoke)
+            {
+                // AI produced nothing — fall through so exactly one reaction still fires.
+                App.Logger?.Information("[BARK] LockCard heads but AI silent -> pool bark fallback");
+                DispatcherHelper.RunOnUI(() => FireLockCardPoolBark(e));
+            }
+        }
+
+        private void FireLockCardPoolBark(LockCardCompletedEventArgs e) =>
+            Raise("LockCardCompleted", c => c
+                .Set("phrase", e.Phrase ?? "")
+                .Set("mistakes", e.Mistakes)
+                .Set("repeats", e.Repeats), guaranteed: true);
 
         private bool ConditionsPass(BarkRule rule, BarkContext ctx)
         {
@@ -555,21 +651,31 @@ namespace ConditioningControlPanel.Services
             public string Reason { get; init; }
         }
 
-        private GateDecision EvaluateGate(BarkRule rule, List<string> pool)
+        private GateDecision EvaluateGate(BarkRule rule, List<string> pool, bool guaranteed)
         {
             if (pool.Count == 0)
                 return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "empty-pool" };
 
-            // Safety bypasses cooldown / min-gap / one-fire entirely.
+            // Safety and guaranteed reactions bypass the gate entirely.
             bool isSafety = rule.Class == BarkClass.Safety;
+            bool bypass = isSafety || guaranteed;
 
-            // One-shot (repeatable=false): fire once per scope. PR1 enforces session scope in memory;
-            // tier/lifetime persistence comes with the speak path.
-            if (!isSafety && !rule.Repeatable && _firedOnceSession.Contains(rule.Id))
-                return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = $"already-fired ({rule.Scope})" };
-
-            if (!isSafety)
+            if (!bypass)
             {
+                // A safety bark holds the floor: nothing fires over it for SafetyHoldMs.
+                if (DateTime.UtcNow < _safetyHoldUntilUtc)
+                    return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "safety-active" };
+
+                // Chat-suppression: don't talk over an active conversation.
+                int window = App.Settings?.Current?.BarkChatSuppressionMs ?? 10000;
+                if (CompanionBusy(window))
+                    return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = $"chat-suppressed ({window}ms)" };
+
+                // One-shot (repeatable=false): fire once per scope. Session is in-memory;
+                // tier/lifetime consult the persisted latch (AppSettings.BarkLifetimeFired).
+                if (!rule.Repeatable && AlreadyFiredOnce(rule))
+                    return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = $"already-fired ({rule.Scope})" };
+
                 // Global min-gap.
                 var sinceGlobal = (DateTime.UtcNow - _globalLastFireUtc).TotalMilliseconds;
                 if (sinceGlobal < GlobalMinGapMs)
@@ -595,11 +701,34 @@ namespace ConditioningControlPanel.Services
                     if (used == null || !used.Contains(i)) { idx = i; break; }
                 }
                 if (idx < 0)
-                    return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "variants-exhausted (session)" };
+                {
+                    // Exhausted: a guaranteed reaction reuses the first line; a normal bark stays quiet.
+                    if (bypass) idx = 0;
+                    else return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "variants-exhausted (session)" };
+                }
             }
 
-            // NOTE: chat-suppression + self-echo mute are speak-path concerns (next PR); not evaluated here.
             return new GateDecision { WouldFire = true, VariantIndex = idx, Reason = "OK" };
+        }
+
+        private bool AlreadyFiredOnce(BarkRule rule)
+        {
+            if (_firedOnceSession.Contains(rule.Id)) return true;
+            if (rule.Scope != BarkScope.Session)
+                return App.Settings?.Current?.IsBarkFired(LatchKey(rule)) == true;
+            return false;
+        }
+
+        /// <summary>Persisted-latch key: lifetime = id; tier = "id@Tier" so a tier change re-arms it.</summary>
+        private static string LatchKey(BarkRule rule) =>
+            rule.Scope == BarkScope.Tier
+                ? rule.Id + "@" + (App.Patreon?.CurrentTier.ToString() ?? "None")
+                : rule.Id;
+
+        private bool CompanionBusy(int windowMs)
+        {
+            if ((App.AvatarWindow?.IsCompanionBusy(windowMs) ?? false)) return true;
+            return windowMs > 0 && (DateTime.UtcNow - _lastUserMessageUtc).TotalMilliseconds < windowMs;
         }
 
         private void CommitFire(BarkRule rule, int variantIndex)
@@ -607,7 +736,19 @@ namespace ConditioningControlPanel.Services
             var now = DateTime.UtcNow;
             _lastFiredUtc[rule.Id] = now;
             _globalLastFireUtc = now;
-            if (!rule.Repeatable) _firedOnceSession.Add(rule.Id);
+
+            // A fired safety bark holds the floor.
+            if (rule.Class == BarkClass.Safety)
+                _safetyHoldUntilUtc = now.AddMilliseconds(SafetyHoldMs);
+
+            if (!rule.Repeatable)
+            {
+                _firedOnceSession.Add(rule.Id);
+                // Persist lifetime/tier latches — but never in dry-run (it must not mutate settings).
+                if (rule.Scope != BarkScope.Session && !DryRun)
+                    App.Settings?.Current?.MarkBarkFired(LatchKey(rule));
+            }
+
             if (variantIndex >= 0)
             {
                 if (!_usedVariants.TryGetValue(rule.Id, out var set))
@@ -619,24 +760,75 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private void LogDecision(string trigger, BarkRule rule, GateDecision decision, BarkContext ctx)
+        // ===================== speak =====================
+
+        private void Speak(BarkRule rule, int variantIndex, BarkContext ctx, List<string> pool)
+        {
+            if (variantIndex < 0 || variantIndex >= pool.Count) return;
+            var avatar = App.AvatarWindow;
+            if (avatar == null)
+            {
+                App.Logger?.Debug("[BARK] no avatar window — dropping rule={Rule}", rule.Id);
+                return;
+            }
+
+            string line = ApplySubstitutions(pool[variantIndex], ctx);
+            if (string.IsNullOrWhiteSpace(line)) return;
+
+            // Route by class/priority: non-Normal or high-priority barks preempt (GigglePriority);
+            // ordinary barks queue (Giggle). Safety is non-Normal, so it preempts and clears the queue.
+            bool priority = rule.Class != BarkClass.Normal || rule.Priority >= PriorityBarkThreshold;
+            if (priority)
+                avatar.GigglePriority(line, playSound: true, aiGenerated: false);
+            else
+                avatar.Giggle(line);
+
+            // Self-echo guard so the bubble text can't trip awareness/OCR off its own output.
+            App.KeywordTriggers?.MuteKeywordEcho(line, SelfEchoMuteMs);
+        }
+
+        /// <summary>Substitute {0} (focused app) and {key} tokens (from the per-fire context).</summary>
+        private static string ApplySubstitutions(string text, BarkContext ctx)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+
+            if (text.Contains("{0}"))
+            {
+                var app = App.WindowAwareness?.CurrentServiceName;
+                if (string.IsNullOrWhiteSpace(app)) app = App.WindowAwareness?.CurrentDetectedName;
+                if (string.IsNullOrWhiteSpace(app)) app = "that";
+                text = text.Replace("{0}", app);
+            }
+
+            foreach (var kvp in ctx.Values)
+            {
+                var token = "{" + kvp.Key + "}";
+                if (text.Contains(token))
+                    text = text.Replace(token, kvp.Value?.ToString() ?? "");
+            }
+            return text;
+        }
+
+        private void LogDecision(string trigger, BarkRule rule, GateDecision decision)
         {
             var pool = ResolvePool(rule);
             string preview = decision.VariantIndex >= 0 && decision.VariantIndex < pool.Count
                 ? Truncate(pool[decision.VariantIndex], 48)
                 : "(n/a)";
+            string tag = DryRun ? "[BARK dry-run]" : "[BARK]";
 
             if (decision.WouldFire)
             {
+                string verb = DryRun ? "WOULD FIRE" : "FIRE";
                 App.Logger?.Information(
-                    "[BARK dry-run] WOULD FIRE trigger={Trigger} rule={Rule} class={Class} mood={Mood} priority={Priority} variant#={Idx} line=\"{Preview}\" gate=OK",
-                    trigger, rule.Id, rule.Class, rule.Mood, rule.Priority, decision.VariantIndex, preview);
+                    "{Tag} {Verb} trigger={Trigger} rule={Rule} class={Class} mood={Mood} priority={Priority} variant#={Idx} line=\"{Preview}\"",
+                    tag, verb, trigger, rule.Id, rule.Class, rule.Mood, rule.Priority, decision.VariantIndex, preview);
             }
             else
             {
                 App.Logger?.Information(
-                    "[BARK dry-run] blocked trigger={Trigger} rule={Rule} class={Class} priority={Priority} reason={Reason}",
-                    trigger, rule.Id, rule.Class, rule.Priority, decision.Reason);
+                    "{Tag} blocked trigger={Trigger} rule={Rule} class={Class} priority={Priority} reason={Reason}",
+                    tag, trigger, rule.Id, rule.Class, rule.Priority, decision.Reason);
             }
         }
 
