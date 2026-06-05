@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace ConditioningControlPanel.Services.Bark
 {
@@ -9,8 +10,15 @@ namespace ConditioningControlPanel.Services.Bark
     /// Loads bark rule manifests from disk. Two-tier, mirroring how
     /// <see cref="CompanionPhraseService.VoiceLineFolder"/> resolves audio: the embedded
     /// base manifest ships with the app; the active mod may ship its own
-    /// <c>bark_rules.json</c> alongside its companion audio, which OVERRIDES/EXTENDS the
-    /// base by rule id (mod rule wins on id collision).
+    /// <c>bark_rules.json</c> alongside its companion audio, which overrides/extends the
+    /// base.
+    ///
+    /// Merge is FIELD-LEVEL by rule id: a mod rule that supplies only
+    /// <c>{ id, variant_pool }</c> inherits trigger / conditions / priority / cooldown /
+    /// scope / class / mood from the base rule of the same id. Only the fields the mod
+    /// actually specifies override the base (omitted fields fall back). This lets skins
+    /// (Drone/Kept/…) ship content-only manifests. Array fields (e.g. variant_pool) are
+    /// REPLACED, not concatenated, so a skin fully owns its line set.
     /// </summary>
     public static class BarkRuleLoader
     {
@@ -32,30 +40,58 @@ namespace ConditioningControlPanel.Services.Bark
             }
         }
 
+        private static readonly JsonMergeSettings MergeSettings = new()
+        {
+            MergeArrayHandling = MergeArrayHandling.Replace,      // skin owns its variant_pool outright
+            MergeNullValueHandling = MergeNullValueHandling.Ignore // explicit null in mod won't blank a base field
+        };
+
         /// <summary>
-        /// Build the active rule set: load embedded base first, then overlay the active mod's
-        /// rules (same id replaces). Never throws — a missing/garbled manifest yields whatever
-        /// loaded successfully (possibly an empty set) and is logged.
+        /// Build the active rule set: load embedded base first, then field-level merge the
+        /// active mod's rules over it (same id → per-field override). Never throws — a
+        /// missing/garbled manifest yields whatever loaded successfully (possibly empty).
         /// </summary>
         public static BarkRuleSet Load()
         {
-            // Keyed by id so the mod overlay can replace base rules deterministically.
-            var merged = new Dictionary<string, BarkRule>(StringComparer.OrdinalIgnoreCase);
+            // Merge at the JSON-object level so we can tell "field omitted" from "field = default".
+            var merged = new Dictionary<string, JObject>(StringComparer.OrdinalIgnoreCase);
 
-            int baseCount = LoadInto(merged, EmbeddedManifestPath, "embedded");
+            int baseCount = MergeFile(merged, EmbeddedManifestPath, "embedded");
             int modCount = 0;
             var modPath = ActiveModManifestPath;
             if (modPath != null)
-                modCount = LoadInto(merged, modPath, "mod");
+                modCount = MergeFile(merged, modPath, "mod");
+
+            var rules = new List<BarkRule>();
+            foreach (var obj in merged.Values)
+            {
+                try
+                {
+                    var rule = obj.ToObject<BarkRule>();
+                    if (rule != null && rule.IsValid())
+                        rules.Add(rule);
+                    else
+                        App.Logger?.Warning("BarkRuleLoader: merged rule invalid after merge (id='{Id}')", rule?.Id);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "BarkRuleLoader: failed to materialize a merged rule");
+                }
+            }
 
             App.Logger?.Information(
-                "BarkRuleLoader: loaded {Total} rules ({Base} base, {Mod} mod-overlay)",
-                merged.Count, baseCount, modCount);
+                "BarkRuleLoader: loaded {Total} rules ({Base} base, {Mod} mod-overlay; field-level merge)",
+                rules.Count, baseCount, modCount);
 
-            return new BarkRuleSet(merged.Values);
+            return new BarkRuleSet(rules);
         }
 
-        private static int LoadInto(Dictionary<string, BarkRule> merged, string path, string source)
+        /// <summary>
+        /// Parse a manifest and merge each rule object into <paramref name="merged"/> by id.
+        /// New id → inserted; existing id → field-level merge (incoming fields win).
+        /// Returns the count of rule objects seen.
+        /// </summary>
+        private static int MergeFile(Dictionary<string, JObject> merged, string path, string source)
         {
             try
             {
@@ -63,22 +99,26 @@ namespace ConditioningControlPanel.Services.Bark
                 var json = File.ReadAllText(path);
                 if (string.IsNullOrWhiteSpace(json)) return 0;
 
-                var rules = JsonConvert.DeserializeObject<List<BarkRule>>(json);
-                if (rules == null) return 0;
-
-                int added = 0;
-                foreach (var rule in rules)
+                var arr = JArray.Parse(json);
+                int n = 0;
+                foreach (var token in arr)
                 {
-                    if (rule == null || !rule.IsValid())
+                    if (token is not JObject obj) continue;
+                    var id = obj.Value<string>("id");
+                    if (string.IsNullOrWhiteSpace(id))
                     {
-                        App.Logger?.Warning("BarkRuleLoader: skipped invalid rule in {Source} manifest (id='{Id}')",
-                            source, rule?.Id);
+                        App.Logger?.Warning("BarkRuleLoader: skipped a rule with no id in {Source} manifest", source);
                         continue;
                     }
-                    merged[rule.Id] = rule; // mod overlay replaces base on id collision
-                    added++;
+
+                    if (merged.TryGetValue(id, out var existing))
+                        existing.Merge(obj, MergeSettings); // mutates existing in place; mod fields override base
+                    else
+                        merged[id] = obj;
+
+                    n++;
                 }
-                return added;
+                return n;
             }
             catch (Exception ex)
             {

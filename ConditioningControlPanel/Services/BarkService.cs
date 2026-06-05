@@ -29,6 +29,7 @@ namespace ConditioningControlPanel.Services
         // Subscription teardown (named delegates captured so -= matches +=).
         private readonly List<Action> _unsubscribe = new();
         private readonly List<Action> _engineUnsubscribe = new();
+        private readonly List<Action> _trayUnsubscribe = new();
 
         // --- reused gate primitives (cooldown dict / global min-gap / one-fire latch / variant rotation) ---
         private readonly Dictionary<string, DateTime> _lastFiredUtc = new(StringComparer.OrdinalIgnoreCase);
@@ -77,6 +78,7 @@ namespace ConditioningControlPanel.Services
 
             RunUnsubscribers(_unsubscribe);
             RunUnsubscribers(_engineUnsubscribe);
+            RunUnsubscribers(_trayUnsubscribe);
         }
 
         private static void RunUnsubscribers(List<Action> list)
@@ -357,15 +359,21 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex) { App.Logger?.Warning(ex, "BarkService: AttachSessionEngine failed"); }
         }
 
-        /// <summary>Wire the MainWindow-owned tray icon (created in MainWindow's constructor).</summary>
+        /// <summary>
+        /// Wire the MainWindow-owned tray icon (created in MainWindow's constructor).
+        /// Re-attach safe: detaches any previous tray wiring before subscribing, so a
+        /// repeat call can't double-subscribe (no double-fire, no leak).
+        /// </summary>
         public void AttachTray(TrayIconService tray)
         {
             if (tray == null) return;
             try
             {
+                RunUnsubscribers(_trayUnsubscribe);
+
                 Action wake = () => Raise("WakeBambiRequested");
                 tray.OnWakeBambiRequested += wake;
-                _unsubscribe.Add(() => tray.OnWakeBambiRequested -= wake);
+                _trayUnsubscribe.Add(() => tray.OnWakeBambiRequested -= wake);
             }
             catch (Exception ex) { App.Logger?.Warning(ex, "BarkService: AttachTray failed"); }
         }
