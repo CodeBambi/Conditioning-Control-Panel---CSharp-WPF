@@ -6765,6 +6765,20 @@ namespace ConditioningControlPanel
                 MenuItemPauseBrowser.IsEnabled = false;
                 MenuItemPauseBrowser.Foreground = lockedBrush;
             }
+            else
+            {
+                // Remote controller disconnected: re-enable everything the lock block disables.
+                // Without this the items stay stuck un-clickable after exiting remote control, because
+                // the normal section above only refreshes their Header/Foreground, never IsEnabled.
+                // (Foreground is already restored above; Takeover stays gated on Patreon access.)
+                MenuItemEngine.IsEnabled = true;
+                MenuItemTriggerMode.IsEnabled = true;
+                MenuItemBambiTakeover.IsEnabled = takeoverAvailable;
+                MenuItemPersonality.IsEnabled = true;
+                MenuItemMute.IsEnabled = true;
+                MenuItemMuteWhispers.IsEnabled = true;
+                MenuItemPauseBrowser.IsEnabled = true;
+            }
         }
 
         /// <summary>
