@@ -103,8 +103,17 @@ namespace ConditioningControlPanel.Services
         {
             try
             {
+                // User-chosen custom clip wins over the built-in folder (a short ~2s clip is recommended).
+                var customPath = App.Settings?.Current?.MindWipeAudioPath;
+                if (!string.IsNullOrWhiteSpace(customPath) && File.Exists(customPath))
+                {
+                    _audioFiles = new[] { customPath };
+                    App.Logger?.Information("MindWipe: Using custom audio file {Path}", customPath);
+                    return;
+                }
+
                 var audioFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "sounds", "mindwipe");
-                
+
                 App.Logger?.Information("MindWipe: Looking for audio files in {Path}", audioFolderPath);
                 
                 if (!Directory.Exists(audioFolderPath))

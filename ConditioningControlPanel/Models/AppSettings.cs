@@ -2267,6 +2267,16 @@ namespace ConditioningControlPanel.Models
             set { _mindWipeLoop = value; OnPropertyChanged(); }
         }
 
+        // Custom mind-wipe audio clip. When set to an existing file, it overrides the
+        // built-in Resources/sounds/mindwipe folder (a short ~2s clip works best).
+        // Empty => fall back to the built-in audio folder.
+        private string _mindWipeAudioPath = "";
+        public string MindWipeAudioPath
+        {
+            get => _mindWipeAudioPath;
+            set { _mindWipeAudioPath = value ?? ""; OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Brain Drain (Unlocks Lv.25)
