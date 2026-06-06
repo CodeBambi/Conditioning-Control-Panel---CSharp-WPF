@@ -787,6 +787,11 @@ namespace ConditioningControlPanel.Services
                 if (DateTime.UtcNow < _safetyHoldUntilUtc)
                     return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "safety-active" };
 
+                // Don't talk over a subliminal/flash whisper that's still audible — two voices at once is
+                // jarring. Safety/guaranteed barks bypass this (handled above) so panic still speaks.
+                if (App.Audio?.IsWhisperAudioPlaying == true)
+                    return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "whisper-active" };
+
                 // Chat-suppression: don't talk over an active conversation.
                 int window = App.Settings?.Current?.BarkChatSuppressionMs ?? 10000;
                 if (CompanionBusy(window))

@@ -729,6 +729,8 @@ namespace ConditioningControlPanel.Services
                 {
                     _soundPlayingForCurrentFlash = true;
                     duration = PlaySound(soundPath, settings.MasterVolume);
+                    // Tell the bark system a flash "whisper" is audible so the companion won't talk over it.
+                    App.Audio?.MarkWhisperAudio(duration);
 
                     // Fire event so avatar can show the audio text as speech bubble
                     FlashAudioPlaying?.Invoke(this, new FlashAudioEventArgs(soundPath));

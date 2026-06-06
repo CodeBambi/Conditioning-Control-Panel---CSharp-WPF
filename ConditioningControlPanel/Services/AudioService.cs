@@ -29,6 +29,13 @@ namespace ConditioningControlPanel.Services
         private bool _isDucked;
         private float _duckAmount = 0.8f; // Default: reduce to 20%
         private long _duckGeneration; // Incremented on ForceUnduck to invalidate stale Unduck callbacks
+
+        // Approx end time (DateTime.UtcNow.Ticks; 0 = idle) of the subliminal/flash "whisper" clip that
+        // is currently audible. The bark system reads IsWhisperAudioPlaying off this so the companion
+        // doesn't talk over a whisper. Written from off-UI playback threads, read from the bark gate —
+        // accessed via Interlocked so the two stay consistent.
+        private long _whisperBusyUntilTicks;
+
         private System.Threading.Timer? _duckWatchdog; // Safety net: force-unduck if ducking exceeds max duration
         private const int DuckWatchdogMs = 300_000; // 5 minutes — safety net for leaked duck refs, must exceed longest video
 
@@ -722,6 +729,36 @@ namespace ConditioningControlPanel.Services
         public long DuckGeneration
         {
             get { lock (_lockObj) { return _duckGeneration; } }
+        }
+
+        /// <summary>
+        /// True while subliminal/flash "whisper" audio is (approximately) still playing. The bark system
+        /// consults this so the companion doesn't speak over a whisper. Approximate: based on the clip
+        /// duration captured at play time, not a real playback-stopped callback.
+        /// </summary>
+        public bool IsWhisperAudioPlaying
+        {
+            get
+            {
+                var until = System.Threading.Interlocked.Read(ref _whisperBusyUntilTicks);
+                return until > 0 && DateTime.UtcNow.Ticks < until;
+            }
+        }
+
+        /// <summary>
+        /// Record that a whisper clip of <paramref name="durationSeconds"/> just started so
+        /// <see cref="IsWhisperAudioPlaying"/> reports busy until it finishes (+ a short tail). Called by
+        /// the subliminal/flash whisper playback paths. Only ever EXTENDS the busy window — a shorter
+        /// concurrent clip can't cut a longer one short. No-op for non-positive/NaN durations.
+        /// </summary>
+        public void MarkWhisperAudio(double durationSeconds)
+        {
+            if (double.IsNaN(durationSeconds) || durationSeconds <= 0) return;
+            var until = DateTime.UtcNow.AddSeconds(durationSeconds + 0.25).Ticks;
+            long prev;
+            do { prev = System.Threading.Interlocked.Read(ref _whisperBusyUntilTicks); }
+            while (until > prev &&
+                   System.Threading.Interlocked.CompareExchange(ref _whisperBusyUntilTicks, until, prev) != prev);
         }
 
         /// <summary>

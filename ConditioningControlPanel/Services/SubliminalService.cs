@@ -469,7 +469,9 @@ namespace ConditioningControlPanel.Services
                     });
                 };
                 _audioPlayer.Play();
-                
+                // Tell the bark system a whisper is now audible so the companion won't talk over it.
+                App.Audio?.MarkWhisperAudio(_audioFile.TotalTime.TotalSeconds);
+
                 App.Logger?.Debug("Playing subliminal audio: {Path}", Path.GetFileName(path));
             }
             catch (Exception ex)

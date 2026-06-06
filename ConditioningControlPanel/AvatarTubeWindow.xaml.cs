@@ -4546,15 +4546,18 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Play a companion bark voiceline. Like <see cref="PlayPhraseAudio"/> but gated on
-        /// MasterVolume only (NOT SubAudioEnabled — that toggle is for subliminal whispers), so
-        /// the companion's spoken barks follow the master/mute control.
+        /// Play a companion bark voiceline. Gated on BOTH MasterVolume (master/mute control) and
+        /// SubAudioEnabled — bark voicelines are "whispers", so the Mute Whispers toggle silences them
+        /// too. When whispers are muted the bubble still shows; it just has no voiceline audio.
         /// </summary>
         private void PlayBarkVoice(string audioPath)
         {
             try
             {
                 if (!System.IO.File.Exists(audioPath)) return;
+
+                // Mute Whispers (SubAudioEnabled == false) silences spoken barks, same as subliminal whispers.
+                if (App.Settings?.Current?.SubAudioEnabled != true) return;
 
                 var masterVolume = (App.Settings?.Current?.MasterVolume ?? 0) / 100f;
                 if (masterVolume <= 0f) return; // muted
