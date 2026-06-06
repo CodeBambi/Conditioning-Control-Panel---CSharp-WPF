@@ -2651,6 +2651,14 @@ namespace ConditioningControlPanel
             return windowMs > 0 && (DateTime.UtcNow - _lastAiBubbleUtc).TotalMilliseconds < windowMs;
         }
 
+        /// <summary>
+        /// True while ANY speech bubble (AI or ordinary "Preset" bark/chatter) is currently being
+        /// displayed. Unlike <see cref="IsCompanionBusy"/> this also covers non-AI bubbles, so the bark
+        /// system can avoid stacking ordinary barks behind one that's already on screen — otherwise they
+        /// queue and, by the time the queue drains, comment on something that happened seconds ago.
+        /// </summary>
+        public bool IsSpeaking => _isGiggling;
+
         public void GigglePriority(string text, bool playSound = true, bool aiGenerated = true, string? phraseAudioPath = null, bool barkVoice = false)
         {
             if (_isPlayingUninterruptibleClip) return; // an uninterruptible clip is speaking

@@ -797,6 +797,15 @@ namespace ConditioningControlPanel.Services
                 if (CompanionBusy(window))
                     return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = $"chat-suppressed ({window}ms)" };
 
+                // Anti-stale: ordinary (queue-class) barks would pile up behind a bubble that's already
+                // on screen and, by the time the queue drained, comment on something that happened 10s
+                // ago. Drop them while she's mid-bubble — the next eligible event gets a FRESH reaction
+                // instead. Preempting barks (non-Normal class or priority >= threshold) are exempt: they
+                // route through GigglePriority, which clears the queue and shows the latest immediately.
+                bool willPreempt = rule.Class != BarkClass.Normal || rule.Priority >= PriorityBarkThreshold;
+                if (!willPreempt && (App.AvatarWindow?.IsSpeaking ?? false))
+                    return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "speaking" };
+
                 // One-shot (repeatable=false): fire once per scope. Session is in-memory;
                 // tier/lifetime consult the persisted latch (AppSettings.BarkLifetimeFired).
                 if (!rule.Repeatable && AlreadyFiredOnce(rule))
