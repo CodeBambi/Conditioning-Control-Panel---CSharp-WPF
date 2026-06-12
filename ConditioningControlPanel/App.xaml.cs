@@ -250,6 +250,10 @@ namespace ConditioningControlPanel
         // "Live actions" panel. Populated by the upcoming local-LLM effect controller; not persisted.
         public static ObservableCollection<string> AiLiveActions { get; } = new();
 
+        // Short-term memory of conditioning/effect actions for the AI companion. In-memory only,
+        // pruned to the last few hours so the model can pace itself without prompt bloat.
+        public static CompanionActionHistory ActionHistory { get; } = new();
+
         public static FlashService Flash { get; private set; } = null!;
         public static VideoService Video { get; private set; } = null!;
         public static AudioService Audio { get; private set; } = null!;

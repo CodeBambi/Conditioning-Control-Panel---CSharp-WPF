@@ -316,8 +316,9 @@ namespace ConditioningControlPanel.Services.AIService
                         _commandOutcomes.Add(outcome);
                 }
             }
-            // Ensure command outcomes don't grow unbounded across turns.
-            while (_commandOutcomes.Count > 10) _commandOutcomes.RemoveAt(0);
+            // Keep only the immediate turn's outcomes; cross-turn history is handled
+            // by App.ActionHistory so the prompt doesn't duplicate information.
+            while (_commandOutcomes.Count > 3) _commandOutcomes.RemoveAt(0);
 
             // Remember the completed exchange.
             ChatMemory.AddUserTurn(userInput);

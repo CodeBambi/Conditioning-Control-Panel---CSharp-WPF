@@ -133,6 +133,13 @@ namespace ConditioningControlPanel.Models
         // kept on disk but dropped from context to keep token usage bounded.
         public int ChatMemorySendPairs { get; set; } = 10;
 
+        // Whether to include the recent conditioning action history in the AI enrichment
+        // context. Helps the companion pace itself and avoid repeating recent intense effects.
+        public bool AiActionHistoryEnabled { get; set; } = true;
+
+        // How many hours of recent conditioning actions are summarized for the AI context.
+        public int AiActionHistoryHours { get; set; } = 2;
+
         // Keyboard shortcut to open the avatar chat input. Stored as the WPF Key name
         // ("T", "F2", etc.) and a comma-separated ModifierKeys ("Control", "Control,Shift").
         // Applied at window load via code-behind so changes take effect without a restart.
@@ -274,6 +281,8 @@ namespace ConditioningControlPanel.Models
                 ChatMemoryEnabled = true,
                 OpenAiCompatibleChatMemoryEnabled = true,
                 ChatMemorySendPairs = 10,
+                AiActionHistoryEnabled = true,
+                AiActionHistoryHours = 2,
                 ChatShortcutKey = "T",
                 ChatShortcutModifiers = "Control",
                 ChatShortcutGlobal = true,
@@ -410,6 +419,8 @@ FREQUENCY RULE:
                 ChatMemoryEnabled = ChatMemoryEnabled,
                 OpenAiCompatibleChatMemoryEnabled = OpenAiCompatibleChatMemoryEnabled,
                 ChatMemorySendPairs = ChatMemorySendPairs,
+                AiActionHistoryEnabled = AiActionHistoryEnabled,
+                AiActionHistoryHours = AiActionHistoryHours,
                 ChatShortcutKey = ChatShortcutKey,
                 ChatShortcutModifiers = ChatShortcutModifiers,
                 ChatShortcutGlobal = ChatShortcutGlobal,

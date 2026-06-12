@@ -1001,24 +1001,29 @@ namespace ConditioningControlPanel.Services
                             if (App.Flash == null)
                             {
                                 App.Logger?.Warning("AutonomyService: Flash service is null!");
+                                App.ActionHistory.Record("flash", "autonomy", false, "service unavailable");
                             }
                             else
                             {
                                 App.Flash.TriggerFlashOnce();
                                 App.Logger?.Information("AutonomyService: Flash triggered");
+                                App.ActionHistory.Record("flash", "autonomy", true);
                             }
                             break;
 
                         case AutonomyActionType.Video:
                             TriggerVideoSafely();
+                            App.ActionHistory.Record("video", "autonomy", true, "autonomy pick");
                             break;
 
                         case AutonomyActionType.Subliminal:
                             App.Subliminal?.FlashSubliminal();
+                            App.ActionHistory.Record("subliminal", "autonomy", true);
                             break;
 
                         case AutonomyActionType.BrainDrainPulse:
                             PulseBrainDrain();
+                            App.ActionHistory.Record("brain_drain", "autonomy", true);
                             break;
 
                         case AutonomyActionType.StartBubbles:
@@ -1026,6 +1031,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 _bubblesPulseActive = true;
                                 App.Bubbles?.Start(bypassLevelCheck: true);
+                                App.ActionHistory.Record("bubbles", "autonomy", true, "30s pulse");
                                 // Stop bubbles after 30 seconds
                                 Task.Delay(30000).ContinueWith(_ =>
                                 {
@@ -1041,6 +1047,10 @@ namespace ConditioningControlPanel.Services
                                     });
                                 });
                             }
+                            else
+                            {
+                                App.ActionHistory.Record("bubbles", "autonomy", false, "already running");
+                            }
                             break;
 
                         case AutonomyActionType.Comment:
@@ -1049,20 +1059,24 @@ namespace ConditioningControlPanel.Services
 
                         case AutonomyActionType.MindWipe:
                             App.MindWipe?.TriggerOnce();
+                            App.ActionHistory.Record("mind_wipe", "autonomy", true);
                             break;
 
                         case AutonomyActionType.LockCard:
                             // Use ShowLockCard() directly to trigger a single lock card
                             // without requiring the continuous service to be enabled
                             App.LockCard?.ShowLockCard();
+                            App.ActionHistory.Record("lock_card", "autonomy", true);
                             break;
 
                         case AutonomyActionType.SpiralPulse:
                             PulseSpiralOverlay();
+                            App.ActionHistory.Record("spiral", "autonomy", true, "pulse");
                             break;
 
                         case AutonomyActionType.PinkFilterPulse:
                             PulsePinkFilter();
+                            App.ActionHistory.Record("pink_filter", "autonomy", true, "pulse");
                             break;
 
                         case AutonomyActionType.BouncingText:
@@ -1070,6 +1084,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 _bouncingTextPulseActive = true;
                                 App.BouncingText?.Start(bypassLevelCheck: true);
+                                App.ActionHistory.Record("bouncing_text", "autonomy", true, "30s pulse");
                                 // Stop after 30 seconds
                                 Task.Delay(30000).ContinueWith(_ =>
                                 {
@@ -1085,16 +1100,22 @@ namespace ConditioningControlPanel.Services
                                     });
                                 });
                             }
+                            else
+                            {
+                                App.ActionHistory.Record("bouncing_text", "autonomy", false, "already running");
+                            }
                             break;
 
                         case AutonomyActionType.BubbleCount:
                             // Use TriggerGame directly to show a single game
                             // forceTest: true bypasses running/level checks
                             App.BubbleCount?.TriggerGame(forceTest: true);
+                            App.ActionHistory.Record("bubble_count", "autonomy", true);
                             break;
 
                         case AutonomyActionType.WebVideo:
                             TriggerWebVideoFullscreen();
+                            App.ActionHistory.Record("web_video", "autonomy", true);
                             break;
 
                         case AutonomyActionType.WallpaperShuffle:
@@ -1104,11 +1125,13 @@ namespace ConditioningControlPanel.Services
                                 {
                                     // Already active — just shuffle
                                     App.Wallpaper.Shuffle();
+                                    App.ActionHistory.Record("wallpaper", "autonomy", true, "shuffle");
                                 }
                                 else
                                 {
                                     // Pulse: activate, wait 30s, deactivate (unless user toggled it on manually)
                                     App.Wallpaper.Activate();
+                                    App.ActionHistory.Record("wallpaper", "autonomy", true, "30s pulse");
                                     var userEnabled = App.Settings?.Current?.WallpaperEnabled == true;
                                     if (!userEnabled)
                                     {
@@ -1125,6 +1148,10 @@ namespace ConditioningControlPanel.Services
                                         });
                                     }
                                 }
+                            }
+                            else
+                            {
+                                App.ActionHistory.Record("wallpaper", "autonomy", false, "service unavailable");
                             }
                             break;
                     }

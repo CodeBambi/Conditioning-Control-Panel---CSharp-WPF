@@ -49,6 +49,7 @@ namespace ConditioningControlPanel.Services.Commands
             if (!settings.AllowAiToControlEffects)
             {
                 App.Logger?.Information("AiCommandService: master toggle OFF — dropping {Cmd}", commandData.Command);
+                App.ActionHistory.Record(commandName, "ai", false, "AI effects master toggle is off");
                 return new CommandOutcome(commandName, false, "AI effects master toggle is off");
             }
 
@@ -56,6 +57,7 @@ namespace ConditioningControlPanel.Services.Commands
             if (!IsEffectAllowed(commandData.Command, settings))
             {
                 App.Logger?.Information("AiCommandService: effect {Cmd} disabled by user — dropping", commandData.Command);
+                App.ActionHistory.Record(commandName, "ai", false, "effect disabled in settings");
                 return new CommandOutcome(commandName, false, "effect disabled in settings");
             }
 
@@ -64,6 +66,7 @@ namespace ConditioningControlPanel.Services.Commands
             {
                 App.Logger?.Information("AiCommandService: batch cap reached ({Cap}) — dropping {Cmd}",
                     MaxCommandsPerResponse, commandData.Command);
+                App.ActionHistory.Record(commandName, "ai", false, $"per-response command cap ({MaxCommandsPerResponse}) reached");
                 return new CommandOutcome(commandName, false, $"per-response command cap ({MaxCommandsPerResponse}) reached");
             }
 
@@ -88,21 +91,24 @@ namespace ConditioningControlPanel.Services.Commands
                 var command = CommandFactory.CreateCommand(commandData, cts?.Token ?? default, depth: 0);
                 if (command == null)
                 {
+                    App.ActionHistory.Record(commandName, "ai", false, "unknown command type");
                     return new CommandOutcome(commandName, false, "unknown command type");
                 }
 
                 App.Logger?.Debug("AiCommandService: executing {Cmd}", commandData.Command);
                 var result = command.ExecuteAsync().GetAwaiter().GetResult();
-                return new CommandOutcome(
-                    result.CommandType,
-                    result.Status == CommandResultStatus.Executed,
-                    result.Status == CommandResultStatus.Executed
-                        ? $"executed{(string.IsNullOrEmpty(result.ParameterSummary) ? "" : $": {result.ParameterSummary}")}"
-                        : $"{result.Status.ToString().ToLowerInvariant()}{(string.IsNullOrEmpty(result.Reason) ? "" : $": {result.Reason}")}");
+                var succeeded = result.Status == CommandResultStatus.Executed;
+                var outcomeText = succeeded
+                    ? $"executed{(string.IsNullOrEmpty(result.ParameterSummary) ? "" : $": {result.ParameterSummary}")}"
+                    : $"{result.Status.ToString().ToLowerInvariant()}{(string.IsNullOrEmpty(result.Reason) ? "" : $": {result.Reason}")}";
+
+                App.ActionHistory.Record(result.CommandType, "ai", succeeded, outcomeText);
+                return new CommandOutcome(result.CommandType, succeeded, outcomeText);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "AiCommandService: command {Cmd} threw", commandData.Command);
+                App.ActionHistory.Record(commandName, "ai", false, $"exception: {ex.Message}");
                 return new CommandOutcome(commandName, false, $"exception: {ex.Message}");
             }
             finally

@@ -11852,6 +11852,7 @@ namespace ConditioningControlPanel
             if (ChkAiChat != null) ChkAiChat.IsChecked = false;
             // Drop any stale Live Actions — only local AI populates this feed.
             App.AiLiveActions?.Clear();
+            App.ActionHistory?.Clear();
             UpdateAiBrainPills();
         }
 
@@ -11950,6 +11951,7 @@ namespace ConditioningControlPanel
                 if (OpenAiCompatibleConfigPanel != null) OpenAiCompatibleConfigPanel.Visibility = Visibility.Collapsed;
                 if (DailyLimitPanel != null) DailyLimitPanel.Visibility = Visibility.Collapsed;
                 App.AiLiveActions?.Clear();
+                App.ActionHistory?.Clear();
             }
             else if (DailyLimitPanel != null)
             {
@@ -12218,8 +12220,10 @@ namespace ConditioningControlPanel
                     strategy.ClearChatHistory();
                 }
 
-                // Also clear the live actions feed so the visual state matches "fresh slate".
+                // Also clear the live actions feed and short-term action history so the
+                // visual state and AI context both match a "fresh slate".
                 App.AiLiveActions.Clear();
+                App.ActionHistory.Clear();
                 UpdateLiveActionsPlaceholder();
 
                 MessageBox.Show(

@@ -40,6 +40,20 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
                 ? "None"
                 : string.Join("\n", previousOutcomes.Select(o => $"- {o.Command}: {(o.Succeeded ? "succeeded" : "failed")}{(string.IsNullOrEmpty(o.Outcome) ? "" : $" — {o.Outcome}")}"));
 
+            var settings = App.Settings?.Current?.CompanionPrompt;
+            var historySummary = settings?.AiActionHistoryEnabled == true
+                ? App.ActionHistory.BuildSummary(settings.AiActionHistoryHours)
+                : null;
+            var historyBlock = string.IsNullOrEmpty(historySummary)
+                ? ""
+                : $$"""
+
+                  ====================================================================
+                  RECENT CONDITIONING ACTIVITY
+                  ====================================================================
+                  {{historySummary}}
+                  """;
+
             return new AiMessage(
                 "user",
                 $$"""
@@ -64,7 +78,7 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
                   ====================================================================
                   {{snapshotJson}}
 
-                  Use this state to avoid asking the user to start things that are already running, and to stop suggesting effects that are already active.
+                  Use this state to avoid asking the user to start things that are already running, and to stop suggesting effects that are already active.{{historyBlock}}
 
                   ====================================================================
                   PREVIOUS COMMAND OUTCOMES
