@@ -203,9 +203,17 @@ namespace ConditioningControlPanel
             ChkDialogSubjectProfileEnabled.IsChecked = settings.AiSubjectProfileEnabled;
             ChkDialogAiEffectsEnabled.IsChecked = settings.AllowAiToControlEffects;
 
-            var cooldown = Math.Clamp(appSettings?.AwarenessReactionCooldownSeconds ?? 90, 10, 300);
-            SliderDialogAwarenessCooldown.Value = cooldown;
-            TxtDialogAwarenessCooldown.Text = $"{cooldown}s";
+            var reactionCooldown = Math.Clamp(appSettings?.AwarenessReactionCooldownSeconds ?? 90, 10, 300);
+            SliderDialogAwarenessReactionCooldown.Value = reactionCooldown;
+            TxtDialogAwarenessReactionCooldown.Text = $"{reactionCooldown}s";
+
+            var keywordCooldown = Math.Clamp(appSettings?.KeywordGlobalCooldownSeconds ?? 90, 10, 300);
+            SliderDialogAwarenessKeywordCooldown.Value = keywordCooldown;
+            TxtDialogAwarenessKeywordCooldown.Text = $"{keywordCooldown}s";
+
+            var effectsCooldown = Math.Clamp(appSettings?.AiEffectsCooldownSeconds ?? 90, 10, 300);
+            SliderDialogAwarenessEffectsCooldown.Value = effectsCooldown;
+            TxtDialogAwarenessEffectsCooldown.Text = $"{effectsCooldown}s";
 
             var bufferMs = Math.Clamp(appSettings?.KeywordBufferTimeoutMs ?? 3000, 1000, 10000);
             SliderDialogKeywordBufferTimeout.Value = bufferMs;
@@ -314,11 +322,10 @@ namespace ConditioningControlPanel
                 appSettings.AwarenessModeEnabled = awarenessOn;
                 appSettings.AwarenessConsentGiven = awarenessOn;
 
-                var cooldown = (int)SliderDialogAwarenessCooldown.Value;
-                appSettings.AwarenessReactionCooldownSeconds = cooldown;
-                // Unify keyword-trigger cooldowns so there is only one awareness cooldown to manage.
-                appSettings.KeywordGlobalCooldownSeconds = cooldown;
-                appSettings.KeywordPerKeywordCooldownSeconds = cooldown;
+                appSettings.AwarenessReactionCooldownSeconds = (int)SliderDialogAwarenessReactionCooldown.Value;
+                appSettings.KeywordGlobalCooldownSeconds = (int)SliderDialogAwarenessKeywordCooldown.Value;
+                appSettings.KeywordPerKeywordCooldownSeconds = appSettings.KeywordGlobalCooldownSeconds;
+                appSettings.AiEffectsCooldownSeconds = (int)SliderDialogAwarenessEffectsCooldown.Value;
 
                 appSettings.KeywordBufferTimeoutMs = (int)SliderDialogKeywordBufferTimeout.Value;
                 appSettings.KeywordHighlightDurationMs = (int)(SliderDialogKeywordHighlightDuration.Value * 1000);
@@ -422,7 +429,7 @@ namespace ConditioningControlPanel
             var selected = allowed.OrderBy(a => Math.Abs(a - minutes)).First();
             foreach (ComboBoxItem item in CmbDialogActionHistoryWindow.Items)
             {
-                if (item.Tag is int tag && tag == selected)
+                if (int.TryParse(item.Tag?.ToString(), out var tag) && tag == selected)
                 {
                     CmbDialogActionHistoryWindow.SelectedItem = item;
                     break;
@@ -456,11 +463,27 @@ namespace ConditioningControlPanel
             _hasUnsavedChanges = true;
         }
 
-        private void SliderDialogAwarenessCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private void SliderDialogAwarenessReactionCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (TxtDialogAwarenessCooldown == null) return;
-            var value = Math.Max(10, Math.Min(300, (int)SliderDialogAwarenessCooldown.Value));
-            TxtDialogAwarenessCooldown.Text = $"{value}s";
+            if (TxtDialogAwarenessReactionCooldown == null) return;
+            var value = Math.Max(10, Math.Min(300, (int)SliderDialogAwarenessReactionCooldown.Value));
+            TxtDialogAwarenessReactionCooldown.Text = $"{value}s";
+            _hasUnsavedChanges = true;
+        }
+
+        private void SliderDialogAwarenessKeywordCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtDialogAwarenessKeywordCooldown == null) return;
+            var value = Math.Max(10, Math.Min(300, (int)SliderDialogAwarenessKeywordCooldown.Value));
+            TxtDialogAwarenessKeywordCooldown.Text = $"{value}s";
+            _hasUnsavedChanges = true;
+        }
+
+        private void SliderDialogAwarenessEffectsCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtDialogAwarenessEffectsCooldown == null) return;
+            var value = Math.Max(10, Math.Min(300, (int)SliderDialogAwarenessEffectsCooldown.Value));
+            TxtDialogAwarenessEffectsCooldown.Text = $"{value}s";
             _hasUnsavedChanges = true;
         }
 

@@ -2566,14 +2566,14 @@ namespace ConditioningControlPanel.Models
             set { _awarenessConsentGiven = value; OnPropertyChanged(); }
         }
 
-        private int _awarenessReactionCooldownSeconds = 10;
+        private int _awarenessReactionCooldownSeconds = 90;
         /// <summary>
-        /// Minimum seconds between awareness reactions (10-600)
+        /// Minimum seconds between awareness reactions (10-300)
         /// </summary>
         public int AwarenessReactionCooldownSeconds
         {
             get => _awarenessReactionCooldownSeconds;
-            set { _awarenessReactionCooldownSeconds = Math.Clamp(value, 10, 600); OnPropertyChanged(); }
+            set { _awarenessReactionCooldownSeconds = Math.Clamp(value, 10, 300); OnPropertyChanged(); }
         }
 
         private Dictionary<string, bool> _companionSectionOpen = new();
@@ -3528,27 +3528,26 @@ namespace ConditioningControlPanel.Models
             set { _keywordBufferTimeoutMs = Math.Clamp(value, 1000, 10000); OnPropertyChanged(); }
         }
 
-        private int _keywordGlobalCooldownSeconds = 10;
+        private int _keywordGlobalCooldownSeconds = 90;
         /// <summary>
-        /// Global cooldown between any trigger firing, in seconds (clamped 1-300).
+        /// Global cooldown between any trigger firing, in seconds (clamped 10-300).
         /// Enforced on all three match sources (OCR, keyboard, external text) —
         /// this is a hard ceiling on trigger frequency regardless of how many
         /// matches are on screen. Primarily prevents the OCR feedback loop
         /// (avatar speech bubble getting re-read on next scan) from spamming.
-        /// Default raised to 10 per user preference — 10s minimum between any
-        /// two reactions, paired with KeywordPerKeywordCooldownSeconds for the
-        /// stricter 15s same-keyword hard cooldown.
+        /// Default 90s; paired with KeywordPerKeywordCooldownSeconds for the
+        /// same-keyword hard cooldown.
         /// </summary>
         public int KeywordGlobalCooldownSeconds
         {
             get => _keywordGlobalCooldownSeconds;
-            set { _keywordGlobalCooldownSeconds = Math.Clamp(value, 1, 300); OnPropertyChanged(); }
+            set { _keywordGlobalCooldownSeconds = Math.Clamp(value, 10, 300); OnPropertyChanged(); }
         }
 
-        private int _keywordPerKeywordCooldownSeconds = 15;
+        private int _keywordPerKeywordCooldownSeconds = 90;
         /// <summary>
         /// Hard minimum cooldown between two fires of the SAME keyword, in seconds
-        /// (clamped 1-600). Enforced at RecordFire time via the _mutedKeywords
+        /// (clamped 10-300). Enforced at RecordFire time via the _mutedKeywords
         /// dictionary independent of AwarenessLoopProtectionEnabled. Floor for
         /// the per-trigger <see cref="KeywordTrigger.CooldownSeconds"/> — presets
         /// that declare a lower cooldown will still be gated at this minimum.
@@ -3557,7 +3556,17 @@ namespace ConditioningControlPanel.Models
         public int KeywordPerKeywordCooldownSeconds
         {
             get => _keywordPerKeywordCooldownSeconds;
-            set { _keywordPerKeywordCooldownSeconds = Math.Clamp(value, 1, 600); OnPropertyChanged(); }
+            set { _keywordPerKeywordCooldownSeconds = Math.Clamp(value, 10, 300); OnPropertyChanged(); }
+        }
+
+        private int _aiEffectsCooldownSeconds = 90;
+        /// <summary>
+        /// Minimum seconds between AI-triggered effects (10-300).
+        /// </summary>
+        public int AiEffectsCooldownSeconds
+        {
+            get => _aiEffectsCooldownSeconds;
+            set { _aiEffectsCooldownSeconds = Math.Clamp(value, 10, 300); OnPropertyChanged(); }
         }
 
         private double _keywordSessionMultiplier = 1.5;
