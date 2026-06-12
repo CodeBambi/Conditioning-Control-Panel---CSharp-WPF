@@ -1296,31 +1296,6 @@ namespace ConditioningControlPanel.Services
                 },
                 new TutorialStep
                 {
-                    Id = "aw_cd_global",
-                    Icon = "\u23F1",
-                    Title = "Global Cooldown",
-                    Description = "Global cooldown = the gap between any two reactions, regardless of which keyword fired.\n\n" +
-                                  "If multiple words land at once and you'd rather feel one click than five, " +
-                                  "raise this slider. Most people start around 10 seconds and tune from there.",
-                    RequiresTab = "awareness",
-                    TargetElementName = "SliderAwarenessGlobalCooldown",
-                    TextPosition = TutorialStepPosition.Top
-                },
-                new TutorialStep
-                {
-                    Id = "aw_cd_sameword",
-                    Icon = "\uD83D\uDD52",
-                    Title = "Same-Word Cooldown",
-                    Description = "Same-word cooldown = the gap before the same keyword can fire again.\n\n" +
-                                  "If \"good boy\" appears five times on a page, only the first one fires. " +
-                                  "Other keywords can still fire normally during that window.\n\n" +
-                                  "Crank both cooldowns up if you ever feel overloaded \u2014 it's the gentlest way to dial things back.",
-                    RequiresTab = "awareness",
-                    TargetElementName = "SliderAwarenessSameWordCooldown",
-                    TextPosition = TutorialStepPosition.Top
-                },
-                new TutorialStep
-                {
                     Id = "aw_demo_fire",
                     Icon = "\u2728",
                     Title = "Watch It Catch a Word",

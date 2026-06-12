@@ -11509,8 +11509,6 @@ namespace ConditioningControlPanel
             // Awareness Mode settings (free for all users)
             var awarenessAvailable = true;
             ChkAwarenessMode.IsChecked = settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
-            SliderAwarenessCooldown.Value = settings.AwarenessReactionCooldownSeconds;
-            TxtAwarenessCooldown.Text = $"{settings.AwarenessReactionCooldownSeconds}s";
 
             // Show/hide awareness settings panel based on enabled state
             var awarenessEnabled = awarenessAvailable && settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
@@ -11817,16 +11815,6 @@ namespace ConditioningControlPanel
                 TxtPrivacyDetails.Visibility = Visibility.Collapsed;
                 BtnPrivacySpoiler.Content = Loc.Get("btn_click_to_reveal");
             }
-        }
-
-        private void SliderAwarenessCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || TxtAwarenessCooldown == null) return;
-
-            var value = (int)SliderAwarenessCooldown.Value;
-            TxtAwarenessCooldown.Text = $"{value}s";
-            App.Settings.Current.AwarenessReactionCooldownSeconds = value;
-            App.Settings.Save();
         }
 
         // ============================================================
@@ -12200,136 +12188,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        /// <summary>
-        /// Wipes the local AI's persisted chat history (in-memory + on-disk).
-        /// Cloud provider has no memory, so this is a local-only action.
-        /// </summary>
-        private void BtnClearChatMemory_Click(object sender, RoutedEventArgs e)
-        {
-            var confirm = MessageBox.Show(
-                Loc.Get("dialog_forget_everything_prompt"),
-                Loc.Get("btn_forget_everything"),
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-            if (confirm != MessageBoxResult.Yes) return;
-
-            try
-            {
-                if (App.Ai is Services.AIService.AiServiceStrategy strategy)
-                {
-                    strategy.ClearChatHistory();
-                }
-
-                // Also clear the live actions feed and short-term action history so the
-                // visual state and AI context both match a "fresh slate".
-                App.AiLiveActions.Clear();
-                App.ActionHistory.Clear();
-                UpdateLiveActionsPlaceholder();
-
-                MessageBox.Show(
-                    Loc.Get("dialog_forget_everything_done"),
-                    Loc.Get("btn_forget_everything"),
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "BtnClearChatMemory_Click failed");
-            }
-        }
-
-        private void ChkChatMemoryEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || ChkChatMemoryEnabled == null) return;
-            var on = ChkChatMemoryEnabled.IsChecked == true;
-            if (s.ChatMemoryEnabled == on) return;
-            s.ChatMemoryEnabled = on;
-            App.Settings?.Save();
-
-            // Turning memory off should wipe what's already saved — not just stop persisting new turns.
-            if (!on && App.Ai is Services.AIService.AiServiceStrategy strategy)
-            {
-                try { strategy.ClearChatHistory(); }
-                catch (Exception ex) { App.Logger?.Warning(ex, "ChkChatMemoryEnabled_Changed: ClearChatHistory failed"); }
-            }
-        }
-
-        private void SliderActionHistoryHours_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || SliderActionHistoryHours == null) return;
-            var hours = Math.Max(1, Math.Min(8, (int)SliderActionHistoryHours.Value));
-            if (s.AiActionHistoryHours == hours) return;
-            s.AiActionHistoryHours = hours;
-            if (TxtActionHistoryHours != null) TxtActionHistoryHours.Text = $"{hours} hour{(hours == 1 ? "" : "s")}";
-            UpdateActionHistoryWarning();
-            App.Settings?.Save();
-        }
-
-        private void SliderActionHistoryMaxEvents_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || SliderActionHistoryMaxEvents == null) return;
-            var maxEvents = Math.Max(50, Math.Min(500, (int)SliderActionHistoryMaxEvents.Value));
-            if (s.AiActionHistoryMaxEvents == maxEvents) return;
-            s.AiActionHistoryMaxEvents = maxEvents;
-            if (TxtActionHistoryMaxEvents != null) TxtActionHistoryMaxEvents.Text = maxEvents.ToString();
-            App.ActionHistory?.SetMaxEvents(maxEvents);
-            App.Settings?.Save();
-        }
-
-        private void UpdateActionHistoryWarning()
-        {
-            if (TxtActionHistoryWarning == null || SliderActionHistoryHours == null) return;
-            var hours = (int)SliderActionHistoryHours.Value;
-            var msg = hours switch
-            {
-                <= 2 => "Short window: keeps prompts small and fast.",
-                <= 5 => "Moderate window: balanced recall and prompt size.",
-                _ => "Long window: richer recall but larger prompts and slower responses."
-            };
-            TxtActionHistoryWarning.Text = msg;
-            TxtActionHistoryWarning.Foreground = hours switch
-            {
-                <= 2 => (Brush?)FindResource("TextDimBrush"),
-                <= 5 => new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x00)),
-                _ => new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x6B))
-            } ?? TxtActionHistoryWarning.Foreground;
-        }
-
-        private void ChkSubjectProfileEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || ChkSubjectProfileEnabled == null) return;
-            var on = ChkSubjectProfileEnabled.IsChecked == true;
-            if (s.AiSubjectProfileEnabled == on) return;
-            s.AiSubjectProfileEnabled = on;
-            App.Settings?.Save();
-        }
-
-        private void BtnClearSubjectProfile_Click(object sender, RoutedEventArgs e)
-        {
-            var confirm = MessageBox.Show(
-                "Erase the persisted subject profile? This cannot be undone.",
-                "Clear Subject Profile",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-            if (confirm != MessageBoxResult.Yes) return;
-
-            try
-            {
-                App.SubjectProfile?.Clear();
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "BtnClearSubjectProfile_Click failed");
-            }
-        }
-
         private void ChkCapEffects_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
@@ -12479,27 +12337,6 @@ namespace ConditioningControlPanel
             // Max haptic intensity
             if (SliderMaxHapticIntensity != null) SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
             if (TxtMaxHapticIntensity != null)    TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
-
-            // Chat memory toggle
-            if (ChkChatMemoryEnabled != null) ChkChatMemoryEnabled.IsChecked = s.CompanionPrompt.ChatMemoryEnabled;
-
-            // Action history window
-            if (SliderActionHistoryHours != null)
-            {
-                var hours = Math.Max(1, Math.Min(8, s.CompanionPrompt.AiActionHistoryHours));
-                SliderActionHistoryHours.Value = hours;
-                if (TxtActionHistoryHours != null) TxtActionHistoryHours.Text = $"{hours} hour{(hours == 1 ? "" : "s")}";
-                UpdateActionHistoryWarning();
-            }
-            if (SliderActionHistoryMaxEvents != null)
-            {
-                var maxEvents = Math.Max(50, Math.Min(500, s.CompanionPrompt.AiActionHistoryMaxEvents));
-                SliderActionHistoryMaxEvents.Value = maxEvents;
-                if (TxtActionHistoryMaxEvents != null) TxtActionHistoryMaxEvents.Text = maxEvents.ToString();
-            }
-
-            // Subject profile toggle
-            if (ChkSubjectProfileEnabled != null) ChkSubjectProfileEnabled.IsChecked = s.CompanionPrompt.AiSubjectProfileEnabled;
 
             // Awareness panel visibility (from previous handler logic)
             if (AwarenessSettingsPanel != null)
@@ -13062,34 +12899,6 @@ namespace ConditioningControlPanel
             App.Settings.Current.KeywordGlobalCooldownSeconds = value;
         }
 
-        private void SliderAwarenessGlobalCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || TxtAwarenessGlobalCooldown == null) return;
-            var value = (int)SliderAwarenessGlobalCooldown.Value;
-            TxtAwarenessGlobalCooldown.Text = $"{value}s";
-            if (App.Settings?.Current != null)
-            {
-                App.Settings.Current.KeywordGlobalCooldownSeconds = value;
-                App.Settings.Save();
-                // Mirror into the Settings-tab slider so both controls stay in sync
-                // even if the Settings tab has already been bound this session.
-                if (SliderKeywordGlobalCooldown != null && (int)SliderKeywordGlobalCooldown.Value != value)
-                    SliderKeywordGlobalCooldown.Value = value;
-            }
-        }
-
-        private void SliderAwarenessSameWordCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || TxtAwarenessSameWordCooldown == null) return;
-            var value = (int)SliderAwarenessSameWordCooldown.Value;
-            TxtAwarenessSameWordCooldown.Text = $"{value}s";
-            if (App.Settings?.Current != null)
-            {
-                App.Settings.Current.KeywordPerKeywordCooldownSeconds = value;
-                App.Settings.Save();
-            }
-        }
-
         private void SliderKeywordSessionMultiplier_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (_isLoading || TxtKeywordSessionMultiplier == null) return;
@@ -13607,19 +13416,6 @@ namespace ConditioningControlPanel
                 if (ChkAwarenessHighlight != null) ChkAwarenessHighlight.IsChecked = settings.KeywordHighlightEnabled;
                 if (ChkAwarenessHighlightVisibleInCapture != null) ChkAwarenessHighlightVisibleInCapture.IsChecked = settings.OcrHighlightVisibleInCapture;
                 SyncAwarenessHighlightSwatchUi();
-
-                if (SliderAwarenessGlobalCooldown != null)
-                {
-                    var v = Math.Clamp(settings.KeywordGlobalCooldownSeconds, 1, 180);
-                    SliderAwarenessGlobalCooldown.Value = v;
-                    if (TxtAwarenessGlobalCooldown != null) TxtAwarenessGlobalCooldown.Text = $"{v}s";
-                }
-                if (SliderAwarenessSameWordCooldown != null)
-                {
-                    var v = Math.Clamp(settings.KeywordPerKeywordCooldownSeconds, 1, 180);
-                    SliderAwarenessSameWordCooldown.Value = v;
-                    if (TxtAwarenessSameWordCooldown != null) TxtAwarenessSameWordCooldown.Text = $"{v}s";
-                }
 
                 UpdateAwarenessStatusIndicator(masterOn);
             }

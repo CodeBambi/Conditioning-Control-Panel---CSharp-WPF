@@ -210,8 +210,9 @@
                     </DockPanel>
                 </Border>
 
-                <!-- Personality / behavior only — provider, model, host, and effect
-                     permissions all live in the AI Brain panel on the Companion tab. -->
+                <!-- Personality / behavior / memory / awareness. Provider, model, host,
+                     and effect permissions still live in the AI Brain panel on the
+                     Companion tab. -->
 
                 <!-- Section 1: Personality -->
                 <Expander IsExpanded="True" Margin="0,0,0,15">
@@ -402,6 +403,91 @@
                             <Button Content="{loc:Str btn_remove_selected}" Style="{StaticResource ResetButton}"
                                     Padding="12,6" Margin="8,0,0,0" Click="RemoveKnowledgeLink_Click"/>
                         </StackPanel>
+                    </StackPanel>
+                </Expander>
+
+                <!-- Section 8: Memory & Awareness -->
+                <Expander x:Name="ExpanderMemoryAwareness" IsExpanded="False" Margin="0,0,0,15">
+                    <Expander.Header>
+                        <TextBlock Text="Memory &amp; Awareness" Style="{StaticResource SectionHeader}"/>
+                    </Expander.Header>
+                    <StackPanel Margin="0,10,0,0">
+                        <TextBlock Style="{StaticResource SectionDescription}">
+                            Control how much the AI remembers, how far back it can recall recent actions, and how often it reacts to screen awareness.
+                        </TextBlock>
+
+                        <!-- Chat memory -->
+                        <Grid Margin="0,0,0,8">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,12,0">
+                                <TextBlock Text="Chat Memory" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock Text="Persist recent conversation turns across sessions." Foreground="{DynamicResource TextDimBrush}" FontSize="11" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkDialogChatMemoryEnabled" Style="{StaticResource ToggleStyle}"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                      Checked="ChkDialogChatMemoryEnabled_Changed" Unchecked="ChkDialogChatMemoryEnabled_Changed"/>
+                        </Grid>
+                        <CheckBox x:Name="ChkDialogOpenAiChatMemoryEnabled" Content="Also remember chat for OpenAI-compatible provider"
+                                  Foreground="White" FontSize="12" Margin="0,0,0,6"
+                                  Checked="ChkDialogOpenAiChatMemoryEnabled_Changed" Unchecked="ChkDialogOpenAiChatMemoryEnabled_Changed"/>
+                        <Grid Margin="0,0,0,14">
+                            <TextBlock Text="Memory send pairs:" Foreground="{DynamicResource TextDimBrush}" FontSize="12" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Slider x:Name="SliderDialogChatMemorySendPairs" Minimum="1" Maximum="50" TickFrequency="1" IsSnapToTickEnabled="True"
+                                        Width="140" VerticalAlignment="Center" ValueChanged="SliderDialogChatMemorySendPairs_ValueChanged"/>
+                                <TextBlock x:Name="TxtDialogChatMemorySendPairs" Text="10" Foreground="White" FontSize="12" Margin="8,0,0,0" VerticalAlignment="Center" Width="30"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Action history -->
+                        <CheckBox x:Name="ChkDialogActionHistoryEnabled" Content="Remember recent conditioning actions"
+                                  Foreground="White" FontSize="13" Margin="0,0,0,6"
+                                  Checked="ChkDialogActionHistoryEnabled_Changed" Unchecked="ChkDialogActionHistoryEnabled_Changed"/>
+                        <Grid Margin="20,0,0,4">
+                            <TextBlock Text="Action history window:" Foreground="{DynamicResource TextDimBrush}" FontSize="12" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Slider x:Name="SliderDialogActionHistoryHours" Minimum="1" Maximum="8" TickFrequency="1" IsSnapToTickEnabled="True"
+                                        Width="140" VerticalAlignment="Center" ValueChanged="SliderDialogActionHistoryHours_ValueChanged"/>
+                                <TextBlock x:Name="TxtDialogActionHistoryHours" Text="2 hours" Foreground="White" FontSize="12" Margin="8,0,0,0" VerticalAlignment="Center" Width="60"/>
+                            </StackPanel>
+                        </Grid>
+                        <Grid Margin="20,0,0,4">
+                            <TextBlock Text="Max events:" Foreground="{DynamicResource TextDimBrush}" FontSize="12" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Slider x:Name="SliderDialogActionHistoryMaxEvents" Minimum="50" Maximum="500" TickFrequency="50" IsSnapToTickEnabled="True"
+                                        Width="140" VerticalAlignment="Center" ValueChanged="SliderDialogActionHistoryMaxEvents_ValueChanged"/>
+                                <TextBlock x:Name="TxtDialogActionHistoryMaxEvents" Text="200" Foreground="White" FontSize="12" Margin="8,0,0,0" VerticalAlignment="Center" Width="40"/>
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock x:Name="TxtDialogActionHistoryWarning" Text="Short window: keeps prompts small and fast."
+                                   Foreground="{DynamicResource TextDimBrush}" FontSize="11" TextWrapping="Wrap" Margin="20,0,0,14"/>
+
+                        <!-- Subject profile -->
+                        <Grid Margin="0,0,0,10">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,12,0">
+                                <TextBlock Text="Remember Subject Profile" Foreground="White" FontSize="13" FontWeight="SemiBold"/>
+                                <TextBlock Text="Persist long-term patterns across sessions (favorites, intensity, habits)." Foreground="{DynamicResource TextDimBrush}" FontSize="11" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkDialogSubjectProfileEnabled" Style="{StaticResource ToggleStyle}"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center"
+                                      Checked="ChkDialogSubjectProfileEnabled_Changed" Unchecked="ChkDialogSubjectProfileEnabled_Changed"/>
+                        </Grid>
+
+                        <!-- Awareness cooldown -->
+                        <Grid Margin="0,0,0,4">
+                            <TextBlock Text="Awareness cooldown:" Foreground="{DynamicResource TextDimBrush}" FontSize="12" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Slider x:Name="SliderDialogAwarenessCooldown" Minimum="10" Maximum="300" TickFrequency="5" IsSnapToTickEnabled="True"
+                                        Width="180" VerticalAlignment="Center" ValueChanged="SliderDialogAwarenessCooldown_ValueChanged"/>
+                                <TextBlock x:Name="TxtDialogAwarenessCooldown" Text="90s" Foreground="White" FontSize="12" Margin="8,0,0,0" VerticalAlignment="Center" Width="40"/>
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Text="Minimum delay between awareness reactions and keyword-triggered effects." Foreground="{DynamicResource TextDimBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                        <!-- Reset -->
+                        <Button Content="Reset AI Memory" HorizontalAlignment="Right"
+                                Background="{DynamicResource SurfaceBgBrush}" Foreground="#FF6B6B" BorderBrush="#FF6B6B" BorderThickness="1"
+                                Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnResetAiMemory_Click"
+                                ToolTip="Clear chat history, recent actions, live actions, and the persisted subject profile."/>
                     </StackPanel>
                 </Expander>
 

@@ -6556,13 +6556,6 @@
                                                 <Button x:Name="HelpBtnAwareness" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="6,0,0,0" Tag="WindowAwareness"/>
                                             </StackPanel>
                                         </Grid>
-                                        <Grid>
-                                            <TextBlock Text="{loc:Str label_reaction_cooldown}" Foreground="White" FontSize="13"/>
-                                            <TextBlock x:Name="TxtAwarenessCooldown" Text="{loc:Str label_90s}" Foreground="{DynamicResource PinkBrush}" HorizontalAlignment="Right" FontSize="13" FontWeight="Bold"/>
-                                        </Grid>
-                                        <Slider x:Name="SliderAwarenessCooldown" Style="{StaticResource PinkSlider}"
-                                                Minimum="10" Maximum="300" Value="90" Margin="0,6,0,8"
-                                                ValueChanged="SliderAwarenessCooldown_ValueChanged"/>
                                         <Border Background="#2A1A1A" CornerRadius="6" Padding="8" BorderBrush="#FF6B6B" BorderThickness="1">
                                             <StackPanel>
                                                 <Grid>
@@ -7870,73 +7863,6 @@
                                     </StackPanel>
                                 </Border>
 
-                                <!-- Memory section -->
-                                <Border CornerRadius="8" Padding="10"
-                                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#9370DB" BorderThickness="1">
-                                    <StackPanel>
-                                        <Grid>
-                                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0" HorizontalAlignment="Left">
-                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                                    <TextBlock Text="{loc:Str label_chat_memory_title}" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold"/>
-                                                    <Button Style="{StaticResource HelpButtonStyle}" ToolTip="{loc:Str tooltip_lab_ai_memory}"/>
-                                                </StackPanel>
-                                                <TextBlock Text="{loc:Str label_chat_memory_hint}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" TextWrapping="Wrap"/>
-                                            </StackPanel>
-                                            <CheckBox x:Name="ChkChatMemoryEnabled" Style="{StaticResource ToggleStyle}"
-                                                      HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                      IsChecked="True"
-                                                      Checked="ChkChatMemoryEnabled_Changed" Unchecked="ChkChatMemoryEnabled_Changed"/>
-                                        </Grid>
-                                        <Button x:Name="BtnClearChatMemory" Content="{loc:Str btn_forget_everything}" HorizontalAlignment="Right" Margin="0,8,0,0"
-                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="#FF6B6B" BorderBrush="#FF6B6B" BorderThickness="1"
-                                                Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnClearChatMemory_Click"
-                                                ToolTip="{loc:Str tooltip_forget_everything}"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Action history window -->
-                                <Border CornerRadius="8" Padding="10" Margin="0,10,0,0"
-                                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#9370DB" BorderThickness="1">
-                                    <StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                            <TextBlock Text="Action History Window" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold"/>
-                                            <Button Style="{StaticResource HelpButtonStyle}" ToolTip="How many hours of recent actions the AI can recall. Longer windows use more prompt space."/>
-                                        </StackPanel>
-                                        <TextBlock Text="Recent actions the AI can recall per session." Foreground="{DynamicResource TextDimBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,6"/>
-
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2">
-                                            <Slider x:Name="SliderActionHistoryHours" Minimum="1" Maximum="8" TickFrequency="1" IsSnapToTickEnabled="True"
-                                                    Width="180" VerticalAlignment="Center" ValueChanged="SliderActionHistoryHours_ValueChanged"/>
-                                            <TextBlock x:Name="TxtActionHistoryHours" Text="2 hours" Foreground="White" FontSize="13" Margin="10,0,0,0" VerticalAlignment="Center" Width="70"/>
-                                        </StackPanel>
-
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4">
-                                            <TextBlock Text="Max events:" Foreground="{DynamicResource TextDimBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                            <Slider x:Name="SliderActionHistoryMaxEvents" Minimum="50" Maximum="500" TickFrequency="50" IsSnapToTickEnabled="True"
-                                                    Width="140" VerticalAlignment="Center" ValueChanged="SliderActionHistoryMaxEvents_ValueChanged"/>
-                                            <TextBlock x:Name="TxtActionHistoryMaxEvents" Text="200" Foreground="White" FontSize="13" Margin="10,0,0,0" VerticalAlignment="Center" Width="50"/>
-                                        </StackPanel>
-
-                                        <TextBlock x:Name="TxtActionHistoryWarning" Text="Longer windows increase prompt size and response cost." Foreground="#FF6B6B" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
-
-                                        <Grid Margin="0,10,0,0">
-                                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0" HorizontalAlignment="Left">
-                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                                    <TextBlock Text="Remember Subject Profile" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold"/>
-                                                    <Button Style="{StaticResource HelpButtonStyle}" ToolTip="Persist a privacy-first summary of preferences across sessions. Sent once at session start."/>
-                                                </StackPanel>
-                                                <TextBlock Text="Long-term pattern memory (favorites, intensity, session habits)." Foreground="{DynamicResource TextDimBrush}" FontSize="12" TextWrapping="Wrap"/>
-                                            </StackPanel>
-                                            <CheckBox x:Name="ChkSubjectProfileEnabled" Style="{StaticResource ToggleStyle}"
-                                                      HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="False"
-                                                      Checked="ChkSubjectProfileEnabled_Changed" Unchecked="ChkSubjectProfileEnabled_Changed"/>
-                                        </Grid>
-                                        <Button x:Name="BtnClearSubjectProfile" Content="Clear Subject Profile" HorizontalAlignment="Right" Margin="0,8,0,0"
-                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="#FF6B6B" BorderBrush="#FF6B6B" BorderThickness="1"
-                                                Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnClearSubjectProfile_Click"
-                                                ToolTip="Erase the persisted subject profile"/>
-                                    </StackPanel>
-                                </Border>
                             </StackPanel>
                         </Border>
 
@@ -9992,84 +9918,6 @@
                              so the trailing "+ New Preset" card can share the wrap flow with the
                              real preset cards. -->
                         <WrapPanel x:Name="AwarenessPresetItems" HorizontalAlignment="Stretch"/>
-                    </StackPanel>
-
-                    <!-- ==================== TIMING ==================== -->
-                    <StackPanel Grid.Row="3" Margin="0,0,0,14">
-                        <TextBlock Text="TIMING" Foreground="#8A8AA0" FontSize="10" FontWeight="Bold"
-                                   Margin="4,0,4,10"/>
-                        <Border Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#2E2E48"
-                                BorderThickness="1" CornerRadius="10" Padding="18,14">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="14"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <!-- Col 0: global effect cooldown -->
-                                <StackPanel Grid.Column="0">
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                        <TextBlock Text="Cooldown between effects" Foreground="White" FontSize="12" FontWeight="SemiBold"
-                                                   VerticalAlignment="Center"/>
-                                        <Button Style="{StaticResource HelpButtonStyle}" Margin="6,0,0,0">
-                                            <Button.ToolTip>
-                                                <ToolTip>
-                                                    <StackPanel MaxWidth="340">
-                                                        <TextBlock Text="Cooldown between effects" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
-                                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
-                                                            Minimum delay between any two Awareness reactions, from ANY trigger. Keeps her from spamming effects when lots of trigger words end up on screen or in your typing at once.
-                                                        </TextBlock>
-                                                        <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
-                                                            Lower = more reactive, higher = calmer pacing. 10s is the default. Max 180s.
-                                                        </TextBlock>
-                                                    </StackPanel>
-                                                </ToolTip>
-                                            </Button.ToolTip>
-                                        </Button>
-                                    </StackPanel>
-                                    <Grid>
-                                        <Slider x:Name="SliderAwarenessGlobalCooldown" Minimum="1" Maximum="180"
-                                                TickFrequency="1" IsSnapToTickEnabled="True"
-                                                ValueChanged="SliderAwarenessGlobalCooldown_ValueChanged"/>
-                                        <TextBlock x:Name="TxtAwarenessGlobalCooldown" Text="10s"
-                                                   Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                                   HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                    </Grid>
-                                </StackPanel>
-
-                                <!-- Col 2: same-word cooldown -->
-                                <StackPanel Grid.Column="2">
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                        <TextBlock Text="Same-word cooldown" Foreground="White" FontSize="12" FontWeight="SemiBold"
-                                                   VerticalAlignment="Center"/>
-                                        <Button Style="{StaticResource HelpButtonStyle}" Margin="6,0,0,0">
-                                            <Button.ToolTip>
-                                                <ToolTip>
-                                                    <StackPanel MaxWidth="340">
-                                                        <TextBlock Text="Same-word cooldown" Foreground="#FF69B4" FontWeight="Bold" FontSize="12" Margin="0,0,0,4"/>
-                                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="White">
-                                                            Minimum gap before the SAME word can fire again, regardless of which trigger caught it. Stops a single word on screen from re-triggering on every OCR scan.
-                                                        </TextBlock>
-                                                        <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#A0A0A0" Margin="0,6,0,0">
-                                                            Independent of the "cooldown between effects" above — a different word can still fire within this window. 15s default. Max 180s.
-                                                        </TextBlock>
-                                                    </StackPanel>
-                                                </ToolTip>
-                                            </Button.ToolTip>
-                                        </Button>
-                                    </StackPanel>
-                                    <Grid>
-                                        <Slider x:Name="SliderAwarenessSameWordCooldown" Minimum="1" Maximum="180"
-                                                TickFrequency="1" IsSnapToTickEnabled="True"
-                                                ValueChanged="SliderAwarenessSameWordCooldown_ValueChanged"/>
-                                        <TextBlock x:Name="TxtAwarenessSameWordCooldown" Text="15s"
-                                                   Foreground="{DynamicResource PinkBrush}" FontSize="10"
-                                                   HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                    </Grid>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
                     </StackPanel>
 
                     <!-- ==================== SOURCES + SAFETY ==================== -->

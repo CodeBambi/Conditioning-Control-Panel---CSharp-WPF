@@ -157,13 +157,16 @@ namespace ConditioningControlPanel
             }
         }
 
+
+
         private void LoadCurrentSettings()
         {
             var settings = App.Settings?.Current?.CompanionPrompt ?? new CompanionPromptSettings();
 
             ChkUseCustom.IsChecked = settings.UseCustomPrompt;
             // Provider toggle, model name, host URL, and effect permissions all live
-            // in the AI Brain panel on the Companion tab — this dialog is personality-only.
+            // in the AI Brain panel on the Companion tab — this dialog is for prompts,
+            // memory, and awareness tuning.
 
             // Load values, falling back to defaults if empty
             TxtPersonality.Text = string.IsNullOrWhiteSpace(settings.Personality)
@@ -178,6 +181,28 @@ namespace ConditioningControlPanel
                 ? _defaults.ContextReactions : settings.ContextReactions;
             TxtOutputRules.Text = string.IsNullOrWhiteSpace(settings.OutputRules)
                 ? _defaults.OutputRules : settings.OutputRules;
+
+            // Memory & Awareness
+            ChkDialogChatMemoryEnabled.IsChecked = settings.ChatMemoryEnabled;
+            ChkDialogOpenAiChatMemoryEnabled.IsChecked = settings.OpenAiCompatibleChatMemoryEnabled;
+            SliderDialogChatMemorySendPairs.Value = Math.Clamp(settings.ChatMemorySendPairs, 1, 50);
+            TxtDialogChatMemorySendPairs.Text = settings.ChatMemorySendPairs.ToString();
+
+            ChkDialogActionHistoryEnabled.IsChecked = settings.AiActionHistoryEnabled;
+            var hours = Math.Clamp(settings.AiActionHistoryHours, 1, 8);
+            SliderDialogActionHistoryHours.Value = hours;
+            TxtDialogActionHistoryHours.Text = $"{hours} hour{(hours == 1 ? "" : "s")}";
+            var maxEvents = Math.Clamp(settings.AiActionHistoryMaxEvents, 50, 500);
+            SliderDialogActionHistoryMaxEvents.Value = maxEvents;
+            TxtDialogActionHistoryMaxEvents.Text = maxEvents.ToString();
+            UpdateActionHistoryWarning();
+
+            ChkDialogSubjectProfileEnabled.IsChecked = settings.AiSubjectProfileEnabled;
+
+            var appSettings = App.Settings?.Current;
+            var cooldown = Math.Clamp(appSettings?.AwarenessReactionCooldownSeconds ?? 90, 10, 300);
+            SliderDialogAwarenessCooldown.Value = cooldown;
+            TxtDialogAwarenessCooldown.Text = $"{cooldown}s";
 
             UpdateEnabledState();
             _hasUnsavedChanges = false;
@@ -198,6 +223,25 @@ namespace ConditioningControlPanel
             settings.ContextReactions = TxtContextReactions.Text;
             settings.OutputRules = TxtOutputRules.Text;
 
+            // Memory & Awareness
+            settings.ChatMemoryEnabled = ChkDialogChatMemoryEnabled.IsChecked == true;
+            settings.OpenAiCompatibleChatMemoryEnabled = ChkDialogOpenAiChatMemoryEnabled.IsChecked == true;
+            settings.ChatMemorySendPairs = (int)SliderDialogChatMemorySendPairs.Value;
+            settings.AiActionHistoryEnabled = ChkDialogActionHistoryEnabled.IsChecked == true;
+            settings.AiActionHistoryHours = (int)SliderDialogActionHistoryHours.Value;
+            settings.AiActionHistoryMaxEvents = (int)SliderDialogActionHistoryMaxEvents.Value;
+            settings.AiSubjectProfileEnabled = ChkDialogSubjectProfileEnabled.IsChecked == true;
+
+            if (App.Settings?.Current != null)
+            {
+                var appSettings = App.Settings.Current;
+                var cooldown = (int)SliderDialogAwarenessCooldown.Value;
+                appSettings.AwarenessReactionCooldownSeconds = cooldown;
+                // Unify keyword-trigger cooldowns so there is only one awareness cooldown to manage.
+                appSettings.KeywordGlobalCooldownSeconds = cooldown;
+                appSettings.KeywordPerKeywordCooldownSeconds = cooldown;
+            }
+
             // Save global knowledge base links
             SaveKnowledgeLinks();
 
@@ -208,12 +252,18 @@ namespace ConditioningControlPanel
                 settings.UseCustomPrompt, _knowledgeLinks.Count);
         }
 
-        private void UpdateEnabledState()
+                private void UpdateEnabledState()
         {
-            // Whole personality form is dimmed when the user is on default prompts.
+            // Personality form is dimmed when the user is on default prompts, but
+            // memory/awareness settings are independent and stay editable.
             var isEnabled = ChkUseCustom.IsChecked == true;
             ContentPanel.IsEnabled = isEnabled;
             ContentPanel.Opacity = isEnabled ? 1.0 : 0.5;
+            if (ExpanderMemoryAwareness != null)
+            {
+                ExpanderMemoryAwareness.IsEnabled = true;
+                ExpanderMemoryAwareness.Opacity = 1.0;
+            }
         }
 
         private void ChkUseCustom_Changed(object sender, RoutedEventArgs e)
@@ -226,6 +276,103 @@ namespace ConditioningControlPanel
         {
             _hasUnsavedChanges = true;
         }
+
+        #region Memory & Awareness handlers
+
+        private void ChkDialogChatMemoryEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            _hasUnsavedChanges = true;
+        }
+
+        private void ChkDialogOpenAiChatMemoryEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            _hasUnsavedChanges = true;
+        }
+
+        private void SliderDialogChatMemorySendPairs_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtDialogChatMemorySendPairs == null) return;
+            var value = Math.Max(1, (int)SliderDialogChatMemorySendPairs.Value);
+            TxtDialogChatMemorySendPairs.Text = value.ToString();
+            _hasUnsavedChanges = true;
+        }
+
+        private void ChkDialogActionHistoryEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            _hasUnsavedChanges = true;
+        }
+
+        private void SliderDialogActionHistoryHours_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtDialogActionHistoryHours == null) return;
+            var hours = Math.Max(1, Math.Min(8, (int)SliderDialogActionHistoryHours.Value));
+            TxtDialogActionHistoryHours.Text = $"{hours} hour{(hours == 1 ? "" : "s")}";
+            UpdateActionHistoryWarning();
+            _hasUnsavedChanges = true;
+        }
+
+        private void SliderDialogActionHistoryMaxEvents_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtDialogActionHistoryMaxEvents == null) return;
+            var value = Math.Max(50, Math.Min(500, (int)SliderDialogActionHistoryMaxEvents.Value));
+            TxtDialogActionHistoryMaxEvents.Text = value.ToString();
+            _hasUnsavedChanges = true;
+        }
+
+        private void UpdateActionHistoryWarning()
+        {
+            if (TxtDialogActionHistoryWarning == null || SliderDialogActionHistoryHours == null) return;
+            var hours = (int)SliderDialogActionHistoryHours.Value;
+            var (msg, color) = hours switch
+            {
+                <= 2 => ("Short window: keeps prompts small and fast.", TryFindResource("TextDimBrush") as Brush),
+                <= 5 => ("Moderate window: balanced recall and prompt size.", new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x00))),
+                _ => ("Long window: richer recall but larger prompts and slower responses.", new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x6B)))
+            };
+            TxtDialogActionHistoryWarning.Text = msg;
+            TxtDialogActionHistoryWarning.Foreground = color ?? TxtDialogActionHistoryWarning.Foreground;
+        }
+
+        private void ChkDialogSubjectProfileEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            _hasUnsavedChanges = true;
+        }
+
+        private void SliderDialogAwarenessCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtDialogAwarenessCooldown == null) return;
+            var value = Math.Max(10, Math.Min(300, (int)SliderDialogAwarenessCooldown.Value));
+            TxtDialogAwarenessCooldown.Text = $"{value}s";
+            _hasUnsavedChanges = true;
+        }
+
+        private void BtnResetAiMemory_Click(object sender, RoutedEventArgs e)
+        {
+            var confirm = MessageBox.Show(
+                "Clear all AI memory?\n\nThis will erase persisted chat history, recent actions, live actions, and the subject profile. This cannot be undone.",
+                "Reset AI Memory",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            try
+            {
+                if (App.Ai is Services.AIService.AiServiceStrategy strategy)
+                    strategy.ClearChatHistory();
+
+                App.AiLiveActions.Clear();
+                App.ActionHistory?.Clear();
+                App.SubjectProfile?.Clear();
+
+                MessageBox.Show("AI memory cleared.", "Reset AI Memory", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BtnResetAiMemory_Click failed");
+            }
+        }
+
+        #endregion
 
         private void ResetPersonality_Click(object sender, RoutedEventArgs e)
         {
