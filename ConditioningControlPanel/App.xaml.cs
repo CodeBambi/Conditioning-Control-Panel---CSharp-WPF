@@ -254,6 +254,10 @@ namespace ConditioningControlPanel
         // pruned to the last few hours so the model can pace itself without prompt bloat.
         public static CompanionActionHistory ActionHistory { get; } = new();
 
+        // Long-term, persisted behavioral profile of the subject across sessions. Injected
+        // into the system prompt once at session start; updated at session end. Opt-in.
+        public static CompanionSubjectProfileService SubjectProfile { get; } = new();
+
         public static FlashService Flash { get; private set; } = null!;
         public static VideoService Video { get; private set; } = null!;
         public static AudioService Audio { get; private set; } = null!;

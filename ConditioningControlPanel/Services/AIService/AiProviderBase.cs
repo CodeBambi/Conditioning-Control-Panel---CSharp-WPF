@@ -27,6 +27,7 @@ namespace ConditioningControlPanel.Services.AIService
 
         private readonly List<CommandOutcome> _commandOutcomes = new();
         private bool _memoryRecallSignaled;
+        private bool _subjectProfileInjected;
 
         protected AiProviderBase()
         {
@@ -264,6 +265,23 @@ namespace ConditioningControlPanel.Services.AIService
             // constructed before App.Settings is fully ready in some paths; lazy loading
             // avoids reading stale state.
             ChatMemory.Load();
+
+            // Inject the persisted subject profile into the system prompt once per session,
+            // when a session is running. Reset when no session is active so the next session
+            // gets a fresh injection.
+            if (App.IsSessionRunning && !_subjectProfileInjected)
+            {
+                var profileAddendum = App.SubjectProfile?.BuildSystemPromptAddendum();
+                if (!string.IsNullOrWhiteSpace(profileAddendum))
+                {
+                    systemPrompt = $"[SUBJECT PROFILE — long-term patterns across sessions]\n{profileAddendum}\n\n{systemPrompt}";
+                }
+                _subjectProfileInjected = true;
+            }
+            else if (!App.IsSessionRunning)
+            {
+                _subjectProfileInjected = false;
+            }
 
             var enrichment = BuildEnrichmentMessage(userInput);
             var messages = ChatMemory.BuildSendMessages(

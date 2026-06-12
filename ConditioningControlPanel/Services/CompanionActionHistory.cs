@@ -14,11 +14,13 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class CompanionActionHistory
     {
-        // Hard cap on raw events to keep memory bounded during very long sessions.
-        public const int MaxEvents = 200;
+        // Default hard cap on raw events to keep memory bounded during very long sessions.
+        public const int DefaultMaxEvents = 200;
 
         private readonly List<CompanionActionEvent> _events = new();
         private readonly ReaderWriterLockSlim _lock = new();
+
+        private int EffectiveMaxEvents => Math.Max(50, App.Settings?.Current?.CompanionPrompt?.AiActionHistoryMaxEvents ?? DefaultMaxEvents);
 
         /// <summary>
         /// Records a new action event.
@@ -65,13 +67,62 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Re-applies the current settings cap immediately (e.g. after the user lowers the limit).
+        /// </summary>
+        public void SetMaxEvents(int maxEvents)
+        {
+            _lock.EnterWriteLock();
+            try
+            {
+                while (_events.Count > Math.Max(50, maxEvents))
+                    _events.RemoveAt(0);
+            }
+            finally
+            {
+                _lock.ExitWriteLock();
+            }
+        }
+
+        /// <summary>
+        /// Returns a snapshot of events since the given cutoff. Used by the subject
+        /// profile service at session end without exposing the internal list.
+        /// </summary>
+        public List<CompanionActionEvent> GetEventsSince(DateTime cutoff)
+        {
+            _lock.EnterReadLock();
+            try
+            {
+                return _events
+                    .Where(e => e.Timestamp >= cutoff)
+                    .OrderBy(e => e.Timestamp)
+                    .ToList();
+            }
+            finally
+            {
+                _lock.ExitReadLock();
+            }
+        }
+
+        /// <summary>
         /// Builds a compact, adult-focused summary of recent actions for the AI prompt.
+        /// The output budget scales with the configured window so longer windows can
+        /// mention more actions without exploding the prompt.
         /// </summary>
         /// <param name="hours">How far back to summarize.</param>
-        /// <param name="maxChars">Rough maximum length of the returned text.</param>
-        public string BuildSummary(int hours = 2, int maxChars = 350)
+        public string BuildSummary(int hours = 2)
         {
-            var cutoff = DateTime.Now.AddHours(-Math.Max(1, hours));
+            hours = Math.Max(1, hours);
+            // Scale summary size with the window: 1h→200, 2h→350, 4h→550, 8h→800.
+            var maxChars = hours switch
+            {
+                <= 1 => 200,
+                <= 2 => 350,
+                <= 4 => 550,
+                <= 6 => 700,
+                _ => 800
+            };
+
+            var cutoff = DateTime.Now.AddHours(-hours);
 
             _lock.EnterReadLock();
             List<CompanionActionEvent> recent;
@@ -139,12 +190,16 @@ namespace ConditioningControlPanel.Services
 
         private void PruneUnlocked()
         {
+            var settings = App.Settings?.Current?.CompanionPrompt;
+            var hours = Math.Max(1, settings?.AiActionHistoryHours ?? 2);
+            var maxEvents = EffectiveMaxEvents;
+
             // Drop oldest events if we exceed the cap.
-            while (_events.Count > MaxEvents)
+            while (_events.Count > maxEvents)
                 _events.RemoveAt(0);
 
             // Also drop anything older than 2x the configured window to keep the list tidy.
-            var hardCutoff = DateTime.Now.AddHours(-4);
+            var hardCutoff = DateTime.Now.AddHours(-hours * 2);
             _events.RemoveAll(e => e.Timestamp < hardCutoff);
         }
 

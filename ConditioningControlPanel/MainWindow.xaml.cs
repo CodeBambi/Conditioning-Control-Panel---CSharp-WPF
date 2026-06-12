@@ -12255,6 +12255,81 @@ namespace ConditioningControlPanel
             }
         }
 
+        private void SliderActionHistoryHours_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current?.CompanionPrompt;
+            if (s == null || SliderActionHistoryHours == null) return;
+            var hours = Math.Max(1, Math.Min(8, (int)SliderActionHistoryHours.Value));
+            if (s.AiActionHistoryHours == hours) return;
+            s.AiActionHistoryHours = hours;
+            if (TxtActionHistoryHours != null) TxtActionHistoryHours.Text = $"{hours} hour{(hours == 1 ? "" : "s")}";
+            UpdateActionHistoryWarning();
+            App.Settings?.Save();
+        }
+
+        private void SliderActionHistoryMaxEvents_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current?.CompanionPrompt;
+            if (s == null || SliderActionHistoryMaxEvents == null) return;
+            var maxEvents = Math.Max(50, Math.Min(500, (int)SliderActionHistoryMaxEvents.Value));
+            if (s.AiActionHistoryMaxEvents == maxEvents) return;
+            s.AiActionHistoryMaxEvents = maxEvents;
+            if (TxtActionHistoryMaxEvents != null) TxtActionHistoryMaxEvents.Text = maxEvents.ToString();
+            App.ActionHistory?.SetMaxEvents(maxEvents);
+            App.Settings?.Save();
+        }
+
+        private void UpdateActionHistoryWarning()
+        {
+            if (TxtActionHistoryWarning == null || SliderActionHistoryHours == null) return;
+            var hours = (int)SliderActionHistoryHours.Value;
+            var msg = hours switch
+            {
+                <= 2 => "Short window: keeps prompts small and fast.",
+                <= 5 => "Moderate window: balanced recall and prompt size.",
+                _ => "Long window: richer recall but larger prompts and slower responses."
+            };
+            TxtActionHistoryWarning.Text = msg;
+            TxtActionHistoryWarning.Foreground = hours switch
+            {
+                <= 2 => (Brush?)FindResource("TextDimBrush"),
+                <= 5 => new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x00)),
+                _ => new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x6B))
+            } ?? TxtActionHistoryWarning.Foreground;
+        }
+
+        private void ChkSubjectProfileEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current?.CompanionPrompt;
+            if (s == null || ChkSubjectProfileEnabled == null) return;
+            var on = ChkSubjectProfileEnabled.IsChecked == true;
+            if (s.AiSubjectProfileEnabled == on) return;
+            s.AiSubjectProfileEnabled = on;
+            App.Settings?.Save();
+        }
+
+        private void BtnClearSubjectProfile_Click(object sender, RoutedEventArgs e)
+        {
+            var confirm = MessageBox.Show(
+                "Erase the persisted subject profile? This cannot be undone.",
+                "Clear Subject Profile",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            try
+            {
+                App.SubjectProfile?.Clear();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "BtnClearSubjectProfile_Click failed");
+            }
+        }
+
         private void ChkCapEffects_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
@@ -12407,6 +12482,24 @@ namespace ConditioningControlPanel
 
             // Chat memory toggle
             if (ChkChatMemoryEnabled != null) ChkChatMemoryEnabled.IsChecked = s.CompanionPrompt.ChatMemoryEnabled;
+
+            // Action history window
+            if (SliderActionHistoryHours != null)
+            {
+                var hours = Math.Max(1, Math.Min(8, s.CompanionPrompt.AiActionHistoryHours));
+                SliderActionHistoryHours.Value = hours;
+                if (TxtActionHistoryHours != null) TxtActionHistoryHours.Text = $"{hours} hour{(hours == 1 ? "" : "s")}";
+                UpdateActionHistoryWarning();
+            }
+            if (SliderActionHistoryMaxEvents != null)
+            {
+                var maxEvents = Math.Max(50, Math.Min(500, s.CompanionPrompt.AiActionHistoryMaxEvents));
+                SliderActionHistoryMaxEvents.Value = maxEvents;
+                if (TxtActionHistoryMaxEvents != null) TxtActionHistoryMaxEvents.Text = maxEvents.ToString();
+            }
+
+            // Subject profile toggle
+            if (ChkSubjectProfileEnabled != null) ChkSubjectProfileEnabled.IsChecked = s.CompanionPrompt.AiSubjectProfileEnabled;
 
             // Awareness panel visibility (from previous handler logic)
             if (AwarenessSettingsPanel != null)

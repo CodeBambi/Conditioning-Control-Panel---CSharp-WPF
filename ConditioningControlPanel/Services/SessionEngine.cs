@@ -352,8 +352,25 @@ namespace ConditioningControlPanel.Services
             // Finalize media log AFTER XP is settled so the persisted log records the actual award.
             // Aborted sessions still get a log (xpForLog == 0) so the post-session dialog shows
             // what played even when the user cut things short.
-            try { App.SessionLog?.EndSession(completed, finalElapsedTime, xpForLog); }
+            SessionLog? finalizedLog = null;
+            try { finalizedLog = App.SessionLog?.EndSession(completed, finalElapsedTime, xpForLog); }
             catch (Exception ex) { App.Logger?.Error(ex, "SessionLog.EndSession failed"); }
+
+            // Update the long-term subject profile from this session's log and recent actions.
+            if (finalizedLog != null)
+            {
+                try
+                {
+                    var hours = App.Settings?.Current?.CompanionPrompt?.AiActionHistoryHours ?? 2;
+                    var cutoff = DateTime.Now.AddHours(-hours);
+                    var recentActions = App.ActionHistory.GetEventsSince(cutoff);
+                    App.SubjectProfile.UpdateFromSession(finalizedLog, recentActions);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "SessionEngine: failed to update subject profile");
+                }
+            }
 
             _currentSession = null;
         }

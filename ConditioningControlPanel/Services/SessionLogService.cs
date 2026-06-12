@@ -72,13 +72,14 @@ namespace ConditioningControlPanel.Services
         /// Finalize the active session log: stop subscribing, populate completion
         /// fields, persist to disk (with prune), and raise LogReady. Safe to call
         /// even if BeginSession was never called - it becomes a no-op.
+        /// Returns the finalized log, or null if there was no active log.
         /// </summary>
-        public void EndSession(bool completed, TimeSpan duration, int xpEarned)
+        public SessionLog? EndSession(bool completed, TimeSpan duration, int xpEarned)
         {
             SessionLog? log;
             lock (_lock)
             {
-                if (_activeLog == null) return;
+                if (_activeLog == null) return null;
 
                 UnsubscribeUnlocked();
 
@@ -100,6 +101,8 @@ namespace ConditioningControlPanel.Services
 
             try { LogReady?.Invoke(this, new SessionLogReadyEventArgs(log)); }
             catch (Exception ex) { App.Logger?.Error(ex, "SessionLogService: LogReady handler threw"); }
+
+            return log;
         }
 
         /// <summary>

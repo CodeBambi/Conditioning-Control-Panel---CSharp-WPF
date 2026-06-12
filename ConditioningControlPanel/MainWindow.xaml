@@ -7893,6 +7893,50 @@
                                                 ToolTip="{loc:Str tooltip_forget_everything}"/>
                                     </StackPanel>
                                 </Border>
+
+                                <!-- Action history window -->
+                                <Border CornerRadius="8" Padding="10" Margin="0,10,0,0"
+                                        Background="{DynamicResource SurfaceBgBrush}" BorderBrush="#9370DB" BorderThickness="1">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                            <TextBlock Text="Action History Window" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold"/>
+                                            <Button Style="{StaticResource HelpButtonStyle}" ToolTip="How many hours of recent actions the AI can recall. Longer windows use more prompt space."/>
+                                        </StackPanel>
+                                        <TextBlock Text="Recent actions the AI can recall per session." Foreground="{DynamicResource TextDimBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,6"/>
+
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,2">
+                                            <Slider x:Name="SliderActionHistoryHours" Minimum="1" Maximum="8" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                    Width="180" VerticalAlignment="Center" ValueChanged="SliderActionHistoryHours_ValueChanged"/>
+                                            <TextBlock x:Name="TxtActionHistoryHours" Text="2 hours" Foreground="White" FontSize="13" Margin="10,0,0,0" VerticalAlignment="Center" Width="70"/>
+                                        </StackPanel>
+
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4">
+                                            <TextBlock Text="Max events:" Foreground="{DynamicResource TextDimBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                            <Slider x:Name="SliderActionHistoryMaxEvents" Minimum="50" Maximum="500" TickFrequency="50" IsSnapToTickEnabled="True"
+                                                    Width="140" VerticalAlignment="Center" ValueChanged="SliderActionHistoryMaxEvents_ValueChanged"/>
+                                            <TextBlock x:Name="TxtActionHistoryMaxEvents" Text="200" Foreground="White" FontSize="13" Margin="10,0,0,0" VerticalAlignment="Center" Width="50"/>
+                                        </StackPanel>
+
+                                        <TextBlock x:Name="TxtActionHistoryWarning" Text="Longer windows increase prompt size and response cost." Foreground="#FF6B6B" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
+
+                                        <Grid Margin="0,10,0,0">
+                                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0" HorizontalAlignment="Left">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                                    <TextBlock Text="Remember Subject Profile" Foreground="#9370DB" FontSize="13" FontWeight="SemiBold"/>
+                                                    <Button Style="{StaticResource HelpButtonStyle}" ToolTip="Persist a privacy-first summary of preferences across sessions. Sent once at session start."/>
+                                                </StackPanel>
+                                                <TextBlock Text="Long-term pattern memory (favorites, intensity, session habits)." Foreground="{DynamicResource TextDimBrush}" FontSize="12" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                            <CheckBox x:Name="ChkSubjectProfileEnabled" Style="{StaticResource ToggleStyle}"
+                                                      HorizontalAlignment="Right" VerticalAlignment="Center" IsChecked="False"
+                                                      Checked="ChkSubjectProfileEnabled_Changed" Unchecked="ChkSubjectProfileEnabled_Changed"/>
+                                        </Grid>
+                                        <Button x:Name="BtnClearSubjectProfile" Content="Clear Subject Profile" HorizontalAlignment="Right" Margin="0,8,0,0"
+                                                Background="{DynamicResource SurfaceBgBrush}" Foreground="#FF6B6B" BorderBrush="#FF6B6B" BorderThickness="1"
+                                                Padding="10,4" FontSize="13" Cursor="Hand" Click="BtnClearSubjectProfile_Click"
+                                                ToolTip="Erase the persisted subject profile"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
 

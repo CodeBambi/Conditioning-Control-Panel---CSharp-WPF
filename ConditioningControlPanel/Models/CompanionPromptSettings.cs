@@ -138,7 +138,17 @@ namespace ConditioningControlPanel.Models
         public bool AiActionHistoryEnabled { get; set; } = true;
 
         // How many hours of recent conditioning actions are summarized for the AI context.
+        // UI allows 0.5–8 hours; stored as whole hours for simplicity (1–8).
         public int AiActionHistoryHours { get; set; } = 2;
+
+        // Hard cap on raw action events kept in memory. Higher values let the AI see more
+        // individual actions within the configured window, but use more RAM/prompt space.
+        public int AiActionHistoryMaxEvents { get; set; } = 200;
+
+        // Whether to include a long-term, persisted subject behavioral profile in the
+        // system prompt at session start. Off by default for privacy; stores only
+        // high-level patterns, never raw chat content.
+        public bool AiSubjectProfileEnabled { get; set; } = false;
 
         // Keyboard shortcut to open the avatar chat input. Stored as the WPF Key name
         // ("T", "F2", etc.) and a comma-separated ModifierKeys ("Control", "Control,Shift").
@@ -283,6 +293,8 @@ namespace ConditioningControlPanel.Models
                 ChatMemorySendPairs = 10,
                 AiActionHistoryEnabled = true,
                 AiActionHistoryHours = 2,
+                AiActionHistoryMaxEvents = 200,
+                AiSubjectProfileEnabled = false,
                 ChatShortcutKey = "T",
                 ChatShortcutModifiers = "Control",
                 ChatShortcutGlobal = true,
@@ -421,6 +433,8 @@ FREQUENCY RULE:
                 ChatMemorySendPairs = ChatMemorySendPairs,
                 AiActionHistoryEnabled = AiActionHistoryEnabled,
                 AiActionHistoryHours = AiActionHistoryHours,
+                AiActionHistoryMaxEvents = AiActionHistoryMaxEvents,
+                AiSubjectProfileEnabled = AiSubjectProfileEnabled,
                 ChatShortcutKey = ChatShortcutKey,
                 ChatShortcutModifiers = ChatShortcutModifiers,
                 ChatShortcutGlobal = ChatShortcutGlobal,
