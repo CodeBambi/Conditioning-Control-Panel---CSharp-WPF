@@ -141,6 +141,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("patreon_is_active")]
             public bool PatreonIsActive { get; set; }
+
+            [JsonProperty("patreon_is_whitelisted")]
+            public bool PatreonIsWhitelisted { get; set; }
         }
 
         public class Unlocks

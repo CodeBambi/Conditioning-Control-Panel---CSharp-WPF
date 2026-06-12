@@ -471,6 +471,14 @@ namespace ConditioningControlPanel.Services
                 Avatar = user.Avatar;
                 NeedsRegistration = user.NeedsRegistration;
 
+                // Apply server-side whitelist so whitelisted Discord-only users get
+                // premium access without depending on a successful profile sync.
+                if (user.IsWhitelisted)
+                {
+                    App.Logger?.Information("Discord validate: whitelisted user — granting premium access (server tier {Tier})", user.PatreonTier);
+                }
+                ApplyWhitelistAccess(user.IsWhitelisted);
+
                 // Cache result for 24 hours
                 _tokenStorage.StoreCachedState(new DiscordCachedState
                 {
@@ -478,11 +486,12 @@ namespace ConditioningControlPanel.Services
                     Username = user.Username,
                     GlobalName = user.GlobalName,
                     Avatar = user.Avatar,
+                    IsWhitelisted = user.IsWhitelisted,
                     LastVerified = DateTime.UtcNow,
                     CacheExpiresAt = DateTime.UtcNow.AddHours(CacheHours)
                 });
 
-                App.Logger?.Information("Discord user validated: {Id}, NeedsRegistration={NeedsReg}", UserId, user.NeedsRegistration);
+                App.Logger?.Information("Discord user validated: {Id}, NeedsRegistration={NeedsReg}, Whitelisted={Whitelisted}", UserId, user.NeedsRegistration, user.IsWhitelisted);
             }
             catch (Exception ex)
             {
@@ -539,6 +548,32 @@ namespace ConditioningControlPanel.Services
             DisplayName = cachedState.DisplayName;
             Avatar = cachedState.Avatar;
             CustomDisplayName = cachedState.CustomDisplayName;
+
+            // Re-apply whitelist on a cache-hit so access survives across restarts
+            // without waiting for the next network validate.
+            ApplyWhitelistAccess(cachedState.IsWhitelisted);
+        }
+
+        /// <summary>
+        /// Grant premium/whitelist access for a whitelisted Discord-only user. Applied
+        /// from both the network-validate path and the cache-hit path so Lab access
+        /// does not depend on a successful profile sync (which the boot defaults-guard
+        /// can block after a season reset — see #293 / ProfileSyncService).
+        /// Sticky-true: only ever promote, never demote on a transient false — mirrors
+        /// the server and ProfileSyncService. Removal is admin-only server-side.
+        /// </summary>
+        private static void ApplyWhitelistAccess(bool isWhitelisted)
+        {
+            if (!isWhitelisted) return;
+
+            // Refresh the cached-premium window (25h > the 24h validate cache, so it
+            // self-renews on each network re-validate and survives restarts).
+            if (App.Settings?.Current != null)
+            {
+                App.Settings.Current.PatreonPremiumValidUntil = DateTime.UtcNow.AddHours(25);
+                App.Settings.Save();
+            }
+            App.Patreon?.SetWhitelistStatus(true);
         }
 
         private void ClearUserInfo()

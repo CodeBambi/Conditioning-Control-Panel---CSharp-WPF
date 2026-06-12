@@ -110,6 +110,25 @@ namespace ConditioningControlPanel.Models
         public string? AuthToken { get; set; }
 
         /// <summary>
+        /// Server-side whitelist status. Whitelisted Discord-only users get premium
+        /// access (Tier 2) without Patreon OAuth. Delivered here so access does not
+        /// depend on a successful profile sync (which the boot defaults-guard can
+        /// block after a season reset — see #293 / ProfileSyncService).
+        /// </summary>
+        [JsonProperty("is_whitelisted")]
+        [JsonPropertyName("is_whitelisted")]
+        public bool IsWhitelisted { get; set; }
+
+        /// <summary>
+        /// Effective Patreon tier for this user as computed by the server (already
+        /// bumped to 2 for whitelisted users). Informational — access is granted via
+        /// <see cref="IsWhitelisted"/>.
+        /// </summary>
+        [JsonProperty("patreon_tier")]
+        [JsonPropertyName("patreon_tier")]
+        public int PatreonTier { get; set; }
+
+        /// <summary>
         /// Get the display name (global_name if set, otherwise username)
         /// </summary>
         [Newtonsoft.Json.JsonIgnore]
@@ -148,6 +167,13 @@ namespace ConditioningControlPanel.Models
 
         [JsonProperty("custom_display_name")]
         public string? CustomDisplayName { get; set; }
+
+        /// <summary>
+        /// Cached server-side whitelist status, so a cache-hit validate (no network
+        /// call) still grants premium access to whitelisted Discord-only users.
+        /// </summary>
+        [JsonProperty("is_whitelisted")]
+        public bool IsWhitelisted { get; set; }
 
         [JsonProperty("last_verified")]
         public DateTime LastVerified { get; set; }

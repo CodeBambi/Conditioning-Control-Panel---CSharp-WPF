@@ -367,8 +367,32 @@ namespace ConditioningControlPanel.Services
                 var user = await v2Auth.GetUserProfileAsync(unifiedId);
                 if (user == null) return false;
 
-                // Server record is itself uninitialized — nothing to adopt (genuine new user).
-                if (user.Level <= 1 && user.Xp <= 0) return false;
+                // Apply server-side whitelist even when level/xp are at season-reset
+                // defaults. The flag normally rides the sync POST response, but the
+                // defaults-guard blocks that POST for season-reset users — leaving
+                // whitelisted Discord-only users with no access. This read-only path is
+                // the safety net. Sticky-true: only ever promote (mirrors the server).
+                if (user.PatreonIsWhitelisted)
+                {
+                    if (settings != null)
+                    {
+                        settings.PatreonPremiumValidUntil = DateTime.UtcNow.AddHours(25);
+                    }
+                    App.Patreon?.SetWhitelistStatus(true);
+                    App.Logger?.Information("Boot heal (#293): whitelisted user — premium access applied via read-only fetch");
+                }
+
+                // Server record is itself at defaults (Level 1 / 0 XP) — no progress to
+                // adopt, but the record EXISTS. Mark the profile loaded (return true) so
+                // the boot defaults-guard releases on the next sync; otherwise a
+                // season-reset (or brand-new) user whose local also looks like defaults
+                // can never push and stays stuck at Level 1 — and never acknowledges
+                // pending server flags like force_skills_reset (#293).
+                if (user.Level <= 1 && user.Xp <= 0)
+                {
+                    App.Settings?.Save();
+                    return true;
+                }
 
                 App.Logger?.Warning("Boot heal (#293): local looked like defaults (Level {LL}, {LX} XP) but server has Level {SL}, {SX} XP — adopting server profile via read-only fetch (no upload).",
                     settings.PlayerLevel, (int)localTotalXp, user.Level, user.Xp);
