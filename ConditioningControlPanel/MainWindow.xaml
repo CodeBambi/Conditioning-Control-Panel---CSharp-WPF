@@ -7032,54 +7032,6 @@
                                     <!-- Settings panel -->
                                     <StackPanel x:Name="KeywordTriggersSettingsPanel" Margin="0,10,0,0">
 
-                                        <!-- Global settings row -->
-                                        <Grid Margin="0,0,0,8">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-
-                                            <!-- Buffer timeout -->
-                                            <StackPanel Grid.Column="0" Margin="0,0,6,0"
-                                                        ToolTip="{loc:Str tooltip_how_long_to_wait_after_a_keystroke_before_che}">
-                                                <TextBlock Text="{loc:Str label_buffer_timeout}" Foreground="#A0A0A0" FontSize="10"/>
-                                                <Grid>
-                                                    <Slider x:Name="SliderKeywordBufferTimeout" Minimum="1000" Maximum="10000"
-                                                            TickFrequency="500" IsSnapToTickEnabled="True"
-                                                            ValueChanged="SliderKeywordBufferTimeout_ValueChanged"/>
-                                                    <TextBlock x:Name="TxtKeywordBufferTimeout" Text="{loc:Str label_3_0s}"
-                                                               Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                                </Grid>
-                                            </StackPanel>
-
-                                            <!-- Global cooldown -->
-                                            <StackPanel Grid.Column="1" Margin="6,0,6,0"
-                                                        ToolTip="{loc:Str tooltip_minimum_time_between_any_two_trigger_activati}">
-                                                <TextBlock Text="{loc:Str label_global_cooldown}" Foreground="#A0A0A0" FontSize="10"/>
-                                                <Grid>
-                                                    <Slider x:Name="SliderKeywordGlobalCooldown" Minimum="1" Maximum="120"
-                                                            TickFrequency="1" IsSnapToTickEnabled="True"
-                                                            ValueChanged="SliderKeywordGlobalCooldown_ValueChanged"/>
-                                                    <TextBlock x:Name="TxtKeywordGlobalCooldown" Text="{loc:Str setting_5s}"
-                                                               Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                                </Grid>
-                                            </StackPanel>
-
-                                            <!-- Session XP boost -->
-                                            <StackPanel Grid.Column="2" Margin="6,0,0,0"
-                                                        ToolTip="{loc:Str tooltip_xp_multiplier_bonus_when_triggers_fire_during}">
-                                                <TextBlock Text="{loc:Str label_session_xp_boost}" Foreground="#A0A0A0" FontSize="10"/>
-                                                <Grid>
-                                                    <Slider x:Name="SliderKeywordSessionMultiplier" Minimum="1.0" Maximum="3.0"
-                                                            TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                                            ValueChanged="SliderKeywordSessionMultiplier_ValueChanged"/>
-                                                    <TextBlock x:Name="TxtKeywordSessionMultiplier" Text="1.5x"
-                                                               Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                                </Grid>
-                                            </StackPanel>
-                                        </Grid>
-
                                         <!-- Screen OCR -->
                                         <Border CornerRadius="6" Padding="8" Margin="0,0,0,8"
                                                 Background="{DynamicResource DarkerBgBrush}" BorderBrush="#353550" BorderThickness="1">
@@ -7118,25 +7070,9 @@
                                                               Checked="ChkHighlightVisibleInCapture_Changed"
                                                               Unchecked="ChkHighlightVisibleInCapture_Changed"
                                                               ToolTip="{loc:Str tooltip_when_enabled_keyword_highlights_will_be_visib}"/>
-                                                    <TextBlock Text="{loc:Str label_highlight_duration}" Foreground="#A0A0A0" FontSize="10"/>
-                                                    <Grid ToolTip="{loc:Str tooltip_how_long_the_pink_highlight_stays_on_screen_0}">
-                                                        <Slider x:Name="SliderKeywordHighlightDuration" Minimum="0.3" Maximum="5.0"
-                                                                TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                                                ValueChanged="SliderKeywordHighlightDuration_ValueChanged"/>
-                                                        <TextBlock x:Name="TxtKeywordHighlightDuration" Text="{loc:Str label_0_6s}"
-                                                                   Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                                    </Grid>
                                                 </StackPanel>
                                                 <StackPanel x:Name="ScreenOcrIntervalPanel" Visibility="Collapsed" Margin="0,6,0,0">
-                                                    <TextBlock Text="{loc:Str label_scan_interval}" Foreground="#A0A0A0" FontSize="10"/>
-                                                    <Grid ToolTip="{loc:Str tooltip_how_often_to_scan_your_screen_for_trigger_key}">
-                                                        <Slider x:Name="SliderScreenOcrInterval" Minimum="2" Maximum="10"
-                                                                TickFrequency="1" IsSnapToTickEnabled="True"
-                                                                ValueChanged="SliderScreenOcrInterval_ValueChanged"/>
-                                                        <TextBlock x:Name="TxtScreenOcrInterval" Text="{loc:Str label_3s}"
-                                                                   Foreground="{DynamicResource PinkBrush}" FontSize="10" HorizontalAlignment="Right" IsHitTestVisible="False"/>
-                                                    </Grid>
-                                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
                                                         <TextBlock Text="Confirm before firing" Foreground="#A0A0A0" FontSize="10" VerticalAlignment="Center"/>
                                                         <ComboBox x:Name="CmbOcrConfirmation" Margin="6,0,0,0" MinWidth="150"
                                                                   Style="{StaticResource DarkComboBoxStyle}" FontSize="10"

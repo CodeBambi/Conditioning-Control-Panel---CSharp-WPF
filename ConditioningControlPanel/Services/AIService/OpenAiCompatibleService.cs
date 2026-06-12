@@ -119,7 +119,7 @@ namespace ConditioningControlPanel.Services.AIService
             get
             {
                 var cp = App.Settings?.Current?.CompanionPrompt;
-                return cp?.ChatMemoryEnabled == true && cp?.OpenAiCompatibleChatMemoryEnabled != false;
+                return cp?.ChatMemoryEnabled == true;
             }
         }
 

@@ -12883,29 +12883,6 @@ namespace ConditioningControlPanel
                     (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4"));
         }
 
-        private void SliderKeywordBufferTimeout_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || TxtKeywordBufferTimeout == null) return;
-            var value = (int)SliderKeywordBufferTimeout.Value;
-            TxtKeywordBufferTimeout.Text = $"{value / 1000.0:F1}s";
-            App.Settings.Current.KeywordBufferTimeoutMs = value;
-        }
-
-        private void SliderKeywordGlobalCooldown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || TxtKeywordGlobalCooldown == null) return;
-            var value = (int)SliderKeywordGlobalCooldown.Value;
-            TxtKeywordGlobalCooldown.Text = $"{value}s";
-            App.Settings.Current.KeywordGlobalCooldownSeconds = value;
-        }
-
-        private void SliderKeywordSessionMultiplier_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || TxtKeywordSessionMultiplier == null) return;
-            var value = SliderKeywordSessionMultiplier.Value;
-            TxtKeywordSessionMultiplier.Text = $"{value:F1}x";
-            App.Settings.Current.KeywordSessionMultiplier = value;
-        }
 
         private void ChkScreenOcrEnabled_Changed(object sender, RoutedEventArgs e)
         {
@@ -12936,29 +12913,12 @@ namespace ConditioningControlPanel
             App.Settings.Save();
         }
 
-        private void SliderScreenOcrInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading || TxtScreenOcrInterval == null) return;
-            var value = (int)SliderScreenOcrInterval.Value;
-            TxtScreenOcrInterval.Text = $"{value}s";
-            App.Settings.Current.ScreenOcrIntervalMs = value * 1000;
-            App.ScreenOcr?.UpdateInterval(value * 1000);
-        }
-
         private void ChkKeywordHighlightEnabled_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;
             App.Settings.Current.KeywordHighlightEnabled = ChkKeywordHighlightEnabled.IsChecked == true;
             if (HighlightDurationPanel != null)
                 HighlightDurationPanel.Visibility = ChkKeywordHighlightEnabled.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        private void SliderKeywordHighlightDuration_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading) return;
-            var ms = (int)(SliderKeywordHighlightDuration.Value * 1000);
-            TxtKeywordHighlightDuration.Text = $"{SliderKeywordHighlightDuration.Value:0.0}s";
-            App.Settings.Current.KeywordHighlightDurationMs = ms;
         }
 
         private void CmbOcrHighlightMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -24033,10 +23993,6 @@ namespace ConditioningControlPanel
 
             // Keyword Triggers
             {
-                SliderKeywordBufferTimeout.Value = s.KeywordBufferTimeoutMs;
-                SliderKeywordGlobalCooldown.Value = s.KeywordGlobalCooldownSeconds;
-                SliderKeywordSessionMultiplier.Value = s.KeywordSessionMultiplier;
-
                 var hasKeywordAccess = KeywordTriggerService.HasAccess();
 
                 // Show/hide lock indicator
@@ -24053,7 +24009,6 @@ namespace ConditioningControlPanel
                 {
                     ChkScreenOcrEnabled.IsChecked = s.ScreenOcrEnabled;
                     ChkScreenOcrEnabled.IsEnabled = hasKeywordAccess;
-                    SliderScreenOcrInterval.Value = s.ScreenOcrIntervalMs / 1000.0;
                     ScreenOcrIntervalPanel.Visibility = s.ScreenOcrEnabled && hasKeywordAccess ? Visibility.Visible : Visibility.Collapsed;
                     if (CmbOcrConfirmation != null)
                         CmbOcrConfirmation.SelectedIndex = Math.Clamp(s.OcrConfirmationScans - 1, 0, 2);
@@ -24064,8 +24019,6 @@ namespace ConditioningControlPanel
                     if (HighlightDurationPanel != null)
                     {
                         HighlightDurationPanel.Visibility = s.KeywordHighlightEnabled ? Visibility.Visible : Visibility.Collapsed;
-                        SliderKeywordHighlightDuration.Value = s.KeywordHighlightDurationMs / 1000.0;
-                        TxtKeywordHighlightDuration.Text = $"{s.KeywordHighlightDurationMs / 1000.0:0.0}s";
                         if (CmbOcrHighlightMode != null)
                             CmbOcrHighlightMode.SelectedIndex = s.OcrHighlightAll ? 0 : 1;
                         if (ChkHighlightVisibleInCapture != null)

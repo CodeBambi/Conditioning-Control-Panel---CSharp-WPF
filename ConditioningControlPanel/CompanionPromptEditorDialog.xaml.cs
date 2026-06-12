@@ -184,7 +184,6 @@ namespace ConditioningControlPanel
 
             // Memory & Awareness
             ChkDialogChatMemoryEnabled.IsChecked = settings.ChatMemoryEnabled;
-            ChkDialogOpenAiChatMemoryEnabled.IsChecked = settings.OpenAiCompatibleChatMemoryEnabled;
             SliderDialogChatMemorySendPairs.Value = Math.Clamp(settings.ChatMemorySendPairs, 1, 50);
             TxtDialogChatMemorySendPairs.Text = settings.ChatMemorySendPairs.ToString();
 
@@ -203,6 +202,22 @@ namespace ConditioningControlPanel
             var cooldown = Math.Clamp(appSettings?.AwarenessReactionCooldownSeconds ?? 90, 10, 300);
             SliderDialogAwarenessCooldown.Value = cooldown;
             TxtDialogAwarenessCooldown.Text = $"{cooldown}s";
+
+            var bufferMs = Math.Clamp(appSettings?.KeywordBufferTimeoutMs ?? 3000, 1000, 10000);
+            SliderDialogKeywordBufferTimeout.Value = bufferMs;
+            TxtDialogKeywordBufferTimeout.Text = $"{bufferMs / 1000.0:F1}s";
+
+            var multiplier = Math.Clamp(appSettings?.KeywordSessionMultiplier ?? 1.5, 1.0, 3.0);
+            SliderDialogKeywordSessionMultiplier.Value = multiplier;
+            TxtDialogKeywordSessionMultiplier.Text = $"{multiplier:F1}x";
+
+            var highlightMs = Math.Clamp(appSettings?.KeywordHighlightDurationMs ?? 1500, 300, 5000);
+            SliderDialogKeywordHighlightDuration.Value = highlightMs / 1000.0;
+            TxtDialogKeywordHighlightDuration.Text = $"{highlightMs / 1000.0:F1}s";
+
+            var scanSec = Math.Clamp(appSettings?.ScreenOcrIntervalMs ?? 3000, 2000, 10000) / 1000;
+            SliderDialogScreenOcrInterval.Value = scanSec;
+            TxtDialogScreenOcrInterval.Text = $"{scanSec}s";
 
             UpdateEnabledState();
             _hasUnsavedChanges = false;
@@ -225,7 +240,7 @@ namespace ConditioningControlPanel
 
             // Memory & Awareness
             settings.ChatMemoryEnabled = ChkDialogChatMemoryEnabled.IsChecked == true;
-            settings.OpenAiCompatibleChatMemoryEnabled = ChkDialogOpenAiChatMemoryEnabled.IsChecked == true;
+            settings.OpenAiCompatibleChatMemoryEnabled = settings.ChatMemoryEnabled;
             settings.ChatMemorySendPairs = (int)SliderDialogChatMemorySendPairs.Value;
             settings.AiActionHistoryEnabled = ChkDialogActionHistoryEnabled.IsChecked == true;
             settings.AiActionHistoryHours = (int)SliderDialogActionHistoryHours.Value;
@@ -240,6 +255,11 @@ namespace ConditioningControlPanel
                 // Unify keyword-trigger cooldowns so there is only one awareness cooldown to manage.
                 appSettings.KeywordGlobalCooldownSeconds = cooldown;
                 appSettings.KeywordPerKeywordCooldownSeconds = cooldown;
+
+                appSettings.KeywordBufferTimeoutMs = (int)SliderDialogKeywordBufferTimeout.Value;
+                appSettings.KeywordSessionMultiplier = SliderDialogKeywordSessionMultiplier.Value;
+                appSettings.KeywordHighlightDurationMs = (int)(SliderDialogKeywordHighlightDuration.Value * 1000);
+                appSettings.ScreenOcrIntervalMs = (int)(SliderDialogScreenOcrInterval.Value * 1000);
             }
 
             // Save global knowledge base links
@@ -280,11 +300,6 @@ namespace ConditioningControlPanel
         #region Memory & Awareness handlers
 
         private void ChkDialogChatMemoryEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            _hasUnsavedChanges = true;
-        }
-
-        private void ChkDialogOpenAiChatMemoryEnabled_Changed(object sender, RoutedEventArgs e)
         {
             _hasUnsavedChanges = true;
         }
@@ -343,6 +358,38 @@ namespace ConditioningControlPanel
             if (TxtDialogAwarenessCooldown == null) return;
             var value = Math.Max(10, Math.Min(300, (int)SliderDialogAwarenessCooldown.Value));
             TxtDialogAwarenessCooldown.Text = $"{value}s";
+            _hasUnsavedChanges = true;
+        }
+
+        private void SliderDialogKeywordBufferTimeout_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtDialogKeywordBufferTimeout == null) return;
+            var value = Math.Max(1000, Math.Min(10000, (int)SliderDialogKeywordBufferTimeout.Value));
+            TxtDialogKeywordBufferTimeout.Text = $"{value / 1000.0:F1}s";
+            _hasUnsavedChanges = true;
+        }
+
+        private void SliderDialogKeywordSessionMultiplier_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtDialogKeywordSessionMultiplier == null) return;
+            var value = Math.Max(1.0, Math.Min(3.0, SliderDialogKeywordSessionMultiplier.Value));
+            TxtDialogKeywordSessionMultiplier.Text = $"{value:F1}x";
+            _hasUnsavedChanges = true;
+        }
+
+        private void SliderDialogKeywordHighlightDuration_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtDialogKeywordHighlightDuration == null) return;
+            var value = Math.Max(0.3, Math.Min(5.0, SliderDialogKeywordHighlightDuration.Value));
+            TxtDialogKeywordHighlightDuration.Text = $"{value:F1}s";
+            _hasUnsavedChanges = true;
+        }
+
+        private void SliderDialogScreenOcrInterval_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (TxtDialogScreenOcrInterval == null) return;
+            var value = Math.Max(2, Math.Min(10, (int)SliderDialogScreenOcrInterval.Value));
+            TxtDialogScreenOcrInterval.Text = $"{value}s";
             _hasUnsavedChanges = true;
         }
 
