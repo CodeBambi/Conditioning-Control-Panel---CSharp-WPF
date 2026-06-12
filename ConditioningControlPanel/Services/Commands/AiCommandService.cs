@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.CommandData;
@@ -27,29 +28,35 @@ namespace ConditioningControlPanel.Services.Commands
             _batchCount = 0;
         }
 
-        public async void ExecuteCommand(AiCommandData commandData)
+        public CommandOutcome? ExecuteCommand(AiCommandData commandData)
         {
-            if (commandData.Data == null) return;
+            if (commandData.Data == null)
+            {
+                App.Logger?.Debug("AiCommandService: no data — dropping command {Cmd}", commandData.Command);
+                return null;
+            }
 
             var settings = App.Settings?.Current?.CompanionPrompt;
             if (settings == null)
             {
                 App.Logger?.Debug("AiCommandService: no settings — dropping command {Cmd}", commandData.Command);
-                return;
+                return null;
             }
+
+            var commandName = commandData.Command.ToString();
 
             // Master gate.
             if (!settings.AllowAiToControlEffects)
             {
                 App.Logger?.Information("AiCommandService: master toggle OFF — dropping {Cmd}", commandData.Command);
-                return;
+                return new CommandOutcome(commandName, false, "AI effects master toggle is off");
             }
 
             // Per-effect gate.
             if (!IsEffectAllowed(commandData.Command, settings))
             {
                 App.Logger?.Information("AiCommandService: effect {Cmd} disabled by user — dropping", commandData.Command);
-                return;
+                return new CommandOutcome(commandName, false, "effect disabled in settings");
             }
 
             // Per-batch cap.
@@ -57,7 +64,7 @@ namespace ConditioningControlPanel.Services.Commands
             {
                 App.Logger?.Information("AiCommandService: batch cap reached ({Cap}) — dropping {Cmd}",
                     MaxCommandsPerResponse, commandData.Command);
-                return;
+                return new CommandOutcome(commandName, false, $"per-response command cap ({MaxCommandsPerResponse}) reached");
             }
 
             App.Logger?.Information("AiCommandService: dispatching {Cmd} with data {@Data}",
@@ -79,15 +86,24 @@ namespace ConditioningControlPanel.Services.Commands
             try
             {
                 var command = CommandFactory.CreateCommand(commandData, cts?.Token ?? default, depth: 0);
-                if (command != null)
+                if (command == null)
                 {
-                    App.Logger?.Debug("AiCommandService: executing {Cmd}", commandData.Command);
-                    await command.ExecuteAsync();
+                    return new CommandOutcome(commandName, false, "unknown command type");
                 }
+
+                App.Logger?.Debug("AiCommandService: executing {Cmd}", commandData.Command);
+                var result = command.ExecuteAsync().GetAwaiter().GetResult();
+                return new CommandOutcome(
+                    result.CommandType,
+                    result.Status == CommandResultStatus.Executed,
+                    result.Status == CommandResultStatus.Executed
+                        ? $"executed{(string.IsNullOrEmpty(result.ParameterSummary) ? "" : $": {result.ParameterSummary}")}"
+                        : $"{result.Status.ToString().ToLowerInvariant()}{(string.IsNullOrEmpty(result.Reason) ? "" : $": {result.Reason}")}");
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "AiCommandService: command {Cmd} threw", commandData.Command);
+                return new CommandOutcome(commandName, false, $"exception: {ex.Message}");
             }
             finally
             {

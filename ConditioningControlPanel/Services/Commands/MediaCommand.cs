@@ -26,14 +26,16 @@ namespace ConditioningControlPanel.Services.Commands
             _kind = kind;
         }
 
-        public Task<bool> ExecuteAsync()
+        public Task<CommandResult> ExecuteAsync()
         {
             // Random pick — the AI can ask for "any video" / "any audio" without naming a file.
             if (_data.Random || string.IsNullOrEmpty(_data.Path))
             {
-                if (_kind == AICommandType.audio)
-                    return Task.FromResult(PlayRandomAudio());
-                return Task.FromResult(PlayRandomVideo());
+                var randomSuccess = _kind == AICommandType.audio ? PlayRandomAudio() : PlayRandomVideo();
+                return Task.FromResult(new CommandResult(
+                    _kind.ToString(),
+                    randomSuccess ? CommandResultStatus.Executed : CommandResultStatus.NoOp,
+                    ParameterSummary: "random"));
             }
 
             var fullPath = GetValidatedPath(_data.Path);
@@ -44,8 +46,11 @@ namespace ConditioningControlPanel.Services.Commands
                 // matches what the user sees in the live actions feed.
                 App.Logger?.Information("MediaCommand: path '{Path}' didn't resolve — falling back to random {Kind}",
                     _data.Path, _kind);
-                if (_kind == AICommandType.audio) return Task.FromResult(PlayRandomAudio());
-                return Task.FromResult(PlayRandomVideo());
+                var fallbackSuccess = _kind == AICommandType.audio ? PlayRandomAudio() : PlayRandomVideo();
+                return Task.FromResult(new CommandResult(
+                    _kind.ToString(),
+                    fallbackSuccess ? CommandResultStatus.Executed : CommandResultStatus.NoOp,
+                    Reason: $"path '{_data.Path}' not found, used random fallback"));
             }
 
             App.Logger?.Information("MediaCommand: AI play media {Path}", fullPath);
@@ -53,7 +58,7 @@ namespace ConditioningControlPanel.Services.Commands
             var ext = Path.GetExtension(fullPath).ToLowerInvariant();
             if (IsVideo(ext))
             {
-                return Task.FromResult(Application.Current.Dispatcher.Invoke(() =>
+                var played = Application.Current.Dispatcher.Invoke(() =>
                 {
                     if (App.Video == null) return false;
                     if (App.Video.IsPlaying)
@@ -63,18 +68,28 @@ namespace ConditioningControlPanel.Services.Commands
                     }
                     App.Video.PlaySpecificVideo(fullPath, false);
                     return true;
-                }));
+                });
+                return Task.FromResult(new CommandResult(
+                    "video",
+                    played ? CommandResultStatus.Executed : CommandResultStatus.NoOp,
+                    ParameterSummary: $"path={fullPath}"));
             }
 
             if (IsAudio(ext))
             {
                 Application.Current.Dispatcher.Invoke(() => App.Audio?.PlaySound(fullPath, 100));
-                return Task.FromResult(true);
+                return Task.FromResult(new CommandResult(
+                    "audio",
+                    CommandResultStatus.Executed,
+                    ParameterSummary: $"path={fullPath}"));
             }
 
             App.Logger?.Information("MediaCommand: extension {Ext} not recognized as audio/video — falling back to random {Kind}", ext, _kind);
-            if (_kind == AICommandType.audio) return Task.FromResult(PlayRandomAudio());
-            return Task.FromResult(PlayRandomVideo());
+            var extFallbackSuccess = _kind == AICommandType.audio ? PlayRandomAudio() : PlayRandomVideo();
+            return Task.FromResult(new CommandResult(
+                _kind.ToString(),
+                extFallbackSuccess ? CommandResultStatus.Executed : CommandResultStatus.NoOp,
+                Reason: $"extension '{ext}' unsupported, used random fallback"));
         }
 
         private static bool PlayRandomVideo()

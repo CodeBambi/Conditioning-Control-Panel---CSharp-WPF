@@ -124,6 +124,15 @@ namespace ConditioningControlPanel.Models
         // users keep the behavior they had before this toggle existed.
         public bool ChatMemoryEnabled { get; set; } = true;
 
+        // When true, the OpenAI-compatible provider also persists/restores chat memory.
+        // When false, the OpenAI-compatible provider is stateless (cloud-like) even if
+        // ChatMemoryEnabled is true.
+        public bool OpenAiCompatibleChatMemoryEnabled { get; set; } = true;
+
+        // Number of user+assistant pairs sent to the model per request. Older pairs are
+        // kept on disk but dropped from context to keep token usage bounded.
+        public int ChatMemorySendPairs { get; set; } = 10;
+
         // Keyboard shortcut to open the avatar chat input. Stored as the WPF Key name
         // ("T", "F2", etc.) and a comma-separated ModifierKeys ("Control", "Control,Shift").
         // Applied at window load via code-behind so changes take effect without a restart.
@@ -263,6 +272,8 @@ namespace ConditioningControlPanel.Models
                 AllowAiGetBackToMe = false,
                 MaxAiHapticIntensity = 0.6,
                 ChatMemoryEnabled = true,
+                OpenAiCompatibleChatMemoryEnabled = true,
+                ChatMemorySendPairs = 10,
                 ChatShortcutKey = "T",
                 ChatShortcutModifiers = "Control",
                 ChatShortcutGlobal = true,
@@ -397,6 +408,8 @@ FREQUENCY RULE:
                 AllowAiGetBackToMe = AllowAiGetBackToMe,
                 MaxAiHapticIntensity = MaxAiHapticIntensity,
                 ChatMemoryEnabled = ChatMemoryEnabled,
+                OpenAiCompatibleChatMemoryEnabled = OpenAiCompatibleChatMemoryEnabled,
+                ChatMemorySendPairs = ChatMemorySendPairs,
                 ChatShortcutKey = ChatShortcutKey,
                 ChatShortcutModifiers = ChatShortcutModifiers,
                 ChatShortcutGlobal = ChatShortcutGlobal,

@@ -112,16 +112,29 @@ namespace ConditioningControlPanel.Services.AIService
             return await base.GetBambiReplyExAsync(userInput, isUserMessage);
         }
 
+        protected override string GetMemoryStorageKey() => "openaicomp";
+
+        protected override bool IsChatMemoryEnabled
+        {
+            get
+            {
+                var cp = App.Settings?.Current?.CompanionPrompt;
+                return cp?.ChatMemoryEnabled == true && cp?.OpenAiCompatibleChatMemoryEnabled != false;
+            }
+        }
+
         /// <summary>
-        /// Core transport: builds messages (with optional enrichment), applies sampler
-        /// settings, posts to the configured endpoint, and returns the raw assistant content.
+        /// Core transport: sends the already-built message list (system + enrichment +
+        /// memory + current user turn), applies sampler settings, posts to the configured
+        /// endpoint, and returns the raw assistant content.
         /// </summary>
         protected override async Task<string?> GetRawCompletionAsync(
-            string systemPrompt,
+            List<AiMessage> messages,
             string userInput,
             bool isUserMessage)
         {
             _ = isUserMessage;
+            _ = userInput;
 
             if (App.Settings?.Current?.OfflineMode == true)
             {
@@ -148,7 +161,6 @@ namespace ConditioningControlPanel.Services.AIService
             }
 
             var model = GetConfiguredModel();
-            var messages = BuildMessages(systemPrompt, userInput);
 
             var payload = new Dictionary<string, object>
             {
@@ -237,23 +249,6 @@ namespace ConditioningControlPanel.Services.AIService
                 App.Logger?.Warning(ex, "OpenAiCompatibleService: request failed");
                 return null;
             }
-        }
-
-        private List<AiMessage> BuildMessages(string systemPrompt, string userInput)
-        {
-            var messages = new List<AiMessage>
-            {
-                new("system", systemPrompt),
-                new("user", userInput)
-            };
-
-            var enrichment = BuildEnrichmentMessage(userInput);
-            if (enrichment != null)
-            {
-                messages.Insert(1, enrichment);
-            }
-
-            return messages;
         }
 
         private static Uri GetConfiguredEndpointBaseUri()

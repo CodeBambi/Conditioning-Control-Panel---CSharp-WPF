@@ -13,7 +13,7 @@ namespace ConditioningControlPanel.Services.Commands
         private readonly Bubbles _data;
         public BubbleCommand(Bubbles data) { _data = data; }
 
-        public Task<bool> ExecuteAsync()
+        public Task<CommandResult> ExecuteAsync()
         {
             var frequency = Math.Clamp(_data.Frequency, 0, MaxFrequency);
 
@@ -33,12 +33,18 @@ namespace ConditioningControlPanel.Services.Commands
                     else
                         App.Bubbles?.Stop();
                 });
-                return Task.FromResult(true);
+                return Task.FromResult(new CommandResult(
+                    "bubbles",
+                    CommandResultStatus.Executed,
+                    ParameterSummary: shouldStart ? $"on, frequency={frequency}/min" : "off"));
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "BubbleCommand failed");
-                return Task.FromResult(false);
+                return Task.FromResult(new CommandResult(
+                    "bubbles",
+                    CommandResultStatus.Failed,
+                    Reason: ex.Message));
             }
         }
     }

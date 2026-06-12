@@ -12,7 +12,7 @@ namespace ConditioningControlPanel.Services.Commands
         private readonly HapticCommandData _data;
         public HapticCommand(HapticCommandData data) { _data = data; }
 
-        public Task<bool> ExecuteAsync()
+        public Task<CommandResult> ExecuteAsync()
         {
             var duration = Math.Clamp(_data.Duration, 0, MaxDurationSec);
             // User-set ceiling on AI haptic intensity.
@@ -22,12 +22,18 @@ namespace ConditioningControlPanel.Services.Commands
             try
             {
                 _ = App.Haptics?.ApplyVibrationModeAsync(intensity, duration * 1000, VibrationMode.Pulse);
-                return Task.FromResult(true);
+                return Task.FromResult(new CommandResult(
+                    "haptic",
+                    CommandResultStatus.Executed,
+                    ParameterSummary: $"intensity={(int)(intensity * 100)}%, duration={duration}s"));
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "HapticCommand failed");
-                return Task.FromResult(false);
+                return Task.FromResult(new CommandResult(
+                    "haptic",
+                    CommandResultStatus.Failed,
+                    Reason: ex.Message));
             }
         }
     }

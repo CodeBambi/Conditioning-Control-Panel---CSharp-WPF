@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -7,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Models.AiEnrichment;
 using ConditioningControlPanel.Services.AIService;
 using ConditioningControlPanel.Services.Moderation;
 
@@ -57,6 +60,11 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         protected override bool SupportsEffectCommands => false;
 
+        /// <summary>
+        /// Cloud provider is stateless; the proxy manages its own conversation context.
+        /// </summary>
+        protected override bool IsChatMemoryEnabled => false;
+
         public AiService()
         {
             _httpClient = new HttpClient
@@ -94,13 +102,16 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Core transport: posts to the cloud proxy (V2 auth or legacy Patreon Bearer),
         /// updates the persisted daily counter, and returns sanitized assistant content.
+        /// Cloud is stateless; we extract the system prompt and current user turn from the
+        /// message list built by the base class and ignore any local memory turns.
         /// </summary>
         protected override async Task<string?> GetRawCompletionAsync(
-            string systemPrompt,
+            List<AiMessage> messages,
             string userInput,
             bool isUserMessage)
         {
             _ = isUserMessage;
+            _ = userInput;
 
             // Check offline mode first
             if (App.Settings?.Current?.OfflineMode == true)
@@ -131,11 +142,13 @@ namespace ConditioningControlPanel.Services
             {
                 BumpDailyCounter();
 
-                // Build messages array
-                var messages = new[]
+                // Cloud is stateless: send only the system prompt and the current user turn.
+                var systemContent = messages.FirstOrDefault(m => m.Role == "system")?.Content ?? string.Empty;
+                var userContent = messages.LastOrDefault(m => m.Role == "user")?.Content ?? string.Empty;
+                var proxyMessages = new[]
                 {
-                    new ProxyChatMessage { Role = "system", Content = systemPrompt },
-                    new ProxyChatMessage { Role = "user", Content = userInput }
+                    new ProxyChatMessage { Role = "system", Content = systemContent },
+                    new ProxyChatMessage { Role = "user", Content = userContent }
                 };
 
                 HttpResponseMessage response;
@@ -148,7 +161,7 @@ namespace ConditioningControlPanel.Services
                     var v2Request = new V2ChatRequest
                     {
                         UnifiedId = unifiedId,
-                        Messages = messages,
+                        Messages = proxyMessages,
                         MaxTokens = MaxTokensHardCap,
                         Temperature = 0.7
                     };
@@ -165,13 +178,13 @@ namespace ConditioningControlPanel.Services
                     {
                         App.Logger?.Debug("AiService: V2 endpoint not available, trying legacy auth");
                         response.Dispose();
-                        response = await SendLegacyRequestAsync(messages);
+                        response = await SendLegacyRequestAsync(proxyMessages);
                         if (response == null) return null;
                     }
                 }
                 else
                 {
-                    response = await SendLegacyRequestAsync(messages);
+                    response = await SendLegacyRequestAsync(proxyMessages);
                     if (response == null) return null;
                 }
 

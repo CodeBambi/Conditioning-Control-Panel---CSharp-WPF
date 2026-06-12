@@ -13,12 +13,18 @@ namespace ConditioningControlPanel.Services.Commands
         private readonly Subliminal _data;
         public SubliminalCommand(Subliminal data) { _data = data; }
 
-        public Task<bool> ExecuteAsync()
+        public Task<CommandResult> ExecuteAsync()
         {
             var opacity = Math.Clamp(_data.Opacity, 0, MaxOpacity);
             var text = (_data.Text ?? string.Empty).Trim();
             if (text.Length > MaxTextChars) text = text.Substring(0, MaxTextChars);
-            if (string.IsNullOrEmpty(text)) return Task.FromResult(false);
+            if (string.IsNullOrEmpty(text))
+            {
+                return Task.FromResult(new CommandResult(
+                    "subliminal",
+                    CommandResultStatus.Rejected,
+                    Reason: "text was empty"));
+            }
 
             try
             {
@@ -26,12 +32,18 @@ namespace ConditioningControlPanel.Services.Commands
                 {
                     App.Subliminal?.FlashSubliminalCustom(text, opacity);
                 });
-                return Task.FromResult(true);
+                return Task.FromResult(new CommandResult(
+                    "subliminal",
+                    CommandResultStatus.Executed,
+                    ParameterSummary: $"\"{text}\", opacity={opacity}%"));
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "SubliminalCommand failed");
-                return Task.FromResult(false);
+                return Task.FromResult(new CommandResult(
+                    "subliminal",
+                    CommandResultStatus.Failed,
+                    Reason: ex.Message));
             }
         }
     }

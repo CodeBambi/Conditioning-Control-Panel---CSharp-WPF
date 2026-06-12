@@ -15,7 +15,7 @@ namespace ConditioningControlPanel.Services.Commands
         private readonly FlashImage _data;
         public FlashImageCommand(FlashImage data) { _data = data; }
 
-        public Task<bool> ExecuteAsync()
+        public Task<CommandResult> ExecuteAsync()
         {
             var amount = Math.Clamp(_data.Amount, 0, MaxAmount);
             var durationSec = Math.Clamp(_data.Duration, 0, MaxDurationSec);
@@ -29,12 +29,18 @@ namespace ConditioningControlPanel.Services.Commands
                 {
                     App.Flash?.TriggerFlashOnce(amount, durationMs, size);
                 });
-                return Task.FromResult(true);
+                return Task.FromResult(new CommandResult(
+                    "flash_image",
+                    CommandResultStatus.Executed,
+                    ParameterSummary: $"amount={amount}, duration={durationSec}s, size={size}%"));
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "FlashImageCommand failed");
-                return Task.FromResult(false);
+                return Task.FromResult(new CommandResult(
+                    "flash_image",
+                    CommandResultStatus.Failed,
+                    Reason: ex.Message));
             }
         }
     }

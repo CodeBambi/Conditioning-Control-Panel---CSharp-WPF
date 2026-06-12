@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.AiEnrichment;
+using ConditioningControlPanel.Models.CommandData;
 using ConditioningControlPanel.Services.AIService.Enrichment;
 using ConditioningControlPanel.Services.Moderation;
 
@@ -15,7 +15,7 @@ namespace ConditioningControlPanel.Services.AIService
     /// Shared foundation for all <see cref="IAiService"/> implementations.
     /// Providers only need to implement transport (<see cref="GetRawCompletionAsync"/>);
     /// this base handles prompt formatting, moderation, response parsing, command
-    /// execution, and result typing.
+    /// execution, result typing, chat memory, and command-outcome feedback.
     /// </summary>
     public abstract class AiProviderBase : IAiService
     {
@@ -23,6 +23,10 @@ namespace ConditioningControlPanel.Services.AIService
         protected readonly IAiResponseParser Parser;
         protected readonly KnowledgeService KnowledgeService;
         protected readonly IPromptService PromptService;
+        protected readonly AiChatMemory ChatMemory;
+
+        private readonly List<CommandOutcome> _commandOutcomes = new();
+        private bool _memoryRecallSignaled;
 
         protected AiProviderBase()
         {
@@ -30,18 +34,20 @@ namespace ConditioningControlPanel.Services.AIService
             Parser = new AiResponseParser(GetFallbackResponse);
             KnowledgeService = new KnowledgeService();
             PromptService = new PromptService();
+            ChatMemory = new AiChatMemory(GetMemoryStorageKey(), () => IsChatMemoryEnabled, MaxPersistedPairs);
         }
 
         public abstract bool IsAvailable { get; }
         public abstract int DailyRequestsRemaining { get; }
 
         /// <summary>
-        /// Sends a chat completion request and returns the raw assistant content
-        /// (including any JSON effects wrapper). Transport only — moderation and
-        /// parsing happen in the base class.
+        /// Sends a chat completion request built by the base class (system + enrichment +
+        /// sliding-window memory + current user turn) and returns the raw assistant
+        /// content (including any JSON effects wrapper). Transport only — moderation,
+        /// parsing, command execution, and memory updates happen in the base class.
         /// </summary>
         protected abstract Task<string?> GetRawCompletionAsync(
-            string systemPrompt,
+            List<AiMessage> messages,
             string userInput,
             bool isUserMessage);
 
@@ -63,6 +69,33 @@ namespace ConditioningControlPanel.Services.AIService
         protected virtual bool SupportsEffectCommands => true;
 
         /// <summary>
+        /// Unique key used for the provider's persistent chat-history file.
+        /// </summary>
+        protected virtual string GetMemoryStorageKey() => GetType().Name;
+
+        /// <summary>
+        /// Whether this provider should load/persist chat memory. Cloud is stateless.
+        /// </summary>
+        protected virtual bool IsChatMemoryEnabled => App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled == true;
+
+        /// <summary>
+        /// Maximum user+assistant pairs persisted to disk.
+        /// </summary>
+        protected virtual int MaxPersistedPairs => 50;
+
+        /// <summary>
+        /// Maximum user+assistant pairs sent to the model per request.
+        /// </summary>
+        protected virtual int MaxSendPairs => App.Settings?.Current?.CompanionPrompt?.ChatMemorySendPairs ?? 10;
+
+        /// <summary>
+        /// Hook called once per session when the first accepted response is produced
+        /// while restored memory turns are in context. Local overrides this to signal
+        /// the GamificationBridge achievement.
+        /// </summary>
+        protected virtual void OnMemoryRecalled() { }
+
+        /// <summary>
         /// Builds the optional effects-enrichment message. Cloud returns null because
         /// the proxy constructs the prompt server-side.
         /// </summary>
@@ -75,20 +108,9 @@ namespace ConditioningControlPanel.Services.AIService
             var currentTime = DateTime.Now.ToString("yyyy-M-dd dddd h:mm:ss tt");
             var facts = KnowledgeService.GetKnowledge(userInput, maxResults: 20);
             var factsJson = JsonSerializer.Serialize(facts);
-            return PromptService.BuildEnrichmentMessage(factsJson, currentTime);
+            var snapshot = AiContextSnapshot.Build();
+            return PromptService.BuildEnrichmentMessage(factsJson, currentTime, snapshot, _commandOutcomes);
         }
-
-        /// <summary>
-        /// Hook called when output moderation blocks a response. Override to roll back
-        /// any provider-side state (e.g., local chat history).
-        /// </summary>
-        protected virtual void OnOutputModerationBlocked(string userInput, string rawResponse) { }
-
-        /// <summary>
-        /// Hook called after a response has passed moderation and any commands have been
-        /// executed. Override to persist state (e.g., local chat history).
-        /// </summary>
-        protected virtual void OnResponseAccepted(string userInput, string rawResponse) { }
 
         public virtual async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
         {
@@ -205,7 +227,8 @@ namespace ConditioningControlPanel.Services.AIService
 
         /// <summary>
         /// Core pipeline shared by chat and all reaction paths:
-        /// input moderation → raw completion → parse → output moderation → execute commands.
+        /// input moderation → build messages → raw completion → parse → output moderation
+        /// → execute commands → update memory.
         /// </summary>
         protected virtual async Task<string?> GetChatResponseAsync(
             string userInput,
@@ -237,9 +260,26 @@ namespace ConditioningControlPanel.Services.AIService
                 }
             }
 
-            var raw = await GetRawCompletionAsync(systemPrompt, userInput, isUserMessage);
+            // Ensure memory is loaded on the first chat/reaction call. Providers are
+            // constructed before App.Settings is fully ready in some paths; lazy loading
+            // avoids reading stale state.
+            ChatMemory.Load();
+
+            var enrichment = BuildEnrichmentMessage(userInput);
+            var messages = ChatMemory.BuildSendMessages(
+                new AiMessage("system", systemPrompt),
+                enrichment,
+                MaxSendPairs);
+            messages.Add(new AiMessage("user", userInput));
+
+            var raw = await GetRawCompletionAsync(messages, userInput, isUserMessage);
             if (string.IsNullOrWhiteSpace(raw))
+            {
+                // The user's turn never reached the model (or produced no usable
+                // response), so do not remember it.
+                ChatMemory.RemoveLastUserTurn();
                 return null;
+            }
 
             var parsed = Parser.Parse(raw);
 
@@ -253,7 +293,8 @@ namespace ConditioningControlPanel.Services.AIService
                     // Model OUTPUT tripping the filter is not the user's doing — log for
                     // compliance but do NOT escalate the Content Policy Notice.
                     App.Logger?.Information("{Provider}: output blocked by ModerationGuard (category={Cat})", GetProviderName(), outputCheck.Category);
-                    OnOutputModerationBlocked(userInput, raw);
+                    ChatMemory.RemoveLastAssistantTurn();
+                    ChatMemory.RemoveLastUserTurn();
                     return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
                 }
                 if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
@@ -262,16 +303,32 @@ namespace ConditioningControlPanel.Services.AIService
                 }
             }
 
-            // Execute any parsed effect commands.
+            // Execute any parsed effect commands and collect outcomes for the next turn.
+            _commandOutcomes.Clear();
             if (SupportsEffectCommands && parsed.Commands.Count > 0 && App.Commands != null)
             {
                 App.Logger?.Information("{Provider}: parsed {Count} command(s) from response", GetProviderName(), parsed.Commands.Count);
                 App.Commands.BeginBatch();
                 foreach (var cmd in parsed.Commands)
-                    App.Commands.ExecuteCommand(cmd);
+                {
+                    var outcome = App.Commands.ExecuteCommand(cmd);
+                    if (outcome != null)
+                        _commandOutcomes.Add(outcome);
+                }
             }
+            // Ensure command outcomes don't grow unbounded across turns.
+            while (_commandOutcomes.Count > 10) _commandOutcomes.RemoveAt(0);
 
-            OnResponseAccepted(userInput, raw);
+            // Remember the completed exchange.
+            ChatMemory.AddUserTurn(userInput);
+            ChatMemory.AddAssistantTurn(raw);
+            _ = Task.Run(ChatMemory.Save);
+
+            if (ChatMemory.RestoredTurnCount > 0 && !_memoryRecallSignaled)
+            {
+                _memoryRecallSignaled = true;
+                OnMemoryRecalled();
+            }
 
             return string.IsNullOrWhiteSpace(parsed.CleanText) ? null : parsed.CleanText;
         }
@@ -306,6 +363,11 @@ namespace ConditioningControlPanel.Services.AIService
         /// Human-readable provider name for logs.
         /// </summary>
         protected virtual string GetProviderName() => GetType().Name;
+
+        /// <summary>
+        /// Clears this provider's in-memory and persisted chat history.
+        /// </summary>
+        public void ClearChatHistory() => ChatMemory.Clear();
 
         public abstract void Dispose();
     }

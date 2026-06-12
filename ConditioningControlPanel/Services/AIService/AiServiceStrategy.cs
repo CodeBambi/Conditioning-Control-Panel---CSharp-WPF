@@ -95,20 +95,36 @@ namespace ConditioningControlPanel.Services.AIService
         }
 
         /// <summary>
-        /// Clears the persisted local-AI conversation memory (in-memory + on-disk).
-        /// No-op for the cloud provider (it's stateless). Safe to call even when
-        /// <see cref="LocalAiService"/> hasn't been constructed yet — we still try
-        /// to delete the file so a fresh local provider starts blank.
+        /// Clears persisted chat memory for all providers (local + OpenAI-compatible).
+        /// Cloud provider is stateless and has no client-side history. Safe to call even
+        /// when providers haven't been constructed yet — we delete the underlying files.
         /// </summary>
-        public void ClearLocalHistory()
+        public void ClearChatHistory()
         {
-            // Construct the local instance if needed only to reach the clear method —
-            // alternative is to duplicate the file path here. Cheaper to instantiate.
             lock (_lock)
             {
-                _local ??= new LocalAiService();
+                _local?.ClearChatHistory();
+                _openAi?.ClearChatHistory();
             }
-            _local.ClearHistory();
+
+            // If a provider has never been instantiated, delete its history file directly
+            // so the next provider starts blank regardless of which provider is active.
+            DeleteHistoryFile("local_chat_history.json");
+            DeleteHistoryFile("openaicomp_chat_history.json");
+        }
+
+        private static void DeleteHistoryFile(string fileName)
+        {
+            try
+            {
+                var path = System.IO.Path.Combine(App.UserDataPath, fileName);
+                if (System.IO.File.Exists(path))
+                    System.IO.File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "AiServiceStrategy: failed to delete history file {File}", fileName);
+            }
         }
 
         /// <summary>

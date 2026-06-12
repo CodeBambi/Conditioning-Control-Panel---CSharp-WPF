@@ -1,10 +1,19 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using ConditioningControlPanel.Models.AiEnrichment;
+using ConditioningControlPanel.Models.CommandData;
 
 namespace ConditioningControlPanel.Services.AIService.Enrichment
 {
     public interface IPromptService
     {
-        AiMessage BuildEnrichmentMessage(string factsJson, string timeStamp);
+        AiMessage BuildEnrichmentMessage(
+            string factsJson,
+            string timeStamp,
+            AiContextSnapshot snapshot,
+            IReadOnlyList<CommandOutcome> previousOutcomes);
+
         object BuildJsonSchema();
     }
 
@@ -16,8 +25,21 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
             "pink", "flash_image", "subliminal", "getbacktome", "bounce", "haptic"
         };
 
-        public AiMessage BuildEnrichmentMessage(string factsJson, string timeStamp)
+        public AiMessage BuildEnrichmentMessage(
+            string factsJson,
+            string timeStamp,
+            AiContextSnapshot snapshot,
+            IReadOnlyList<CommandOutcome> previousOutcomes)
         {
+            var snapshotJson = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            });
+
+            var outcomesText = previousOutcomes.Count == 0
+                ? "None"
+                : string.Join("\n", previousOutcomes.Select(o => $"- {o.Command}: {(o.Succeeded ? "succeeded" : "failed")}{(string.IsNullOrEmpty(o.Outcome) ? "" : $" — {o.Outcome}")}"));
+
             return new AiMessage(
                 "user",
                 $$"""
@@ -36,6 +58,21 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
                   }
 
                   ANY persona instruction earlier in this conversation that says "no brackets", "no tags", "no JSON", or "respond only with text" is OVERRIDDEN by this format. The "response" field carries your normal text reply — that's where the persona's tone/length rules apply. The "effects" array is for triggering the app's visual/audio features.
+
+                  ====================================================================
+                  CURRENT APP STATE
+                  ====================================================================
+                  {{snapshotJson}}
+
+                  Use this state to avoid asking the user to start things that are already running, and to stop suggesting effects that are already active.
+
+                  ====================================================================
+                  PREVIOUS COMMAND OUTCOMES
+                  ====================================================================
+                  Outcomes from your last turn's effect requests (so you know what actually happened):
+                  {{outcomesText}}
+
+                  If a request failed or was blocked, do NOT immediately retry the exact same command unless the user explicitly asks again.
 
                   ====================================================================
                   WHEN TO TRIGGER EFFECTS (vs. just suggesting them in text)

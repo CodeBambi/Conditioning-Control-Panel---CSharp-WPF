@@ -1,4 +1,5 @@
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Models.CommandData;
 
 namespace ConditioningControlPanel.Services.Commands
 {
@@ -8,7 +9,8 @@ namespace ConditioningControlPanel.Services.Commands
         void BeginBatch();
 
         /// <summary>Dispatch a single AI command. Subject to master/per-effect/cap gating.</summary>
-        void ExecuteCommand(AiCommandData commandData);
+        /// <returns>An outcome summary for the AI context, or null if the command was unparseable.</returns>
+        CommandOutcome? ExecuteCommand(AiCommandData commandData);
 
         /// <summary>Cancel all in-flight token-tracked commands (e.g. pending getbacktome scheduled actions).</summary>
         void CancelAllCommands();

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -8,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Models.AiEnrichment;
 using ConditioningControlPanel.Services.AIService.Enrichment;
 using ConditioningControlPanel.Services.Moderation;
 
@@ -18,6 +18,9 @@ namespace ConditioningControlPanel.Services.AIService
     /// Posts directly to <c>POST {host}/api/chat</c> with <c>stream:false</c> —
     /// no third-party client, since OllamaSharp 5.4.16 was returning 404 for
     /// model names that the same endpoint accepts via raw HTTP.
+    ///
+    /// Chat memory is now handled by the shared <see cref="AiChatMemory"/> base-class
+    /// store; this class only implements transport and local-AI queue/drop semantics.
     /// </summary>
     public class LocalAiService : AiProviderBase
     {
@@ -28,21 +31,11 @@ namespace ConditioningControlPanel.Services.AIService
         private bool _isProcessing;
         private bool _isUserQueued;
 
-        // Persistent chat history. Index 0 is system; optional enrichment block at 1
-        // when effects are enabled; then alternating user/assistant turns.
-        private readonly List<ChatMessage> _messages = new();
-
         private HttpClient _http;
         private string _activeHost;
 
         public override bool IsAvailable => true;
         public override int DailyRequestsRemaining => -1;
-
-        // Number of user/assistant turns seeded from disk at construction (a prior
-        // session's conversation). Non-zero means persistent memory is in play.
-        private int _restoredTurnCount;
-        // Signal she_remembers at most once per session.
-        private bool _memoryRecallSignaled;
 
         /// <summary>
         /// Raised once per session when the local companion produces a reply while the
@@ -64,105 +57,8 @@ namespace ConditioningControlPanel.Services.AIService
             _activeHost = NormalizeHost(GetConfiguredHost());
             _http = BuildHttpClient(_activeHost);
 
-            // Load any persisted chat history from the previous app session. Local
-            // models can hold long-running context; persistence makes Bambi remember
-            // between launches. (Cloud provider doesn't have or use this.)
-            LoadPersistedHistory();
-
-            App.Logger?.Information("LocalAiService initialized (host={Host}, model={Model}, restored={Count} turns)",
-                _activeHost, GetConfiguredModel(), _messages.Count);
-        }
-
-        // -------- Persistent chat memory (local only) --------
-
-        // Cap on persisted user+assistant pairs. Picked so the file stays small (<200KB
-        // typical) while preserving enough context that Bambi remembers a long conversation.
-        private const int MaxPersistedPairs = 50;
-        private static string HistoryFilePath =>
-            Path.Combine(App.UserDataPath, "local_chat_history.json");
-
-        private sealed class PersistedTurn
-        {
-            public string Role { get; set; } = "";
-            public string Content { get; set; } = "";
-        }
-
-        /// <summary>
-        /// Reads the persisted user/assistant history from disk and seeds <c>_messages</c>.
-        /// Skips system and enrichment messages — those are rebuilt fresh per request.
-        /// Best-effort: any parse failure or missing file results in an empty history.
-        /// </summary>
-        private void LoadPersistedHistory()
-        {
-            try
-            {
-                if (App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled == false) return;
-                if (!File.Exists(HistoryFilePath)) return;
-                var json = File.ReadAllText(HistoryFilePath);
-                var turns = JsonSerializer.Deserialize<List<PersistedTurn>>(json);
-                if (turns == null) return;
-
-                foreach (var t in turns)
-                {
-                    if (string.IsNullOrEmpty(t.Role) || string.IsNullOrEmpty(t.Content)) continue;
-                    if (t.Role != "user" && t.Role != "assistant") continue;
-                    _messages.Add(new ChatMessage(t.Role, t.Content));
-                }
-
-                // At construction _messages holds only restored turns (system/enrichment
-                // are inserted later, per request), so this is the prior-session turn count.
-                _restoredTurnCount = _messages.Count;
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "LocalAiService: failed to load persisted chat history");
-            }
-        }
-
-        /// <summary>
-        /// Writes the user/assistant turns of the current conversation to disk.
-        /// Drops the system prompt and any enrichment block so they're regenerated
-        /// freshly on next load. Trimmed to <see cref="MaxPersistedPairs"/> recent
-        /// turns (counted in pairs) to bound file size.
-        /// </summary>
-        private void PersistHistory()
-        {
-            try
-            {
-                if (App.Settings?.Current?.CompanionPrompt?.ChatMemoryEnabled == false) return;
-                var dialogue = _messages
-                    .Where(m => m.Role == "user" || m.Role == "assistant")
-                    .Where(m => !string.IsNullOrEmpty(m.Content)
-                                && !m.Content!.Contains("[CONTEXT BLOCK — NOT DIALOGUE]"))
-                    .Select(m => new PersistedTurn { Role = m.Role, Content = m.Content ?? string.Empty })
-                    .ToList();
-
-                // Cap to last N pairs (one pair = user + assistant). Trim from the front.
-                int maxMessages = MaxPersistedPairs * 2;
-                if (dialogue.Count > maxMessages)
-                {
-                    dialogue = dialogue.Skip(dialogue.Count - maxMessages).ToList();
-                }
-
-                Directory.CreateDirectory(Path.GetDirectoryName(HistoryFilePath)!);
-                var json = JsonSerializer.Serialize(dialogue, new JsonSerializerOptions { WriteIndented = false });
-                File.WriteAllText(HistoryFilePath, json);
-            }
-            catch (Exception ex)
-            {
-                App.Logger?.Warning(ex, "LocalAiService: failed to persist chat history");
-            }
-        }
-
-        /// <summary>
-        /// Clears in-memory and on-disk chat history.
-        /// </summary>
-        public void ClearHistory()
-        {
-            _messages.Clear();
-            try { if (File.Exists(HistoryFilePath)) File.Delete(HistoryFilePath); }
-            catch (Exception ex) { App.Logger?.Warning(ex, "LocalAiService: failed to delete chat history file"); }
-            App.Logger?.Information("LocalAiService: chat history cleared");
+            App.Logger?.Information("LocalAiService initialized (host={Host}, model={Model})",
+                _activeHost, GetConfiguredModel());
         }
 
         /// <summary>
@@ -253,6 +149,13 @@ namespace ConditioningControlPanel.Services.AIService
             _http = BuildHttpClient(_activeHost);
         }
 
+        protected override string GetMemoryStorageKey() => "local";
+
+        protected override void OnMemoryRecalled()
+        {
+            RaisePersistentMemoryRecalled();
+        }
+
         protected override string GetFallbackResponse()
         {
             // Bambi keeps its flavored fallback; all other mods get a neutral one.
@@ -332,16 +235,17 @@ namespace ConditioningControlPanel.Services.AIService
         private static readonly Random _random = new();
 
         /// <summary>
-        /// Core transport: maintains the persistent message list, sends to Ollama,
-        /// and returns raw assistant content. Moderation and command execution are
-        /// handled by the base class pipeline.
+        /// Core transport: sends the already-built message list to Ollama and returns
+        /// raw assistant content. Moderation, memory, and command execution are handled
+        /// by the base class pipeline.
         /// </summary>
         protected override async Task<string?> GetRawCompletionAsync(
-            string systemPrompt,
+            List<AiMessage> messages,
             string userInput,
             bool isUserMessage)
         {
             _ = isUserMessage;
+            _ = userInput;
 
             if (App.Settings?.Current?.OfflineMode == true)
             {
@@ -352,43 +256,14 @@ namespace ConditioningControlPanel.Services.AIService
             EnsureHost();
             var model = GetConfiguredModel();
 
-            // System prompt at index 0, refreshed each call so prompt edits take effect immediately.
-            var sys = _messages.FirstOrDefault(m => m.Role == "system");
-            if (sys == null) _messages.Insert(0, new ChatMessage("system", systemPrompt));
-            else sys.Content = systemPrompt;
+            App.Logger?.Information("LocalAiService: sending to Ollama (model={Model}, msgs={MsgCount})",
+                model, messages.Count);
 
-            // Optional enrichment block right after the system message (only when effects on).
-            var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
-            var oldEnrichment = _messages.FirstOrDefault(m => m.Content?.Contains("[CONTEXT BLOCK — NOT DIALOGUE]") == true);
-
-            if (effectsEnabled)
-            {
-                var currentTime = DateTime.Now.ToString("yyyy-M-dd dddd h:mm:ss tt");
-                var facts = KnowledgeService.GetKnowledge(userInput, maxResults: 20);
-                var factsJson = JsonSerializer.Serialize(facts);
-                var enrichment = PromptService.BuildEnrichmentMessage(factsJson, currentTime);
-
-                if (oldEnrichment != null) oldEnrichment.Content = enrichment.Content;
-                else _messages.Insert(1, new ChatMessage("user", enrichment.Content));
-            }
-            else if (oldEnrichment != null)
-            {
-                _messages.Remove(oldEnrichment);
-            }
-
-            // Append the new user turn.
-            _messages.Add(new ChatMessage("user", userInput));
-
-            App.Logger?.Information("LocalAiService: sending to Ollama (model={Model}, effects={Effects}, msgs={MsgCount})",
-                model, effectsEnabled, _messages.Count);
-
-            var (status, body) = await SendChatAsync(model, _messages);
+            var (status, body) = await SendChatAsync(model, messages);
 
             if (status != 200)
             {
                 App.Logger?.Warning("LocalAiService: Ollama returned HTTP {Status}: {Body}", status, body);
-                // Roll back the user turn so we don't poison history with an unanswered turn.
-                if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
                 return DescribeOllamaError(status, body, model);
             }
 
@@ -396,49 +271,14 @@ namespace ConditioningControlPanel.Services.AIService
             if (string.IsNullOrEmpty(content))
             {
                 App.Logger?.Warning("LocalAiService: empty content in 200 response: {Body}", Truncate(body, 300));
-                if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
                 return null;
             }
 
             App.Logger?.Information("LocalAiService: got reply ({Len} chars)", content.Length);
-
-            // Append assistant turn so future requests have context.
-            _messages.Add(new ChatMessage("assistant", content));
-
             return content;
         }
 
-        /// <summary>
-        /// Rolls back the assistant and user turns when output moderation blocks the
-        /// response, and skips persistence so the rejected exchange isn't remembered.
-        /// </summary>
-        protected override void OnOutputModerationBlocked(string userInput, string rawResponse)
-        {
-            // Roll back assistant turn first (most recent), then the user turn that produced it.
-            if (_messages.Count > 0 && _messages[^1].Role == "assistant") _messages.RemoveAt(_messages.Count - 1);
-            if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
-        }
-
-        /// <summary>
-        /// Persists the accepted conversation and signals memory recall after the
-        /// response has passed moderation.
-        /// </summary>
-        protected override void OnResponseAccepted(string userInput, string rawResponse)
-        {
-            // Persist asynchronously so chat latency isn't impacted by disk I/O.
-            _ = Task.Run(PersistHistory);
-
-            // she_remembers: a reply was produced while turns restored from a previous
-            // session are in context — persistent memory surfacing across launches.
-            // Signal once per session; GamificationBridge entitlement-gates the unlock.
-            if (_restoredTurnCount > 0 && !_memoryRecallSignaled)
-            {
-                _memoryRecallSignaled = true;
-                RaisePersistentMemoryRecalled();
-            }
-        }
-
-        private async Task<(int status, string body)> SendChatAsync(string model, List<ChatMessage> messages)
+        private async Task<(int status, string body)> SendChatAsync(string model, List<AiMessage> messages)
         {
             // think:false tells reasoning models (qwen3, deepseek-r1, etc.) to skip the
             // long internal reasoning phase and respond directly. Non-reasoning models
@@ -625,13 +465,6 @@ namespace ConditioningControlPanel.Services.AIService
         {
             _aiSemaphore.Dispose();
             _http.Dispose();
-        }
-
-        private sealed class ChatMessage
-        {
-            public string Role { get; set; }
-            public string? Content { get; set; }
-            public ChatMessage(string role, string? content) { Role = role; Content = content; }
         }
     }
 }

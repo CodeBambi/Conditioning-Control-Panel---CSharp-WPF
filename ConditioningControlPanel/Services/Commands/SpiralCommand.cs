@@ -12,7 +12,7 @@ namespace ConditioningControlPanel.Services.Commands
         private readonly SpiralPinkFiler _data;
         public SpiralCommand(SpiralPinkFiler data) { _data = data; }
 
-        public Task<bool> ExecuteAsync()
+        public Task<CommandResult> ExecuteAsync()
         {
             var intensity = Math.Clamp(_data.Intensity, 0, MaxIntensity);
 
@@ -39,12 +39,18 @@ namespace ConditioningControlPanel.Services.Commands
                     App.Overlay.RefreshOverlays();
                     App.Settings?.Save();
                 });
-                return Task.FromResult(true);
+                return Task.FromResult(new CommandResult(
+                    "spiral",
+                    CommandResultStatus.Executed,
+                    ParameterSummary: _data.On ? $"on, intensity={intensity}%" : "off"));
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "SpiralCommand failed");
-                return Task.FromResult(false);
+                return Task.FromResult(new CommandResult(
+                    "spiral",
+                    CommandResultStatus.Failed,
+                    Reason: ex.Message));
             }
         }
     }

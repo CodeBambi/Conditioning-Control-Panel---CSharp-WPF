@@ -11603,10 +11603,10 @@ namespace ConditioningControlPanel
 
             try
             {
-                // Cloud provider is stateless, so this only does work for local Ollama users.
-                // App.Ai is typed as the IAiService interface; ClearLocalHistory lives on
+                // Cloud provider is stateless, so this only does work for local/OpenAI-compatible users.
+                // App.Ai is typed as the IAiService interface; ClearChatHistory lives on
                 // the concrete strategy (which is what's always assigned).
-                (App.Ai as Services.AIService.AiServiceStrategy)?.ClearLocalHistory();
+                (App.Ai as Services.AIService.AiServiceStrategy)?.ClearChatHistory();
 
                 // Drop the on-screen history too (the data store the avatar window binds to).
                 _avatarTubeWindow?.ChatHistory.Clear();
@@ -12215,7 +12215,7 @@ namespace ConditioningControlPanel
             {
                 if (App.Ai is Services.AIService.AiServiceStrategy strategy)
                 {
-                    strategy.ClearLocalHistory();
+                    strategy.ClearChatHistory();
                 }
 
                 // Also clear the live actions feed so the visual state matches "fresh slate".
@@ -12246,8 +12246,8 @@ namespace ConditioningControlPanel
             // Turning memory off should wipe what's already saved — not just stop persisting new turns.
             if (!on && App.Ai is Services.AIService.AiServiceStrategy strategy)
             {
-                try { strategy.ClearLocalHistory(); }
-                catch (Exception ex) { App.Logger?.Warning(ex, "ChkChatMemoryEnabled_Changed: ClearLocalHistory failed"); }
+                try { strategy.ClearChatHistory(); }
+                catch (Exception ex) { App.Logger?.Warning(ex, "ChkChatMemoryEnabled_Changed: ClearChatHistory failed"); }
             }
         }
 

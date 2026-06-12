@@ -13,12 +13,18 @@ namespace ConditioningControlPanel.Services.Commands
         private readonly MantraLockscreen _data;
         public MantraLockScreenCommand(MantraLockscreen data) { _data = data; }
 
-        public Task<bool> ExecuteAsync()
+        public Task<CommandResult> ExecuteAsync()
         {
             var amount = Math.Clamp(_data.Amount, 0, MaxRepeats);
             var phrase = (_data.Mantra ?? string.Empty).Trim();
             if (phrase.Length > MaxMantraChars) phrase = phrase.Substring(0, MaxMantraChars);
-            if (string.IsNullOrEmpty(phrase)) return Task.FromResult(false);
+            if (string.IsNullOrEmpty(phrase))
+            {
+                return Task.FromResult(new CommandResult(
+                    "mantra_lockscreen",
+                    CommandResultStatus.Rejected,
+                    Reason: "mantra was empty"));
+            }
 
             try
             {
@@ -26,12 +32,18 @@ namespace ConditioningControlPanel.Services.Commands
                 {
                     App.LockCard?.ShowLockCard(phrase, amount, customStrict: true);
                 });
-                return Task.FromResult(true);
+                return Task.FromResult(new CommandResult(
+                    "mantra_lockscreen",
+                    CommandResultStatus.Executed,
+                    ParameterSummary: $"\"{phrase}\" x{amount}"));
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "MantraLockScreenCommand failed");
-                return Task.FromResult(false);
+                return Task.FromResult(new CommandResult(
+                    "mantra_lockscreen",
+                    CommandResultStatus.Failed,
+                    Reason: ex.Message));
             }
         }
     }

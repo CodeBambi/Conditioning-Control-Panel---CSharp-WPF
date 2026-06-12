@@ -10,7 +10,7 @@ namespace ConditioningControlPanel.Services.Commands
         private readonly Bounce _data;
         public BounceCommand(Bounce data) { _data = data; }
 
-        public Task<bool> ExecuteAsync()
+        public Task<CommandResult> ExecuteAsync()
         {
             try
             {
@@ -21,12 +21,18 @@ namespace ConditioningControlPanel.Services.Commands
                     else
                         App.BouncingText?.Stop();
                 });
-                return Task.FromResult(true);
+                return Task.FromResult(new CommandResult(
+                    "bounce",
+                    CommandResultStatus.Executed,
+                    ParameterSummary: _data.On ? "on" : "off"));
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "BounceCommand failed");
-                return Task.FromResult(false);
+                return Task.FromResult(new CommandResult(
+                    "bounce",
+                    CommandResultStatus.Failed,
+                    Reason: ex.Message));
             }
         }
     }

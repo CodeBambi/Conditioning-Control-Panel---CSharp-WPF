@@ -26,12 +26,15 @@ namespace ConditioningControlPanel.Services.Commands
             _depth = depth;
         }
 
-        public async Task<bool> ExecuteAsync()
+        public async Task<CommandResult> ExecuteAsync()
         {
             if (_depth >= CommandFactory.MaxGetBackToMeDepth)
             {
                 App.Logger?.Information("GetBackToMeCommand: depth cap reached ({Depth}) — refusing further nesting", _depth);
-                return false;
+                return new CommandResult(
+                    "getbacktome",
+                    CommandResultStatus.Rejected,
+                    Reason: $"max nesting depth ({CommandFactory.MaxGetBackToMeDepth}) reached");
             }
 
             var delay = Math.Clamp(_data.Delay, 1, MaxDelaySec);
@@ -56,16 +59,25 @@ namespace ConditioningControlPanel.Services.Commands
                         }
                     }
                 }
-                return true;
+                return new CommandResult(
+                    "getbacktome",
+                    CommandResultStatus.Executed,
+                    ParameterSummary: $"delay={delay}s");
             }
             catch (OperationCanceledException)
             {
-                return false;
+                return new CommandResult(
+                    "getbacktome",
+                    CommandResultStatus.NoOp,
+                    Reason: "cancelled");
             }
             catch (Exception ex)
             {
                 App.Logger?.Warning(ex, "GetBackToMeCommand failed");
-                return false;
+                return new CommandResult(
+                    "getbacktome",
+                    CommandResultStatus.Failed,
+                    Reason: ex.Message);
             }
         }
 
