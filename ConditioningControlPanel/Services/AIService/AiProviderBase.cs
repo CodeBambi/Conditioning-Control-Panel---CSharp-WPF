@@ -66,7 +66,7 @@ namespace ConditioningControlPanel.Services.AIService
         /// Builds the optional effects-enrichment message. Cloud returns null because
         /// the proxy constructs the prompt server-side.
         /// </summary>
-        protected virtual MessageDto? BuildEnrichmentMessage(string userInput)
+        protected virtual AiMessage? BuildEnrichmentMessage(string userInput)
         {
             var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
             if (!effectsEnabled)

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Moderation;
@@ -13,6 +14,12 @@ namespace ConditioningControlPanel.Services
     /// </summary>
     public class BambiSprite
     {
+        // Prompt cache: building the system prompt allocates many large strings and
+        // runs regex transforms. The inputs change far less often than the AI is called,
+        // so we cache the final wrapped prompt and invalidate by a deterministic key.
+        private string? _cachedPrompt;
+        private string? _cachedPromptKey;
+
         // ==========================================
         // 1. KNOWLEDGE BASE (The "Lore")
         // ==========================================
@@ -441,18 +448,24 @@ Example responses with REAL video names:
             // are still loaded verbatim, but cannot bypass the safety rules. The
             // Preamble/Floor strings are hardcoded const in SafetyComposer.cs and
             // never persisted, never editable, never visible to the user.
+
             string assembled;
+            string? presetId;
+            string? presetName;
 
             // Check for active community prompt (assigned via prite/companion)
             var companionPrompt = App.Settings?.Current?.CompanionPrompt;
             if (companionPrompt?.UseCustomPrompt == true &&
                 !string.IsNullOrEmpty(App.Settings?.Current?.ActiveCommunityPromptId))
             {
+                presetId = App.Settings!.Current!.ActiveCommunityPromptId;
+                presetName = "Community Prompt";
+
                 // Build a temporary preset wrapper so we can reuse BuildPromptFromPreset
                 var communityPreset = new Models.PersonalityPreset
                 {
-                    Id = App.Settings!.Current!.ActiveCommunityPromptId!,
-                    Name = "Community Prompt",
+                    Id = presetId!,
+                    Name = presetName,
                     PromptSettings = companionPrompt
                 };
                 assembled = BuildPromptFromPreset(communityPreset);
@@ -461,12 +474,123 @@ Example responses with REAL video names:
             {
                 // Get the active personality preset from PersonalityService
                 var activePreset = App.Personality?.GetActivePreset();
+                presetId = activePreset?.Id;
+                presetName = activePreset?.Name;
                 assembled = activePreset?.PromptSettings != null
                     ? BuildPromptFromPreset(activePreset)
                     : GetDefaultBambiSpritePrompt();
             }
 
-            return SafetyComposer.Wrap(assembled);
+            var key = ComputePromptCacheKey(presetId, presetName, companionPrompt, App.Settings?.Current);
+            if (_cachedPrompt != null && _cachedPromptKey == key)
+                return _cachedPrompt;
+
+            var prompt = SafetyComposer.Wrap(assembled);
+            _cachedPrompt = prompt;
+            _cachedPromptKey = key;
+            return prompt;
+        }
+
+        /// <summary>
+        /// Builds a deterministic cache key for the current prompt inputs. If none of
+        /// these change, the wrapped system prompt can be reused.
+        /// </summary>
+        private static string ComputePromptCacheKey(
+            string? presetId,
+            string? presetName,
+            CompanionPromptSettings? companionPrompt,
+            AppSettings? settings)
+        {
+            var mods = App.Mods;
+
+            var sb = new StringBuilder();
+
+            sb.Append("preset:");
+            sb.AppendLine(presetId ?? "");
+            sb.Append("presetName:");
+            sb.AppendLine(presetName ?? "");
+
+            sb.Append("community:");
+            sb.AppendLine(settings?.ActiveCommunityPromptId ?? "");
+            sb.Append("useCustom:");
+            sb.AppendLine(companionPrompt?.UseCustomPrompt == true ? "1" : "0");
+
+            sb.Append("slutMode:");
+            sb.AppendLine(settings?.SlutModeEnabled == true ? "1" : "0");
+            sb.Append("bambiMode:");
+            sb.AppendLine(settings?.IsBambiMode == true ? "1" : "0");
+
+            sb.Append("modId:");
+            sb.AppendLine(mods?.ActiveModId ?? "");
+            sb.Append("userTerm:");
+            sb.AppendLine(mods?.GetUserTerm() ?? "");
+            sb.Append("companionName:");
+            sb.AppendLine(mods?.GetCompanionName() ?? "");
+
+            AppendKeyPart(sb, "personality", companionPrompt?.Personality);
+            AppendKeyPart(sb, "slutPersonality", companionPrompt?.SlutModePersonality);
+            AppendKeyPart(sb, "explicitReaction", companionPrompt?.ExplicitReaction);
+            AppendKeyPart(sb, "knowledgeBase", companionPrompt?.KnowledgeBase);
+            AppendKeyPart(sb, "contextReactions", companionPrompt?.ContextReactions);
+            AppendKeyPart(sb, "outputRules", companionPrompt?.OutputRules);
+
+            sb.AppendLine("globalLinks:");
+            var globalLinks = settings?.GlobalKnowledgeBaseLinks;
+            if (globalLinks != null)
+            {
+                foreach (var link in globalLinks)
+                {
+                    sb.AppendLine(link?.ToPromptText() ?? "");
+                }
+            }
+
+            sb.AppendLine("hypnoBambi:");
+            sb.AppendLine(settings?.HypnotubeLinksBambiSleep ?? "");
+            sb.AppendLine("hypnoSissy:");
+            sb.AppendLine(settings?.HypnotubeLinksSissyHypno ?? "");
+
+            sb.Append("quiz:");
+            sb.Append(settings?.LatestQuizScorePercentage ?? -1);
+            sb.Append("|");
+            sb.Append(settings?.LatestQuizArchetype ?? "");
+            sb.Append("|");
+            sb.AppendLine(settings?.LatestQuizProfileText ?? "");
+
+            sb.AppendLine("knownVideos:");
+            var knownVideos = AvatarTubeWindow.KnownVideoLinks;
+            if (knownVideos != null)
+            {
+                foreach (var kvp in knownVideos.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    sb.Append(kvp.Key);
+                    sb.Append("=>");
+                    sb.AppendLine(kvp.Value);
+                }
+            }
+
+            return ComputeSha256(sb.ToString());
+        }
+
+        private static void AppendKeyPart(StringBuilder sb, string label, string? value)
+        {
+            sb.Append(label);
+            sb.Append(":");
+            sb.AppendLine(value ?? "");
+        }
+
+        private static string ComputeSha256(string input)
+        {
+            var bytes = Encoding.UTF8.GetBytes(input);
+#if NET8_0_OR_GREATER
+            var hash = SHA256.HashData(bytes);
+#else
+            using var sha = SHA256.Create();
+            var hash = sha.ComputeHash(bytes);
+#endif
+            var sb = new StringBuilder(hash.Length * 2);
+            foreach (var b in hash)
+                sb.Append(b.ToString("x2"));
+            return sb.ToString();
         }
 
         /// <summary>

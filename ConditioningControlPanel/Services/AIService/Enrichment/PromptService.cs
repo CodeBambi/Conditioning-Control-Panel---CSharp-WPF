@@ -4,7 +4,7 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
 {
     public interface IPromptService
     {
-        MessageDto BuildEnrichmentMessage(string factsJson, string timeStamp);
+        AiMessage BuildEnrichmentMessage(string factsJson, string timeStamp);
         object BuildJsonSchema();
     }
 
@@ -16,9 +16,9 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
             "pink", "flash_image", "subliminal", "getbacktome", "bounce", "haptic"
         };
 
-        public MessageDto BuildEnrichmentMessage(string factsJson, string timeStamp)
+        public AiMessage BuildEnrichmentMessage(string factsJson, string timeStamp)
         {
-            return new MessageDto(
+            return new AiMessage(
                 "user",
                 $$"""
                   [CONTEXT BLOCK — NOT DIALOGUE]

@@ -47,6 +47,7 @@ namespace ConditioningControlPanel.Services.AIService
             long? ElapsedMs = null);
 
         private readonly HttpClient _httpClient;
+        private readonly AiRetryPolicy _retryPolicy;
 
         private static CompanionPromptSettings? Settings => App.Settings?.Current?.CompanionPrompt;
 
@@ -96,6 +97,7 @@ namespace ConditioningControlPanel.Services.AIService
             {
                 Timeout = TimeSpan.FromSeconds(60)
             };
+            _retryPolicy = new AiRetryPolicy(maxAttempts: 2, delay: TimeSpan.FromMilliseconds(1200), logger: App.Logger);
 
             ResetDailyCounterIfNeeded();
         }
@@ -160,78 +162,86 @@ namespace ConditioningControlPanel.Services.AIService
 
             BumpDailyCounter();
 
-            for (var attempt = 0; attempt < 2; attempt++)
+            try
             {
-                try
-                {
-                    using var request = new HttpRequestMessage(HttpMethod.Post, endpointUri)
+                using var response = await _retryPolicy.ExecuteAsync(
+                    async ct =>
                     {
-                        Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-                    };
-                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-
-                    App.Logger?.Debug("OpenAiCompatibleService: request to {Url} (attempt {Attempt})", request.RequestUri, attempt + 1);
-
-                    using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
-                    var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        var status = (int)response.StatusCode;
-                        var retryableStatus = status == 429 || status >= 500;
-
-                        if (attempt == 0 && retryableStatus)
+                        using var request = new HttpRequestMessage(HttpMethod.Post, endpointUri)
                         {
-                            await Task.Delay(1200).ConfigureAwait(false);
-                            continue;
+                            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+                        };
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+                        App.Logger?.Debug("OpenAiCompatibleService: request to {Url}", request.RequestUri);
+
+                        var resp = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+                        var status = (int)resp.StatusCode;
+                        if (status == 429 || status >= 500)
+                        {
+                            var body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                            resp.Dispose();
+                            throw new RetryableStatusException(status, body);
                         }
 
-                        App.Logger?.Warning("OpenAiCompatibleService: HTTP {Status} from {Endpoint}: {Body}",
-                            status,
-                            endpointUri,
-                            json);
-                        return null;
-                    }
+                        return resp;
+                    },
+                    ex => ex is RetryableStatusException || ex is HttpRequestException || ex is TaskCanceledException,
+                    CancellationToken.None).ConfigureAwait(false);
 
-                    using var doc = JsonDocument.Parse(json);
-                    if (!doc.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
-                    {
-                        App.Logger?.Warning("OpenAiCompatibleService: response has no choices");
-                        return null;
-                    }
+                var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-                    var first = choices[0];
-                    if (!first.TryGetProperty("message", out var message) ||
-                        !message.TryGetProperty("content", out var contentElement))
-                    {
-                        App.Logger?.Warning("OpenAiCompatibleService: response missing message.content");
-                        return null;
-                    }
-
-                    return CleanTokenizerArtifacts(contentElement.GetString());
-                }
-                catch (HttpRequestException) when (attempt == 0)
+                if (!response.IsSuccessStatusCode)
                 {
-                    await Task.Delay(1200).ConfigureAwait(false);
-                }
-                catch (TaskCanceledException) when (attempt == 0)
-                {
-                    await Task.Delay(1200).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning(ex, "OpenAiCompatibleService: request failed");
+                    App.Logger?.Warning("OpenAiCompatibleService: HTTP {Status} from {Endpoint}: {Body}",
+                        (int)response.StatusCode,
+                        endpointUri,
+                        json);
                     return null;
                 }
-            }
 
-            App.Logger?.Warning("OpenAiCompatibleService: request failed after retry");
-            return null;
+                using var doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
+                {
+                    App.Logger?.Warning("OpenAiCompatibleService: response has no choices");
+                    return null;
+                }
+
+                var first = choices[0];
+                if (!first.TryGetProperty("message", out var message) ||
+                    !message.TryGetProperty("content", out var contentElement))
+                {
+                    App.Logger?.Warning("OpenAiCompatibleService: response missing message.content");
+                    return null;
+                }
+
+                return CleanTokenizerArtifacts(contentElement.GetString());
+            }
+            catch (RetryableStatusException)
+            {
+                App.Logger?.Warning("OpenAiCompatibleService: request failed after retry");
+                return null;
+            }
+            catch (HttpRequestException)
+            {
+                App.Logger?.Warning("OpenAiCompatibleService: request failed after retry");
+                return null;
+            }
+            catch (TaskCanceledException)
+            {
+                App.Logger?.Warning("OpenAiCompatibleService: request timed out");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "OpenAiCompatibleService: request failed");
+                return null;
+            }
         }
 
-        private List<MessageDto> BuildMessages(string systemPrompt, string userInput)
+        private List<AiMessage> BuildMessages(string systemPrompt, string userInput)
         {
-            var messages = new List<MessageDto>
+            var messages = new List<AiMessage>
             {
                 new("system", systemPrompt),
                 new("user", userInput)
@@ -521,6 +531,20 @@ namespace ConditioningControlPanel.Services.AIService
         }
 
         protected override string GetProviderName() => "OpenAiCompatibleService";
+
+        /// <summary>
+        /// Thrown when the provider returns a transient HTTP status (429 or 5xx) so the
+        /// shared <see cref="AiRetryPolicy"/> can schedule a retry.
+        /// </summary>
+        private sealed class RetryableStatusException : Exception
+        {
+            public int StatusCode { get; }
+            public RetryableStatusException(int statusCode, string message)
+                : base(message)
+            {
+                StatusCode = statusCode;
+            }
+        }
 
         public override void Dispose()
         {
