@@ -174,6 +174,13 @@ namespace ConditioningControlPanel.Services
                     notes.Add("often skips triggered videos");
 
                 Profile.Notes = notes.Count > 0 ? string.Join("; ", notes) : null;
+
+                // Persist a compact narrative summary of the recent action window.
+                var settingsCp = App.Settings?.Current?.CompanionPrompt;
+                var minutes = settingsCp?.AiActionHistoryMinutes > 0
+                    ? settingsCp.AiActionHistoryMinutes
+                    : (settingsCp?.AiActionHistoryHours ?? 2) * 60;
+                Profile.RecentSessionSummary = App.ActionHistory?.BuildSummary(minutes);
             }
 
             Save();
@@ -203,8 +210,11 @@ namespace ConditioningControlPanel.Services
                 if (!string.IsNullOrEmpty(Profile.Notes))
                     parts.Add(Profile.Notes);
 
+                if (!string.IsNullOrWhiteSpace(Profile.RecentSessionSummary))
+                    parts.Add($"Recent activity: {Profile.RecentSessionSummary}");
+
                 var text = string.Join(" ", parts);
-                return text.Length > 250 ? text.Substring(0, 250).TrimEnd() + "…" : text;
+                return text.Length > 350 ? text.Substring(0, 350).TrimEnd() + "…" : text;
             }
         }
 

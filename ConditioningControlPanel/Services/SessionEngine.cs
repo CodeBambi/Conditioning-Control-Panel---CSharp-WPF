@@ -361,8 +361,11 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    var hours = App.Settings?.Current?.CompanionPrompt?.AiActionHistoryHours ?? 2;
-                    var cutoff = DateTime.Now.AddHours(-hours);
+                    var settingsCp = App.Settings?.Current?.CompanionPrompt;
+                    var minutes = settingsCp?.AiActionHistoryMinutes > 0
+                        ? settingsCp.AiActionHistoryMinutes
+                        : (settingsCp?.AiActionHistoryHours ?? 2) * 60;
+                    var cutoff = DateTime.Now.AddMinutes(-minutes);
                     var recentActions = App.ActionHistory.GetEventsSince(cutoff);
                     App.SubjectProfile.UpdateFromSession(finalizedLog, recentActions);
                 }

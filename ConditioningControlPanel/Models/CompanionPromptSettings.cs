@@ -138,8 +138,13 @@ namespace ConditioningControlPanel.Models
         public bool AiActionHistoryEnabled { get; set; } = true;
 
         // How many hours of recent conditioning actions are summarized for the AI context.
-        // UI allows 0.5–8 hours; stored as whole hours for simplicity (1–8).
-        public int AiActionHistoryHours { get; set; } = 2;
+        // Legacy field — use AiActionHistoryMinutes for new values.
+        [System.Obsolete("Use AiActionHistoryMinutes.")]
+        public int AiActionHistoryHours { get; set; } = 0;
+
+        // How many minutes of recent conditioning actions are summarized for the AI context.
+        // UI allows 15, 30, 60, 120, 180, 240, 300, 360, 420, 480, 720, or 1440 minutes.
+        public int AiActionHistoryMinutes { get; set; } = 120;
 
         // Hard cap on raw action events kept in memory. Higher values let the AI see more
         // individual actions within the configured window, but use more RAM/prompt space.
@@ -292,7 +297,7 @@ namespace ConditioningControlPanel.Models
                 OpenAiCompatibleChatMemoryEnabled = true,
                 ChatMemorySendPairs = 10,
                 AiActionHistoryEnabled = true,
-                AiActionHistoryHours = 2,
+                AiActionHistoryMinutes = 120,
                 AiActionHistoryMaxEvents = 200,
                 AiSubjectProfileEnabled = false,
                 ChatShortcutKey = "T",
@@ -432,7 +437,7 @@ FREQUENCY RULE:
                 OpenAiCompatibleChatMemoryEnabled = OpenAiCompatibleChatMemoryEnabled,
                 ChatMemorySendPairs = ChatMemorySendPairs,
                 AiActionHistoryEnabled = AiActionHistoryEnabled,
-                AiActionHistoryHours = AiActionHistoryHours,
+                AiActionHistoryMinutes = AiActionHistoryMinutes,
                 AiActionHistoryMaxEvents = AiActionHistoryMaxEvents,
                 AiSubjectProfileEnabled = AiSubjectProfileEnabled,
                 ChatShortcutKey = ChatShortcutKey,

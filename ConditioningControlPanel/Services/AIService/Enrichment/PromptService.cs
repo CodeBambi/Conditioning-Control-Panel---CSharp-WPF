@@ -41,8 +41,11 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
                 : string.Join("\n", previousOutcomes.Select(o => $"- {o.Command}: {(o.Succeeded ? "succeeded" : "failed")}{(string.IsNullOrEmpty(o.Outcome) ? "" : $" — {o.Outcome}")}"));
 
             var settings = App.Settings?.Current?.CompanionPrompt;
+            var historyMinutes = settings?.AiActionHistoryMinutes > 0
+                ? settings.AiActionHistoryMinutes
+                : (settings?.AiActionHistoryHours ?? 2) * 60;
             var historySummary = settings?.AiActionHistoryEnabled == true
-                ? App.ActionHistory.BuildSummary(settings.AiActionHistoryHours)
+                ? App.ActionHistory.BuildSummary(historyMinutes)
                 : null;
             var historyBlock = string.IsNullOrEmpty(historySummary)
                 ? ""

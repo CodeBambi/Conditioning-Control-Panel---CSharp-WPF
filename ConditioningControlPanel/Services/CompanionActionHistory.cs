@@ -108,21 +108,25 @@ namespace ConditioningControlPanel.Services
         /// The output budget scales with the configured window so longer windows can
         /// mention more actions without exploding the prompt.
         /// </summary>
-        /// <param name="hours">How far back to summarize.</param>
-        public string BuildSummary(int hours = 2)
+        /// <param name="minutes">How far back to summarize.</param>
+        public string BuildSummary(int minutes = 120)
         {
-            hours = Math.Max(1, hours);
-            // Scale summary size with the window: 1h→200, 2h→350, 4h→550, 8h→800.
-            var maxChars = hours switch
+            minutes = Math.Max(1, minutes);
+            // Scale summary size with the window: 15m→150, 30m→200, 1h→250, 2h→350,
+            // 4h→550, 8h→800, 12h→1000, 24h→1200.
+            var maxChars = minutes switch
             {
-                <= 1 => 200,
-                <= 2 => 350,
-                <= 4 => 550,
-                <= 6 => 700,
-                _ => 800
+                <= 15 => 150,
+                <= 30 => 200,
+                <= 60 => 250,
+                <= 120 => 350,
+                <= 240 => 550,
+                <= 480 => 800,
+                <= 720 => 1000,
+                _ => 1200
             };
 
-            var cutoff = DateTime.Now.AddHours(-hours);
+            var cutoff = DateTime.Now.AddMinutes(-minutes);
 
             _lock.EnterReadLock();
             List<CompanionActionEvent> recent;
@@ -142,7 +146,8 @@ namespace ConditioningControlPanel.Services
                 return "No conditioning actions have happened recently.";
 
             var sb = new StringBuilder();
-            sb.AppendLine($"Recent conditioning activity (last {hours}h):");
+            var windowLabel = minutes >= 1440 ? "1 day" : minutes >= 60 ? $"{minutes / 60}h" : $"{minutes}m";
+            sb.AppendLine($"Recent conditioning activity (last {windowLabel}):");
 
             // Group by source + action, ordered by frequency.
             var grouped = recent
@@ -191,7 +196,7 @@ namespace ConditioningControlPanel.Services
         private void PruneUnlocked()
         {
             var settings = App.Settings?.Current?.CompanionPrompt;
-            var hours = Math.Max(1, settings?.AiActionHistoryHours ?? 2);
+            var minutes = Math.Max(1, settings?.AiActionHistoryMinutes > 0 ? settings.AiActionHistoryMinutes : settings?.AiActionHistoryHours * 60 ?? 120);
             var maxEvents = EffectiveMaxEvents;
 
             // Drop oldest events if we exceed the cap.
@@ -199,7 +204,7 @@ namespace ConditioningControlPanel.Services
                 _events.RemoveAt(0);
 
             // Also drop anything older than 2x the configured window to keep the list tidy.
-            var hardCutoff = DateTime.Now.AddHours(-hours * 2);
+            var hardCutoff = DateTime.Now.AddMinutes(-minutes * 2);
             _events.RemoveAll(e => e.Timestamp < hardCutoff);
         }
 

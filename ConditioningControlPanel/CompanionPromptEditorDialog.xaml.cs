@@ -191,15 +191,17 @@ namespace ConditioningControlPanel
             ChkDialogAwarenessMode.IsChecked = appSettings?.AwarenessModeEnabled == true && appSettings?.AwarenessConsentGiven == true;
 
             ChkDialogActionHistoryEnabled.IsChecked = settings.AiActionHistoryEnabled;
-            var hours = Math.Clamp(settings.AiActionHistoryHours, 1, 8);
-            SliderDialogActionHistoryHours.Value = hours;
-            TxtDialogActionHistoryHours.Text = $"{hours} hour{(hours == 1 ? "" : "s")}";
+            var minutes = settings.AiActionHistoryMinutes > 0
+                ? settings.AiActionHistoryMinutes
+                : Math.Clamp(settings.AiActionHistoryHours, 1, 24) * 60;
+            SelectActionHistoryWindow(minutes);
             var maxEvents = Math.Clamp(settings.AiActionHistoryMaxEvents, 50, 500);
             SliderDialogActionHistoryMaxEvents.Value = maxEvents;
             TxtDialogActionHistoryMaxEvents.Text = maxEvents.ToString();
             UpdateActionHistoryWarning();
 
             ChkDialogSubjectProfileEnabled.IsChecked = settings.AiSubjectProfileEnabled;
+            ChkDialogAiEffectsEnabled.IsChecked = settings.AllowAiToControlEffects;
 
             var cooldown = Math.Clamp(appSettings?.AwarenessReactionCooldownSeconds ?? 90, 10, 300);
             SliderDialogAwarenessCooldown.Value = cooldown;
@@ -209,10 +211,6 @@ namespace ConditioningControlPanel
             SliderDialogKeywordBufferTimeout.Value = bufferMs;
             TxtDialogKeywordBufferTimeout.Text = $"{bufferMs / 1000.0:F1}s";
 
-            var multiplier = Math.Clamp(appSettings?.KeywordSessionMultiplier ?? 1.5, 1.0, 3.0);
-            SliderDialogKeywordSessionMultiplier.Value = multiplier;
-            TxtDialogKeywordSessionMultiplier.Text = $"{multiplier:F1}x";
-
             var highlightMs = Math.Clamp(appSettings?.KeywordHighlightDurationMs ?? 1500, 300, 5000);
             SliderDialogKeywordHighlightDuration.Value = highlightMs / 1000.0;
             TxtDialogKeywordHighlightDuration.Text = $"{highlightMs / 1000.0:F1}s";
@@ -221,8 +219,65 @@ namespace ConditioningControlPanel
             SliderDialogScreenOcrInterval.Value = scanSec;
             TxtDialogScreenOcrInterval.Text = $"{scanSec}s";
 
+            ApplyEntitlementGating();
             UpdateEnabledState();
             _hasUnsavedChanges = false;
+        }
+
+        private bool HasPremiumAccess() => App.Patreon?.HasPremiumAccess == true;
+
+        private bool HasLabAccess() => App.Patreon?.CurrentTier >= PatreonTier.Level2 || (App.Settings?.Current?.PatreonTier ?? 0) >= 2;
+
+        private void ApplyEntitlementGating()
+        {
+            var premium = HasPremiumAccess();
+            var lab = HasLabAccess();
+
+            // Chat memory: Lab access (Tier 2) required.
+            if (!lab)
+            {
+                ChkDialogChatMemoryEnabled.IsChecked = false;
+                ChkDialogChatMemoryEnabled.IsEnabled = false;
+                if (App.Settings?.Current?.CompanionPrompt != null)
+                    App.Settings.Current.CompanionPrompt.ChatMemoryEnabled = false;
+            }
+            else
+            {
+                ChkDialogChatMemoryEnabled.IsEnabled = true;
+            }
+
+            // Action history + subject profile: premium required.
+            if (!premium)
+            {
+                ChkDialogActionHistoryEnabled.IsChecked = false;
+                ChkDialogActionHistoryEnabled.IsEnabled = false;
+                ChkDialogSubjectProfileEnabled.IsChecked = false;
+                ChkDialogSubjectProfileEnabled.IsEnabled = false;
+                if (App.Settings?.Current?.CompanionPrompt != null)
+                {
+                    App.Settings.Current.CompanionPrompt.AiActionHistoryEnabled = false;
+                    App.Settings.Current.CompanionPrompt.AiSubjectProfileEnabled = false;
+                }
+            }
+            else
+            {
+                ChkDialogActionHistoryEnabled.IsEnabled = true;
+                ChkDialogSubjectProfileEnabled.IsEnabled = true;
+            }
+
+            // AI effects control: premium required.
+            ChkDialogAiEffectsEnabled.IsEnabled = premium;
+            if (TxtDialogAiEffectsPatreonNote != null)
+                TxtDialogAiEffectsPatreonNote.Visibility = premium ? Visibility.Collapsed : Visibility.Visible;
+            if (!premium)
+            {
+                ChkDialogAiEffectsEnabled.IsChecked = false;
+                if (App.Settings?.Current?.CompanionPrompt != null)
+                    App.Settings.Current.CompanionPrompt.AllowAiToControlEffects = false;
+            }
+
+            if (App.Settings?.Current != null)
+                App.Settings.Save();
         }
 
         private void SaveSettings()
@@ -245,9 +300,11 @@ namespace ConditioningControlPanel
             settings.OpenAiCompatibleChatMemoryEnabled = settings.ChatMemoryEnabled;
             settings.ChatMemorySendPairs = (int)SliderDialogChatMemorySendPairs.Value;
             settings.AiActionHistoryEnabled = ChkDialogActionHistoryEnabled.IsChecked == true;
-            settings.AiActionHistoryHours = (int)SliderDialogActionHistoryHours.Value;
+            settings.AiActionHistoryMinutes = GetSelectedActionHistoryWindowMinutes();
+            settings.AiActionHistoryHours = 0; // legacy field cleared
             settings.AiActionHistoryMaxEvents = (int)SliderDialogActionHistoryMaxEvents.Value;
             settings.AiSubjectProfileEnabled = ChkDialogSubjectProfileEnabled.IsChecked == true;
+            settings.AllowAiToControlEffects = ChkDialogAiEffectsEnabled.IsChecked == true;
 
             if (App.Settings?.Current != null)
             {
@@ -264,7 +321,6 @@ namespace ConditioningControlPanel
                 appSettings.KeywordPerKeywordCooldownSeconds = cooldown;
 
                 appSettings.KeywordBufferTimeoutMs = (int)SliderDialogKeywordBufferTimeout.Value;
-                appSettings.KeywordSessionMultiplier = SliderDialogKeywordSessionMultiplier.Value;
                 appSettings.KeywordHighlightDurationMs = (int)(SliderDialogKeywordHighlightDuration.Value * 1000);
                 appSettings.ScreenOcrIntervalMs = (int)(SliderDialogScreenOcrInterval.Value * 1000);
             }
@@ -332,20 +388,6 @@ namespace ConditioningControlPanel
             _hasUnsavedChanges = true;
         }
 
-        private void ChkDialogActionHistoryEnabled_Changed(object sender, RoutedEventArgs e)
-        {
-            _hasUnsavedChanges = true;
-        }
-
-        private void SliderDialogActionHistoryHours_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (TxtDialogActionHistoryHours == null) return;
-            var hours = Math.Max(1, Math.Min(8, (int)SliderDialogActionHistoryHours.Value));
-            TxtDialogActionHistoryHours.Text = $"{hours} hour{(hours == 1 ? "" : "s")}";
-            UpdateActionHistoryWarning();
-            _hasUnsavedChanges = true;
-        }
-
         private void SliderDialogActionHistoryMaxEvents_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (TxtDialogActionHistoryMaxEvents == null) return;
@@ -354,21 +396,62 @@ namespace ConditioningControlPanel
             _hasUnsavedChanges = true;
         }
 
+        private void ChkDialogActionHistoryEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            _hasUnsavedChanges = true;
+        }
+
+        private void CmbDialogActionHistoryWindow_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateActionHistoryWarning();
+            _hasUnsavedChanges = true;
+        }
+
+        private int GetSelectedActionHistoryWindowMinutes()
+        {
+            if (CmbDialogActionHistoryWindow?.SelectedItem is not ComboBoxItem item) return 120;
+            if (item.Tag is int minutes) return minutes;
+            if (int.TryParse(item.Tag?.ToString(), out var parsed)) return parsed;
+            return 120;
+        }
+
+        private void SelectActionHistoryWindow(int minutes)
+        {
+            if (CmbDialogActionHistoryWindow == null) return;
+            var allowed = new[] { 15, 30, 60, 120, 180, 240, 300, 360, 420, 480, 720, 1440 };
+            var selected = allowed.OrderBy(a => Math.Abs(a - minutes)).First();
+            foreach (ComboBoxItem item in CmbDialogActionHistoryWindow.Items)
+            {
+                if (item.Tag is int tag && tag == selected)
+                {
+                    CmbDialogActionHistoryWindow.SelectedItem = item;
+                    break;
+                }
+            }
+            UpdateActionHistoryWarning();
+        }
+
         private void UpdateActionHistoryWarning()
         {
-            if (TxtDialogActionHistoryWarning == null || SliderDialogActionHistoryHours == null) return;
-            var hours = (int)SliderDialogActionHistoryHours.Value;
-            var (msg, color) = hours switch
+            if (TxtDialogActionHistoryWarning == null) return;
+            var minutes = GetSelectedActionHistoryWindowMinutes();
+            var (msg, color) = minutes switch
             {
-                <= 2 => ("Short window: keeps prompts small and fast.", TryFindResource("TextDimBrush") as Brush),
-                <= 5 => ("Moderate window: balanced recall and prompt size.", new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x00))),
-                _ => ("Long window: richer recall but larger prompts and slower responses.", new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x6B)))
+                <= 30 => ("Short window: keeps prompts small and fast.", TryFindResource("TextDimBrush") as Brush),
+                <= 120 => ("Moderate window: balanced recall and prompt size.", new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x00))),
+                <= 480 => ("Longer window: richer recall but larger prompts.", new SolidColorBrush(Color.FromRgb(0xFF, 0x99, 0x33))),
+                _ => ("Very long window: richer recall but larger prompts and slower responses.", new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x6B)))
             };
             TxtDialogActionHistoryWarning.Text = msg;
             TxtDialogActionHistoryWarning.Foreground = color ?? TxtDialogActionHistoryWarning.Foreground;
         }
 
         private void ChkDialogSubjectProfileEnabled_Changed(object sender, RoutedEventArgs e)
+        {
+            _hasUnsavedChanges = true;
+        }
+
+        private void ChkDialogAiEffectsEnabled_Changed(object sender, RoutedEventArgs e)
         {
             _hasUnsavedChanges = true;
         }
@@ -386,14 +469,6 @@ namespace ConditioningControlPanel
             if (TxtDialogKeywordBufferTimeout == null) return;
             var value = Math.Max(1000, Math.Min(10000, (int)SliderDialogKeywordBufferTimeout.Value));
             TxtDialogKeywordBufferTimeout.Text = $"{value / 1000.0:F1}s";
-            _hasUnsavedChanges = true;
-        }
-
-        private void SliderDialogKeywordSessionMultiplier_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (TxtDialogKeywordSessionMultiplier == null) return;
-            var value = Math.Max(1.0, Math.Min(3.0, SliderDialogKeywordSessionMultiplier.Value));
-            TxtDialogKeywordSessionMultiplier.Text = $"{value:F1}x";
             _hasUnsavedChanges = true;
         }
 

@@ -1558,10 +1558,10 @@ namespace ConditioningControlPanel
                 var labHeroMap = new (string resourcePath, ImageBrush? brush)[]
                 {
                     ("features/lab_quiz_hero.png", LabQuizHeroBrush),
-                    ("features/lab_aimemory_hero.png", LabAiMemoryHeroBrush),
                     ("features/lab_gaze_hero.png", LabGazeHeroBrush),
                     ("features/lab_focusgaze_hero.png", LabFocusHeroBrush),
                 };
+
                 foreach (var (path, brush) in labHeroMap)
                 {
                     if (brush == null) continue;
@@ -11902,17 +11902,6 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Lab tab "AI Companion Effects & Memory" notice button — switches to the
-        /// Companion tab so the user can see the AI Brain provider controls, then
-        /// launches the setup wizard. Effects need a local LLM (cloud is stateless +
-        /// has no command-output capability).
-        /// </summary>
-        private void BtnLabEffectsSetupLocal_Click(object sender, RoutedEventArgs e)
-        {
-            ShowTab("companion");
-            LaunchLocalAiSetupWizard();
-        }
-
         /// <summary>
         /// Slut Mode toggle: swaps the active personality's Personality text with its
         /// SlutModePersonality variant in BambiSprite.GetSystemPrompt. Takes effect on
@@ -12137,51 +12126,6 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void ChkCapEffects_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || ChkCapEffects == null) return;
-            var on = ChkCapEffects.IsChecked == true;
-            s.AllowAiToControlEffects = on;
-            if (EffectPermsPanel != null) EffectPermsPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-            App.Settings.Save();
-        }
-
-        private void ChkAllowEffect_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-            if (sender is not CheckBox cb) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null) return;
-            var on = cb.IsChecked == true;
-            switch (cb.Tag as string)
-            {
-                case "Flash":       s.AllowAiFlash = on; break;
-                case "Video":       s.AllowAiVideo = on; break;
-                case "Audio":       s.AllowAiAudio = on; break;
-                case "Bubbles":     s.AllowAiBubbles = on; break;
-                case "Subliminal":  s.AllowAiSubliminal = on; break;
-                case "Overlay":     s.AllowAiOverlay = on; break;
-                case "LockCard":    s.AllowAiLockCard = on; break;
-                case "Bounce":      s.AllowAiBounce = on; break;
-                case "Haptic":      s.AllowAiHaptic = on; break;
-                case "GetBackToMe": s.AllowAiGetBackToMe = on; break;
-            }
-            App.Settings.Save();
-        }
-
-        private void SliderMaxHapticIntensity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_isLoading) return;
-            var s = App.Settings?.Current?.CompanionPrompt;
-            if (s == null || SliderMaxHapticIntensity == null) return;
-            s.MaxAiHapticIntensity = SliderMaxHapticIntensity.Value;
-            if (TxtMaxHapticIntensity != null)
-                TxtMaxHapticIntensity.Text = $"{(int)(SliderMaxHapticIntensity.Value * 100)}%";
-            App.Settings.Save();
-        }
-
         private void UpdateAiBrainPills()
         {
             if (PillAiProvider == null || PillAwareness == null) return;
@@ -12197,13 +12141,10 @@ namespace ConditioningControlPanel
                                 : Loc.Get("label_awareness_pill_off");
 
             // Effects only work with local AI (cloud has no command output). Hide the
-            // Live Actions feed in the AI Brain panel and show the "needs local" notice
-            // in the Lab effects card whenever the user isn't on local AI.
+            // Live Actions feed in the AI Brain panel whenever the user isn't on local AI.
             var localAiActive = aiOn && local;
             if (LiveActionsContainer != null)
                 LiveActionsContainer.Visibility = localAiActive ? Visibility.Visible : Visibility.Collapsed;
-            if (LabEffectsNeedsLocalNotice != null)
-                LabEffectsNeedsLocalNotice.Visibility = localAiActive ? Visibility.Collapsed : Visibility.Visible;
         }
 
         private void UpdateLiveActionsPlaceholder()
@@ -12263,29 +12204,6 @@ namespace ConditioningControlPanel
                 var limit = s.CompanionPrompt.DailyRequestLimit;
                 TxtDailyLimit.Text = limit > 0 ? limit.ToString() : string.Empty;
             }
-
-            // Capability checkboxes (ChkAiChat handled by its own sync path)
-            if (ChkCapEffects != null)
-                ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
-            if (EffectPermsPanel != null)
-                EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
-                    ? Visibility.Visible : Visibility.Collapsed;
-
-            // Effect permission grid
-            if (ChkAllowFlash != null)       ChkAllowFlash.IsChecked       = s.CompanionPrompt.AllowAiFlash;
-            if (ChkAllowVideo != null)       ChkAllowVideo.IsChecked       = s.CompanionPrompt.AllowAiVideo;
-            if (ChkAllowAudio != null)       ChkAllowAudio.IsChecked       = s.CompanionPrompt.AllowAiAudio;
-            if (ChkAllowBubbles != null)     ChkAllowBubbles.IsChecked     = s.CompanionPrompt.AllowAiBubbles;
-            if (ChkAllowSubliminal != null)  ChkAllowSubliminal.IsChecked  = s.CompanionPrompt.AllowAiSubliminal;
-            if (ChkAllowOverlay != null)     ChkAllowOverlay.IsChecked     = s.CompanionPrompt.AllowAiOverlay;
-            if (ChkAllowLockCard != null)    ChkAllowLockCard.IsChecked    = s.CompanionPrompt.AllowAiLockCard;
-            if (ChkAllowBounce != null)      ChkAllowBounce.IsChecked      = s.CompanionPrompt.AllowAiBounce;
-            if (ChkAllowHaptic != null)      ChkAllowHaptic.IsChecked      = s.CompanionPrompt.AllowAiHaptic;
-            if (ChkAllowGetBackToMe != null) ChkAllowGetBackToMe.IsChecked = s.CompanionPrompt.AllowAiGetBackToMe;
-
-            // Max haptic intensity
-            if (SliderMaxHapticIntensity != null) SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
-            if (TxtMaxHapticIntensity != null)    TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
 
             // Hero pills
             UpdateAiBrainPills();
@@ -17947,7 +17865,6 @@ namespace ConditioningControlPanel
             SetHelpContent(HelpBtnKeywordTriggers, "KeywordTriggers");
             SetHelpContent(HelpBtnScreenOcr, "ScreenOcr");
             SetHelpContent(HelpBtnRemoteControl, "RemoteControl");
-            SetHelpContent(HelpBtnGetBackToMe, "GetBackToMe");
 
             // Side panels + Exclusives features (Awareness / Haptics / BlinkTrainer
             // share this cluster — they're dedicated full-tab Exclusives surfaces
@@ -25105,22 +25022,7 @@ namespace ConditioningControlPanel
                 var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2 || (App.Settings?.Current?.PatreonTier ?? 0) >= 2;
                 if (LabSmokescreen != null) LabSmokescreen.Visibility = labUnlocked ? Visibility.Collapsed : Visibility.Visible;
 
-                // AI effect control lives in the Lab — force-disable for non-T2 users so settings can't outlive the entitlement.
-                if (!labUnlocked)
-                {
-                    var cp = App.Settings?.Current?.CompanionPrompt;
-                    if (cp != null && cp.AllowAiToControlEffects)
-                    {
-                        cp.AllowAiToControlEffects = false;
-                        App.Settings?.Save();
-                    }
-                    if (ChkCapEffects != null && ChkCapEffects.IsChecked == true)
-                        ChkCapEffects.IsChecked = false;
-                    if (EffectPermsPanel != null)
-                        EffectPermsPanel.Visibility = Visibility.Collapsed;
-                }
 
-                // Bambi Takeover: Requires Patreon (any tier)
                 var autonomyUnlocked = App.Patreon?.HasPremiumAccess == true;
                 if (AutonomyLocked != null) AutonomyLocked.Visibility = autonomyUnlocked ? Visibility.Collapsed : Visibility.Visible;
                 if (AutonomyUnlocked != null) AutonomyUnlocked.Visibility = autonomyUnlocked ? Visibility.Visible : Visibility.Collapsed;

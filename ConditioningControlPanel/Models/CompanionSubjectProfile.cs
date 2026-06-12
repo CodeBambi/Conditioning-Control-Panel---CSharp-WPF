@@ -36,5 +36,8 @@ namespace ConditioningControlPanel.Models
 
         /// <summary>Free-form, very short notes for the AI (e.g. "responds well to denial").</summary>
         public string? Notes { get; set; }
+
+        /// <summary>Compact narrative summary of the most recent session's actions, persisted from action history.</summary>
+        public string? RecentSessionSummary { get; set; }
     }
 }
