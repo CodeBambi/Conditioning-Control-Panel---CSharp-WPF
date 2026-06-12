@@ -1,5 +1,3 @@
-
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,7 +9,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Models.AiEnrichment;
-using ConditioningControlPanel.Services.AIService.Enrichment;
 using ConditioningControlPanel.Services.Moderation;
 
 namespace ConditioningControlPanel.Services.AIService
@@ -27,7 +24,7 @@ namespace ConditioningControlPanel.Services.AIService
     /// same <see cref="AiResponseParser"/> used by the local provider, and any valid commands are
     /// executed through <see cref="App.Commands"/>.
     /// </summary>
-    public sealed class OpenAiCompatibleService : IAiService
+    public sealed class OpenAiCompatibleService : AiProviderBase
     {
         public enum DiagnosticCategory
         {
@@ -50,17 +47,10 @@ namespace ConditioningControlPanel.Services.AIService
             long? ElapsedMs = null);
 
         private readonly HttpClient _httpClient;
-        private readonly BambiSprite _bambiSprite;
-        private readonly IAiResponseParser _parser;
-        private readonly KnowledgeService _knowledgeService;
-        private readonly IPromptService _promptService;
-
-        private int _dailyRequestCount;
-        private DateTime _lastResetDate;
 
         private static CompanionPromptSettings? Settings => App.Settings?.Current?.CompanionPrompt;
 
-        public bool IsAvailable
+        public override bool IsAvailable
         {
             get
             {
@@ -77,11 +67,12 @@ namespace ConditioningControlPanel.Services.AIService
                 var limit = s.DailyRequestLimit;
                 if (limit <= 0) return true; // unlimited
 
-                return _dailyRequestCount < limit;
+                var usage = s.Usage;
+                return usage != null && usage.OpenAiCompatibleRequestCount < limit;
             }
         }
 
-        public int DailyRequestsRemaining
+        public override int DailyRequestsRemaining
         {
             get
             {
@@ -93,24 +84,166 @@ namespace ConditioningControlPanel.Services.AIService
                 var limit = s.DailyRequestLimit;
                 if (limit <= 0) return -1; // unlimited
 
-                var remaining = limit - _dailyRequestCount;
+                var usage = s.Usage;
+                var remaining = usage == null ? limit : limit - usage.OpenAiCompatibleRequestCount;
                 return remaining < 0 ? 0 : remaining;
             }
         }
 
         public OpenAiCompatibleService()
         {
-            _bambiSprite = new BambiSprite();
-            _parser = new AiResponseParser(GetFallbackResponse);
-            _knowledgeService = new KnowledgeService();
-            _promptService = new PromptService();
-            _lastResetDate = DateTime.Today;
-            _dailyRequestCount = 0;
-
             _httpClient = new HttpClient
             {
                 Timeout = TimeSpan.FromSeconds(60)
             };
+
+            ResetDailyCounterIfNeeded();
+        }
+
+        public override async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
+        {
+            _ = isUserMessage;
+
+            if (App.Settings?.Current?.OfflineMode == true)
+                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+
+            return await base.GetBambiReplyExAsync(userInput, isUserMessage);
+        }
+
+        /// <summary>
+        /// Core transport: builds messages (with optional enrichment), applies sampler
+        /// settings, posts to the configured endpoint, and returns the raw assistant content.
+        /// </summary>
+        protected override async Task<string?> GetRawCompletionAsync(
+            string systemPrompt,
+            string userInput,
+            bool isUserMessage)
+        {
+            _ = isUserMessage;
+
+            if (App.Settings?.Current?.OfflineMode == true)
+            {
+                App.Logger?.Debug("OpenAiCompatibleService: Offline mode enabled, skipping AI request");
+                return null;
+            }
+
+            var apiKey = GetApiKey();
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                App.Logger?.Debug("OpenAiCompatibleService: missing API key");
+                return null;
+            }
+
+            ResetDailyCounterIfNeeded();
+
+            var s = Settings;
+            var usage = s?.Usage;
+            var limit = s?.DailyRequestLimit ?? 0;
+            if (limit > 0 && usage != null && usage.OpenAiCompatibleRequestCount >= limit)
+            {
+                App.Logger?.Debug("OpenAiCompatibleService: daily limit reached ({Limit})", limit);
+                return null;
+            }
+
+            var model = GetConfiguredModel();
+            var messages = BuildMessages(systemPrompt, userInput);
+
+            var payload = new Dictionary<string, object>
+            {
+                ["model"] = model,
+                ["messages"] = messages
+            };
+            ApplySamplerSettings(payload);
+
+            var baseUri = GetConfiguredEndpointBaseUri();
+            var endpointUri = new Uri(baseUri, "chat/completions");
+
+            BumpDailyCounter();
+
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                try
+                {
+                    using var request = new HttpRequestMessage(HttpMethod.Post, endpointUri)
+                    {
+                        Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+                    };
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+                    App.Logger?.Debug("OpenAiCompatibleService: request to {Url} (attempt {Attempt})", request.RequestUri, attempt + 1);
+
+                    using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+                    var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var status = (int)response.StatusCode;
+                        var retryableStatus = status == 429 || status >= 500;
+
+                        if (attempt == 0 && retryableStatus)
+                        {
+                            await Task.Delay(1200).ConfigureAwait(false);
+                            continue;
+                        }
+
+                        App.Logger?.Warning("OpenAiCompatibleService: HTTP {Status} from {Endpoint}: {Body}",
+                            status,
+                            endpointUri,
+                            json);
+                        return null;
+                    }
+
+                    using var doc = JsonDocument.Parse(json);
+                    if (!doc.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
+                    {
+                        App.Logger?.Warning("OpenAiCompatibleService: response has no choices");
+                        return null;
+                    }
+
+                    var first = choices[0];
+                    if (!first.TryGetProperty("message", out var message) ||
+                        !message.TryGetProperty("content", out var contentElement))
+                    {
+                        App.Logger?.Warning("OpenAiCompatibleService: response missing message.content");
+                        return null;
+                    }
+
+                    return CleanTokenizerArtifacts(contentElement.GetString());
+                }
+                catch (HttpRequestException) when (attempt == 0)
+                {
+                    await Task.Delay(1200).ConfigureAwait(false);
+                }
+                catch (TaskCanceledException) when (attempt == 0)
+                {
+                    await Task.Delay(1200).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "OpenAiCompatibleService: request failed");
+                    return null;
+                }
+            }
+
+            App.Logger?.Warning("OpenAiCompatibleService: request failed after retry");
+            return null;
+        }
+
+        private List<MessageDto> BuildMessages(string systemPrompt, string userInput)
+        {
+            var messages = new List<MessageDto>
+            {
+                new("system", systemPrompt),
+                new("user", userInput)
+            };
+
+            var enrichment = BuildEnrichmentMessage(userInput);
+            if (enrichment != null)
+            {
+                messages.Insert(1, enrichment);
+            }
+
+            return messages;
         }
 
         private static Uri GetConfiguredEndpointBaseUri()
@@ -353,276 +486,43 @@ namespace ConditioningControlPanel.Services.AIService
 
         private void ResetDailyCounterIfNeeded()
         {
-            if (DateTime.Today <= _lastResetDate) return;
+            var usage = Settings?.Usage;
+            if (usage == null) return;
 
-            _dailyRequestCount = 0;
-            _lastResetDate = DateTime.Today;
+            if (DateTime.Today <= usage.LastResetDate) return;
+
+            usage.OpenAiCompatibleRequestCount = 0;
+            usage.LastResetDate = DateTime.Today;
+            App.Settings?.Save();
             App.Logger?.Debug("OpenAiCompatibleService: Daily request count reset");
         }
 
         private void BumpDailyCounter()
         {
             ResetDailyCounterIfNeeded();
-            _dailyRequestCount++;
+            var usage = Settings?.Usage;
+            if (usage == null) return;
+
+            usage.OpenAiCompatibleRequestCount++;
+            App.Settings?.Save();
         }
 
-        private async Task<string?> SendChatAsync(string systemPrompt, string userInput)
-        {
-            if (App.Settings?.Current?.OfflineMode == true)
-            {
-                App.Logger?.Debug("OpenAiCompatibleService: Offline mode enabled, skipping AI request");
-                return null;
-            }
-
-            var apiKey = GetApiKey();
-            if (string.IsNullOrEmpty(apiKey))
-            {
-                App.Logger?.Debug("OpenAiCompatibleService: missing API key");
-                return null;
-            }
-
-            ResetDailyCounterIfNeeded();
-            var limit = Settings?.DailyRequestLimit ?? 0;
-            if (limit > 0 && _dailyRequestCount >= limit)
-            {
-                App.Logger?.Debug("OpenAiCompatibleService: daily limit reached ({Limit})", limit);
-                return null;
-            }
-
-            var model = GetConfiguredModel();
-            var messages = BuildMessages(systemPrompt, userInput);
-
-            var payload = new Dictionary<string, object>
-            {
-                ["model"] = model,
-                ["messages"] = messages
-            };
-            ApplySamplerSettings(payload);
-
-            var baseUri = GetConfiguredEndpointBaseUri();
-            var endpointUri = new Uri(baseUri, "chat/completions");
-
-            BumpDailyCounter();
-
-            for (var attempt = 0; attempt < 2; attempt++)
-            {
-                try
-                {
-                    using var request = new HttpRequestMessage(HttpMethod.Post, endpointUri)
-                    {
-                        Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-                    };
-                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-
-                    App.Logger?.Debug("OpenAiCompatibleService: request to {Url} (attempt {Attempt})", request.RequestUri, attempt + 1);
-
-                    using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
-                    var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        var status = (int)response.StatusCode;
-                        var retryableStatus = status == 429 || status >= 500;
-
-                        if (attempt == 0 && retryableStatus)
-                        {
-                            await Task.Delay(1200).ConfigureAwait(false);
-                            continue;
-                        }
-
-                        App.Logger?.Warning("OpenAiCompatibleService: HTTP {Status} from {Endpoint}: {Body}",
-                            status,
-                            endpointUri,
-                            json);
-                        return null;
-                    }
-
-                    using var doc = JsonDocument.Parse(json);
-                    if (!doc.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
-                    {
-                        App.Logger?.Warning("OpenAiCompatibleService: response has no choices");
-                        return null;
-                    }
-
-                    var first = choices[0];
-                    if (!first.TryGetProperty("message", out var message) ||
-                        !message.TryGetProperty("content", out var contentElement))
-                    {
-                        App.Logger?.Warning("OpenAiCompatibleService: response missing message.content");
-                        return null;
-                    }
-
-                    var content = CleanTokenizerArtifacts(contentElement.GetString());
-                    return ProcessResponse(content);
-                }
-                catch (HttpRequestException) when (attempt == 0)
-                {
-                    await Task.Delay(1200).ConfigureAwait(false);
-                }
-                catch (TaskCanceledException) when (attempt == 0)
-                {
-                    await Task.Delay(1200).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    App.Logger?.Warning(ex, "OpenAiCompatibleService: request failed");
-                    return null;
-                }
-            }
-
-            App.Logger?.Warning("OpenAiCompatibleService: request failed after retry");
-            return null;
-        }
-
-        private List<MessageDto> BuildMessages(string systemPrompt, string userInput)
-        {
-            var messages = new List<MessageDto>
-            {
-                new("system", systemPrompt),
-                new("user", userInput)
-            };
-
-            var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
-            if (effectsEnabled)
-            {
-                var currentTime = DateTime.Now.ToString("yyyy-M-dd dddd h:mm:ss tt");
-                var facts = _knowledgeService.GetKnowledge("");
-                var factsJson = JsonSerializer.Serialize(facts);
-                var enrichment = _promptService.BuildEnrichmentMessage(factsJson, currentTime);
-                messages.Insert(1, enrichment);
-            }
-
-            return messages;
-        }
-
-        private string? ProcessResponse(string? content)
-        {
-            if (string.IsNullOrWhiteSpace(content))
-                return null;
-
-            var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
-            if (!effectsEnabled)
-                return content;
-
-            var parsed = _parser.Parse(content);
-            var commands = parsed.Commands;
-
-            if (commands.Count > 0)
-            {
-                App.Logger?.Information("OpenAiCompatibleService: parsed {Count} command(s) from response", commands.Count);
-                if (App.Commands != null)
-                {
-                    App.Commands.BeginBatch();
-                    foreach (var cmd in commands)
-                        App.Commands.ExecuteCommand(cmd);
-                }
-            }
-
-            return string.IsNullOrWhiteSpace(parsed.CleanText) ? null : parsed.CleanText;
-        }
-
-        private static string GetFallbackResponse()
+        protected override string GetFallbackResponse()
         {
             if (App.Mods?.IsBambiMode == true)
                 return "Bambi's head is so empty right now~ *giggles*";
             return "...";
         }
 
-        public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
+        protected override string GetModelHint()
         {
-            var result = await GetBambiReplyExAsync(userInput, isUserMessage).ConfigureAwait(false);
-            if (result.Refusal != null)
-            {
-                return result.Refusal.Source == ModerationSource.Input
-                    ? ModerationRefusal.InputSentinel
-                    : ModerationRefusal.OutputSentinel;
-            }
-            return result.Text;
+            var model = GetConfiguredModel();
+            return "openai-compatible:" + (string.IsNullOrWhiteSpace(model) ? "unknown" : model);
         }
 
-        public async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
-        {
-            _ = isUserMessage; // queueing semantics are local-only
+        protected override string GetProviderName() => "OpenAiCompatibleService";
 
-            if (App.Settings?.Current?.OfflineMode == true)
-                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
-
-            var prompt = _bambiSprite.GetSystemPrompt();
-            var reply = await SendChatAsync(prompt, userInput).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(reply))
-                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
-
-            return new AiReplyResult(reply, IsAiGenerated: true, Refusal: null);
-        }
-
-        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "")
-        {
-            var prompt = _bambiSprite.GetSystemPrompt();
-
-            var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
-            var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
-
-            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: 0m]";
-
-            return await SendChatAsync(prompt, userInput).ConfigureAwait(false);
-        }
-
-        public async Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration)
-        {
-            var prompt = _bambiSprite.GetSystemPrompt();
-
-            string durationText;
-            if (duration.TotalMinutes < 1)
-                durationText = $"{(int)duration.TotalSeconds}s";
-            else if (duration.TotalMinutes < 60)
-                durationText = $"{(int)duration.TotalMinutes}m";
-            else
-                durationText = $"{(int)duration.TotalHours}h";
-
-            var userInput = $"[Category: {category} | App: {displayName} | Title: {displayName} | Duration: {durationText}]";
-
-            return await SendChatAsync(prompt, userInput).ConfigureAwait(false);
-        }
-
-        public async Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null)
-        {
-            var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
-                : promptTemplate.Replace("{keyword}", keyword);
-
-            return await SendChatAsync(systemPrompt, userInput).ConfigureAwait(false);
-        }
-
-        public async Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null)
-        {
-            var systemPrompt = _bambiSprite.GetSystemPrompt();
-            string userInput;
-            if (string.IsNullOrEmpty(promptTemplate))
-            {
-                userInput = $"The user made {mistakes} mistakes in '{sentance}' for the lock screen. They had to type it {amount} of time. React in character, one short line.";
-            }
-            else
-            {
-                userInput = promptTemplate.Replace("{sentance}", sentance);
-                userInput = userInput.Replace("{mistakes}", mistakes.ToString());
-                userInput = userInput.Replace("{amount}", amount.ToString());
-            }
-
-            return await SendChatAsync(systemPrompt, userInput).ConfigureAwait(false);
-        }
-
-        public async Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null)
-        {
-            var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"The user has just finished the mandatory video {title}. React in character, one short line."
-                : promptTemplate.Replace("{title}", title);
-
-            return await SendChatAsync(systemPrompt, userInput).ConfigureAwait(false);
-        }
-
-        public void Dispose()
+        public override void Dispose()
         {
             _httpClient.Dispose();
         }

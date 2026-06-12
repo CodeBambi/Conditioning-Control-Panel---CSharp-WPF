@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -18,17 +17,14 @@ namespace ConditioningControlPanel.Services
     /// Uses hosted proxy that forwards to OpenRouter for roleplay.
     /// Free for all users with a cloud identity; falls back to Patreon auth.
     /// </summary>
-    public class AiService : IDisposable, IAiService
+    public class AiService : AiProviderBase
     {
         private readonly HttpClient _httpClient;
-        private readonly BambiSprite _bambiSprite;
 
         // Configuration - must match PatreonService
         private const string ProxyBaseUrl = "https://codebambi-proxy.vercel.app";
 
         // Circuit breaker tracking (client-side)
-        private int _dailyRequestCount;
-        private DateTime _lastResetDate;
         private const int FreeDailyLimit = 100;     // Free users (logged in, no Patreon)
         private const int PatreonDailyLimit = 1000;  // Patreon supporters
         private const int MaxTokensHardCap = 100; // Hard cap on response tokens to control costs (~50 words, enough for video names)
@@ -38,23 +34,28 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private int DailyLimit => App.Patreon?.HasAiAccess == true ? PatreonDailyLimit : FreeDailyLimit;
 
-        // Fallback response when API unavailable or limit reached — pick from idle phrases for variety
-        private static readonly Random _fallbackRandom = new();
-        private static string GetFallbackResponse()
-        {
-            var phrases = App.Mods?.GetPhrases("Idle") ?? new[] { "Good girl~" };
-            return phrases[_fallbackRandom.Next(phrases.Length)];
-        }
-
         /// <summary>
         /// Whether AI is available (cloud identity or Patreon access)
         /// </summary>
-        public bool IsAvailable => App.HasCloudIdentity || App.Patreon?.HasAiAccess == true;
+        public override bool IsAvailable => App.HasCloudIdentity || App.Patreon?.HasAiAccess == true;
 
         /// <summary>
         /// Daily requests remaining (client-side tracking)
         /// </summary>
-        public int DailyRequestsRemaining => Math.Max(0, DailyLimit - _dailyRequestCount);
+        public override int DailyRequestsRemaining
+        {
+            get
+            {
+                ResetDailyCounterIfNeeded();
+                var usage = App.Settings?.Current?.CompanionPrompt?.Usage;
+                return Math.Max(0, DailyLimit - (usage?.CloudRequestCount ?? 0));
+            }
+        }
+
+        /// <summary>
+        /// Cloud proxy handles effects server-side; don't execute parsed commands locally.
+        /// </summary>
+        protected override bool SupportsEffectCommands => false;
 
         public AiService()
         {
@@ -66,41 +67,12 @@ namespace ConditioningControlPanel.Services
             _httpClient.DefaultRequestHeaders.Add("X-Client-Version", UpdateService.AppVersion);
             _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"ConditioningControlPanel/{UpdateService.AppVersion}");
 
-            _bambiSprite = new BambiSprite();
-            _lastResetDate = DateTime.Today;
-            _dailyRequestCount = 0;
+            ResetDailyCounterIfNeeded();
 
             App.Logger?.Information("AiService initialized (proxy mode, V2 auth or Patreon)");
         }
 
-        /// <summary>
-        /// Gets an AI-generated reply in the Bambi personality.
-        /// Returns fallback response if API unavailable or daily limit reached.
-        ///
-        /// Legacy string-returning API kept for non-UI callers (Autonomy, command
-        /// scripts) that only need text. New UI surfaces (chat box) should call
-        /// <see cref="GetBambiReplyExAsync"/> instead so they can distinguish real
-        /// AI replies from canned fallbacks (P2/C4 — pink "AI" badge must not
-        /// appear over fallback strings).
-        /// </summary>
-        public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
-        {
-            var result = await GetBambiReplyExAsync(userInput, isUserMessage);
-            // Preserve the legacy sentinel-string contract so any caller still
-            // routing through the string API can detect refusals.
-            if (result.Refusal != null)
-            {
-                return result.Refusal.Source == ModerationSource.Input
-                    ? ModerationRefusal.InputSentinel
-                    : ModerationRefusal.OutputSentinel;
-            }
-            return result.Text;
-        }
-
-        /// <summary>
-        /// Typed variant. See <see cref="IAiService.GetBambiReplyExAsync"/>.
-        /// </summary>
-        public async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
+        public override async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
         {
             // isUserMessage is honored by the local provider for queue/drop logic;
             // cloud path has its own circuit breaker and rate limiting, so we ignore it here.
@@ -116,181 +88,25 @@ namespace ConditioningControlPanel.Services
                 return new AiReplyResult(Loc.Get("ai_login_required_hint"), IsAiGenerated: false, Refusal: null);
             }
 
-            // Get prompt from active personality preset (handles all personalities including slut mode)
-            var prompt = _bambiSprite.GetSystemPrompt();
-
-            // GetAiResponseAsync returns:
-            //   • a refusal sentinel string → typed refusal result
-            //   • null on any failure (HTTP error, empty content, daily-limit, etc.) → canned fallback
-            //   • model text → genuine AI reply
-            var result = await GetAiResponseAsync(userInput, prompt, returnRefusalSentinel: true);
-
-            var refusalSource = ModerationRefusal.GetSource(result);
-            if (refusalSource.HasValue)
-            {
-                // Category was already logged inside GetAiResponseAsync; the sentinel
-                // string can't carry it, so we surface only the source here.
-                return new AiReplyResult(
-                    string.Empty,
-                    IsAiGenerated: false,
-                    Refusal: new ModerationRefusalInfo(Category: null, Source: refusalSource.Value));
-            }
-
-            if (result == null)
-                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
-
-            return new AiReplyResult(result, IsAiGenerated: true, Refusal: null);
+            return await base.GetBambiReplyExAsync(userInput, isUserMessage);
         }
 
         /// <summary>
-        /// Gets an AI-generated reaction to the user's current activity.
-        /// Used by Awareness Mode. Passes raw website and tab name for AI to interpret.
-        /// Returns null if AI unavailable (caller should use preset phrase).
+        /// Core transport: posts to the cloud proxy (V2 auth or legacy Patreon Bearer),
+        /// updates the persisted daily counter, and returns sanitized assistant content.
         /// </summary>
-        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "")
+        protected override async Task<string?> GetRawCompletionAsync(
+            string systemPrompt,
+            string userInput,
+            bool isUserMessage)
         {
-            // Get prompt from active personality preset
-            var prompt = _bambiSprite.GetSystemPrompt();
+            _ = isUserMessage;
 
-            // Get website/service name and tab title
-            var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
-            var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
-
-            // Format context with category for accurate reactions
-            // Format: [Category: X | App: Y | Title: Z | Duration: 0m]
-            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: 0m]";
-
-            return await GetAiResponseAsync(userInput, prompt);
-        }
-
-        /// <summary>
-        /// Gets an AI-generated "still on" reaction when user has been on the same activity for a while.
-        /// Includes time context for the AI to reference.
-        /// </summary>
-        public async Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration)
-        {
-            // Get prompt from active personality preset
-            var prompt = _bambiSprite.GetSystemPrompt();
-
-            // Format duration nicely
-            string durationText;
-            if (duration.TotalMinutes < 1)
-                durationText = $"{(int)duration.TotalSeconds}s";
-            else if (duration.TotalMinutes < 60)
-                durationText = $"{(int)duration.TotalMinutes}m";
-            else
-                durationText = $"{(int)duration.TotalHours}h";
-
-            // Format context with category for accurate reactions
-            // Format: [Category: X | App: Y | Title: Z | Duration: Nm]
-            var userInput = $"[Category: {category} | App: {displayName} | Title: {displayName} | Duration: {durationText}]";
-
-            return await GetAiResponseAsync(userInput, prompt);
-        }
-
-        /// <summary>
-        /// Gets an AI-generated reaction line when a configured keyword trigger fires.
-        /// Used by <see cref="KeywordTriggerService"/>'s AvatarCommentAction dispatch.
-        /// Returns null if AI is unavailable (caller is expected to use a canned phrase).
-        /// </summary>
-        public async Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null)
-        {
-            if (!IsAvailable) return null;
-
-            var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
-                : promptTemplate.Replace("{keyword}", keyword);
-
-            return await GetAiResponseAsync(userInput, systemPrompt);
-        }
-
-        /// <summary>
-        /// Gets an AI-generated reaction after the user finishes a lock-screen mantra.
-        /// Returns null if AI unavailable.
-        /// </summary>
-        public async Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null)
-        {
-            if (!IsAvailable) return null;
-
-            var systemPrompt = _bambiSprite.GetSystemPrompt();
-            string userInput;
-            if (string.IsNullOrEmpty(promptTemplate))
-            {
-                userInput = $"The user made {mistakes} mistakes in '{sentance}' for the lock screen. They had to type it {amount} of time. React in character, one short line.";
-            }
-            else
-            {
-                userInput = promptTemplate.Replace("{sentance}", sentance);
-                userInput = userInput.Replace("{mistakes}", mistakes.ToString());
-                userInput = userInput.Replace("{amount}", amount.ToString());
-            }
-
-            return await GetAiResponseAsync(userInput, systemPrompt);
-        }
-
-        /// <summary>
-        /// Gets an AI-generated reaction after a mandatory video finishes.
-        /// Returns null if AI unavailable.
-        /// </summary>
-        public async Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null)
-        {
-            if (!IsAvailable) return null;
-
-            var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"The user has just finished the mandatory video {title}. React in character, one short line."
-                : promptTemplate.Replace("{title}", title);
-
-            return await GetAiResponseAsync(userInput, systemPrompt);
-        }
-
-        /// <summary>
-        /// Core method to get an AI response with custom system prompt.
-        /// Returns null if unavailable.
-        ///
-        /// Moderation: if <paramref name="returnRefusalSentinel"/> is true and the input
-        /// or output trips <see cref="App.ModerationGuard"/>, returns the appropriate
-        /// <see cref="ModerationRefusal"/> sentinel string so the chat UI can render the
-        /// refusal bubble + POLICY badge. When false (awareness, keyword, lockscreen,
-        /// video paths) a moderation hit returns null and the caller silently drops the
-        /// reaction — surfacing a refusal there would be jarring (user didn't actively
-        /// prompt).
-        /// </summary>
-        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool returnRefusalSentinel = false)
-        {
             // Check offline mode first
             if (App.Settings?.Current?.OfflineMode == true)
             {
                 App.Logger?.Debug("AiService: Offline mode enabled, skipping AI request");
                 return null;
-            }
-
-            // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass).
-            // Runs BEFORE the HTTP request so prohibited inputs never leave the client.
-            var guard = App.ModerationGuard;
-            if (guard != null)
-            {
-                var inputCheck = guard.CheckInput(userInput ?? string.Empty);
-                if (!inputCheck.Allow && inputCheck.Category.HasValue)
-                {
-                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: "cloud");
-                    // Only escalate the user-facing Content Policy Notice for content the
-                    // user actually typed. returnRefusalSentinel is true only on the
-                    // interactive chat path; every background/auto reaction (awareness,
-                    // keyword, lockscreen, video-done) leaves it false and must not pop
-                    // the warning — that filtering is "on us, not on them". The hit is
-                    // still logged above for the CCBill compliance record either way.
-                    if (returnRefusalSentinel)
-                        App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:cloud");
-                    App.Logger?.Information("AiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
-                    return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
-                }
-                // ProfessionalAdvice is soft (Allow=true with Category set) — log only.
-                if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
-                {
-                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: "cloud");
-                }
             }
 
             // Check access (cloud identity or Patreon)
@@ -301,16 +117,11 @@ namespace ConditioningControlPanel.Services
                 return null;
             }
 
-            // Reset daily count at midnight
-            if (DateTime.Today > _lastResetDate)
-            {
-                _dailyRequestCount = 0;
-                _lastResetDate = DateTime.Today;
-                App.Logger?.Debug("AiService: Daily request count reset");
-            }
+            ResetDailyCounterIfNeeded();
 
             // Circuit breaker check (client-side backup)
-            if (_dailyRequestCount >= DailyLimit)
+            var usage = App.Settings?.Current?.CompanionPrompt?.Usage;
+            if (usage != null && usage.CloudRequestCount >= DailyLimit)
             {
                 App.Logger?.Debug("AiService: Daily limit reached ({Limit} requests)", DailyLimit);
                 return null;
@@ -318,7 +129,7 @@ namespace ConditioningControlPanel.Services
 
             try
             {
-                _dailyRequestCount++;
+                BumpDailyCounter();
 
                 // Build messages array
                 var messages = new[]
@@ -387,42 +198,22 @@ namespace ConditioningControlPanel.Services
                 }
 
                 // Update remaining count if provided by server (server is authoritative)
-                if (result.RequestsRemaining.HasValue && result.RequestsRemaining.Value >= 0)
+                if (result.RequestsRemaining.HasValue && result.RequestsRemaining.Value >= 0 && usage != null)
                 {
                     // Server tells us how many requests remain - calculate our count from that
-                    var serverLimit = Math.Max(DailyLimit, _dailyRequestCount + result.RequestsRemaining.Value);
-                    _dailyRequestCount = serverLimit - result.RequestsRemaining.Value;
+                    var serverLimit = Math.Max(DailyLimit, usage.CloudRequestCount + result.RequestsRemaining.Value);
+                    usage.CloudRequestCount = serverLimit - result.RequestsRemaining.Value;
+                    App.Settings?.Save();
                     App.Logger?.Debug("AiService: Server says {Remaining} remaining, calculated count={Count}",
-                        result.RequestsRemaining.Value, _dailyRequestCount);
+                        result.RequestsRemaining.Value, usage.CloudRequestCount);
                 }
 
                 App.Logger?.Information("AiService: Got reply ({RequestCount}/{Limit} today, {Remaining} remaining)",
-                    _dailyRequestCount, DailyLimit, DailyRequestsRemaining);
+                    usage?.CloudRequestCount ?? 0, DailyLimit, DailyRequestsRemaining);
 
                 // Sanitize response to remove any leaked metadata tags FIRST (so context-tag
                 // echoes don't accidentally trip moderation regexes).
-                var sanitized = SanitizeResponse(result.Content);
-
-                // OUTPUT MODERATION (Layer 1). Discard prohibited model output before display.
-                if (guard != null)
-                {
-                    var outputCheck = guard.CheckOutput(sanitized ?? string.Empty);
-                    if (!outputCheck.Allow && outputCheck.Category.HasValue)
-                    {
-                        App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: "cloud");
-                        // Model OUTPUT that trips the filter is never the user's doing, so
-                        // it does NOT escalate the Content Policy Notice (logged above for
-                        // compliance only). The warning is reserved for user-typed input.
-                        App.Logger?.Information("AiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
-                        return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
-                    }
-                    if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
-                    {
-                        App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: "cloud");
-                    }
-                }
-
-                return sanitized;
+                return SanitizeResponse(result.Content);
             }
             catch (TaskCanceledException)
             {
@@ -445,7 +236,7 @@ namespace ConditioningControlPanel.Services
         /// Sanitizes AI response by removing any leaked internal metadata tags.
         /// The AI sometimes echoes context tags that should be hidden from users.
         /// </summary>
-        private static string SanitizeResponse(string? response)
+        private string SanitizeResponse(string? response)
         {
             if (string.IsNullOrEmpty(response))
                 return response ?? string.Empty;
@@ -499,7 +290,42 @@ namespace ConditioningControlPanel.Services
             return await _httpClient.SendAsync(legacyMsg);
         }
 
-        public void Dispose()
+        protected override string GetFallbackResponse()
+        {
+            var phrases = App.Mods?.GetPhrases("Idle") ?? new[] { "Good girl~" };
+            return phrases[_fallbackRandom.Next(phrases.Length)];
+        }
+
+        protected override string GetModelHint() => "cloud";
+
+        protected override string GetProviderName() => "AiService";
+
+        private void ResetDailyCounterIfNeeded()
+        {
+            var usage = App.Settings?.Current?.CompanionPrompt?.Usage;
+            if (usage == null) return;
+
+            if (DateTime.Today <= usage.LastResetDate) return;
+
+            usage.CloudRequestCount = 0;
+            usage.LastResetDate = DateTime.Today;
+            App.Settings?.Save();
+            App.Logger?.Debug("AiService: Daily request count reset");
+        }
+
+        private void BumpDailyCounter()
+        {
+            ResetDailyCounterIfNeeded();
+            var usage = App.Settings?.Current?.CompanionPrompt?.Usage;
+            if (usage == null) return;
+
+            usage.CloudRequestCount++;
+            App.Settings?.Save();
+        }
+
+        private static readonly Random _fallbackRandom = new();
+
+        public override void Dispose()
         {
             _httpClient.Dispose();
             GC.SuppressFinalize(this);

@@ -19,15 +19,10 @@ namespace ConditioningControlPanel.Services.AIService
     /// no third-party client, since OllamaSharp 5.4.16 was returning 404 for
     /// model names that the same endpoint accepts via raw HTTP.
     /// </summary>
-    public class LocalAiService : IAiService
+    public class LocalAiService : AiProviderBase
     {
         private const string DefaultHost = "http://localhost:11434/";
         private const string DefaultModel = "qwen3.5:latest";
-
-        private readonly BambiSprite _bambiSprite;
-        private readonly IAiResponseParser _parser;
-        private readonly KnowledgeService _knowledgeService;
-        private readonly IPromptService _promptService;
 
         private readonly SemaphoreSlim _aiSemaphore = new(1, 1);
         private bool _isProcessing;
@@ -40,11 +35,8 @@ namespace ConditioningControlPanel.Services.AIService
         private HttpClient _http;
         private string _activeHost;
 
-        // Currently parsed commands from the most recent AI response.
-        private List<AiCommandData> _currentCommands = new();
-
-        public bool IsAvailable => true;
-        public int DailyRequestsRemaining => -1;
+        public override bool IsAvailable => true;
+        public override int DailyRequestsRemaining => -1;
 
         // Number of user/assistant turns seeded from disk at construction (a prior
         // session's conversation). Non-zero means persistent memory is in play.
@@ -69,12 +61,8 @@ namespace ConditioningControlPanel.Services.AIService
 
         public LocalAiService()
         {
-            _bambiSprite = new BambiSprite();
             _activeHost = NormalizeHost(GetConfiguredHost());
             _http = BuildHttpClient(_activeHost);
-            _parser = new AiResponseParser(GetFallbackResponse);
-            _knowledgeService = new KnowledgeService();
-            _promptService = new PromptService();
 
             // Load any persisted chat history from the previous app session. Local
             // models can hold long-running context; persistence makes Bambi remember
@@ -167,8 +155,7 @@ namespace ConditioningControlPanel.Services.AIService
         }
 
         /// <summary>
-        /// Clears in-memory and on-disk chat history. Useful for a "reset memory"
-        /// button (not yet exposed in the UI).
+        /// Clears in-memory and on-disk chat history.
         /// </summary>
         public void ClearHistory()
         {
@@ -266,7 +253,7 @@ namespace ConditioningControlPanel.Services.AIService
             _http = BuildHttpClient(_activeHost);
         }
 
-        private static string GetFallbackResponse()
+        protected override string GetFallbackResponse()
         {
             // Bambi keeps its flavored fallback; all other mods get a neutral one.
             if (App.Mods?.IsBambiMode == true)
@@ -274,57 +261,55 @@ namespace ConditioningControlPanel.Services.AIService
             return "...";
         }
 
-        public async Task<string> GetBambiReplyAsync(string userInput, bool isUserMessage = false)
+        protected override string GetModelHint()
         {
-            var result = await GetBambiReplyExAsync(userInput, isUserMessage);
-            if (result.Refusal != null)
-            {
-                return result.Refusal.Source == ModerationSource.Input
-                    ? ModerationRefusal.InputSentinel
-                    : ModerationRefusal.OutputSentinel;
-            }
-            return result.Text;
+            var model = GetConfiguredModel();
+            return "local:" + (string.IsNullOrWhiteSpace(model) ? "unknown" : model);
+        }
+
+        protected override string GetProviderName() => "LocalAiService";
+
+        public override async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
+        {
+            // Local chat always treats the request as a user message for queue/drop logic.
+            _ = isUserMessage;
+            var result = await base.GetBambiReplyExAsync(userInput, isUserMessage: true);
+            return result;
         }
 
         /// <summary>
-        /// Typed variant. See <see cref="IAiService.GetBambiReplyExAsync"/>.
+        /// Adds local-AI queue/drop semantics around the shared pipeline.
         /// </summary>
-        public async Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
+        protected override async Task<string?> GetChatResponseAsync(
+            string userInput,
+            string systemPrompt,
+            bool isUserMessage,
+            bool returnRefusalSentinel)
         {
-            var prompt = _bambiSprite.GetSystemPrompt();
-            // Mark this as a user request so a second click while busy gets a "still thinking"
-            // phrase back instead of the bare fallback.
-            var result = await GetAiResponseAsync(userInput, prompt, isUser: true, returnRefusalSentinel: true);
-
-            var refusalSource = ModerationRefusal.GetSource(result);
-            if (refusalSource.HasValue)
+            if (isUserMessage)
             {
-                return new AiReplyResult(
-                    string.Empty,
-                    IsAiGenerated: false,
-                    Refusal: new ModerationRefusalInfo(Category: null, Source: refusalSource.Value));
+                if (_isUserQueued) { App.Logger?.Debug("LocalAiService: user request dropped (one already queued)"); return GetRandomThinkingPhrase(); }
+                _isUserQueued = true;
+            }
+            else
+            {
+                if (_isProcessing) { App.Logger?.Debug("LocalAiService: automated request dropped (busy)"); return null; }
             }
 
-            // GetAiResponseAsync returns null/empty in a handful of paths that all represent
-            // "we didn't get a usable LLM reply" — Ollama not reachable, empty content,
-            // queue drop ("still thinking" phrase), or descriptive error strings produced by
-            // DescribeOllamaError / DescribeChatException. Treat ALL of those as canned
-            // (badge OFF) so the user doesn't see the pink AI badge over an error string.
-            //
-            // Heuristic: a real Ollama reply never starts with the literal "(" we use for
-            // parenthetical diagnostic messages, and "still thinking" phrases are short and
-            // come from a fixed pool. We don't try to filter those by content here — instead
-            // we treat any null return as canned and let real content flow as AI.
-            if (string.IsNullOrEmpty(result))
-                return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
+            await _aiSemaphore.WaitAsync();
+            if (isUserMessage) _isUserQueued = false;
+            _isProcessing = true;
 
-            // Best-effort: descriptive error strings produced by DescribeChatException /
-            // DescribeOllamaError are parenthetical diagnostics, NOT model output. Keep them
-            // out of the AI-badge path.
-            if (result.StartsWith("(", StringComparison.Ordinal) && result.EndsWith(")", StringComparison.Ordinal))
-                return new AiReplyResult(result, IsAiGenerated: false, Refusal: null);
-
-            return new AiReplyResult(result, IsAiGenerated: true, Refusal: null);
+            try
+            {
+                return await base.GetChatResponseAsync(userInput, systemPrompt, isUserMessage, returnRefusalSentinel);
+            }
+            finally
+            {
+                _isProcessing = false;
+                // Semaphore may have been disposed if the app shut down mid-request.
+                try { _aiSemaphore.Release(); } catch (ObjectDisposedException) { }
+            }
         }
 
         private static readonly string[] StillThinkingPhrases =
@@ -346,240 +331,110 @@ namespace ConditioningControlPanel.Services.AIService
 
         private static readonly Random _random = new();
 
-        public async Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "", string pageTitle = "")
+        /// <summary>
+        /// Core transport: maintains the persistent message list, sends to Ollama,
+        /// and returns raw assistant content. Moderation and command execution are
+        /// handled by the base class pipeline.
+        /// </summary>
+        protected override async Task<string?> GetRawCompletionAsync(
+            string systemPrompt,
+            string userInput,
+            bool isUserMessage)
         {
-            var prompt = _bambiSprite.GetSystemPrompt();
-            var website = string.IsNullOrEmpty(serviceName) ? detectedName : serviceName;
-            var tabName = string.IsNullOrEmpty(pageTitle) ? detectedName : pageTitle;
-            var userInput = $"[Category: {category} | App: {website} | Title: {tabName} | Duration: 0m]";
-            return await GetAiResponseAsync(userInput, prompt);
-        }
+            _ = isUserMessage;
 
-        public async Task<string?> GetStillOnReactionAsync(string displayName, string category, TimeSpan duration)
-        {
-            var prompt = _bambiSprite.GetSystemPrompt();
-            string durationText;
-            if (duration.TotalMinutes < 1) durationText = $"{(int)duration.TotalSeconds}s";
-            else if (duration.TotalMinutes < 60) durationText = $"{(int)duration.TotalMinutes}m";
-            else durationText = $"{(int)duration.TotalHours}h";
-
-            var userInput = $"[Category: {category} | App: {displayName} | Title: {displayName} | Duration: {durationText}]";
-            return await GetAiResponseAsync(userInput, prompt);
-        }
-
-        public async Task<string?> GetKeywordCommentAsync(string keyword, string? promptTemplate = null)
-        {
-            var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"You just caught the user on the word '{keyword}'. React in character, one short line."
-                : promptTemplate.Replace("{keyword}", keyword);
-            return await GetAiResponseAsync(userInput, systemPrompt);
-        }
-
-        public async Task<string?> GetLockScreenReaction(string sentance, int mistakes, int amount, string? promptTemplate = null)
-        {
-            var systemPrompt = _bambiSprite.GetSystemPrompt();
-            string userInput;
-            if (string.IsNullOrEmpty(promptTemplate))
+            if (App.Settings?.Current?.OfflineMode == true)
             {
-                userInput = $"The user made {mistakes} mistakes in '{sentance}' for the lock screen. They had to type it {amount} of time. React in character, one short line.";
+                App.Logger?.Debug("LocalAiService: Offline mode enabled, skipping AI request");
+                return null;
             }
-            else
-            {
-                userInput = promptTemplate.Replace("{sentance}", sentance);
-                userInput = userInput.Replace("{mistakes}", mistakes.ToString());
-                userInput = userInput.Replace("{amount}", amount.ToString());
-            }
-            return await GetAiResponseAsync(userInput, systemPrompt);
-        }
-
-        public async Task<string?> GetVideoDoneReaction(string title, string? promptTemplate = null)
-        {
-            var systemPrompt = _bambiSprite.GetSystemPrompt();
-            var userInput = string.IsNullOrEmpty(promptTemplate)
-                ? $"The user has just finished the mandatory video {title}. React in character, one short line."
-                : promptTemplate.Replace("{title}", title);
-            return await GetAiResponseAsync(userInput, systemPrompt);
-        }
-
-        private async Task<string?> GetAiResponseAsync(string userInput, string systemPrompt, bool isUser = false, bool returnRefusalSentinel = false)
-        {
-            // INPUT MODERATION (Layer 1 — code-side, prompt cannot bypass). Same semantics
-            // as AiService cloud path: hard categories block before the HTTP call; refusal
-            // sentinel surfaces only when the caller is the chat UI.
-            var guard = App.ModerationGuard;
-            var modelName = GetConfiguredModel();
-            var modelHint = "local:" + (string.IsNullOrWhiteSpace(modelName) ? "unknown" : modelName);
-            if (guard != null)
-            {
-                var inputCheck = guard.CheckInput(userInput ?? string.Empty);
-                if (!inputCheck.Allow && inputCheck.Category.HasValue)
-                {
-                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: modelHint);
-                    // Only escalate the user-facing Content Policy Notice for content the
-                    // user actually typed (interactive chat path). Background/auto
-                    // reactions leave returnRefusalSentinel false and must not pop the
-                    // warning. Still logged above for the compliance record either way.
-                    if (returnRefusalSentinel)
-                        App.ModerationCounter?.RecordHit(inputCheck.Category.Value, "input:local");
-                    App.Logger?.Information("LocalAiService: input blocked by ModerationGuard (category={Cat})", inputCheck.Category);
-                    return returnRefusalSentinel ? ModerationRefusal.InputSentinel : null;
-                }
-                if (inputCheck.Allow && inputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
-                {
-                    App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "input", modelHint: modelHint);
-                }
-            }
-
-            if (isUser)
-            {
-                if (_isUserQueued) { App.Logger?.Debug("LocalAiService: user request dropped (one already queued)"); return GetRandomThinkingPhrase(); }
-                _isUserQueued = true;
-            }
-            else
-            {
-                if (_isProcessing) { App.Logger?.Debug("LocalAiService: automated request dropped (busy)"); return null; }
-            }
-
-            await _aiSemaphore.WaitAsync();
-            if (isUser) _isUserQueued = false;
-            _isProcessing = true;
 
             EnsureHost();
             var model = GetConfiguredModel();
 
-            try
+            // System prompt at index 0, refreshed each call so prompt edits take effect immediately.
+            var sys = _messages.FirstOrDefault(m => m.Role == "system");
+            if (sys == null) _messages.Insert(0, new ChatMessage("system", systemPrompt));
+            else sys.Content = systemPrompt;
+
+            // Optional enrichment block right after the system message (only when effects on).
+            var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
+            var oldEnrichment = _messages.FirstOrDefault(m => m.Content?.Contains("[CONTEXT BLOCK — NOT DIALOGUE]") == true);
+
+            if (effectsEnabled)
             {
-                // System prompt at index 0, refreshed each call so prompt edits take effect immediately.
-                var sys = _messages.FirstOrDefault(m => m.Role == "system");
-                if (sys == null) _messages.Insert(0, new ChatMessage("system", systemPrompt));
-                else sys.Content = systemPrompt;
+                var currentTime = DateTime.Now.ToString("yyyy-M-dd dddd h:mm:ss tt");
+                var facts = KnowledgeService.GetKnowledge(userInput, maxResults: 20);
+                var factsJson = JsonSerializer.Serialize(facts);
+                var enrichment = PromptService.BuildEnrichmentMessage(factsJson, currentTime);
 
-                // Optional enrichment block right after the system message (only when effects on).
-                var effectsEnabled = App.Settings?.Current?.CompanionPrompt?.AllowAiToControlEffects == true;
-                var oldEnrichment = _messages.FirstOrDefault(m => m.Content?.Contains("[CONTEXT BLOCK — NOT DIALOGUE]") == true);
-
-                if (effectsEnabled)
-                {
-                    var currentTime = DateTime.Now.ToString("yyyy-M-dd dddd h:mm:ss tt");
-                    var facts = _knowledgeService.GetKnowledge("");
-                    var factsJson = JsonSerializer.Serialize(facts);
-                    var enrichment = _promptService.BuildEnrichmentMessage(factsJson, currentTime);
-
-                    if (oldEnrichment != null) oldEnrichment.Content = enrichment.Content;
-                    else _messages.Insert(1, new ChatMessage("user", enrichment.Content));
-                }
-                else if (oldEnrichment != null)
-                {
-                    _messages.Remove(oldEnrichment);
-                }
-
-                // Append the new user turn.
-                _messages.Add(new ChatMessage("user", userInput));
-
-                App.Logger?.Information("LocalAiService: sending to Ollama (model={Model}, effects={Effects}, msgs={MsgCount})",
-                    model, effectsEnabled, _messages.Count);
-
-                var (status, body) = await SendChatAsync(model, _messages);
-
-                if (status != 200)
-                {
-                    App.Logger?.Warning("LocalAiService: Ollama returned HTTP {Status}: {Body}", status, body);
-                    // Roll back the user turn so we don't poison history with an unanswered turn.
-                    if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
-                    return DescribeOllamaError(status, body, model);
-                }
-
-                var content = ExtractContent(body);
-                if (string.IsNullOrEmpty(content))
-                {
-                    App.Logger?.Warning("LocalAiService: empty content in 200 response: {Body}", Truncate(body, 300));
-                    if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
-                    return GetFallbackResponse();
-                }
-
-                App.Logger?.Information("LocalAiService: got reply ({Len} chars)", content.Length);
-
-                // Append assistant turn so future requests have context.
-                _messages.Add(new ChatMessage("assistant", content));
-
-                var parsed = _parser.Parse(content);
-                _currentCommands = parsed.Commands;
-
-                if (effectsEnabled)
-                {
-                    App.Logger?.Information("LocalAiService: parsed {Count} command(s) from response", _currentCommands.Count);
-                }
-
-                // OUTPUT MODERATION (Layer 1). Scan the user-visible text — the JSON
-                // effects wrapper is already stripped by the parser. If the model produced
-                // prohibited content we discard the WHOLE turn (no commands executed, no
-                // text displayed, persistence skipped) and return the refusal sentinel or
-                // null per caller.
-                //
-                // P2/H5: persistence is deferred until AFTER output moderation passes.
-                // Previously PersistHistory() ran before the output check, so a prohibited
-                // assistant turn (and its preceding user turn) would land on disk and be
-                // reloaded next launch. The user/assistant turns are also rolled back from
-                // the in-memory _messages list so future requests don't carry the rejected
-                // context.
-                if (guard != null)
-                {
-                    var outputCheck = guard.CheckOutput(parsed.CleanText ?? string.Empty);
-                    if (!outputCheck.Allow && outputCheck.Category.HasValue)
-                    {
-                        App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: modelHint);
-                        // Model OUTPUT tripping the filter is not the user's doing — log
-                        // for compliance (above) but do NOT escalate the Content Policy
-                        // Notice. The warning is reserved for user-typed input.
-                        App.Logger?.Information("LocalAiService: output blocked by ModerationGuard (category={Cat})", outputCheck.Category);
-                        // Don't fire effects from a blocked response.
-                        _currentCommands = new List<AiCommandData>();
-                        // Roll back assistant turn first (most recent), then the user turn
-                        // that produced it. PersistHistory is NOT called — the file on disk
-                        // remains at the prior known-clean state.
-                        if (_messages.Count > 0 && _messages[^1].Role == "assistant") _messages.RemoveAt(_messages.Count - 1);
-                        if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
-                        return returnRefusalSentinel ? ModerationRefusal.OutputSentinel : null;
-                    }
-                    if (outputCheck.Allow && outputCheck.Category == ProhibitedCategory.ProfessionalAdvice)
-                    {
-                        App.ModerationLog?.Record(ProhibitedCategory.ProfessionalAdvice, source: "output", modelHint: modelHint);
-                    }
-                }
-
-                // Persist asynchronously so chat latency isn't impacted by disk I/O.
-                // Runs only after output moderation passed (P2/H5).
-                _ = Task.Run(PersistHistory);
-
-                // she_remembers: a reply was produced while turns restored from a previous
-                // session are in context — persistent memory surfacing across launches.
-                // Signal once per session; GamificationBridge entitlement-gates the unlock.
-                if (_restoredTurnCount > 0 && !_memoryRecallSignaled)
-                {
-                    _memoryRecallSignaled = true;
-                    RaisePersistentMemoryRecalled();
-                }
-
-                if (_currentCommands.Count > 0 && App.Commands != null)
-                {
-                    App.Commands.BeginBatch();
-                    foreach (var cmd in _currentCommands) App.Commands.ExecuteCommand(cmd);
-                }
-
-                return parsed.CleanText;
+                if (oldEnrichment != null) oldEnrichment.Content = enrichment.Content;
+                else _messages.Insert(1, new ChatMessage("user", enrichment.Content));
             }
-            catch (Exception ex)
+            else if (oldEnrichment != null)
             {
-                App.Logger?.Error(ex, "LocalAiService: chat call threw (host={Host}, model={Model})", _activeHost, model);
+                _messages.Remove(oldEnrichment);
+            }
+
+            // Append the new user turn.
+            _messages.Add(new ChatMessage("user", userInput));
+
+            App.Logger?.Information("LocalAiService: sending to Ollama (model={Model}, effects={Effects}, msgs={MsgCount})",
+                model, effectsEnabled, _messages.Count);
+
+            var (status, body) = await SendChatAsync(model, _messages);
+
+            if (status != 200)
+            {
+                App.Logger?.Warning("LocalAiService: Ollama returned HTTP {Status}: {Body}", status, body);
+                // Roll back the user turn so we don't poison history with an unanswered turn.
                 if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
-                return DescribeChatException(ex, model);
+                return DescribeOllamaError(status, body, model);
             }
-            finally
+
+            var content = ExtractContent(body);
+            if (string.IsNullOrEmpty(content))
             {
-                _isProcessing = false;
-                // Semaphore may have been disposed if the app shut down mid-request.
-                try { _aiSemaphore.Release(); } catch (ObjectDisposedException) { }
+                App.Logger?.Warning("LocalAiService: empty content in 200 response: {Body}", Truncate(body, 300));
+                if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
+                return null;
+            }
+
+            App.Logger?.Information("LocalAiService: got reply ({Len} chars)", content.Length);
+
+            // Append assistant turn so future requests have context.
+            _messages.Add(new ChatMessage("assistant", content));
+
+            return content;
+        }
+
+        /// <summary>
+        /// Rolls back the assistant and user turns when output moderation blocks the
+        /// response, and skips persistence so the rejected exchange isn't remembered.
+        /// </summary>
+        protected override void OnOutputModerationBlocked(string userInput, string rawResponse)
+        {
+            // Roll back assistant turn first (most recent), then the user turn that produced it.
+            if (_messages.Count > 0 && _messages[^1].Role == "assistant") _messages.RemoveAt(_messages.Count - 1);
+            if (_messages.Count > 0 && _messages[^1].Role == "user") _messages.RemoveAt(_messages.Count - 1);
+        }
+
+        /// <summary>
+        /// Persists the accepted conversation and signals memory recall after the
+        /// response has passed moderation.
+        /// </summary>
+        protected override void OnResponseAccepted(string userInput, string rawResponse)
+        {
+            // Persist asynchronously so chat latency isn't impacted by disk I/O.
+            _ = Task.Run(PersistHistory);
+
+            // she_remembers: a reply was produced while turns restored from a previous
+            // session are in context — persistent memory surfacing across launches.
+            // Signal once per session; GamificationBridge entitlement-gates the unlock.
+            if (_restoredTurnCount > 0 && !_memoryRecallSignaled)
+            {
+                _memoryRecallSignaled = true;
+                RaisePersistentMemoryRecalled();
             }
         }
 
@@ -766,7 +621,7 @@ namespace ConditioningControlPanel.Services.AIService
             }
         }
 
-        public void Dispose()
+        public override void Dispose()
         {
             _aiSemaphore.Dispose();
             _http.Dispose();

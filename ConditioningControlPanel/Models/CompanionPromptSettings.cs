@@ -68,6 +68,11 @@ namespace ConditioningControlPanel.Models
         public int DailyRequestLimit { get; set; } = 0;
 
         /// <summary>
+        /// Persisted daily request counters for providers that track usage client-side.
+        /// </summary>
+        public AiUsageState Usage { get; set; } = new();
+
+        /// <summary>
         /// When true, the OpenAI-compatible provider sends the custom sampler values below.
         /// When false, the endpoint's own defaults are used and no sampler keys are sent.
         /// </summary>
@@ -236,6 +241,7 @@ namespace ConditioningControlPanel.Models
                 OpenAiCompatibleApiKey = "",
                 OpenAiCompatibleModel = "",
                 DailyRequestLimit = 0,
+                Usage = new(),
                 OpenAiCompatibleUseCustomSamplerSettings = false,
                 OpenAiCompatibleTemperature = null,
                 OpenAiCompatibleTopP = null,
@@ -369,6 +375,7 @@ FREQUENCY RULE:
                 OpenAiCompatibleApiKey = OpenAiCompatibleApiKey,
                 OpenAiCompatibleModel = OpenAiCompatibleModel,
                 DailyRequestLimit = DailyRequestLimit,
+                Usage = Usage.Clone(),
                 OpenAiCompatibleUseCustomSamplerSettings = OpenAiCompatibleUseCustomSamplerSettings,
                 OpenAiCompatibleTemperature = OpenAiCompatibleTemperature,
                 OpenAiCompatibleTopP = OpenAiCompatibleTopP,

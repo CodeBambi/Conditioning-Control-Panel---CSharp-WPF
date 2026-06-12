@@ -82,9 +82,55 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
             }
         }
 
-        public List<Knowledge> GetKnowledge(string keyword)
+        /// <summary>
+        /// Returns knowledge entries relevant to the given keyword, capped to
+        /// <paramref name="maxResults"/>. When <paramref name="keyword"/> is empty,
+        /// the first <paramref name="maxResults"/> entries are returned. If there
+        /// are fewer keyword matches than <paramref name="maxResults"/>, the rest
+        /// are filled with the remaining entries so the model always has some context.
+        /// </summary>
+        public List<Knowledge> GetKnowledge(string keyword, int maxResults = 20)
         {
-            return _context.ToList();
+            if (maxResults <= 0)
+                return new List<Knowledge>();
+
+            if (string.IsNullOrWhiteSpace(keyword))
+                return _context.Take(maxResults).ToList();
+
+            var normalizedKeyword = keyword.Trim();
+            var matches = _context.Where(k => MatchesKeyword(k, normalizedKeyword)).ToList();
+
+            if (matches.Count >= maxResults)
+                return matches.Take(maxResults).ToList();
+
+            // Pad with non-matching entries so the prompt doesn't collapse to nothing.
+            var matchingIds = new HashSet<Knowledge>(matches);
+            var remainder = _context.Where(k => !matchingIds.Contains(k)).Take(maxResults - matches.Count);
+            matches.AddRange(remainder);
+            return matches;
+        }
+
+        private static bool MatchesKeyword(Knowledge k, string keyword)
+        {
+            return k.Files.Any(f =>
+                Contains(f.Title, keyword) ||
+                Contains(f.FileName, keyword) ||
+                Contains(f.FileType, keyword) ||
+                f.Triggers.Any(t => Contains(t, keyword)) ||
+                f.Links.Any(l => Contains(l, keyword)) ||
+                f.LocalPaths.Any(p => Contains(p, keyword)))
+                || k.Triggers.Any(t =>
+                    Contains(t.Trigger, keyword) ||
+                    Contains(t.Description, keyword))
+                || k.Kinks.Any(kk =>
+                    Contains(kk.Name, keyword) ||
+                    Contains(kk.Description, keyword));
+        }
+
+        private static bool Contains(string? text, string keyword)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            return text.Contains(keyword, StringComparison.OrdinalIgnoreCase);
         }
     }
 }
