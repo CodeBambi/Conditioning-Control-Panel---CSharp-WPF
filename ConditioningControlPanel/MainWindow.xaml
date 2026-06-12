@@ -6443,13 +6443,6 @@
                                                       IsChecked="True"
                                                       Checked="ChkAiChat_Changed" Unchecked="ChkAiChat_Changed"/>
                                         </Grid>
-                                        <Grid Margin="0,0,0,6">
-                                            <TextBlock Text="{loc:Str label_capability_awareness}" Foreground="White" FontSize="17" VerticalAlignment="Center"/>
-                                            <CheckBox x:Name="ChkAwarenessMode" Style="{StaticResource ToggleStyle}"
-                                                      HorizontalAlignment="Right" VerticalAlignment="Center"
-                                                      IsChecked="False"
-                                                      Checked="ChkAwarenessMode_Changed" Unchecked="ChkAwarenessMode_Changed"/>
-                                        </Grid>
                                     </StackPanel>
 
                                     <!-- Live actions — only meaningful when local AI is selected
@@ -6537,44 +6530,6 @@
                                         IsSnapToTickEnabled="True" TickFrequency="1"
                                         ToolTip="{loc:Str tooltip_bubble_duration}"
                                         ValueChanged="SliderBubbleDuration_ValueChanged"/>
-
-                                <!-- Awareness Mode toggle — reunited here from the old AI Brain "Capabilities" block.
-                                     Flipping it on reveals the cooldown/consent panel directly below. -->
-                                <Grid Margin="0,4,0,8">
-                                    <TextBlock Text="{loc:Str label_capability_awareness}" Foreground="White" FontSize="14" VerticalAlignment="Center"/>
-                                    <CheckBox x:Name="ChkAwarenessModeCompanion" Style="{StaticResource ToggleStyle}"
-                                              HorizontalAlignment="Right" VerticalAlignment="Center"
-                                              IsChecked="False"
-                                              Checked="ChkAwarenessMode_Changed" Unchecked="ChkAwarenessMode_Changed"/>
-                                </Grid>
-
-                                <Border x:Name="AwarenessSettingsPanel" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" Padding="10" Margin="0,0,0,12" Visibility="Collapsed">
-                                    <StackPanel>
-                                        <Grid Margin="0,0,0,8">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{loc:Str label_awareness_settings}" Foreground="{DynamicResource PinkBrush}" FontSize="14" FontWeight="Bold"/>
-                                                <Button x:Name="HelpBtnAwareness" Style="{StaticResource HelpButtonStyle}" VerticalAlignment="Center" Margin="6,0,0,0" Tag="WindowAwareness"/>
-                                            </StackPanel>
-                                        </Grid>
-                                        <Border Background="#2A1A1A" CornerRadius="6" Padding="8" BorderBrush="#FF6B6B" BorderThickness="1">
-                                            <StackPanel>
-                                                <Grid>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="⚠️" FontSize="13" VerticalAlignment="Center"/>
-                                                        <TextBlock Text="{loc:Str label_privacy_notice}" Foreground="#FF6B6B" FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
-                                                    </StackPanel>
-                                                    <Button x:Name="BtnPrivacySpoiler" Content="{loc:Str btn_click_to_reveal}"
-                                                            Background="Transparent" Foreground="{DynamicResource TextMutedBrush}" BorderThickness="0"
-                                                            HorizontalAlignment="Right" FontSize="12" Cursor="Hand"
-                                                            Click="BtnPrivacySpoiler_Click"/>
-                                                </Grid>
-                                                <TextBlock x:Name="TxtPrivacyDetails" Visibility="Collapsed"
-                                                           TextWrapping="Wrap" Foreground="#CCCCCC" FontSize="12" Margin="0,8,0,0"
-                                                           Text="{loc:Str label_this_feature_reads_the_name_of_the_active_win}"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </StackPanel>
-                                </Border>
 
                                 <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>

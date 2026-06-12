@@ -187,6 +187,9 @@ namespace ConditioningControlPanel
             SliderDialogChatMemorySendPairs.Value = Math.Clamp(settings.ChatMemorySendPairs, 1, 50);
             TxtDialogChatMemorySendPairs.Text = settings.ChatMemorySendPairs.ToString();
 
+            var appSettings = App.Settings?.Current;
+            ChkDialogAwarenessMode.IsChecked = appSettings?.AwarenessModeEnabled == true && appSettings?.AwarenessConsentGiven == true;
+
             ChkDialogActionHistoryEnabled.IsChecked = settings.AiActionHistoryEnabled;
             var hours = Math.Clamp(settings.AiActionHistoryHours, 1, 8);
             SliderDialogActionHistoryHours.Value = hours;
@@ -198,7 +201,6 @@ namespace ConditioningControlPanel
 
             ChkDialogSubjectProfileEnabled.IsChecked = settings.AiSubjectProfileEnabled;
 
-            var appSettings = App.Settings?.Current;
             var cooldown = Math.Clamp(appSettings?.AwarenessReactionCooldownSeconds ?? 90, 10, 300);
             SliderDialogAwarenessCooldown.Value = cooldown;
             TxtDialogAwarenessCooldown.Text = $"{cooldown}s";
@@ -250,6 +252,11 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current != null)
             {
                 var appSettings = App.Settings.Current;
+
+                bool awarenessOn = ChkDialogAwarenessMode.IsChecked == true;
+                appSettings.AwarenessModeEnabled = awarenessOn;
+                appSettings.AwarenessConsentGiven = awarenessOn;
+
                 var cooldown = (int)SliderDialogAwarenessCooldown.Value;
                 appSettings.AwarenessReactionCooldownSeconds = cooldown;
                 // Unify keyword-trigger cooldowns so there is only one awareness cooldown to manage.
@@ -302,6 +309,19 @@ namespace ConditioningControlPanel
         private void ChkDialogChatMemoryEnabled_Changed(object sender, RoutedEventArgs e)
         {
             _hasUnsavedChanges = true;
+        }
+
+        private void ChkDialogAwarenessMode_Changed(object sender, RoutedEventArgs e)
+        {
+            _hasUnsavedChanges = true;
+            var appSettings = App.Settings?.Current;
+            if (appSettings == null) return;
+            bool isEnabled = ChkDialogAwarenessMode.IsChecked == true;
+            appSettings.AwarenessModeEnabled = isEnabled;
+            appSettings.AwarenessConsentGiven = isEnabled;
+            App.Settings?.Save();
+            if (isEnabled) App.WindowAwareness?.Start();
+            else App.WindowAwareness?.Stop();
         }
 
         private void SliderDialogChatMemorySendPairs_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)

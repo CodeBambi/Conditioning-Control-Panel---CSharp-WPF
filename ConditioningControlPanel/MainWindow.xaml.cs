@@ -11506,14 +11506,6 @@ namespace ConditioningControlPanel
             SliderBubbleDurationCompanion.Value = settings.BubbleDurationSeconds;
             TxtBubbleDurationCompanion.Text = $"{(int)settings.BubbleDurationSeconds}s";
 
-            // Awareness Mode settings (free for all users)
-            var awarenessAvailable = true;
-            ChkAwarenessMode.IsChecked = settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
-
-            // Show/hide awareness settings panel based on enabled state
-            var awarenessEnabled = awarenessAvailable && settings.AwarenessModeEnabled && settings.AwarenessConsentGiven;
-            AwarenessSettingsPanel.Visibility = awarenessEnabled ? Visibility.Visible : Visibility.Collapsed;
-
             // Trigger Mode settings (free for all)
             ChkTriggerModeCompanion.IsChecked = settings.TriggerModeEnabled;
             SliderTriggerIntervalCompanion.Value = settings.TriggerIntervalSeconds;
@@ -11771,49 +11763,6 @@ namespace ConditioningControlPanel
                 App.Logger?.Error(ex, "Failed to open trigger editor");
                 MessageBox.Show($"Error opening trigger editor: {ex.Message}", "Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void ChkAwarenessMode_Changed(object sender, RoutedEventArgs e)
-        {
-            if (_isLoading) return;
-
-            var isEnabled = ChkAwarenessMode.IsChecked == true;
-
-            // Show/hide awareness settings panel
-            AwarenessSettingsPanel.Visibility = isEnabled ? Visibility.Visible : Visibility.Collapsed;
-
-            // Update settings
-            App.Settings.Current.AwarenessModeEnabled = isEnabled;
-            App.Settings.Current.AwarenessConsentGiven = isEnabled; // Auto-consent when enabling via UI
-            App.Settings.Save();
-
-            // Start or stop the awareness service
-            if (isEnabled)
-            {
-                App.WindowAwareness?.Start();
-                App.Logger?.Information("Awareness Mode enabled via UI");
-            }
-            else
-            {
-                App.WindowAwareness?.Stop();
-                App.Logger?.Information("Awareness Mode disabled via UI");
-            }
-
-            UpdateAiBrainPills();
-        }
-
-        private void BtnPrivacySpoiler_Click(object sender, RoutedEventArgs e)
-        {
-            if (TxtPrivacyDetails.Visibility == Visibility.Collapsed)
-            {
-                TxtPrivacyDetails.Visibility = Visibility.Visible;
-                BtnPrivacySpoiler.Content = Loc.Get("btn_hide");
-            }
-            else
-            {
-                TxtPrivacyDetails.Visibility = Visibility.Collapsed;
-                BtnPrivacySpoiler.Content = Loc.Get("btn_click_to_reveal");
             }
         }
 
@@ -12315,7 +12264,7 @@ namespace ConditioningControlPanel
                 TxtDailyLimit.Text = limit > 0 ? limit.ToString() : string.Empty;
             }
 
-            // Capability checkboxes (ChkAiChat / ChkAwarenessMode handled by their own sync paths)
+            // Capability checkboxes (ChkAiChat handled by its own sync path)
             if (ChkCapEffects != null)
                 ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
             if (EffectPermsPanel != null)
@@ -12337,10 +12286,6 @@ namespace ConditioningControlPanel
             // Max haptic intensity
             if (SliderMaxHapticIntensity != null) SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
             if (TxtMaxHapticIntensity != null)    TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
-
-            // Awareness panel visibility (from previous handler logic)
-            if (AwarenessSettingsPanel != null)
-                AwarenessSettingsPanel.Visibility = s.AwarenessModeEnabled ? Visibility.Visible : Visibility.Collapsed;
 
             // Hero pills
             UpdateAiBrainPills();
@@ -18015,7 +17960,6 @@ namespace ConditioningControlPanel
             SetHelpContent(HelpBtnQuickControls, "QuickControls");
             SetHelpContent(HelpBtnPatreon, "PatreonExclusives");
             SetHelpContent(HelpBtnAiChat, "AiChat");
-            SetHelpContent(HelpBtnAwareness, "WindowAwareness");
             SetHelpContent(HelpBtnHaptics, "Haptics");
             SetHelpContent(HelpBtnBlinkTrainer, "BlinkTrainer");
             SetHelpContent(HelpBtnVideoHapticSync, "VideoHapticSync");
