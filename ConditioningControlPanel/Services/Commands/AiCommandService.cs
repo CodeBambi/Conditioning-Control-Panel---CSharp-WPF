@@ -61,14 +61,27 @@ namespace ConditioningControlPanel.Services.Commands
                 return new CommandOutcome(commandName, false, "effect disabled in settings");
             }
 
-            // AI effects cooldown (shared across all AI-triggered effects and autonomy).
+            // AI effects cooldown. Shared with Autonomy only when both AI effects and
+            // Autonomy/Takeover are enabled; otherwise use the AI-only cooldown.
             var appSettings = App.Settings?.Current;
             if (appSettings != null)
             {
-                var cooldown = appSettings.AiEffectsCooldownSeconds;
-                if (cooldown > 0 && SharedEffectCooldown.IsCooldownActive(cooldown))
+                var companion = App.Settings?.Current?.CompanionPrompt;
+                var bothEnabled = appSettings.AutonomyModeEnabled && companion?.AllowAiToControlEffects == true;
+                var cooldown = bothEnabled
+                    ? SharedEffectCooldown.GetEffectiveCooldownSeconds()
+                    : appSettings.AiEffectsCooldownSeconds;
+                var cooldownActive = bothEnabled
+                    ? SharedEffectCooldown.IsSharedCooldownActive(cooldown)
+                    : SharedEffectCooldown.IsCooldownActive(cooldown, CooldownSource.Ai);
+                if (cooldownActive)
                 {
-                    var remaining = (int)Math.Ceiling((SharedEffectCooldown.LastEffectCommandTimeUtc.AddSeconds(cooldown) - DateTime.UtcNow).TotalSeconds);
+                    var last = bothEnabled
+                        ? (SharedEffectCooldown.LastAiEffectTimeUtc > SharedEffectCooldown.LastAutonomyEffectTimeUtc
+                            ? SharedEffectCooldown.LastAiEffectTimeUtc
+                            : SharedEffectCooldown.LastAutonomyEffectTimeUtc)
+                        : SharedEffectCooldown.LastAiEffectTimeUtc;
+                    var remaining = (int)Math.Ceiling((last.AddSeconds(cooldown) - DateTime.UtcNow).TotalSeconds);
                     App.Logger?.Information("AiCommandService: effects cooldown active ({Remaining}s remaining) — dropping {Cmd}", remaining, commandData.Command);
                     App.ActionHistory.Record(commandName, "ai", false, $"AI effects cooldown active ({remaining}s remaining)");
                     return new CommandOutcome(commandName, false, $"AI effects cooldown active ({remaining}s remaining)");
@@ -111,7 +124,7 @@ namespace ConditioningControlPanel.Services.Commands
 
                 App.Logger?.Debug("AiCommandService: executing {Cmd}", commandData.Command);
                 var result = command.ExecuteAsync().GetAwaiter().GetResult();
-                SharedEffectCooldown.RecordEffectFired();
+                SharedEffectCooldown.RecordEffectFired(CooldownSource.Ai);
                 var succeeded = result.Status == CommandResultStatus.Executed;
                 var outcomeText = succeeded
                     ? $"executed{(string.IsNullOrEmpty(result.ParameterSummary) ? "" : $": {result.ParameterSummary}")}"

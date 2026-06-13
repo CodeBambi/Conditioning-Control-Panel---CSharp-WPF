@@ -4,30 +4,54 @@ namespace ConditioningControlPanel.Services
 {
     /// <summary>
     /// Shared cooldown state for AI-triggered effects and Autonomy/Takeover actions.
-    /// Both paths use this so they respect the lower of the two configured cooldowns.
+    /// Both paths use this so they respect the lower of the two configured cooldowns,
+    /// but only when both AI effects control and Autonomy/Takeover are enabled.
     /// </summary>
     public static class SharedEffectCooldown
     {
         /// <summary>
-        /// UTC timestamp of the last effect command executed by either AI or Autonomy.
+        /// UTC timestamp of the last effect command executed by the AI effects path.
         /// </summary>
-        public static DateTime LastEffectCommandTimeUtc { get; private set; } = DateTime.MinValue;
+        public static DateTime LastAiEffectTimeUtc { get; private set; } = DateTime.MinValue;
 
         /// <summary>
-        /// Records that an effect has just been fired by either path.
+        /// UTC timestamp of the last effect command executed by the Autonomy/Takeover path.
         /// </summary>
-        public static void RecordEffectFired()
+        public static DateTime LastAutonomyEffectTimeUtc { get; private set; } = DateTime.MinValue;
+
+        /// <summary>
+        /// Records that an effect has just been fired by the specified path.
+        /// </summary>
+        public static void RecordEffectFired(CooldownSource source)
         {
-            LastEffectCommandTimeUtc = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            if (source == CooldownSource.Ai)
+                LastAiEffectTimeUtc = now;
+            else
+                LastAutonomyEffectTimeUtc = now;
         }
 
         /// <summary>
-        /// Returns true if the configured cooldown has not elapsed since the last effect.
+        /// Returns true if the configured cooldown has not elapsed since the last effect
+        /// fired by the specified path.
         /// </summary>
-        public static bool IsCooldownActive(int cooldownSeconds)
+        public static bool IsCooldownActive(int cooldownSeconds, CooldownSource source)
         {
             if (cooldownSeconds <= 0) return false;
-            return (DateTime.UtcNow - LastEffectCommandTimeUtc).TotalSeconds < cooldownSeconds;
+            var last = source == CooldownSource.Ai ? LastAiEffectTimeUtc : LastAutonomyEffectTimeUtc;
+            return (DateTime.UtcNow - last).TotalSeconds < cooldownSeconds;
+        }
+
+        /// <summary>
+        /// Returns true if the configured shared cooldown has not elapsed since the most
+        /// recent effect fired by either the AI or Autonomy path. Use this only when both
+        /// AI effects and Autonomy/Takeover are enabled.
+        /// </summary>
+        public static bool IsSharedCooldownActive(int cooldownSeconds)
+        {
+            if (cooldownSeconds <= 0) return false;
+            var last = LastAiEffectTimeUtc > LastAutonomyEffectTimeUtc ? LastAiEffectTimeUtc : LastAutonomyEffectTimeUtc;
+            return (DateTime.UtcNow - last).TotalSeconds < cooldownSeconds;
         }
 
         /// <summary>
@@ -43,8 +67,21 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Time elapsed since the last effect command. Null if no effect has ever fired.
+        /// Time elapsed since the most recent effect command from either path.
         /// </summary>
-        public static TimeSpan TimeSinceLastEffect => DateTime.UtcNow - LastEffectCommandTimeUtc;
+        public static TimeSpan TimeSinceLastEffect
+        {
+            get
+            {
+                var last = LastAiEffectTimeUtc > LastAutonomyEffectTimeUtc ? LastAiEffectTimeUtc : LastAutonomyEffectTimeUtc;
+                return DateTime.UtcNow - last;
+            }
+        }
+    }
+
+    public enum CooldownSource
+    {
+        Ai,
+        Autonomy
     }
 }

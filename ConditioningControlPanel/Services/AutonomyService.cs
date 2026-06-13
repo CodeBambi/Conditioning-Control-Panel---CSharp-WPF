@@ -767,12 +767,20 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
-            // Check shared cooldown (uses the lower of AI effects and autonomy cooldowns).
-            var effectiveCooldown = SharedEffectCooldown.GetEffectiveCooldownSeconds();
-            if (SharedEffectCooldown.IsCooldownActive(effectiveCooldown))
+            // Cooldown: shared with AI effects only when both Autonomy and AI effects are enabled.
+            var appSettings = App.Settings?.Current;
+            var companionSettings = App.Settings?.Current?.CompanionPrompt;
+            var bothEnabled = appSettings?.AutonomyModeEnabled == true && companionSettings?.AllowAiToControlEffects == true;
+            var cooldown = bothEnabled
+                ? SharedEffectCooldown.GetEffectiveCooldownSeconds()
+                : (appSettings?.AutonomyCooldownSeconds ?? 30);
+            var cooldownActive = bothEnabled
+                ? SharedEffectCooldown.IsSharedCooldownActive(cooldown)
+                : SharedEffectCooldown.IsCooldownActive(cooldown, CooldownSource.Autonomy);
+            if (cooldownActive)
             {
-                App.Logger?.Debug("AutonomyService: CanTakeAction=false - shared cooldown active ({Elapsed:F0}s / {Required}s)",
-                    SharedEffectCooldown.TimeSinceLastEffect.TotalSeconds, effectiveCooldown);
+                App.Logger?.Debug("AutonomyService: CanTakeAction=false - cooldown active ({Elapsed:F0}s / {Required}s)",
+                    SharedEffectCooldown.TimeSinceLastEffect.TotalSeconds, cooldown);
                 return false;
             }
             return true;
@@ -790,7 +798,8 @@ namespace ConditioningControlPanel.Services
                 // AI-guided path: when AI effects control is enabled and available, ask the AI to choose.
                 var settings = App.Settings?.Current;
                 var companion = App.Settings?.Current?.CompanionPrompt;
-                if (settings?.AutonomyAiGuidanceEnabled == true
+                if (settings?.AutonomyModeEnabled == true
+                    && settings?.AutonomyAiGuidanceEnabled == true
                     && companion?.AllowAiToControlEffects == true
                     && App.Ai?.IsAvailable == true)
                 {
@@ -852,7 +861,7 @@ namespace ConditioningControlPanel.Services
                 PerformAction(actionType.Value, source, context);
             }
 
-            SharedEffectCooldown.RecordEffectFired();
+            SharedEffectCooldown.RecordEffectFired(CooldownSource.Autonomy);
             _lastActionTime = DateTime.Now;
             StartCooldown();
 
@@ -888,7 +897,7 @@ namespace ConditioningControlPanel.Services
                         ? "ai-guided autonomy executed"
                         : $"ai-guided autonomy failed: {outcome?.Outcome ?? "unknown"}";
 
-                    SharedEffectCooldown.RecordEffectFired();
+                    SharedEffectCooldown.RecordEffectFired(CooldownSource.Autonomy);
                     _lastActionTime = DateTime.Now;
                     StartCooldown();
 
@@ -1854,7 +1863,13 @@ namespace ConditioningControlPanel.Services
         {
             _isOnCooldown = true;
 
-            var cooldownSeconds = SharedEffectCooldown.GetEffectiveCooldownSeconds();
+            // Share the lower cooldown only when both Autonomy and AI effects are on.
+            var appSettings = App.Settings?.Current;
+            var companion = App.Settings?.Current?.CompanionPrompt;
+            var bothEnabled = appSettings?.AutonomyModeEnabled == true && companion?.AllowAiToControlEffects == true;
+            var cooldownSeconds = bothEnabled
+                ? SharedEffectCooldown.GetEffectiveCooldownSeconds()
+                : (appSettings?.AutonomyCooldownSeconds ?? 30);
             var cooldownMs = cooldownSeconds * 1000;
 
             _cooldownTimer?.Stop();
