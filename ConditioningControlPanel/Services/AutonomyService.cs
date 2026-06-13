@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Helpers;
 using ConditioningControlPanel.Models;
+using ConditioningControlPanel.Models.CommandData;
 
 namespace ConditioningControlPanel.Services
 {
@@ -915,31 +916,47 @@ namespace ConditioningControlPanel.Services
 
             if (command != null && !timedOut)
             {
-                // AI returned a valid command. Announce the AI phrase if there is one, then execute.
-                if (!string.IsNullOrWhiteSpace(phrase))
+                command = EnsureCommandData(command);
+                if (command.Data == null)
                 {
-                    AnnouncePhrase(phrase);
-                    await Task.Delay(1500);
+                    App.Logger?.Warning("AutonomyService: AI returned command {Cmd} with no usable data; considering random fallback", command.Command);
                 }
+                else
+                {
+                    App.Logger?.Information("AutonomyService: AI chose command {Cmd}; executing via AI command path", command.Command);
+                    App.Commands?.BeginBatch();
+                    var outcome = App.Commands?.ExecuteCommand(command);
+                    var succeeded = outcome?.Succeeded ?? false;
+                    var outcomeText = succeeded
+                        ? "ai-guided autonomy executed"
+                        : $"ai-guided autonomy failed: {outcome?.Outcome ?? "unknown"}";
 
-                App.Logger?.Information("AutonomyService: AI chose command {Cmd}; executing via AI command path", command.Command);
-                App.Commands?.BeginBatch();
-                var outcome = App.Commands?.ExecuteCommand(command);
-                var succeeded = outcome?.Succeeded ?? false;
-                var outcomeText = succeeded
-                    ? "ai-guided autonomy executed"
-                    : $"ai-guided autonomy failed: {outcome?.Outcome ?? "unknown"}";
+                    App.Logger?.Information("AutonomyService: AI command outcome - Succeeded={Succeeded}, Text={Text}", succeeded, outcomeText);
 
-                SharedEffectCooldown.RecordEffectFired(CooldownSource.Autonomy);
-                _lastActionTime = DateTime.Now;
-                StartCooldown();
+                    if (succeeded)
+                    {
+                        // Only announce the AI phrase if the effect actually fired.
+                        if (!string.IsNullOrWhiteSpace(phrase))
+                        {
+                            AnnouncePhrase(phrase);
+                        }
 
-                App.ActionHistory.Record(command.Command.ToString().ToLowerInvariant(), "autonomy-ai", succeeded, outcomeText);
-                ActionTriggered?.Invoke(this, new AutonomyActionEventArgs(AutonomyActionType.Comment, source, $"AI chose {command.Command}"));
-                return;
+                        SharedEffectCooldown.RecordEffectFired(CooldownSource.Autonomy);
+                        _lastActionTime = DateTime.Now;
+                        StartCooldown();
+
+                        App.ActionHistory.Record(command.Command.ToString().ToLowerInvariant(), "autonomy-ai", true, outcomeText);
+                        ActionTriggered?.Invoke(this, new AutonomyActionEventArgs(AutonomyActionType.Comment, source, $"AI chose {command.Command}"));
+                        return;
+                    }
+
+                    App.Logger?.Warning("AutonomyService: AI command failed ({Outcome}); considering random fallback", outcome?.Outcome ?? "unknown");
+                }
             }
-
-            App.Logger?.Information("AutonomyService: AI did not choose a valid action; considering random fallback");
+            else
+            {
+                App.Logger?.Information("AutonomyService: AI did not choose a valid action; considering random fallback");
+            }
 
             // Random fallback: keep a bit of unpredictability, scaled by intensity.
             if (ShouldUseRandomFallback())
@@ -976,6 +993,36 @@ namespace ConditioningControlPanel.Services
             AddIfAllowed(AutonomyActionType.WebVideo, companion.AllowAiVideo && settings.AutonomyCanTriggerWebVideo);
 
             return result;
+        }
+
+        /// <summary>
+        /// Fills in sensible defaults when the AI returns a command without the required
+        /// <c>data</c> payload. Local effect commands need data to run; this keeps the
+        /// autonomy path working even when the model omits parameters.
+        /// </summary>
+        private static AiCommandData EnsureCommandData(AiCommandData command)
+        {
+            if (command.Data != null)
+                return command;
+
+            IAiCommandData? defaultData = command.Command switch
+            {
+                AICommandType.flash_image => new FlashImage(Amount: 4, Duration: 5, Size: 100, Opacity: 100),
+                AICommandType.bubbles => new Bubbles(On: true, Frequency: 5),
+                AICommandType.subliminal => new Subliminal(Text: "Bambi", Opacity: 50),
+                AICommandType.spiral => new SpiralPinkFiler(On: true, Intensity: 25),
+                AICommandType.pink => new SpiralPinkFiler(On: true, Intensity: 25),
+                AICommandType.bounce => new Bounce(Words: new List<string>(), On: true),
+                AICommandType.mantra_lockscreen => new MantraLockscreen(Mantra: "Good Girl", Amount: 3),
+                AICommandType.haptic => new HapticCommandData(Intensity: 0.5, Duration: 3),
+                _ => null
+            };
+
+            if (defaultData == null)
+                return command;
+
+            App.Logger?.Information("AutonomyService: supplying default data for AI command {Cmd}", command.Command);
+            return new AiCommandData { Command = command.Command, Data = defaultData };
         }
 
         /// <summary>
