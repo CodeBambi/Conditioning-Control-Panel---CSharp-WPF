@@ -14,7 +14,7 @@ namespace ConditioningControlPanel.Services.Commands
 
         public Task<CommandResult> ExecuteAsync()
         {
-            var intensity = Math.Clamp(_data.Intensity, 0, MaxIntensity);
+            var activeIntensity = App.Settings?.Current?.PinkFilterOpacity ?? 0;
 
             try
             {
@@ -23,7 +23,7 @@ namespace ConditioningControlPanel.Services.Commands
                     var settings = App.Settings?.Current;
                     if (settings == null || App.Overlay == null) return;
 
-                    settings.PinkFilterOpacity = intensity;
+                    // The main-panel opacity slider is authoritative; the AI only decides on/off.
                     settings.PinkFilterEnabled = _data.On;
 
                     if (!App.Overlay.IsRunning)
@@ -42,7 +42,7 @@ namespace ConditioningControlPanel.Services.Commands
                 return Task.FromResult(new CommandResult(
                     "pink",
                     CommandResultStatus.Executed,
-                    ParameterSummary: _data.On ? $"on, intensity={intensity}%" : "off"));
+                    ParameterSummary: _data.On ? $"on, intensity={activeIntensity}%" : "off"));
             }
             catch (Exception ex)
             {
