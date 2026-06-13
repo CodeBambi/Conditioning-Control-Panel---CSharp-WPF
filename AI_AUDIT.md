@@ -1323,3 +1323,64 @@ Required user-driven verification (cannot run in this container):
 - Translation of the 3 new P2 loc-keys into 8 non-EN locales - low-impact (CCBill cares about presence, and EN fallback IS present).
 - The "Read content policy" URL `https://cclabs.app/policies/prohibited-content` still 404s pending cclabs-web work.
 - Server-side filter on `/v2/ai/chat` proxy remains the load-bearing defense for the cloud chat path (out of scope, lives in CCP-Server private repo).
+
+---
+
+## 18. Implementation log — AI Phase A: shared cooldown / AI-guided takeover gating
+
+**Date**: 2026-06-12
+**Branch**: `feature/ai-phase-a`
+**Commit**: `0e6eb69b`
+
+### Problem
+
+The shared effect cooldown introduced earlier (used by `AiCommandService` and `AutonomyService`) and the new AI-guided autonomous Takeover path were active whenever their respective local toggles were on, even if the *other* subsystem was disabled. That meant:
+
+- A user with only AI effects enabled could still have their cooldown influence Autonomy once Autonomy was later enabled.
+- The AI-guided takeover path could be entered as long as `AutonomyAiGuidanceEnabled` and `AllowAiToControlEffects` were true, regardless of whether `AutonomyModeEnabled` was actually on.
+
+### Change
+
+`SharedEffectCooldown` now maintains two independent timestamps:
+
+- `LastAiEffectTimeUtc`
+- `LastAutonomyEffectTimeUtc`
+
+Callers record fires with a `CooldownSource` (`Ai` or `Autonomy`). Cooldown checks use the source-specific timestamp when the two subsystems are not both enabled, and the most-recent-of-either timestamp only when both are enabled.
+
+In `AiCommandService` and `AutonomyService` the decision is:
+
+```csharp
+var bothEnabled = appSettings.AutonomyModeEnabled
+                  && companionSettings.AllowAiToControlEffects == true;
+
+var cooldown = bothEnabled
+    ? SharedEffectCooldown.GetEffectiveCooldownSeconds()   // lower of the two
+    : ownConfiguredCooldown;
+
+var active = bothEnabled
+    ? SharedEffectCooldown.IsSharedCooldownActive(cooldown)
+    : SharedEffectCooldown.IsCooldownActive(cooldown, thisSource);
+```
+
+`AutonomyService.ExecuteAutonomousAction` now requires `AutonomyModeEnabled == true` in addition to `AutonomyAiGuidanceEnabled == true` and `AllowAiToControlEffects == true` before taking the AI-guided path.
+
+### Files modified
+
+- `ConditioningControlPanel/Services/SharedEffectCooldown.cs` — split timestamp, added `CooldownSource` enum, `RecordEffectFired(CooldownSource)`, `IsCooldownActive(int, CooldownSource)`, and `IsSharedCooldownActive(int)`.
+- `ConditioningControlPanel/Services/Commands/AiCommandService.cs` — uses shared cooldown only when both toggles are on; otherwise uses `AiEffectsCooldownSeconds` and AI-only timestamp.
+- `ConditioningControlPanel/Services/AutonomyService.cs` — uses shared cooldown only when both toggles are on; otherwise uses `AutonomyCooldownSeconds` and autonomy-only timestamp; AI-guided path gated on `AutonomyModeEnabled`.
+
+### Build verification
+
+`dotnet build ConditioningControlPanel.sln -c Release`: 0 errors, pre-existing warning baseline unchanged.
+
+### Smoke tests
+
+Same container constraint as previous sections (no interactive WPF desktop). Expected manual verification:
+
+1. Enable only AI effects control → fire an effect → verify Autonomy/Takeover (when later enabled) is not artificially cooled down by that AI effect.
+2. Enable only Autonomy/Takeover → trigger an action → verify AI effects (when later enabled) are not artificially cooled down by that autonomy action.
+3. Enable both → fire an AI effect → verify Autonomy respects the shared lower cooldown.
+4. Enable both → trigger an Autonomy action → verify AI effects respect the shared lower cooldown.
+5. With `AutonomyAiGuidanceEnabled` true but `AutonomyModeEnabled` false, verify autonomy does **not** call the AI for a guided action.
