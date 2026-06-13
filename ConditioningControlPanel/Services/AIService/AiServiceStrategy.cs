@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Moderation;
@@ -70,6 +71,9 @@ namespace ConditioningControlPanel.Services.AIService
 
         public Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false)
             => Active.GetBambiReplyExAsync(userInput, isUserMessage);
+
+        public Task<(AiCommandData? Command, string? ResponsePhrase)> RequestAutonomyActionAsync(List<AutonomyActionType> enabledActions, string? context = null)
+            => Active.RequestAutonomyActionAsync(enabledActions, context);
 
         public Task<string?> GetAwarenessReactionAsync(string detectedName, string category,
             string serviceName = "", string pageTitle = "")

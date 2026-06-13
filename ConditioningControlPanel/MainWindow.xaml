@@ -10785,6 +10785,11 @@
                                         <Slider x:Name="SliderAutonomyAnnounce" Minimum="0" Maximum="100" Value="50" Height="22" ValueChanged="SliderAutonomyAnnounce_Changed"/>
                                     </StackPanel>
                                 </Grid>
+
+                                <CheckBox x:Name="ChkAutonomyAiGuidance" Content="Let AI guide Takeover actions"
+                                          Foreground="White" FontSize="12" Margin="0,10,0,0"
+                                          ToolTip="When on, Takeover asks the AI to choose the next effect from the enabled pool. When off, Takeover uses random selection."
+                                          Checked="ChkAutonomyAiGuidance_Changed" Unchecked="ChkAutonomyAiGuidance_Changed"/>
                             </StackPanel>
                         </Border>
 

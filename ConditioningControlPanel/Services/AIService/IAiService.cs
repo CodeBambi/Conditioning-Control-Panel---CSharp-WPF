@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Services.Moderation;
 
 namespace ConditioningControlPanel.Services.AIService
@@ -29,6 +31,14 @@ namespace ConditioningControlPanel.Services.AIService
         /// that only need the text.
         /// </summary>
         Task<AiReplyResult> GetBambiReplyExAsync(string userInput, bool isUserMessage = false);
+
+        /// <summary>
+        /// Asks the AI to pick one autonomous Takeover action from the enabled pool.
+        /// Returns null command when the AI declines, returns an invalid command, or when
+        /// the provider cannot execute local effects (e.g. cloud provider).
+        /// The response phrase can be shown/said by the avatar as an announcement.
+        /// </summary>
+        Task<(AiCommandData? Command, string? ResponsePhrase)> RequestAutonomyActionAsync(List<AutonomyActionType> enabledActions, string? context = null);
 
         Task<string?> GetAwarenessReactionAsync(string detectedName, string category, string serviceName = "",
             string pageTitle = "");

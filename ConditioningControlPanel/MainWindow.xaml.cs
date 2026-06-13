@@ -23748,6 +23748,12 @@ namespace ConditioningControlPanel
             ChkAutonomyIdle.IsChecked = s.AutonomyIdleTriggerEnabled;
             ChkAutonomyRandom.IsChecked = s.AutonomyRandomTriggerEnabled;
             ChkAutonomyTimeAware.IsChecked = s.AutonomyTimeAwareEnabled;
+            if (ChkAutonomyAiGuidance != null)
+            {
+                ChkAutonomyAiGuidance.IsChecked = s.AutonomyAiGuidanceEnabled;
+                ChkAutonomyAiGuidance.IsEnabled = s.AutonomyModeEnabled && App.Ai?.IsAvailable == true;
+            }
+
             ChkAutonomyFlash.IsChecked = s.AutonomyCanTriggerFlash;
             ChkAutonomyVideo.IsChecked = s.AutonomyCanTriggerVideo;
             ChkAutonomyWebVideo.IsChecked = s.AutonomyCanTriggerWebVideo;
@@ -26066,6 +26072,9 @@ namespace ConditioningControlPanel
                 BtnAutonomyStartStop.Content = Loc.Get("btn_start_2");
                 BtnAutonomyStartStop.Foreground = new SolidColorBrush(Color.FromRgb(144, 238, 144)); // Light green
             }
+
+            if (ChkAutonomyAiGuidance != null)
+                ChkAutonomyAiGuidance.IsEnabled = isEnabled && App.Ai?.IsAvailable == true;
         }
 
         /// <summary>
@@ -26151,6 +26160,13 @@ namespace ConditioningControlPanel
         {
             if (_isLoading) return;
             App.Settings.Current.AutonomyTimeAwareEnabled = ChkAutonomyTimeAware.IsChecked ?? false;
+            App.Settings.Save();
+        }
+
+        private void ChkAutonomyAiGuidance_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            App.Settings.Current.AutonomyAiGuidanceEnabled = ChkAutonomyAiGuidance.IsChecked ?? false;
             App.Settings.Save();
         }
 

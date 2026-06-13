@@ -88,6 +88,7 @@ namespace ConditioningControlPanel.Services
         private bool _isOnCooldown = false;
         private bool _isEnabled = false;
         private bool _disposed = false;
+        private bool _isAiGuidancePending = false;
         private readonly Random _random = new();
 
         // Pulse state tracking - prevent overlapping pulses
@@ -745,6 +746,12 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
+            if (_isAiGuidancePending)
+            {
+                App.Logger?.Debug("AutonomyService: CanTakeAction=false - AI guidance request in progress");
+                return false;
+            }
+
             // Don't take actions while web video is playing fullscreen
             if (_webVideoActive)
             {
@@ -760,15 +767,12 @@ namespace ConditioningControlPanel.Services
                 return false;
             }
 
-            // Check time-based cooldown
-            var settings = App.Settings?.Current;
-            if (settings == null) return false;
-
-            var timeSinceLast = (DateTime.Now - _lastActionTime).TotalSeconds;
-            if (timeSinceLast < settings.AutonomyCooldownSeconds)
+            // Check shared cooldown (uses the lower of AI effects and autonomy cooldowns).
+            var effectiveCooldown = SharedEffectCooldown.GetEffectiveCooldownSeconds();
+            if (SharedEffectCooldown.IsCooldownActive(effectiveCooldown))
             {
-                App.Logger?.Debug("AutonomyService: CanTakeAction=false - time cooldown ({Elapsed:F0}s / {Required}s)",
-                    timeSinceLast, settings.AutonomyCooldownSeconds);
+                App.Logger?.Debug("AutonomyService: CanTakeAction=false - shared cooldown active ({Elapsed:F0}s / {Required}s)",
+                    SharedEffectCooldown.TimeSinceLastEffect.TotalSeconds, effectiveCooldown);
                 return false;
             }
             return true;
@@ -783,55 +787,206 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Information("AutonomyService: ExecuteAutonomousAction called (Source: {Source})", source);
 
-                var actionType = SelectAction(source, context);
-                if (actionType == null)
+                // AI-guided path: when AI effects control is enabled and available, ask the AI to choose.
+                var settings = App.Settings?.Current;
+                var companion = App.Settings?.Current?.CompanionPrompt;
+                if (settings?.AutonomyAiGuidanceEnabled == true
+                    && companion?.AllowAiToControlEffects == true
+                    && App.Ai?.IsAvailable == true)
                 {
-                    App.Logger?.Warning("AutonomyService: No valid action available - check if any actions are enabled!");
-                    return;
-                }
-
-                App.Logger?.Information("AutonomyService: Selected action: {Action}", actionType);
-
-                var shouldAnnounce = ShouldAnnounce();
-                App.Logger?.Information("AutonomyService: Will announce: {Announce}", shouldAnnounce);
-
-                if (shouldAnnounce)
-                {
-                    AnnounceAction(actionType.Value);
-                    App.Logger?.Information("AutonomyService: Announcement made, scheduling action in 2 seconds...");
-
-                    // Delay action after announcement
-                    var capturedAction = actionType.Value;
-                    Task.Delay(2000).ContinueWith(_ =>
+                    var aiCandidates = GetAiGuidanceCandidates();
+                    if (aiCandidates.Count > 0)
                     {
-                        App.Logger?.Information("AutonomyService: 2 second delay complete, executing {Action}...", capturedAction);
-                        if (Application.Current?.Dispatcher == null)
-                        {
-                            App.Logger?.Warning("AutonomyService: Cannot execute action - Dispatcher is null after delay");
-                            return;
-                        }
-                        Application.Current?.Dispatcher?.BeginInvoke(() =>
-                        {
-                            PerformAction(capturedAction, source, context);
-                        });
-                    });
-                }
-                else
-                {
-                    App.Logger?.Information("AutonomyService: No announcement, executing action immediately...");
-                    PerformAction(actionType.Value, source, context);
+                        _ = ExecuteAutonomousActionWithAiGuidanceAsync(source, context, aiCandidates);
+                        return;
+                    }
                 }
 
-                // Start cooldown
-                StartCooldown();
-                _lastActionTime = DateTime.Now;
-
-                ActionTriggered?.Invoke(this, new AutonomyActionEventArgs(actionType.Value, source, context));
+                // Standard random-autonomy path.
+                ExecuteRandomAutonomousAction(source, context);
             }
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "AutonomyService: Failed to execute action");
             }
+        }
+
+        private void ExecuteRandomAutonomousAction(AutonomyTriggerSource source, string? context = null)
+        {
+            var actionType = SelectAction(source, context);
+            if (actionType == null)
+            {
+                App.Logger?.Warning("AutonomyService: No valid action available - check if any actions are enabled!");
+                return;
+            }
+
+            App.Logger?.Information("AutonomyService: Selected action: {Action}", actionType);
+
+            var shouldAnnounce = ShouldAnnounce();
+            App.Logger?.Information("AutonomyService: Will announce: {Announce}", shouldAnnounce);
+
+            if (shouldAnnounce)
+            {
+                AnnounceAction(actionType.Value);
+                App.Logger?.Information("AutonomyService: Announcement made, scheduling action in 2 seconds...");
+
+                // Delay action after announcement
+                var capturedAction = actionType.Value;
+                Task.Delay(2000).ContinueWith(_ =>
+                {
+                    App.Logger?.Information("AutonomyService: 2 second delay complete, executing {Action}...", capturedAction);
+                    if (Application.Current?.Dispatcher == null)
+                    {
+                        App.Logger?.Warning("AutonomyService: Cannot execute action - Dispatcher is null after delay");
+                        return;
+                    }
+                    Application.Current?.Dispatcher?.BeginInvoke(() =>
+                    {
+                        PerformAction(capturedAction, source, context);
+                    });
+                });
+            }
+            else
+            {
+                App.Logger?.Information("AutonomyService: No announcement, executing action immediately...");
+                PerformAction(actionType.Value, source, context);
+            }
+
+            SharedEffectCooldown.RecordEffectFired();
+            _lastActionTime = DateTime.Now;
+            StartCooldown();
+
+            ActionTriggered?.Invoke(this, new AutonomyActionEventArgs(actionType.Value, source, context));
+        }
+
+        /// <summary>
+        /// Asks the AI to choose one autonomous action from the enabled pool and executes it.
+        /// Falls back to the random autonomy path when the AI declines or returns an invalid command.
+        /// </summary>
+        private async Task ExecuteAutonomousActionWithAiGuidanceAsync(AutonomyTriggerSource source, string? context, List<AutonomyActionType> candidates)
+        {
+            _isAiGuidancePending = true;
+            try
+            {
+                App.Logger?.Information("AutonomyService: Requesting AI-guided action (Source: {Source})", source);
+                var (command, phrase) = await App.Ai!.RequestAutonomyActionAsync(candidates, context);
+
+                if (command != null)
+                {
+                    // AI returned a valid command. Announce the AI phrase if there is one, then execute.
+                    if (!string.IsNullOrWhiteSpace(phrase))
+                    {
+                        AnnouncePhrase(phrase);
+                        await Task.Delay(1500);
+                    }
+
+                    App.Logger?.Information("AutonomyService: AI chose command {Cmd}; executing via AI command path", command.Command);
+                    App.Commands?.BeginBatch();
+                    var outcome = App.Commands?.ExecuteCommand(command);
+                    var succeeded = outcome?.Succeeded ?? false;
+                    var outcomeText = succeeded
+                        ? "ai-guided autonomy executed"
+                        : $"ai-guided autonomy failed: {outcome?.Outcome ?? "unknown"}";
+
+                    SharedEffectCooldown.RecordEffectFired();
+                    _lastActionTime = DateTime.Now;
+                    StartCooldown();
+
+                    App.ActionHistory.Record(command.Command.ToString().ToLowerInvariant(), "autonomy-ai", succeeded, outcomeText);
+                    ActionTriggered?.Invoke(this, new AutonomyActionEventArgs(AutonomyActionType.Comment, source, $"AI chose {command.Command}"));
+                    return;
+                }
+
+                App.Logger?.Information("AutonomyService: AI declined to choose an action; considering random fallback");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "AutonomyService: AI guidance request failed");
+            }
+            finally
+            {
+                _isAiGuidancePending = false;
+            }
+
+            // Random fallback: keep a bit of unpredictability, scaled by intensity.
+            if (ShouldUseRandomFallback())
+            {
+                DispatcherHelper.RunOnUI(() => ExecuteRandomAutonomousAction(source, context));
+            }
+        }
+
+        /// <summary>
+        /// Builds the list of Takeover actions that are both enabled and allowed by AI per-effect toggles.
+        /// </summary>
+        private static List<AutonomyActionType> GetAiGuidanceCandidates()
+        {
+            var result = new List<AutonomyActionType>();
+            var settings = App.Settings?.Current;
+            var companion = App.Settings?.Current?.CompanionPrompt;
+            if (settings == null || companion == null || !companion.AllowAiToControlEffects)
+                return result;
+
+            void AddIfAllowed(AutonomyActionType action, bool aiAllowed)
+            {
+                if (aiAllowed)
+                    result.Add(action);
+            }
+
+            AddIfAllowed(AutonomyActionType.Flash, companion.AllowAiFlash && settings.AutonomyCanTriggerFlash);
+            AddIfAllowed(AutonomyActionType.Video, companion.AllowAiVideo && settings.AutonomyCanTriggerVideo);
+            AddIfAllowed(AutonomyActionType.Subliminal, companion.AllowAiSubliminal && settings.AutonomyCanTriggerSubliminal);
+            AddIfAllowed(AutonomyActionType.StartBubbles, companion.AllowAiBubbles && settings.AutonomyCanTriggerBubbles);
+            AddIfAllowed(AutonomyActionType.LockCard, companion.AllowAiLockCard && settings.AutonomyCanTriggerLockCard);
+            AddIfAllowed(AutonomyActionType.SpiralPulse, companion.AllowAiOverlay && settings.AutonomyCanTriggerSpiral);
+            AddIfAllowed(AutonomyActionType.PinkFilterPulse, companion.AllowAiOverlay && settings.AutonomyCanTriggerPinkFilter);
+            AddIfAllowed(AutonomyActionType.BouncingText, companion.AllowAiBounce && settings.AutonomyCanTriggerBouncingText);
+            AddIfAllowed(AutonomyActionType.WebVideo, companion.AllowAiVideo && settings.AutonomyCanTriggerWebVideo);
+
+            return result;
+        }
+
+        /// <summary>
+        /// Maps an Autonomy action to the AI per-effect toggle that governs it.
+        /// </summary>
+        private static bool IsAiEffectAllowed(AutonomyActionType action)
+        {
+            var companion = App.Settings?.Current?.CompanionPrompt;
+            if (companion == null) return false;
+            return action switch
+            {
+                AutonomyActionType.Flash => companion.AllowAiFlash,
+                AutonomyActionType.Video => companion.AllowAiVideo,
+                AutonomyActionType.Subliminal => companion.AllowAiSubliminal,
+                AutonomyActionType.StartBubbles => companion.AllowAiBubbles,
+                AutonomyActionType.LockCard => companion.AllowAiLockCard,
+                AutonomyActionType.SpiralPulse => companion.AllowAiOverlay,
+                AutonomyActionType.PinkFilterPulse => companion.AllowAiOverlay,
+                AutonomyActionType.BouncingText => companion.AllowAiBounce,
+                AutonomyActionType.WebVideo => companion.AllowAiVideo,
+                _ => false
+            };
+        }
+
+        /// <summary>
+        /// Announces a custom phrase through the avatar.
+        /// </summary>
+        private void AnnouncePhrase(string phrase)
+        {
+            if (string.IsNullOrWhiteSpace(phrase)) return;
+            var audioPath = CompanionPhraseService.ResolveEventAudio(phrase);
+            App.AvatarWindow?.GigglePriority(phrase, audioPath != null, aiGenerated: true, phraseAudioPath: audioPath);
+            AnnouncementMade?.Invoke(this, phrase);
+        }
+
+        /// <summary>
+        /// Decides whether to fall back to a random autonomy action when AI guidance declines.
+        /// Higher autonomy intensity increases the chance.
+        /// </summary>
+        private bool ShouldUseRandomFallback()
+        {
+            var intensity = App.Settings?.Current?.AutonomyIntensity ?? 5;
+            var chance = 30 + (intensity * 5); // 35% at intensity 1, 80% at intensity 10
+            return _random.Next(100) < chance;
         }
 
         /// <summary>
@@ -1699,7 +1854,8 @@ namespace ConditioningControlPanel.Services
         {
             _isOnCooldown = true;
 
-            var cooldownMs = (App.Settings?.Current?.AutonomyCooldownSeconds ?? 30) * 1000;
+            var cooldownSeconds = SharedEffectCooldown.GetEffectiveCooldownSeconds();
+            var cooldownMs = cooldownSeconds * 1000;
 
             _cooldownTimer?.Stop();
             _cooldownTimer = new DispatcherTimer

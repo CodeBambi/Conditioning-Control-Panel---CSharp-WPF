@@ -2922,6 +2922,18 @@ namespace ConditioningControlPanel.Models
             set { _autonomyConsentGiven = value; OnPropertyChanged(); }
         }
 
+        private bool _autonomyAiGuidanceEnabled = true;
+        /// <summary>
+        /// When true, Takeover asks the AI to choose the next action from the enabled
+        /// autonomy pool instead of using pure random selection. Falls back to random
+        /// when the AI is unavailable or declines.
+        /// </summary>
+        public bool AutonomyAiGuidanceEnabled
+        {
+            get => _autonomyAiGuidanceEnabled;
+            set { _autonomyAiGuidanceEnabled = value; OnPropertyChanged(); }
+        }
+
         private int _autonomyIntensity = 5;
         /// <summary>
         /// Intensity level 1-10 affecting frequency and action weights

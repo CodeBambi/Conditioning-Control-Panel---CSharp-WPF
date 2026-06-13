@@ -21,7 +21,6 @@ namespace ConditioningControlPanel.Services.Commands
         public const int MaxCommandsPerResponse = 3;
 
         private static readonly Dictionary<string, CancellationTokenSource> TokenCancellationSources = new();
-        private static DateTime _lastEffectCommandTime = DateTime.MinValue;
         private int _batchCount;
 
         public void BeginBatch()
@@ -62,14 +61,14 @@ namespace ConditioningControlPanel.Services.Commands
                 return new CommandOutcome(commandName, false, "effect disabled in settings");
             }
 
-            // AI effects cooldown (shared across all AI-triggered effects).
+            // AI effects cooldown (shared across all AI-triggered effects and autonomy).
             var appSettings = App.Settings?.Current;
             if (appSettings != null)
             {
                 var cooldown = appSettings.AiEffectsCooldownSeconds;
-                if (cooldown > 0 && DateTime.UtcNow - _lastEffectCommandTime < TimeSpan.FromSeconds(cooldown))
+                if (cooldown > 0 && SharedEffectCooldown.IsCooldownActive(cooldown))
                 {
-                    var remaining = (int)Math.Ceiling((_lastEffectCommandTime.AddSeconds(cooldown) - DateTime.UtcNow).TotalSeconds);
+                    var remaining = (int)Math.Ceiling((SharedEffectCooldown.LastEffectCommandTimeUtc.AddSeconds(cooldown) - DateTime.UtcNow).TotalSeconds);
                     App.Logger?.Information("AiCommandService: effects cooldown active ({Remaining}s remaining) — dropping {Cmd}", remaining, commandData.Command);
                     App.ActionHistory.Record(commandName, "ai", false, $"AI effects cooldown active ({remaining}s remaining)");
                     return new CommandOutcome(commandName, false, $"AI effects cooldown active ({remaining}s remaining)");
@@ -112,7 +111,7 @@ namespace ConditioningControlPanel.Services.Commands
 
                 App.Logger?.Debug("AiCommandService: executing {Cmd}", commandData.Command);
                 var result = command.ExecuteAsync().GetAwaiter().GetResult();
-                _lastEffectCommandTime = DateTime.UtcNow;
+                SharedEffectCooldown.RecordEffectFired();
                 var succeeded = result.Status == CommandResultStatus.Executed;
                 var outcomeText = succeeded
                     ? $"executed{(string.IsNullOrEmpty(result.ParameterSummary) ? "" : $": {result.ParameterSummary}")}"

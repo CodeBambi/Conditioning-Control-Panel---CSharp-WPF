@@ -157,6 +157,7 @@ namespace ConditioningControlPanel.Services
                 .ToList();
 
             var aiActions = grouped.Where(x => x.Source == "ai").ToList();
+            var autonomyAiActions = grouped.Where(x => x.Source == "autonomy-ai").ToList();
             var autonomyActions = grouped.Where(x => x.Source == "autonomy").ToList();
             var userActions = grouped.Where(x => x.Source == "user").ToList();
 
@@ -168,6 +169,7 @@ namespace ConditioningControlPanel.Services
             }
 
             AppendGroup("You triggered", aiActions);
+            AppendGroup("AI-guided Takeover triggered", autonomyAiActions);
             AppendGroup("Autonomy triggered", autonomyActions);
             AppendGroup("User triggered", userActions);
 

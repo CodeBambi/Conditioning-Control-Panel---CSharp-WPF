@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Localization;
@@ -134,6 +135,110 @@ namespace ConditioningControlPanel.Services.AIService
                 returnRefusalSentinel: true);
 
             return ClassifyChatResult(result);
+        }
+
+        public virtual async Task<(AiCommandData? Command, string? ResponsePhrase)> RequestAutonomyActionAsync(List<AutonomyActionType> enabledActions, string? context = null)
+        {
+            if (!IsAvailable || enabledActions == null || enabledActions.Count == 0)
+                return (null, null);
+
+            // Cloud proxy handles effects server-side; don't ask it to pick local actions.
+            if (!SupportsEffectCommands)
+                return (null, null);
+
+            var guard = App.ModerationGuard;
+            var modelHint = GetModelHint();
+
+            var allowedCommands = string.Join(", ",
+                enabledActions
+                    .Select(GetAutonomyCommandName)
+                    .Where(c => !string.IsNullOrEmpty(c))
+                    .Distinct());
+            if (string.IsNullOrEmpty(allowedCommands))
+                return (null, null);
+
+            var snapshot = AiContextSnapshot.Build();
+            var snapshotJson = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            });
+
+            var promptSettings = App.Settings?.Current?.CompanionPrompt;
+            var historyMinutes = promptSettings?.AiActionHistoryMinutes > 0
+                ? promptSettings.AiActionHistoryMinutes
+                : (promptSettings?.AiActionHistoryHours ?? 2) * 60;
+            var historySummary = promptSettings?.AiActionHistoryEnabled == true
+                ? App.ActionHistory.BuildSummary(historyMinutes)
+                : null;
+
+            var userInput = $$"""
+                [CONTEXT BLOCK — NOT DIALOGUE]
+                You are controlling the Bambi Takeover. Choose ONE effect from the enabled actions below that best fits the current moment. Consider the current app state, recent activity, and the user's mood.
+
+                Enabled actions: {{allowedCommands}}
+
+                Current app state:
+                {{snapshotJson}}
+
+                {{(string.IsNullOrWhiteSpace(historySummary) ? "" : $"Recent activity:\n{historySummary}\n")}}
+                Return a single JSON object:
+                {
+                  "response": "<short in-character phrase, 5-10 words, describing what you're about to do>",
+                  "effects": [ { "command": "<one of the enabled commands>", "data": {...} } ]
+                }
+
+                If now is not a good time to fire an effect, return "effects": [].
+                [END CONTEXT BLOCK]
+                """;
+
+            // INPUT MODERATION (Layer 1)
+            if (guard != null)
+            {
+                var inputCheck = guard.CheckInput(userInput);
+                if (!inputCheck.Allow && inputCheck.Category.HasValue)
+                {
+                    App.ModerationLog?.Record(inputCheck.Category.Value, source: "input", modelHint: modelHint);
+                    App.Logger?.Information("{Provider}: autonomy input blocked by ModerationGuard (category={Cat})", GetProviderName(), inputCheck.Category);
+                    return (null, null);
+                }
+            }
+
+            var systemPrompt = BambiSprite.GetSystemPrompt();
+            var messages = new List<AiMessage>
+            {
+                new AiMessage("system", systemPrompt),
+                new AiMessage("user", userInput)
+            };
+
+            var raw = await GetRawCompletionAsync(messages, userInput, isUserMessage: false);
+            if (string.IsNullOrWhiteSpace(raw))
+                return (null, null);
+
+            var parsed = Parser.Parse(raw);
+
+            // OUTPUT MODERATION (Layer 1)
+            if (guard != null)
+            {
+                var outputCheck = guard.CheckOutput(parsed.CleanText ?? string.Empty);
+                if (!outputCheck.Allow && outputCheck.Category.HasValue)
+                {
+                    App.ModerationLog?.Record(outputCheck.Category.Value, source: "output", modelHint: modelHint);
+                    App.Logger?.Information("{Provider}: autonomy output blocked by ModerationGuard (category={Cat})", GetProviderName(), outputCheck.Category);
+                    return (null, null);
+                }
+            }
+
+            var command = parsed.Commands.FirstOrDefault();
+            if (command == null)
+                return (null, parsed.CleanText);
+
+            if (!IsAutonomyCommandEnabled(command.Command, enabledActions))
+            {
+                App.Logger?.Information("{Provider}: AI returned autonomy command {Cmd} that is not enabled; ignoring", GetProviderName(), command.Command);
+                return (null, parsed.CleanText);
+            }
+
+            return (command, parsed.CleanText);
         }
 
         public virtual async Task<string?> GetAwarenessReactionAsync(
@@ -387,6 +492,50 @@ namespace ConditioningControlPanel.Services.AIService
         /// Clears this provider's in-memory and persisted chat history.
         /// </summary>
         public void ClearChatHistory() => ChatMemory.Clear();
+
+        /// <summary>
+        /// Maps an Autonomy action to the AI command name used in prompts/parsing.
+        /// Returns null for actions that have no direct AI command equivalent.
+        /// </summary>
+        private static string? GetAutonomyCommandName(AutonomyActionType action)
+        {
+            return action switch
+            {
+                AutonomyActionType.Flash => "flash_image",
+                AutonomyActionType.Video => "video",
+                AutonomyActionType.Subliminal => "subliminal",
+                AutonomyActionType.StartBubbles => "bubbles",
+                AutonomyActionType.LockCard => "mantra_lockscreen",
+                AutonomyActionType.SpiralPulse => "spiral",
+                AutonomyActionType.PinkFilterPulse => "pink",
+                AutonomyActionType.BouncingText => "bounce",
+                AutonomyActionType.WebVideo => "video",
+                AutonomyActionType.BrainDrainPulse => "subliminal",
+                _ => null
+            };
+        }
+
+        private static AutonomyActionType? ToAutonomyActionType(AICommandType command)
+        {
+            return command switch
+            {
+                AICommandType.flash_image => AutonomyActionType.Flash,
+                AICommandType.video => AutonomyActionType.Video,
+                AICommandType.subliminal => AutonomyActionType.Subliminal,
+                AICommandType.bubbles => AutonomyActionType.StartBubbles,
+                AICommandType.mantra_lockscreen => AutonomyActionType.LockCard,
+                AICommandType.spiral => AutonomyActionType.SpiralPulse,
+                AICommandType.pink => AutonomyActionType.PinkFilterPulse,
+                AICommandType.bounce => AutonomyActionType.BouncingText,
+                _ => null
+            };
+        }
+
+        private static bool IsAutonomyCommandEnabled(AICommandType command, List<AutonomyActionType> enabledActions)
+        {
+            var mapped = ToAutonomyActionType(command);
+            return mapped.HasValue && enabledActions.Contains(mapped.Value);
+        }
 
         public abstract void Dispose();
     }
