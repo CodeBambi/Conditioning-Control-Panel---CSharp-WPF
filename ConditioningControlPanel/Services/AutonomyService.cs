@@ -799,6 +799,13 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Information("AutonomyService: ExecuteAutonomousAction called (Source: {Source})", source);
 
+                // Don't interfere with an active conditioning session.
+                if (App.IsSessionRunning)
+                {
+                    App.Logger?.Information("AutonomyService: Skipping autonomous action - a session is running");
+                    return;
+                }
+
                 // AI-guided path: when AI effects control is enabled and available, ask the AI to choose.
                 var settings = App.Settings?.Current;
                 var companion = App.Settings?.Current?.CompanionPrompt;
