@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using ConditioningControlPanel.Helpers;
+using ConditioningControlPanel.Models;
 
 namespace ConditioningControlPanel.Services
 {
@@ -291,9 +292,11 @@ namespace ConditioningControlPanel.Services
 
             App.Logger?.Information("AutonomyService: Test trigger - executing action (bypassing cooldown check)");
 
-            // Force execute, bypassing cooldown
+            // Force execute a random action directly, bypassing cooldown and AI guidance.
+            // This lets the user verify that the autonomy machinery itself works even if the
+            // AI guidance path is slow or unavailable.
             _isOnCooldown = false;
-            ExecuteAutonomousAction(AutonomyTriggerSource.Random, "Manual test trigger");
+            ExecuteRandomAutonomousAction(AutonomyTriggerSource.Random, "Manual test trigger");
         }
 
         /// <summary>
@@ -870,43 +873,36 @@ namespace ConditioningControlPanel.Services
 
         /// <summary>
         /// Asks the AI to choose one autonomous action from the enabled pool and executes it.
-        /// Falls back to the random autonomy path when the AI declines or returns an invalid command.
+        /// Falls back to the random autonomy path when the AI declines, times out, or returns
+        /// an invalid command. A timeout prevents a slow/stuck AI request from blocking all
+        /// autonomy ticks.
         /// </summary>
         private async Task ExecuteAutonomousActionWithAiGuidanceAsync(AutonomyTriggerSource source, string? context, List<AutonomyActionType> candidates)
         {
             _isAiGuidancePending = true;
+            AiCommandData? command = null;
+            string? phrase = null;
+            var timedOut = false;
             try
             {
                 App.Logger?.Information("AutonomyService: Requesting AI-guided action (Source: {Source})", source);
-                var (command, phrase) = await App.Ai!.RequestAutonomyActionAsync(candidates, context);
+                var requestTask = App.Ai!.RequestAutonomyActionAsync(candidates, context);
+                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(10));
+                var completed = await Task.WhenAny(requestTask, timeoutTask);
 
-                if (command != null)
+                if (completed == timeoutTask)
                 {
-                    // AI returned a valid command. Announce the AI phrase if there is one, then execute.
-                    if (!string.IsNullOrWhiteSpace(phrase))
-                    {
-                        AnnouncePhrase(phrase);
-                        await Task.Delay(1500);
-                    }
-
-                    App.Logger?.Information("AutonomyService: AI chose command {Cmd}; executing via AI command path", command.Command);
-                    App.Commands?.BeginBatch();
-                    var outcome = App.Commands?.ExecuteCommand(command);
-                    var succeeded = outcome?.Succeeded ?? false;
-                    var outcomeText = succeeded
-                        ? "ai-guided autonomy executed"
-                        : $"ai-guided autonomy failed: {outcome?.Outcome ?? "unknown"}";
-
-                    SharedEffectCooldown.RecordEffectFired(CooldownSource.Autonomy);
-                    _lastActionTime = DateTime.Now;
-                    StartCooldown();
-
-                    App.ActionHistory.Record(command.Command.ToString().ToLowerInvariant(), "autonomy-ai", succeeded, outcomeText);
-                    ActionTriggered?.Invoke(this, new AutonomyActionEventArgs(AutonomyActionType.Comment, source, $"AI chose {command.Command}"));
-                    return;
+                    App.Logger?.Warning("AutonomyService: AI guidance request timed out after 10s; falling back");
+                    // Swallow any eventual fault from the abandoned request so it doesn't surface as unobserved.
+                    _ = requestTask.ContinueWith(t => { var _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+                    timedOut = true;
                 }
-
-                App.Logger?.Information("AutonomyService: AI declined to choose an action; considering random fallback");
+                else
+                {
+                    (command, phrase) = await requestTask;
+                    App.Logger?.Information("AutonomyService: AI guidance returned command={Command} phrase={HasPhrase}",
+                        command?.Command.ToString() ?? "(none)", !string.IsNullOrWhiteSpace(phrase));
+                }
             }
             catch (Exception ex)
             {
@@ -916,6 +912,34 @@ namespace ConditioningControlPanel.Services
             {
                 _isAiGuidancePending = false;
             }
+
+            if (command != null && !timedOut)
+            {
+                // AI returned a valid command. Announce the AI phrase if there is one, then execute.
+                if (!string.IsNullOrWhiteSpace(phrase))
+                {
+                    AnnouncePhrase(phrase);
+                    await Task.Delay(1500);
+                }
+
+                App.Logger?.Information("AutonomyService: AI chose command {Cmd}; executing via AI command path", command.Command);
+                App.Commands?.BeginBatch();
+                var outcome = App.Commands?.ExecuteCommand(command);
+                var succeeded = outcome?.Succeeded ?? false;
+                var outcomeText = succeeded
+                    ? "ai-guided autonomy executed"
+                    : $"ai-guided autonomy failed: {outcome?.Outcome ?? "unknown"}";
+
+                SharedEffectCooldown.RecordEffectFired(CooldownSource.Autonomy);
+                _lastActionTime = DateTime.Now;
+                StartCooldown();
+
+                App.ActionHistory.Record(command.Command.ToString().ToLowerInvariant(), "autonomy-ai", succeeded, outcomeText);
+                ActionTriggered?.Invoke(this, new AutonomyActionEventArgs(AutonomyActionType.Comment, source, $"AI chose {command.Command}"));
+                return;
+            }
+
+            App.Logger?.Information("AutonomyService: AI did not choose a valid action; considering random fallback");
 
             // Random fallback: keep a bit of unpredictability, scaled by intensity.
             if (ShouldUseRandomFallback())
