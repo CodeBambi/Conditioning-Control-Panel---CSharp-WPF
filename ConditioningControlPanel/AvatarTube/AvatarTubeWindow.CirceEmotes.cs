@@ -887,6 +887,13 @@ namespace ConditioningControlPanel
             bool aActive = ReferenceEquals(outImg, ImgAvatarAnimated);
             var inImg = aActive ? ImgAvatarAnimatedB : ImgAvatarAnimated;
 
+            // The incoming layer is reused, so it still holds its PREVIOUS clip's animator. SetSourceUri
+            // below does NOT synchronously tear that down, so a naive GetAnimator()!=null readiness check
+            // sees the STALE animator and fades the visible frame out while the new GIF is still loading —
+            // the residual ~1.5s blank the watchdog had to reload. Capture it so InReady() can require a
+            // genuinely NEW animator instance instead.
+            var inOldAnim = AnimationBehavior.GetAnimator(inImg);
+
             try
             {
                 // Force a property CHANGE even if this layer still holds the same URI (its cleanup is
@@ -954,12 +961,17 @@ namespace ConditioningControlPanel
                 outImg.BeginAnimation(UIElement.OpacityProperty, fout);
                 inImg.BeginAnimation(UIElement.OpacityProperty, fin);
             }
-            // Ready ONLY when the layer has a real ANIMATOR — i.e. a decoded, renderable frame. The old code
-            // also accepted inImg.Source != null, but during the talk->reaction handoff Source goes briefly
-            // non-null BEFORE the GIF actually decodes a frame, so the gate faded the visible clip out into a
-            // still-blank layer; if that load then dropped (no animator ever), the avatar sat blank until the
-            // 6s watchdog. Requiring the animator means we never fade into nothing.
-            bool InReady() => AnimationBehavior.GetAnimator(inImg) != null;
+            // Ready ONLY when the layer has a real, NEW animator — i.e. the incoming clip has decoded a
+            // renderable frame. Two traps this avoids: (1) inImg.Source flips non-null a beat before the GIF
+            // decodes; (2) the layer still carries its previous clip's animator (SetSourceUri(null) doesn't
+            // tear it down synchronously). Either would make us fade the visible frame out into a still-blank
+            // layer = the downtime. Requiring an animator that is NOT the stale one (inOldAnim) means we hold
+            // the outgoing frame until the new clip can actually be shown — never fade into nothing.
+            bool InReady()
+            {
+                var a = AnimationBehavior.GetAnimator(inImg);
+                return a != null && !ReferenceEquals(a, inOldAnim);
+            }
             bool talkSeq = _circeTalkSeqActive;
             if (InReady())
             {
