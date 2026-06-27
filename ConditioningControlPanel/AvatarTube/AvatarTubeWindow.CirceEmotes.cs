@@ -933,11 +933,16 @@ namespace ConditioningControlPanel
             var fout = new DoubleAnimation(outImg.Opacity, 0, dur) { FillBehavior = FillBehavior.Stop };
             fin.Completed += (_, __) =>
             {
-                inImg.Opacity = 1;
-                if (!ReferenceEquals(outImg, inImg))
+                // A newer crossfade may have repurposed one of these layers since this fade started (rapid
+                // talk->reaction handoff reuses a layer mid-fade). Only touch a layer that is STILL playing
+                // the role this fade gave it — else this stale completion wipes/zeroes the clip the newer
+                // crossfade just put there. THIS was the residual "avatar off for ~1.5s" blank: a talk clip's
+                // fade-out completion ran ClearGifLayer on the very layer the reaction had since reused.
+                if (ReferenceEquals(_circeActiveImg, inImg)) inImg.Opacity = 1;
+                if (!ReferenceEquals(outImg, inImg) && !ReferenceEquals(_circeActiveImg, outImg))
                 {
                     outImg.Opacity = 0;
-                    ClearGifLayer(outImg); // stop + free the outgoing clip
+                    ClearGifLayer(outImg); // stop + free the outgoing clip (still genuinely outgoing)
                 }
             };
             // Capture the still-visible state so a stalled load can roll back to it without blanking.
