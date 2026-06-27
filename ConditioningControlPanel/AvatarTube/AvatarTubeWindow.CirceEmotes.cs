@@ -49,9 +49,18 @@ namespace ConditioningControlPanel
         // poll reads the animator's IsComplete and advances within ~1 poll of the real clip end.
         private DispatcherTimer? _circeWatchdog;
         private const int CircePollMs = 500;          // rotation safety poll cadence
-        private const int CirceStalledLoadMs = 6000;  // force-advance if the active layer never gets an animator
+        private const int CirceStalledLoadMs = 3000;  // force-advance if the active layer never gets an animator
+        private const int CirceStallRetryMs = 1200;   // re-issue a stalled load once at this point before force-advancing
         private int _circeNoAnimTicks;
+        private bool _circeStallRetried;               // already re-issued the current stalled load (one retry per clip)
         private string? _circeLastCompleteClip;        // clip seen IsComplete on the previous poll (drop detector)
+        // A GIF load occasionally DROPS — XamlAnimatedGif never raises an animator for the layer, most often on
+        // the talk->reaction handoff where the reaction reuses a layer mid-fade. The crossfade then has no frame
+        // to show and the avatar blanks until the watchdog force-advances (~6s). Re-issuing the source (null then
+        // re-set; re-setting the SAME uri is a silent no-op) kicks a fresh load and recovers in ~1 retry. The gate
+        // retries a few times early instead of waiting out the full grace, so a dropped load self-heals fast.
+        private const int CirceGateRetryMs = 450;
+        private const int CirceGateMaxRetries = 3;
         // Hold the previous frame up to this long for a slow GIF first-frame decode before giving up on a
         // crossfade — long enough that a heavy clip decoding under load (video/chaos/GC) never fades to blank.
         private const int CirceLoadGraceMs = 5000;
@@ -416,6 +425,7 @@ namespace ConditioningControlPanel
                 if (anim != null)
                 {
                     _circeNoAnimTicks = 0;
+                    _circeStallRetried = false;
                     if (anim.IsComplete)
                     {
                         // The active clip has finished its single pass. A clean completion is handled promptly
@@ -434,12 +444,22 @@ namespace ConditioningControlPanel
                 }
                 else
                 {
-                    // Active layer never produced an animator (a load that yielded no frame, no crossfade gate
-                    // running to hold it). Give it a grace, then force the rotation on so it can't strand.
+                    // Active layer never produced an animator (a dropped load that yielded no frame, no crossfade
+                    // gate running to hold it = a visible blank). First RE-ISSUE the load once — a dropped async
+                    // GIF load self-heals on a fresh source set — and only force the rotation on if even that
+                    // never produces a frame. This turns the old flat 6s blank into a ~1.2s reload.
                     _circeLastCompleteClip = null;
-                    if (++_circeNoAnimTicks * CircePollMs >= CirceStalledLoadMs)
+                    int stalledMs = ++_circeNoAnimTicks * CircePollMs;
+                    if (!_circeStallRetried && stalledMs >= CirceStallRetryMs && !string.IsNullOrEmpty(_circeCurrentClip))
+                    {
+                        _circeStallRetried = true;
+                        App.Logger?.Information("[EMOTE] poll reload (stalled load, clip={Clip})", _circeCurrentClip);
+                        ReissueClipLoad(active, _circeCurrentClip!);
+                    }
+                    else if (stalledMs >= CirceStalledLoadMs)
                     {
                         _circeNoAnimTicks = 0;
+                        _circeStallRetried = false;
                         App.Logger?.Information("[EMOTE] poll advance (stalled load, clip={Clip})", _circeCurrentClip);
                         AdvanceCirce();
                     }
@@ -841,6 +861,23 @@ namespace ConditioningControlPanel
             return t;
         }
 
+        /// <summary>
+        /// Re-issue a clip's GIF source on a layer to recover a DROPPED async load (no animator ever
+        /// appeared). Re-setting the same URI is a no-op, so null it first, then set it — that forces a
+        /// fresh load. Safe to call repeatedly. See CirceGateRetryMs for why this is needed.
+        /// </summary>
+        private void ReissueClipLoad(Image img, string clip)
+        {
+            try
+            {
+                if (AnimationBehavior.GetSourceUri(img) != null) AnimationBehavior.SetSourceUri(img, null);
+                AnimationBehavior.SetAutoStart(img, true);
+                AnimationBehavior.SetRepeatBehavior(img, new RepeatBehavior(1));
+                AnimationBehavior.SetSourceUri(img, CirceClipUri(clip));
+            }
+            catch (Exception ex) { App.Logger?.Warning("Emote clip reload failed ({Clip}): {Error}", clip, ex.Message); }
+        }
+
         /// <summary>The actual crossfade between the two animated GIF layers. The clip plays ONCE.</summary>
         private void DoCirceCrossfade(string clip)
         {
@@ -917,7 +954,12 @@ namespace ConditioningControlPanel
                 outImg.BeginAnimation(UIElement.OpacityProperty, fout);
                 inImg.BeginAnimation(UIElement.OpacityProperty, fin);
             }
-            bool InReady() => AnimationBehavior.GetAnimator(inImg) != null || inImg.Source != null;
+            // Ready ONLY when the layer has a real ANIMATOR — i.e. a decoded, renderable frame. The old code
+            // also accepted inImg.Source != null, but during the talk->reaction handoff Source goes briefly
+            // non-null BEFORE the GIF actually decodes a frame, so the gate faded the visible clip out into a
+            // still-blank layer; if that load then dropped (no animator ever), the avatar sat blank until the
+            // 6s watchdog. Requiring the animator means we never fade into nothing.
+            bool InReady() => AnimationBehavior.GetAnimator(inImg) != null;
             bool talkSeq = _circeTalkSeqActive;
             if (InReady())
             {
@@ -939,6 +981,7 @@ namespace ConditioningControlPanel
                 long graceCap = talkSeq ? CirceTalkLoadGraceMs : CirceLoadGraceMs;
                 if (!outVisible) graceCap = Math.Min(graceCap, CirceEmptyHoldGraceMs);
                 long gateStart = Environment.TickCount64;
+                int gateRetries = 0;
                 var gate = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
                 gate.Tick += (_, __) =>
                 {
@@ -948,6 +991,15 @@ namespace ConditioningControlPanel
                     {
                         gate.Stop();
                         StartFade();
+                    }
+                    else if (gateRetries < CirceGateMaxRetries
+                             && Environment.TickCount64 - gateStart > CirceGateRetryMs * (gateRetries + 1))
+                    {
+                        // No animator yet — the async load looks dropped (the talk->reaction-handoff stall).
+                        // Re-issue it; this recovers in ~1 retry instead of blanking until the 6s watchdog.
+                        gateRetries++;
+                        App.Logger?.Information("[EMOTE] gate retry {N} (clip={Clip})", gateRetries, clip);
+                        ReissueClipLoad(inImg, clip);
                     }
                     else if (Environment.TickCount64 - gateStart > graceCap)
                     {
