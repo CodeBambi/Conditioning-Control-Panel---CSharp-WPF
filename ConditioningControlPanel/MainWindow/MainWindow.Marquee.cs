@@ -318,11 +318,13 @@ namespace ConditioningControlPanel
                             IsStartupDialogShowing = true;
                             App.Logger?.Information("What's New dialog showing, setting IsStartupDialogShowing=true");
 
-                            MessageBox.Show(
-                                Services.UpdateService.CurrentPatchNotes,
+                            var whatsNew = new WhatsNewDialog(
                                 $"What's New in v{currentVersion}",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Information);
+                                Services.UpdateService.CurrentPatchNotes)
+                            {
+                                Owner = this
+                            };
+                            whatsNew.ShowDialog();
 
                             // Update the last seen version
                             if (App.Settings?.Current != null)
