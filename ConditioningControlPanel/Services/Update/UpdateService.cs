@@ -20,74 +20,27 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.2.2";
+        public const string AppVersion = "6.2.3";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.2.2 - She Can Hear You Now
+        public const string CurrentPatchNotes = @"v6.2.3 - Loud and Clear
 
-🎤 SHE'S LISTENING (new tab, Patreon)
-- ""Hey Bambi"" wake word: say her name and she perks up and listens (only while
-  active).
-- Push-to-talk: hold a hotkey (default F8) to talk to her any time, no wake word
-  needed.
-- 500+ ways to phrase the commands: toggle subliminals, spiral, pink filter,
-  bubbles, mind wipe, pop-quiz or triggers, or ask her to ""flash me"", ""lock me"",
-  ""freeze"", ""count for me"", ""go deeper"", ""again"". Say ""what can I say?"" for help.
-- She talks back: spoken wake-greeting and voiced confirmations, themed per mod.
-- 100% offline: every word is processed on your own PC, nothing sent anywhere.
-- Consent-first: a clear opt-in the first time, OFF by default, and a real disarm
-  that actually cuts the mic (not just pauses it).
+🔧 BUG FIXES
+- Spoken mantras trigger reliably again. They no longer get hijacked by other
+  voice commands (""sound"", ""mantra"", etc. now route correctly).
+- ""Go pink"" / ""spiral"" voice commands stay on screen instead of flashing and
+  vanishing a moment later.
+- Your companion's voice is no longer silenced by the subliminal-audio toggle.
+  She speaks as long as master volume is up.
+- Fixed the dashboard ""glitch"" and ""cascade"" trigger bubbles.
+- The What's New dialog scrolls now, and broken ""source"" links are fixed.
 
-🎴 VOICE LOCK CARDS
-- Say the phrase out loud to clear a lock card instead of typing it, with a live
-  mic meter and instant feedback (typing always works as a fallback).
-
-🗣️ SPOKEN MANTRAS (Patreon)
-- She prompts a mantra, you say it back, she responds. 50 per mod, fully voiced.
-
-🎬 DEEPER GOES VOICE
-- The voice features are in the timeline editor now too: a new ""Speak (voice)""
-  effect pauses a video and asks you to say a phrase out loud, with feedback and
-  a rep counter before it lets you continue.
-
-🌀 TAKEOVER REWORK
-- A much-needed overhaul: when she takes over, the screen now shows you what's
-  happening (the takeover text + effect) instead of leaving you guessing.
-- New voice control hooks, extra functions, a glowing/sparkling/shaking cue, and
-  a pile of takeover bugs squashed (start/stop reliability, mic handoff and more).
-
-🫧 TRIGGER BUBBLES
-- New dashboard minigame: a slice of your ambient bubbles become ""trigger""
-  bubbles that fire an effect when popped (flash, subliminal, pink filter, spiral,
-  glitch, GIF rain or video), with the same XP/sound/haptic feedback and a new
-  bubble Speed slider. Keep an eye out, your companion might want to play too...
-
-⚡ DASHBOARD QUICK ACTIONS
-- Quick-toggle rail: one-tap chips for Takeover, Awareness, Haptics and Voice,
-  plus launchers for Lockdown, Blink Trainer and Remote. (Patreon)
-- Jump Right In randomizes a fun setup and starts in one tap, Remember snapshots
-  and recalls your setup any time, and there's a browser mute toggle for
-  HypnoTube audio.
-
-🎭 COMPANION
-- The avatar no longer goes blank or freezes when swapping reactions or emotes,
-  and there are hundreds of new voicelines so Sissy and Circe match Bambi (plus
-  fresh idle chatter and previously-silent moments now voiced).
-
-🔧 FIXES
-- Log Out now fully logs out SubscribeStar too (premium can't survive a logout).
-- Videos fill the whole second monitor on mixed-DPI setups, mandatory and browser
-  videos no longer stack, and the autonomy interval slider is accurate now.
-- Voice polish since the 6.2.0 preview: steadier wake-word detection, one-breath
-  commands, a mic input-device picker and a Webcam & Mic pill, plus pop quizzes no
-  longer close themselves in the background and audio ducks on every output device.
-- ""Hey Bambi"" hears you far more reliably now: a new offline wake engine with
-  per-user calibration and a mic sensitivity slider so she catches her name.
-- Smoother dashboard bubbles: a new shared-host render path keeps the bubble game
-  fluid even when lots of bubbles are on screen at once.
+⚡ PERFORMANCE & STABILITY
+- Faster startup. The offline voice models warm up in the background instead of
+  blocking launch.
 
 Season: Juicy June";
 
