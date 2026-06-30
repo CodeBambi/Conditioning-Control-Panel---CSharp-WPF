@@ -62,6 +62,7 @@ namespace ConditioningControlPanel
             MirrorCheck(BambiTakeoverTab.ChkSpeechWakeWord, SheListeningTab.ChkSL_WakeWord);
             RefreshSheListeningStatus();
             RefreshPremiumRail();
+            RefreshAutonomyVoiceHint(); // arming/disarming wake suppresses/restores surprise mantras
         }
 
         internal void SL_WakeWords_LostFocus(object sender, RoutedEventArgs e)
@@ -86,6 +87,7 @@ namespace ConditioningControlPanel
             MirrorCheck(BambiTakeoverTab.ChkSpeechPushToTalk, SheListeningTab.ChkSL_PushToTalk);
             RefreshSheListeningStatus();
             RefreshPremiumRail();
+            RefreshAutonomyVoiceHint(); // arming/disarming PTT suppresses/restores surprise mantras
         }
 
         /// <summary>

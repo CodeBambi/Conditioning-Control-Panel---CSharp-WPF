@@ -390,15 +390,9 @@ namespace ConditioningControlPanel.Services
                 var remainder = string.Join(' ', tokens.Skip(drop)).Trim();
                 if (remainder.Length == 0) return false;           // bare wake, no chained command
 
-                // Fuzzy-match the remainder to an intent (same scoring as the listen path).
-                VoiceCommandIntent? best = null; double bestScore = 0;
-                foreach (var intent in VoiceCommandIntents)
-                    foreach (var alias in intent.Aliases)
-                    {
-                        var s = SpeechService.Similarity(SpeechService.Normalize(alias), remainder);
-                        if (s > bestScore) { bestScore = s; best = intent; }
-                    }
-                if (best == null || bestScore < VoiceCommandMatchThreshold) return false;
+                // Fuzzy-match the remainder to an intent (same scoring + guards as the listen path).
+                var (best, bestScore) = MatchVoiceIntent(remainder);
+                if (best == null) return false;
                 // Mantra / "again" need the listen-flow context — defer those to the normal path.
                 if (best.IsMantra || best.IsReplay) return false;
 

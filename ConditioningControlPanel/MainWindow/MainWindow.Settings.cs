@@ -204,6 +204,7 @@ namespace ConditioningControlPanel
             BambiTakeoverTab.ChkSpeechPushToTalk.IsChecked = s.SpeechPushToTalkEnabled && s.MicConsentGiven;
             BambiTakeoverTab.TxtPttKey.Text = string.IsNullOrWhiteSpace(s.SpeechPushToTalkKey) ? "F8" : s.SpeechPushToTalkKey;
             BambiTakeoverTab.SliderAutonomyAnnounce.Value = s.AutonomyAnnouncementChance;
+            RefreshAutonomyVoiceHint(); // reflect any wake/PTT suppression in the surprise-mantras hint
 
             // Bouncing Text Size (add if not already loaded above)
             ProgressionTab.SliderBouncingTextSize.Value = s.BouncingTextSize;

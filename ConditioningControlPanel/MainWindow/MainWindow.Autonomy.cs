@@ -330,18 +330,44 @@ namespace ConditioningControlPanel
             s.AutonomyCanTriggerVoiceCommand = turningOn;
             App.Settings?.Save();
 
-            // Friendly heads-up if they enabled it but the engine can't run yet.
-            if (turningOn && App.Speech?.IsAvailable != true && BambiTakeoverTab.TxtAutonomyVoiceHint != null)
+            RefreshAutonomyVoiceHint();
+        }
+
+        /// <summary>
+        /// Keep the "Surprise me with mantras" hint honest. The Takeover auto-trigger is suppressed
+        /// whenever the user is driving the mic themselves (wake word / push-to-talk on) — see
+        /// AutonomyService candidate gating — so when it's enabled-but-dormant, say so in amber instead
+        /// of leaving the user wondering why surprise mantras never fire. Also surfaces an unavailable
+        /// engine. Safe to call any time; no-ops if the control isn't built yet.
+        /// </summary>
+        internal void RefreshAutonomyVoiceHint()
+        {
+            var hint = BambiTakeoverTab?.TxtAutonomyVoiceHint;
+            if (hint == null) return;
+            var s = App.Settings?.Current;
+            bool on = s?.AutonomyCanTriggerVoiceCommand == true && s.MicConsentGiven;
+
+            var amber = new SolidColorBrush(Color.FromRgb(0xFF, 0xC1, 0x07));
+            var grey = new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
+
+            if (on && App.Speech?.IsAvailable != true)
             {
-                BambiTakeoverTab.TxtAutonomyVoiceHint.Text =
-                    App.Speech == null || !Services.Speech.SpeechService.HasCaptureDevice
-                        ? "No microphone detected — connect one to use this."
-                        : "Speech model not installed yet — voice prompts stay off until it is.";
+                hint.Foreground = amber;
+                hint.Text = App.Speech == null || !Services.Speech.SpeechService.HasCaptureDevice
+                    ? "No microphone detected — connect one to use this."
+                    : "Speech model not installed yet — voice prompts stay off until it is.";
+                return;
             }
-            else if (BambiTakeoverTab.TxtAutonomyVoiceHint != null)
+            if (on && (s!.SpeechWakeWordEnabled || s.SpeechPushToTalkEnabled))
             {
-                BambiTakeoverTab.TxtAutonomyVoiceHint.Text = "Offline mic. Opens only when she prompts you.";
+                hint.Foreground = amber;
+                hint.Text = "Paused — you're driving the mic with “Hey Bambi” / push-to-talk, so she only does mantras when you ask. Turn those off in She's Listening for surprise mantras.";
+                return;
             }
+            hint.Foreground = grey;
+            hint.Text = on
+                ? "During Takeover she'll now and then ask you to repeat a phrase. Offline mic — opens only when she prompts you."
+                : "During Takeover she'll now and then ask you to repeat a phrase. Suppressed while you're driving the mic yourself.";
         }
 
         internal void ChkAutonomyResume_Changed(object sender, RoutedEventArgs e)

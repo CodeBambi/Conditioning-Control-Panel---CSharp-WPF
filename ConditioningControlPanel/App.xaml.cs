@@ -1427,7 +1427,29 @@ namespace ConditioningControlPanel
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
             // for Takeover to start. No-op unless consent is given and the speech engine is available.
-            try { Autonomy?.RefreshVoiceInputModes(); } catch (Exception ex) { Logger?.Warning(ex, "Startup RefreshVoiceInputModes failed"); }
+            //
+            // LAZY/DEFERRED: the offline speech models are heavy to load (Vosk small ~0.5s on the UI
+            // thread; the sherpa-onnx KWS transducer trio several seconds), and arming inline here made
+            // the very first IsAvailable query load Vosk ON the startup UI thread. Defer the whole arm-up
+            // to ApplicationIdle (after the window has rendered and is interactive), and warm BOTH models
+            // on a background thread first — so neither load ever blocks startup. RefreshVoiceInputModes
+            // then runs back on the UI thread (it touches the LL keyboard hook / message pump) with the
+            // models already warm, so it returns instantly.
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                Task.Run(() =>
+                {
+                    try { _ = Speech?.IsAvailable; } catch { }                                   // warm Vosk off-UI
+                    try { if (Settings?.Current?.SpeechWakeWordEnabled == true) _ = WakeWord?.IsAvailable; } catch { } // warm KWS off-UI
+                }).ContinueWith(_ =>
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try { Autonomy?.RefreshVoiceInputModes(); }
+                        catch (Exception ex) { Logger?.Warning(ex, "Deferred RefreshVoiceInputModes failed"); }
+                    }));
+                });
+            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
 
             // First-instance "Open with CCP" dispatch: replay parsed --play/--edit
             // args once MainWindow is fully loaded so the player/editor windows
