@@ -26,6 +26,13 @@ public class OverlayService : IDisposable
     // because the persistent feature is off. Decremented when the timed overlay's hide fires.
     private int _timedPinkHolds;
     private int _timedSpiralHolds;
+    // Sustained holds: an overlay shown via ShowOverlaySustained (voice "go pink"/"spiral", Deeper
+    // region bands) has no hide timer, so — like the timed holds above — the periodic reconcilers
+    // (RefreshOverlays / UpdateOverlays) must NOT tear it down just because the persistent feature
+    // setting is off. Bool, not a counter: ShowOverlaySustained is idempotent (the ad-hoc paths
+    // early-return on a non-empty window list), so a repeat show + single hide must still release it.
+    private bool _sustainedPinkHeld;
+    private bool _sustainedSpiralHeld;
 
     public OverlayService()
     {
@@ -235,7 +242,7 @@ public class OverlayService : IDisposable
                 else
                     UpdatePinkFilterOpacity();
             }
-            else if (_timedPinkHolds == 0)   // don't kill an in-flight timed pink overlay
+            else if (_timedPinkHolds == 0 && !_sustainedPinkHeld)   // don't kill an in-flight timed/sustained pink overlay
             {
                 StopPinkFilter();
             }
@@ -249,7 +256,7 @@ public class OverlayService : IDisposable
                 else
                     UpdateSpiralOpacity();
             }
-            else if (_timedSpiralHolds == 0)   // don't kill an in-flight timed spiral overlay
+            else if (_timedSpiralHolds == 0 && !_sustainedSpiralHeld)   // don't kill an in-flight timed/sustained spiral overlay
             {
                 StopSpiral();
             }
@@ -383,7 +390,7 @@ public class OverlayService : IDisposable
         {
             StartPinkFilter();
         }
-        else if (!settings.PinkFilterEnabled && _pinkFilterWindows.Count > 0 && _timedPinkHolds == 0)
+        else if (!settings.PinkFilterEnabled && _pinkFilterWindows.Count > 0 && _timedPinkHolds == 0 && !_sustainedPinkHeld)
         {
             StopPinkFilter();
         }
@@ -398,7 +405,7 @@ public class OverlayService : IDisposable
             _spiralPath = spiralPath;
             StartSpiral();
         }
-        else if (!settings.SpiralEnabled && _spiralWindows.Count > 0 && _timedSpiralHolds == 0)
+        else if (!settings.SpiralEnabled && _spiralWindows.Count > 0 && _timedSpiralHolds == 0 && !_sustainedSpiralHeld)
         {
             StopSpiral();
         }
@@ -553,7 +560,18 @@ public class OverlayService : IDisposable
 
         Action runShow = () =>
         {
-            try { show(); }
+            try
+            {
+                show();
+                // Mark it held so the periodic reconcilers (RefreshOverlays / UpdateOverlays) leave it
+                // alone — without this they tore the unguarded ad-hoc window down on the next tick because
+                // the persistent feature setting was off ("go pink flashes then immediately goes away").
+                // Both show() and the reconcilers run on this one UI thread, so they can't interleave;
+                // gate on a window actually appearing so a no-op show (e.g. spiral with no asset) doesn't
+                // leave a stale hold that would later block a legitimate teardown.
+                if (kind == "pink_filter") _sustainedPinkHeld = _pinkFilterWindows.Count > 0;
+                else if (kind == "spiral") _sustainedSpiralHeld = _spiralWindows.Count > 0;
+            }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlaySustained show: {E}", ex.Message); }
         };
         if (dispatcher.CheckAccess()) runShow();
@@ -568,10 +586,14 @@ public class OverlayService : IDisposable
         var dispatcher = Application.Current?.Dispatcher;
         if (dispatcher == null) return;
 
+        // Release the sustained hold, then only actually tear the overlay down when nothing else is
+        // keeping it on (a timed overlay still holding it, or the persistent feature setting). Mirrors
+        // the timed hide-timer's release discipline so a sustained exit can't stomp a co-active owner.
+        var settings = App.Settings.Current;
         Action? hide = kind switch
         {
-            "pink_filter" => () => StopPinkFilter(),
-            "spiral"      => () => StopSpiral(),
+            "pink_filter" => () => { _sustainedPinkHeld = false; if (_timedPinkHolds == 0 && !settings.PinkFilterEnabled) StopPinkFilter(); },
+            "spiral"      => () => { _sustainedSpiralHeld = false; if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) StopSpiral(); },
             "braindrain"  => () => StopBrainDrainBlur(),
             _ => null
         };
@@ -801,6 +823,7 @@ public class OverlayService : IDisposable
         }
         _lastAppliedPinkOpacity = -1;
         _rampPinkOpacity = null;
+        _sustainedPinkHeld = false; // overlay is gone (incl. force-stop / panic) — drop any stale sustained hold
         _pinkFilterWindows.Clear();
         App.Logger?.Debug("Pink filter stopped");
     }
@@ -1325,6 +1348,7 @@ public class OverlayService : IDisposable
         }
         _lastAppliedSpiralOpacity = -1;
         _rampSpiralOpacity = null;
+        _sustainedSpiralHeld = false; // overlay is gone (incl. force-stop / panic) — drop any stale sustained hold
         _spiralWindows.Clear();
         App.Logger?.Debug("Spiral stopped");
     }
