@@ -3192,6 +3192,11 @@ public sealed class ChaosModeService
         // run explicitly opts into Free Desktop again.
         ActiveMode = ChaosPlayMode.Story;
         ChaosWindowZ.DesktopMode = false;
+        // Reset the topmost-pin too. It's set from ChaosPinOnTop at StartRun and was leaking
+        // across runs: a Free Desktop run with pin-off left PinTopmost=false, so a later
+        // DASHBOARD glitch/cascade bubble built its keep-alive overlay non-topmost and it
+        // rendered behind the main window (invisible). Dashboard effects must default to pinned.
+        ChaosWindowZ.PinTopmost = true;
         _lessonCardPaused = false;
         _lessonCardsAfterDraft = false;
         _pendingLessonCards.Clear();

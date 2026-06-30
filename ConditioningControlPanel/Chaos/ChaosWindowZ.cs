@@ -66,6 +66,25 @@ internal static class ChaosWindowZ
     }
 
     /// <summary>
+    /// Pin a window to the top of the topmost band UNCONDITIONALLY (ignores <see cref="PinTopmost"/>).
+    /// Used by the dashboard trigger-bubble overlays (glitch/cascade) which fire OUTSIDE any chaos
+    /// run: there the run's pin state doesn't apply, and the keep-alive overlay singleton may carry a
+    /// stale Topmost=false from a prior Free-Desktop run, leaving the wash buried behind the app.
+    /// </summary>
+    public static void ForceTopmost(Window? w)
+    {
+        if (w == null) return;
+        try
+        {
+            w.Topmost = true;
+            var hwnd = new WindowInteropHelper(w).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        catch { }
+    }
+
+    /// <summary>
     /// The bounds (DIPs) a full-screen chaos overlay should cover. The Rabbit Hole is a
     /// single-monitor experience: with multi-monitor OFF every spanning overlay must confine to
     /// the PRIMARY screen. Sizing these to the whole VIRTUAL desktop (as they used to) stretched

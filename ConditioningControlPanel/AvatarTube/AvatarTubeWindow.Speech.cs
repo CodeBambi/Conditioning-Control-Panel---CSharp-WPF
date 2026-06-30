@@ -1544,13 +1544,15 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Plays a voice line audio file. Suppressed entirely when the avatar
-        /// menu's "Mute Whispers" toggle is on (SubAudioEnabled=false) — the
-        /// bubble + text still show, only the attached voiceline goes silent.
+        /// Plays a voice line audio file. Follows the master volume only; when MasterVolume is 0 the
+        /// bubble + text still show, only the attached voiceline goes silent. (No longer tied to the
+        /// subliminal "Mute Whispers" toggle — see bug #436.)
         /// </summary>
         private void PlayVoiceLineAudio(string filePath)
         {
-            if (App.Settings?.Current?.SubAudioEnabled != true) return;
+            // Companion voice follows the master volume only (like the giggle/pop SFX) — it is no
+            // longer gated behind the subliminal "Mute Whispers" toggle, which defaulted OFF and left
+            // the companion silent even with audio up at max (bug #436).
             var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
             if (masterVolume <= 0f) return;
             // Idle voicelines were full-volume (×1.0); -20% so today's hotter v3 lines sit under the barks.
@@ -2147,18 +2149,16 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Play a companion bark voiceline. Gated on BOTH MasterVolume (master/mute control) and
-        /// SubAudioEnabled — bark voicelines are "whispers", so the Mute Whispers toggle silences them
-        /// too. When whispers are muted the bubble still shows; it just has no voiceline audio.
+        /// Play a companion bark voiceline. Gated on MasterVolume only (master/mute control). It used
+        /// to also require the subliminal "Mute Whispers" toggle (SubAudioEnabled), which defaulted OFF
+        /// and silenced the companion out of the box even with audio up (bug #436); the bubble still
+        /// shows when MasterVolume is 0, it just has no voiceline audio.
         /// </summary>
         private void PlayBarkVoice(string audioPath)
         {
             try
             {
                 if (!System.IO.File.Exists(audioPath)) return;
-
-                // Mute Whispers (SubAudioEnabled == false) silences spoken barks, same as subliminal whispers.
-                if (App.Settings?.Current?.SubAudioEnabled != true) return;
 
                 var masterVolume = (App.Settings?.Current?.MasterVolume ?? 0) / 100f;
                 if (masterVolume <= 0f) return; // muted
@@ -2176,7 +2176,8 @@ namespace ConditioningControlPanel
             try
             {
                 if (!System.IO.File.Exists(audioPath)) return;
-                if (App.Settings?.Current?.SubAudioEnabled != true) return;
+                // Companion voice follows master volume only — no longer gated by the subliminal
+                // "Mute Whispers" toggle, which left the companion silent by default (bug #436).
 
                 var masterVolume = (App.Settings?.Current?.MasterVolume ?? 100) / 100f;
                 if (masterVolume <= 0f) return;

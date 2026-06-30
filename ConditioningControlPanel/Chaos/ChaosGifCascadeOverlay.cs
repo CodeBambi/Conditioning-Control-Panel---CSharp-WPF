@@ -58,6 +58,9 @@ public sealed class ChaosGifCascadeOverlay : Window
             if (_active == null) { _active = new ChaosGifCascadeOverlay(); ((Window)_active).Show(); }
             else if (!_active.IsVisible) { try { ((Window)_active).Show(); } catch { } }   // idles hidden between cascades
             ChaosWindowZ.RaiseAboveVideo(_active);   // un-hiding doesn't re-stack — kick over a playing video
+            // Dashboard "cascade" trigger-bubble use (no chaos run): force the singleton topmost so a
+            // stale Topmost=false from a prior Free-Desktop run can't bury the rain behind the app.
+            if (App.Chaos?.IsRunning != true) ChaosWindowZ.ForceTopmost(_active);
             _active.Restart(files, spawnRatePerSec, durationSec, gifSize, fallSpeed, opacity, startScale);
         }
         catch (Exception ex) { App.Logger?.Debug("ChaosGifCascadeOverlay.Show: {E}", ex.Message); }

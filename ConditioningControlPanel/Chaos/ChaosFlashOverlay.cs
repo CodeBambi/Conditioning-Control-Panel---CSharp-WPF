@@ -46,6 +46,9 @@ public sealed class ChaosFlashOverlay : Window
             if (_active == null) { _active = new ChaosFlashOverlay(); ((Window)_active).Show(); }
             else if (!_active.IsVisible) { try { ((Window)_active).Show(); } catch { } }   // idles hidden between washes
             ChaosWindowZ.RaiseAboveVideo(_active);   // un-hiding doesn't re-stack — kick over a playing video
+            // Dashboard "glitch" trigger-bubble use (no chaos run): force the singleton topmost so a
+            // stale Topmost=false from a prior Free-Desktop run can't bury the wash behind the app.
+            if (App.Chaos?.IsRunning != true) ChaosWindowZ.ForceTopmost(_active);
             _active.Display(pick, durationMs, opacity);
         }
         catch (Exception ex) { App.Logger?.Debug("ChaosFlashOverlay.Show: {E}", ex.Message); }
