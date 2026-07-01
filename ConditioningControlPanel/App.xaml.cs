@@ -1006,6 +1006,11 @@ namespace ConditioningControlPanel
             Logger.Information("Application starting v{Version} | workingSet {WS}MB",
                 Services.UpdateService.AppVersion, Environment.WorkingSet / (1024 * 1024));
 
+            // Rotate crash.log so a bug report only carries crashes from THIS build. The log is
+            // append-only, so without this it accumulates months of old crashes and the reporter
+            // ships them all (the last 120KB), burying the real failure and polluting triage.
+            RotateCrashLogForVersion(logPath);
+
             // Surface a single-instance takeover (a prior wedged/headless process was killed so
             // this launch could proceed). Recorded here because Logger isn't up during the handshake.
             if (_recoveredFromStaleInstance)
@@ -2599,6 +2604,56 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Rotate <c>crash.log</c> at startup so a bug report only carries crashes from the running
+        /// build. crash.log is append-only (see <see cref="LogCrashDetails"/>) and the bug reporter
+        /// attaches its tail, so left alone it drags months of unrelated crashes into every report.
+        /// We rotate when the app version changes (each entry is version-tagged) and cap runaway
+        /// growth within a single version. Best-effort: any failure is swallowed. Keeps ONE archive
+        /// (<c>crash.log.prev</c>) for local post-mortems.
+        /// </summary>
+        private static void RotateCrashLogForVersion(string logDir)
+        {
+            const long MaxCrashLogBytes = 512 * 1024; // per-version runaway guard
+            try
+            {
+                var crashLogPath = Path.Combine(logDir, "crash.log");
+                if (!File.Exists(crashLogPath)) return;
+
+                var markerPath = Path.Combine(logDir, "crash.log.version");
+                string current = Services.UpdateService.AppVersion;
+                string previous = "";
+                try { if (File.Exists(markerPath)) previous = File.ReadAllText(markerPath).Trim(); } catch { }
+
+                long size = 0;
+                try { size = new FileInfo(crashLogPath).Length; } catch { }
+
+                bool versionChanged = !string.Equals(previous, current, StringComparison.Ordinal);
+                if (versionChanged || size > MaxCrashLogBytes)
+                {
+                    var archive = Path.Combine(logDir, "crash.log.prev");
+                    try { if (File.Exists(archive)) File.Delete(archive); } catch { }
+                    try
+                    {
+                        File.Move(crashLogPath, archive);
+                    }
+                    catch
+                    {
+                        // Locked/denied — truncate in place so we still drop the stale entries.
+                        try { File.WriteAllText(crashLogPath, string.Empty); } catch { }
+                    }
+                    Logger?.Information("[CRASHLOG] rotated crash.log (versionChanged={V}, prevVer={P}, size={S}KB)",
+                        versionChanged, string.IsNullOrEmpty(previous) ? "(none)" : previous, size / 1024);
+                }
+
+                try { File.WriteAllText(markerPath, current); } catch { }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("[CRASHLOG] rotation skipped: {Msg}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Log detailed crash information to both main log and a dedicated crash log file.
         /// This helps debug random crashes by capturing full context.
         /// </summary>
@@ -2617,6 +2672,7 @@ namespace ConditioningControlPanel
 ================================================================================
 CRASH REPORT - {DateTime.Now:yyyy-MM-dd HH:mm:ss}
 ================================================================================
+App Version: {Services.UpdateService.AppVersion}
 Source: {source}
 Exception Type: {ex.GetType().FullName}
 Message: {ex.Message}
