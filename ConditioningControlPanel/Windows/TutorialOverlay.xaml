@@ -63,14 +63,21 @@
                                TextWrapping="Wrap"/>
                 </StackPanel>
 
-                <TextBlock x:Name="TxtDescription"
-                           Grid.Row="2"
-                           Text="Description text goes here..."
-                           Foreground="#C0C0C0"
-                           FontSize="13"
-                           TextWrapping="Wrap"
-                           LineHeight="20"
-                           Margin="0,0,0,10"/>
+                <!-- Bounded + scrollable so a long (multi-bullet) description can't push the button row
+                     (Grid.Row 5) off the bottom of the screen — the "stuck on step 12, no buttons to
+                     advance" bug (#443). Tall cards scroll here; Skip/Prev/Next stay visible. -->
+                <ScrollViewer Grid.Row="2"
+                              MaxHeight="320"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Margin="0,0,0,10">
+                    <TextBlock x:Name="TxtDescription"
+                               Text="Description text goes here..."
+                               Foreground="#C0C0C0"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               LineHeight="20"/>
+                </ScrollViewer>
 
                 <Button x:Name="BtnSupport"
                         Grid.Row="3"

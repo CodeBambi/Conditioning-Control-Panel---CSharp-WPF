@@ -668,6 +668,13 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // A single-emote mod (BambiSleep/Sissy) has exactly one animated avatar and no picker. A
+            // companion swap must NOT swap that animated avatar out for a static companion set: no roster
+            // card maps back to it and the nav arrows are hidden, so it was unrecoverable without
+            // reloading the mod (#442). Keep the emote avatar pinned; the persona/name/XP still switches.
+            if (IsSingleEmoteAvatarMod(out _))
+                return;
+
             int targetSet = GetAvatarSetForCompanion(companionId);
 
             // Only switch if set is unlocked

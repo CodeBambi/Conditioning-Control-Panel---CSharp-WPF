@@ -443,11 +443,13 @@ namespace ConditioningControlPanel
                 SpeechBubble.MaxWidth = 380;
             }
 
-            // Skip if muted or avatar not visible on screen
-            if (_isMuted || !IsAvatarVisibleOnScreen)
+            // Skip only when the avatar isn't on screen. Mute silences her VOICE (audio is gated
+            // below), it must NOT suppress the text speech bubble — that made a muted companion look
+            // completely broken (#445).
+            if (!IsAvatarVisibleOnScreen)
             {
                 _isGiggling = false;
-                // Track timing and properties even when muted/hidden (for delay calculation)
+                // Track timing and properties even when hidden (for delay calculation)
                 _lastSpeechEndTime = DateTime.Now;
                 _lastSpeechSource = source;
                 _lastSpeechLength = text.Length;
@@ -479,25 +481,29 @@ namespace ConditioningControlPanel
             {
                 if (!_isGiggling) return; // a newer bubble took over during the lead-in
 
-                // Play sound for the speech bubble
-                if (phraseAudioPath != null)
+                // Audio only when NOT muted — mute silences the voice but keeps the text bubble (#445).
+                if (!_isMuted)
                 {
-                    // Custom phrase audio overrides default sounds. Bark voicelines play through the
-                    // companion-voice path (MasterVolume-gated), not the SubAudio-gated phrase path.
-                    if (barkVoice)
-                        PlayBarkVoice(phraseAudioPath);
-                    else
-                        PlayPhraseAudio(phraseAudioPath);
-                }
-                else if (playSound)
-                {
-                    // Explicitly requested giggle sound (AI responses, etc.)
-                    PlayGiggleSound();
-                }
-                else if (source != SpeechSource.AI)
-                {
-                    // Fallback sound for regular bubbles (skip for AI thinking — response will play its own)
-                    PlayFallbackBubbleSound();
+                    // Play sound for the speech bubble
+                    if (phraseAudioPath != null)
+                    {
+                        // Custom phrase audio overrides default sounds. Bark voicelines play through the
+                        // companion-voice path (MasterVolume-gated), not the SubAudio-gated phrase path.
+                        if (barkVoice)
+                            PlayBarkVoice(phraseAudioPath);
+                        else
+                            PlayPhraseAudio(phraseAudioPath);
+                    }
+                    else if (playSound)
+                    {
+                        // Explicitly requested giggle sound (AI responses, etc.)
+                        PlayGiggleSound();
+                    }
+                    else if (source != SpeechSource.AI)
+                    {
+                        // Fallback sound for regular bubbles (skip for AI thinking — response will play its own)
+                        PlayFallbackBubbleSound();
+                    }
                 }
 
                 // Type the text out char-by-char for every bubble (AI replies fast, everything else
