@@ -484,8 +484,12 @@ namespace ConditioningControlPanel
                 }
             });
             
-            // Check if ramp is complete and should end session
-            if (progress >= 1.0 && settings.EndSessionOnRampComplete)
+            // Check if ramp is complete and should end session. NOT while a preset session is active —
+            // the preset owns its own master timer and must run its full length; letting a shorter ramp
+            // call StopEngine() here tore down the manual services but left the preset timer counting
+            // down (#444). The visual-ramp branches above are already guarded with !sessionActive for the
+            // same reason; this stop branch was the one that wasn't.
+            if (progress >= 1.0 && settings.EndSessionOnRampComplete && !sessionActive)
             {
                 App.Logger?.Information("Ramp complete - ending session");
                 Dispatcher.Invoke(() =>

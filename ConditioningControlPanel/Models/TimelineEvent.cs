@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 
 namespace ConditioningControlPanel.Models
 {
@@ -68,6 +69,15 @@ namespace ConditioningControlPanel.Models
                 {
                     if (value is T typedValue)
                         return typedValue;
+                    // After a save/reload the Settings dictionary is Dictionary<string, object> whose
+                    // values deserialize as JsonElement (System.Text.Json). Convert.ChangeType can't
+                    // handle those, so materialize the primitive directly — otherwise every persisted
+                    // per-event setting (perHour, opacity, clickable, …) would silently reset (#429).
+                    if (value is System.Text.Json.JsonElement je)
+                    {
+                        var materialized = je.Deserialize<T>();
+                        return materialized is null ? defaultValue : materialized;
+                    }
                     return (T)Convert.ChangeType(value, typeof(T));
                 }
                 catch
