@@ -199,6 +199,7 @@ namespace ConditioningControlPanel
             BambiTakeoverTab.ChkAutonomyBubbleCount.IsChecked = s.AutonomyCanTriggerBubbleCount;
             BambiTakeoverTab.ChkAutonomyVoice.IsChecked = s.AutonomyCanTriggerVoiceCommand && s.MicConsentGiven;
             BambiTakeoverTab.ChkAutonomyResumeOnStartup.IsChecked = s.AutonomyResumeOnStartup;
+            BambiTakeoverTab.ChkShowTakeoverCountdown.IsChecked = s.ShowTakeoverCountdownBar;
             BambiTakeoverTab.ChkSpeechWakeWord.IsChecked = s.SpeechWakeWordEnabled && s.MicConsentGiven;
             BambiTakeoverTab.TxtSpeechWakeWords.Text = string.IsNullOrWhiteSpace(s.SpeechWakeWords) ? "hey bambi" : s.SpeechWakeWords;
             BambiTakeoverTab.ChkSpeechPushToTalk.IsChecked = s.SpeechPushToTalkEnabled && s.MicConsentGiven;

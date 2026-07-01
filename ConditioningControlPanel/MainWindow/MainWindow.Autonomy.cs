@@ -379,6 +379,15 @@ namespace ConditioningControlPanel
             App.Settings?.Save();
         }
 
+        internal void ChkShowTakeoverCountdown_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.ShowTakeoverCountdownBar = BambiTakeoverTab.ChkShowTakeoverCountdown.IsChecked == true;
+            App.Settings?.Save();
+        }
+
         internal void ChkSpeechWakeWord_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading) return;

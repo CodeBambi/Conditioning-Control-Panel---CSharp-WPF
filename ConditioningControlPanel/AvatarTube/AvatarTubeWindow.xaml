@@ -544,6 +544,38 @@
                 </Grid>
             </Border>
 
+            <!-- Takeover countdown bar - thin pink bar under the avatar, drains toward the next
+                 random Takeover action. Shown only while Takeover is running (driven in code-behind).
+                 Fill is scaled horizontally via TakeoverCountdownScale (1.0 = full, 0 = about to fire). -->
+            <Border x:Name="TakeoverCountdownBar"
+                    Panel.ZIndex="5"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,116,246"
+                    Width="120" Height="9"
+                    CornerRadius="4"
+                    Background="#EE14141C"
+                    BorderBrush="#FFFF1493"
+                    BorderThickness="1"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False">
+                <!-- Fill is left-anchored and horizontally scaled (1.0 full -> 0 empty), so the
+                     blackish track shows through the drained portion like a real progress bar. -->
+                <Border x:Name="TakeoverCountdownFill"
+                        HorizontalAlignment="Left"
+                        Width="116" Height="5"
+                        CornerRadius="2"
+                        Background="#FFF7A8D8"
+                        RenderTransformOrigin="0,0.5">
+                    <Border.RenderTransform>
+                        <ScaleTransform x:Name="TakeoverCountdownScale" ScaleX="1" ScaleY="1"/>
+                    </Border.RenderTransform>
+                    <Border.Effect>
+                        <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="6" ShadowDepth="0" Opacity="0.6"/>
+                    </Border.Effect>
+                </Border>
+            </Border>
+
             <!-- Title/Level Box with Avatar Selection - Z-Index 4 to be above everything -->
             <Border x:Name="TitleBox"
                     Panel.ZIndex="4"

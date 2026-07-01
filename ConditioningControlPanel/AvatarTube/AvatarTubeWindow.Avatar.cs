@@ -34,6 +34,98 @@ namespace ConditioningControlPanel
         private int _maxUnlockedSet = 1; // Highest avatar set unlocked based on level
         private bool _useAnimatedAvatar = false; // Whether to use animated GIF
 
+        #region Takeover countdown bar
+        // A thin pink bar under the avatar that drains toward the next random Takeover action.
+        // The ticker only runs while Takeover is enabled (gated on AutonomyService.EnabledChanged),
+        // so there is no always-on render loop when the feature is idle — see the freeze-cluster notes.
+        private DispatcherTimer? _takeoverCountdownTimer;
+
+        internal void InitTakeoverCountdownBar()
+        {
+            try
+            {
+                if (App.Autonomy == null) return;
+                // Idempotent: safe if the window is re-initialised.
+                App.Autonomy.EnabledChanged -= OnAutonomyEnabledChangedForBar;
+                App.Autonomy.EnabledChanged += OnAutonomyEnabledChangedForBar;
+                Closed -= OnClosedStopCountdownBar;
+                Closed += OnClosedStopCountdownBar;
+                if (App.Autonomy.IsEnabled) StartCountdownTicker();
+            }
+            catch { }
+        }
+
+        private void OnClosedStopCountdownBar(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (App.Autonomy != null) App.Autonomy.EnabledChanged -= OnAutonomyEnabledChangedForBar;
+                _takeoverCountdownTimer?.Stop();
+            }
+            catch { }
+        }
+
+        private void OnAutonomyEnabledChangedForBar(object? sender, bool enabled)
+        {
+            try
+            {
+                if (!Dispatcher.CheckAccess())
+                {
+                    Dispatcher.BeginInvoke(new Action(() => OnAutonomyEnabledChangedForBar(sender, enabled)));
+                    return;
+                }
+                if (enabled)
+                {
+                    StartCountdownTicker();
+                }
+                else
+                {
+                    _takeoverCountdownTimer?.Stop();
+                    if (TakeoverCountdownBar != null) TakeoverCountdownBar.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch { }
+        }
+
+        private void StartCountdownTicker()
+        {
+            if (_takeoverCountdownTimer == null)
+            {
+                _takeoverCountdownTimer = new DispatcherTimer(DispatcherPriority.Render)
+                {
+                    Interval = TimeSpan.FromMilliseconds(100)
+                };
+                _takeoverCountdownTimer.Tick += TakeoverCountdown_Tick;
+            }
+            _takeoverCountdownTimer.Start();
+        }
+
+        private void TakeoverCountdown_Tick(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (TakeoverCountdownBar == null) return;
+
+                var show = App.Settings?.Current?.ShowTakeoverCountdownBar == true
+                           && App.Autonomy?.IsEnabled == true;
+                double? frac = show ? App.Autonomy?.NextRandomFireFraction : null;
+
+                if (frac == null)
+                {
+                    if (TakeoverCountdownBar.Visibility != Visibility.Collapsed)
+                        TakeoverCountdownBar.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                if (TakeoverCountdownBar.Visibility != Visibility.Visible)
+                    TakeoverCountdownBar.Visibility = Visibility.Visible;
+                if (TakeoverCountdownScale != null)
+                    TakeoverCountdownScale.ScaleX = frac.Value;
+            }
+            catch { }
+        }
+        #endregion
+
         // ── Emotive portrait avatar (mod-agnostic) ───────────────────────────────────────
         // Active only when the active mod ships an avatar_manifest.json (Sissy first). When on, the
         // skins ARE the avatar-set selector's choices — each the same 20-emotion portrait collection

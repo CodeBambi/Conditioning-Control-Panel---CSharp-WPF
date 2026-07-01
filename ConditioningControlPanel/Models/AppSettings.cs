@@ -3188,6 +3188,17 @@ namespace ConditioningControlPanel.Models
             set { _autonomyModeEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _showTakeoverCountdownBar = true;
+        /// <summary>
+        /// Show a thin pink countdown bar under the avatar that drains toward the next
+        /// random Takeover action. On by default; hidden via the Takeover tab toggle.
+        /// </summary>
+        public bool ShowTakeoverCountdownBar
+        {
+            get => _showTakeoverCountdownBar;
+            set { _showTakeoverCountdownBar = value; OnPropertyChanged(); }
+        }
+
         private bool _autonomyConsentGiven = false;
         /// <summary>
         /// Whether the user has given consent for autonomous behavior.

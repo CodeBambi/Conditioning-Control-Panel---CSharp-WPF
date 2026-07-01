@@ -227,6 +227,30 @@ namespace ConditioningControlPanel.Services
         public bool IsIdleTimerRunning => _idleTimer?.IsEnabled == true;
         public bool IsRandomTimerRunning => _randomTimer?.IsEnabled == true;
 
+        // Countdown-bar support: remember when the current random interval will fire and how
+        // long that interval was, so the UI can render "fraction of time left" each frame.
+        private DateTime? _nextRandomFireTime;
+        private double _lastRandomIntervalSeconds;
+
+        /// <summary>
+        /// Fraction (0..1) of the current random-interval window still remaining before the next
+        /// Takeover action fires. 1.0 = just scheduled, 0.0 = about to fire. Null when the random
+        /// timer isn't running (nothing to count down to). Drives the avatar countdown bar.
+        /// </summary>
+        public double? NextRandomFireFraction
+        {
+            get
+            {
+                if (_randomTimer?.IsEnabled != true) return null;
+                if (_nextRandomFireTime == null || _lastRandomIntervalSeconds <= 0) return null;
+                var remaining = (_nextRandomFireTime.Value - DateTime.Now).TotalSeconds;
+                var frac = remaining / _lastRandomIntervalSeconds;
+                if (frac < 0) return 0;
+                if (frac > 1) return 1;
+                return frac;
+            }
+        }
+
         /// <summary>
         /// True when autonomy is currently executing an action.
         /// Used by XPContext to give Cult Bunny the +50% bonus.
@@ -675,6 +699,10 @@ namespace ConditioningControlPanel.Services
             };
             _randomTimer.Tick += OnRandomTick;
             _randomTimer.Start();
+
+            // Anchor for the avatar countdown bar (DispatcherTimer exposes no "time remaining").
+            _lastRandomIntervalSeconds = actualSeconds;
+            _nextRandomFireTime = DateTime.Now.AddSeconds(actualSeconds);
 
             App.Logger?.Information("AutonomyService: Random timer scheduled - next tick in {Seconds:F0}s ({Mode})",
                 actualSeconds, modeInfo);

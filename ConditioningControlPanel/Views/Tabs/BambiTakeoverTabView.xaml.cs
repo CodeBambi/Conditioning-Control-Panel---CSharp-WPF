@@ -47,6 +47,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkAutonomyResume_Changed(sender, e);
         }
+        private void ChkShowTakeoverCountdown_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkShowTakeoverCountdown_Changed(sender, e);
+        }
         private void ChkSpeechWakeWord_Changed(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)
