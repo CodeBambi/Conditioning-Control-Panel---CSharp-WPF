@@ -22,8 +22,32 @@ namespace ConditioningControlPanel.Services
         private static string PathFor(string seasonKey) =>
             Path.Combine(SnapshotDir, $"{seasonKey}.json");
 
-        /// <summary>Current season key, "yyyy-MM" UTC.</summary>
-        public static string CurrentSeasonKey => DateTime.UtcNow.ToString("yyyy-MM");
+        /// <summary>
+        /// Current season key, "yyyy-MM". The season boundary is SERVER-authoritative: the
+        /// server rotates the season (and fires the level_reset) on its own schedule, which is
+        /// NOT guaranteed to align with the local wall-clock 1st-of-month. Keying off wall-clock
+        /// made the local stats bucket roll prematurely on the 1st — before the server ended the
+        /// season — discarding the real month's totals and capturing a fresh, tiny bucket that
+        /// then got mislabeled as the prior month (the "June card shows 10 July minutes" bug).
+        /// So prefer the server's CurrentSeason; fall back to wall-clock only when it's unknown
+        /// (not logged in / invite users) or not in yyyy-MM form.
+        /// </summary>
+        public static string CurrentSeasonKey
+        {
+            get
+            {
+                var server = App.Settings?.Current?.CurrentSeason;
+                if (!string.IsNullOrWhiteSpace(server) && LooksLikeMonthKey(server!))
+                    return server!;
+                return DateTime.UtcNow.ToString("yyyy-MM");
+            }
+        }
+
+        /// <summary>True if the string is a "yyyy-MM" month key (so it's safe to compare/order with our keys).</summary>
+        private static bool LooksLikeMonthKey(string k) =>
+            k.Length == 7 && k[4] == '-'
+            && int.TryParse(k.Substring(0, 4), out _)
+            && int.TryParse(k.Substring(5, 2), out _);
 
         // ---------- live counter mutations (call from feature hook points) ----------
 
@@ -118,13 +142,18 @@ namespace ConditioningControlPanel.Services
                     ? SeasonNumbering.Previous(newSeasonKey)
                     : s.SeasonStatsSeason!;
 
-                // If the "ended" season IS the one we're rolling into, nothing actually ended — the live
-                // bucket already belongs to newSeasonKey (e.g. a duplicate/replayed level_reset on an
-                // upgrade launch after June already rolled to July). Snapshotting here produced a spurious
-                // "Season N ended" card for the in-progress month and wiped its counters (#450).
-                if (string.Equals(ended, newSeasonKey, StringComparison.Ordinal))
+                // Only ever roll FORWARD. If the target season isn't strictly after the ended bucket,
+                // nothing actually ended, so refuse to snapshot/roll:
+                //   - equal  -> the live bucket already belongs to newSeasonKey (a duplicate/replayed
+                //               level_reset on an upgrade launch). Snapshotting produced a spurious
+                //               "Season N ended" card for the in-progress month and wiped it (#450).
+                //   - earlier -> a stale/desynced backward key (e.g. the local bucket rolled to July on
+                //               wall-clock but the server season key is still June). Rolling backward
+                //               would capture the wrong/empty counters and clobber the bucket.
+                // Ordinal string compare is chronological for zero-padded yyyy-MM keys.
+                if (string.CompareOrdinal(newSeasonKey, ended) <= 0)
                 {
-                    App.Logger?.Information("SeasonRecap: skipping rollover — already on season {Season}", newSeasonKey);
+                    App.Logger?.Information("SeasonRecap: skipping rollover — target {New} is not after ended {Ended}", newSeasonKey, ended);
                     return null;
                 }
 

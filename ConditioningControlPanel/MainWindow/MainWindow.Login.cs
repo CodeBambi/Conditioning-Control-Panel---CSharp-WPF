@@ -45,7 +45,12 @@ namespace ConditioningControlPanel
         /// </summary>
         private void OpenUnifiedLoginDialog()
         {
-            var previousUnifiedId = App.UnifiedUserId ?? _lastKnownUnifiedId;
+            // Fall back to the startup snapshot: an expired session can null both
+            // App.UnifiedUserId and _lastKnownUnifiedId (which is only set on an explicit
+            // logout, not on token expiry). Without the snapshot, re-logging into the SAME
+            // account after "session expired" reads previousUnifiedId as empty and the wipe
+            // below fires, resetting progression to level 1. (data-loss bug)
+            var previousUnifiedId = App.UnifiedUserId ?? _lastKnownUnifiedId ?? App.StartupUnifiedId;
 
             var loginDialog = new LoginDialog
             {
@@ -57,9 +62,17 @@ namespace ConditioningControlPanel
             {
                 var result = loginDialog.Result;
 
-                // Detect same-account re-login (e.g. re-linking Patreon on same account)
-                var isSameAccount = !string.IsNullOrEmpty(previousUnifiedId)
-                    && previousUnifiedId == App.UnifiedUserId;
+                // Only wipe local progression when we can POSITIVELY confirm this is a
+                // different account (both ids known and they differ). If the previous id is
+                // unknown — e.g. an expired session cleared it — treat it as the same account
+                // and DO NOT wipe; the post-login cloud sync is authoritative and reconciles
+                // via take-higher, so no progress is lost. Flipping the default from
+                // "wipe unless proven same" to "wipe only when proven different" closes the
+                // data-loss hole where a same-account re-login reset everyone to level 1.
+                var isDifferentAccount = !string.IsNullOrEmpty(previousUnifiedId)
+                    && !string.IsNullOrEmpty(App.UnifiedUserId)
+                    && previousUnifiedId != App.UnifiedUserId;
+                var isSameAccount = !isDifferentAccount;
 
                 // Update all UI
                 UpdateQuickLoginUI();

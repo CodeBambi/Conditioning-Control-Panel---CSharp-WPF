@@ -381,6 +381,15 @@ namespace ConditioningControlPanel
         public static string? UnifiedUserId { get; set; }
 
         /// <summary>
+        /// Snapshot of the UnifiedUserId as restored from settings at startup, captured
+        /// BEFORE session validation can null it out on a token/session failure. Used by
+        /// the re-login flow to tell "same account re-login" from "different account" even
+        /// after an expired session cleared the live UnifiedUserId — so re-logging into the
+        /// same account never gets misclassified as a new account and wipes progression.
+        /// </summary>
+        public static string? StartupUnifiedId { get; private set; }
+
+        /// <summary>
         /// User identifier for server communication. Only the unified ID is valid —
         /// fallback IDs like "patreon:email" don't match any server key.
         /// </summary>
@@ -1034,9 +1043,6 @@ namespace ConditioningControlPanel
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "wallpapers"));
             Directory.CreateDirectory(Path.Combine(UserDataPath, "Spirals"));
 
-            // Migrate assets from old location (install dir) to new location (user data) in background
-            _ = Task.Run(MigrateAssetsToUserFolder);
-
             // Create Resources directories (these are bundled with app, not user content)
             var resourcesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
             Directory.CreateDirectory(resourcesPath);
@@ -1063,10 +1069,22 @@ namespace ConditioningControlPanel
                 Logger?.Warning(ex, "Settings migration failed (non-fatal, defaults apply)");
             }
 
+            // Migrate assets from old location (install dir) to new location (user data) in background.
+            // MUST run after Settings is initialized: the migration both READS the "already migrated"
+            // guard and WRITES the completion flag, and if Settings.Current is still null (as it was
+            // when this fired at the top of OnStartup, before `Settings = new SettingsService()`), the
+            // flag never persists and the whole library gets re-copied to the system drive every launch.
+            _ = Task.Run(MigrateAssetsToUserFolder);
+
             // Restore UnifiedUserId from settings (persisted from previous session)
             if (!string.IsNullOrEmpty(Settings?.Current?.UnifiedId))
             {
                 UnifiedUserId = Settings.Current.UnifiedId;
+                // Persist a snapshot for the re-login same-account check. ValidateRestoredSessionAsync
+                // (below) may null UnifiedUserId + settings.UnifiedId on a token/session failure, which
+                // would otherwise make a later re-login of THIS SAME account look brand new and wipe
+                // local progression back to level 1.
+                StartupUnifiedId = UnifiedUserId;
                 Logger?.Information("Restored UnifiedUserId from settings: {Id}", UnifiedUserId);
             }
 
@@ -2520,6 +2538,17 @@ Application State:
         {
             try
             {
+                // One-time migration only. Once it has run, never copy again — otherwise a user
+                // who keeps their library in the install dir (on another drive) and deletes the
+                // %APPDATA% copy to reclaim space gets the whole ~10GB re-copied to the system
+                // drive on every launch, since the per-file "destination exists?" guard passes
+                // for freshly-deleted files. (asset re-copy / disk-fill bug)
+                if (Settings?.Current?.HasMigratedAssetsToUserFolder == true)
+                {
+                    Logger?.Information("Asset migration skipped — already completed once.");
+                    return;
+                }
+
                 // If the user has chosen a custom assets folder, they manage their own
                 // assets — don't keep copying files into the default AppData location on
                 // every launch (bug #227). The migration only ever exists to rescue
@@ -2562,6 +2591,15 @@ Application State:
                 if (migratedCount > 0)
                 {
                     Logger?.Information("Migrated {Count} asset files to user data folder", migratedCount);
+                }
+
+                // Mark migration complete so it never runs again. This is what stops the
+                // repeated full re-copy after the user deletes the %APPDATA% copy to free space.
+                if (Settings?.Current != null)
+                {
+                    Settings.Current.HasMigratedAssetsToUserFolder = true;
+                    Settings.Save();
+                    Logger?.Information("Asset migration complete ({Count} files copied) — flag set, will not run again.", migratedCount);
                 }
             }
             catch (Exception ex)

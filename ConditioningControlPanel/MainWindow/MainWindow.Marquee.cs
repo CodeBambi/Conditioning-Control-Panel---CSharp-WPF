@@ -210,7 +210,11 @@ namespace ConditioningControlPanel
                 if (_seasonRecapShown) return;
                 if (App.Settings?.Current == null) return;
 
-                var currentSeason = DateTime.UtcNow.ToString("yyyy-MM");
+                // Season boundary is server-authoritative (SeasonRecapService.CurrentSeasonKey prefers the
+                // server's CurrentSeason over wall-clock). Using wall-clock here made the recap fire on the
+                // local 1st-of-month before the server actually ended the season, rolling the bucket early
+                // and losing the real month's totals.
+                var currentSeason = Services.SeasonRecapService.CurrentSeasonKey;
                 var lastSeasonSeen = App.Settings.Current.LastSeasonResetSeen ?? "";
                 var highestLevel = App.Settings.Current.HighestLevelEver;
                 var resetPending = App.Settings.Current.SeasonResetPending;
@@ -218,14 +222,19 @@ namespace ConditioningControlPanel
                 // Brand-new users (never leveled up) skip this. They'll see it once they progress.
                 if (highestLevel < 2) return;
 
-                var monthRolled = lastSeasonSeen != currentSeason;
+                // Seasons only ever move FORWARD. Fire only when the current season is strictly AFTER the
+                // last one we showed a recap for — never on an equal or backward (desynced) key. Ordinal
+                // compare is chronological for zero-padded yyyy-MM; an empty lastSeasonSeen (first run) is
+                // "before" any real key, so first-timers still fire.
+                var monthRolled = string.CompareOrdinal(currentSeason, lastSeasonSeen) > 0;
 
                 // A replayed server level_reset can leave SeasonResetPending set on an upgrade launch even
-                // when the season didn't actually change. Only treat it as a real pending reset if the live
-                // stats bucket is from a DIFFERENT season; otherwise clear the stale latch and skip, so we
-                // don't fire a spurious "Season N ended" recap for the in-progress month (#450).
+                // when the season didn't actually change. Only treat it as a real pending reset if the current
+                // (server) season is strictly ahead of the live stats bucket; otherwise clear the stale latch
+                // and skip, so we don't fire a spurious "Season N ended" recap for the in-progress month (#450)
+                // or a backward one during a wall-clock/server desync.
                 var statsSeason = App.Settings.Current.SeasonStatsSeason ?? "";
-                var reallyPending = resetPending && statsSeason != currentSeason;
+                var reallyPending = resetPending && string.CompareOrdinal(currentSeason, statsSeason) > 0;
                 if (!monthRolled && !reallyPending)
                 {
                     if (resetPending)
