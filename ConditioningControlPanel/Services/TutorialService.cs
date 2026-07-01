@@ -17,6 +17,42 @@ namespace ConditioningControlPanel.Services
             try { (w as DeeperEditorWindow)?.ExpandMetadataDrawer(); } catch { }
         };
     }
+
+    // Companion tutorial: the timing / triggers / phrases steps target controls that live inside the
+    // "BEHAVIOR & TRIGGERS" section, which is a default-collapsed Expander. Without expanding it first,
+    // the spotlight lands on the collapsed header (its inner controls aren't realized), so steps 12-14
+    // highlighted the wrong thing (#443). Expand it via PrepareTargetWindowAction before those steps.
+    internal static class CompanionTutorialPrep
+    {
+        public static readonly Action<Window> ExpandBehaviourSection = w =>
+        {
+            try
+            {
+                var ex = FindExpander(w, "SectionBehaviour");
+                if (ex != null) ex.IsExpanded = true;
+            }
+            catch { }
+        };
+
+        // Namescope-agnostic visual-tree search (the section lives inside the CompanionTabView
+        // UserControl, so Window.FindName wouldn't reach it). The Expander element itself is realized
+        // even while collapsed, so this finds it and flips IsExpanded; the overlay's UpdateLayout +
+        // bounds-retry then pick up the now-visible inner control.
+        private static System.Windows.Controls.Expander? FindExpander(DependencyObject? root, string name)
+        {
+            if (root == null) return null;
+            int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is System.Windows.Controls.Expander ex && ex.Name == name)
+                    return ex;
+                var found = FindExpander(child, name);
+                if (found != null) return found;
+            }
+            return null;
+        }
+    }
     /// <summary>
     /// Types of tutorials available in the app
     /// </summary>
@@ -864,6 +900,7 @@ namespace ConditioningControlPanel.Services
                               "raise the bubble duration.",
                 RequiresTab = "companion",
                 TargetElementName = "SliderIdleIntervalCompanion",
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandBehaviourSection,
                 TextPosition = TutorialStepPosition.Left
             });
             steps.Add(new TutorialStep
@@ -877,6 +914,7 @@ namespace ConditioningControlPanel.Services
                               "where you can add or remove phrases.",
                 RequiresTab = "companion",
                 TargetElementName = "ChkTriggerModeCompanion",
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandBehaviourSection,
                 TextPosition = TutorialStepPosition.Left
             });
             steps.Add(new TutorialStep
@@ -891,6 +929,7 @@ namespace ConditioningControlPanel.Services
                               "• Hypnotube Links — comma-separated video URLs she's allowed to suggest (2000-char cap).",
                 RequiresTab = "companion",
                 TargetElementName = "BtnManagePhrases",
+                PrepareTargetWindowAction = CompanionTutorialPrep.ExpandBehaviourSection,
                 TextPosition = TutorialStepPosition.Left
             });
             steps.Add(new TutorialStep
