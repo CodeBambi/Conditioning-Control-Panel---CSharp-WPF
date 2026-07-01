@@ -219,7 +219,22 @@ namespace ConditioningControlPanel
                 if (highestLevel < 2) return;
 
                 var monthRolled = lastSeasonSeen != currentSeason;
-                if (!monthRolled && !resetPending) return;
+
+                // A replayed server level_reset can leave SeasonResetPending set on an upgrade launch even
+                // when the season didn't actually change. Only treat it as a real pending reset if the live
+                // stats bucket is from a DIFFERENT season; otherwise clear the stale latch and skip, so we
+                // don't fire a spurious "Season N ended" recap for the in-progress month (#450).
+                var statsSeason = App.Settings.Current.SeasonStatsSeason ?? "";
+                var reallyPending = resetPending && statsSeason != currentSeason;
+                if (!monthRolled && !reallyPending)
+                {
+                    if (resetPending)
+                    {
+                        App.Settings.Current.SeasonResetPending = false;
+                        App.Settings.Save();
+                    }
+                    return;
+                }
 
                 _seasonRecapShown = true;
                 App.Logger?.Information("Presenting season recap (monthRolled={Month}, resetPending={Pending}, last={Old}, current={New}, highestLevel={Highest})",

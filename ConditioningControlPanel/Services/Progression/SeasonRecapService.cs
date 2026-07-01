@@ -118,6 +118,16 @@ namespace ConditioningControlPanel.Services
                     ? SeasonNumbering.Previous(newSeasonKey)
                     : s.SeasonStatsSeason!;
 
+                // If the "ended" season IS the one we're rolling into, nothing actually ended — the live
+                // bucket already belongs to newSeasonKey (e.g. a duplicate/replayed level_reset on an
+                // upgrade launch after June already rolled to July). Snapshotting here produced a spurious
+                // "Season N ended" card for the in-progress month and wiped its counters (#450).
+                if (string.Equals(ended, newSeasonKey, StringComparison.Ordinal))
+                {
+                    App.Logger?.Information("SeasonRecap: skipping rollover — already on season {Season}", newSeasonKey);
+                    return null;
+                }
+
                 var snap = BuildSnapshot(ended, s);
 
                 if (HasMeaningfulData(snap))

@@ -590,13 +590,10 @@ namespace ConditioningControlPanel.Services.Speech
 
         private static int ResolveDeviceNumber()
         {
-            try
-            {
-                var idx = App.Settings?.Current?.SpeechInputDeviceIndex ?? -1;
-                if (idx >= 0 && idx < WaveInEvent.DeviceCount) return idx;
-            }
-            catch { }
-            return 0; // WaveIn device 0 == Windows default capture device.
+            // Prefer name-match over the raw ordinal (robust to device reshuffles) — shared with the
+            // Vosk path so both wake engines open the same mic (#441b).
+            var s = App.Settings?.Current;
+            return SpeechService.ResolveDeviceNumber(s?.SpeechInputDeviceIndex ?? -1, s?.SpeechInputDeviceName);
         }
 
         public void Dispose()

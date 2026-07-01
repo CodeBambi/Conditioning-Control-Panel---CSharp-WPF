@@ -117,6 +117,10 @@ namespace ConditioningControlPanel
             {
                 await StopRemoteControl();
             }
+
+            // Keep the dashboard Remote chip's dot honest no matter where the toggle was flipped
+            // (Remote tab or dashboard chip) — previously enabling from the tab left the dot stale (#440).
+            try { RefreshPremiumRail(); } catch { }
         }
 
         private string GetSelectedRemoteTier()

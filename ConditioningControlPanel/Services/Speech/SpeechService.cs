@@ -492,10 +492,33 @@ namespace ConditioningControlPanel.Services.Speech
 
         private int ResolveDeviceNumber()
         {
-            var idx = SettingInt("SpeechInputDeviceIndex", -1);
+            var s = App.Settings?.Current;
+            return ResolveDeviceNumber(s?.SpeechInputDeviceIndex ?? -1, s?.SpeechInputDeviceName);
+        }
+
+        /// <summary>
+        /// Resolve the WaveIn device number to open, preferring a match on the saved device NAME (robust
+        /// to NAudio ordinal reshuffling when virtual audio devices appear/disappear — the "voice worked
+        /// yesterday, not today" failure, #441b), then the saved ordinal if still valid, else 0 (Windows
+        /// default). Never throws. Shared by <see cref="SherpaWakeService"/> so both wake engines agree.
+        /// </summary>
+        public static int ResolveDeviceNumber(int savedIndex, string? savedName)
+        {
             try
             {
-                if (idx >= 0 && idx < WaveInEvent.DeviceCount) return idx;
+                if (!string.IsNullOrWhiteSpace(savedName))
+                {
+                    int count = WaveInEvent.DeviceCount;
+                    for (int i = 0; i < count; i++)
+                    {
+                        string name;
+                        try { name = WaveInEvent.GetCapabilities(i).ProductName; }
+                        catch { name = ""; }
+                        if (string.Equals(name, savedName, StringComparison.OrdinalIgnoreCase))
+                            return i;
+                    }
+                }
+                if (savedIndex >= 0 && savedIndex < WaveInEvent.DeviceCount) return savedIndex;
             }
             catch { }
             return 0; // WaveIn device 0 == Windows default capture device.

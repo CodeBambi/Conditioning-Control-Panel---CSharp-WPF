@@ -3546,6 +3546,18 @@ namespace ConditioningControlPanel.Models
             set { _speechInputDeviceIndex = value; OnPropertyChanged(); }
         }
 
+        private string _speechInputDeviceName = "";
+        /// <summary>WaveIn capture device NAME (ProductName) for the chosen mic. Preferred over the raw
+        /// ordinal when reopening the mic, because NAudio device indices reshuffle when virtual audio
+        /// devices come and go — a stale ordinal then silently points at a dead input ("voice worked
+        /// yesterday, not today", #441b). Empty = fall back to the ordinal / system default.</summary>
+        [JsonProperty]
+        public string SpeechInputDeviceName
+        {
+            get => _speechInputDeviceName;
+            set { _speechInputDeviceName = value ?? ""; OnPropertyChanged(); }
+        }
+
         private double _speechMatchThreshold = 0.62;
         /// <summary>Minimum fuzzy similarity (0..1) for a spoken phrase to count as a match.</summary>
         [JsonProperty]
@@ -4636,6 +4648,15 @@ namespace ConditioningControlPanel.Models
         // false too but the toast self-suppresses once they visit the tab.
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool HasSeenBlinkTrainerFlagship { get; set; }
+
+        /// <summary>
+        /// Set once the one-time asset migration (install-dir assets -> %APPDATA% user folder)
+        /// has completed. Without this flag the migration re-copies the entire library on every
+        /// launch: its only re-copy guard was a per-file "destination exists?" check, so a user
+        /// who deleted the %APPDATA% copy to reclaim disk space got all ~10GB copied again next
+        /// launch, repeatedly filling the system drive.
+        /// </summary>
+        public bool HasMigratedAssetsToUserFolder { get; set; }
 
         #endregion
 

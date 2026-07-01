@@ -2206,11 +2206,20 @@ namespace ConditioningControlPanel.Services
             // spamming phantom mouth/tongue gestures (#367/#371). Gate each
             // absolute path on the floor genuinely exceeding the baseline; when
             // it doesn't, fall back to the relative ratio alone.
-            bool absoluteOpenUsable  = MarAbsoluteOpen  > _marBaseline;
+            // Per-user sensitivity (Webcam settings slider, 0..1, default 0.5) scales the ENTER-open
+            // thresholds: below 0.5 raises them so facial hair / naturally-parted lips stop producing
+            // phantom mouth-open fires (#432); above 0.5 lowers them for the under-detected. 0.5 is
+            // neutral. The close/hysteresis floors are left fixed (they stay below the scaled open).
+            double sensitivity = Math.Clamp(App.Settings?.Current?.WebcamSensitivity ?? 0.5, 0.0, 1.0);
+            double openScale = 1.0 + (0.5 - sensitivity) * 0.8;   // 1.4 @0.0 → 1.0 @0.5 → 0.6 @1.0
+            double openRatio = MarOpenRatio * openScale;
+            double absoluteOpen = MarAbsoluteOpen * openScale;
+
+            bool absoluteOpenUsable  = absoluteOpen  > _marBaseline;
             bool absoluteCloseUsable = MarAbsoluteClose > _marBaseline;
             bool nowOpen = _mouthOpen
                 ? (mar > MarCloseRatio * _marBaseline || (absoluteCloseUsable && mar > MarAbsoluteClose))
-                : (mar > MarOpenRatio  * _marBaseline || (absoluteOpenUsable  && mar > MarAbsoluteOpen));
+                : (mar > openRatio  * _marBaseline || (absoluteOpenUsable  && mar > absoluteOpen));
 
             if (nowOpen && !_mouthOpen)
             {
