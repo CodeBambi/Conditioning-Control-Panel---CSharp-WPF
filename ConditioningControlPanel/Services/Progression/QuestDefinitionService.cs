@@ -55,7 +55,7 @@ public class QuestDefinitionService : IDisposable
         { 4, "Airhead April" },
         { 5, "Mooing May" },
         { 6, "Juicy June" },
-        { 7, "Jizzly July" },
+        { 7, "Jelly July" },
         { 8, "Ass-up August" },
         { 9, "Sissygasm September" },
         { 10, "Obey-tober" },
