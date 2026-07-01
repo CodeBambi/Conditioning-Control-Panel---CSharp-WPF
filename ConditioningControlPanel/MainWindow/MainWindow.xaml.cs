@@ -246,22 +246,11 @@ namespace ConditioningControlPanel
                 HookBlinkTrainerService();
             };
             Closing += (_, _) => Services.GlobalHotkeyService.Unregister();
-            // Title-bar X is an app-exit gesture. ShutdownMode=OnLastWindowClose can't tear us down
-            // while an ownerless window is still open (a DETACHED avatar tube keeps itself alive, and
-            // pooled flash/subliminal/overlay windows stay Show()n-then-Hidden) — so the process
-            // lingers headless. Mirror the tray Exit's explicit shutdown so everything dies with us.
-            Closing += (_, e) =>
-            {
-                if (_exitRequested) return;                                  // tray/other path already handling exit
-                if (App.Lockdown?.IsActive == true) { e.Cancel = true; return; }   // can't escape lockdown via X
-                _exitRequested = true;
-                try { if (_isRunning) StopEngine(); } catch { }
-                try { App.KillAllAudio(); } catch { }
-                try { App.Overlay?.Dispose(); } catch { }
-                try { EnsureSessionRestoredForExit(); } catch { }
-                try { SaveSettings(); } catch { }
-                Application.Current.Shutdown();
-            };
+            // The title-bar X now MINIMIZES TO TRAY (see OnClosing) instead of quitting — users expect
+            // the app to keep running in the background (#446/#438). Real exit is the tray-menu Exit and
+            // the in-app Exit button, which both set _exitRequested and call Application.Current.Shutdown()
+            // so the app can't linger headless behind ownerless windows (the original 3219fd01 concern).
+            // Lockdown still blocks the X close in OnClosing.
 
             // Set version dynamically from assembly
             var version = Services.UpdateService.GetCurrentVersion();

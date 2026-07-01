@@ -1643,6 +1643,11 @@ namespace ConditioningControlPanel.Services
             // NOTE: We no longer disable spiral - let both overlays coexist if needed
             settings.PinkFilterEnabled = true;
             settings.PinkFilterOpacity = Math.Max(30, baseOpacity + 15);
+            // The setter clamps to 0..50, so read back what it actually became. On restore we revert
+            // ONLY if the value is still this — i.e. the user didn't move the slider during the pulse.
+            // Otherwise frequent pulses keep snapping the user's chosen opacity back up, so it "can't
+            // be lowered, always goes to 50" (#441a).
+            var appliedOpacity = settings.PinkFilterOpacity;
 
             App.Logger?.Information("AutonomyService: Pink filter pulse - enabling overlay (wasRunning={WasRunning})",
                 App.Overlay.IsRunning);
@@ -1693,7 +1698,10 @@ namespace ConditioningControlPanel.Services
                     {
                         // Restore ONLY pink filter settings - don't touch spiral
                         App.Settings.Current.PinkFilterEnabled = wasEnabled;
-                        App.Settings.Current.PinkFilterOpacity = baseOpacity;
+                        // Undo our boost only if the user hasn't changed opacity during the pulse window;
+                        // otherwise respect their manual value instead of snapping it back up (#441a).
+                        if (Math.Abs(App.Settings.Current.PinkFilterOpacity - appliedOpacity) < 0.5)
+                            App.Settings.Current.PinkFilterOpacity = baseOpacity;
                         App.Overlay?.RefreshOverlays();
 
                         // Stop overlay if nothing needs it

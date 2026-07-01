@@ -326,7 +326,12 @@ namespace ConditioningControlPanel
             try { StopBlinkTrainerDemoLoop(); } catch { }
             try { UnsubscribeBlinkTrainerLiveBlink(); } catch { }
 
-            base.OnClosing(e);
+            // Only raise the public Closing event (exit-cleanup handlers: global-hotkey unregister,
+            // gaze/blink stop) when we're actually exiting. On a minimize-to-tray (e.Cancel==true) the
+            // app keeps running, so those handlers must NOT fire — otherwise the global hotkey would die
+            // after the first X press (#446).
+            if (_exitRequested)
+                base.OnClosing(e);
         }
 
         protected override void OnStateChanged(EventArgs e)
