@@ -393,6 +393,8 @@
                                           ToolTip="Per-zone backdrop plates under the bubbles. Off = classic Chaos over your live desktop."/>
                                 <TextBlock Text="Backdrop opacity" Foreground="{StaticResource TextMut}" FontSize="11" Margin="0,6,0,0"/>
                                 <Slider x:Name="SldBackdropOpacity" Minimum="0" Maximum="1"/>
+                                <CheckBox x:Name="ChkTunnel" Style="{StaticResource Chk}" Content="3D rabbit-hole tunnel" Margin="0,10,0,0"
+                                          ToolTip="An endless procedurally-generated 3D tunnel rendered behind the game. Heavier on the GPU — default off."/>
                             </StackPanel>
                         </Border>
 

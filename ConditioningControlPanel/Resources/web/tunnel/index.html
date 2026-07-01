@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Rabbit Hole</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: #000; overflow: hidden; cursor: default;
+      -webkit-user-select: none; user-select: none; touch-action: none;
+    }
+    #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+    /* Full-screen black curtain used for the falling intro fade-up and the exit fade-out.
+       Starts opaque so the very first frame is black (we "plunge in" from darkness). */
+    #curtain {
+      position: fixed; inset: 0; background: #000; pointer-events: none;
+      opacity: 1; transition: opacity 0.9s ease;
+    }
+    /* Cheap radial vignette that we pulse during the intro / fast zones for a rush feel. */
+    #vig {
+      position: fixed; inset: 0; pointer-events: none; opacity: 0;
+      transition: opacity 0.5s ease;
+      background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%);
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../vendor/three/three.module.min.js",
+      "three/addons/": "../vendor/three/addons/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="vig"></div>
+  <div id="curtain"></div>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

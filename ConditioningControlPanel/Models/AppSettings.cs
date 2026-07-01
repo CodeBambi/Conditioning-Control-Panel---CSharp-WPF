@@ -2351,6 +2351,16 @@ namespace ConditioningControlPanel.Models
             set { _backdropOpacity = Math.Clamp(value, 0.0, 1.0); OnPropertyChanged(); }
         }
 
+        private bool _chaosTunnelEnabled = false;
+        /// <summary>Endless 3D "rabbit hole" WebGL tunnel rendered behind the Chaos game (a non-topmost
+        /// WebView2 window under every bubble/FX/video/HUD layer). Default OFF — it stacks GPU load on the
+        /// already-heavy game, so it's opt-in from the Chaos hub.</summary>
+        public bool ChaosTunnelEnabled
+        {
+            get => _chaosTunnelEnabled;
+            set { _chaosTunnelEnabled = value; OnPropertyChanged(); }
+        }
+
         private string _chaosAccessoryKey1 = "Q";
         /// <summary>Keybind for accessory pocket 1 (reserved: active-use accessories are a future system).</summary>
         public string ChaosAccessoryKey1

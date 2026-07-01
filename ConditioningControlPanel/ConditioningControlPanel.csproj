@@ -343,6 +343,13 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
+    <!-- Endless three.js "rabbit hole" tunnel background (HTML/JS + vendored three.js).
+         Served to a WebView2 via a virtual host, so it must live on disk in the output. -->
+    <Content Include="Resources\web\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
     <!-- Subliminal audio files -->
     <Content Include="Resources\sub_audio\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -411,6 +418,7 @@
   <Target Name="CopyContentAfterPublish" AfterTargets="Publish">
     <ItemGroup>
       <SoundFiles Include="$(ProjectDir)Resources\sounds\**\*" />
+      <WebFiles Include="$(ProjectDir)Resources\web\**\*" />
       <SubAudioFiles Include="$(ProjectDir)Resources\sub_audio\**\*" />
       <AwarenessPresetFiles Include="$(ProjectDir)Resources\AwarenessPresets\**\*" />
       <DeeperDemoFiles Include="$(ProjectDir)Resources\DeeperDemos\**\*" />
@@ -418,6 +426,7 @@
       <TutorialVideoFiles Include="$(ProjectDir)Resources\tutorial_videos\**\*" />
     </ItemGroup>
     <Copy SourceFiles="@(SoundFiles)" DestinationFolder="$(PublishDir)Resources\sounds\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(WebFiles)" DestinationFolder="$(PublishDir)Resources\web\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(SubAudioFiles)" DestinationFolder="$(PublishDir)Resources\sub_audio\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(AwarenessPresetFiles)" DestinationFolder="$(PublishDir)Resources\AwarenessPresets\%(RecursiveDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(DeeperDemoFiles)" DestinationFolder="$(PublishDir)Resources\DeeperDemos\%(RecursiveDir)" SkipUnchangedFiles="true" />

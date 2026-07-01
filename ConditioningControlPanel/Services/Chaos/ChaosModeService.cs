@@ -504,6 +504,10 @@ public sealed class ChaosModeService
         ChaosNarrativeHooks.OnRunStarted();
         _pendingDepthVCard = false;
         ChaosBackdropService.Show(_state.ActIndex);
+        // Endless 3D tunnel background (opt-in, gated on ChaosTunnelEnabled internally; spawns no
+        // window when off). Non-topmost like the backdrop, so it needs no z-order handling.
+        ChaosTunnelService.Show();
+        ChaosTunnelService.SendZoneHint(_state.ActIndex, Math.Min(1.0, (_state.ActIndex - 1) / 5.0));
         ChaosNarrativeHooks.OnMoment("run_start", BuildNarrativeCtx());
 
         // Arm crash diagnostics: fresh peak, baseline sample, and the sentinel goes live for THIS run.
@@ -796,6 +800,8 @@ public sealed class ChaosModeService
     {
         var disp = Application.Current?.Dispatcher;
         if (disp == null) return;
+        // A fullscreen video fully covers the tunnel — pause its render loop (0% tunnel GPU).
+        try { disp.BeginInvoke((Action)(() => ChaosTunnelService.SetVideoPlaying(true))); } catch { }
         try { disp.BeginInvoke((Action)RaiseGameLayerAboveVideo); } catch { }
         System.Threading.Tasks.Task.Delay(60).ContinueWith(_ =>
         {
@@ -2121,8 +2127,11 @@ public sealed class ChaosModeService
 
     /// <summary>Any video ending during a run (natural end, attention-check retry, cap) starts
     /// the teardown quarantine so no cascade rises into the LibVLC disposal churn.</summary>
-    private void OnVideoEndedDuringRun(object? sender, EventArgs e) =>
+    private void OnVideoEndedDuringRun(object? sender, EventArgs e)
+    {
+        try { Application.Current?.Dispatcher?.BeginInvoke((Action)(() => ChaosTunnelService.SetVideoPlaying(false))); } catch { }
         ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);
+    }
 
     /// <summary>Fire a payload under "Playing with fire": detonation durations scale by the sin's
     /// knob for exactly this call (GlobalDurationMult is shared with slow-mo/freeze — scope it).</summary>
@@ -2971,6 +2980,7 @@ public sealed class ChaosModeService
                 artKey: "depth", subText: $"{_state.ActIndex}");
             // Zone border: swap the backdrop plate and let the Madam mark the descent.
             ChaosBackdropService.SwapTo(_state.ActIndex);
+            ChaosTunnelService.SendZoneHint(_state.ActIndex, Math.Min(1.0, (_state.ActIndex - 1) / 5.0));
             // Depth V is a STORY card moment, not a reactive line — defer it past this transition's
             // draft/ReadyGo (which would overwrite the card) and open it once the field resumes.
             if (_state.ActIndex >= 5) _pendingDepthVCard = true;
@@ -3174,6 +3184,7 @@ public sealed class ChaosModeService
         try { ChaosFieldFxOverlay.CloseActive(); } catch { }
         try { ChaosSkiaFxOverlay.CloseActive(); } catch { }
         try { ChaosBackdropService.CloseActive(); } catch { }
+        try { ChaosTunnelService.CloseActive(); } catch { }
         try { ChaosPopText.ShutdownPool(); } catch { }
         App.AvatarWindow?.SetChaosRunActive(false);   // restore the avatar's normal attached z-order
         ChaosHappyPath.OnRunEnded();   // the script never outlives its run (idempotent)
