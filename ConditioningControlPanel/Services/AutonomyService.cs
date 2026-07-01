@@ -1855,19 +1855,29 @@ namespace ConditioningControlPanel.Services
                 for (int i = 0; i < 40 && (App.AvatarWindow?.IsSpeaking ?? false); i++)
                     await Task.Delay(75).ConfigureAwait(false);
 
+                // A beat longer than the old 8s so it's easier to get the whole phrase out in time.
+                var listenWindow = TimeSpan.FromSeconds(10);
+
                 var result = await App.Speech!.RecognizePhraseAsync(
-                    phrase, new Services.Speech.RecognizeOptions { Timeout = TimeSpan.FromSeconds(8) })
+                    phrase, new Services.Speech.RecognizeOptions { Timeout = listenWindow })
                     .ConfigureAwait(false);
 
-                // One gentle retry when she heard you but you were too quiet.
-                if (!result.Matched && result.LoudEnough == false && result.Score >= 0.45 && !result.Unavailable)
+                // One gentle retry on ANY non-match — too quiet, misheard, or nothing said — as long as
+                // the engine is still available. Makes it much easier to land the phrase; only a clean
+                // match (or an unavailable engine) skips the second try. The prompt fits the reason.
+                if (!result.Matched && !result.Unavailable)
                 {
-                    SpeakLine(App.MantraVoice?.GetRetry(), "Louder for me~ say it like you mean it.");
+                    var retryLine = result.LoudEnough == false
+                        ? "Louder for me~ say it like you mean it."
+                        : result.TimedOut && string.IsNullOrWhiteSpace(result.Transcript)
+                            ? "Take your time~ say it again for me."
+                            : "Mmm, almost~ say it once more, just for me.";
+                    SpeakLine(App.MantraVoice?.GetRetry(), retryLine);
                     await Task.Delay(900).ConfigureAwait(false);
                     for (int i = 0; i < 40 && (App.AvatarWindow?.IsSpeaking ?? false); i++)
                         await Task.Delay(75).ConfigureAwait(false);
                     result = await App.Speech!.RecognizePhraseAsync(
-                        phrase, new Services.Speech.RecognizeOptions { Timeout = TimeSpan.FromSeconds(8) })
+                        phrase, new Services.Speech.RecognizeOptions { Timeout = listenWindow })
                         .ConfigureAwait(false);
                 }
 

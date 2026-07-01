@@ -228,6 +228,14 @@ namespace ConditioningControlPanel.Services.Speech
                 {
                     stream = spotter.CreateStream();
 
+                    // Mic noise front-end (opt-out via settings): high-pass out AC/fan/hum rumble and skip
+                    // feeding steady-hum frames to the KWS decoder at all, so background noise on a hot day
+                    // never even reaches the keyword scorer (cheaper + more robust than score-thresholding).
+                    var nsEnabled = App.Settings?.Current?.SpeechNoiseSuppression ?? true;
+                    var gateFactor = App.Settings?.Current?.SpeechNoiseGateFactor ?? 4.0;
+                    var hpf = nsEnabled ? new HighPassFilter(SampleRate) : null;
+                    var gate = nsEnabled ? new NoiseGate(gateFactor) : null;
+
                     mic = new WaveInEvent
                     {
                         DeviceNumber = ResolveDeviceNumber(),
@@ -244,25 +252,34 @@ namespace ConditioningControlPanel.Services.Speech
                             int n = e.BytesRecorded / 2;
                             if (n <= 0) return;
                             var samples = new float[n];
-                            double sumSq = 0;
                             for (int i = 0, j = 0; i + 1 < e.BytesRecorded; i += 2, j++)
+                                samples[j] = (short)(e.Buffer[i] | (e.Buffer[i + 1] << 8)) / 32768f;
+
+                            // Rumble filter first, so both the level meter and the gate see clean audio.
+                            hpf?.ProcessInPlace(samples, n);
+
+                            double rms = 0;
+                            if (gate != null || diag)
                             {
-                                float v = (short)(e.Buffer[i] | (e.Buffer[i + 1] << 8)) / 32768f;
-                                samples[j] = v;
-                                sumSq += v * v;
+                                double sumSq = 0;
+                                for (int k = 0; k < n; k++) sumSq += samples[k] * samples[k];
+                                rms = Math.Sqrt(sumSq / n);
                             }
 
                             if (diag)
                             {
-                                double rms = Math.Sqrt(sumSq / n);
                                 winPeak = Math.Max(winPeak, rms);
                                 if (++winFrames >= 40) // ~2s at 50ms buffers
                                 {
-                                    App.Logger?.Information("SherpaWakeService: listening (peakRms={Peak:0.0000}, frames={Frames})", winPeak, totalFrames + winFrames);
+                                    App.Logger?.Information("SherpaWakeService: listening (peakRms={Peak:0.0000}, floor={Floor:0.0000}, frames={Frames})", winPeak, gate?.NoiseFloor ?? 0, totalFrames + winFrames);
                                     winPeak = 0; winFrames = 0;
                                 }
                             }
                             totalFrames++;
+
+                            // Steady room tone (AC/fan) never clears the adaptive floor — drop it before the
+                            // decoder so hum can't accrete into a false wake. Voiced audio passes through.
+                            if (gate != null && !gate.Update(rms)) return;
 
                             // Use the captured 'spotter'/'stream' pair for the whole session — never the
                             // _spotter field, which ResetInitState/Dispose could swap on another thread

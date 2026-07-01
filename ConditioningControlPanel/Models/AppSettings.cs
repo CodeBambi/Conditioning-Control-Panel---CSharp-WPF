@@ -3714,6 +3714,34 @@ namespace ConditioningControlPanel.Models
             set { _speechHeadphonesMode = value; OnPropertyChanged(); }
         }
 
+        private bool _speechNoiseSuppression = true;
+        /// <summary>
+        /// Mic noise front-end: strips low-frequency rumble (AC units, fans, mains hum) with a high-pass
+        /// filter and gates onset on an ADAPTIVE noise floor instead of a fixed loudness threshold, so a
+        /// steady room hum self-raises the trigger point rather than firing it. On by default; turn off to
+        /// feed raw mic audio to the recognizers (the pre-6.2.x behaviour).
+        /// </summary>
+        [JsonProperty]
+        public bool SpeechNoiseSuppression
+        {
+            get => _speechNoiseSuppression;
+            set { _speechNoiseSuppression = value; OnPropertyChanged(); }
+        }
+
+        private double _speechNoiseGateFactor = 4.0;
+        /// <summary>
+        /// SNR margin for the adaptive noise gate: a frame counts as "voiced" when its RMS exceeds the
+        /// tracked noise floor by this multiple (~+12 dB at 4.0). Higher = stricter (needs to be clearly
+        /// louder than the room — good for noisy rooms); lower = more sensitive. Only used when
+        /// <see cref="SpeechNoiseSuppression"/> is on.
+        /// </summary>
+        [JsonProperty]
+        public double SpeechNoiseGateFactor
+        {
+            get => _speechNoiseGateFactor;
+            set { _speechNoiseGateFactor = Math.Clamp(value, 1.5, 8.0); OnPropertyChanged(); }
+        }
+
         #endregion
 
         #region Lab — Wallpaper Override
