@@ -946,8 +946,9 @@ namespace ConditioningControlPanel.Services
             if (settings.AutonomyCanTriggerSubliminal)
                 candidates.Add((AutonomyActionType.Subliminal, 25));
 
-            if (settings.AutonomyCanTriggerBrainDrain)
-                candidates.Add((AutonomyActionType.BrainDrainPulse, 10));
+            // Note: BrainDrainPulse removed from autonomy — Brain Drain is being kept out of user-facing
+            // surfaces while the blur feature is still being verified (mirrors its removal from the
+            // Deeper editor + session creator). Enum/label/PulseBrainDrain kept for a clean restore later.
 
             if (settings.AutonomyCanTriggerBubbles)
                 candidates.Add((AutonomyActionType.StartBubbles, 15));
