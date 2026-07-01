@@ -484,6 +484,18 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Monitor topology / resolution / DPI changed. Refresh the screen cache and quiesce the
+        /// layered-window spawn paths for a beat (WPF is rebuilding composition surfaces; adding new
+        /// ones now risks desktop-heap/GPU-surface exhaustion — the freeze cluster). Fires on the UI
+        /// thread via SystemEvents' WPF message pump.
+        /// </summary>
+        private static void OnDisplaySettingsChanged(object? sender, EventArgs e)
+        {
+            InvalidateScreenCache();
+            Services.UI.DisplayChangeCoordinator.NotifyDisplayChange("display-settings");
+        }
+
+        /// <summary>
         /// Returns the monitor the user picked for webcam calibration / Quick
         /// Recal / Tracker Test, falling back to the primary screen if their
         /// saved choice is "Primary" or no longer present (monitor unplugged
@@ -1020,6 +1032,11 @@ namespace ConditioningControlPanel
             // in crash.log — but the chaos sentinel file is still on disk. Report+consume it so the
             // crash self-documents (with last-known context) in this session's log.
             Services.Chaos.ChaosCrashSentinel.ConsumeAndReport(Logger);
+
+            // React to monitor topology / resolution changes (unplug, res change, DPI): drop the stale
+            // screen cache AND pause layered-window spawns briefly so we don't create fresh surfaces
+            // during the composition rebuild storm (freeze cluster — see DisplayChangeCoordinator).
+            try { SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged; } catch { }
 
             // Hang forensics: the recurring freezes are render-thread deadlocks (Application
             // Hang 1002, nothing in crash.log). The watchdog writes one minidump per session
@@ -2907,6 +2924,8 @@ Application State:
         protected override void OnExit(ExitEventArgs e)
         {
             Logger?.Information("Application shutting down...");
+
+            try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
 
             // A clean shutdown — even mid-run — is NOT a crash. Clear the chaos sentinel so the next
             // launch doesn't false-report it as an abnormal exit.

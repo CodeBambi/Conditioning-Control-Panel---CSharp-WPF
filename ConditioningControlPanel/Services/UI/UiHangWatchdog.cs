@@ -102,15 +102,22 @@ public static class UiHangWatchdog
             {
                 var rundll = Path.Combine(Environment.SystemDirectory, "rundll32.exe");
                 var comsvcs = Path.Combine(Environment.SystemDirectory, "comsvcs.dll");
+                // Compact minidump (NO "full"): comsvcs "full" writes MiniDumpWithFullMemory — the
+                // ENTIRE process memory (multi-GB for this app), which piles IO/commit pressure onto a
+                // process that is often ALREADY at desktop-heap/GPU-surface exhaustion when the watchdog
+                // fires, and can itself produce 0-byte/partial dumps. A normal minidump still carries
+                // every thread's stack + module list — enough to identify the render-thread deadlock
+                // that these hangs are. (If deep managed-heap inspection is ever needed, the in-proc
+                // fallback below captures private RW memory.)
                 using var dumper = Process.Start(new ProcessStartInfo
                 {
                     FileName = rundll,
-                    Arguments = $"\"{comsvcs}\", MiniDump {proc.Id} \"{path}\" full",
+                    Arguments = $"\"{comsvcs}\", MiniDump {proc.Id} \"{path}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
                 });
-                if (dumper != null && dumper.WaitForExit(120_000)
-                    && File.Exists(path) && new FileInfo(path).Length > 1_000_000)
+                if (dumper != null && dumper.WaitForExit(60_000)
+                    && File.Exists(path) && new FileInfo(path).Length > 100_000)
                 {
                     App.Logger?.Error("[WATCHDOG] hang dump written (external) after {Sec:F0}s of silence: {Path}", silenceMs / 1000.0, path);
                     return;
