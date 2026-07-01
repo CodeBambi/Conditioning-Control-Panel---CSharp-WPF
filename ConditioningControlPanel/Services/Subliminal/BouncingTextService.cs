@@ -143,16 +143,34 @@ public class BouncingTextService : IDisposable
         _zReassertAccum = 0;
         CompositionTarget.Rendering -= Animate; // guard against a double subscribe
         CompositionTarget.Rendering += Animate;
-        
-        App.Logger?.Information("BouncingTextService started - Text: {Text}, Size: {W}x{H}", 
+
+        // During mandatory video the old code kept Animate subscribed and hid the windows + returned
+        // every vsync — a permanent no-op render callback that never let the composition loop sleep
+        // (a contributor to the idle/long-session freeze, #453). Instead, pause the loop entirely on
+        // VideoStarted and resume on VideoEnded.
+        if (App.Video != null)
+        {
+            App.Video.VideoStarted -= OnVideoStartedPause;
+            App.Video.VideoStarted += OnVideoStartedPause;
+            App.Video.VideoEnded -= OnVideoEndedResume;
+            App.Video.VideoEnded += OnVideoEndedResume;
+            if (App.Video.IsPlaying) OnVideoStartedPause(null, EventArgs.Empty);
+        }
+
+        App.Logger?.Information("BouncingTextService started - Text: {Text}, Size: {W}x{H}",
             _currentText, _textWidth, _textHeight);
     }
 
     public void Stop()
     {
         _isRunning = false;
-        
+
         CompositionTarget.Rendering -= Animate;
+        if (App.Video != null)
+        {
+            App.Video.VideoStarted -= OnVideoStartedPause;
+            App.Video.VideoEnded -= OnVideoEndedResume;
+        }
 
         // Always close and clear windows, even if we thought we weren't running
         foreach (var window in _windows)
@@ -160,8 +178,32 @@ public class BouncingTextService : IDisposable
             try { window.Close(); } catch { }
         }
         _windows.Clear();
-        
+
         App.Logger?.Information("BouncingTextService stopped");
+    }
+
+    /// <summary>Sleep the bounce render loop while a mandatory video plays (VideoStarted). Marshals to
+    /// the UI thread since the video event can fire off a playback thread.</summary>
+    private void OnVideoStartedPause(object? sender, EventArgs e)
+    {
+        var disp = System.Windows.Application.Current?.Dispatcher;
+        if (disp == null) return;
+        if (!disp.CheckAccess()) { try { disp.BeginInvoke(new Action(() => OnVideoStartedPause(sender, e))); } catch { } return; }
+        CompositionTarget.Rendering -= Animate;
+        foreach (var w in _windows) { try { if (w.IsLoaded) w.Hide(); } catch { } }
+    }
+
+    /// <summary>Resume the bounce render loop when the video ends (VideoEnded), if still running.</summary>
+    private void OnVideoEndedResume(object? sender, EventArgs e)
+    {
+        var disp = System.Windows.Application.Current?.Dispatcher;
+        if (disp == null) return;
+        if (!disp.CheckAccess()) { try { disp.BeginInvoke(new Action(() => OnVideoEndedResume(sender, e))); } catch { } return; }
+        if (!_isRunning) return;
+        foreach (var w in _windows) { try { if (w.IsLoaded && !w.IsVisible) w.Show(); } catch { } }
+        _lastRenderTime = TimeSpan.MinValue; // reset dt so the first resumed frame doesn't jump
+        CompositionTarget.Rendering -= Animate;
+        CompositionTarget.Rendering += Animate;
     }
 
     private void SelectRandomText(List<string>? pool = null)

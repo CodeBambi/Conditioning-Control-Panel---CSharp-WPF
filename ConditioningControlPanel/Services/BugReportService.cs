@@ -321,7 +321,7 @@ namespace ConditioningControlPanel.Services
                 long tail = Math.Min(info.Length, MaxCrashLogChars);
                 fs.Seek(info.Length - tail, SeekOrigin.Begin);
                 using var sr = new StreamReader(fs, Encoding.UTF8);
-                return FilterBenignCrashes(sr.ReadToEnd());
+                return FilterToCurrentVersion(FilterBenignCrashes(sr.ReadToEnd()));
             }
             catch (Exception ex)
             {
@@ -364,6 +364,38 @@ namespace ConditioningControlPanel.Services
 
             if (dropped > 0)
                 App.Logger?.Debug("[BugReport] filtered {Count} benign exit-cleanup crash entries", dropped);
+            return kept.ToString();
+        }
+
+        /// <summary>
+        /// Keep only crash entries emitted by the CURRENTLY-running build. crash.log is append-only,
+        /// so even after startup rotation a report could catch a crash logged just before an in-place
+        /// update; more importantly this guards against a rotation that failed (locked/denied file).
+        /// Each entry is tagged with "App Version: X.Y.Z" (see App.LogCrashDetails). Entries from other
+        /// versions — and legacy untagged entries from before this change — are dropped so triage sees
+        /// only crashes relevant to the reported build. If the log has no delimited entries, it's
+        /// returned untouched.
+        /// </summary>
+        private static string FilterToCurrentVersion(string log)
+        {
+            if (string.IsNullOrEmpty(log)) return log;
+            const string marker = "CRASH REPORT - ";
+            var entries = log.Split(new[] { marker }, StringSplitOptions.None);
+            if (entries.Length <= 1) return log; // no delimited entries — leave as-is
+
+            var versionTag = "App Version: " + UpdateService.AppVersion;
+            var kept = new System.Text.StringBuilder(entries[0]);
+            int dropped = 0;
+            for (int i = 1; i < entries.Length; i++)
+            {
+                if (entries[i].Contains(versionTag, StringComparison.Ordinal))
+                    kept.Append(marker).Append(entries[i]);
+                else
+                    dropped++;
+            }
+
+            if (dropped > 0)
+                App.Logger?.Debug("[BugReport] dropped {Count} crash entries from other app versions", dropped);
             return kept.ToString();
         }
 

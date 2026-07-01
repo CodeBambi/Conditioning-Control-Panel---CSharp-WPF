@@ -42,7 +42,20 @@ namespace ConditioningControlPanel
         private static bool _mutexOwned = false;
         private const string MutexName = "ConditioningControlPanel_SingleInstance_Mutex";
         private const string ShowSignalName = "ConditioningControlPanel_ShowWindow_Signal";
+        // Acknowledgment gate for the single-instance handshake. A second instance sets the
+        // show-signal, then waits on this for the primary to confirm — from its UI thread — that
+        // it actually surfaced a window. A wedged (render-thread deadlock) or headless primary
+        // never runs the dispatcher callback, so it never acks; the second instance then presumes
+        // the primary is dead, kills it, and takes over instead of silently exiting. Without this
+        // ack, a zombie process kept the mutex alive and every relaunch quietly Shutdown()'d,
+        // which is the "app freezes on startup, have to relaunch several times" report.
+        private const string ShowAckSignalName = "ConditioningControlPanel_ShowAck_Signal";
+        // Generous: exceeds a normal cold start so a healthy but still-initializing primary
+        // (whose dispatcher isn't pumping yet) acks in time and is never mistaken for wedged.
+        private const int ShowAckTimeoutMs = 10000;
         private static EventWaitHandle? _showSignal;
+        private static EventWaitHandle? _showAckSignal;
+        private static bool _recoveredFromStaleInstance;
         private SplashScreen? _splash;
         private static Thread? _showSignalThread;
         private readonly TaskCompletionSource _patreonInitDone = new();
@@ -480,6 +493,18 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Monitor topology / resolution / DPI changed. Refresh the screen cache and quiesce the
+        /// layered-window spawn paths for a beat (WPF is rebuilding composition surfaces; adding new
+        /// ones now risks desktop-heap/GPU-surface exhaustion — the freeze cluster). Fires on the UI
+        /// thread via SystemEvents' WPF message pump.
+        /// </summary>
+        private static void OnDisplaySettingsChanged(object? sender, EventArgs e)
+        {
+            InvalidateScreenCache();
+            Services.UI.DisplayChangeCoordinator.NotifyDisplayChange("display-settings");
+        }
+
+        /// <summary>
         /// Returns the monitor the user picked for webcam calibration / Quick
         /// Recal / Tracker Test, falling back to the primary screen if their
         /// saved choice is "Primary" or no longer present (monitor unplugged
@@ -834,26 +859,86 @@ namespace ConditioningControlPanel
             _mutexOwned = createdNew; // Track if we actually own the mutex
             if (!createdNew)
             {
-                // Another instance is already running - signal it to show its window
+                // Another instance holds the single-instance mutex. Ask it to show its window —
+                // but confirm it's actually alive before we bow out. A wedged/headless primary
+                // keeps the mutex forever, and the old "signal then Shutdown()" left every
+                // relaunch a silent no-op until the zombie finally died. Now we wait for an ack
+                // and, if none comes, kill the stale process and take over as primary.
+
+                // Write the "Open with CCP" handoff BEFORE signaling so a live primary can read it.
+                if (_pendingFileOpenAction != null && _pendingFileOpenPath != null)
+                {
+                    try { WriteFileOpenHandoff(_pendingFileOpenAction, _pendingFileOpenPath); } catch { }
+                }
+
+                EventWaitHandle? ackWait = null;
+                try { ackWait = EventWaitHandle.OpenExisting(ShowAckSignalName); } catch { ackWait = null; }
+
+                if (ackWait == null)
+                {
+                    // Primary predates the ack handshake (mid-upgrade) or its kernel objects are
+                    // gone. Preserve the legacy behavior: poke it to show, then exit quietly —
+                    // never kill a process we can't positively identify as wedged.
+                    try
+                    {
+                        var signal = EventWaitHandle.OpenExisting(ShowSignalName);
+                        signal.Set();
+                        signal.Dispose();
+                    }
+                    catch { }
+
+                    splash.Close();
+                    Shutdown();
+                    return;
+                }
+
+                // Clear any stale ack from a prior handshake, poke the primary, then wait for it
+                // to confirm liveness from its UI thread.
+                try { ackWait.Reset(); } catch { }
                 try
                 {
-                    if (_pendingFileOpenAction != null && _pendingFileOpenPath != null)
-                    {
-                        WriteFileOpenHandoff(_pendingFileOpenAction, _pendingFileOpenPath);
-                    }
                     var signal = EventWaitHandle.OpenExisting(ShowSignalName);
                     signal.Set();
                     signal.Dispose();
                 }
                 catch { }
 
-                splash.Close();
-                Shutdown();
-                return;
+                bool acknowledged = false;
+                try { acknowledged = ackWait.WaitOne(ShowAckTimeoutMs); } catch { }
+                try { ackWait.Dispose(); } catch { }
+
+                if (acknowledged)
+                {
+                    // Primary is alive and surfaced its window — nothing more to do.
+                    splash.Close();
+                    Shutdown();
+                    return;
+                }
+
+                // No acknowledgment within the window: the primary is wedged or headless. Kill it
+                // and take over. (Logger isn't up yet here; we record the recovery once it is.)
+                _recoveredFromStaleInstance = true;
+                KillStaleInstances();
+
+                // Claim single-instance ownership now that the zombie is gone. If it died holding
+                // the mutex, WaitOne throws AbandonedMutexException but we DO acquire it.
+                try { if (_mutex!.WaitOne(TimeSpan.FromSeconds(3))) _mutexOwned = true; }
+                catch (AbandonedMutexException) { _mutexOwned = true; }
+                catch { }
+
+                // We kept the parsed _pendingFileOpen* fields and will fulfill them ourselves, so
+                // drop any on-disk handoff to avoid a spurious re-open on a later signal.
+                try { ConsumeFileOpenHandoff(); } catch { }
+
+                // Fall through — this instance is now the primary.
             }
 
-            // Create signal for other instances to request showing our window
+            // Create signal for other instances to request showing our window, plus the ack gate
+            // a second instance waits on to prove this instance's UI thread is responsive.
             _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowSignalName);
+            // ManualReset: a second instance Reset()s it just before signaling, so a leftover
+            // ack from a prior handshake can't be mistaken for a fresh one.
+            _showAckSignal = new EventWaitHandle(false, EventResetMode.ManualReset, ShowAckSignalName);
             _showSignalThread = new Thread(() =>
             {
                 while (_showSignal != null)
@@ -871,7 +956,8 @@ namespace ConditioningControlPanel
                                 var mainWin = MainWindowRef ?? (MainWindow as MainWindow);
                                 if (mainWin != null)
                                 {
-                                    mainWin.ShowFromTray();
+                                    try { mainWin.ShowFromTray(); }
+                                    catch (Exception ex) { Logger?.Warning(ex, "ShowFromTray failed"); }
                                     var (action, path) = ConsumeFileOpenHandoff();
                                     if (action != null && path != null)
                                     {
@@ -879,6 +965,12 @@ namespace ConditioningControlPanel
                                         catch (Exception ex) { Logger?.Warning(ex, "HandlePendingFileOpen failed"); }
                                     }
                                 }
+
+                                // Reaching here means the UI thread is alive and pumping — ack the
+                                // waiting second instance so it exits instead of killing us. Sent
+                                // even when mainWin is null (still starting): a responsive
+                                // dispatcher is proof enough that we are not wedged.
+                                try { _showAckSignal?.Set(); } catch { }
                             });
                         }
                     }
@@ -935,10 +1027,25 @@ namespace ConditioningControlPanel
             Logger.Information("Application starting v{Version} | workingSet {WS}MB",
                 Services.UpdateService.AppVersion, Environment.WorkingSet / (1024 * 1024));
 
+            // Rotate crash.log so a bug report only carries crashes from THIS build. The log is
+            // append-only, so without this it accumulates months of old crashes and the reporter
+            // ships them all (the last 120KB), burying the real failure and polluting triage.
+            RotateCrashLogForVersion(logPath);
+
+            // Surface a single-instance takeover (a prior wedged/headless process was killed so
+            // this launch could proceed). Recorded here because Logger isn't up during the handshake.
+            if (_recoveredFromStaleInstance)
+                Logger.Warning("[LIFECYCLE] Previous instance was unresponsive (no show-ack within {Ms}ms) — killed it and took over as primary", ShowAckTimeoutMs);
+
             // If a Rabbit Hole run was live when the process last died, the native vanish left nothing
             // in crash.log — but the chaos sentinel file is still on disk. Report+consume it so the
             // crash self-documents (with last-known context) in this session's log.
             Services.Chaos.ChaosCrashSentinel.ConsumeAndReport(Logger);
+
+            // React to monitor topology / resolution changes (unplug, res change, DPI): drop the stale
+            // screen cache AND pause layered-window spawns briefly so we don't create fresh surfaces
+            // during the composition rebuild storm (freeze cluster — see DisplayChangeCoordinator).
+            try { SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged; } catch { }
 
             // Hang forensics: the recurring freezes are render-thread deadlocks (Application
             // Hang 1002, nothing in crash.log). The watchdog writes one minidump per session
@@ -1530,6 +1637,49 @@ namespace ConditioningControlPanel
                     Settings.Save();
                 }), System.Windows.Threading.DispatcherPriority.Loaded);
             }
+        }
+
+        // Terminate any OTHER running CCP process that shares our executable path. Called from the
+        // single-instance handshake only after the existing instance failed to acknowledge within
+        // ShowAckTimeoutMs — i.e. it is wedged (render-thread deadlock) or headless and is keeping
+        // the single-instance mutex alive. Matching on the full exe path avoids nuking an unrelated
+        // same-named process or a separate install; ProcessName is a best-effort fallback when the
+        // other process's MainModule can't be read (access denied). Runs before Logger init.
+        private static void KillStaleInstances()
+        {
+            try
+            {
+                int selfId = Environment.ProcessId;
+                string? selfPath = null;
+                try { selfPath = Process.GetCurrentProcess().MainModule?.FileName; } catch { }
+                string selfName = Process.GetCurrentProcess().ProcessName;
+
+                foreach (var proc in Process.GetProcessesByName(selfName))
+                {
+                    try
+                    {
+                        if (proc.Id == selfId) continue;
+
+                        // Prefer an exact executable-path match; fall back to name-only if the
+                        // path is unreadable (e.g. the target is elevated).
+                        bool pathMatches = true;
+                        if (selfPath != null)
+                        {
+                            string? otherPath = null;
+                            try { otherPath = proc.MainModule?.FileName; } catch { otherPath = null; }
+                            if (otherPath != null)
+                                pathMatches = string.Equals(otherPath, selfPath, StringComparison.OrdinalIgnoreCase);
+                        }
+                        if (!pathMatches) continue;
+
+                        proc.Kill();
+                        proc.WaitForExit(5000);
+                    }
+                    catch { /* process may have exited on its own, or we lack rights — skip it */ }
+                    finally { try { proc.Dispose(); } catch { } }
+                }
+            }
+            catch { /* enumeration failed — takeover still proceeds; the mutex re-acquire is best-effort */ }
         }
 
         // Standard WPF "bring to front" sequence. Activate() alone is silently
@@ -2489,6 +2639,56 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Rotate <c>crash.log</c> at startup so a bug report only carries crashes from the running
+        /// build. crash.log is append-only (see <see cref="LogCrashDetails"/>) and the bug reporter
+        /// attaches its tail, so left alone it drags months of unrelated crashes into every report.
+        /// We rotate when the app version changes (each entry is version-tagged) and cap runaway
+        /// growth within a single version. Best-effort: any failure is swallowed. Keeps ONE archive
+        /// (<c>crash.log.prev</c>) for local post-mortems.
+        /// </summary>
+        private static void RotateCrashLogForVersion(string logDir)
+        {
+            const long MaxCrashLogBytes = 512 * 1024; // per-version runaway guard
+            try
+            {
+                var crashLogPath = Path.Combine(logDir, "crash.log");
+                if (!File.Exists(crashLogPath)) return;
+
+                var markerPath = Path.Combine(logDir, "crash.log.version");
+                string current = Services.UpdateService.AppVersion;
+                string previous = "";
+                try { if (File.Exists(markerPath)) previous = File.ReadAllText(markerPath).Trim(); } catch { }
+
+                long size = 0;
+                try { size = new FileInfo(crashLogPath).Length; } catch { }
+
+                bool versionChanged = !string.Equals(previous, current, StringComparison.Ordinal);
+                if (versionChanged || size > MaxCrashLogBytes)
+                {
+                    var archive = Path.Combine(logDir, "crash.log.prev");
+                    try { if (File.Exists(archive)) File.Delete(archive); } catch { }
+                    try
+                    {
+                        File.Move(crashLogPath, archive);
+                    }
+                    catch
+                    {
+                        // Locked/denied — truncate in place so we still drop the stale entries.
+                        try { File.WriteAllText(crashLogPath, string.Empty); } catch { }
+                    }
+                    Logger?.Information("[CRASHLOG] rotated crash.log (versionChanged={V}, prevVer={P}, size={S}KB)",
+                        versionChanged, string.IsNullOrEmpty(previous) ? "(none)" : previous, size / 1024);
+                }
+
+                try { File.WriteAllText(markerPath, current); } catch { }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("[CRASHLOG] rotation skipped: {Msg}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Log detailed crash information to both main log and a dedicated crash log file.
         /// This helps debug random crashes by capturing full context.
         /// </summary>
@@ -2507,6 +2707,7 @@ namespace ConditioningControlPanel
 ================================================================================
 CRASH REPORT - {DateTime.Now:yyyy-MM-dd HH:mm:ss}
 ================================================================================
+App Version: {Services.UpdateService.AppVersion}
 Source: {source}
 Exception Type: {ex.GetType().FullName}
 Message: {ex.Message}
@@ -2762,6 +2963,8 @@ Application State:
         {
             Logger?.Information("Application shutting down...");
 
+            try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
+
             // A clean shutdown — even mid-run — is NOT a crash. Clear the chaos sentinel so the next
             // launch doesn't false-report it as an abnormal exit.
             try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
@@ -2883,6 +3086,11 @@ Application State:
             _showSignal = null;
             signal?.Set(); // Unblock the listener thread
             signal?.Dispose();
+
+            // Dispose the single-instance ack gate
+            var ackSignal = _showAckSignal;
+            _showAckSignal = null;
+            try { ackSignal?.Dispose(); } catch { }
 
             // Release single instance mutex (only if we own it)
             if (_mutexOwned && _mutex != null)

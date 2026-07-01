@@ -266,6 +266,9 @@ namespace ConditioningControlPanel.Services
         public void TriggerFlash()
         {
             if (!_isRunning || _isBusy) return;
+            // Skip spawning a fresh layered flash window while a monitor/DPI change is settling — one
+            // dropped flash is invisible; a new surface during the composition rebuild is not (freeze cluster).
+            if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed) return;
 
             _isBusy = true;
             _soundPlayingForCurrentFlash = false; // Reset for new flash event
@@ -281,6 +284,11 @@ namespace ConditioningControlPanel.Services
             if (_isBusy)
             {
                 App.Logger?.Debug("FlashService: TriggerFlashOnce skipped - busy");
+                return;
+            }
+            if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed)
+            {
+                App.Logger?.Debug("FlashService: TriggerFlashOnce skipped - display change in progress");
                 return;
             }
 

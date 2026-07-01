@@ -93,18 +93,41 @@ namespace ConditioningControlPanel.Services
             _packsFolder = Path.Combine(App.EffectiveAssetsPath, ".packs");
             _manifestCachePath = Path.Combine(_packsFolder, ".manifest_cache.enc");
 
-            // Create hidden directory
-            if (!Directory.Exists(_packsFolder))
-            {
-                var di = Directory.CreateDirectory(_packsFolder);
-                di.Attributes |= FileAttributes.Hidden;
-            }
+            // Create hidden directory. Guarded: EffectiveAssetsPath can be a user-chosen
+            // custom drive (D:\, S:\, a network/removable volume) that is read-only, denied,
+            // or offline. An unguarded CreateDirectory here threw UnauthorizedAccessException /
+            // IOException straight out of OnStartup and hard-crashed the app before the window
+            // showed. Degrade gracefully instead: content packs are unavailable this session,
+            // but the app starts. (crash reports #450/#451/#452)
+            TryCreateHiddenPacksFolder();
 
             // Scan for orphaned packs (on disk but not in settings) and register them
             ScanAndRegisterOrphanedPacks();
 
             // Load installed pack manifests
             LoadInstalledManifests();
+        }
+
+        /// <summary>
+        /// Create <see cref="_packsFolder"/> as a hidden directory, swallowing the failure modes
+        /// that can occur on a user-chosen custom assets path (denied ACL, read-only/offline drive).
+        /// Never throws — callers must tolerate the folder being absent afterwards (the scan/load
+        /// paths already guard on <c>Directory.Exists</c>).
+        /// </summary>
+        private void TryCreateHiddenPacksFolder()
+        {
+            try
+            {
+                if (!Directory.Exists(_packsFolder))
+                {
+                    var di = Directory.CreateDirectory(_packsFolder);
+                    di.Attributes |= FileAttributes.Hidden;
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "ContentPackService: could not create packs folder {Path} — content packs disabled this session", _packsFolder);
+            }
         }
 
         /// <summary>
@@ -126,12 +149,8 @@ namespace ConditioningControlPanel.Services
             _packsFolder = newPacksFolder;
             _manifestCachePath = Path.Combine(_packsFolder, ".manifest_cache.enc");
 
-            // Create hidden directory if it doesn't exist
-            if (!Directory.Exists(_packsFolder))
-            {
-                var di = Directory.CreateDirectory(_packsFolder);
-                di.Attributes |= FileAttributes.Hidden;
-            }
+            // Create hidden directory if it doesn't exist (guarded — see TryCreateHiddenPacksFolder)
+            TryCreateHiddenPacksFolder();
 
             // Scan for orphaned packs (on disk but not in settings) and register them
             ScanAndRegisterOrphanedPacks();

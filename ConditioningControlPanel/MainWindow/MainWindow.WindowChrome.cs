@@ -334,6 +334,16 @@ namespace ConditioningControlPanel
                 base.OnClosing(e);
         }
 
+        protected override void OnDpiChanged(System.Windows.DpiScale oldDpi, System.Windows.DpiScale newDpi)
+        {
+            // Moving to a monitor with a different scale factor makes WPF rebuild every visible layered
+            // window's composition surface synchronously. Pause new flash/bubble/overlay spawns for a
+            // beat so we don't pile fresh surfaces onto that rebuild burst (desktop-heap/GPU exhaustion
+            // -> "Not enough quota" crash / render-thread wedge). See DisplayChangeCoordinator.
+            Services.UI.DisplayChangeCoordinator.NotifyDisplayChange("dpi-changed");
+            base.OnDpiChanged(oldDpi, newDpi);
+        }
+
         protected override void OnStateChanged(EventArgs e)
         {
             base.OnStateChanged(e);
