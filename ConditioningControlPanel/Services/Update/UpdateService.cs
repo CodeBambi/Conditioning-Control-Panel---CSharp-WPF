@@ -20,29 +20,41 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.2.3";
+        public const string AppVersion = "6.2.4";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.2.3 - Loud and Clear
+        public const string CurrentPatchNotes = @"v6.2.4 - Jelly July
+
+✨ NEW
+- Takeover countdown bar: a thin pink bar under your companion drains toward the
+  next surprise Takeover, so you can see it coming. Toggle it in the Takeover tab.
+- Smarter microphone. An adaptive noise gate and high-pass filter make wake words
+  and spoken mantras far more reliable in noisy rooms.
 
 🔧 BUG FIXES
-- Spoken mantras trigger reliably again. They no longer get hijacked by other
-  voice commands (""sound"", ""mantra"", etc. now route correctly).
-- ""Go pink"" / ""spiral"" voice commands stay on screen instead of flashing and
-  vanishing a moment later.
-- Your companion's voice is no longer silenced by the subliminal-audio toggle.
-  She speaks as long as master volume is up.
-- Fixed the dashboard ""glitch"" and ""cascade"" trigger bubbles.
-- The What's New dialog scrolls now, and broken ""source"" links are fixed.
+- Re-logging into the same account no longer wipes your progression and level.
+- Stopped unnecessary re-copying of your assets folder on some launches.
+- Season recap now shows the correct month.
+- Sessions keep your timeline segments, credit videos you actually watched, and
+  respect ramp vs preset settings.
+- Fixed overlays clobbering your pink-opacity setting, web videos showing a black
+  screen, and closing to the tray with the X button.
+- Muting keeps ambient bubbles, the animated avatar pins correctly, and the
+  tutorial no longer gets stuck.
+- Dashboard remote toggle, webcam mouth sensitivity, and picking your mic by name
+  all work again.
+- Takeover on-screen cues stay above other overlays.
 
 ⚡ PERFORMANCE & STABILITY
-- Faster startup. The offline voice models warm up in the background instead of
-  blocking launch.
+- Big freeze fixes: less layered-window pressure and smoother handling when moving
+  between monitors or when DPI changes.
+- Fixed startup freezes when relaunching the app several times in a row.
+- crash.log now rotates per version, so bug reports carry the right logs.
 
-Season: Juicy June";
+Season: Jelly July";
 
         private const string GitHubOwner = "CodeBambi";
         private const string GitHubRepo = "Conditioning-Control-Panel---CSharp-WPF";
