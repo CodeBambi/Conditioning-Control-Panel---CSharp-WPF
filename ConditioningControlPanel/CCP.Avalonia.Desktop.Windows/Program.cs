@@ -74,6 +74,9 @@ class Program
             // Opt-in 3D Chaos tunnel background (WebView2). Resolved as null on heads without a browser host.
             services.AddSingleton<ConditioningControlPanel.Core.Services.Chaos.IChaosTunnelService,
                                   ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Chaos.ChaosTunnelService>();
+            // Offline keyword wake (sherpa-onnx KWS). Preferred over grammar wake when the model drop-in is present; null on heads without sherpa.
+            services.AddSingleton<ConditioningControlPanel.Core.Services.Speech.ISpeechWakeService,
+                                  ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Speech.SherpaWakeService>();
             services.AddSingleton<IScreenOcrService, AvaloniaScreenOcrService>();
             // Real offline speech engine (Vosk + NAudio); overrides the shared NullSpeechService.
             services.AddSingleton<ConditioningControlPanel.Core.Services.Speech.ISpeechRecognitionService, WindowsSpeechService>();

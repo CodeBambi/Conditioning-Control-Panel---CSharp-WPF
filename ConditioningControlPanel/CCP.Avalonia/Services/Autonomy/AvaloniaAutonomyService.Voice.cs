@@ -178,9 +178,15 @@ public sealed partial class AvaloniaAutonomyService
         {
             try
             {
-                if (_speech?.IsAvailable != true) { await Task.Delay(1000, ct).ConfigureAwait(false); continue; }
+                if (_speech?.IsAvailable != true && _wakeWord?.IsAvailable != true) { await Task.Delay(1000, ct).ConfigureAwait(false); continue; }
                 _wakeWaitCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                var heard = await _speech.WaitForWakeWordAsync(WakeWords(), _wakeWaitCts.Token).ConfigureAwait(false);
+                // Prefer the offline sherpa KWS spotter when its model is installed; else the grammar wake.
+                // KWS gives no transcript — RequestVoiceCommand() opens a fresh listen for the command.
+                string? heard;
+                if (_wakeWord?.IsAvailable == true)
+                    heard = (await _wakeWord.WaitForWakeAsync(_wakeWaitCts.Token).ConfigureAwait(false)) ? "" : null;
+                else
+                    heard = await _speech.WaitForWakeWordAsync(WakeWords(), _wakeWaitCts.Token).ConfigureAwait(false);
                 if (heard != null && !ct.IsCancellationRequested)
                     RequestVoiceCommand();
             }

@@ -48,6 +48,7 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
 
     // Voice ("Hey Bambi") dependencies — see AvaloniaAutonomyService.Voice.cs for the wake loop + dispatch.
     private readonly ConditioningControlPanel.Core.Services.Speech.ISpeechRecognitionService? _speech;
+    private readonly ConditioningControlPanel.Core.Services.Speech.ISpeechWakeService? _wakeWord;
     private readonly ConditioningControlPanel.Core.Services.Bark.IBarkManifestService? _barkManifest;
     private readonly ConditioningControlPanel.Core.Services.Mantra.IMantraVoiceService? _mantraVoice;
     private readonly ConditioningControlPanel.IKeywordTriggerService? _keywordTriggers;
@@ -133,6 +134,7 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
         IWallpaperProvider? wallpaper = null,
         IAvatarWindowService? avatar = null,
         ConditioningControlPanel.Core.Services.Speech.ISpeechRecognitionService? speech = null,
+        ConditioningControlPanel.Core.Services.Speech.ISpeechWakeService? wakeWord = null,
         ConditioningControlPanel.Core.Services.Bark.IBarkManifestService? barkManifest = null,
         ConditioningControlPanel.Core.Services.Mantra.IMantraVoiceService? mantraVoice = null,
         ConditioningControlPanel.IKeywordTriggerService? keywordTriggers = null,
@@ -156,6 +158,7 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
         _wallpaper = wallpaper;
         _avatar = avatar;
         _speech = speech;
+        _wakeWord = wakeWord;
         _barkManifest = barkManifest;
         _mantraVoice = mantraVoice;
         _keywordTriggers = keywordTriggers;
