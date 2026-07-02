@@ -23,6 +23,16 @@
         <TextBox Text="{Binding WakeWords}" Width="340" Watermark="hey bambi, bambi"/>
       </StackPanel>
 
+      <!-- Reliable wake (sherpa-onnx KWS) status + per-voice calibration. -->
+      <Border Background="#1A2A1A" CornerRadius="6" Padding="10" Margin="0,2,0,0">
+        <StackPanel Spacing="6">
+          <TextBlock Text="{Binding WakeEngineStatusText}" TextWrapping="Wrap" Opacity="0.85"/>
+          <Button Content="{Binding CalibrateCaption}" Command="{Binding CalibrateWakeCommand}"
+                  IsVisible="{Binding WakeEngineAvailable}" IsEnabled="{Binding !IsCalibrating}"
+                  HorizontalAlignment="Left"/>
+        </StackPanel>
+      </Border>
+
       <CheckBox Content="Push-to-talk (key binding coming soon)" IsChecked="{Binding PushToTalkEnabled}"/>
 
       <StackPanel Orientation="Horizontal" Spacing="8">

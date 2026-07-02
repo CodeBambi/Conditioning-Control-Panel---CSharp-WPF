@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ConditioningControlPanel.Core.Services.Autonomy;
@@ -21,6 +22,7 @@ public partial class SheListeningTabViewModel : TabItemViewModel
     private readonly ISettingsService? _settings;
     private readonly ISpeechRecognitionService? _speech;
     private readonly IAutonomyService? _autonomy;
+    private readonly ISpeechWakeService? _wakeWord;
     private readonly ILogger<SheListeningTabViewModel>? _logger;
 
     private bool _syncing;
@@ -32,6 +34,11 @@ public partial class SheListeningTabViewModel : TabItemViewModel
     [ObservableProperty] private SpeechInputDevice? _selectedDevice;
     [ObservableProperty] private bool _engineAvailable;
     [ObservableProperty] private string _statusText = "";
+    /// <summary>Reliable-wake (sherpa-onnx KWS) status line.</summary>
+    [ObservableProperty] private bool _wakeEngineAvailable;
+    [ObservableProperty] private string _wakeEngineStatusText = "";
+    [ObservableProperty] private bool _isCalibrating;
+    [ObservableProperty] private string _calibrateCaption = "Calibrate to my voice";
     /// <summary>Mic sensitivity 0-100% (inverted loudness gate). Bound to SpeechLoudnessThreshold.</summary>
     [ObservableProperty] private int _micSensitivity;
 
@@ -53,11 +60,13 @@ public partial class SheListeningTabViewModel : TabItemViewModel
         ISettingsService settings,
         ISpeechRecognitionService speech,
         IAutonomyService autonomy,
-        ILogger<SheListeningTabViewModel> logger) : base("shelistening", "She's Listening", "🎤")
+        ILogger<SheListeningTabViewModel> logger,
+        ISpeechWakeService? wakeWord = null) : base("shelistening", "She's Listening", "🎤")
     {
         _settings = settings;
         _speech = speech;
         _autonomy = autonomy;
+        _wakeWord = wakeWord;
         _logger = logger;
         SyncFromSettings();
         RefreshDevices();
@@ -86,8 +95,53 @@ public partial class SheListeningTabViewModel : TabItemViewModel
             StatusText = EngineAvailable
                 ? "Offline voice engine ready."
                 : "Voice engine unavailable — drop a Vosk model into Resources/Models/vosk.";
+            RefreshWakeStatus();
         }
         finally { _syncing = false; }
+    }
+
+    /// <summary>Reliable-wake (sherpa-onnx KWS) status: model present + ready, or what's missing.</summary>
+    private void RefreshWakeStatus()
+    {
+        WakeEngineAvailable = _wakeWord?.IsAvailable ?? false;
+        if (_wakeWord == null)
+            WakeEngineStatusText = "";
+        else if (_wakeWord.IsAvailable)
+            WakeEngineStatusText = "Reliable wake ready (sherpa-onnx KWS).";
+        else if (_wakeWord.IsConfigured)
+            WakeEngineStatusText = "Reliable wake model present but unavailable (no mic?).";
+        else
+            WakeEngineStatusText = "Tip: drop a sherpa-kws model into Resources/Models for reliable wake.";
+    }
+
+    /// <summary>
+    /// Tune the reliable-wake threshold to this user's voice + mic by saying "Hey Bambi" a few times.
+    /// The recognizer is single-session: stops the wake loop first, re-arms after with the new threshold.
+    /// </summary>
+    [RelayCommand]
+    private async Task CalibrateWakeAsync()
+    {
+        var wake = _wakeWord;
+        if (wake?.IsAvailable != true || _isCalibrating) return;
+        try
+        {
+            IsCalibrating = true;
+            CalibrateCaption = "Say “Hey Bambi” 5×…";
+            // The recognizer is single-session — stop the wake loop first so calibration can open the mic.
+            _autonomy?.StopVoiceInput();
+            for (int i = 0; i < 20 && wake.IsListening; i++) await Task.Delay(25);
+            var progress = new Progress<WakeCalibrationProgress>(p =>
+                CalibrateCaption = p.Phase == "analyze" ? "Analyzing…" : $"Say “Hey Bambi” ({p.Captured}/{p.Target})");
+            var result = await wake.CalibrateAsync(5, progress);
+            WakeEngineStatusText = result.Message;
+        }
+        catch (Exception ex) { _logger?.LogDebug(ex, "SheListeningTab: wake calibration failed"); WakeEngineStatusText = "Calibration failed — try again."; }
+        finally
+        {
+            IsCalibrating = false;
+            CalibrateCaption = "Calibrate to my voice";
+            _autonomy?.RefreshVoiceInputModes(); // re-arm the wake loop (with the new threshold if it changed)
+        }
     }
 
     [RelayCommand]
