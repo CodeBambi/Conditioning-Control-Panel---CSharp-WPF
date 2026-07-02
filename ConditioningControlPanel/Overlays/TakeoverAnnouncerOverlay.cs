@@ -126,6 +126,7 @@ public sealed class TakeoverAnnouncerOverlay : Window
 
     private bool _renderHooked;
     private TimeSpan _lastRender = TimeSpan.MinValue;
+    private double _topmostAccum;   // throttles the periodic HWND_TOPMOST re-assert
     private double _dpiX = 1, _dpiY = 1;
 
     private static readonly SKColor VioletBody = new(0xC9, 0xA0, 0xFF);
@@ -330,6 +331,13 @@ public sealed class TakeoverAnnouncerOverlay : Window
                 if (dt > 0.1f) dt = 0.1f;   // clamp a spike (alt-tab etc.)
             }
 
+            // Keep this cue above the effect overlays. Pink/spiral/brain-drain windows re-assert
+            // HWND_TOPMOST on OverlayService's 500ms timer, which otherwise climbs above this banner
+            // and hides the cue text while an overlay effect is active (the "PINK FILTER" text not
+            // showing consistently). Re-assert our own topmost a few times a second for the dwell.
+            _topmostAccum += dt;
+            if (_topmostAccum >= 0.2) { _topmostAccum = 0; ForceTopmost(); }
+
             // Advance sparkles: integrate, drag, gentle gravity, cull dead (swap-remove).
             float drag = MathF.Exp(-2.4f * dt);
             for (int i = _sparkN - 1; i >= 0; i--)
@@ -485,10 +493,25 @@ public sealed class TakeoverAnnouncerOverlay : Window
         catch { }
     }
 
+    /// <summary>Re-assert HWND_TOPMOST so the cue stays above effect overlays that also re-assert topmost.</summary>
+    private void ForceTopmost()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        catch { }
+    }
+
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int WS_EX_TRANSPARENT = 0x00000020;
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private const uint SWP_NOMOVE = 0x0002, SWP_NOSIZE = 0x0001, SWP_NOACTIVATE = 0x0010;
     [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hwnd, int index);
     [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 }

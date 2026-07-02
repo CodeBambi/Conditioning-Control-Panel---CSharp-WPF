@@ -72,8 +72,11 @@ namespace ConditioningControlPanel.Features
             if (CmbMicDevice.SelectedItem is not ComboBoxItem item || item.Tag is not int idx) return;
 
             var s = App.Settings?.Current;
-            if (s == null || s.SpeechInputDeviceIndex == idx) return;
+            if (s == null) return;
+            var name = idx < 0 ? "" : (item.Content?.ToString() ?? "");
+            if (s.SpeechInputDeviceIndex == idx && s.SpeechInputDeviceName == name) return;
             s.SpeechInputDeviceIndex = idx;
+            s.SpeechInputDeviceName = name; // matched by name on reopen — robust to ordinal reshuffle (#441b)
             App.Settings?.Save();
 
             // Apply live if the mic is armed: cut the current capture so the wake loop reopens on the new device.

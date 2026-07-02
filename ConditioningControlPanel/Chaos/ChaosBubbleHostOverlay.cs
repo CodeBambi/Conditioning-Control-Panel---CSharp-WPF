@@ -27,8 +27,20 @@ public sealed class ChaosBubbleHostOverlay : Window
     private static ChaosBubbleHostOverlay? _active;
     private static int _refCount;
     private readonly Canvas _canvas;
+    // Mixed-DPI metrics: the host spans every monitor but WPF renders it at ONE scale (its
+    // majority monitor's — in practice the primary). Placement must therefore run in PHYSICAL px
+    // against the hwnd's true pixel origin, not in per-screen DIPs: a bubble on a monitor with a
+    // different scale computed DIPs the host silently re-scaled, drawing it displaced/mis-sized
+    // from the physical-px hit disc the mouse hook tests (second-screen "unclickable" bug).
+    private double _scaleX = 1.0;
+    private double _originPxX, _originPxY;
+    private bool _metricsValid;
 
     public static bool IsReady => _active != null;
+
+    /// <summary>The host's render scale (DPI/96 of the monitor WPF composed it for). Bubbles on a
+    /// screen with a different scale compensate with a LayoutTransform of bubbleScale/RenderScale.</summary>
+    public static double RenderScale => _active?._scaleX ?? 1.0;
 
     /// <summary>Take a reference on the host, creating + showing it if this is the first owner. Each
     /// call must be balanced by exactly one <see cref="CloseActive"/>; the window only dies at the last
@@ -75,15 +87,16 @@ public sealed class ChaosBubbleHostOverlay : Window
         catch { }
     }
 
-    /// <summary>Position a bubble visual. Coordinates are GLOBAL DIPs (the same space the per-bubble
-    /// Window.Left/Top used); the host subtracts its own origin so the child lands in canvas-local
-    /// space. UI thread only.</summary>
-    public static void Place(UIElement el, double globalLeftDip, double globalTopDip)
+    /// <summary>Position a bubble visual. Coordinates are PHYSICAL px (the cross-screen-safe
+    /// currency — the same space the hook hit discs live in); the host converts into its own
+    /// canvas-local DIPs via its true pixel origin + render scale. UI thread only.</summary>
+    public static void Place(UIElement el, double xPx, double yPx)
     {
         var w = _active;
         if (w == null || el == null) return;
-        Canvas.SetLeft(el, globalLeftDip - w.Left);
-        Canvas.SetTop(el, globalTopDip - w.Top);
+        if (!w._metricsValid) w.RefreshMetrics();
+        Canvas.SetLeft(el, (xPx - w._originPxX) / w._scaleX);
+        Canvas.SetTop(el, (yPx - w._originPxY) / w._scaleX);
     }
 
     /// <summary>Re-stack the live host above a mandatory video (see ChaosWindowZ). UI thread only.</summary>
@@ -134,7 +147,30 @@ public sealed class ChaosBubbleHostOverlay : Window
         _canvas = new Canvas { IsHitTestVisible = false };
         Content = _canvas;
 
-        SourceInitialized += (_, _) => ApplyExStyles();
+        SourceInitialized += (_, _) => { ApplyExStyles(); RefreshMetrics(); };
+        Loaded += (_, _) => RefreshMetrics();
+    }
+
+    /// <summary>Cache the hwnd's physical origin + the DPI scale WPF renders this window at.
+    /// Cheap, re-run on DPI change; Place() runs per bubble per frame and must not P/Invoke.</summary>
+    private void RefreshMetrics()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            if (GetWindowRect(hwnd, out var r)) { _originPxX = r.Left; _originPxY = r.Top; }
+            var dpi = VisualTreeHelper.GetDpi(this);
+            _scaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+            _metricsValid = true;
+        }
+        catch { }
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        RefreshMetrics();
     }
 
     private void ApplyExStyles()
@@ -153,6 +189,9 @@ public sealed class ChaosBubbleHostOverlay : Window
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int WS_EX_TRANSPARENT = 0x00000020;
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hwnd, int index);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
 }

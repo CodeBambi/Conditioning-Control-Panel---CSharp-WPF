@@ -68,6 +68,14 @@ namespace ConditioningControlPanel.Services
         // Don't go below 0.5: that starts accepting phrases sharing under half their words.
         private const double VoiceCommandMatchThreshold = 0.5;
 
+        // Utility / terse verbs (mute, unmute, volume, pause…) have short 2-word aliases that collide
+        // with a half-garbled utterance on a SINGLE shared word — which scores exactly the 0.5 content
+        // floor and false-fires (e.g. "sound mantra" hitting unmute's "sound on"). When genuinely said
+        // they're distinctive multi-word phrases that clear a higher bar comfortably, so require it of
+        // them while content nouns (bubbles, spiral…) keep the recall-first 0.5 floor. Safety (panic) is
+        // NOT terse, so it stays at 0.5 and still fires easily — a false positive there just stops things.
+        private const double UtilityCommandMatchThreshold = 0.6;
+
         // After a successful command we keep listening for a few quick follow-ups (no wake word needed)
         // so you can stack "bubbles ... flashes ... deeper" in one breath. Capped so it always winds down.
         private const int MaxChainedCommands = 3;
@@ -839,16 +847,9 @@ namespace ConditioningControlPanel.Services
                     return VoiceCmdOutcome.Silence;
 
                 var heard = SpeechService.Normalize(res.Transcript);
-                VoiceCommandIntent? best = null;
-                double bestScore = 0;
-                foreach (var intent in intents)
-                    foreach (var alias in intent.Aliases)
-                    {
-                        var s = SpeechService.Similarity(SpeechService.Normalize(alias), heard);
-                        if (s > bestScore) { bestScore = s; best = intent; }
-                    }
+                var (best, bestScore) = MatchVoiceIntent(heard);
 
-                if (best == null || bestScore < VoiceCommandMatchThreshold)
+                if (best == null)
                 {
                     App.Logger?.Information(
                         "AutonomyService: voice command no-match (heard '{Heard}', best {Score:0.00})", heard, bestScore);
@@ -888,6 +889,45 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Warning(ex, "AutonomyService: ListenForCommandAsync failed");
                 return VoiceCmdOutcome.Silence;
             }
+        }
+
+        /// <summary>
+        /// Resolve a heard (grammar-constrained) phrase to the best command intent, or (null, bestScore)
+        /// when nothing clears that intent's required threshold. Two guards over a plain argmax:
+        ///   • per-intent floor: terse utility verbs need <see cref="UtilityCommandMatchThreshold"/> — their
+        ///     short aliases otherwise grab any one-word overlap at the 0.5 content floor;
+        ///   • "mantra" keyword priority: that token appears in NO other intent's aliases, so a
+        ///     grammar-constrained transcript containing it is an explicit mantra request — route it to the
+        ///     mantra intent even when a utility alias coincidentally ties (the original "sound mantra" bug).
+        /// Shared by the listen flow and the one-breath inline-command path so both score identically.
+        /// </summary>
+        private static (VoiceCommandIntent? intent, double score) MatchVoiceIntent(string heard)
+        {
+            heard = SpeechService.Normalize(heard);
+            if (heard.Length == 0) return (null, 0);
+
+            VoiceCommandIntent? best = null;
+            double bestScore = 0;
+            foreach (var intent in VoiceCommandIntents)
+                foreach (var alias in intent.Aliases)
+                {
+                    var s = SpeechService.Similarity(SpeechService.Normalize(alias), heard);
+                    if (s > bestScore) { bestScore = s; best = intent; }
+                }
+
+            // "mantra" is unique to the mantra intent's grammar, so its presence is an explicit request —
+            // honour it over a coincidental utility-alias tie. The < 0.85 guard is belt-and-braces: a
+            // near-exact match to some other alias can't actually contain the word "mantra".
+            if (best?.IsMantra != true && bestScore < 0.85
+                && heard.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("mantra"))
+            {
+                var mantra = VoiceCommandIntents.FirstOrDefault(i => i.IsMantra);
+                if (mantra != null) return (mantra, Math.Max(bestScore, VoiceCommandMatchThreshold));
+            }
+
+            if (best == null) return (null, bestScore);
+            double required = best.TerseAck ? UtilityCommandMatchThreshold : VoiceCommandMatchThreshold;
+            return bestScore >= required ? (best, bestScore) : (null, bestScore);
         }
 
         /// <summary>Run an intent's action and speak its confirmation. Must be called on the UI thread.</summary>

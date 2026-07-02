@@ -25,6 +25,11 @@ public class BubbleService : IDisposable
 {
     private const int MAX_BUBBLES = 3;          // per-window fallback cap (SetWindowPos-bound — keep small)
     private const int MAX_BUBBLES_HOST = 40;    // shared-host cap: a dense ambient field is cheap on the Canvas
+    // Trigger/effect bubbles ALWAYS render per-window (forceWindowMode) even with the shared host on,
+    // and each is a WS_EX_LAYERED window repositioned via SetWindowPos every frame. So they must be
+    // capped independently of the (Canvas-cheap) host field cap — otherwise a high trigger chance puts
+    // dozens of layered windows on screen and starves desktop-heap/GPU surfaces (freeze cluster #448/#431).
+    private const int MAX_TRIGGER_WINDOWS = 4;
     /// <summary>Concurrent ambient cap. The per-window path stays at 3 (each move is a SetWindowPos);
     /// the shared-host path repositions via batched Canvas.SetLeft/Top, so it carries a dense field.</summary>
     private int MaxAmbientBubbles => _ambientHost ? MAX_BUBBLES_HOST : MAX_BUBBLES;
@@ -274,8 +279,14 @@ public class BubbleService : IDisposable
     public void PopBubblesInRect(Rect rectDips)
     {
         if (!_chaosActive) return;
-        foreach (var b in _bubbles.ToArray())
+        // Called by EVERY flying DVD logo every composed frame — the old per-call ToArray()
+        // re-allocated the whole field N-logos × refresh-rate times a second. Pop() defers its
+        // list removal to the pop animation's completion, so a reverse index scan with a count
+        // re-check is safe against anything a pop mutates same-frame.
+        for (int i = _bubbles.Count - 1; i >= 0; i--)
         {
+            if (i >= _bubbles.Count) continue;
+            var b = _bubbles[i];
             if (!b.IsAlive || b.Spec == null) continue;
             if (b.Spec.IsDarter || b.Spec.IsFreeze) continue;
             if (rectDips.IntersectsWith(b.BoundingBox)) b.Pop();
@@ -824,6 +835,8 @@ public class BubbleService : IDisposable
     private void SpawnBubble()
     {
         if (!_isRunning) return;
+        // Hold off spawning while a monitor/DPI change settles (freeze cluster — see DisplayChangeCoordinator).
+        if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed) return;
         if (_bubbles.Count >= MaxAmbientBubbles)
         {
             App.Logger?.Debug("Max bubbles reached, skipping spawn");
@@ -868,6 +881,17 @@ public class BubbleService : IDisposable
         {
             try
             {
+                // Hold off while a monitor/DPI change settles (freeze cluster — see DisplayChangeCoordinator).
+                if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed) return;
+
+                // Respect the concurrent cap (SpawnBubble does; keyword-triggered spawns must too, or a
+                // held-down trigger floods layered windows). Checked before starting the timer.
+                if (_bubbles.Count >= MaxAmbientBubbles)
+                {
+                    App.Logger?.Debug("SpawnOnce: max bubbles reached, skipping trigger spawn");
+                    return;
+                }
+
                 if (_bubbleImage == null)
                     LoadBubbleImage();
 
@@ -989,6 +1013,11 @@ public class BubbleService : IDisposable
     private Bubble CreateAmbientBubble(System.Windows.Forms.Screen screen, bool isClickable)
     {
         var spec = RollTriggerSpec();
+        // Trigger bubbles are per-window layered windows; keep their concurrent count low regardless of
+        // the overall (host-rendered) field cap. Past the ceiling, fall back to a plain bubble so the
+        // dashboard stays lively without a layered-window pileup.
+        if (spec != null && _bubbles.Count(b => b.IsAmbientEffectBubble) >= MAX_TRIGGER_WINDOWS)
+            spec = null;
         if (spec == null)
             return new Bubble(screen, _bubbleImage, _random, OnPop, OnMiss, OnDestroy, isClickable);
         return new Bubble(screen, _bubbleImage, _random, onPop: null, onMiss: OnMiss, onDestroy: OnDestroy,
@@ -2750,8 +2779,15 @@ internal class Bubble
             _grid.Opacity = _baseOpacity;
             _grid.Effect = null;
             ChaosBubbleHostOverlay.Add(_grid);
-            ChaosBubbleHostOverlay.Place(_grid, _posX + _size / 2.0 - _hitSize / 2.0,
-                                                _posY + _size / 2.0 - _hitSize / 2.0);
+            // Mixed-DPI: the host renders at ONE scale (its majority monitor's). A bubble whose
+            // screen runs a different scale compensates with a LayoutTransform, or its visual is
+            // drawn displaced + mis-sized from the physical-px hit disc the mouse hook tests —
+            // the second-screen "bubbles don't pop" bug on e.g. 125% primary / 100% secondary.
+            double hostScale = ChaosBubbleHostOverlay.RenderScale;
+            if (hostScale > 0 && Math.Abs(hostScale - _dpiScale) > 0.001)
+                _grid.LayoutTransform = new ScaleTransform(_dpiScale / hostScale, _dpiScale / hostScale);
+            ChaosBubbleHostOverlay.Place(_grid, (_posX + _size / 2.0 - _hitSize / 2.0) * _dpiScale,
+                                                (_posY + _size / 2.0 - _hitSize / 2.0) * _dpiScale);
         }
         else
         {
@@ -3408,8 +3444,9 @@ internal class Bubble
             if (_useHost)
             {
                 // Cheap Canvas reposition — no SetWindowPos. Grid (_hitSize) centred on the bubble.
-                ChaosBubbleHostOverlay.Place(_grid, _posX + _size / 2.0 - _hitSize / 2.0 + jx,
-                                                    _posY + _size / 2.0 - _hitSize / 2.0 + jy);
+                // PHYSICAL px: the host converts by its own origin/scale (mixed-DPI safe).
+                ChaosBubbleHostOverlay.Place(_grid, (_posX + _size / 2.0 - _hitSize / 2.0 + jx) * _dpiScale,
+                                                    (_posY + _size / 2.0 - _hitSize / 2.0 + jy) * _dpiScale);
             }
             else
             {

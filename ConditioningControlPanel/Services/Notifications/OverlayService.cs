@@ -26,6 +26,13 @@ public class OverlayService : IDisposable
     // because the persistent feature is off. Decremented when the timed overlay's hide fires.
     private int _timedPinkHolds;
     private int _timedSpiralHolds;
+    // Sustained holds: an overlay shown via ShowOverlaySustained (voice "go pink"/"spiral", Deeper
+    // region bands) has no hide timer, so — like the timed holds above — the periodic reconcilers
+    // (RefreshOverlays / UpdateOverlays) must NOT tear it down just because the persistent feature
+    // setting is off. Bool, not a counter: ShowOverlaySustained is idempotent (the ad-hoc paths
+    // early-return on a non-empty window list), so a repeat show + single hide must still release it.
+    private bool _sustainedPinkHeld;
+    private bool _sustainedSpiralHeld;
 
     public OverlayService()
     {
@@ -55,6 +62,13 @@ public class OverlayService : IDisposable
     private double? _rampSpiralOpacity;
     private double? _rampBrainDrainOpacity;
     private int _consecutiveTopmostLossCount;
+    // Recreate-overlays backoff. Destroying + recreating every layered overlay window on a 3s cadence
+    // is a GDI/composition-surface churn engine (feeds the "not enough quota" exhaustion, and the
+    // render-thread close/create is the freeze class). If a few recreations don't win topmost back,
+    // stop recreating and just keep forcing z-order — recreation isn't helping and only burns surfaces.
+    // Reset to 0 whenever topmost is regained, so a genuinely transient loss can still recreate later.
+    private int _recreateAttempts;
+    private const int MaxRecreateAttempts = 3;
     // Tick counter for periodic topmost-layer "kick". The 500ms timer drives this;
     // every ~5s (10 ticks) we re-issue HWND_TOPMOST even if the WS_EX_TOPMOST flag
     // is set, because Windows can reorder within the topmost layer (fullscreen
@@ -235,7 +249,7 @@ public class OverlayService : IDisposable
                 else
                     UpdatePinkFilterOpacity();
             }
-            else if (_timedPinkHolds == 0)   // don't kill an in-flight timed pink overlay
+            else if (_timedPinkHolds == 0 && !_sustainedPinkHeld)   // don't kill an in-flight timed/sustained pink overlay
             {
                 StopPinkFilter();
             }
@@ -249,7 +263,7 @@ public class OverlayService : IDisposable
                 else
                     UpdateSpiralOpacity();
             }
-            else if (_timedSpiralHolds == 0)   // don't kill an in-flight timed spiral overlay
+            else if (_timedSpiralHolds == 0 && !_sustainedSpiralHeld)   // don't kill an in-flight timed/sustained spiral overlay
             {
                 StopSpiral();
             }
@@ -383,7 +397,7 @@ public class OverlayService : IDisposable
         {
             StartPinkFilter();
         }
-        else if (!settings.PinkFilterEnabled && _pinkFilterWindows.Count > 0 && _timedPinkHolds == 0)
+        else if (!settings.PinkFilterEnabled && _pinkFilterWindows.Count > 0 && _timedPinkHolds == 0 && !_sustainedPinkHeld)
         {
             StopPinkFilter();
         }
@@ -398,7 +412,7 @@ public class OverlayService : IDisposable
             _spiralPath = spiralPath;
             StartSpiral();
         }
-        else if (!settings.SpiralEnabled && _spiralWindows.Count > 0 && _timedSpiralHolds == 0)
+        else if (!settings.SpiralEnabled && _spiralWindows.Count > 0 && _timedSpiralHolds == 0 && !_sustainedSpiralHeld)
         {
             StopSpiral();
         }
@@ -414,12 +428,30 @@ public class OverlayService : IDisposable
             if (_consecutiveTopmostLossCount >= 6) // 6 x 500ms = 3 seconds of continuous loss
             {
                 _consecutiveTopmostLossCount = 0;
-                RecreateOverlays();
+                if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed)
+                {
+                    // A monitor/DPI change is settling — topmost loss is expected and transient. Just
+                    // reassert; don't tear down + recreate windows into the composition rebuild storm,
+                    // and don't spend the recreate budget on it.
+                    ReassertZOrder(force: true);
+                }
+                else if (_recreateAttempts < MaxRecreateAttempts)
+                {
+                    _recreateAttempts++;
+                    RecreateOverlays();
+                }
+                else
+                {
+                    // Backed off: recreation didn't win topmost back after several tries. Keep forcing
+                    // z-order instead of churning layered surfaces every 3s (freeze cluster #431/#451).
+                    ReassertZOrder(force: true);
+                }
             }
         }
         else
         {
             _consecutiveTopmostLossCount = 0;
+            _recreateAttempts = 0; // topmost regained — allow recreation to help again on a future loss
         }
 
         // Periodic unconditional kick to handle in-layer reordering even when the
@@ -553,7 +585,18 @@ public class OverlayService : IDisposable
 
         Action runShow = () =>
         {
-            try { show(); }
+            try
+            {
+                show();
+                // Mark it held so the periodic reconcilers (RefreshOverlays / UpdateOverlays) leave it
+                // alone — without this they tore the unguarded ad-hoc window down on the next tick because
+                // the persistent feature setting was off ("go pink flashes then immediately goes away").
+                // Both show() and the reconcilers run on this one UI thread, so they can't interleave;
+                // gate on a window actually appearing so a no-op show (e.g. spiral with no asset) doesn't
+                // leave a stale hold that would later block a legitimate teardown.
+                if (kind == "pink_filter") _sustainedPinkHeld = _pinkFilterWindows.Count > 0;
+                else if (kind == "spiral") _sustainedSpiralHeld = _spiralWindows.Count > 0;
+            }
             catch (Exception ex) { App.Logger?.Debug("ShowOverlaySustained show: {E}", ex.Message); }
         };
         if (dispatcher.CheckAccess()) runShow();
@@ -568,10 +611,14 @@ public class OverlayService : IDisposable
         var dispatcher = Application.Current?.Dispatcher;
         if (dispatcher == null) return;
 
+        // Release the sustained hold, then only actually tear the overlay down when nothing else is
+        // keeping it on (a timed overlay still holding it, or the persistent feature setting). Mirrors
+        // the timed hide-timer's release discipline so a sustained exit can't stomp a co-active owner.
+        var settings = App.Settings.Current;
         Action? hide = kind switch
         {
-            "pink_filter" => () => StopPinkFilter(),
-            "spiral"      => () => StopSpiral(),
+            "pink_filter" => () => { _sustainedPinkHeld = false; if (_timedPinkHolds == 0 && !settings.PinkFilterEnabled) StopPinkFilter(); },
+            "spiral"      => () => { _sustainedSpiralHeld = false; if (_timedSpiralHolds == 0 && !settings.SpiralEnabled) StopSpiral(); },
             "braindrain"  => () => StopBrainDrainBlur(),
             _ => null
         };
@@ -801,6 +848,7 @@ public class OverlayService : IDisposable
         }
         _lastAppliedPinkOpacity = -1;
         _rampPinkOpacity = null;
+        _sustainedPinkHeld = false; // overlay is gone (incl. force-stop / panic) — drop any stale sustained hold
         _pinkFilterWindows.Clear();
         App.Logger?.Debug("Pink filter stopped");
     }
@@ -1325,6 +1373,7 @@ public class OverlayService : IDisposable
         }
         _lastAppliedSpiralOpacity = -1;
         _rampSpiralOpacity = null;
+        _sustainedSpiralHeld = false; // overlay is gone (incl. force-stop / panic) — drop any stale sustained hold
         _spiralWindows.Clear();
         App.Logger?.Debug("Spiral stopped");
     }
@@ -1831,9 +1880,10 @@ public class OverlayService : IDisposable
 
         if (hadPinkFilter && settings.PinkFilterEnabled) StartPinkFilter();
         if (hadSpiral && settings.SpiralEnabled) StartSpiral();
-        // Brain drain is started externally, so just log if it was active
-        if (hadBrainDrain)
-            App.Logger?.Debug("Brain drain blur was active before recreation — must be restarted externally");
+        // Brain drain was previously only logged here, so a braindrain overlay that was the one losing
+        // topmost got torn down and never came back. Restart it too (same intensity source the other
+        // reconcile paths use) so recreation doesn't silently kill the effect.
+        if (hadBrainDrain && settings.BrainDrainEnabled) StartBrainDrainBlur((int)settings.BrainDrainIntensity);
     }
 
     /// <summary>
@@ -2164,6 +2214,18 @@ public class OverlayService : IDisposable
         _isRunning = false;
         _updateTimer?.Stop();
         _updateTimer = null;
+
+        // Dispose previously stopped only _updateTimer, leaving the capture + GIF timers running with
+        // _brainDrainImages populated — so BrainDrainCaptureTick kept grabbing the screen every tick
+        // after teardown, and the native capture DC/HBITMAP leaked. Stop them all and free the handles.
+        _brainDrainCaptureTimer?.Stop();
+        _brainDrainCaptureTimer = null;
+        _gifFrameTimer?.Stop();
+        _gifFrameTimer = null;
+        _gifLoopTimer?.Stop();
+        _gifLoopTimer = null;
+        _brainDrainImages.Clear();
+        CleanupCaptureResources();
 
         // Unsubscribe from settings changes
         if (App.Settings?.Current != null)

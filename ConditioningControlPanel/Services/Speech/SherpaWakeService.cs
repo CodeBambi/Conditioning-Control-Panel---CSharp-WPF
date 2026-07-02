@@ -209,6 +209,7 @@ namespace ConditioningControlPanel.Services.Speech
                 var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 WaveInEvent? mic = null;
                 OnlineStream? stream = null;
+                SileroVadGate? vadGate = null;
                 var engineLock = new object(); // serialize engine/stream access with teardown
                 var done = 0;
 
@@ -228,6 +229,20 @@ namespace ConditioningControlPanel.Services.Speech
                 {
                     stream = spotter.CreateStream();
 
+                    // Mic noise front-end (opt-out via settings): high-pass out AC/fan/hum rumble, then a
+                    // voiced/silent gate so steady room tone never reaches the keyword scorer. The gate is
+                    // Silero VAD when its model is installed (understands speech-vs-noise, so a fan can't
+                    // mask a soft voice) with the adaptive energy gate as fallback. Silent chunks are NOT
+                    // dropped — they roll through a pre-roll buffer that's flushed into the decoder the
+                    // moment the gate opens, so the low-energy "hey" onset (which every gate flips on only
+                    // AFTER it has begun) still reaches the model instead of being clipped off.
+                    var nsEnabled = App.Settings?.Current?.SpeechNoiseSuppression ?? true;
+                    var gateFactor = App.Settings?.Current?.SpeechNoiseGateFactor ?? 4.0;
+                    var hpf = nsEnabled ? new HighPassFilter(SampleRate) : null;
+                    vadGate = nsEnabled ? SileroVadGate.TryCreate(SampleRate) : null;
+                    var gate = nsEnabled && vadGate == null ? new NoiseGate(gateFactor, hangoverFrames: 12) : null;
+                    var preRoll = nsEnabled ? new PreRollBuffer(SampleRate) : null;
+
                     mic = new WaveInEvent
                     {
                         DeviceNumber = ResolveDeviceNumber(),
@@ -244,25 +259,41 @@ namespace ConditioningControlPanel.Services.Speech
                             int n = e.BytesRecorded / 2;
                             if (n <= 0) return;
                             var samples = new float[n];
-                            double sumSq = 0;
                             for (int i = 0, j = 0; i + 1 < e.BytesRecorded; i += 2, j++)
+                                samples[j] = (short)(e.Buffer[i] | (e.Buffer[i + 1] << 8)) / 32768f;
+
+                            // Rumble filter first, so both the level meter and the gate see clean audio.
+                            hpf?.ProcessInPlace(samples, n);
+
+                            double rms = 0;
+                            if (gate != null || diag)
                             {
-                                float v = (short)(e.Buffer[i] | (e.Buffer[i + 1] << 8)) / 32768f;
-                                samples[j] = v;
-                                sumSq += v * v;
+                                double sumSq = 0;
+                                for (int k = 0; k < n; k++) sumSq += samples[k] * samples[k];
+                                rms = Math.Sqrt(sumSq / n);
                             }
 
                             if (diag)
                             {
-                                double rms = Math.Sqrt(sumSq / n);
                                 winPeak = Math.Max(winPeak, rms);
                                 if (++winFrames >= 40) // ~2s at 50ms buffers
                                 {
-                                    App.Logger?.Information("SherpaWakeService: listening (peakRms={Peak:0.0000}, frames={Frames})", winPeak, totalFrames + winFrames);
+                                    App.Logger?.Information("SherpaWakeService: listening (peakRms={Peak:0.0000}, floor={Floor:0.0000}, frames={Frames})", winPeak, gate?.NoiseFloor ?? 0, totalFrames + winFrames);
                                     winPeak = 0; winFrames = 0;
                                 }
                             }
                             totalFrames++;
+
+                            // Steady room tone (AC/fan) never reaches the decoder, so hum can't accrete
+                            // into a false wake — but instead of dropping silent chunks we park them in
+                            // the pre-roll buffer, and flush it the moment the gate opens: the decoder
+                            // gets the speech onset the gate necessarily reacted to late.
+                            bool voiced = vadGate?.Update(samples) ?? gate?.Update(rms) ?? true;
+                            if (!voiced && preRoll != null)
+                            {
+                                preRoll.Push(samples);
+                                return;
+                            }
 
                             // Use the captured 'spotter'/'stream' pair for the whole session — never the
                             // _spotter field, which ResetInitState/Dispose could swap on another thread
@@ -270,6 +301,9 @@ namespace ConditioningControlPanel.Services.Speech
                             lock (engineLock)
                             {
                                 if (Volatile.Read(ref done) != 0 || stream == null) return;
+                                if (preRoll != null)
+                                    foreach (var held in preRoll.Drain())
+                                        stream.AcceptWaveform(SampleRate, held);
                                 stream.AcceptWaveform(SampleRate, samples);
                                 while (spotter.IsReady(stream))
                                 {
@@ -295,7 +329,8 @@ namespace ConditioningControlPanel.Services.Speech
 
                     IsListening = true; // mic is now physically open — light the privacy pill
                     mic.StartRecording();
-                    if (diag) App.Logger?.Information("SherpaWakeService: capture started (device={Dev})", mic.DeviceNumber);
+                    if (diag) App.Logger?.Information("SherpaWakeService: capture started (device={Dev}, gate={Gate})",
+                        mic.DeviceNumber, vadGate != null ? "silero-vad" : gate != null ? "energy" : "off");
                     return await tcs.Task.ConfigureAwait(false);
                 }
                 catch (Exception ex)
@@ -317,6 +352,8 @@ namespace ConditioningControlPanel.Services.Speech
                         try { stream?.Dispose(); } catch { }
                         stream = null;
                     }
+                    try { vadGate?.Dispose(); } catch { }
+                    vadGate = null;
                 }
             }
             finally
@@ -379,6 +416,10 @@ namespace ConditioningControlPanel.Services.Speech
                 int MsToSamples(double ms) => (int)(SampleRate * ms / 1000.0);
 
                 WaveInEvent? mic = null;
+                // Same rumble filter as the live wake path, so the utterances we sweep against are the
+                // audio the decoder will actually see (calibrating on raw audio picks a threshold for a
+                // pipeline the user never runs).
+                var hpfCal = (App.Settings?.Current?.SpeechNoiseSuppression ?? true) ? new HighPassFilter(SampleRate) : null;
                 try
                 {
                     mic = new WaveInEvent
@@ -395,12 +436,11 @@ namespace ConditioningControlPanel.Services.Speech
                             int n = e.BytesRecorded / 2;
                             if (n <= 0) return;
                             var buf = new float[n];
-                            double sumSq = 0;
                             for (int i = 0, j = 0; i + 1 < e.BytesRecorded; i += 2, j++)
-                            {
-                                float v = (short)(e.Buffer[i] | (e.Buffer[i + 1] << 8)) / 32768f;
-                                buf[j] = v; sumSq += v * v;
-                            }
+                                buf[j] = (short)(e.Buffer[i] | (e.Buffer[i + 1] << 8)) / 32768f;
+                            hpfCal?.ProcessInPlace(buf, n);
+                            double sumSq = 0;
+                            for (int k = 0; k < n; k++) sumSq += buf[k] * buf[k];
                             double rms = Math.Sqrt(sumSq / n);
                             double bufMs = 1000.0 * n / SampleRate;
 
@@ -590,13 +630,10 @@ namespace ConditioningControlPanel.Services.Speech
 
         private static int ResolveDeviceNumber()
         {
-            try
-            {
-                var idx = App.Settings?.Current?.SpeechInputDeviceIndex ?? -1;
-                if (idx >= 0 && idx < WaveInEvent.DeviceCount) return idx;
-            }
-            catch { }
-            return 0; // WaveIn device 0 == Windows default capture device.
+            // Prefer name-match over the raw ordinal (robust to device reshuffles) — shared with the
+            // Vosk path so both wake engines open the same mic (#441b).
+            var s = App.Settings?.Current;
+            return SpeechService.ResolveDeviceNumber(s?.SpeechInputDeviceIndex ?? -1, s?.SpeechInputDeviceName);
         }
 
         public void Dispose()

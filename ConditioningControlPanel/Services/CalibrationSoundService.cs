@@ -21,6 +21,7 @@ namespace ConditioningControlPanel.Services
         public static void ValidationStepPass()  => Play("chime1.mp3", 0.45f);
         public static void CalibrationVerified() => Play("result.mp3", 0.6f);
         public static void QuickRecalComplete()  => Play("chime3.mp3", 0.55f);
+        public static void BubblePop()           => Play("bubbles/Pop.mp3", 0.5f);
 
         private static void Play(string filename, float multiplier)
         {

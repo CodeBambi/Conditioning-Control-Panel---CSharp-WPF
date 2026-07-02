@@ -543,6 +543,9 @@ namespace ConditioningControlPanel
             _hwndSource = HwndSource.FromHwnd(_tubeHandle);
             _hwndSource?.AddHook(WndProc);
 
+            // Start the Takeover countdown bar (only ticks while Takeover is enabled)
+            InitTakeoverCountdownBar();
+
             // Hook the parent window's messages too. The keep-on-top timer polls at
             // Background priority and gets starved exactly when AI speech is busy
             // (GIF animation, text streaming, effects firing) — so the bubble can sit

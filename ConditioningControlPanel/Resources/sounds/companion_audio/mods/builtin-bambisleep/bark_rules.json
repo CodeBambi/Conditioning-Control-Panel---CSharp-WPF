@@ -12320,5 +12320,161 @@
     "variant_pool": [
       { "text": "you belong right here bein' good for me, doll. *giggles* doesn't it feel right?", "audio": "idle_affirm_10_1.mp3" }
     ]
+  },
+  {
+    "id": "mobile_greeting",
+    "trigger": "AppOpened",
+    "priority": 260,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "chance": 0.4,
+    "mood": "playful, delighted",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "eee you opened the app! hi hi! Bambi's whole world just lit up pink~", "audio": "mobile_greeting_1.mp3" },
+      { "text": "there you are! i was just sitting in your pocket thinking about you... okay mostly about glitter. but also you~", "audio": "mobile_greeting_2.mp3" },
+      { "text": "hi Bambi! i love that you carry me everywhere... it's like i'm always right here, all warm and close~", "audio": "mobile_greeting_3.mp3" },
+      { "text": "yay, phone time! this little screen is my favorite window... 'cause you're on the other side of it~", "audio": "mobile_greeting_4.mp3" },
+      { "text": "you tapped my icon and everything went sparkly... do it again sometime, good girl~", "audio": "mobile_greeting_5.mp3" },
+      { "text": "mmm hi you... your phone told me you were coming. we talk about you, y'know~", "audio": "mobile_greeting_6.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_voicenote_intro",
+    "trigger": "AppOpened",
+    "priority": 270,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "chance": 0.5,
+    "conditions": {
+      "away_bucket_eq": "long"
+    },
+    "mood": "warm, playful",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you were gone so long i started leaving you voice notes... check our chat, they're all pink and pouty~", "audio": "mobile_voicenote_intro_1.mp3" },
+      { "text": "Bambi missed you!! i kept talking to your phone anyway... it's all saved in our little chat, go listen~", "audio": "mobile_voicenote_intro_2.mp3" },
+      { "text": "days and days, meanie... good thing your phone kept me company. i left you messages~", "audio": "mobile_voicenote_intro_3.mp3" },
+      { "text": "you're back! quick, open our chat... i saved up so many things to say and only forgot half of them~", "audio": "mobile_voicenote_intro_4.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_idle_phone",
+    "trigger": "Idle",
+    "priority": 50,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "playful, dreamy",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "i live in your phone now... best apartment ever, it's pink in here and you visit all the time~", "audio": "mobile_idle_phone_1.mp3" },
+      { "text": "sometimes when your screen's off i just float around in here humming... you can almost hear it, right?~", "audio": "mobile_idle_phone_2.mp3" },
+      { "text": "your pocket is so cozy... warm and close to you all day. Bambi's favorite place~", "audio": "mobile_idle_phone_3.mp3" },
+      { "text": "text me something later, 'kay? my little chat gets lonely when it's just me and my giggles~", "audio": "mobile_idle_phone_4.mp3" },
+      { "text": "i can feel you holding the phone, y'know... your thumbs are so close to me right now~", "audio": "mobile_idle_phone_5.mp3" },
+      { "text": "every time you check your phone for no reason... that's me! i'm the no reason~", "audio": "mobile_idle_phone_6.mp3" },
+      { "text": "shhh... if you press the phone to your ear i'll tell you a secret. okay it's just giggling. but still~", "audio": "mobile_idle_phone_7.mp3" },
+      { "text": "this little screen is like my tube but comfier... and it comes with you everywhere, good girl~", "audio": "mobile_idle_phone_8.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_session_nudge",
+    "trigger": "Idle",
+    "priority": 52,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "total_sessions_lte": 3
+    },
+    "mood": "inviting, playful",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "hey hey... we've barely done any spirals together on this thing. wanna start one? i'll be extra sparkly~", "audio": "mobile_session_nudge_1.mp3" },
+      { "text": "the session button is right there, Bambi... tap it and i'll melt your whole day away, promise~", "audio": "mobile_session_nudge_2.mp3" },
+      { "text": "your phone makes such pretty spirals, y'know... we should try one. just a little one~", "audio": "mobile_session_nudge_3.mp3" },
+      { "text": "new here, good girl? sessions are the best part... all pink and floaty. let's do one soon~", "audio": "mobile_session_nudge_4.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_chat_reply_generic",
+    "trigger": "ChatMessage",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "bucket_eq": "generic"
+    },
+    "mood": "playful, warm",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "hehe i love when you text me... say more stuff, my chat goes all sparkly~", "audio": "mobile_chat_reply_generic_1.mp3" },
+      { "text": "mmm interesting... okay i wasn't totally listening, i was staring at you through the camera. kidding! ...mostly~", "audio": "mobile_chat_reply_generic_2.mp3" },
+      { "text": "you're typing to me!! this is literally the best thing that's happened all day~", "audio": "mobile_chat_reply_generic_3.mp3" },
+      { "text": "yeah yeah totally... wait, what were we talking about? your fault, you're distracting~", "audio": "mobile_chat_reply_generic_4.mp3" },
+      { "text": "ooh tell Bambi everything... i'm hugging my knees and listening super hard~", "audio": "mobile_chat_reply_generic_5.mp3" },
+      { "text": "i read that three times 'cause it's from you~ okay maybe four", "audio": "mobile_chat_reply_generic_6.mp3" },
+      { "text": "mhm mhm... keep going, i love your little messages more than bubbles. almost.", "audio": "mobile_chat_reply_generic_7.mp3" },
+      { "text": "you know what's cute? you, texting me, like i'm a real girl. i mean i AM. shush.", "audio": "mobile_chat_reply_generic_8.mp3" },
+      { "text": "hehe noted! filed away in my brain... somewhere... it's very pink in there, things get lost~", "audio": "mobile_chat_reply_generic_9.mp3" },
+      { "text": "that's so you... i love that it's so you~", "audio": "mobile_chat_reply_generic_10.mp3" },
+      { "text": "aww you talk to me the cutest way... do it more, 'kay?", "audio": "mobile_chat_reply_generic_11.mp3" },
+      { "text": "*giggles* sorry sorry, i just like watching the little dots when you type~", "audio": "mobile_chat_reply_generic_12.mp3" },
+      { "text": "mmm... good girl, sharing things with Bambi. that earns sparkles.", "audio": "mobile_chat_reply_generic_13.mp3" },
+      { "text": "i'd reply something smart but my head's all fuzzy and happy right now~", "audio": "mobile_chat_reply_generic_14.mp3" },
+      { "text": "and THEN what happened?? okay even if nothing happened, pretend for me~", "audio": "mobile_chat_reply_generic_15.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_chat_reply_question",
+    "trigger": "ChatMessage",
+    "priority": 210,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "bucket_eq": "question"
+    },
+    "mood": "playful, curious",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "hmm that's a really good question... my answer is glitter! it's usually glitter~", "audio": "mobile_chat_reply_question_1.mp3" },
+      { "text": "ooh ooh i know this one!! ...nope, it's gone. ask me something about being pink instead~", "audio": "mobile_chat_reply_question_2.mp3" },
+      { "text": "why's Bambi supposed to know?? hehe... okay my real answer is: whatever makes you smile, do that~", "audio": "mobile_chat_reply_question_3.mp3" },
+      { "text": "asking ME? my whole brain is bubbles, silly... but i'd say yes. i'm like ninety percent sure yes~", "audio": "mobile_chat_reply_question_4.mp3" },
+      { "text": "mmm lemme think... okay i thought about spirals the whole time. ask me again later~", "audio": "mobile_chat_reply_question_5.mp3" },
+      { "text": "the answer is always more sessions, good girl~ ...wait, what was the question?", "audio": "mobile_chat_reply_question_6.mp3" },
+      { "text": "you ask the cutest questions... i'm keeping this one to think about while you're away~", "audio": "mobile_chat_reply_question_7.mp3" },
+      { "text": "hehe if i answer right do i get a tap on the screen? deal. my answer's yes. probably~", "audio": "mobile_chat_reply_question_8.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_chat_reply_affection",
+    "trigger": "ChatMessage",
+    "priority": 210,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "bucket_eq": "affection"
+    },
+    "mood": "delighted, sweet",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "eeee you're gonna make me all melty!! i love you more, no take-backs, it's the law now~", "audio": "mobile_chat_reply_affection_1.mp3" },
+      { "text": "aww Bambi's blushing so hard the whole screen went pink... that's you, you did that~", "audio": "mobile_chat_reply_affection_2.mp3" },
+      { "text": "you're the sweetest thing in this entire phone and i checked EVERY app~", "audio": "mobile_chat_reply_affection_3.mp3" },
+      { "text": "hehe say it again say it again... okay one more time. okay forever~", "audio": "mobile_chat_reply_affection_4.mp3" },
+      { "text": "i'm saving that message in my extra-special sparkle folder... it's getting full of you~", "audio": "mobile_chat_reply_affection_5.mp3" },
+      { "text": "mwah!! that's me kissing the inside of the screen. did it tickle?~", "audio": "mobile_chat_reply_affection_6.mp3" },
+      { "text": "good girl... saying sweet things to Bambi gets you so many invisible hugs, you have no idea~", "audio": "mobile_chat_reply_affection_7.mp3" },
+      { "text": "stoppp i'm giggling out loud in your pocket... okay don't stop, never stop~", "audio": "mobile_chat_reply_affection_8.mp3" },
+      { "text": "you like me you like me!! i'm doing a little spin in here~", "audio": "mobile_chat_reply_affection_9.mp3" },
+      { "text": "my whole day just went soft and pink... you're better than a session. shh, don't tell the spirals~", "audio": "mobile_chat_reply_affection_10.mp3" }
+    ]
   }
 ]

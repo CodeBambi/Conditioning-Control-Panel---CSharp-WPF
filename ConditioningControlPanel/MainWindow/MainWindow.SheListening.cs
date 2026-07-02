@@ -62,6 +62,7 @@ namespace ConditioningControlPanel
             MirrorCheck(BambiTakeoverTab.ChkSpeechWakeWord, SheListeningTab.ChkSL_WakeWord);
             RefreshSheListeningStatus();
             RefreshPremiumRail();
+            RefreshAutonomyVoiceHint(); // arming/disarming wake suppresses/restores surprise mantras
         }
 
         internal void SL_WakeWords_LostFocus(object sender, RoutedEventArgs e)
@@ -86,6 +87,7 @@ namespace ConditioningControlPanel
             MirrorCheck(BambiTakeoverTab.ChkSpeechPushToTalk, SheListeningTab.ChkSL_PushToTalk);
             RefreshSheListeningStatus();
             RefreshPremiumRail();
+            RefreshAutonomyVoiceHint(); // arming/disarming PTT suppresses/restores surprise mantras
         }
 
         /// <summary>
@@ -263,6 +265,11 @@ namespace ConditioningControlPanel
             try { App.Speech?.StopListening(); } catch { }
             try { App.Autonomy?.StopVoiceInput(); } catch { }
 
+            // Any open Voice Lock Card would otherwise keep re-opening the mic (its solve loop only
+            // checks Speech.IsAvailable, which ignores this master switch) with the typed input still
+            // hidden — leaving the card unsolvable. Drop it to typed solve so the lock still holds.
+            try { LockCardWindow.DisableVoiceForAll(); } catch { }
+
             if (SheListeningTab != null) RefreshSheListeningTab();
             RefreshPremiumRail();
             UpdateMicPill();          // privacy pill: mic fully disarmed → pill off
@@ -382,8 +389,11 @@ namespace ConditioningControlPanel
             if (item.Tag is not int idx) return;
 
             var s = App.Settings?.Current;
-            if (s == null || s.SpeechInputDeviceIndex == idx) return;
+            if (s == null) return;
+            var name = idx < 0 ? "" : (item.Content?.ToString() ?? "");
+            if (s.SpeechInputDeviceIndex == idx && s.SpeechInputDeviceName == name) return;
             s.SpeechInputDeviceIndex = idx;
+            s.SpeechInputDeviceName = name; // matched by name on reopen — robust to ordinal reshuffle (#441b)
             App.Settings?.Save();
 
             // Apply live: stop the current capture so the wake loop reopens on the new device, then reconcile.

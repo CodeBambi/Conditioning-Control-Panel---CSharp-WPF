@@ -326,7 +326,22 @@ namespace ConditioningControlPanel
             try { StopBlinkTrainerDemoLoop(); } catch { }
             try { UnsubscribeBlinkTrainerLiveBlink(); } catch { }
 
-            base.OnClosing(e);
+            // Only raise the public Closing event (exit-cleanup handlers: global-hotkey unregister,
+            // gaze/blink stop) when we're actually exiting. On a minimize-to-tray (e.Cancel==true) the
+            // app keeps running, so those handlers must NOT fire — otherwise the global hotkey would die
+            // after the first X press (#446).
+            if (_exitRequested)
+                base.OnClosing(e);
+        }
+
+        protected override void OnDpiChanged(System.Windows.DpiScale oldDpi, System.Windows.DpiScale newDpi)
+        {
+            // Moving to a monitor with a different scale factor makes WPF rebuild every visible layered
+            // window's composition surface synchronously. Pause new flash/bubble/overlay spawns for a
+            // beat so we don't pile fresh surfaces onto that rebuild burst (desktop-heap/GPU exhaustion
+            // -> "Not enough quota" crash / render-thread wedge). See DisplayChangeCoordinator.
+            Services.UI.DisplayChangeCoordinator.NotifyDisplayChange("dpi-changed");
+            base.OnDpiChanged(oldDpi, newDpi);
         }
 
         protected override void OnStateChanged(EventArgs e)

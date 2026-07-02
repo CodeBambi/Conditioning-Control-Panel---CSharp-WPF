@@ -227,6 +227,30 @@ namespace ConditioningControlPanel.Services
         public bool IsIdleTimerRunning => _idleTimer?.IsEnabled == true;
         public bool IsRandomTimerRunning => _randomTimer?.IsEnabled == true;
 
+        // Countdown-bar support: remember when the current random interval will fire and how
+        // long that interval was, so the UI can render "fraction of time left" each frame.
+        private DateTime? _nextRandomFireTime;
+        private double _lastRandomIntervalSeconds;
+
+        /// <summary>
+        /// Fraction (0..1) of the current random-interval window still remaining before the next
+        /// Takeover action fires. 1.0 = just scheduled, 0.0 = about to fire. Null when the random
+        /// timer isn't running (nothing to count down to). Drives the avatar countdown bar.
+        /// </summary>
+        public double? NextRandomFireFraction
+        {
+            get
+            {
+                if (_randomTimer?.IsEnabled != true) return null;
+                if (_nextRandomFireTime == null || _lastRandomIntervalSeconds <= 0) return null;
+                var remaining = (_nextRandomFireTime.Value - DateTime.Now).TotalSeconds;
+                var frac = remaining / _lastRandomIntervalSeconds;
+                if (frac < 0) return 0;
+                if (frac > 1) return 1;
+                return frac;
+            }
+        }
+
         /// <summary>
         /// True when autonomy is currently executing an action.
         /// Used by XPContext to give Cult Bunny the +50% bonus.
@@ -676,6 +700,10 @@ namespace ConditioningControlPanel.Services
             _randomTimer.Tick += OnRandomTick;
             _randomTimer.Start();
 
+            // Anchor for the avatar countdown bar (DispatcherTimer exposes no "time remaining").
+            _lastRandomIntervalSeconds = actualSeconds;
+            _nextRandomFireTime = DateTime.Now.AddSeconds(actualSeconds);
+
             App.Logger?.Information("AutonomyService: Random timer scheduled - next tick in {Seconds:F0}s ({Mode})",
                 actualSeconds, modeInfo);
         }
@@ -946,8 +974,9 @@ namespace ConditioningControlPanel.Services
             if (settings.AutonomyCanTriggerSubliminal)
                 candidates.Add((AutonomyActionType.Subliminal, 25));
 
-            if (settings.AutonomyCanTriggerBrainDrain)
-                candidates.Add((AutonomyActionType.BrainDrainPulse, 10));
+            // Note: BrainDrainPulse removed from autonomy — Brain Drain is being kept out of user-facing
+            // surfaces while the blur feature is still being verified (mirrors its removal from the
+            // Deeper editor + session creator). Enum/label/PulseBrainDrain kept for a clean restore later.
 
             if (settings.AutonomyCanTriggerBubbles)
                 candidates.Add((AutonomyActionType.StartBubbles, 15));
@@ -1643,6 +1672,11 @@ namespace ConditioningControlPanel.Services
             // NOTE: We no longer disable spiral - let both overlays coexist if needed
             settings.PinkFilterEnabled = true;
             settings.PinkFilterOpacity = Math.Max(30, baseOpacity + 15);
+            // The setter clamps to 0..50, so read back what it actually became. On restore we revert
+            // ONLY if the value is still this — i.e. the user didn't move the slider during the pulse.
+            // Otherwise frequent pulses keep snapping the user's chosen opacity back up, so it "can't
+            // be lowered, always goes to 50" (#441a).
+            var appliedOpacity = settings.PinkFilterOpacity;
 
             App.Logger?.Information("AutonomyService: Pink filter pulse - enabling overlay (wasRunning={WasRunning})",
                 App.Overlay.IsRunning);
@@ -1693,7 +1727,10 @@ namespace ConditioningControlPanel.Services
                     {
                         // Restore ONLY pink filter settings - don't touch spiral
                         App.Settings.Current.PinkFilterEnabled = wasEnabled;
-                        App.Settings.Current.PinkFilterOpacity = baseOpacity;
+                        // Undo our boost only if the user hasn't changed opacity during the pulse window;
+                        // otherwise respect their manual value instead of snapping it back up (#441a).
+                        if (Math.Abs(App.Settings.Current.PinkFilterOpacity - appliedOpacity) < 0.5)
+                            App.Settings.Current.PinkFilterOpacity = baseOpacity;
                         App.Overlay?.RefreshOverlays();
 
                         // Stop overlay if nothing needs it
@@ -1818,19 +1855,29 @@ namespace ConditioningControlPanel.Services
                 for (int i = 0; i < 40 && (App.AvatarWindow?.IsSpeaking ?? false); i++)
                     await Task.Delay(75).ConfigureAwait(false);
 
+                // A beat longer than the old 8s so it's easier to get the whole phrase out in time.
+                var listenWindow = TimeSpan.FromSeconds(10);
+
                 var result = await App.Speech!.RecognizePhraseAsync(
-                    phrase, new Services.Speech.RecognizeOptions { Timeout = TimeSpan.FromSeconds(8) })
+                    phrase, new Services.Speech.RecognizeOptions { Timeout = listenWindow })
                     .ConfigureAwait(false);
 
-                // One gentle retry when she heard you but you were too quiet.
-                if (!result.Matched && result.LoudEnough == false && result.Score >= 0.45 && !result.Unavailable)
+                // One gentle retry on ANY non-match — too quiet, misheard, or nothing said — as long as
+                // the engine is still available. Makes it much easier to land the phrase; only a clean
+                // match (or an unavailable engine) skips the second try. The prompt fits the reason.
+                if (!result.Matched && !result.Unavailable)
                 {
-                    SpeakLine(App.MantraVoice?.GetRetry(), "Louder for me~ say it like you mean it.");
+                    var retryLine = result.LoudEnough == false
+                        ? "Louder for me~ say it like you mean it."
+                        : result.TimedOut && string.IsNullOrWhiteSpace(result.Transcript)
+                            ? "Take your time~ say it again for me."
+                            : "Mmm, almost~ say it once more, just for me.";
+                    SpeakLine(App.MantraVoice?.GetRetry(), retryLine);
                     await Task.Delay(900).ConfigureAwait(false);
                     for (int i = 0; i < 40 && (App.AvatarWindow?.IsSpeaking ?? false); i++)
                         await Task.Delay(75).ConfigureAwait(false);
                     result = await App.Speech!.RecognizePhraseAsync(
-                        phrase, new Services.Speech.RecognizeOptions { Timeout = TimeSpan.FromSeconds(8) })
+                        phrase, new Services.Speech.RecognizeOptions { Timeout = listenWindow })
                         .ConfigureAwait(false);
                 }
 

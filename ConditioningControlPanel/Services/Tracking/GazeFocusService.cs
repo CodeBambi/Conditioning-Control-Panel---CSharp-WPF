@@ -49,8 +49,12 @@ public class GazeFocusService : IDisposable
     // the lock switches. This is the "feels glued" behavior — the same trick
     // iPhone keyboards use (bias the candidate set with a prior, don't just
     // pick the literal hit point).
-    private const double BubbleScoreSigma = 100; // ≈ 2.45σ (≈245 dips) at threshold
-    private const double FlashScoreSigma = 60;
+    // Sigmas sized for quadrant-level reach ("if we are in that quadrant we
+    // are looking at that target"): a bubble stays the acquired target out
+    // to ≈390 dips — roughly a quarter of a 1080p screen — so the cursor
+    // lock-on (SetCursorLock) can draw the cursor in from its whole region.
+    private const double BubbleScoreSigma = 160; // ≈ 2.45σ (≈390 dips) at threshold
+    private const double FlashScoreSigma = 90;
     private const double StickyBonus = 0.20;
     private const double FlashTypeBonus = 0.15;
     private const double ScoreThreshold = 0.05;
@@ -134,6 +138,7 @@ public class GazeFocusService : IDisposable
         _timer = null;
 
         ClearTarget();
+        SetCursorLock(null);
         App.GazeCursor?.SetLocked(false);
         _lastGazePoint = null;
         _faceLost = false;
@@ -229,6 +234,7 @@ public class GazeFocusService : IDisposable
             if (DateTime.UtcNow < _cooldownUntil)
             {
                 ClearTarget();
+                SetCursorLock(null);
                 App.GazeCursor?.SetLocked(false);
                 return;
             }
@@ -236,6 +242,7 @@ public class GazeFocusService : IDisposable
             if (_faceLost || !_lastGazePoint.HasValue)
             {
                 ClearTarget();
+                SetCursorLock(null);
                 App.GazeCursor?.SetLocked(false);
                 return;
             }
@@ -246,6 +253,7 @@ public class GazeFocusService : IDisposable
             if (hit == null)
             {
                 ClearTarget();
+                SetCursorLock(null);
                 App.GazeCursor?.SetLocked(false);
                 return;
             }
@@ -254,14 +262,19 @@ public class GazeFocusService : IDisposable
 
             if (hit.Value.Bubble is Bubble b)
             {
+                SetCursorLock(b.GetGazeBounds());
                 AdvanceBubbleDwell(b);
             }
             else if (hit.Value.Flash is FlashWindow fw)
             {
+                Rect? fr = null;
+                try { fr = new Rect(fw.Left, fw.Top, fw.Width, fw.Height); } catch { }
+                SetCursorLock(fr);
                 AdvanceFlashDwell(fw);
             }
             else if (hit.Value.Floating is FloatingText ft)
             {
+                SetCursorLock(ft.GetGazeBounds());
                 AdvanceFloatingTextDwell(ft);
             }
         }
@@ -269,6 +282,36 @@ public class GazeFocusService : IDisposable
         {
             App.Logger?.Debug("GazeFocusService tick error: {Error}", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Points the tracking service's stateful gaze lock-on at the current
+    /// dwell target's bounds (null = no target → release). The cursor then
+    /// wobbles toward the target and stays with it in proportion to how
+    /// steady the user's gaze actually is — the tracking service drains the
+    /// lock gradually when the gaze sways too much, so there's no hard glue.
+    /// Applies to ALL live targets (bubbles, flash GIFs, video attention
+    /// targets): if the user's gaze is roughly in a target's region they
+    /// almost certainly want to hit it, so tending there IS the intended
+    /// behavior (round-7 user direction). Big targets get their radius
+    /// capped so the pull toward the center of a large flash stays sane.
+    /// Skipped while the calibration window owns the attractor (its bubble
+    /// test declares its own targets).
+    /// </summary>
+    private static void SetCursorLock(Rect? bounds)
+    {
+        if (WebcamCalibrationWindow.IsShowing) return;
+        if (bounds == null || bounds.Value.IsEmpty)
+        {
+            App.Webcam?.ClearGazeAttractor();
+            return;
+        }
+        var rect = bounds.Value;
+        // Radius = target visual radius + slack for mapping residual,
+        // capped so the lock's capture/taper zones (which scale off it)
+        // don't cover half the screen for a large flash window.
+        double radius = Math.Clamp(Math.Max(rect.Width, rect.Height) / 2.0 + 30, 50, 240);
+        App.Webcam?.SetGazeAttractor(rect.X + rect.Width / 2.0, rect.Y + rect.Height / 2.0, radius);
     }
 
     /// <summary>

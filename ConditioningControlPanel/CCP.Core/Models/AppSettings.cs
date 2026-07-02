@@ -710,6 +710,18 @@ namespace ConditioningControlPanel.Models
             set { _flashGlowEnabled = value; OnPropertyChanged(); }
         }
 
+        // Solid mode: render flashes as children of the ONE shared click-through host window
+        // (ChaosBubbleHostOverlay) instead of one topmost layered window per flash. The per-flash
+        // window churn near screen centre is what some fullscreen games (e.g. Overwatch) react
+        // badly to — the same reason bubble solid mode exists. Solid-mode flashes are click-through
+        // (no mouse pop/hydra clicks); gaze-pop and stare-linger still work.
+        private bool _flashSolidMode = false;
+        public bool FlashSolidMode
+        {
+            get => _flashSolidMode;
+            set { _flashSolidMode = value; OnPropertyChanged(); }
+        }
+
         private int _flashDuration = 5; // Duration in seconds when audio is disabled (1-30)
         public int FlashDuration
         {
@@ -2094,14 +2106,15 @@ namespace ConditioningControlPanel.Models
             get => _bubblesFrequency;
             set { _bubblesFrequency = Math.Clamp(value, 1, 60); OnPropertyChanged(); }
         }
-        private bool _bubbleSharedHost = false;
+        private bool _bubbleSharedHost = true;
         /// <summary>Render the ambient dashboard bubbles as visuals on ONE shared click-through host
         /// window (Canvas-positioned, pops via the global mouse hook) instead of one top-level layered
         /// Window per bubble — the same hyper-optimized path the chaos field uses (see
         /// <see cref="ChaosBubbleSharedHost"/>). The per-window path repositions every bubble via
         /// SetWindowPos each frame, which saturates the UI thread and makes clicks register late under a
-        /// dense field (raised spawn rate / higher concurrent cap). Default OFF until proven, exactly how
-        /// the chaos host shipped; falls back to the proven per-window path when off.</summary>
+        /// dense field (raised spawn rate / higher concurrent cap). Default ON since v6.2.5 (the chaos
+        /// field proved the renderer); the "Solid mode" toggle remains as the opt-out back to the
+        /// per-window path for setups where the global mouse hook or click-through host misbehave.</summary>
         public bool BubbleSharedHost
         {
             get => _bubbleSharedHost;
@@ -2358,6 +2371,16 @@ namespace ConditioningControlPanel.Models
         {
             get => _backdropOpacity;
             set { _backdropOpacity = Math.Clamp(value, 0.0, 1.0); OnPropertyChanged(); }
+        }
+
+        private bool _chaosTunnelEnabled = false;
+        /// <summary>Endless 3D "rabbit hole" WebGL tunnel rendered behind the Chaos game (a non-topmost
+        /// WebView2 window under every bubble/FX/video/HUD layer). Default OFF — it stacks GPU load on the
+        /// already-heavy game, so it's opt-in from the Chaos hub.</summary>
+        public bool ChaosTunnelEnabled
+        {
+            get => _chaosTunnelEnabled;
+            set { _chaosTunnelEnabled = value; OnPropertyChanged(); }
         }
 
         private string _chaosAccessoryKey1 = "Q";
@@ -3197,6 +3220,17 @@ namespace ConditioningControlPanel.Models
             set { _autonomyModeEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _showTakeoverCountdownBar = true;
+        /// <summary>
+        /// Show a thin pink countdown bar under the avatar that drains toward the next
+        /// random Takeover action. On by default; hidden via the Takeover tab toggle.
+        /// </summary>
+        public bool ShowTakeoverCountdownBar
+        {
+            get => _showTakeoverCountdownBar;
+            set { _showTakeoverCountdownBar = value; OnPropertyChanged(); }
+        }
+
         private bool _autonomyConsentGiven = false;
         /// <summary>
         /// Whether the user has given consent for autonomous behavior.
@@ -3555,6 +3589,18 @@ namespace ConditioningControlPanel.Models
             set { _speechInputDeviceIndex = value; OnPropertyChanged(); }
         }
 
+        private string _speechInputDeviceName = "";
+        /// <summary>WaveIn capture device NAME (ProductName) for the chosen mic. Preferred over the raw
+        /// ordinal when reopening the mic, because NAudio device indices reshuffle when virtual audio
+        /// devices come and go — a stale ordinal then silently points at a dead input ("voice worked
+        /// yesterday, not today", #441b). Empty = fall back to the ordinal / system default.</summary>
+        [JsonProperty]
+        public string SpeechInputDeviceName
+        {
+            get => _speechInputDeviceName;
+            set { _speechInputDeviceName = value ?? ""; OnPropertyChanged(); }
+        }
+
         private double _speechMatchThreshold = 0.62;
         /// <summary>Minimum fuzzy similarity (0..1) for a spoken phrase to count as a match.</summary>
         [JsonProperty]
@@ -3698,6 +3744,34 @@ namespace ConditioningControlPanel.Models
         {
             get => _speechHeadphonesMode;
             set { _speechHeadphonesMode = value; OnPropertyChanged(); }
+        }
+
+        private bool _speechNoiseSuppression = true;
+        /// <summary>
+        /// Mic noise front-end: strips low-frequency rumble (AC units, fans, mains hum) with a high-pass
+        /// filter and gates onset on an ADAPTIVE noise floor instead of a fixed loudness threshold, so a
+        /// steady room hum self-raises the trigger point rather than firing it. On by default; turn off to
+        /// feed raw mic audio to the recognizers (the pre-6.2.x behaviour).
+        /// </summary>
+        [JsonProperty]
+        public bool SpeechNoiseSuppression
+        {
+            get => _speechNoiseSuppression;
+            set { _speechNoiseSuppression = value; OnPropertyChanged(); }
+        }
+
+        private double _speechNoiseGateFactor = 4.0;
+        /// <summary>
+        /// SNR margin for the adaptive noise gate: a frame counts as "voiced" when its RMS exceeds the
+        /// tracked noise floor by this multiple (~+12 dB at 4.0). Higher = stricter (needs to be clearly
+        /// louder than the room — good for noisy rooms); lower = more sensitive. Only used when
+        /// <see cref="SpeechNoiseSuppression"/> is on.
+        /// </summary>
+        [JsonProperty]
+        public double SpeechNoiseGateFactor
+        {
+            get => _speechNoiseGateFactor;
+            set { _speechNoiseGateFactor = Math.Clamp(value, 1.5, 8.0); OnPropertyChanged(); }
         }
 
         #endregion
@@ -4535,6 +4609,19 @@ namespace ConditioningControlPanel.Models
             set { _webcamSensitivity = value; OnPropertyChanged(); }
         }
 
+        // Click-driven implicit recalibration (GazeDriftCorrectionService).
+        // While tracking runs with a calibration loaded, each left-click the
+        // user makes near their fixated gaze point nudges the runtime offset
+        // a little toward the click — posture drift self-corrects instead of
+        // requiring Quick Recal. Default on; the toggle lives in the Lab
+        // webcam debug card.
+        private bool _webcamAutoDriftCorrection = true;
+        public bool WebcamAutoDriftCorrection
+        {
+            get => _webcamAutoDriftCorrection;
+            set { _webcamAutoDriftCorrection = value; OnPropertyChanged(); }
+        }
+
         // Box 2 — Focus Training
         private bool _focusGameEnabled;
         public bool FocusGameEnabled
@@ -4645,6 +4732,15 @@ namespace ConditioningControlPanel.Models
         // false too but the toast self-suppresses once they visit the tab.
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool HasSeenBlinkTrainerFlagship { get; set; }
+
+        /// <summary>
+        /// Set once the one-time asset migration (install-dir assets -> %APPDATA% user folder)
+        /// has completed. Without this flag the migration re-copies the entire library on every
+        /// launch: its only re-copy guard was a per-file "destination exists?" check, so a user
+        /// who deleted the %APPDATA% copy to reclaim disk space got all ~10GB copied again next
+        /// launch, repeatedly filling the system drive.
+        /// </summary>
+        public bool HasMigratedAssetsToUserFolder { get; set; }
 
         #endregion
 

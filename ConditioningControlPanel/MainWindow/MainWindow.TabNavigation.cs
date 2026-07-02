@@ -240,6 +240,8 @@ namespace ConditioningControlPanel
                     RefreshWebcamMonitorList();
                     if (LabTab.ChkRestrictGazeToCalScreen != null && App.Settings?.Current != null)
                         LabTab.ChkRestrictGazeToCalScreen.IsChecked = App.Settings.Current.RestrictGazeContentToCalibratedScreen;
+                    if (LabTab.ChkWebcamDriftCorrection != null && App.Settings?.Current != null)
+                        LabTab.ChkWebcamDriftCorrection.IsChecked = App.Settings.Current.WebcamAutoDriftCorrection;
                     break;
 
                 // Note: "patreon" case is handled at the top of ShowTab as a

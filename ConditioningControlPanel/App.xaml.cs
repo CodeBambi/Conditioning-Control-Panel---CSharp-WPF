@@ -42,7 +42,20 @@ namespace ConditioningControlPanel
         private static bool _mutexOwned = false;
         private const string MutexName = "ConditioningControlPanel_SingleInstance_Mutex";
         private const string ShowSignalName = "ConditioningControlPanel_ShowWindow_Signal";
+        // Acknowledgment gate for the single-instance handshake. A second instance sets the
+        // show-signal, then waits on this for the primary to confirm — from its UI thread — that
+        // it actually surfaced a window. A wedged (render-thread deadlock) or headless primary
+        // never runs the dispatcher callback, so it never acks; the second instance then presumes
+        // the primary is dead, kills it, and takes over instead of silently exiting. Without this
+        // ack, a zombie process kept the mutex alive and every relaunch quietly Shutdown()'d,
+        // which is the "app freezes on startup, have to relaunch several times" report.
+        private const string ShowAckSignalName = "ConditioningControlPanel_ShowAck_Signal";
+        // Generous: exceeds a normal cold start so a healthy but still-initializing primary
+        // (whose dispatcher isn't pumping yet) acks in time and is never mistaken for wedged.
+        private const int ShowAckTimeoutMs = 10000;
         private static EventWaitHandle? _showSignal;
+        private static EventWaitHandle? _showAckSignal;
+        private static bool _recoveredFromStaleInstance;
         private SplashScreen? _splash;
         private static Thread? _showSignalThread;
         private readonly TaskCompletionSource _patreonInitDone = new();
@@ -337,6 +350,7 @@ namespace ConditioningControlPanel
         public static FocusGameService FocusGame { get; private set; } = null!;
         public static GazeFocusService GazeFocus { get; private set; } = null!;
         public static GazeDebugCursorService GazeCursor { get; private set; } = null!;
+        public static GazeDriftCorrectionService GazeDrift { get; private set; } = null!;
         public static BlinkTrainerService BlinkTrainer { get; private set; } = null!;
         public static Services.Deeper.EnhancementLibrary EnhancementLibrary { get; private set; } = null!;
         public static Services.Deeper.EnhancementAudioPlayer DeeperPlayer { get; private set; } = null!;
@@ -379,6 +393,15 @@ namespace ConditioningControlPanel
         /// Unified user ID that links Patreon and Discord accounts together
         /// </summary>
         public static string? UnifiedUserId { get; set; }
+
+        /// <summary>
+        /// Snapshot of the UnifiedUserId as restored from settings at startup, captured
+        /// BEFORE session validation can null it out on a token/session failure. Used by
+        /// the re-login flow to tell "same account re-login" from "different account" even
+        /// after an expired session cleared the live UnifiedUserId — so re-logging into the
+        /// same account never gets misclassified as a new account and wipes progression.
+        /// </summary>
+        public static string? StartupUnifiedId { get; private set; }
 
         /// <summary>
         /// User identifier for server communication. Only the unified ID is valid —
@@ -468,6 +491,18 @@ namespace ConditioningControlPanel
                 _cachedScreens = null;
                 _screenCacheTime = DateTime.MinValue;
             }
+        }
+
+        /// <summary>
+        /// Monitor topology / resolution / DPI changed. Refresh the screen cache and quiesce the
+        /// layered-window spawn paths for a beat (WPF is rebuilding composition surfaces; adding new
+        /// ones now risks desktop-heap/GPU-surface exhaustion — the freeze cluster). Fires on the UI
+        /// thread via SystemEvents' WPF message pump.
+        /// </summary>
+        private static void OnDisplaySettingsChanged(object? sender, EventArgs e)
+        {
+            InvalidateScreenCache();
+            Services.UI.DisplayChangeCoordinator.NotifyDisplayChange("display-settings");
         }
 
         /// <summary>
@@ -825,26 +860,86 @@ namespace ConditioningControlPanel
             _mutexOwned = createdNew; // Track if we actually own the mutex
             if (!createdNew)
             {
-                // Another instance is already running - signal it to show its window
+                // Another instance holds the single-instance mutex. Ask it to show its window —
+                // but confirm it's actually alive before we bow out. A wedged/headless primary
+                // keeps the mutex forever, and the old "signal then Shutdown()" left every
+                // relaunch a silent no-op until the zombie finally died. Now we wait for an ack
+                // and, if none comes, kill the stale process and take over as primary.
+
+                // Write the "Open with CCP" handoff BEFORE signaling so a live primary can read it.
+                if (_pendingFileOpenAction != null && _pendingFileOpenPath != null)
+                {
+                    try { WriteFileOpenHandoff(_pendingFileOpenAction, _pendingFileOpenPath); } catch { }
+                }
+
+                EventWaitHandle? ackWait = null;
+                try { ackWait = EventWaitHandle.OpenExisting(ShowAckSignalName); } catch { ackWait = null; }
+
+                if (ackWait == null)
+                {
+                    // Primary predates the ack handshake (mid-upgrade) or its kernel objects are
+                    // gone. Preserve the legacy behavior: poke it to show, then exit quietly —
+                    // never kill a process we can't positively identify as wedged.
+                    try
+                    {
+                        var signal = EventWaitHandle.OpenExisting(ShowSignalName);
+                        signal.Set();
+                        signal.Dispose();
+                    }
+                    catch { }
+
+                    splash.Close();
+                    Shutdown();
+                    return;
+                }
+
+                // Clear any stale ack from a prior handshake, poke the primary, then wait for it
+                // to confirm liveness from its UI thread.
+                try { ackWait.Reset(); } catch { }
                 try
                 {
-                    if (_pendingFileOpenAction != null && _pendingFileOpenPath != null)
-                    {
-                        WriteFileOpenHandoff(_pendingFileOpenAction, _pendingFileOpenPath);
-                    }
                     var signal = EventWaitHandle.OpenExisting(ShowSignalName);
                     signal.Set();
                     signal.Dispose();
                 }
                 catch { }
 
-                splash.Close();
-                Shutdown();
-                return;
+                bool acknowledged = false;
+                try { acknowledged = ackWait.WaitOne(ShowAckTimeoutMs); } catch { }
+                try { ackWait.Dispose(); } catch { }
+
+                if (acknowledged)
+                {
+                    // Primary is alive and surfaced its window — nothing more to do.
+                    splash.Close();
+                    Shutdown();
+                    return;
+                }
+
+                // No acknowledgment within the window: the primary is wedged or headless. Kill it
+                // and take over. (Logger isn't up yet here; we record the recovery once it is.)
+                _recoveredFromStaleInstance = true;
+                KillStaleInstances();
+
+                // Claim single-instance ownership now that the zombie is gone. If it died holding
+                // the mutex, WaitOne throws AbandonedMutexException but we DO acquire it.
+                try { if (_mutex!.WaitOne(TimeSpan.FromSeconds(3))) _mutexOwned = true; }
+                catch (AbandonedMutexException) { _mutexOwned = true; }
+                catch { }
+
+                // We kept the parsed _pendingFileOpen* fields and will fulfill them ourselves, so
+                // drop any on-disk handoff to avoid a spurious re-open on a later signal.
+                try { ConsumeFileOpenHandoff(); } catch { }
+
+                // Fall through — this instance is now the primary.
             }
 
-            // Create signal for other instances to request showing our window
+            // Create signal for other instances to request showing our window, plus the ack gate
+            // a second instance waits on to prove this instance's UI thread is responsive.
             _showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowSignalName);
+            // ManualReset: a second instance Reset()s it just before signaling, so a leftover
+            // ack from a prior handshake can't be mistaken for a fresh one.
+            _showAckSignal = new EventWaitHandle(false, EventResetMode.ManualReset, ShowAckSignalName);
             _showSignalThread = new Thread(() =>
             {
                 while (_showSignal != null)
@@ -862,7 +957,8 @@ namespace ConditioningControlPanel
                                 var mainWin = MainWindowRef ?? (MainWindow as MainWindow);
                                 if (mainWin != null)
                                 {
-                                    mainWin.ShowFromTray();
+                                    try { mainWin.ShowFromTray(); }
+                                    catch (Exception ex) { Logger?.Warning(ex, "ShowFromTray failed"); }
                                     var (action, path) = ConsumeFileOpenHandoff();
                                     if (action != null && path != null)
                                     {
@@ -870,6 +966,12 @@ namespace ConditioningControlPanel
                                         catch (Exception ex) { Logger?.Warning(ex, "HandlePendingFileOpen failed"); }
                                     }
                                 }
+
+                                // Reaching here means the UI thread is alive and pumping — ack the
+                                // waiting second instance so it exits instead of killing us. Sent
+                                // even when mainWin is null (still starting): a responsive
+                                // dispatcher is proof enough that we are not wedged.
+                                try { _showAckSignal?.Set(); } catch { }
                             });
                         }
                     }
@@ -926,10 +1028,25 @@ namespace ConditioningControlPanel
             Logger.Information("Application starting v{Version} | workingSet {WS}MB",
                 Services.UpdateService.AppVersion, Environment.WorkingSet / (1024 * 1024));
 
+            // Rotate crash.log so a bug report only carries crashes from THIS build. The log is
+            // append-only, so without this it accumulates months of old crashes and the reporter
+            // ships them all (the last 120KB), burying the real failure and polluting triage.
+            RotateCrashLogForVersion(logPath);
+
+            // Surface a single-instance takeover (a prior wedged/headless process was killed so
+            // this launch could proceed). Recorded here because Logger isn't up during the handshake.
+            if (_recoveredFromStaleInstance)
+                Logger.Warning("[LIFECYCLE] Previous instance was unresponsive (no show-ack within {Ms}ms) — killed it and took over as primary", ShowAckTimeoutMs);
+
             // If a Rabbit Hole run was live when the process last died, the native vanish left nothing
             // in crash.log — but the chaos sentinel file is still on disk. Report+consume it so the
             // crash self-documents (with last-known context) in this session's log.
             Services.Chaos.ChaosCrashSentinel.ConsumeAndReport(Logger);
+
+            // React to monitor topology / resolution changes (unplug, res change, DPI): drop the stale
+            // screen cache AND pause layered-window spawns briefly so we don't create fresh surfaces
+            // during the composition rebuild storm (freeze cluster — see DisplayChangeCoordinator).
+            try { SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged; } catch { }
 
             // Hang forensics: the recurring freezes are render-thread deadlocks (Application
             // Hang 1002, nothing in crash.log). The watchdog writes one minidump per session
@@ -1034,9 +1151,6 @@ namespace ConditioningControlPanel
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "wallpapers"));
             Directory.CreateDirectory(Path.Combine(UserDataPath, "Spirals"));
 
-            // Migrate assets from old location (install dir) to new location (user data) in background
-            _ = Task.Run(MigrateAssetsToUserFolder);
-
             // Create Resources directories (these are bundled with app, not user content)
             var resourcesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
             Directory.CreateDirectory(resourcesPath);
@@ -1063,10 +1177,22 @@ namespace ConditioningControlPanel
                 Logger?.Warning(ex, "Settings migration failed (non-fatal, defaults apply)");
             }
 
+            // Migrate assets from old location (install dir) to new location (user data) in background.
+            // MUST run after Settings is initialized: the migration both READS the "already migrated"
+            // guard and WRITES the completion flag, and if Settings.Current is still null (as it was
+            // when this fired at the top of OnStartup, before `Settings = new SettingsService()`), the
+            // flag never persists and the whole library gets re-copied to the system drive every launch.
+            _ = Task.Run(MigrateAssetsToUserFolder);
+
             // Restore UnifiedUserId from settings (persisted from previous session)
             if (!string.IsNullOrEmpty(Settings?.Current?.UnifiedId))
             {
                 UnifiedUserId = Settings.Current.UnifiedId;
+                // Persist a snapshot for the re-login same-account check. ValidateRestoredSessionAsync
+                // (below) may null UnifiedUserId + settings.UnifiedId on a token/session failure, which
+                // would otherwise make a later re-login of THIS SAME account look brand new and wipe
+                // local progression back to level 1.
+                StartupUnifiedId = UnifiedUserId;
                 Logger?.Information("Restored UnifiedUserId from settings: {Id}", UnifiedUserId);
             }
 
@@ -1293,6 +1419,9 @@ namespace ConditioningControlPanel
             FocusGame = new FocusGameService();
             GazeCursor = new GazeDebugCursorService();
             GazeFocus = new GazeFocusService();
+            // Click-driven implicit recal — installs its mouse hook only while
+            // tracking runs with a calibration loaded (and the setting is on).
+            GazeDrift = new GazeDriftCorrectionService();
             BlinkTrainer = new BlinkTrainerService();
 
             // In-app non-blocking notifications. Host attachment is deferred to
@@ -1427,7 +1556,29 @@ namespace ConditioningControlPanel
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
             // for Takeover to start. No-op unless consent is given and the speech engine is available.
-            try { Autonomy?.RefreshVoiceInputModes(); } catch (Exception ex) { Logger?.Warning(ex, "Startup RefreshVoiceInputModes failed"); }
+            //
+            // LAZY/DEFERRED: the offline speech models are heavy to load (Vosk small ~0.5s on the UI
+            // thread; the sherpa-onnx KWS transducer trio several seconds), and arming inline here made
+            // the very first IsAvailable query load Vosk ON the startup UI thread. Defer the whole arm-up
+            // to ApplicationIdle (after the window has rendered and is interactive), and warm BOTH models
+            // on a background thread first — so neither load ever blocks startup. RefreshVoiceInputModes
+            // then runs back on the UI thread (it touches the LL keyboard hook / message pump) with the
+            // models already warm, so it returns instantly.
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                Task.Run(() =>
+                {
+                    try { _ = Speech?.IsAvailable; } catch { }                                   // warm Vosk off-UI
+                    try { if (Settings?.Current?.SpeechWakeWordEnabled == true) _ = WakeWord?.IsAvailable; } catch { } // warm KWS off-UI
+                }).ContinueWith(_ =>
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try { Autonomy?.RefreshVoiceInputModes(); }
+                        catch (Exception ex) { Logger?.Warning(ex, "Deferred RefreshVoiceInputModes failed"); }
+                    }));
+                });
+            }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
 
             // First-instance "Open with CCP" dispatch: replay parsed --play/--edit
             // args once MainWindow is fully loaded so the player/editor windows
@@ -1490,6 +1641,49 @@ namespace ConditioningControlPanel
                     Settings.Save();
                 }), System.Windows.Threading.DispatcherPriority.Loaded);
             }
+        }
+
+        // Terminate any OTHER running CCP process that shares our executable path. Called from the
+        // single-instance handshake only after the existing instance failed to acknowledge within
+        // ShowAckTimeoutMs — i.e. it is wedged (render-thread deadlock) or headless and is keeping
+        // the single-instance mutex alive. Matching on the full exe path avoids nuking an unrelated
+        // same-named process or a separate install; ProcessName is a best-effort fallback when the
+        // other process's MainModule can't be read (access denied). Runs before Logger init.
+        private static void KillStaleInstances()
+        {
+            try
+            {
+                int selfId = Environment.ProcessId;
+                string? selfPath = null;
+                try { selfPath = Process.GetCurrentProcess().MainModule?.FileName; } catch { }
+                string selfName = Process.GetCurrentProcess().ProcessName;
+
+                foreach (var proc in Process.GetProcessesByName(selfName))
+                {
+                    try
+                    {
+                        if (proc.Id == selfId) continue;
+
+                        // Prefer an exact executable-path match; fall back to name-only if the
+                        // path is unreadable (e.g. the target is elevated).
+                        bool pathMatches = true;
+                        if (selfPath != null)
+                        {
+                            string? otherPath = null;
+                            try { otherPath = proc.MainModule?.FileName; } catch { otherPath = null; }
+                            if (otherPath != null)
+                                pathMatches = string.Equals(otherPath, selfPath, StringComparison.OrdinalIgnoreCase);
+                        }
+                        if (!pathMatches) continue;
+
+                        proc.Kill();
+                        proc.WaitForExit(5000);
+                    }
+                    catch { /* process may have exited on its own, or we lack rights — skip it */ }
+                    finally { try { proc.Dispose(); } catch { } }
+                }
+            }
+            catch { /* enumeration failed — takeover still proceeds; the mutex re-acquire is best-effort */ }
         }
 
         // Standard WPF "bring to front" sequence. Activate() alone is silently
@@ -2449,6 +2643,56 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Rotate <c>crash.log</c> at startup so a bug report only carries crashes from the running
+        /// build. crash.log is append-only (see <see cref="LogCrashDetails"/>) and the bug reporter
+        /// attaches its tail, so left alone it drags months of unrelated crashes into every report.
+        /// We rotate when the app version changes (each entry is version-tagged) and cap runaway
+        /// growth within a single version. Best-effort: any failure is swallowed. Keeps ONE archive
+        /// (<c>crash.log.prev</c>) for local post-mortems.
+        /// </summary>
+        private static void RotateCrashLogForVersion(string logDir)
+        {
+            const long MaxCrashLogBytes = 512 * 1024; // per-version runaway guard
+            try
+            {
+                var crashLogPath = Path.Combine(logDir, "crash.log");
+                if (!File.Exists(crashLogPath)) return;
+
+                var markerPath = Path.Combine(logDir, "crash.log.version");
+                string current = Services.UpdateService.AppVersion;
+                string previous = "";
+                try { if (File.Exists(markerPath)) previous = File.ReadAllText(markerPath).Trim(); } catch { }
+
+                long size = 0;
+                try { size = new FileInfo(crashLogPath).Length; } catch { }
+
+                bool versionChanged = !string.Equals(previous, current, StringComparison.Ordinal);
+                if (versionChanged || size > MaxCrashLogBytes)
+                {
+                    var archive = Path.Combine(logDir, "crash.log.prev");
+                    try { if (File.Exists(archive)) File.Delete(archive); } catch { }
+                    try
+                    {
+                        File.Move(crashLogPath, archive);
+                    }
+                    catch
+                    {
+                        // Locked/denied — truncate in place so we still drop the stale entries.
+                        try { File.WriteAllText(crashLogPath, string.Empty); } catch { }
+                    }
+                    Logger?.Information("[CRASHLOG] rotated crash.log (versionChanged={V}, prevVer={P}, size={S}KB)",
+                        versionChanged, string.IsNullOrEmpty(previous) ? "(none)" : previous, size / 1024);
+                }
+
+                try { File.WriteAllText(markerPath, current); } catch { }
+            }
+            catch (Exception ex)
+            {
+                Logger?.Debug("[CRASHLOG] rotation skipped: {Msg}", ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Log detailed crash information to both main log and a dedicated crash log file.
         /// This helps debug random crashes by capturing full context.
         /// </summary>
@@ -2467,6 +2711,7 @@ namespace ConditioningControlPanel
 ================================================================================
 CRASH REPORT - {DateTime.Now:yyyy-MM-dd HH:mm:ss}
 ================================================================================
+App Version: {Services.UpdateService.AppVersion}
 Source: {source}
 Exception Type: {ex.GetType().FullName}
 Message: {ex.Message}
@@ -2498,6 +2743,17 @@ Application State:
         {
             try
             {
+                // One-time migration only. Once it has run, never copy again — otherwise a user
+                // who keeps their library in the install dir (on another drive) and deletes the
+                // %APPDATA% copy to reclaim space gets the whole ~10GB re-copied to the system
+                // drive on every launch, since the per-file "destination exists?" guard passes
+                // for freshly-deleted files. (asset re-copy / disk-fill bug)
+                if (Settings?.Current?.HasMigratedAssetsToUserFolder == true)
+                {
+                    Logger?.Information("Asset migration skipped — already completed once.");
+                    return;
+                }
+
                 // If the user has chosen a custom assets folder, they manage their own
                 // assets — don't keep copying files into the default AppData location on
                 // every launch (bug #227). The migration only ever exists to rescue
@@ -2540,6 +2796,15 @@ Application State:
                 if (migratedCount > 0)
                 {
                     Logger?.Information("Migrated {Count} asset files to user data folder", migratedCount);
+                }
+
+                // Mark migration complete so it never runs again. This is what stops the
+                // repeated full re-copy after the user deletes the %APPDATA% copy to free space.
+                if (Settings?.Current != null)
+                {
+                    Settings.Current.HasMigratedAssetsToUserFolder = true;
+                    Settings.Save();
+                    Logger?.Information("Asset migration complete ({Count} files copied) — flag set, will not run again.", migratedCount);
                 }
             }
             catch (Exception ex)
@@ -2702,6 +2967,8 @@ Application State:
         {
             Logger?.Information("Application shutting down...");
 
+            try { SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged; } catch { }
+
             // A clean shutdown — even mid-run — is NOT a crash. Clear the chaos sentinel so the next
             // launch doesn't false-report it as an abnormal exit.
             try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
@@ -2781,6 +3048,7 @@ Application State:
             BlinkTrainer?.Dispose();
             GazeFocus?.Dispose();
             GazeCursor?.Dispose();
+            GazeDrift?.Dispose();
             Webcam?.Dispose();
             FocusGame?.Dispose();
             ContentPacks?.Dispose();
@@ -2823,6 +3091,11 @@ Application State:
             _showSignal = null;
             signal?.Set(); // Unblock the listener thread
             signal?.Dispose();
+
+            // Dispose the single-instance ack gate
+            var ackSignal = _showAckSignal;
+            _showAckSignal = null;
+            try { ackSignal?.Dispose(); } catch { }
 
             // Release single instance mutex (only if we own it)
             if (_mutexOwned && _mutex != null)

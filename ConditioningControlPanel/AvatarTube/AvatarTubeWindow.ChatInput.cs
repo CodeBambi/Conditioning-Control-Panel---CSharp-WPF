@@ -1181,11 +1181,8 @@ namespace ConditioningControlPanel
             _isMuted = !_isMuted;
             UpdateQuickMenuState();
 
-            // Hide speech bubble immediately when muting
-            if (_isMuted)
-            {
-                SpeechBubble.Visibility = Visibility.Collapsed;
-            }
+            // Mute silences her VOICE only — do NOT collapse the speech bubble (#445). Any in-flight
+            // bubble stays; future bubbles still show (audio is gated in ShowGiggle).
 
             // Persist to settings
             if (App.Settings?.Current != null)
@@ -1211,7 +1208,7 @@ namespace ConditioningControlPanel
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => ApplyMuteState(avatarMuted))); return; }
             _isMuted = avatarMuted;
-            if (avatarMuted) { try { SpeechBubble.Visibility = Visibility.Collapsed; } catch { } }
+            // Mute is audio-only; keep the speech bubble visible (#445).
             UpdateQuickMenuState();
         }
 
@@ -1385,10 +1382,7 @@ namespace ConditioningControlPanel
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => SetMuteAvatar(isMuted))); return; }
             _isMuted = isMuted;
-            if (_isMuted)
-            {
-                SpeechBubble.Visibility = Visibility.Collapsed;
-            }
+            // Mute is audio-only; keep the speech bubble visible (#445).
             UpdateQuickMenuState();
         }
 

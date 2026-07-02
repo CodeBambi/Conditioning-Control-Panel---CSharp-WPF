@@ -1563,6 +1563,7 @@ public partial class ChaosHubWindow : Window
         ChkNarrative.IsChecked = s.NarrativeModeEnabled;
         ChkBackdrop.IsChecked = s.BackdropEnabled;
         SldBackdropOpacity.Value = s.BackdropOpacity;
+        ChkTunnel.IsChecked = s.ChaosTunnelEnabled;
 
         // Accessory keybinds (future active-use; the binds persist now so loadouts feel real).
         var keyOpts = new[] { "Q", "E", "R", "F", "Z", "X", "C", "V", "1", "2", "3", "4" };
@@ -1630,6 +1631,7 @@ public partial class ChaosHubWindow : Window
         ChkNarrative.IsChecked = true;
         ChkBackdrop.IsChecked = true;
         SldBackdropOpacity.Value = 0.55;
+        ChkTunnel.IsChecked = false;
     }
 
     private void SaveToSettings()
@@ -1662,6 +1664,7 @@ public partial class ChaosHubWindow : Window
         s.NarrativeModeEnabled = ChkNarrative.IsChecked == true;
         s.BackdropEnabled = ChkBackdrop.IsChecked == true;
         s.BackdropOpacity = SldBackdropOpacity.Value;
+        s.ChaosTunnelEnabled = ChkTunnel.IsChecked == true;
     }
 
     // ============================ run-setup controls ============================

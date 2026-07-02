@@ -585,6 +585,16 @@ namespace ConditioningControlPanel.Models
                 BouncingTextPhrases = new List<string>(session.Settings.BouncingTextPhrases)
             };
 
+            // Prefer the persisted raw events when present — they preserve EVERY segment (multiple
+            // segments per feature). The Settings-based rebuild below only reconstructs one segment per
+            // feature, which silently dropped extra same-feature blocks (#429). Sessions authored before
+            // this field existed have no TimelineEvents and fall through to the Settings rebuild.
+            if (session.TimelineEvents != null && session.TimelineEvents.Count > 0)
+            {
+                timeline.Events = new List<TimelineEvent>(session.TimelineEvents);
+                return timeline;
+            }
+
             var settings = session.Settings;
 
             // Helper to get effective end minute (-1 means session duration)
@@ -757,7 +767,10 @@ namespace ConditioningControlPanel.Models
                 Difficulty = CalculateDifficulty(),
                 BonusXP = CalculateXP(),
                 HasCornerGifOption = HasFeature("corner_gif"),
-                Settings = ToSessionSettings()
+                Settings = ToSessionSettings(),
+                // Persist the raw events so every segment survives save/reload — Settings only carries
+                // one segment per feature (#429).
+                TimelineEvents = new List<TimelineEvent>(Events)
             };
         }
 

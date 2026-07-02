@@ -105,7 +105,7 @@
                 <TextBlock Text="Webcam Calibration"
                            Foreground="#FFFFFF" FontSize="26" FontWeight="Bold"
                            HorizontalAlignment="Center" Margin="0,0,0,4"/>
-                <TextBlock Text="Two short phases — about a minute total."
+                <TextBlock Text="Two short phases — under a minute total."
                            Foreground="#FFB6E1" FontSize="14"
                            HorizontalAlignment="Center" Margin="0,0,0,22"/>
 
@@ -139,10 +139,15 @@
                     </StackPanel>
                 </Grid>
 
+                <TextBlock Foreground="#FFC96E" FontSize="12.5"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap" Margin="0,0,0,8">
+                    ⚠ Dim-lit rooms make eye tracking super inconsistent — put some light on your face if you can.
+                </TextBlock>
                 <TextBlock Foreground="#888888" FontSize="12"
                            HorizontalAlignment="Center" TextAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,0,18">
-                    Sit comfortably, with even lighting on your face. ESC cancels at any time.
+                    Sit comfortably. ESC cancels at any time.
                 </TextBlock>
 
                 <Button x:Name="BtnIntroContinue" Content="Continue"
@@ -169,6 +174,48 @@
                 <TextBlock x:Name="TxtValidationAttempt" Text="" Foreground="#FF69B4"
                            FontSize="13" FontFamily="Consolas" HorizontalAlignment="Center"
                            Margin="0,16,0,0"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Bubble accuracy test: optional post-calibration minigame launched
+             from the verify panel. One bubble at a time; the user pops it by
+             holding their gaze cursor on it (~0.7s dwell). Residuals feed a
+             drift fine-tune — see RunBubbleTestAsync. -->
+        <Grid x:Name="BubbleTestPanel" Visibility="Collapsed">
+            <Canvas x:Name="BubbleTestCanvas">
+                <Ellipse x:Name="TestBubbleRingBg" Width="176" Height="176"
+                         Stroke="#33FFFFFF" StrokeThickness="4" Visibility="Collapsed"/>
+                <Ellipse x:Name="TestBubbleRingFg" Width="176" Height="176"
+                         Stroke="#FFFF69B4" StrokeThickness="5"
+                         StrokeDashArray="0 10000" StrokeDashCap="Round"
+                         RenderTransformOrigin="0.5,0.5" Visibility="Collapsed">
+                    <Ellipse.RenderTransform>
+                        <RotateTransform Angle="-90"/>
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+                <Ellipse x:Name="TestBubble" Width="128" Height="128"
+                         RenderTransformOrigin="0.5,0.5" Visibility="Collapsed">
+                    <Ellipse.RenderTransform>
+                        <ScaleTransform x:Name="TestBubbleScale" ScaleX="1" ScaleY="1"/>
+                    </Ellipse.RenderTransform>
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Color="#66FFFFFF" Offset="0"/>
+                            <GradientStop Color="#99FF9BD0" Offset="0.7"/>
+                            <GradientStop Color="#CCFF69B4" Offset="1"/>
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                    <Ellipse.Effect>
+                        <DropShadowEffect Color="#FF69B4" BlurRadius="24" ShadowDepth="0" Opacity="0.8"/>
+                    </Ellipse.Effect>
+                </Ellipse>
+            </Canvas>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
+                <TextBlock Text="Accuracy test" Foreground="White" FontSize="22" FontWeight="Bold"
+                           HorizontalAlignment="Center"/>
+                <TextBlock x:Name="TxtBubbleTestStatus"
+                           Text="Look at each bubble — hold your gaze on it to pop it. ESC cancels."
+                           Foreground="#AAAAAA" FontSize="14" Margin="0,8,0,0" HorizontalAlignment="Center"/>
             </StackPanel>
         </Grid>
 
@@ -202,7 +249,7 @@
                 <TextBlock Text="Calibration complete. Blink and mouth tracking warmed up — you're all set."
                            Foreground="#CCCCCC" FontSize="13" Margin="0,8,0,0"
                            TextWrapping="Wrap" HorizontalAlignment="Center"/>
-                <TextBlock x:Name="TxtVerifyStatus" Text="Click Verify to preview accuracy with a live gaze cursor, or close when ready."
+                <TextBlock x:Name="TxtVerifyStatus" Text="Preview accuracy with a live gaze cursor, or pop a few bubbles with your eyes to test (and auto fine-tune) precision."
                            Foreground="#AAAAAA" FontSize="12" Margin="0,16,0,20"
                            TextWrapping="Wrap" HorizontalAlignment="Center" MaxWidth="440"/>
 
@@ -211,6 +258,10 @@
                             Background="#33333A" Foreground="White" BorderBrush="#FF69B4"
                             BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
                             Margin="0,0,8,0" Click="BtnVerifyAccuracy_Click"/>
+                    <Button x:Name="BtnVerifyBubbleTest" Content="Bubble test" Padding="20,10"
+                            Background="#33333A" Foreground="White" BorderBrush="#FF69B4"
+                            BorderThickness="1" FontWeight="SemiBold" Cursor="Hand"
+                            Margin="0,0,8,0" Click="BtnVerifyBubbleTest_Click"/>
                     <Button x:Name="BtnVerifyRecalibrate" Content="Recalibrate" Padding="20,10"
                             Background="#33333A" Foreground="White" BorderThickness="0"
                             Cursor="Hand" Margin="0,0,8,0" Click="BtnVerifyRecalibrate_Click"/>

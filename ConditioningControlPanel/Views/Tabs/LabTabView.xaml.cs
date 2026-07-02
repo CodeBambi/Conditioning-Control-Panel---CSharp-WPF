@@ -162,6 +162,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.ChkWebcamDebugCursor_Changed(sender, e);
         }
+        private void ChkWebcamDriftCorrection_Changed(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.ChkWebcamDriftCorrection_Changed(sender, e);
+        }
         private void CmbWebcamDevice_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

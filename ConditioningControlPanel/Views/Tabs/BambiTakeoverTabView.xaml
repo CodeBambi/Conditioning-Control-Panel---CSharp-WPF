@@ -272,6 +272,15 @@
                             </Grid>
 
                             <Border Height="1" Background="#2E2E48" Margin="0,10"/>
+                            <Grid Margin="0,2" ToolTip="Shows a thin pink bar under the avatar that drains as the next surprise Takeover approaches, so you can see it coming.">
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="⏳ Show next-takeover countdown bar" FontSize="12" Foreground="#CCC"/>
+                                    <TextBlock Text="A pink bar under the avatar that empties before the next random action." FontSize="10" Foreground="#888"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ChkShowTakeoverCountdown" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="ChkShowTakeoverCountdown_Changed" Unchecked="ChkShowTakeoverCountdown_Changed"/>
+                            </Grid>
+
+                            <Border Height="1" Background="#2E2E48" Margin="0,10"/>
 
                             <!-- Pointer: the mic controls moved to the She's Listening exclusive -->
                             <Border Background="#22FF69B4" CornerRadius="6" Padding="12,10">

@@ -130,6 +130,15 @@ namespace ConditioningControlPanel
 
         internal void PremiumRemoteOpenFlyout()
         {
+            // State-aware chip: if Remote is already ON, the chip turns it OFF from the dashboard. The
+            // start-only flyout had no stop path, so the chip appeared stuck in "turn on" with no way to
+            // disable Remote without going to the Remote tab (#440).
+            if (RemoteControlTab?.ChkRemoteControlEnabled?.IsChecked == true)
+            {
+                RemoteControlTab.ChkRemoteControlEnabled.IsChecked = false; // runs the existing disable flow
+                RefreshPremiumRail();
+                return;
+            }
             if (SettingsTab?.RemoteFlyout != null) SettingsTab.RemoteFlyout.IsOpen = true;
         }
 

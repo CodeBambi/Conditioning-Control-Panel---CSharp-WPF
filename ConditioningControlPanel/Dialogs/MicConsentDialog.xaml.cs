@@ -15,7 +15,7 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class MicConsentDialog : Window
     {
-        private const string SourceUrl = "https://github.com/CC-Labs-llc/Conditioning-Control-Panel---CSharp-WPF/blob/main/ConditioningControlPanel/Services/Speech/SpeechService.cs";
+        private const string SourceUrl = "https://github.com/CodeBambi/Conditioning-Control-Panel---CSharp-WPF/blob/main/ConditioningControlPanel/Services/Speech/SpeechService.cs";
 
         private enum Step { Intro = 1, Privacy = 2, Consent = 3 }
         private Step _step = Step.Intro;

@@ -646,7 +646,10 @@ namespace ConditioningControlPanel.Services
                         // Sync oopsie insurance season usage from server
                         if (v2Result?.OopsieUsedSeason != null)
                         {
-                            var currentSeason = DateTime.UtcNow.ToString("yyyy-MM");
+                            // Server-authoritative season key (not wall-clock): OopsieUsedSeason is in the
+                            // server's season terms, so comparing it to a local wall-clock month mis-clears
+                            // the flag whenever the server season lags the calendar month (e.g. the 1st).
+                            var currentSeason = SeasonRecapService.CurrentSeasonKey;
                             var oopsieUsed = v2Result.OopsieUsedSeason == currentSeason;
                             if (settings.SeasonalStreakRecoveryUsed != oopsieUsed)
                             {

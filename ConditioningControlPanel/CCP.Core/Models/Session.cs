@@ -56,6 +56,14 @@ namespace ConditioningControlPanel.Models
         public List<SessionPhase> Phases { get; set; } = new();
 
         /// <summary>
+        /// Raw timeline events from the editor, preserving EVERY segment (multiple segments per feature).
+        /// Settings above is a flattened one-segment-per-feature view used by the runtime engine; without
+        /// this the editor lost extra same-feature segments on save/reload (#429). Empty for sessions
+        /// authored before this field existed (they rebuild the timeline from Settings).
+        /// </summary>
+        public List<TimelineEvent> TimelineEvents { get; set; } = new();
+
+        /// <summary>
         /// Gets XP bonus based on difficulty
         /// </summary>
         public static int GetDifficultyXP(SessionDifficulty difficulty)

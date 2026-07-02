@@ -626,8 +626,16 @@ namespace ConditioningControlPanel.Services
         private Window GetOrCreateScreenWindow(System.Windows.Forms.Screen screen)
         {
             var key = screen.DeviceName ?? "primary";
-            if (_screenWindows.TryGetValue(key, out var cached) && cached.IsLoaded)
-                return cached;
+            if (_screenWindows.TryGetValue(key, out var cached))
+            {
+                if (cached.IsLoaded)
+                    return cached;
+                // Stale entry (the window was closed, or a display topology change left it unloaded).
+                // Close it before replacing the slot so we don't orphan a live layered window that then
+                // lingers until Dispose — accumulates across monitor plug/unplug cycles.
+                try { cached.Close(); } catch { }
+                _screenWindows.Remove(key);
+            }
 
             // Use EXACTLY the same approach as OverlayService.GetWpfScreenBounds
             // which works correctly for multi-monitor DPI setups

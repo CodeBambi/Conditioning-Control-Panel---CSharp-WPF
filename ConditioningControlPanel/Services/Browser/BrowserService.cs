@@ -160,9 +160,21 @@ namespace ConditioningControlPanel.Services
                 // Store the URL to navigate to after initialization
                 _pendingUrl = initialUrl ?? _defaultUrl;
                 
-                // Create environment
+                // Create environment. Pass the same browser args the Deeper player uses:
+                //  --autoplay-policy=no-user-gesture-required: allow programmatic v.play() (the WPF/UI
+                //    gesture isn't a JS user gesture).
+                //  --disable-direct-composition-video-overlays: Chromium otherwise promotes <video> to a
+                //    DirectComposition hardware overlay (MPO) plane; on GPUs/drivers with buggy MPO
+                //    support that plane scans out BLACK while audio decodes fine — the "web video is a
+                //    black screen, audio plays" report (#449/#439). Disabling it composites video through
+                //    DWM normally (also keeps Spiral/Pink overlays visible over fullscreen web video).
                 App.Logger?.Information("Creating WebView2 environment in: {Path}", _userDataFolder);
-                _environment = await CoreWebView2Environment.CreateAsync(userDataFolder: _userDataFolder);
+                var envOptions = new CoreWebView2EnvironmentOptions
+                {
+                    AdditionalBrowserArguments =
+                        "--autoplay-policy=no-user-gesture-required --disable-direct-composition-video-overlays"
+                };
+                _environment = await CoreWebView2Environment.CreateAsync(userDataFolder: _userDataFolder, options: envOptions);
                 App.Logger?.Information("WebView2 environment created successfully");
 
                 // Hook into the Loaded event - EnsureCoreWebView2Async must be called AFTER the control is in the visual tree

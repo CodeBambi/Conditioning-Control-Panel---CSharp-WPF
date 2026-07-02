@@ -110,10 +110,9 @@ namespace ConditioningControlPanel
         {
             // Click is the privacy stop affordance — same intent as the camera pill. Fully disarm the
             // offline mic so it genuinely stays off (and the dashboard Voice dot reflects it): clears
-            // wake-word + push-to-talk, cuts live capture, tears down the loop/hook. Also drop any open
+            // wake-word + push-to-talk, cuts live capture, tears down the loop/hook, and drops any open
             // Voice Lock Card to typed solve so the lock still holds.
             try { DisarmVoiceMic(); } catch { }
-            try { LockCardWindow.DisableVoiceForAll(); } catch { }
         }
 
         private void WireWebcamActivePill()
@@ -1019,6 +1018,17 @@ namespace ConditioningControlPanel
                 App.GazeCursor?.Hide("debug-toggle");
                 AppendWebcamDebugLog("Debug cursor hidden.");
             }
+        }
+
+        internal void ChkWebcamDriftCorrection_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (LabTab.ChkWebcamDriftCorrection == null || App.Settings?.Current == null) return;
+            bool v = LabTab.ChkWebcamDriftCorrection.IsChecked == true;
+            App.Settings.Current.WebcamAutoDriftCorrection = v;
+            AppendWebcamDebugLog(v
+                ? "Auto drift correction enabled — clicks near your gaze will fine-tune calibration."
+                : "Auto drift correction disabled.");
         }
 
         internal void ChkRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)

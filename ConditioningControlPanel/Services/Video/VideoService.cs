@@ -37,6 +37,12 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _safetyTimer;
         private DispatcherTimer? _fallbackSafetyTimer;
 
+        // Watch-time crediting for stats/quests (#447). _lastWatchPositionMs tracks the current video's
+        // latest playback position (LibVLC TimeChanged); _creditedWatchSeconds is a watermark of what's
+        // already been credited so repeated teardown calls can't double-count.
+        private double _lastWatchPositionMs;
+        private double _creditedWatchSeconds;
+
         private bool _isRunning;
         private bool _videoPlaying;
         private bool _triggerInProgress; // Guards the 800ms freeze delay window in TriggerVideo
@@ -970,6 +976,7 @@ namespace ConditioningControlPanel.Services
 
                 mediaPlayer.TimeChanged += (s, e) =>
                 {
+                    _lastWatchPositionMs = e.Time; // track watched position for quest crediting (#447)
                     try { PrimaryPlaybackTimeMsChanged?.Invoke(e.Time); }
                     catch (Exception ex) { App.Logger?.Debug("PrimaryPlaybackTimeMsChanged handler error: {Error}", ex.Message); }
                 };
@@ -1348,6 +1355,7 @@ namespace ConditioningControlPanel.Services
 
                 mediaPlayer.TimeChanged += (s, e) =>
                 {
+                    _lastWatchPositionMs = e.Time; // track watched position for quest crediting (#447)
                     try { PrimaryPlaybackTimeMsChanged?.Invoke(e.Time); }
                     catch (Exception ex) { App.Logger?.Debug("PrimaryPlaybackTimeMsChanged handler error: {Error}", ex.Message); }
                 };
@@ -2156,13 +2164,12 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            // Track video watch time for leaderboard
-            // Must be done here in OnEnded, not in Cleanup, because Cleanup is also called during shutdown
-            if (_duration > 0)
-            {
-                App.Logger?.Information("Video ended with duration: {Duration}s, tracking watch time", _duration);
-                App.Achievements?.TrackVideoWatched(_duration);
-            }
+            // Watch-time crediting now happens in CloseAll (position-based, so interruptions/attention
+            // fails credit what was watched too — #447). The WPF MediaElement fallback path has no
+            // TimeChanged position, so on a natural end seed the watched position to the full duration to
+            // preserve the old "credit full length" behavior; the LibVLC path is already at ~duration here.
+            if (_lastWatchPositionMs <= 0 && _duration > 0)
+                _lastWatchPositionMs = _duration * 1000.0;
 
             Cleanup();
         }
@@ -2311,6 +2318,32 @@ namespace ConditioningControlPanel.Services
 
         #region Cleanup
 
+        /// <summary>
+        /// Credit the minutes actually watched of the current video toward stats/quests, then reset for
+        /// the next video. Position-based (from LibVLC TimeChanged) and watermarked via
+        /// <see cref="_creditedWatchSeconds"/> so repeated teardown calls can't double-count, and an
+        /// interrupted video still credits what was watched (#447). Never throws.
+        /// </summary>
+        private void FinalizeWatchCredit()
+        {
+            try
+            {
+                double watchedSec = _lastWatchPositionMs / 1000.0;
+                double uncredited = watchedSec - _creditedWatchSeconds;
+                if (uncredited >= 1.0)
+                {
+                    _creditedWatchSeconds = watchedSec;
+                    App.Achievements?.TrackVideoWatched(uncredited);
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("FinalizeWatchCredit error: {Error}", ex.Message); }
+            finally
+            {
+                _lastWatchPositionMs = 0;
+                _creditedWatchSeconds = 0;
+            }
+        }
+
         private void CloseAll(bool synchronous = false)
         {
             // Use lock to prevent race conditions between multiple cleanup triggers
@@ -2324,6 +2357,11 @@ namespace ConditioningControlPanel.Services
                 }
                 _isCleaningUp = true;
             }
+
+            // Credit the minutes actually watched, on EVERY teardown (natural end, manual stop, panic,
+            // safety timeout, attention-fail retry) — not just OnEnded. Position-based + watermarked so it
+            // can't double-count, so an interrupted video still counts toward the video quest (#447).
+            FinalizeWatchCredit();
 
             try
             {

@@ -56,6 +56,11 @@ namespace ConditioningControlPanel.Models
         // === Timeline Phases ===
         public List<SessionPhase> Phases { get; set; } = new();
 
+        // === Raw timeline events ===
+        // Preserves every authored segment (multiple segments per feature) across save/reload — Settings
+        // is only a flattened one-per-feature view. Empty for sessions authored before this field (#429).
+        public List<TimelineEvent> TimelineEvents { get; set; } = new();
+
         // === Source Tracking (not serialized to file) ===
         [JsonIgnore]
         public SessionSource Source { get; set; } = SessionSource.BuiltIn;
@@ -82,6 +87,7 @@ namespace ConditioningControlPanel.Models
                 CornerGifDescription = CornerGifDescription,
                 Settings = Settings,
                 Phases = Phases,
+                TimelineEvents = TimelineEvents,
                 Source = Source,
                 SourceFilePath = SourceFilePath
             };
@@ -106,6 +112,7 @@ namespace ConditioningControlPanel.Models
                 CornerGifDescription = session.CornerGifDescription,
                 Settings = session.Settings,
                 Phases = session.Phases,
+                TimelineEvents = session.TimelineEvents,
                 Source = session.Source,
                 SourceFilePath = session.SourceFilePath
             };

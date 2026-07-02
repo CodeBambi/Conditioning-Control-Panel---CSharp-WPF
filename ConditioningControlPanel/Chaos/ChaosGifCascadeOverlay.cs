@@ -24,9 +24,6 @@ namespace ConditioningControlPanel;
 /// </summary>
 public sealed class ChaosGifCascadeOverlay : Window
 {
-    private static readonly string[] Extensions =
-        { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp" };
-
     /// <summary>
     /// Hard ceiling on clips alive at once. Animated GIFs are decoded frame-by-frame at full
     /// native resolution by XamlAnimatedGif, so a pile-up of large gifs can exhaust memory and
@@ -58,6 +55,9 @@ public sealed class ChaosGifCascadeOverlay : Window
             if (_active == null) { _active = new ChaosGifCascadeOverlay(); ((Window)_active).Show(); }
             else if (!_active.IsVisible) { try { ((Window)_active).Show(); } catch { } }   // idles hidden between cascades
             ChaosWindowZ.RaiseAboveVideo(_active);   // un-hiding doesn't re-stack — kick over a playing video
+            // Dashboard "cascade" trigger-bubble use (no chaos run): force the singleton topmost so a
+            // stale Topmost=false from a prior Free-Desktop run can't bury the rain behind the app.
+            if (App.Chaos?.IsRunning != true) ChaosWindowZ.ForceTopmost(_active);
             _active.Restart(files, spawnRatePerSec, durationSec, gifSize, fallSpeed, opacity, startScale);
         }
         catch (Exception ex) { App.Logger?.Debug("ChaosGifCascadeOverlay.Show: {E}", ex.Message); }
@@ -305,18 +305,8 @@ public sealed class ChaosGifCascadeOverlay : Window
         try { Close(); } catch { }
     }
 
-    private static List<string> PickFiles()
-    {
-        try
-        {
-            var dir = Path.Combine(App.EffectiveAssetsPath ?? "", "images");
-            if (!Directory.Exists(dir)) return new List<string>();
-            return Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly)
-                .Where(f => Extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-                .ToList();
-        }
-        catch { return new List<string>(); }
-    }
+    // TTL-cached shared listing — re-walking the whole images folder per cascade was UI-thread I/O.
+    private static List<string> PickFiles() => ChaosImagePool.GetFiles();
 
     private void ApplyExStyles()
     {

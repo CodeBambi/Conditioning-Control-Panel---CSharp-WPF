@@ -66,6 +66,11 @@ public sealed class ChaosModeService
     private long _peakNativeMb;     // high-water native (~workingSet-managed) MB this run — fed to the crash sentinel
     private TimeSpan _lastRenderTs = TimeSpan.MinValue;   // [CHAOSHITCH] frame-gap detector (see OnChaosRendering)
     private int _hitchCount;
+    // Perf governor: hitch frames feed a decaying pressure score; when it climbs, the spawn
+    // cadence stretches (fewer NEW bubbles is the one lever that sheds load everywhere —
+    // motion, collision, FX, decode all scale with the field). Eases back once frames are clean.
+    private double _hitchScore;          // decayed 4x/s in RunTick (see UpdatePerfGovernor)
+    private double _perfBackoff = 1.0;   // >1 = spawn interval multiplied by this
     private bool _active;        // a run session exists (countdown → results dismissed)
     private bool _spawning;      // GO fired, bubbles spawning, not yet ended
     private bool _paused;        // boon draft on screen (clock + spawns held)
@@ -334,7 +339,10 @@ public sealed class ChaosModeService
             _overlay.OnRunAgain = RunAgain;
             _overlay.OnDismissed = OnOverlayClosed;
             _overlay.Show();
-            if (!isRestart) ChaosSfx.Play("fall_in", 0.55f);   // the falling whoosh under the countdown
+            if (!isRestart) ChaosSfx.Play("fall_in", 0.28f);   // the falling whoosh under the countdown (kept soft)
+            // Warm the tunnel's WebView2 + three.js under the countdown (no-op when the toggle is
+            // off) so BeginRun's fade-in is instant instead of seconds of black.
+            ChaosTunnelService.Preload();
             _overlay.ShowCountdown(BeginRun, shortFlash: isRestart);   // 1s flash on RunAgain
 
             // The run's topmost windows (overlay/FX/payload washes/bubbles) would otherwise bury an
@@ -505,13 +513,22 @@ public sealed class ChaosModeService
         ChaosNarrativeHooks.OnRunStarted();
         _pendingDepthVCard = false;
         ChaosBackdropService.Show(_state.ActIndex);
+        // Endless 3D tunnel background (opt-in, gated on ChaosTunnelEnabled internally; spawns no
+        // window when off). Non-topmost like the backdrop, so it needs no z-order handling.
+        ChaosTunnelService.Show();
+        ChaosTunnelService.SendZoneHint(_state.ActIndex, Math.Min(1.0, (_state.ActIndex - 1) / 5.0));
+        // Fall speed follows the streak: seed it (super-slow start) and track every Combo change
+        // (gain, halve, break) through the state's own setter — no per-call-site wiring.
+        ChaosTunnelService.SetStreak(_state.Combo, _state.ComboMult);
+        _state.PropertyChanged += OnStateChangedForTunnel;
         ChaosNarrativeHooks.OnMoment("run_start", BuildNarrativeCtx());
 
         // Arm crash diagnostics: fresh peak, baseline sample, and the sentinel goes live for THIS run.
         _peakNativeMb = 0; _memSampleTick = 0;
         LogMemSample("run-start");
-        // Arm the frame-hitch detector for this run.
+        // Arm the frame-hitch detector + perf governor for this run.
         _lastRenderTs = TimeSpan.MinValue; _hitchCount = 0;
+        _hitchScore = 0; _perfBackoff = 1.0;
         System.Windows.Media.CompositionTarget.Rendering += OnChaosRendering;
     }
 
@@ -797,6 +814,8 @@ public sealed class ChaosModeService
     {
         var disp = Application.Current?.Dispatcher;
         if (disp == null) return;
+        // A fullscreen video fully covers the tunnel — pause its render loop (0% tunnel GPU).
+        try { disp.BeginInvoke((Action)(() => ChaosTunnelService.SetVideoPlaying(true))); } catch { }
         try { disp.BeginInvoke((Action)RaiseGameLayerAboveVideo); } catch { }
         System.Threading.Tasks.Task.Delay(60).ContinueWith(_ =>
         {
@@ -865,18 +884,49 @@ public sealed class ChaosModeService
         if (_lastRenderTs != TimeSpan.MinValue)
         {
             double gapMs = (ts - _lastRenderTs).TotalMilliseconds;
-            if (gapMs > 40.0 && App.Settings?.Current?.ChaosMemTelemetry == true)
+            if (gapMs > 40.0)
             {
-                _hitchCount++;
-                App.Logger?.Information("[CHAOSHITCH] frame gap {Gap:F0}ms bubbles={Bubbles} (#{N} this run)",
-                    gapMs, App.Bubbles?.ActiveBubbles ?? 0, _hitchCount);
+                // Governor input runs regardless of the telemetry flag (the flag only gates the
+                // log line). A real stall (>120ms) weighs triple — one of those is a felt freeze.
+                _hitchScore += gapMs >= 120.0 ? 3.0 : 1.0;
+                if (App.Settings?.Current?.ChaosMemTelemetry == true)
+                {
+                    _hitchCount++;
+                    App.Logger?.Information("[CHAOSHITCH] frame gap {Gap:F0}ms bubbles={Bubbles} (#{N} this run)",
+                        gapMs, App.Bubbles?.ActiveBubbles ?? 0, _hitchCount);
+                }
             }
         }
         _lastRenderTs = ts;
     }
 
+    /// <summary>Perf governor (4x/s from RunTick): decay the hitch pressure, then set the spawn
+    /// backoff — degrade INSTANTLY when hitches pile up, ease back to full over ~5s of clean
+    /// frames. The backoff multiplies the refill interval in <c>SpawnTick</c>'s cadence math, so
+    /// an overwhelmed render thread gets a thinner field instead of a frozen one. Sized so a
+    /// single stray hitch (score 1-3) changes nothing.</summary>
+    private void UpdatePerfGovernor()
+    {
+        _hitchScore = Math.Max(0, _hitchScore * 0.93);   // ~halves every 2.3s
+        double target = _hitchScore >= 12 ? 2.0 : _hitchScore >= 5 ? 1.5 : 1.0;
+        if (target > _perfBackoff)
+        {
+            _perfBackoff = target;
+            App.Logger?.Information("[CHAOSPERF] render thread behind (hitch score {S:F1}) — spawn cadence x{B:F1}, bubbles={Bubbles}",
+                _hitchScore, _perfBackoff, App.Bubbles?.ActiveBubbles ?? 0);
+        }
+        else if (target < _perfBackoff)
+        {
+            _perfBackoff = Math.Max(target, _perfBackoff - 0.05);
+            if (_perfBackoff <= 1.0)
+                App.Logger?.Information("[CHAOSPERF] recovered — spawn cadence back to full");
+        }
+    }
+
     private void RunTick(object? sender, EventArgs e)
     {
+        // Governor housekeeping runs even while paused, so the backoff relaxes during a draft/pause.
+        UpdatePerfGovernor();
         if (!_spawning || _state == null || _paused || _manualPaused) return;
 
         // Keep the run chrome (HUD/sidebar, clock, boon bar, active-skill buttons) pinned above
@@ -1172,7 +1222,10 @@ public sealed class ChaosModeService
         // spawns = a LONGER gap between ticks (the scripted run 1 breathes at ~0.6).
         interval /= Math.Clamp(cfg.SpawnRateMult, 0.1, 10.0);
         if (_slowMoRemainingSec > 0) interval /= SLOWMO_FACTOR;   // slow-mo stretches the spawn cadence
-        _spawnTimer!.Interval = TimeSpan.FromMilliseconds(Math.Max(280, interval));
+        // Perf governor: while the render thread is dropping frames, stretch the refill cadence.
+        // Applied AFTER the floor-feeding math so a hitching late run can breathe above 280ms.
+        interval = Math.Max(280, interval) * _perfBackoff;
+        _spawnTimer!.Interval = TimeSpan.FromMilliseconds(interval);
     }
 
     // ============================ behavioral bubbles (Echo / Chaperone / Tease / Bound) ============================
@@ -2120,10 +2173,24 @@ public sealed class ChaosModeService
         if (until > _heavyUntilUtc) _heavyUntilUtc = until;
     }
 
+    /// <summary>Mirrors the pop streak into the tunnel background so the fall accelerates with
+    /// the combo and brakes when it halves/breaks. Combo only ever changes on the UI thread
+    /// (timers + click handlers), so this posts straight through.</summary>
+    private void OnStateChangedForTunnel(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(ChaosRunState.Combo)) return;
+        var st = _state;
+        if (st == null) return;
+        try { ChaosTunnelService.SetStreak(st.Combo, st.ComboMult); } catch { }
+    }
+
     /// <summary>Any video ending during a run (natural end, attention-check retry, cap) starts
     /// the teardown quarantine so no cascade rises into the LibVLC disposal churn.</summary>
-    private void OnVideoEndedDuringRun(object? sender, EventArgs e) =>
+    private void OnVideoEndedDuringRun(object? sender, EventArgs e)
+    {
+        try { Application.Current?.Dispatcher?.BeginInvoke((Action)(() => ChaosTunnelService.SetVideoPlaying(false))); } catch { }
         ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);
+    }
 
     /// <summary>Fire a payload under "Playing with fire": detonation durations scale by the sin's
     /// knob for exactly this call (GlobalDurationMult is shared with slow-mo/freeze — scope it).</summary>
@@ -2972,6 +3039,7 @@ public sealed class ChaosModeService
                 artKey: "depth", subText: $"{_state.ActIndex}");
             // Zone border: swap the backdrop plate and let the Madam mark the descent.
             ChaosBackdropService.SwapTo(_state.ActIndex);
+            ChaosTunnelService.SendZoneHint(_state.ActIndex, Math.Min(1.0, (_state.ActIndex - 1) / 5.0));
             // Depth V is a STORY card moment, not a reactive line — defer it past this transition's
             // draft/ReadyGo (which would overwrite the card) and open it once the field resumes.
             if (_state.ActIndex >= 5) _pendingDepthVCard = true;
@@ -3175,6 +3243,7 @@ public sealed class ChaosModeService
         try { ChaosFieldFxOverlay.CloseActive(); } catch { }
         try { ChaosSkiaFxOverlay.CloseActive(); } catch { }
         try { ChaosBackdropService.CloseActive(); } catch { }
+        try { ChaosTunnelService.CloseActive(); } catch { }
         try { ChaosPopText.ShutdownPool(); } catch { }
         App.AvatarWindow?.SetChaosRunActive(false);   // restore the avatar's normal attached z-order
         ChaosHappyPath.OnRunEnded();   // the script never outlives its run (idempotent)
@@ -3184,6 +3253,7 @@ public sealed class ChaosModeService
         _hud = null;
         _overlay = null;
         _fx = null;
+        if (_state != null) _state.PropertyChanged -= OnStateChangedForTunnel;
         _state = null;
         _active = false;
         _spawning = false;
@@ -3193,6 +3263,11 @@ public sealed class ChaosModeService
         // run explicitly opts into Free Desktop again.
         ActiveMode = ChaosPlayMode.Story;
         ChaosWindowZ.DesktopMode = false;
+        // Reset the topmost-pin too. It's set from ChaosPinOnTop at StartRun and was leaking
+        // across runs: a Free Desktop run with pin-off left PinTopmost=false, so a later
+        // DASHBOARD glitch/cascade bubble built its keep-alive overlay non-topmost and it
+        // rendered behind the main window (invisible). Dashboard effects must default to pinned.
+        ChaosWindowZ.PinTopmost = true;
         _lessonCardPaused = false;
         _lessonCardsAfterDraft = false;
         _pendingLessonCards.Clear();

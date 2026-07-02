@@ -290,6 +290,15 @@ namespace ConditioningControlPanel.Services.Speech
                 var loudnessThreshold = options.LoudnessThreshold ?? SettingDouble("SpeechLoudnessThreshold", 0.015);
                 var normalizedTarget = Normalize(target);
 
+                // Mic noise front-end (opt-out via settings): high-pass out AC/fan/hum rumble and gate
+                // onset on an adaptive noise floor instead of the fixed loudness threshold alone, so a hot
+                // day's AC hum self-raises the trigger point rather than tripping it. One instance per
+                // session (they hold filter + floor state); both closures below capture them.
+                var nsEnabled = App.Settings?.Current?.SpeechNoiseSuppression ?? true;
+                var gateFactor = App.Settings?.Current?.SpeechNoiseGateFactor ?? 4.0;
+                var hpf = nsEnabled ? new HighPassFilter(SampleRate) : null;
+                var gate = nsEnabled ? new NoiseGate(gateFactor) : null;
+
                 var tcs = new TaskCompletionSource<PhraseResult>(TaskCreationOptions.RunContinuationsAsynchronously);
                 WaveInEvent? mic = null;
                 VoskRecognizer? rec = null;
@@ -324,7 +333,10 @@ namespace ConditioningControlPanel.Services.Speech
                         if (hh.Length > tn)
                             score = Math.Max(score, Similarity(normalizedTarget, string.Join(' ', hh.Take(tn))));
                     }
-                    var loud = peakRms >= loudnessThreshold;
+                    // With the adaptive gate on, a phrase must clear whichever is higher: the fixed floor
+                    // or the room-tone-scaled onset gate — so hum can't be mistaken for "said out loud".
+                    var loudGate = gate != null ? Math.Max(loudnessThreshold, gate.EnterGate) : loudnessThreshold;
+                    var loud = peakRms >= loudGate;
                     return new PhraseResult
                     {
                         Transcript = transcript?.Trim() ?? "",
@@ -353,13 +365,19 @@ namespace ConditioningControlPanel.Services.Speech
                         if (Volatile.Read(ref done) != 0) return;
                         try
                         {
+                            // Strip low-frequency rumble in place BEFORE measuring RMS and before Vosk sees
+                            // it, so AC/fan hum neither inflates the level nor smears the acoustic features.
+                            hpf?.ProcessPcm16(e.Buffer, e.BytesRecorded);
+
                             double rms = Rms(e.Buffer, e.BytesRecorded);
                             peakRms = Math.Max(peakRms, rms);
                             RaiseLevel(rms);
 
                             // Speech onset: once we hear an above-threshold frame, cancel the onset deadline
                             // so a late-starting utterance gets the full window instead of being cut off.
-                            if (rms >= loudnessThreshold) Volatile.Write(ref speechStarted, 1);
+                            // The adaptive gate tracks the room floor; falls back to the fixed threshold.
+                            bool voiced = gate != null ? gate.Update(rms) : rms >= loudnessThreshold;
+                            if (voiced) Volatile.Write(ref speechStarted, 1);
 
                             // Serialize recognizer access with teardown: never call into a disposed handle.
                             lock (recLock)
@@ -492,10 +510,33 @@ namespace ConditioningControlPanel.Services.Speech
 
         private int ResolveDeviceNumber()
         {
-            var idx = SettingInt("SpeechInputDeviceIndex", -1);
+            var s = App.Settings?.Current;
+            return ResolveDeviceNumber(s?.SpeechInputDeviceIndex ?? -1, s?.SpeechInputDeviceName);
+        }
+
+        /// <summary>
+        /// Resolve the WaveIn device number to open, preferring a match on the saved device NAME (robust
+        /// to NAudio ordinal reshuffling when virtual audio devices appear/disappear — the "voice worked
+        /// yesterday, not today" failure, #441b), then the saved ordinal if still valid, else 0 (Windows
+        /// default). Never throws. Shared by <see cref="SherpaWakeService"/> so both wake engines agree.
+        /// </summary>
+        public static int ResolveDeviceNumber(int savedIndex, string? savedName)
+        {
             try
             {
-                if (idx >= 0 && idx < WaveInEvent.DeviceCount) return idx;
+                if (!string.IsNullOrWhiteSpace(savedName))
+                {
+                    int count = WaveInEvent.DeviceCount;
+                    for (int i = 0; i < count; i++)
+                    {
+                        string name;
+                        try { name = WaveInEvent.GetCapabilities(i).ProductName; }
+                        catch { name = ""; }
+                        if (string.Equals(name, savedName, StringComparison.OrdinalIgnoreCase))
+                            return i;
+                    }
+                }
+                if (savedIndex >= 0 && savedIndex < WaveInEvent.DeviceCount) return savedIndex;
             }
             catch { }
             return 0; // WaveIn device 0 == Windows default capture device.
