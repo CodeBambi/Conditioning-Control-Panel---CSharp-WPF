@@ -620,6 +620,12 @@ namespace ConditioningControlPanel.Services
                         System.Threading.Interlocked.Increment(ref GifDecodes);
                         LoadGifFrames(path, data, decodeMax);
                     }
+                    else if (extension == ".webp" && TryLoadAnimatedWebpFrames(path, data, decodeMax))
+                    {
+                        // Animated webp → frame list, played by the same heartbeat frame-stepper
+                        // as GIFs. Still/undecodable webps return false and fall through to the
+                        // static WIC branch below.
+                    }
                     else
                     {
                         System.Threading.Interlocked.Increment(ref StaticDecodes);
@@ -721,6 +727,34 @@ namespace ConditioningControlPanel.Services
             };
             clone.Frames.AddRange(source.Frames);
             return clone;
+        }
+
+        /// <summary>
+        /// Animated .webp → frame list. WIC only ever decodes webp's first frame and GDI+ can't
+        /// open the format at all, so animated webps flashed as stills. SkiaSharp decodes and
+        /// composes the full animation under the same memory budget as LoadGifFrames. Returns
+        /// false (data untouched) for still webps or on decode failure so the caller falls back
+        /// to the static WIC path.
+        /// </summary>
+        private static bool TryLoadAnimatedWebpFrames(string path, LoadedImageData data, int decodeMax)
+        {
+            try
+            {
+                if (!AnimatedWebp.IsAnimated(path)) return false;
+                if (AnimatedWebp.DecodeFrames(path, decodeMax, maxFrames: 60, maxMemoryMb: 30.0) is not { } d)
+                    return false;
+
+                data.Frames.AddRange(d.Frames);
+                data.Width = d.Frames[0].PixelWidth;
+                data.Height = d.Frames[0].PixelHeight;
+                data.FrameDelay = d.FrameDelay;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Could not load webp frames: {Error}", ex.Message);
+                return false;
+            }
         }
 
         private void LoadGifFrames(string path, LoadedImageData data, int decodeMax)
