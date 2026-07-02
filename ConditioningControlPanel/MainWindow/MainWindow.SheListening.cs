@@ -265,6 +265,11 @@ namespace ConditioningControlPanel
             try { App.Speech?.StopListening(); } catch { }
             try { App.Autonomy?.StopVoiceInput(); } catch { }
 
+            // Any open Voice Lock Card would otherwise keep re-opening the mic (its solve loop only
+            // checks Speech.IsAvailable, which ignores this master switch) with the typed input still
+            // hidden — leaving the card unsolvable. Drop it to typed solve so the lock still holds.
+            try { LockCardWindow.DisableVoiceForAll(); } catch { }
+
             if (SheListeningTab != null) RefreshSheListeningTab();
             RefreshPremiumRail();
             UpdateMicPill();          // privacy pill: mic fully disarmed → pill off

@@ -110,10 +110,9 @@ namespace ConditioningControlPanel
         {
             // Click is the privacy stop affordance — same intent as the camera pill. Fully disarm the
             // offline mic so it genuinely stays off (and the dashboard Voice dot reflects it): clears
-            // wake-word + push-to-talk, cuts live capture, tears down the loop/hook. Also drop any open
+            // wake-word + push-to-talk, cuts live capture, tears down the loop/hook, and drops any open
             // Voice Lock Card to typed solve so the lock still holds.
             try { DisarmVoiceMic(); } catch { }
-            try { LockCardWindow.DisableVoiceForAll(); } catch { }
         }
 
         private void WireWebcamActivePill()
