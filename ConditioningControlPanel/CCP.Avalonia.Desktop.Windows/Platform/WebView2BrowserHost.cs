@@ -54,6 +54,12 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
     public event EventHandler<string>? TitleChanged;
     public event EventHandler<Uri>? Navigated;
     public event EventHandler<bool>? FullscreenChanged;
+    public event EventHandler<string>? WebMessageReceived;
+
+    // Pending virtual-host mapping (applied once the embedded CoreWebView2 initializes).
+    private string? _virtualHostName;
+    private string? _virtualHostFolder;
+    private bool _messagingWired;
 
     /// <summary>
     /// Creates an Avalonia control that hosts WebView2. The first call initializes the
@@ -104,12 +110,54 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
 
         if (_embeddedHost?.WebView?.CoreWebView2 is { } core)
         {
+            ApplyVirtualHostAndMessaging(core);
             core.Navigate(url.ToString());
         }
         else
         {
             await PopOutAsync(url);
         }
+    }
+
+    /// <summary>Serve a local folder under a virtual host name (WebView2 SetVirtualHostNameToFolderMapping).</summary>
+    public void SetVirtualHostToFolder(string hostName, string folder)
+    {
+        _virtualHostName = hostName;
+        _virtualHostFolder = folder;
+        // Apply immediately if the core is already up (e.g. set after a Navigate).
+        if (_embeddedHost?.WebView?.CoreWebView2 is { } core)
+            ApplyVirtualHostAndMessaging(core);
+    }
+
+    /// <summary>Post a JSON message from host → page.</summary>
+    public void PostWebMessageAsJson(string json)
+    {
+        try { _embeddedHost?.WebView?.CoreWebView2?.PostWebMessageAsJson(json); }
+        catch { /* best effort */ }
+    }
+
+    /// <summary>Apply the pending virtual-host mapping + enable/wire web messaging on a fresh CoreWebView2.</summary>
+    private void ApplyVirtualHostAndMessaging(CoreWebView2 core)
+    {
+        try
+        {
+            core.Settings.IsWebMessageEnabled = true;
+            if (!string.IsNullOrEmpty(_virtualHostName) && !string.IsNullOrEmpty(_virtualHostFolder))
+            {
+                core.SetVirtualHostNameToFolderMapping(
+                    _virtualHostName, _virtualHostFolder, CoreWebView2HostResourceAccessKind.Deny);
+            }
+            if (!_messagingWired)
+            {
+                core.WebMessageReceived += (_, e) =>
+                {
+                    try { WebMessageReceived?.Invoke(this, e.WebMessageAsJson ?? string.Empty); }
+                    catch { }
+                };
+                _messagingWired = true;
+            }
+        }
+        catch { /* virtual host / messaging unsupported — degrade gracefully */ }
     }
 
     public async Task PopOutAsync(Uri url)

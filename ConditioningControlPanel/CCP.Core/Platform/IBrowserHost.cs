@@ -50,4 +50,18 @@ public interface IBrowserHost
     /// for hosts that already open a separate window or shell browser.
     /// </summary>
     Task PopOutAsync(Uri url) => NavigateAsync(url);
+
+    /// <summary>Raised when the embedded page posts a JSON message to the host
+    /// (via <c>window.chrome.webview.postMessage</c> / the platform equivalent). Default is never raised.</summary>
+    event EventHandler<string>? WebMessageReceived { add { } remove { } }
+
+    /// <summary>Post a JSON message from the host to the page. Default no-op on hosts without messaging.</summary>
+    void PostWebMessageAsJson(string json) { }
+
+    /// <summary>
+    /// Serve a local <paramref name="folder"/> under a virtual host <paramref name="hostName"/> so the page
+    /// can load local assets/scripts via <c>https://hostName/...</c> (ESM + import maps resolve). Required by
+    /// web-hosted effects like the Chaos tunnel. Default no-op on hosts without virtual-host support.
+    /// </summary>
+    void SetVirtualHostToFolder(string hostName, string folder) { }
 }
