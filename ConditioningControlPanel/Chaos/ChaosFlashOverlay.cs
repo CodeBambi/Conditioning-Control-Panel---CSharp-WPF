@@ -29,9 +29,6 @@ public sealed class ChaosFlashOverlay : Window
     private const int DEFAULT_DURATION_MS = 10000;   // ~10s on screen
     private const double DEFAULT_OPACITY = 0.10;     // faint 10% wash
 
-    private static readonly string[] Extensions =
-        { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp" };
-
     private static ChaosFlashOverlay? _active;
     private static readonly Random _rng = new();
 
@@ -63,6 +60,7 @@ public sealed class ChaosFlashOverlay : Window
     private readonly Image _img;
     private readonly DispatcherTimer _life;
     private (string path, int durationMs, double opacity)? _pending;   // first Display can land before Loaded
+    private int _displayGen;   // guards the async still-decode against a newer wash / a clear
 
     private ChaosFlashOverlay()
     {
@@ -114,6 +112,7 @@ public sealed class ChaosFlashOverlay : Window
     {
         _life.Stop();
         ClearImage();
+        int gen = ++_displayGen;
 
         if (path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
         {
@@ -123,13 +122,32 @@ public sealed class ChaosFlashOverlay : Window
         }
         else
         {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.UriSource = new Uri(path, UriKind.Absolute);
-            bmp.EndInit();
-            if (bmp.CanFreeze) bmp.Freeze();
-            _img.Source = bmp;
+            // Decode OFF the UI thread and at display size. The old synchronous full-native-res
+            // decode stalled the UI thread for the whole parse on every wash, mid-run (a phone
+            // photo is 4000+ px wide — ~100MB of BGRA nobody sees at a 10% full-screen wash).
+            // UniformToFill covers the stage by WIDTH, so DecodePixelWidth at stage width is
+            // lossless on screen. The wash fades in over 500ms, which hides the decode gap.
+            int decodeWidth = (int)Math.Min(2560, Math.Max(640, Width));
+            string file = path;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.DecodePixelWidth = decodeWidth;
+                    bmp.UriSource = new Uri(file, UriKind.Absolute);
+                    bmp.EndInit();
+                    if (bmp.CanFreeze) bmp.Freeze();
+                    Application.Current?.Dispatcher.BeginInvoke(() =>
+                    {
+                        // A newer wash (or a clear/teardown) may have superseded this decode.
+                        try { if (gen == _displayGen) _img.Source = bmp; } catch { }
+                    });
+                }
+                catch (Exception ex) { App.Logger?.Debug("ChaosFlashOverlay decode: {E}", ex.Message); }
+            });
         }
 
         double peak = Math.Clamp(opacity, 0.02, 1.0);
@@ -140,6 +158,7 @@ public sealed class ChaosFlashOverlay : Window
 
     private void ClearImage()
     {
+        _displayGen++;   // orphan any still-in-flight async decode
         try { AnimationBehavior.SetSourceUri(_img, null); } catch { }
         try { _img.Source = null; } catch { }
     }
@@ -152,16 +171,13 @@ public sealed class ChaosFlashOverlay : Window
         try { Close(); } catch { }
     }
 
-    /// <summary>Pick a random image file from the flash images folder, or null if none.</summary>
+    /// <summary>Pick a random image file from the flash images folder, or null if none.
+    /// Rides the shared TTL cache — re-walking the folder per wash was UI-thread I/O.</summary>
     private static string? PickImage()
     {
         try
         {
-            var dir = Path.Combine(App.EffectiveAssetsPath ?? "", "images");
-            if (!Directory.Exists(dir)) return null;
-            var files = Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly)
-                .Where(f => Extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-                .ToList();
+            var files = ChaosImagePool.GetFiles();
             if (files.Count == 0) return null;
             return files[_rng.Next(files.Count)];
         }

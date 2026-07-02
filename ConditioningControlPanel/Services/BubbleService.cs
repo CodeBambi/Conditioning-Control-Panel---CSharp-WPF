@@ -278,8 +278,14 @@ public class BubbleService : IDisposable
     public void PopBubblesInRect(Rect rectDips)
     {
         if (!_chaosActive) return;
-        foreach (var b in _bubbles.ToArray())
+        // Called by EVERY flying DVD logo every composed frame — the old per-call ToArray()
+        // re-allocated the whole field N-logos × refresh-rate times a second. Pop() defers its
+        // list removal to the pop animation's completion, so a reverse index scan with a count
+        // re-check is safe against anything a pop mutates same-frame.
+        for (int i = _bubbles.Count - 1; i >= 0; i--)
         {
+            if (i >= _bubbles.Count) continue;
+            var b = _bubbles[i];
             if (!b.IsAlive || b.Spec == null) continue;
             if (b.Spec.IsDarter || b.Spec.IsFreeze) continue;
             if (rectDips.IntersectsWith(b.BoundingBox)) b.Pop();

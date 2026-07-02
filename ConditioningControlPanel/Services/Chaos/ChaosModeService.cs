@@ -65,6 +65,11 @@ public sealed class ChaosModeService
     private long _peakNativeMb;     // high-water native (~workingSet-managed) MB this run — fed to the crash sentinel
     private TimeSpan _lastRenderTs = TimeSpan.MinValue;   // [CHAOSHITCH] frame-gap detector (see OnChaosRendering)
     private int _hitchCount;
+    // Perf governor: hitch frames feed a decaying pressure score; when it climbs, the spawn
+    // cadence stretches (fewer NEW bubbles is the one lever that sheds load everywhere —
+    // motion, collision, FX, decode all scale with the field). Eases back once frames are clean.
+    private double _hitchScore;          // decayed 4x/s in RunTick (see UpdatePerfGovernor)
+    private double _perfBackoff = 1.0;   // >1 = spawn interval multiplied by this
     private bool _active;        // a run session exists (countdown → results dismissed)
     private bool _spawning;      // GO fired, bubbles spawning, not yet ended
     private bool _paused;        // boon draft on screen (clock + spawns held)
@@ -520,8 +525,9 @@ public sealed class ChaosModeService
         // Arm crash diagnostics: fresh peak, baseline sample, and the sentinel goes live for THIS run.
         _peakNativeMb = 0; _memSampleTick = 0;
         LogMemSample("run-start");
-        // Arm the frame-hitch detector for this run.
+        // Arm the frame-hitch detector + perf governor for this run.
         _lastRenderTs = TimeSpan.MinValue; _hitchCount = 0;
+        _hitchScore = 0; _perfBackoff = 1.0;
         System.Windows.Media.CompositionTarget.Rendering += OnChaosRendering;
     }
 
@@ -877,18 +883,49 @@ public sealed class ChaosModeService
         if (_lastRenderTs != TimeSpan.MinValue)
         {
             double gapMs = (ts - _lastRenderTs).TotalMilliseconds;
-            if (gapMs > 40.0 && App.Settings?.Current?.ChaosMemTelemetry == true)
+            if (gapMs > 40.0)
             {
-                _hitchCount++;
-                App.Logger?.Information("[CHAOSHITCH] frame gap {Gap:F0}ms bubbles={Bubbles} (#{N} this run)",
-                    gapMs, App.Bubbles?.ActiveBubbles ?? 0, _hitchCount);
+                // Governor input runs regardless of the telemetry flag (the flag only gates the
+                // log line). A real stall (>120ms) weighs triple — one of those is a felt freeze.
+                _hitchScore += gapMs >= 120.0 ? 3.0 : 1.0;
+                if (App.Settings?.Current?.ChaosMemTelemetry == true)
+                {
+                    _hitchCount++;
+                    App.Logger?.Information("[CHAOSHITCH] frame gap {Gap:F0}ms bubbles={Bubbles} (#{N} this run)",
+                        gapMs, App.Bubbles?.ActiveBubbles ?? 0, _hitchCount);
+                }
             }
         }
         _lastRenderTs = ts;
     }
 
+    /// <summary>Perf governor (4x/s from RunTick): decay the hitch pressure, then set the spawn
+    /// backoff — degrade INSTANTLY when hitches pile up, ease back to full over ~5s of clean
+    /// frames. The backoff multiplies the refill interval in <c>SpawnTick</c>'s cadence math, so
+    /// an overwhelmed render thread gets a thinner field instead of a frozen one. Sized so a
+    /// single stray hitch (score 1-3) changes nothing.</summary>
+    private void UpdatePerfGovernor()
+    {
+        _hitchScore = Math.Max(0, _hitchScore * 0.93);   // ~halves every 2.3s
+        double target = _hitchScore >= 12 ? 2.0 : _hitchScore >= 5 ? 1.5 : 1.0;
+        if (target > _perfBackoff)
+        {
+            _perfBackoff = target;
+            App.Logger?.Information("[CHAOSPERF] render thread behind (hitch score {S:F1}) — spawn cadence x{B:F1}, bubbles={Bubbles}",
+                _hitchScore, _perfBackoff, App.Bubbles?.ActiveBubbles ?? 0);
+        }
+        else if (target < _perfBackoff)
+        {
+            _perfBackoff = Math.Max(target, _perfBackoff - 0.05);
+            if (_perfBackoff <= 1.0)
+                App.Logger?.Information("[CHAOSPERF] recovered — spawn cadence back to full");
+        }
+    }
+
     private void RunTick(object? sender, EventArgs e)
     {
+        // Governor housekeeping runs even while paused, so the backoff relaxes during a draft/pause.
+        UpdatePerfGovernor();
         if (!_spawning || _state == null || _paused || _manualPaused) return;
 
         // Keep the run chrome (HUD/sidebar, clock, boon bar, active-skill buttons) pinned above
@@ -1184,7 +1221,10 @@ public sealed class ChaosModeService
         // spawns = a LONGER gap between ticks (the scripted run 1 breathes at ~0.6).
         interval /= Math.Clamp(cfg.SpawnRateMult, 0.1, 10.0);
         if (_slowMoRemainingSec > 0) interval /= SLOWMO_FACTOR;   // slow-mo stretches the spawn cadence
-        _spawnTimer!.Interval = TimeSpan.FromMilliseconds(Math.Max(280, interval));
+        // Perf governor: while the render thread is dropping frames, stretch the refill cadence.
+        // Applied AFTER the floor-feeding math so a hitching late run can breathe above 280ms.
+        interval = Math.Max(280, interval) * _perfBackoff;
+        _spawnTimer!.Interval = TimeSpan.FromMilliseconds(interval);
     }
 
     // ============================ behavioral bubbles (Echo / Chaperone / Tease / Bound) ============================

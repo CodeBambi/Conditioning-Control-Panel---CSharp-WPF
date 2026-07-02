@@ -70,11 +70,19 @@ public sealed class ChaosDvdOverlay : Window
     private static DateTime _lastBounceCue;    // shared across logos: one boing per 250ms max
     private double _remainingSec;
     private int _hueIndex;
-    // Composition-clock state. Motion runs off CompositionTarget.Rendering (one
-    // vsync-aligned callback per rendered frame) instead of a 33ms DispatcherTimer,
-    // whose coarse OS-quantized cadence beat against the display refresh and made the
-    // logo judder. _lastRender feeds true delta-time movement.
-    private TimeSpan _lastRender = TimeSpan.MinValue;
+    private bool _retiring;                    // fading out — the shared loop skips it
+    // Logical flight rect. Host-mode logos never show their window, so motion/collision run on
+    // these fields instead of Window.Left/Top/Width/Height — a recycled logo can carry a realized
+    // (hidden) hwnd from a per-window flight, and hammering its position DPs every frame is a
+    // SetWindowPos per logo per frame for a window nobody sees.
+    private double _x, _y, _w, _h;
+    // Composition-clock state. Motion runs off ONE shared CompositionTarget.Rendering
+    // subscription stepping every active logo (vsync-aligned; a 33ms DispatcherTimer's
+    // coarse OS-quantized cadence beat against the display refresh and made the logo
+    // judder). Per-logo subscriptions meant N callbacks per composed frame — an Intrusive
+    // Thoughts + Casting Couch pile-up ran up to 16 of them.
+    private static bool _loopOn;
+    private static TimeSpan _loopLastRender = TimeSpan.MinValue;
 
     /// <summary>Launch <paramref name="count"/> logos for <paramref name="durationSec"/>.
     /// Rank ramp: <paramref name="speedMult"/>/<paramref name="scale"/> grow with the skill's level.
@@ -190,6 +198,7 @@ public sealed class ChaosDvdOverlay : Window
         _splitOnRabbit = splitOnRabbit;
         _fontScale = Math.Clamp(scale, 0.5, 1.5);
         _splitSpent = false;
+        _retiring = false;
         _splitBouncesLeft = Math.Max(0, splitBounces);
 
         _clickable = SpankerRedirect?.Invoke() == true;   // The Spanker capstone: smack to turn
@@ -211,21 +220,23 @@ public sealed class ChaosDvdOverlay : Window
         _vx = vxOverride ?? speed * Math.Cos(angle) * (_rng.Next(2) == 0 ? 1 : -1);
         _vy = vyOverride ?? speed * Math.Sin(angle) * (_rng.Next(2) == 0 ? 1 : -1);
 
+        _label.Build();
+        _w = _label.Width;
+        _h = _label.Height;
+        _x = startX ?? wa.Left + _rng.NextDouble() * Math.Max(1, wa.Width - _w);
+        _y = startY ?? wa.Top + _rng.NextDouble() * Math.Max(1, wa.Height - _h);
+
         _active.Add(this);
         if (_useHost)
         {
-            // Shared-host: never show this window. Host the logo's visual in the shared Canvas and
-            // move it there (cheap Canvas.SetLeft/Top) instead of a per-frame SetWindowPos.
+            // Shared-host: never show this window (motion runs on _x/_y — the window's own
+            // DPs stay untouched). Host the logo's visual in the shared Canvas and move it
+            // there (cheap Canvas.SetLeft/Top) instead of a per-frame SetWindowPos.
             ChaosDvdHostOverlay.EnsureCreated();
             if (Content == _host) Content = null;            // detach from this (unshown) window
-            _label.Build();
-            Width = _label.Width;
-            Height = _label.Height;
-            Left = startX ?? wa.Left + _rng.NextDouble() * Math.Max(1, wa.Width - Width);
-            Top = startY ?? wa.Top + _rng.NextDouble() * Math.Max(1, wa.Height - Height);
             _host.Opacity = 0;
             ChaosDvdHostOverlay.Add(_host);
-            ChaosDvdHostOverlay.Place(_host, Left, Top);
+            ChaosDvdHostOverlay.Place(_host, _x, _y);
             _host.BeginAnimation(UIElement.OpacityProperty, null);
             _host.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, PEAK_OPAC, TimeSpan.FromMilliseconds(180)));
         }
@@ -234,23 +245,60 @@ public sealed class ChaosDvdOverlay : Window
             // A pooled logo last used in host mode left this window's Content null (its _host went to the
             // shared canvas, then was removed on retire). Re-attach before showing or the window is empty.
             if (Content != _host) Content = _host;
+            // Size + place BEFORE Show(): a recycled logo is a realized layered window, and
+            // resizing one while visible is the render-thread deadlock pattern (see FlashService).
+            Width = _w;
+            Height = _h;
+            Left = _x;
+            Top = _y;
             Show();                                  // first call creates the hwnd; re-shows unhide
             ChaosWindowZ.RaiseAboveVideo(this);      // un-hiding doesn't re-stack — kick over a playing video
             ApplyExStyles(_clickable);               // per launch — clickability can differ per run
-
-            _label.Build();
-            Width = _label.Width;
-            Height = _label.Height;
-            Left = startX ?? wa.Left + _rng.NextDouble() * Math.Max(1, wa.Width - Width);
-            Top = startY ?? wa.Top + _rng.NextDouble() * Math.Max(1, wa.Height - Height);
 
             BeginAnimation(OpacityProperty, null);
             Opacity = 0;
             BeginAnimation(OpacityProperty, new DoubleAnimation(0, PEAK_OPAC, TimeSpan.FromMilliseconds(180)));
         }
-        _lastRender = TimeSpan.MinValue;
-        CompositionTarget.Rendering -= Step;     // guard against double-subscribe on reuse
-        CompositionTarget.Rendering += Step;
+        EnsureLoop();
+    }
+
+    /// <summary>Subscribe the ONE shared composition-clock callback (idempotent).</summary>
+    private static void EnsureLoop()
+    {
+        if (_loopOn) return;
+        _loopOn = true;
+        _loopLastRender = TimeSpan.MinValue;
+        CompositionTarget.Rendering += StepAll;
+    }
+
+    /// <summary>Drop the shared callback once no logo is flying.</summary>
+    private static void StopLoopIfIdle()
+    {
+        if (!_loopOn || _active.Count > 0) return;
+        _loopOn = false;
+        CompositionTarget.Rendering -= StepAll;
+    }
+
+    /// <summary>One composed frame: delta time from the composition clock (baseline on the first
+    /// frame, skip duplicate callbacks, clamp after a stall so no logo can jump), then step every
+    /// active logo. Reverse index scan — a step can retire its logo or spawn splits (appended, so
+    /// they first step next frame).</summary>
+    private static void StepAll(object? sender, EventArgs e)
+    {
+        double dt = TICK_MS / 1000.0;
+        if (e is RenderingEventArgs r)
+        {
+            if (_loopLastRender == TimeSpan.MinValue) { _loopLastRender = r.RenderingTime; return; }
+            dt = (r.RenderingTime - _loopLastRender).TotalSeconds;
+            _loopLastRender = r.RenderingTime;
+            if (dt <= 0) return;
+            if (dt > 0.1) dt = 0.1;
+        }
+        for (int i = _active.Count - 1; i >= 0; i--)
+        {
+            if (i >= _active.Count) continue;   // a step's pops/retires shrank the list
+            _active[i].StepOne(dt);
+        }
     }
 
     /// <summary>The Spanker capstone: a smacked logo takes a fresh random heading + a hue hop.</summary>
@@ -279,40 +327,32 @@ public sealed class ChaosDvdOverlay : Window
         double baseAng = Math.Atan2(_vy, _vx);
         double ang = baseAng + (_rng.Next(2) == 0 ? 0.61 : -0.61);   // ~35° divergence
         Acquire().Begin(_remainingSec, 1.0, _fontScale, _label.Text, true,
-                        Left, Top, Math.Cos(ang) * spd, Math.Sin(ang) * spd);
+                        _x, _y, Math.Cos(ang) * spd, Math.Sin(ang) * spd);
         Services.Chaos.ChaosSfx.Play("dvd_bounce", 0.4f);
     }
 
-    private void Step(object? sender, EventArgs e)
+    /// <summary>One frame of this logo's flight, driven by the shared <see cref="StepAll"/> loop.</summary>
+    private void StepOne(double dt)
     {
         try
         {
-            // Delta time from the composition clock: baseline on the first frame,
-            // skip duplicate callbacks, clamp after a stall so the logo can't jump.
-            double dt = TICK_MS / 1000.0;
-            if (e is RenderingEventArgs r)
-            {
-                if (_lastRender == TimeSpan.MinValue) { _lastRender = r.RenderingTime; return; }
-                dt = (r.RenderingTime - _lastRender).TotalSeconds;
-                _lastRender = r.RenderingTime;
-                if (dt <= 0) return;
-                if (dt > 0.1) dt = 0.1;
-            }
+            if (_retiring || _closed) return;   // fading out — motion is done, the fade owns it
 
             _remainingSec -= dt;
             if (_remainingSec <= 0) { FadeOutAndRetire(); return; }
 
             var wa = SystemParameters.WorkArea;
-            double x = Left + _vx * dt;
-            double y = Top + _vy * dt;
+            double x = _x + _vx * dt;
+            double y = _y + _vy * dt;
             bool bounced = false;
             if (x <= wa.Left) { x = wa.Left; _vx = Math.Abs(_vx); bounced = true; }
-            else if (x + Width >= wa.Right) { x = wa.Right - Width; _vx = -Math.Abs(_vx); bounced = true; }
+            else if (x + _w >= wa.Right) { x = wa.Right - _w; _vx = -Math.Abs(_vx); bounced = true; }
             if (y <= wa.Top) { y = wa.Top; _vy = Math.Abs(_vy); bounced = true; }
-            else if (y + Height >= wa.Bottom) { y = wa.Bottom - Height; _vy = -Math.Abs(_vy); bounced = true; }
-            Left = x;
-            Top = y;
+            else if (y + _h >= wa.Bottom) { y = wa.Bottom - _h; _vy = -Math.Abs(_vy); bounced = true; }
+            _x = x;
+            _y = y;
             if (_useHost) ChaosDvdHostOverlay.Place(_host, x, y);   // cheap canvas move (no SetWindowPos)
+            else { Left = x; Top = y; }                             // per-window logo: real window move
 
             if (bounced)
             {
@@ -338,7 +378,7 @@ public sealed class ChaosDvdOverlay : Window
                         double baseAng = Math.Atan2(_vy, _vx);
                         double ang = baseAng + (_rng.Next(2) == 0 ? 0.61 : -0.61);   // ~35° divergence
                         Acquire().Begin(_remainingSec, 1.0, _fontScale, null, false,
-                                        Left, Top, Math.Cos(ang) * spd, Math.Sin(ang) * spd,
+                                        _x, _y, Math.Cos(ang) * spd, Math.Sin(ang) * spd,
                                         _splitBouncesLeft);
                         Services.Chaos.ChaosSfx.Play("dvd_launch", 0.35f);
                     }
@@ -347,11 +387,11 @@ public sealed class ChaosDvdOverlay : Window
 
             // The collider: everything the logo overlaps pops/snaps (darters/freeze exempt;
             // Pop()'s pause-lock guard silences this while the run is manually paused).
-            App.Bubbles?.PopBubblesInRect(new Rect(x, y, Width, Height));
+            App.Bubbles?.PopBubblesInRect(new Rect(x, y, _w, _h));
 
             // Intrusive Thoughts capstone: a thought that brushes a rabbit splits (once per instance).
             if (_splitOnRabbit && !_splitSpent
-                && App.Bubbles?.AnyDarterIntersects(new Rect(x, y, Width, Height)) == true)
+                && App.Bubbles?.AnyDarterIntersects(new Rect(x, y, _w, _h)) == true)
             {
                 _splitSpent = true;
                 SplitInTwo();
@@ -366,7 +406,7 @@ public sealed class ChaosDvdOverlay : Window
 
     private void FadeOutAndRetire()
     {
-        CompositionTarget.Rendering -= Step;
+        _retiring = true;   // the shared loop skips this logo from here on
         if (_useHost)
         {
             var fade = new DoubleAnimation(_host.Opacity, 0, TimeSpan.FromMilliseconds(240));
@@ -384,8 +424,8 @@ public sealed class ChaosDvdOverlay : Window
     /// <summary>Hide and return to the pool — the window outlives the flight.</summary>
     private void Retire()
     {
-        CompositionTarget.Rendering -= Step;
         _active.Remove(this);
+        StopLoopIfIdle();
         if (_closed) return;
         try
         {
@@ -409,8 +449,8 @@ public sealed class ChaosDvdOverlay : Window
 
     private void CloseNow()
     {
-        CompositionTarget.Rendering -= Step;
         _active.Remove(this);
+        StopLoopIfIdle();
         if (_useHost) { try { ChaosDvdHostOverlay.Remove(_host); } catch { } }
         try { Close(); } catch { }
     }
@@ -418,7 +458,8 @@ public sealed class ChaosDvdOverlay : Window
     protected override void OnClosed(EventArgs e)
     {
         _closed = true;
-        CompositionTarget.Rendering -= Step;
+        _active.Remove(this);   // belt-and-suspenders: a window closed out-of-band must not be stepped
+        StopLoopIfIdle();
         base.OnClosed(e);
     }
 
