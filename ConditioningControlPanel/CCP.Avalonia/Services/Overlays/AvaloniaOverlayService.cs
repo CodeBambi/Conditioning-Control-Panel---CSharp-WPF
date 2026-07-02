@@ -491,7 +491,35 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         var assetsFallback = Path.Combine(_environment.EffectiveAssetsPath, "spiral.gif");
         if (File.Exists(assetsFallback)) return assetsFallback;
 
-        return "";
+        return GetBundledSpiralPath();
+    }
+
+    // WPF parity: its chain ends at the embedded pack://.../Resources/spiral.gif, so a default
+    // spiral always exists. SpiralLayer decodes from a file path, so the bundled avares asset is
+    // extracted once into the user-data cache and reused from there.
+    private string GetBundledSpiralPath()
+    {
+        try
+        {
+            var cachePath = Path.Combine(_environment.UserDataPath, "cache", "spiral.gif");
+            if (File.Exists(cachePath)) return cachePath;
+
+            var uri = new Uri("avares://CCP.Avalonia/Assets/spiral.gif");
+            if (!global::Avalonia.Platform.AssetLoader.Exists(uri)) return "";
+
+            Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
+            using var stream = global::Avalonia.Platform.AssetLoader.Open(uri);
+            var tmpPath = cachePath + ".tmp";
+            using (var file = File.Create(tmpPath))
+                stream.CopyTo(file);
+            File.Move(tmpPath, cachePath, overwrite: true);
+            return cachePath;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to extract bundled spiral.gif; spiral stays disabled without a user spiral");
+            return "";
+        }
     }
 
     private void StartSpiral(string path, int opacityPercent)

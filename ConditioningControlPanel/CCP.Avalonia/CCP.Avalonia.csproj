@@ -23,6 +23,9 @@
     <AvaloniaResource Include="..\Resources\bubble.png">
       <Link>Assets\bubble.png</Link>
     </AvaloniaResource>
+    <AvaloniaResource Include="..\Resources\spiral.gif">
+      <Link>Assets\spiral.gif</Link>
+    </AvaloniaResource>
     <AvaloniaResource Include="..\Resources\achievements\**\*">
       <Link>Assets\achievements\%(RecursiveDir)%(Filename)%(Extension)</Link>
     </AvaloniaResource>
