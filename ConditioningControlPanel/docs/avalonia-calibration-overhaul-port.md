@@ -22,7 +22,16 @@ the merge additions + one retired legacy field), so the port was a faithful diff
 ## Remaining surface (follow-up)
 - `WebcamCalibrationWindow` (+641 / −110): the calibration flow that *populates* the new
   `IrisRange`/`AxisCorrection`/`GazeTrim`/`LightSource` data, plus the dim-room warning that
-  replaced the lighting picker (dfbe20c4). Until this lands the new algorithm branches are
+  replaced the lighting picker (dfbe20c4).
+  **BLOCKED by a pre-existing Avalonia gap (not the merge):** the Avalonia
+  `WebcamCalibrationWindow.axaml.cs` is a non-functional UI shell — it animates the dot
+  grid + runs gesture checks but collects NO iris samples, fits NO polynomial, and calls
+  NO `ApplyCalibration` (there are zero `OnRawIris` handlers and zero `ApplyCalibration`
+  calls in all of `CCP.Avalonia`). The WPF window's finalize additions (IrisRange min/max,
+  `BuildAxisCorrection`, the bubble test) layer onto a polynomial-fit pipeline that does
+  not exist in Avalonia. Porting them therefore requires FIRST implementing the Avalonia
+  calibration sample-collection + polynomial-fit pipeline — a separate feature effort
+  that predates the merge, out of scope here. Until then the new algorithm branches are
   reachable but not yet driven by a calibration run.
 - `GazeDebugCursorService` (+306): on-screen gaze debug cursor.
 - `GazeFocusService` (+47): drives `SetGazeAttractor` for live gaze-pop bubbles.
@@ -32,8 +41,9 @@ the merge additions + one retired legacy field), so the port was a faithful diff
 
 ## Verification caveat
 This is the eye-tracker core. The port mirrors the WPF math exactly (diff-driven, not from
-memory) and compiles clean, but it has **not** been live-verified with a webcam — that
-remains a release gate (bubble lock-on, disagreement gating, drift recal, iris clamp).
+memory) and compiles clean, but it has **not** been live-verified with a webcam, and the
+Avalonia `--smoke-test` could not be run (it launches the UI app, which needs an interactive
+desktop session unavailable in this environment). Both remain release gates.
 
 ## Source merge commits
 - `fce9713d` feat(gaze): calibration overhaul — accuracy corrections, target lock-on, motion shaping, lighting comp
