@@ -83,9 +83,13 @@ public sealed class AvaloniaAppEnvironment : IAppEnvironment
     }
 
     /// <summary>
-    /// One-time migration: move anything the Avalonia head previously wrote to the
+    /// One-time migration: copy anything the Avalonia head previously wrote to the
     /// Windows Roaming folder into the Local folder so it shares the legacy WPF path.
-    /// Skipped if a sentinel file already exists or the Roaming folder is absent.
+    /// COPIES (never moves): the WPF reference head still reads achievements.json from
+    /// Roaming during the port, so moving that file would silently reset the WPF head's
+    /// achievements to zero. Every source file is left in place; the sentinel file in
+    /// Local prevents the copy from re-running.
+    /// Skipped if the sentinel already exists or the Roaming folder is absent.
     /// </summary>
     public static void MigrateFromLegacyRoamingPath()
     {
@@ -116,20 +120,12 @@ public sealed class AvaloniaAppEnvironment : IAppEnvironment
 
             try
             {
-                if (Directory.Exists(entry))
-                    Directory.Move(entry, dest);
-                else
-                    File.Move(entry, dest);
+                CopyRecursive(entry, dest);
             }
             catch
             {
-                // Cross-volume or locked: copy then delete. If that also fails,
-                // leave the original in place for manual cleanup rather than crash.
-                try
-                {
-                    CopyRecursive(entry, dest);
-                }
-                catch { /* best effort */ }
+                // Locked or unreadable: skip this entry rather than crash;
+                // the original stays in Roaming either way.
             }
         }
 
@@ -143,7 +139,6 @@ public sealed class AvaloniaAppEnvironment : IAppEnvironment
         {
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             File.Copy(source, destination, overwrite: true);
-            File.Delete(source);
             return;
         }
 
@@ -155,6 +150,5 @@ public sealed class AvaloniaAppEnvironment : IAppEnvironment
             Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
             File.Copy(file, destFile, overwrite: true);
         }
-        Directory.Delete(source, recursive: true);
     }
 }

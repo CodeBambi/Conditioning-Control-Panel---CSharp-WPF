@@ -1,11 +1,11 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using Avalonia.Threading;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Settings;
-using Newtonsoft.Json;
 
 namespace ConditioningControlPanel.Core.Services.Progression;
 
@@ -101,7 +101,7 @@ public sealed class QuestService : IQuestService, IDisposable
             try
             {
                 var json = File.ReadAllText(_progressPath);
-                var progress = JsonConvert.DeserializeObject<QuestProgress>(json);
+                var progress = JsonSerializer.Deserialize<QuestProgress>(json);
                 if (progress != null)
                 {
                     return progress;
@@ -119,7 +119,7 @@ public sealed class QuestService : IQuestService, IDisposable
             try
             {
                 var json = File.ReadAllText(tmpPath);
-                var progress = JsonConvert.DeserializeObject<QuestProgress>(json);
+                var progress = JsonSerializer.Deserialize<QuestProgress>(json);
                 if (progress != null)
                 {
                     _logger?.LogWarning("Recovered quest progress from temp file {Path}", tmpPath);
@@ -146,7 +146,9 @@ public sealed class QuestService : IQuestService, IDisposable
                 Directory.CreateDirectory(directory);
             }
 
-            var json = JsonConvert.SerializeObject(Progress, Formatting.Indented);
+            // System.Text.Json with WriteIndented, matching the WPF QuestService and the Core
+            // AchievementService — both heads share quests.json, so the serializers must agree.
+            var json = JsonSerializer.Serialize(Progress, new JsonSerializerOptions { WriteIndented = true });
             var tmpPath = _progressPath + ".tmp";
             File.WriteAllText(tmpPath, json);
             File.Move(tmpPath, _progressPath, overwrite: true);

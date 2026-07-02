@@ -26,6 +26,9 @@ public sealed class SettingsService : ISettingsService
     public AppSettings Current { get; private set; }
 
     /// <inheritdoc />
+    public event Action? CurrentReplaced;
+
+    /// <inheritdoc />
     public bool WasSettingsFileMissing { get; private set; }
 
     /// <inheritdoc />
@@ -351,6 +354,9 @@ public sealed class SettingsService : ISettingsService
     public void RestoreFrom(AppSettings settings)
     {
         Current = settings ?? throw new ArgumentNullException(nameof(settings));
+        // Notify listeners (re-binding to the new Current instance) BEFORE we persist,
+        // so any backups they seed get written too.
+        try { CurrentReplaced?.Invoke(); } catch (Exception ex) { Log.Warning("CurrentReplaced handler failed: {Error}", ex.Message); }
         SaveImmediate();
         Log.Information("Settings restored from external source");
     }
@@ -359,6 +365,7 @@ public sealed class SettingsService : ISettingsService
     public void Reset()
     {
         Current = new AppSettings();
+        try { CurrentReplaced?.Invoke(); } catch (Exception ex) { Log.Warning("CurrentReplaced handler failed: {Error}", ex.Message); }
         SaveImmediate();
     }
 }
