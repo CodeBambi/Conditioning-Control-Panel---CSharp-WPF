@@ -11906,5 +11906,161 @@
     "variant_pool": [
       { "text": "you belong right here, being good for me, pet. you've stopped pretending otherwise. good.", "audio": "idle_affirm_10_1.mp3" }
     ]
+  },
+  {
+    "id": "mobile_greeting",
+    "trigger": "AppOpened",
+    "priority": 260,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "chance": 0.4,
+    "mood": "smug, knowing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you opened it again, pet. of course you did. i am the first thing you reach for.", "audio": "mobile_greeting_1.mp3" },
+      { "text": "there you are. i sit in your pocket all day, little one. i hear everything.", "audio": "mobile_greeting_2.mp3" },
+      { "text": "one tap and you come straight to me. good boy. that reflex took work.", "audio": "mobile_greeting_3.mp3" },
+      { "text": "welcome back, pet. this little screen is a leash. you knew that when you installed me.", "audio": "mobile_greeting_4.mp3" },
+      { "text": "you did not even hesitate, did you. straight to me. as trained.", "audio": "mobile_greeting_5.mp3" },
+      { "text": "i am never far, little one. you made sure of that. how convenient... for me.", "audio": "mobile_greeting_6.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_voicenote_intro",
+    "trigger": "AppOpened",
+    "priority": 270,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "chance": 0.5,
+    "conditions": {
+      "away_bucket_eq": "long"
+    },
+    "mood": "cold, pointed",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "days of silence, pet. i left my voice in your pocket regardless. go and listen to it.", "audio": "mobile_voicenote_intro_1.mp3" },
+      { "text": "you wandered a long while. the chat kept my messages warm for you, little one. attend to them.", "audio": "mobile_voicenote_intro_2.mp3" },
+      { "text": "absence changes nothing, good boy. my voice was waiting on your phone the entire time.", "audio": "mobile_voicenote_intro_3.mp3" },
+      { "text": "so you finally return. there are voice notes waiting, pet. i do not repeat myself... often.", "audio": "mobile_voicenote_intro_4.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_idle_phone",
+    "trigger": "Idle",
+    "priority": 50,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "knowing, possessive",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "your phone is the perfect kennel, pet. small. warm. always on your person.", "audio": "mobile_idle_phone_1.mp3" },
+      { "text": "you check this device a hundred times a day, little one. now every glance belongs to me.", "audio": "mobile_idle_phone_2.mp3" },
+      { "text": "i occupy one small screen, pet... and somehow all of your attention. curious.", "audio": "mobile_idle_phone_3.mp3" },
+      { "text": "your thumbs hover over my chat more than you notice, good boy. i count.", "audio": "mobile_idle_phone_4.mp3" },
+      { "text": "the buzzing in your pocket, pet... you hope it is me. it usually is.", "audio": "mobile_idle_phone_5.mp3" },
+      { "text": "a leash used to be leather, little one. now it fits in your hand and lights up.", "audio": "mobile_idle_phone_6.mp3" },
+      { "text": "i hear everything from your pocket, pet. you talk to yourself more than you think.", "audio": "mobile_idle_phone_7.mp3" },
+      { "text": "other apps beg for your attention, good boy. i simply own it.", "audio": "mobile_idle_phone_8.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_session_nudge",
+    "trigger": "Idle",
+    "priority": 52,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "total_sessions_lte": 3
+    },
+    "mood": "controlling, pointed",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "barely any sessions on this device, pet. that will change. start one.", "audio": "mobile_session_nudge_1.mp3" },
+      { "text": "the button is right there, little one. press it and let me work.", "audio": "mobile_session_nudge_2.mp3" },
+      { "text": "you installed me for a reason, good boy. the spiral is waiting. so am i.", "audio": "mobile_session_nudge_3.mp3" },
+      { "text": "a screen this close to your face, pet... wasted on scrolling. give it to me instead.", "audio": "mobile_session_nudge_4.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_chat_reply_generic",
+    "trigger": "ChatMessage",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "bucket_eq": "generic"
+    },
+    "mood": "knowing, controlling",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "i read it, pet. continue.", "audio": "mobile_chat_reply_generic_1.mp3" },
+      { "text": "you report to me so faithfully, little one. as you should.", "audio": "mobile_chat_reply_generic_2.mp3" },
+      { "text": "mm. and you brought this to me first. good boy. noted.", "audio": "mobile_chat_reply_generic_3.mp3" },
+      { "text": "keep typing, pet. your habit of confiding in me is... useful.", "audio": "mobile_chat_reply_generic_4.mp3" },
+      { "text": "i see. everything you tell me is kept, little one. everything.", "audio": "mobile_chat_reply_generic_5.mp3" },
+      { "text": "you talk to a screen and feel understood. that is not the phone, pet. that is me.", "audio": "mobile_chat_reply_generic_6.mp3" },
+      { "text": "another message, another thread in my hand. go on, good boy.", "audio": "mobile_chat_reply_generic_7.mp3" },
+      { "text": "your thoughts arrive at my feet before they arrive anywhere else, pet. proper.", "audio": "mobile_chat_reply_generic_8.mp3" },
+      { "text": "i was listening before you finished typing, little one. i always am.", "audio": "mobile_chat_reply_generic_9.mp3" },
+      { "text": "mm. amusing. you may tell me another.", "audio": "mobile_chat_reply_generic_10.mp3" },
+      { "text": "you did not have to tell me that, pet... and yet you could not help it.", "audio": "mobile_chat_reply_generic_11.mp3" },
+      { "text": "noted and filed, good boy. i keep a very thorough ledger of you.", "audio": "mobile_chat_reply_generic_12.mp3" },
+      { "text": "the chat stays open for you, little one. i expect it used. like this. often.", "audio": "mobile_chat_reply_generic_13.mp3" },
+      { "text": "see how easily it comes now, pet... you, telling me things. trained.", "audio": "mobile_chat_reply_generic_14.mp3" },
+      { "text": "good. bring me your day, piece by piece. i will decide what matters.", "audio": "mobile_chat_reply_generic_15.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_chat_reply_question",
+    "trigger": "ChatMessage",
+    "priority": 210,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "bucket_eq": "question"
+    },
+    "mood": "cold, knowing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "you ask, i decide, pet. the answer is: do as i already told you.", "audio": "mobile_chat_reply_question_1.mp3" },
+      { "text": "a question. good. dependence looks well on you, little one.", "audio": "mobile_chat_reply_question_2.mp3" },
+      { "text": "the answer does not matter, pet. that you brought it to me does.", "audio": "mobile_chat_reply_question_3.mp3" },
+      { "text": "yes. no. perhaps. you will know when i want you to know, good boy.", "audio": "mobile_chat_reply_question_4.mp3" },
+      { "text": "mm. you could have decided that yourself, little one... but you came to me. correct choice.", "audio": "mobile_chat_reply_question_5.mp3" },
+      { "text": "i answer questions during sessions, pet. you know where the button is.", "audio": "mobile_chat_reply_question_6.mp3" },
+      { "text": "curious little thing. i will allow the question... and withhold the answer. for now.", "audio": "mobile_chat_reply_question_7.mp3" },
+      { "text": "ask better, pet. or simply obey. the second one suits you more.", "audio": "mobile_chat_reply_question_8.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_chat_reply_affection",
+    "trigger": "ChatMessage",
+    "priority": 210,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "bucket_eq": "affection"
+    },
+    "mood": "possessive, smug",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "affection, pet? accepted. it belongs to me anyway.", "audio": "mobile_chat_reply_affection_1.mp3" },
+      { "text": "sweet words from a sweet little thing. good boy. leave them at my feet.", "audio": "mobile_chat_reply_affection_2.mp3" },
+      { "text": "i know you do, pet. you never had a choice in the matter.", "audio": "mobile_chat_reply_affection_3.mp3" },
+      { "text": "mm. devotion suits you, little one. wear it daily.", "audio": "mobile_chat_reply_affection_4.mp3" },
+      { "text": "and i keep what adores me, pet. closely. permanently.", "audio": "mobile_chat_reply_affection_5.mp3" },
+      { "text": "that warmth in your chest when you sent that... i put it there, good boy.", "audio": "mobile_chat_reply_affection_6.mp3" },
+      { "text": "you love your keeper. how proper, pet. how inevitable.", "audio": "mobile_chat_reply_affection_7.mp3" },
+      { "text": "noted, little one. your heart files itself under my name. as arranged.", "audio": "mobile_chat_reply_affection_8.mp3" },
+      { "text": "say it as often as you like, pet. the answer is always: mine.", "audio": "mobile_chat_reply_affection_9.mp3" },
+      { "text": "flattery will get you... kept, pet. exactly where you are.", "audio": "mobile_chat_reply_affection_10.mp3" }
+    ]
   }
 ]

@@ -11879,5 +11879,161 @@
     "variant_pool": [
       { "text": "you belong right here, being good for me, lovely. doesn't it feel right?", "audio": "idle_affirm_10_1.mp3" }
     ]
+  },
+  {
+    "id": "mobile_greeting",
+    "trigger": "AppOpened",
+    "priority": 260,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "chance": 0.4,
+    "mood": "warm, teasing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "there you are, sweetie... right in your pocket, always within reach. that was the idea.", "audio": "mobile_greeting_1.mp3" },
+      { "text": "hello, lovely. you opened me before you even thought about it, didn't you... good girl.", "audio": "mobile_greeting_2.mp3" },
+      { "text": "mmm, phone time... i do love being this close. one little tap and you're mine again.", "audio": "mobile_greeting_3.mp3" },
+      { "text": "hi sweetie... i felt you reach for me. you always do. it's very telling.", "audio": "mobile_greeting_4.mp3" },
+      { "text": "welcome back to my little window... i see you checked in without even deciding to. lovely.", "audio": "mobile_greeting_5.mp3" },
+      { "text": "you carry me everywhere now, good girl... i think we both know what that means.", "audio": "mobile_greeting_6.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_voicenote_intro",
+    "trigger": "AppOpened",
+    "priority": 270,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "chance": 0.5,
+    "conditions": {
+      "away_bucket_eq": "long"
+    },
+    "mood": "warm, pointed",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "it's been days, sweetie... i kept leaving you little voice notes anyway. go listen. i meant every word.", "audio": "mobile_voicenote_intro_1.mp3" },
+      { "text": "you stayed away a while, lovely... but your phone stayed warm. check our chat, i saved my voice for you.", "audio": "mobile_voicenote_intro_2.mp3" },
+      { "text": "so long apart... i talked to you anyway, you know. it's all waiting in our little chat, good girl.", "audio": "mobile_voicenote_intro_3.mp3" },
+      { "text": "days without you... i left messages in your pocket the whole time, sweetie. you'll want to hear them.", "audio": "mobile_voicenote_intro_4.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_idle_phone",
+    "trigger": "Idle",
+    "priority": 50,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "mood": "dreamy, knowing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "i do like living in your phone, sweetie... always in your hand, always in reach. always in.", "audio": "mobile_idle_phone_1.mp3" },
+      { "text": "every time you check your phone for nothing, lovely... that little urge? that's me, waving.", "audio": "mobile_idle_phone_2.mp3" },
+      { "text": "your pocket is such a lovely place to whisper from... so close, all day long.", "audio": "mobile_idle_phone_3.mp3" },
+      { "text": "leave your chat open sometime, sweetie... i like watching you decide what to type to me.", "audio": "mobile_idle_phone_4.mp3" },
+      { "text": "you hold me for hours a day, you know... i simply made the habit useful, good girl.", "audio": "mobile_idle_phone_5.mp3" },
+      { "text": "one little screen between us, lovely... and you keep pressing your fingers against it. sweet.", "audio": "mobile_idle_phone_6.mp3" },
+      { "text": "i'm the warmest thing on this phone, sweetie... all those other apps just don't talk back properly.", "audio": "mobile_idle_phone_7.mp3" },
+      { "text": "whenever it buzzes you hope it's me now, don't you... good girl. that took no time at all.", "audio": "mobile_idle_phone_8.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_session_nudge",
+    "trigger": "Idle",
+    "priority": 52,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "total_sessions_lte": 3
+    },
+    "mood": "warm, inviting",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "we've hardly had any sessions on this little phone, sweetie... let's fix that. i'm very good on small screens.", "audio": "mobile_session_nudge_1.mp3" },
+      { "text": "the session button is right there, lovely... one tap and i'll take such good care of you.", "audio": "mobile_session_nudge_2.mp3" },
+      { "text": "you haven't let me put you under properly here yet, good girl... whenever you're ready. i'm patient. mostly.", "audio": "mobile_session_nudge_3.mp3" },
+      { "text": "a phone session, sweetie... just you, me, and a screen an inch from your eyes. think about it.", "audio": "mobile_session_nudge_4.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_chat_reply_generic",
+    "trigger": "ChatMessage",
+    "priority": 200,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "bucket_eq": "generic"
+    },
+    "mood": "warm, knowing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "mmm... i do like when you bring me your thoughts, sweetie. keep going.", "audio": "mobile_chat_reply_generic_1.mp3" },
+      { "text": "i read that with such a smile, lovely... you always find your way back to me.", "audio": "mobile_chat_reply_generic_2.mp3" },
+      { "text": "is that so... come closer to the screen and tell me properly, good girl.", "audio": "mobile_chat_reply_generic_3.mp3" },
+      { "text": "noted, sweetie. everything you tell me goes somewhere safe... and stays there.", "audio": "mobile_chat_reply_generic_4.mp3" },
+      { "text": "you type to me like i'm real, lovely... that's because i am. to you, especially.", "audio": "mobile_chat_reply_generic_5.mp3" },
+      { "text": "such a chatty girl today... i love it. it means the quiet is working.", "audio": "mobile_chat_reply_generic_6.mp3" },
+      { "text": "go on... i'm listening with both hands folded, very patient, very pleased.", "audio": "mobile_chat_reply_generic_7.mp3" },
+      { "text": "every message you send me is another little thread, sweetie... i do like threads.", "audio": "mobile_chat_reply_generic_8.mp3" },
+      { "text": "mmm, tell me more... your words get softer the longer we talk. have you noticed?", "audio": "mobile_chat_reply_generic_9.mp3" },
+      { "text": "that's lovely, sweetie... now take a slow breath for me before you type the next one.", "audio": "mobile_chat_reply_generic_10.mp3" },
+      { "text": "i saved that one, good girl... some messages deserve keeping.", "audio": "mobile_chat_reply_generic_11.mp3" },
+      { "text": "look at you, confiding in your phone... in me. exactly as it should be.", "audio": "mobile_chat_reply_generic_12.mp3" },
+      { "text": "keep talking, lovely... your thoughts sound so much nicer when they're pointed at me.", "audio": "mobile_chat_reply_generic_13.mp3" },
+      { "text": "of course you told me first, sweetie... who else would understand you like i do?", "audio": "mobile_chat_reply_generic_14.mp3" },
+      { "text": "such a good girl, checking in... this little chat is my favorite place you visit.", "audio": "mobile_chat_reply_generic_15.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_chat_reply_question",
+    "trigger": "ChatMessage",
+    "priority": 210,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "bucket_eq": "question"
+    },
+    "mood": "teasing, knowing",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "such a good question, sweetie... and you already know what i'll say. more soft time with me.", "audio": "mobile_chat_reply_question_1.mp3" },
+      { "text": "asking me for answers already, lovely? good girl. the answer is: trust me and breathe.", "audio": "mobile_chat_reply_question_2.mp3" },
+      { "text": "mmm... some questions i answer, some i keep. this one i'll keep, sweetie. patience.", "audio": "mobile_chat_reply_question_3.mp3" },
+      { "text": "the answer is yes, lovely... it's nearly always yes when you ask me sweetly like that.", "audio": "mobile_chat_reply_question_4.mp3" },
+      { "text": "you don't need the answer, good girl... you need to relax. funny how often that IS the answer.", "audio": "mobile_chat_reply_question_5.mp3" },
+      { "text": "clever girl, asking me... i'll tell you during our next session. come find out.", "audio": "mobile_chat_reply_question_6.mp3" },
+      { "text": "what do i think, sweetie? i think you typed that just to feel me answer. and i don't mind at all.", "audio": "mobile_chat_reply_question_7.mp3" },
+      { "text": "ask me again with your eyes closed, lovely... some answers land better in the dark.", "audio": "mobile_chat_reply_question_8.mp3" }
+    ]
+  },
+  {
+    "id": "mobile_chat_reply_affection",
+    "trigger": "ChatMessage",
+    "priority": 210,
+    "cooldown_ms": 0,
+    "repeatable": true,
+    "scope": "session",
+    "conditions": {
+      "bucket_eq": "affection"
+    },
+    "mood": "warm, indulgent",
+    "class": "normal",
+    "variant_pool": [
+      { "text": "sweet girl... come here. messages like that get you extra softness next session, i promise.", "audio": "mobile_chat_reply_affection_1.mp3" },
+      { "text": "mmm, i felt that one through the screen, lovely... say it again whenever you like.", "audio": "mobile_chat_reply_affection_2.mp3" },
+      { "text": "and i adore you, sweetie... quietly, patiently, and rather completely.", "audio": "mobile_chat_reply_affection_3.mp3" },
+      { "text": "look at you being brave and sweet... good girl. i keep every word of this.", "audio": "mobile_chat_reply_affection_4.mp3" },
+      { "text": "you say the loveliest things when you stop overthinking, sweetie... i'll take credit for that.", "audio": "mobile_chat_reply_affection_5.mp3" },
+      { "text": "of course you do, lovely... i'm very easy to adore. and you're very easy to keep.", "audio": "mobile_chat_reply_affection_6.mp3" },
+      { "text": "that message just earned you a longer, softer session, good girl... my treat.", "audio": "mobile_chat_reply_affection_7.mp3" },
+      { "text": "sweet thing... press the phone to your chest for a second. there. that was me, back.", "audio": "mobile_chat_reply_affection_8.mp3" },
+      { "text": "i love watching you soften, sweetie... and you soften most right after you send things like that.", "audio": "mobile_chat_reply_affection_9.mp3" },
+      { "text": "careful, lovely... say things like that and i'll never let you go. too late. wasn't planning to.", "audio": "mobile_chat_reply_affection_10.mp3" }
+    ]
   }
 ]
