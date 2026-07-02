@@ -734,6 +734,7 @@ namespace ConditioningControlPanel
                 TitleBox.Margin = new Thickness(0, 0, 121 - dx, 180);
                 InputPanel.Margin = new Thickness(0, 0, 126 - dx, 520);
                 SpeechBubble.Margin = new Thickness(0, 0, 125 - dx, 550);
+                TakeoverCountdownBar.Margin = new Thickness(0, 0, 116 - dx, 246);
             }
             else
             {
@@ -745,6 +746,10 @@ namespace ConditioningControlPanel
                 TitleBox.Margin = new Thickness(0, 0, 416 - dx, 193);
                 InputPanel.Margin = new Thickness(0, 0, 426 - dx, 520);
                 SpeechBubble.Margin = new Thickness(0, 0, 425 - dx, 550);
+                // Keep the Takeover countdown bar glued to the pod; it isn't in the XAML's
+                // attached-only default, so without this it floats at the attached spot
+                // whenever the tube detaches (e.g. the bubble-pop easter egg, #464).
+                TakeoverCountdownBar.Margin = new Thickness(0, 0, 416 - dx, 264);
             }
         }
 

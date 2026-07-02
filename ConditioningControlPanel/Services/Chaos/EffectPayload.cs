@@ -150,7 +150,11 @@ public sealed class VideoPayload : EffectPayload
     {
         try
         {
-            App.Video?.ArmRandomSegment(SEGMENT_SEC);   // a random 15s slice, not always the opening
+            // Only chaos caps playback at ~15s, making a random start a "random slice".
+            // Dashboard trigger bubbles reuse this payload uncapped, so arming there made
+            // the full mandatory video start midway (#456/#458).
+            if (App.Chaos?.IsRunning == true)
+                App.Video?.ArmRandomSegment(SEGMENT_SEC);
             App.Video?.TriggerVideo(silentIfEmpty: true);
         }
         catch (Exception ex) { App.Logger?.Debug("VideoPayload: {E}", ex.Message); }

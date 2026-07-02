@@ -1799,7 +1799,7 @@ namespace ConditioningControlPanel
                 var s = Settings?.Current;
                 if (s != null && s.AutonomyResumeOnStartup && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
                 {
-                    var hasPatreonAccess = s.PatreonTier >= 1 || Patreon?.IsWhitelisted == true;
+                    var hasPatreonAccess = Patreon?.HasPremiumAccess == true;
                     if (hasPatreonAccess && Autonomy?.IsEnabled != true)
                     {
                         Autonomy?.Start();

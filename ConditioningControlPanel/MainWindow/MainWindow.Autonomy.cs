@@ -69,8 +69,9 @@ namespace ConditioningControlPanel
             App.Settings.Current.AutonomyModeEnabled = isEnabled;
 
             // Start/stop autonomy service (works independently of engine!)
-            // Requires Patreon + Consent
-            var hasPatreon = App.Settings.Current.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+            // Requires Patreon + Consent. Canonical gate: Settings.PatreonTier is only written
+            // at login and goes stale for live-validated subscribers (#465).
+            var hasPatreon = App.Patreon?.HasPremiumAccess == true;
 
             if (isEnabled)
             {

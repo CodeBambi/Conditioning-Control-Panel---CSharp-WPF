@@ -243,6 +243,10 @@ namespace ConditioningControlPanel
             if (App.Settings?.Current != null)
             {
                 App.Settings.Current.UnifiedId = null;
+                // The server rotates this token on each auth event; keeping it past logout
+                // makes every re-login call present a rotated-out token and fail with
+                // "Invalid or missing auth token" (#455).
+                App.Settings.Current.AuthToken = null;
                 App.Settings.Current.UserDisplayName = null;
                 App.Settings.Current.HasLinkedDiscord = false;
                 App.Settings.Current.HasLinkedPatreon = false;

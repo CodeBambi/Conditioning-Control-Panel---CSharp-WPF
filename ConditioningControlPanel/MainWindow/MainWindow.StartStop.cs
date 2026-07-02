@@ -222,7 +222,7 @@ namespace ConditioningControlPanel
             }
 
             // Start autonomy service (requires Patreon)
-            var hasPatreonAccess = settings.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+            var hasPatreonAccess = App.Patreon?.HasPremiumAccess == true;
             if (hasPatreonAccess && settings.AutonomyModeEnabled && settings.AutonomyConsentGiven)
             {
                 App.Autonomy?.Start();
