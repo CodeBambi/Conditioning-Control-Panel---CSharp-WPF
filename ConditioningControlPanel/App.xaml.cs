@@ -842,14 +842,16 @@ namespace ConditioningControlPanel
                 }));
 
             // Show splash screen IMMEDIATELY - before anything else
-            // This ensures users see feedback right away after update/launch
-            _splash = new SplashScreen();
+            // This ensures users see feedback right away after update/launch.
+            // The splash runs on its OWN STA thread with its own dispatcher: everything
+            // below executes synchronously on THIS thread, and a same-thread splash
+            // cannot pump messages during that work — its animations froze mid-bar and
+            // one click marked it "Not Responding". On a dedicated thread it stays
+            // responsive and animating for the whole load. Null if creation failed;
+            // every use below is ?. so startup proceeds splash-less in that case.
+            _splash = SplashScreen.ShowOnOwnThread();
             var splash = _splash;
-            splash.Show();
-            splash.SetProgress(0.0, "Starting...");
-
-            // Force the splash to render before continuing with any initialization
-            splash.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => { }));
+            splash?.SetProgress(0.0, "Starting...");
 
             // Parse "Open with CCP" args. Done before single-instance check so a
             // second-instance launch can write its handoff file before signaling.
@@ -888,7 +890,7 @@ namespace ConditioningControlPanel
                     }
                     catch { }
 
-                    splash.Close();
+                    splash?.CloseImmediate();
                     Shutdown();
                     return;
                 }
@@ -911,7 +913,7 @@ namespace ConditioningControlPanel
                 if (acknowledged)
                 {
                     // Primary is alive and surfaced its window — nothing more to do.
-                    splash.Close();
+                    splash?.CloseImmediate();
                     Shutdown();
                     return;
                 }
@@ -996,7 +998,7 @@ namespace ConditioningControlPanel
                 typeof(System.Windows.Media.Animation.Timeline),
                 new FrameworkPropertyMetadata(30));
 
-            splash.SetProgress(0.05, "Initializing logging...");
+            splash?.SetProgress(0.05, "Initializing logging...");
 
             // Setup logging - use UserDataPath (writable) instead of BaseDirectory (may be in Program Files)
             string logPath;
@@ -1053,7 +1055,7 @@ namespace ConditioningControlPanel
             // to the logs folder when the dispatcher stops responding for 10s.
             Services.UiHangWatchdog.Start(Dispatcher);
 
-            splash.SetProgress(0.1, "Initializing...");
+            splash?.SetProgress(0.1, "Initializing...");
 
             // Global exception handlers to catch and log crashes instead of hard crashing
             bool errorDialogShown = false;
@@ -1106,7 +1108,7 @@ namespace ConditioningControlPanel
                     errorDialogShown = true;
 
                     // Close splash screen if still open so error dialog is visible
-                    try { _splash?.Close(); } catch { }
+                    try { _splash?.CloseImmediate(); } catch { }
                     _splash = null;
 
                     try
@@ -1143,7 +1145,7 @@ namespace ConditioningControlPanel
                 }
             });
 
-            splash.SetProgress(0.1, "Creating directories...");
+            splash?.SetProgress(0.1, "Creating directories...");
 
             // Create user assets directories in LocalAppData (persists across updates)
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "images"));
@@ -1157,7 +1159,7 @@ namespace ConditioningControlPanel
             Directory.CreateDirectory(Path.Combine(resourcesPath, "sub_audio"));
             Directory.CreateDirectory(Path.Combine(resourcesPath, "sounds", "mindwipe"));
 
-            splash.SetProgress(0.2, "Loading settings...");
+            splash?.SetProgress(0.2, "Loading settings...");
 
             // Initialize services
             Settings = new SettingsService();
@@ -1235,21 +1237,21 @@ namespace ConditioningControlPanel
                 else Current?.Dispatcher?.Invoke(Recolor);
             };
 
-            splash.SetProgress(0.3, "Initializing audio...");
+            splash?.SetProgress(0.3, "Initializing audio...");
             Audio = new AudioService();
             Audio.RunStartupDiagnostics();
 
-            splash.SetProgress(0.4, "Initializing flash service...");
+            splash?.SetProgress(0.4, "Initializing flash service...");
             Flash = new FlashService();
 
-            splash.SetProgress(0.5, "Initializing video service...");
+            splash?.SetProgress(0.5, "Initializing video service...");
             Video = new VideoService();
             Video.PreloadLibVLC(); // Pre-load LibVLC in background for faster first video
 
             // Session media log - must be after Flash and Video so it can subscribe to their events.
             SessionLog = new SessionLogService();
 
-            splash.SetProgress(0.6, "Initializing effects...");
+            splash?.SetProgress(0.6, "Initializing effects...");
             Progression = new ProgressionService();
             ActivityTracker = new ActivityTracker();
 
@@ -1276,7 +1278,7 @@ namespace ConditioningControlPanel
             MindWipe = new MindWipeService();
             BrainDrain = new BrainDrainService();
 
-            splash.SetProgress(0.75, "Loading achievements...");
+            splash?.SetProgress(0.75, "Loading achievements...");
             Achievements = new AchievementService();
             // Single seam between feature events and achievement tracking. Constructed
             // here; Start() is called later in OnStartup once feature services exist.
@@ -1300,7 +1302,7 @@ namespace ConditioningControlPanel
             // (AchievementService runs UpdateDailyStreak in its constructor before SkillTree exists)
             Achievements?.Progress?.AwardDeferredStreakBonus();
 
-            splash.SetProgress(0.85, "Initializing companion...");
+            splash?.SetProgress(0.85, "Initializing companion...");
             // Moderation guard + log: substantive content moderation that runs in C# code
             // OUTSIDE the LLM prompt. User-editable prompt sections (Personality,
             // SlutModePersonality, CompanionPrompt, custom Awareness templates, etc.) cannot
@@ -1530,7 +1532,7 @@ namespace ConditioningControlPanel
 
             Logger.Information("Services initialized");
 
-            splash.SetProgress(0.95, "Opening main window...");
+            splash?.SetProgress(0.95, "Opening main window...");
 
             // Show main window — wrapped in try-catch to ensure splash closes on failure
             MainWindow mainWindow;
@@ -1542,7 +1544,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 Logger?.Error(ex, "Failed to create main window");
-                try { splash.Close(); } catch { }
+                try { splash?.CloseImmediate(); } catch { }
                 _splash = null;
                 throw; // Re-throw to let DispatcherUnhandledException show the error
             }
@@ -1600,21 +1602,24 @@ namespace ConditioningControlPanel
                 else mainWindow.Loaded += (_, _) => dispatch();
             }
 
-            // Close splash screen with fade animation
-            // Drop Topmost FIRST so deferred dialogs (What's New, Age Verification) aren't hidden behind it
-            splash.Topmost = false;
-            splash.SetProgress(1.0, "Ready!");
+            // Close splash screen with fade animation. FadeOutAndClose drops Topmost
+            // first (on the splash's own thread) so deferred dialogs (What's New,
+            // Age Verification) aren't hidden behind it.
+            splash?.SetProgress(1.0, "Ready!");
 
             // Activate the main window before AND after the splash fades. Show()
             // alone doesn't reliably foreground the window because the splash
             // was Topmost during init and Windows can give focus to whatever
             // was foreground before launch (Explorer, prior app) when the
             // splash closes. Topmost-pulse is the standard WPF workaround for
-            // ForegroundLockTimeout blocking Activate().
+            // ForegroundLockTimeout blocking Activate(). The after-close callback
+            // fires on the SPLASH thread, so marshal back to the main dispatcher.
             ForceWindowToFront(mainWindow);
-            splash.Closed += (_, _) => ForceWindowToFront(mainWindow);
-
-            splash.FadeOutAndClose();
+            splash?.FadeOutAndClose(() => Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { ForceWindowToFront(mainWindow); }
+                catch (Exception ex) { Logger?.Debug("Post-splash ForceWindowToFront failed: {Error}", ex.Message); }
+            })));
             _splash = null;
 
             // Age verification gate (first launch only, deferred to ensure splash is fully closed)
