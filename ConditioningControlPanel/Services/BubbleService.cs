@@ -2778,8 +2778,15 @@ internal class Bubble
             _grid.Opacity = _baseOpacity;
             _grid.Effect = null;
             ChaosBubbleHostOverlay.Add(_grid);
-            ChaosBubbleHostOverlay.Place(_grid, _posX + _size / 2.0 - _hitSize / 2.0,
-                                                _posY + _size / 2.0 - _hitSize / 2.0);
+            // Mixed-DPI: the host renders at ONE scale (its majority monitor's). A bubble whose
+            // screen runs a different scale compensates with a LayoutTransform, or its visual is
+            // drawn displaced + mis-sized from the physical-px hit disc the mouse hook tests —
+            // the second-screen "bubbles don't pop" bug on e.g. 125% primary / 100% secondary.
+            double hostScale = ChaosBubbleHostOverlay.RenderScale;
+            if (hostScale > 0 && Math.Abs(hostScale - _dpiScale) > 0.001)
+                _grid.LayoutTransform = new ScaleTransform(_dpiScale / hostScale, _dpiScale / hostScale);
+            ChaosBubbleHostOverlay.Place(_grid, (_posX + _size / 2.0 - _hitSize / 2.0) * _dpiScale,
+                                                (_posY + _size / 2.0 - _hitSize / 2.0) * _dpiScale);
         }
         else
         {
@@ -3436,8 +3443,9 @@ internal class Bubble
             if (_useHost)
             {
                 // Cheap Canvas reposition — no SetWindowPos. Grid (_hitSize) centred on the bubble.
-                ChaosBubbleHostOverlay.Place(_grid, _posX + _size / 2.0 - _hitSize / 2.0 + jx,
-                                                    _posY + _size / 2.0 - _hitSize / 2.0 + jy);
+                // PHYSICAL px: the host converts by its own origin/scale (mixed-DPI safe).
+                ChaosBubbleHostOverlay.Place(_grid, (_posX + _size / 2.0 - _hitSize / 2.0 + jx) * _dpiScale,
+                                                    (_posY + _size / 2.0 - _hitSize / 2.0 + jy) * _dpiScale);
             }
             else
             {
