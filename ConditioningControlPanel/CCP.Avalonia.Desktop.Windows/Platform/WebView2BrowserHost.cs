@@ -61,6 +61,10 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
     private string? _virtualHostFolder;
     private bool _messagingWired;
 
+    /// <summary>Optional extra Chromium command-line flags applied when the environment is first created
+    /// (e.g. the Chaos tunnel's anti-MPO flags so its WebGL swapchain composites below topmost overlays).</summary>
+    public string? AdditionalBrowserArguments { get; set; }
+
     /// <summary>
     /// Creates an Avalonia control that hosts WebView2. The first call initializes the
     /// embedded WebView2 asynchronously; subsequent calls return the same control instance.
@@ -98,7 +102,7 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
 
         try
         {
-            _environment ??= await CoreWebView2Environment.CreateAsync(userDataFolder: _userDataFolder);
+            _environment ??= await CreateEnvironmentAsync();
             await _embeddedHost!.EnsureInitializedAsync(_environment);
         }
         catch (Exception ex)
@@ -207,8 +211,18 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
         if (_disposed) return;
         if (_embeddedHost == null) return;
 
-        _environment ??= await CoreWebView2Environment.CreateAsync(userDataFolder: _userDataFolder);
+        _environment ??= await CreateEnvironmentAsync();
         await _embeddedHost.EnsureInitializedAsync(_environment);
+    }
+
+    private async Task<CoreWebView2Environment> CreateEnvironmentAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(AdditionalBrowserArguments))
+        {
+            var options = new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = AdditionalBrowserArguments };
+            return await CoreWebView2Environment.CreateAsync(browserExecutableFolder: null, userDataFolder: _userDataFolder, options: options);
+        }
+        return await CoreWebView2Environment.CreateAsync(userDataFolder: _userDataFolder);
     }
 
     private async Task EnsureBrowserWindowAsync()

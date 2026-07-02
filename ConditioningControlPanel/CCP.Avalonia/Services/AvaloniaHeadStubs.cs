@@ -43,6 +43,7 @@ public sealed class AvaloniaChaosService : IChaosService
     private readonly IBouncingTextService? _bouncingText;
     private readonly IBrowserHost? _browserHost;
     private readonly IModService? _modService;
+    private readonly ConditioningControlPanel.Core.Services.Chaos.IChaosTunnelService? _tunnel;
     private readonly Random _rng = new();
 
     private bool _active;
@@ -91,7 +92,8 @@ public sealed class AvaloniaChaosService : IChaosService
         IOverlayService? overlayService = null,
         IBouncingTextService? bouncingText = null,
         IBrowserHost? browserHost = null,
-        IModService? modService = null)
+        IModService? modService = null,
+        ConditioningControlPanel.Core.Services.Chaos.IChaosTunnelService? tunnel = null)
     {
         _bubbles = bubbles;
         _settings = settings;
@@ -107,6 +109,7 @@ public sealed class AvaloniaChaosService : IChaosService
         _bouncingText = bouncingText;
         _browserHost = browserHost;
         _modService = modService;
+        _tunnel = tunnel;
         AvaloniaChaosCatalogs.EnsureInitialized();
     }
 
@@ -268,6 +271,8 @@ public sealed class AvaloniaChaosService : IChaosService
         _state.PushEvent("🐇 the descent begins");
 
         try { ChaosBackdropService.Show(_state.ActIndex); } catch (Exception ex) { _logger?.LogDebug("ChaosBackdropService.Show failed: {E}", ex.Message); }
+
+        try { _tunnel?.Show(); _tunnel?.SendZoneHint(_state.ActIndex, Math.Min(1.0, (_state.ActIndex - 1) / 5.0)); _tunnel?.SetStreak(_state.Combo, _state.ComboMult); } catch (Exception ex) { _logger?.LogDebug("ChaosTunnel wire failed: {E}", ex.Message); }
 
         ChaosHappyPath.OnRunStarted(_state, this);
         if (ChaosMeta.State.RunsCompleted == 0)
@@ -801,6 +806,7 @@ public sealed class AvaloniaChaosService : IChaosService
     private void CleanupAfterRun()
     {
         _logger?.LogDebug("CleanupAfterRun called");
+        try { _tunnel?.CloseActive(); } catch { }
         ChaosHappyPath.OnRunEnded();
         _ending = false;
         _active = false;

@@ -54,6 +54,10 @@
       <Link>chime1.mp3</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- Chaos tunnel web assets (three.js tunnel page + vendor libs), served via the IBrowserHost virtual host. -->
+    <Content Include="..\Resources\web\**\*" Link="Resources\web\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <ProjectReference Include="..\CCP.Avalonia.Desktop\CCP.Avalonia.Desktop.csproj" />
 
     <!-- Smoke test harness is kept out of the production source tree and only

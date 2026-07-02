@@ -71,6 +71,9 @@ class Program
             services.AddSingleton<IWebcamService>(sp => sp.GetRequiredService<AvaloniaWebcamTrackingService>());
             services.AddSingleton<ConditioningControlPanel.Core.Services.Webcam.IGazeDriftCorrectionService,
                                   GazeDriftCorrectionService>();
+            // Opt-in 3D Chaos tunnel background (WebView2). Resolved as null on heads without a browser host.
+            services.AddSingleton<ConditioningControlPanel.Core.Services.Chaos.IChaosTunnelService,
+                                  ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Chaos.ChaosTunnelService>();
             services.AddSingleton<IScreenOcrService, AvaloniaScreenOcrService>();
             // Real offline speech engine (Vosk + NAudio); overrides the shared NullSpeechService.
             services.AddSingleton<ConditioningControlPanel.Core.Services.Speech.ISpeechRecognitionService, WindowsSpeechService>();
