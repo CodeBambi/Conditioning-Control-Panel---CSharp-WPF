@@ -60,20 +60,23 @@ namespace ConditioningControlPanel.Services
         [JsonProperty] public PolynomialFitData? Polynomial { get; set; }
 
         /// <summary>
-        /// Legacy. Calibration-time average head pose, paired with HeadPoseComp
-        /// to drive a runtime iris-vector correction when the live head pose
-        /// drifted off the calibration baseline. The comp pipeline was retired
-        /// because the PnP head-pose estimator was noisier than natural head
-        /// movement, so the correction injected variance instead of removing
-        /// it. New calibrations set this to null; old saves are still
-        /// deserialized but the field is ignored at runtime.
+        /// Calibration-time average head pose ("looking forward" reference).
+        /// Paired with <see cref="HeadPoseComp"/> to correct the iris vector
+        /// when the live head pose leaves this baseline. History: an earlier
+        /// comp pipeline fit its coefficients from the NATURAL head variance
+        /// during dot sampling — users hold still, so the fit was noise and
+        /// got retired. It's now back with a well-conditioned source: a
+        /// guided head-motion step (eyes on a center dot, deliberate nod +
+        /// turn) — see WebcamCalibrationWindow.RunHeadMotionPhaseAsync. Null
+        /// when the guided fit was skipped or failed.
         /// </summary>
         [JsonProperty] public CalibrationHeadPose? BaselineHeadPose { get; set; }
 
         /// <summary>
-        /// Legacy. Empirically-fit head-pose compensation coefficients for the
-        /// iris vector. See <see cref="BaselineHeadPose"/> — this is the other
-        /// half of the same retired pipeline. Ignored at runtime.
+        /// Head-pose compensation coefficients for the iris vector. Only
+        /// applied at runtime when <see cref="HeadPoseCompFit.FromGuidedMotion"/>
+        /// is true — fits from old builds (natural-variance, retired) load
+        /// fine but stay inert.
         /// </summary>
         [JsonProperty] public HeadPoseCompFit? HeadPoseComp { get; set; }
 
@@ -85,6 +88,55 @@ namespace ConditioningControlPanel.Services
         /// never run quick-recal — projection path skips the nudge.
         /// </summary>
         [JsonProperty] public RuntimeOffsetData? RuntimeOffset { get; set; }
+
+        /// <summary>
+        /// Min/max iris vector observed across the calibration grid. The
+        /// runtime clamps the live (smoothed) iris vector to this range plus a
+        /// margin before projecting: the 2nd-order polynomial is only trained
+        /// inside the calibrated hull, and its quadratic terms extrapolate
+        /// violently outside it — a single bad iris sample (glint, half-blink)
+        /// used to sling the cursor across the screen. Null on calibrations
+        /// from older app versions — projection path skips the clamp.
+        /// </summary>
+        [JsonProperty] public IrisRangeData? IrisRange { get; set; }
+
+        /// <summary>
+        /// Post-polynomial per-axis residual correction. The polynomial's
+        /// systematic per-row/per-column bias (e.g. "everything in the bottom
+        /// row projects 150 px too high" — the user literally can't reach the
+        /// bottom of the screen) is measured at finalize time by re-projecting
+        /// each grid row/column's mean iris vector and comparing to the true
+        /// dot position; the anchors stored here define a piecewise-linear
+        /// warp applied after the polynomial. Null on old saves or when the
+        /// anchors came out non-monotonic (degenerate fit) — projection path
+        /// skips the warp.
+        /// </summary>
+        [JsonProperty] public AxisCorrectionData? AxisCorrection { get; set; }
+
+        /// <summary>
+        /// Main light-source direction the user declared in the calibration
+        /// lighting picker (step 0): "left", "right", "top", "front", "back",
+        /// or null when skipped. One-sided light inflates iris noise on the
+        /// shadow side of the gaze range; the runtime widens the iris-clamp
+        /// margin on that side (see the clamp block in EmitGazeEvents) so the
+        /// user can still reach the far side of the screen. Stamped per
+        /// calibration — the fit itself was also weighted with this hint.
+        /// </summary>
+        [JsonProperty] public string? LightSource { get; set; }
+
+        /// <summary>
+        /// Per-axis linear trim fit from the bubble-test residuals — the
+        /// bubbles are ground truth ("the user was trying to look THERE"),
+        /// so the gap between each bubble and where the cursor actually
+        /// hovered is a measured mapping error. Offset + scale per axis:
+        ///   x' = x + X0 + X1·(x − CenterX),  y' = y + Y0 + Y1·(y − CenterY)
+        /// which captures both whole-map drift and the "cursor went up but
+        /// the bubble was down" stretch/compression error. Applied after
+        /// RuntimeOffset; repeated bubble tests COMPOSE into this (see
+        /// WebcamTrackingService.ApplyGazeTrim). Null until the user runs a
+        /// bubble test; cleared by a fresh calibration.
+        /// </summary>
+        [JsonProperty] public GazeTrimData? GazeTrim { get; set; }
 
         public static string FilePath => Path.Combine(App.UserDataPath, FileName);
 
@@ -154,7 +206,22 @@ namespace ConditioningControlPanel.Services
                 BaselineHeadPose = this.BaselineHeadPose,
                 HeadPoseComp = this.HeadPoseComp,
                 RuntimeOffset = offset,
+                IrisRange = this.IrisRange,
+                AxisCorrection = this.AxisCorrection,
+                LightSource = this.LightSource,
+                GazeTrim = this.GazeTrim,
             };
+        }
+
+        /// <summary>
+        /// Shallow clone with <see cref="GazeTrim"/> replaced — same
+        /// swap-don't-mutate contract as <see cref="WithRuntimeOffset"/>.
+        /// </summary>
+        public WebcamCalibrationData WithGazeTrim(GazeTrimData? trim)
+        {
+            var clone = WithRuntimeOffset(this.RuntimeOffset);
+            clone.GazeTrim = trim;
+            return clone;
         }
     }
 
@@ -212,12 +279,15 @@ namespace ConditioningControlPanel.Services
     }
 
     /// <summary>
-    /// Iris-vector correction coefficients fit empirically from the natural
-    /// head-pose variance during calibration sampling. Applied as
-    ///   ix' = ix + AxYaw * sin(Δyaw) + AxPitch * sin(Δpitch)
-    ///   iy' = iy + AyYaw * sin(Δyaw) + AyPitch * sin(Δpitch)
-    /// where Δ is (live pose − BaselineHeadPose). Sign and magnitude come out
-    /// of the LS fit, so they're correct by construction for this camera/face.
+    /// Iris-vector correction coefficients fit from the guided head-motion
+    /// step (gaze pinned to a center dot while the user deliberately nods and
+    /// turns — pose varies, gaze doesn't, so the regression is
+    /// well-conditioned). Applied at runtime as
+    ///   ix' = ix − AxYaw·(sin(yaw)−sin(baseYaw)) − AxPitch·(sin(pitch)−sin(basePitch))
+    ///   iy' = iy − AyYaw·(sin(yaw)−sin(baseYaw)) − AyPitch·(sin(pitch)−sin(basePitch))
+    /// mapping the live iris vector back to its baseline-pose equivalent
+    /// before the polynomial projection. Sign and magnitude come out of the
+    /// LS fit, so they're correct by construction for this camera/face.
     /// </summary>
     public class HeadPoseCompFit
     {
@@ -231,16 +301,71 @@ namespace ConditioningControlPanel.Services
         [JsonProperty] public double RSquaredY { get; set; }
         /// <summary>Number of samples that contributed to the fit.</summary>
         [JsonProperty] public int SampleCount { get; set; }
+        /// <summary>
+        /// True when the coefficients came from the guided nod/turn step. The
+        /// runtime only applies fits with this set — coefficients from the
+        /// retired natural-variance pipeline (older builds) deserialize with
+        /// false and stay inert.
+        /// </summary>
+        [JsonProperty] public bool FromGuidedMotion { get; set; }
     }
 
     /// <summary>
     /// Translational offset (screen DIPs) added to every projected gaze point
-    /// before it's emitted. Captured by the Quick Recal flow.
+    /// before it's emitted. Captured by the Quick Recal flow, the calibration
+    /// bubble-test fine-tune, and the click-driven drift correction.
     /// </summary>
     public class RuntimeOffsetData
     {
         [JsonProperty] public double Dx { get; set; }
         [JsonProperty] public double Dy { get; set; }
+        [JsonProperty] public DateTime CapturedAt { get; set; }
+    }
+
+    /// <summary>
+    /// Bounding box of the per-dot mean iris vectors from calibration
+    /// (iris-vector units, roughly [-0.5, +0.5]). See
+    /// <see cref="WebcamCalibrationData.IrisRange"/> for how it's used.
+    /// </summary>
+    public class IrisRangeData
+    {
+        [JsonProperty] public double MinX { get; set; }
+        [JsonProperty] public double MaxX { get; set; }
+        [JsonProperty] public double MinY { get; set; }
+        [JsonProperty] public double MaxY { get; set; }
+    }
+
+    /// <summary>
+    /// Piecewise-linear post-polynomial warp, one curve per axis. SrcX[i] is
+    /// where the polynomial projected grid column i (mean over its dots),
+    /// DstX[i] is where that column actually was; likewise SrcY/DstY for rows.
+    /// Runtime maps the projected coordinate through the curve (linear
+    /// between anchors, end-segment slope beyond them), which cancels the
+    /// polynomial's systematic per-band bias — the dominant "cursor is skewed
+    /// toward the top / can't reach the bottom" failure. Arrays are sorted
+    /// ascending by Src and strictly monotonic in BOTH arrays (enforced at
+    /// build time; non-monotonic fits store null instead).
+    /// </summary>
+    public class AxisCorrectionData
+    {
+        [JsonProperty] public double[] SrcX { get; set; } = Array.Empty<double>();
+        [JsonProperty] public double[] DstX { get; set; } = Array.Empty<double>();
+        [JsonProperty] public double[] SrcY { get; set; } = Array.Empty<double>();
+        [JsonProperty] public double[] DstY { get; set; } = Array.Empty<double>();
+    }
+
+    /// <summary>
+    /// Per-axis linear correction (offset + center-relative scale) measured
+    /// by the bubble accuracy test. See <see cref="WebcamCalibrationData.GazeTrim"/>.
+    /// </summary>
+    public class GazeTrimData
+    {
+        [JsonProperty] public double X0 { get; set; }
+        [JsonProperty] public double X1 { get; set; }
+        [JsonProperty] public double Y0 { get; set; }
+        [JsonProperty] public double Y1 { get; set; }
+        [JsonProperty] public double CenterX { get; set; }
+        [JsonProperty] public double CenterY { get; set; }
         [JsonProperty] public DateTime CapturedAt { get; set; }
     }
 }

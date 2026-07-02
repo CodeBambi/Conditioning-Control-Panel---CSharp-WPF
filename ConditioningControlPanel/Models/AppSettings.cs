@@ -4588,6 +4588,31 @@ namespace ConditioningControlPanel.Models
             set { _webcamSensitivity = value; OnPropertyChanged(); }
         }
 
+        // Click-driven implicit recalibration (GazeDriftCorrectionService).
+        // While tracking runs with a calibration loaded, each left-click the
+        // user makes near their fixated gaze point nudges the runtime offset
+        // a little toward the click — posture drift self-corrects instead of
+        // requiring Quick Recal. Default on; the toggle lives in the Lab
+        // webcam debug card.
+        private bool _webcamAutoDriftCorrection = true;
+        public bool WebcamAutoDriftCorrection
+        {
+            get => _webcamAutoDriftCorrection;
+            set { _webcamAutoDriftCorrection = value; OnPropertyChanged(); }
+        }
+
+        // Where the user's main light source sits, declared in the
+        // calibration lighting picker (step 0): "left", "right", "top",
+        // "front" (facing them / even), "back" (backlit), or "" when
+        // skipped/never asked. Remembered so the picker preselects it on
+        // the next calibration.
+        private string _webcamLightSource = "";
+        public string WebcamLightSource
+        {
+            get => _webcamLightSource;
+            set { _webcamLightSource = value ?? ""; OnPropertyChanged(); }
+        }
+
         // Box 2 — Focus Training
         private bool _focusGameEnabled;
         public bool FocusGameEnabled

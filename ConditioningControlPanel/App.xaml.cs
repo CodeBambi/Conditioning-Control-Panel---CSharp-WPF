@@ -350,6 +350,7 @@ namespace ConditioningControlPanel
         public static FocusGameService FocusGame { get; private set; } = null!;
         public static GazeFocusService GazeFocus { get; private set; } = null!;
         public static GazeDebugCursorService GazeCursor { get; private set; } = null!;
+        public static GazeDriftCorrectionService GazeDrift { get; private set; } = null!;
         public static BlinkTrainerService BlinkTrainer { get; private set; } = null!;
         public static Services.Deeper.EnhancementLibrary EnhancementLibrary { get; private set; } = null!;
         public static Services.Deeper.EnhancementAudioPlayer DeeperPlayer { get; private set; } = null!;
@@ -1418,6 +1419,9 @@ namespace ConditioningControlPanel
             FocusGame = new FocusGameService();
             GazeCursor = new GazeDebugCursorService();
             GazeFocus = new GazeFocusService();
+            // Click-driven implicit recal — installs its mouse hook only while
+            // tracking runs with a calibration loaded (and the setting is on).
+            GazeDrift = new GazeDriftCorrectionService();
             BlinkTrainer = new BlinkTrainerService();
 
             // In-app non-blocking notifications. Host attachment is deferred to
@@ -3044,6 +3048,7 @@ Application State:
             BlinkTrainer?.Dispose();
             GazeFocus?.Dispose();
             GazeCursor?.Dispose();
+            GazeDrift?.Dispose();
             Webcam?.Dispose();
             FocusGame?.Dispose();
             ContentPacks?.Dispose();

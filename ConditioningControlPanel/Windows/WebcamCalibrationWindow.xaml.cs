@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -44,11 +44,16 @@ namespace ConditioningControlPanel
         private const int GridSize = 4;            // 4×4 = 16 calibration points (corners + interior)
         private const double EdgeMargin = 40;      // distance from screen edge for corner dots (DIPs); small enough that polynomial extrapolation to bezel is negligible
 
-        // Sample target for the "ring is full" feedback. We treat the SampleMs
-        // window's worth of frames at ~30fps as 100% — this is above the hard
-        // MinSamplesPerPoint floor with comfortable headroom, so the ring fills
-        // smoothly across the window rather than maxing out almost immediately.
-        private const int RingFullSampleTarget = 33;
+        // Sample target for the "ring is full" feedback. Was 33 (the raw
+        // frame count of the SampleMs window) — but the tracking pipeline
+        // legitimately drops frames (blink suppression, eye-consistency
+        // gates, median warm-up), so a good dot typically delivers ~20-28
+        // samples and the ring visibly never filled, which read as "it
+        // didn't work" (bad UX, user report). 20 fills reliably on a good
+        // dot while still animating across most of the window; the sampling
+        // loop additionally snaps the ring to 100% whenever a dot SUCCEEDS,
+        // so a filled ring and an accepted dot always agree.
+        private const int RingFullSampleTarget = 20;
 
         // Per-dot iris samples paired with the head-pose at the same frame.
         // Pairing lets the finalize pass reject frames where the user's head
@@ -75,6 +80,11 @@ namespace ConditioningControlPanel
         // no re-entrancy.
         private readonly TaskCompletionSource<bool> _introDone =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Step-0 lighting picker: "left"/"right"/"top"/"front"/"back" or ""
+        // (skipped). Feeds the shadow-side weight floor in the fit and is
+        // stamped into the calibration for the runtime clamp asymmetry.
+        private TaskCompletionSource<string?>? _lightDone;
+        private string _lightChoice = "";
         private Storyboard? _ringPulse;
         private bool _ringIsFull;
         // Index of the dot currently being sampled. Read by OnRawIris so
@@ -112,17 +122,38 @@ namespace ConditioningControlPanel
             // that will never fire.
             App.Webcam.OnTrackingStateChanged += OnWebcamStateChanged;
 
-            // Show the intro overlay first so users know what's coming —
-            // the dot grid + head-movement + validation checks are otherwise
-            // a surprise. DotCanvas / StatusPanel stay hidden until the
-            // user clicks Continue (or presses ESC, which cancels).
             DotCanvas.Visibility = Visibility.Collapsed;
             StatusPanel.Visibility = Visibility.Collapsed;
-            IntroPanel.Visibility = Visibility.Visible;
             // Surface the blink-shortcut hint while the user is reading the
-            // intro (and again on the verify panel) — but not during the dot
-            // grid, where it would sit over the top-row dots.
+            // pre-calibration panels (and again on the verify panel) — but
+            // not during the dot grid, where it would sit over the top-row
+            // dots.
             ShortcutHintBanner.Visibility = Visibility.Visible;
+
+            // Step 0 (skippable): lighting picker. Preselect the remembered
+            // choice so returning users can just confirm with one click.
+            HighlightLightTile(App.Settings?.Current?.WebcamLightSource ?? "");
+            _lightDone = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            LightSourcePanel.Visibility = Visibility.Visible;
+            var light = await _lightDone.Task;
+            LightSourcePanel.Visibility = Visibility.Collapsed;
+            if (_cancelled) return;
+            _lightChoice = light ?? "";
+            if (!string.IsNullOrEmpty(_lightChoice))
+            {
+                var s = App.Settings?.Current;
+                if (s != null && s.WebcamLightSource != _lightChoice)
+                {
+                    s.WebcamLightSource = _lightChoice;
+                    App.Settings?.Save();
+                }
+            }
+
+            // Then the intro overlay so users know what's coming — the dot
+            // grid + validation checks are otherwise a surprise. DotCanvas /
+            // StatusPanel stay hidden until the user clicks Continue (or
+            // presses ESC, which cancels).
+            IntroPanel.Visibility = Visibility.Visible;
 
             var proceed = await _introDone.Task;
             if (!proceed || _cancelled) return;
@@ -148,6 +179,29 @@ namespace ConditioningControlPanel
             _introDone.TrySetResult(true);
         }
 
+        private void BtnLightPick_Click(object sender, RoutedEventArgs e)
+        {
+            var tag = (sender as FrameworkElement)?.Tag as string;
+            if (string.IsNullOrEmpty(tag)) return;
+            HighlightLightTile(tag);
+            _lightDone?.TrySetResult(tag);
+        }
+
+        private void BtnLightSkip_Click(object sender, RoutedEventArgs e)
+            => _lightDone?.TrySetResult("");
+
+        /// <summary>Pink border on the tile matching the current choice, default chrome on the rest.</summary>
+        private void HighlightLightTile(string choice)
+        {
+            var pink = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4));
+            var dim = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x55));
+            foreach (var btn in new[] { BtnLightLeft, BtnLightRight, BtnLightTop, BtnLightFront, BtnLightBack })
+            {
+                try { btn.BorderBrush = (btn.Tag as string) == choice ? pink : dim; }
+                catch { }
+            }
+        }
+
         private void Window_Closed(object sender, EventArgs e)
         {
             IsShowing = false;
@@ -156,8 +210,9 @@ namespace ConditioningControlPanel
             // (or owner-cascade) instead of ESC / Continue. Window_Loaded is
             // async void and awaits _introDone — without this, the awaiter
             // sits orphaned and the calibration handlers stay subscribed
-            // until the next GC pass.
+            // until the next GC pass. Same for the lighting picker.
             _introDone.TrySetResult(false);
+            _lightDone?.TrySetResult(null);
 
             if (App.Webcam != null)
             {
@@ -165,6 +220,16 @@ namespace ConditioningControlPanel
                 App.Webcam.OnHeadPose -= OnHeadPose;
                 App.Webcam.OnTrackingStateChanged -= OnWebcamStateChanged;
             }
+
+            // Release any debug-cursor requests this window made. ESC closes
+            // the window without running the button handlers, and a leaked
+            // Show key keeps the gaze dot on screen forever after. Same for
+            // the bubble-test attractor — leaking it would leave the live
+            // cursor magnetized to a stale point.
+            _verifyCountdownTimer?.Stop();
+            App.GazeCursor?.Hide("calibration-verify");
+            App.GazeCursor?.Hide(BubbleTestCursorKey);
+            App.Webcam?.ClearGazeAttractor();
         }
 
         private void OnWebcamStateChanged(WebcamTrackingState state)
@@ -186,6 +251,7 @@ namespace ConditioningControlPanel
                 _cancelled = true;
                 _collecting = false;
                 _introDone.TrySetResult(false);
+                _lightDone?.TrySetResult(null);
                 DialogResult = false;
                 Close();
             }
@@ -315,6 +381,17 @@ namespace ConditioningControlPanel
                     if (_allSamples[i].Count >= MinSamplesPerPoint)
                     {
                         succeeded = true;
+                        // The dot is accepted — always show it as such. With
+                        // frame gates upstream, the live count can land just
+                        // under RingFullSampleTarget; a 90%-filled ring on a
+                        // dot that actually succeeded reads as failure.
+                        UpdateProgressRing(1.0);
+                        if (!_ringIsFull)
+                        {
+                            _ringIsFull = true;
+                            StartRingPulse();
+                            CalibrationSoundService.RingFull();
+                        }
                     }
                 }
                 _activeDotIndex = -1;
@@ -336,6 +413,10 @@ namespace ConditioningControlPanel
             if (_cancelled) return;
 
             CalibrationSoundService.AllDotsCollected();
+
+            // Guided head-motion step — trains the head-pose compensation
+            // that keeps the cursor put when the user nods/turns slightly
+            // during normal use. Skipped silently when no pose stream.
             await FinalizeCalibrationAsync(positions);
         }
 
@@ -435,6 +516,35 @@ namespace ConditioningControlPanel
             var dotWeights = new double[positions.Length];
             for (int i = 0; i < positions.Length; i++)
                 dotWeights[i] = 1.0 / (dotSpreads[i] * dotSpreads[i] + medSpreadSq + 1e-12);
+
+            // Lighting compensation (step-0 picker): one-sided room light
+            // inflates iris-sample spread on the SHADOW side of the grid, so
+            // the inverse-spread weighting above would demote exactly the
+            // dots that side needs and the fit comes out great on the lit
+            // side, poor on the other ("with the window on my right I
+            // struggled to reach the left side of the screen"). Floor the
+            // shadow-side weights at the median weight so both halves pull
+            // the polynomial equally. Light from the user's right shadows
+            // their gaze range toward screen-LEFT (they reported the far
+            // side from the window as the weak one), and overhead light
+            // (brow shadow) hurts looking DOWN.
+            if (_lightChoice is "left" or "right" or "top")
+            {
+                double medWeight = MedianOf(dotWeights);
+                for (int i = 0; i < positions.Length; i++)
+                {
+                    int row = i / GridSize, col = i % GridSize;
+                    bool shadow = _lightChoice switch
+                    {
+                        "right" => col < GridSize / 2,   // screen-left half
+                        "left" => col >= GridSize - GridSize / 2, // screen-right half
+                        "top" => row >= GridSize - GridSize / 2,  // bottom half
+                        _ => false,
+                    };
+                    if (shadow && dotWeights[i] < medWeight) dotWeights[i] = medWeight;
+                }
+                App.Logger?.Information("WebcamCalibration: lighting comp active (source={Light})", _lightChoice);
+            }
 
             // Absolute residual floor for outlier-dot rejection: a dot is only a
             // drop candidate if its fit residual exceeds BOTH the robust
@@ -582,14 +692,30 @@ namespace ConditioningControlPanel
                 App.Logger?.Warning(ex, "WebcamCalibrationWindow: failed to identify calibration monitor");
             }
 
-            // Head-pose compensation pipeline (BaselineHeadPose + HeadPoseComp)
-            // was retired. The PnP head-pose estimator from face landmarks is
-            // noisier than the natural head movement during normal use, so the
-            // empirical comp fit was injecting variance instead of removing it
-            // — this matches Funes Mora & Odobez (2013) showing comp goes
-            // negative below ~5° rotation noise. Calibrations from older
-            // builds that still have these fields populated are simply ignored
-            // by the runtime.
+            // Axis residual correction: the polynomial routinely lands with a
+            // SYSTEMATIC per-row bias on Y (e.g. bottom row +145 px too high →
+            // "can't reach the bottom of the screen") even when its overall
+            // rms looks acceptable. Measure it directly — re-project each grid
+            // row/column's mean iris through the fitted polynomial, compare to
+            // the true dot position — and store a piecewise-linear warp that
+            // cancels it at runtime.
+            var axisCorrection = BuildAxisCorrection(polynomial, srcMeans, dstPoints);
+
+            // Calibrated iris range — bounding box of the per-dot mean iris
+            // vectors. The runtime clamps the live iris vector to this range
+            // (plus a margin) before projecting, which stops the polynomial's
+            // quadratic terms from extrapolating a stray sample into a
+            // cursor fly-away. See WebcamCalibrationData.IrisRange.
+            double irMinX = double.MaxValue, irMaxX = double.MinValue;
+            double irMinY = double.MaxValue, irMaxY = double.MinValue;
+            foreach (var m in srcMeans)
+            {
+                if (m.X < irMinX) irMinX = m.X;
+                if (m.X > irMaxX) irMaxX = m.X;
+                if (m.Y < irMinY) irMinY = m.Y;
+                if (m.Y > irMaxY) irMaxY = m.Y;
+            }
+
             var data = new WebcamCalibrationData
             {
                 Mode = "SixteenPoint",
@@ -608,8 +734,14 @@ namespace ConditioningControlPanel
                 RightRefVec = rightRef,
                 Homography = homography,
                 Polynomial = polynomial,
+                // Head-pose comp retired entirely (see the tombstone where the
+                // runtime block used to live in WebcamTrackingService) — new
+                // calibrations write null so no comp ever engages.
                 BaselineHeadPose = null,
                 HeadPoseComp = null,
+                IrisRange = new IrisRangeData { MinX = irMinX, MaxX = irMaxX, MinY = irMinY, MaxY = irMaxY },
+                AxisCorrection = axisCorrection,
+                LightSource = string.IsNullOrEmpty(_lightChoice) ? null : _lightChoice,
             };
 
             // Live-apply (in-memory only, no disk write yet) so the verify
@@ -1289,6 +1421,461 @@ namespace ConditioningControlPanel
             }
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        //  Head-motion compensation fit (guided nod/turn phase)
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Regresses the iris vector on head pose over the guided-motion
+        // samples: per axis, iris ≈ c0 + kYaw·(sin(yaw)−sin(baseYaw)) +
+        // kPitch·(sin(pitch)−sin(basePitch)). Because the user's gaze was
+        // pinned to the center dot while the pose varied deliberately, the
+        // slope coefficients isolate exactly the pose-induced iris shift the
+        // runtime needs to subtract. Robustness: one MAD-trim pass drops
+        // blink / glance-away frames; per-axis R² gates zero out an axis the
+        // motion didn't constrain; absurd slopes reject the whole fit.
+        // ── Axis residual correction ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Evaluates the fitted 7-coefficient Cerrolaza polynomial at an iris
+        /// vector — must match WebcamTrackingService.ProjectGazeToScreen.
+        /// </summary>
+        private static WpfPoint EvalPolynomial(PolynomialFitData poly, double ix, double iy)
+        {
+            double ix2 = ix * ix, iy2 = iy * iy, ixy = ix * iy;
+            double x = poly.X[0] + poly.X[1] * ix + poly.X[2] * iy
+                     + poly.X[3] * ixy + poly.X[4] * ix2 + poly.X[5] * iy2
+                     + poly.X[6] * ix2 * iy;
+            double y = poly.Y[0] + poly.Y[1] * ix + poly.Y[2] * iy
+                     + poly.Y[3] * ixy + poly.Y[4] * ix2 + poly.Y[5] * iy2
+                     + poly.Y[6] * iy2 * ix;
+            return new WpfPoint(x, y);
+        }
+
+        /// <summary>
+        /// Builds the post-polynomial piecewise-linear warp from the grid's
+        /// own data: for each grid ROW, where the polynomial projected the
+        /// row's dots on average vs where the row actually is (same per
+        /// COLUMN for X). The polynomial routinely lands with a systematic
+        /// per-row Y bias even at acceptable rms — e.g. bottom row +145 px
+        /// too high, which the user experiences as "the cursor is skewed
+        /// toward the top, I can't reach the bottom of the screen". Mapping
+        /// the projected coordinate through these anchors cancels that bias;
+        /// random per-dot noise averages away inside each band. Returns null
+        /// (no warp at runtime) when the polynomial is missing, an anchor
+        /// sequence is non-monotonic, or a segment's gain is implausible —
+        /// a fit that folds or crushes space can't be warped safely.
+        /// </summary>
+        private static AxisCorrectionData? BuildAxisCorrection(
+            PolynomialFitData? poly, Point2d[] srcMeans, Point2d[] dstPoints)
+        {
+            if (poly == null || poly.X.Length != 7 || poly.Y.Length != 7) return null;
+            const double MinGain = 0.4, MaxGain = 3.0; // dst-per-src slope sanity per segment
+            try
+            {
+                int n = GridSize;
+                var srcY = new double[n]; var dstY = new double[n];
+                var srcX = new double[n]; var dstX = new double[n];
+                for (int r = 0; r < n; r++)
+                {
+                    double projSum = 0, trueSum = 0;
+                    for (int c = 0; c < n; c++)
+                    {
+                        int idx = r * n + c;
+                        projSum += EvalPolynomial(poly, srcMeans[idx].X, srcMeans[idx].Y).Y;
+                        trueSum += dstPoints[idx].Y;
+                    }
+                    srcY[r] = projSum / n;
+                    dstY[r] = trueSum / n;
+                }
+                for (int c = 0; c < n; c++)
+                {
+                    double projSum = 0, trueSum = 0;
+                    for (int r = 0; r < n; r++)
+                    {
+                        int idx = r * n + c;
+                        projSum += EvalPolynomial(poly, srcMeans[idx].X, srcMeans[idx].Y).X;
+                        trueSum += dstPoints[idx].X;
+                    }
+                    srcX[c] = projSum / n;
+                    dstX[c] = trueSum / n;
+                }
+
+                // Anchors must be strictly increasing (dst is by grid
+                // construction; src only if the fit didn't fold space) and
+                // every segment's gain sane, on both axes.
+                static bool Usable(double[] src, double[] dst)
+                {
+                    for (int i = 1; i < src.Length; i++)
+                    {
+                        double ds = src[i] - src[i - 1];
+                        double dd = dst[i] - dst[i - 1];
+                        if (ds < 1.0 || dd < 1.0) return false;
+                        double gain = dd / ds;
+                        if (gain < MinGain || gain > MaxGain) return false;
+                    }
+                    return true;
+                }
+
+                bool xOk = Usable(srcX, dstX);
+                bool yOk = Usable(srcY, dstY);
+                if (!xOk && !yOk)
+                {
+                    App.Logger?.Information("WebcamCalibration: axis correction skipped — anchors unusable on both axes");
+                    return null;
+                }
+                // A dead axis keeps identity anchors so the runtime code path
+                // stays uniform.
+                if (!xOk) { srcX = (double[])dstX.Clone(); }
+                if (!yOk) { srcY = (double[])dstY.Clone(); }
+
+                App.Logger?.Information(
+                    "WebcamCalibration: axis correction built | rowY Δ=[{Y0:F0},{Y1:F0},{Y2:F0},{Y3:F0}] colX Δ=[{X0:F0},{X1:F0},{X2:F0},{X3:F0}] (DIPs, dst−src){Note}",
+                    dstY[0] - srcY[0], dstY[1] - srcY[1], dstY[2] - srcY[2], dstY[3] - srcY[3],
+                    dstX[0] - srcX[0], dstX[1] - srcX[1], dstX[2] - srcX[2], dstX[3] - srcX[3],
+                    xOk && yOk ? "" : (xOk ? " [Y axis identity]" : " [X axis identity]"));
+
+                return new AxisCorrectionData { SrcX = srcX, DstX = dstX, SrcY = srcY, DstY = dstY };
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "WebcamCalibrationWindow: axis correction build threw");
+                return null;
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  Bubble accuracy test (optional, launched from the verify panel)
+        // ─────────────────────────────────────────────────────────────────────
+        //  Four bubbles, one at a time, at spread positions. The live gaze
+        //  cursor is shown; holding the cursor near a bubble for ~0.7 s pops
+        //  it (same dwell mechanic as Focus Gaze pop). Doubles as an implicit
+        //  RECALIBRATION: the dwell samples ARE ground truth ("user is
+        //  looking at the bubble"), so the per-bubble residuals feed a
+        //  per-axis linear correction — offset AND scale — applied as the
+        //  calibration's GazeTrim (see FitAxisTrim / ApplyGazeTrim). A
+        //  multi-point quick-recal the user experiences as a minigame.
+
+        private const string BubbleTestCursorKey = "calibration-bubbletest";
+        private const double BubblePopRadiusDips = 130;     // gaze-to-center distance that counts as "on it" (bubble visual radius 64 + slack)
+        private const int BubbleDwellNeededMs = 700;
+        private const int BubbleAvgWindowSamples = 12;      // ~400ms rolling mean drives the on-target decision
+        private const int BubbleTimeoutMs = 10000;
+        private const double NearMissMaxDips = 250;          // timeout bubbles still yield a recal sample within this
+
+        private bool _bubbleTestRunning;
+        private WpfPoint? _bubbleGaze;
+        private DateTime _bubbleGazeAt = DateTime.MinValue;
+
+        private async void BtnVerifyBubbleTest_Click(object sender, RoutedEventArgs e)
+        {
+            if (_bubbleTestRunning) return;
+            _bubbleTestRunning = true;
+            StopVerifyCountdown();
+            VerifyPanel.Visibility = Visibility.Collapsed;
+            ShortcutHintBanner.Visibility = Visibility.Collapsed;
+            BubbleTestPanel.Visibility = Visibility.Visible;
+            App.GazeCursor?.Show(BubbleTestCursorKey);
+            if (App.Webcam != null) App.Webcam.OnGazeMove += OnBubbleTestGaze;
+
+            string summary;
+            try
+            {
+                summary = await RunBubbleTestAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "WebcamCalibrationWindow: bubble test threw");
+                summary = "Bubble test hit an error — see logs/app.log.";
+            }
+            finally
+            {
+                if (App.Webcam != null) App.Webcam.OnGazeMove -= OnBubbleTestGaze;
+                App.Webcam?.ClearGazeAttractor();
+                App.GazeCursor?.Hide(BubbleTestCursorKey);
+                BubbleTestPanel.Visibility = Visibility.Collapsed;
+                _bubbleTestRunning = false;
+            }
+
+            if (_cancelled) return;
+            VerifyPanel.Visibility = Visibility.Visible;
+            ShortcutHintBanner.Visibility = Visibility.Visible;
+            TxtVerifyStatus.Text = summary;
+        }
+
+        private void OnBubbleTestGaze(WpfPoint p)
+        {
+            _bubbleGaze = p;
+            _bubbleGazeAt = DateTime.UtcNow;
+        }
+
+        private async Task<string> RunBubbleTestAsync()
+        {
+            const int TickMs = 33;
+
+            double w = ActualWidth, h = ActualHeight;
+            // Quadrant spread, clockwise from top-left. Off the extreme
+            // corners (where residuals are naturally worst) but far enough
+            // apart to exercise the whole mapping.
+            var spots = new[]
+            {
+                new WpfPoint(w * 0.24, h * 0.30),
+                new WpfPoint(w * 0.76, h * 0.30),
+                new WpfPoint(w * 0.76, h * 0.72),
+                new WpfPoint(w * 0.24, h * 0.72),
+            };
+
+            int popped = 0;
+            var errors = new List<double>();          // |gaze−bubble| per popped bubble
+            // Ground-truth pairs for the recalibration fit: where the bubble
+            // was vs where the (pre-lock) cursor actually hovered.
+            var samples = new List<(WpfPoint Target, WpfPoint Measured)>();
+
+            for (int i = 0; i < spots.Length; i++)
+            {
+                if (_cancelled) return "";
+                var center = spots[i];
+                MoveBubbleTo(center);
+                UpdateRing(TestBubbleRingFg, 0);
+                TestBubble.Opacity = 1.0;
+                TestBubbleScale.ScaleX = 1.0;
+                TestBubbleScale.ScaleY = 1.0;
+                TxtBubbleTestStatus.Text = $"Bubble {i + 1} / {spots.Length} — pop it with your eyes.";
+
+                // Declare this bubble as the current intent target: the gaze
+                // attractor contracts wobble around it so the cursor stays in
+                // the zone once the user is clearly trying to hit it.
+                App.Webcam?.SetGazeAttractor(center.X, center.Y, BubblePopRadiusDips);
+
+                double dwellMs = 0;
+                var insideSamples = new List<WpfPoint>();
+                var recentSamples = new Queue<(DateTime At, WpfPoint P)>();
+                var avgWindow = new Queue<WpfPoint>();
+                var started = DateTime.UtcNow;
+                bool didPop = false;
+
+                while (true)
+                {
+                    await Task.Delay(TickMs);
+                    if (_cancelled) return "";
+                    var now = DateTime.UtcNow;
+                    if ((now - started).TotalMilliseconds > BubbleTimeoutMs) break;
+
+                    var gaze = _bubbleGaze;
+                    bool fresh = gaze.HasValue && (now - _bubbleGazeAt).TotalMilliseconds < 300;
+                    WpfPoint raw = default;
+                    if (fresh)
+                    {
+                        // Residual/accuracy math must not be flattered by the
+                        // lock-on — record the pre-lock point the tracking
+                        // service snapshots each frame. The dwell decision
+                        // below deliberately DOES use the locked point
+                        // (that's the forgiveness).
+                        raw = App.Webcam?.LastPreLockGaze ?? gaze!.Value;
+                        recentSamples.Enqueue((now, raw));
+                        while (recentSamples.Count > 0 && (now - recentSamples.Peek().At).TotalMilliseconds > 2000)
+                            recentSamples.Dequeue();
+                        avgWindow.Enqueue(gaze.Value);
+                        while (avgWindow.Count > BubbleAvgWindowSamples) avgWindow.Dequeue();
+                    }
+
+                    // On-target decision runs on the ROLLING MEAN, not the
+                    // instantaneous point: if the user is lingering on the
+                    // zone on average, a single wobble frame outside the
+                    // radius must not drop the target (user report — "at the
+                    // first wobble out of the bubble zone we lose it").
+                    double dist = double.MaxValue;
+                    if (fresh && avgWindow.Count >= 3)
+                    {
+                        double ax = 0, ay = 0;
+                        foreach (var q in avgWindow) { ax += q.X; ay += q.Y; }
+                        ax /= avgWindow.Count;
+                        ay /= avgWindow.Count;
+                        dist = Math.Sqrt((ax - center.X) * (ax - center.X) + (ay - center.Y) * (ay - center.Y));
+                    }
+
+                    if (dist <= BubblePopRadiusDips)
+                    {
+                        dwellMs += TickMs;
+                        insideSamples.Add(raw);
+                    }
+                    else
+                    {
+                        // Leaky decay instead of a hard reset — a stray
+                        // stretch shouldn't wipe accumulated dwell.
+                        dwellMs = Math.Max(0, dwellMs - TickMs);
+                    }
+                    UpdateRing(TestBubbleRingFg, dwellMs / BubbleDwellNeededMs);
+
+                    if (dwellMs >= BubbleDwellNeededMs)
+                    {
+                        didPop = true;
+                        break;
+                    }
+                }
+                App.Webcam?.ClearGazeAttractor();
+
+                if (didPop)
+                {
+                    popped++;
+                    var med = MedianPoint(insideSamples);
+                    double err = Math.Sqrt(Math.Pow(med.X - center.X, 2) + Math.Pow(med.Y - center.Y, 2));
+                    errors.Add(err);
+                    samples.Add((center, med));
+                    CalibrationSoundService.BubblePop();
+                    await PlayBubblePopAnimationAsync();
+                }
+                else
+                {
+                    // Timeout. If the gaze hovered at a consistent spot near
+                    // the bubble, that's still a usable sample — the user was
+                    // looking at it, the mapping just missed. These are the
+                    // MOST valuable pairs for the fit: the biggest errors.
+                    if (recentSamples.Count >= 10)
+                    {
+                        var med = MedianPoint(recentSamples.Select(s => s.P).ToList());
+                        double dist = Math.Sqrt(Math.Pow(med.X - center.X, 2) + Math.Pow(med.Y - center.Y, 2));
+                        if (dist <= NearMissMaxDips)
+                            samples.Add((center, med));
+                    }
+                    TxtBubbleTestStatus.Text = "Moving on…";
+                    TestBubble.Opacity = 0.25;
+                    await Task.Delay(500);
+                    if (_cancelled) return "";
+                }
+            }
+
+            HideBubble();
+
+            // Recalibrate from the residuals. Each bubble is ground truth —
+            // the user was trying to look THERE — so fit a per-axis linear
+            // correction (offset + center-relative scale) through the
+            // (measured → target) pairs. The scale term is what a plain
+            // offset can't express: if the cursor sat too high on the LOW
+            // bubbles but was fine on the high ones, the map is vertically
+            // stretched, and the slope measures exactly that. Falls back to
+            // offset-only when the sample geometry is too thin for a slope.
+            bool tuned = false;
+            double rmsBefore = 0, rmsAfter = 0;
+            if (samples.Count >= 2)
+            {
+                double cx = ActualWidth / 2.0, cy = ActualHeight / 2.0;
+                var (x0, x1) = FitAxisTrim(samples.Select(s => (s.Target.X, s.Measured.X)).ToList(), cx, ActualWidth * 0.15);
+                var (y0, y1) = FitAxisTrim(samples.Select(s => (s.Target.Y, s.Measured.Y)).ToList(), cy, ActualHeight * 0.15);
+
+                foreach (var (t, m) in samples)
+                {
+                    double rx = t.X - m.X, ry = t.Y - m.Y;
+                    rmsBefore += rx * rx + ry * ry;
+                    double ax = m.X + x0 + x1 * (m.X - cx);
+                    double ay = m.Y + y0 + y1 * (m.Y - cy);
+                    rmsAfter += (t.X - ax) * (t.X - ax) + (t.Y - ay) * (t.Y - ay);
+                }
+                rmsBefore = Math.Sqrt(rmsBefore / samples.Count);
+                rmsAfter = Math.Sqrt(rmsAfter / samples.Count);
+
+                // Apply only when it measurably helps and isn't noise-level.
+                if (rmsAfter < rmsBefore - 2
+                    && (Math.Abs(x0) >= 3 || Math.Abs(y0) >= 3 || Math.Abs(x1) >= 0.01 || Math.Abs(y1) >= 0.01))
+                {
+                    App.Webcam?.ApplyGazeTrim(x0, x1, y0, y1, cx, cy, persist: true);
+                    tuned = true;
+                    App.Logger?.Information(
+                        "WebcamCalibrationWindow: bubble-test recal — x0={X0:F0} x1={X1:F3} y0={Y0:F0} y1={Y1:F3} from {N} bubbles (rms {B:F0}→{A:F0} DIPs)",
+                        x0, x1, y0, y1, samples.Count, rmsBefore, rmsAfter);
+                }
+            }
+
+            if (popped == 0 && !tuned)
+                return "Couldn't pop any bubbles — tracking may be off for this setup. Consider recalibrating.";
+
+            var text = popped > 0
+                ? $"Popped {popped} / {spots.Length} · average accuracy {errors.Average():F0} px"
+                : $"Popped 0 / {spots.Length}";
+            if (tuned) text += $" · recalibrated from your aim ({rmsBefore:F0}→{rmsAfter:F0} px). Run it again to verify!";
+            else text += ".";
+            return text;
+        }
+
+        // LS fit of residual = c0 + c1·(measured − center) over the bubble
+        // samples of one axis. The slope needs ≥3 samples spanning enough of
+        // the axis (minSpreadForScale) to be identifiable — with less
+        // geometry it degrades to offset-only. Clamps keep one bad test from
+        // warping the map; ApplyGazeTrim clamps the composed total again.
+        private static (double C0, double C1) FitAxisTrim(
+            List<(double Target, double Measured)> pts, double center, double minSpreadForScale)
+        {
+            int n = pts.Count;
+            double meanU = 0, meanR = 0;
+            double minU = double.MaxValue, maxU = double.MinValue;
+            foreach (var (t, m) in pts)
+            {
+                double u = m - center;
+                meanU += u; meanR += t - m;
+                if (u < minU) minU = u;
+                if (u > maxU) maxU = u;
+            }
+            meanU /= n; meanR /= n;
+
+            double c1 = 0;
+            if (n >= 3 && maxU - minU >= minSpreadForScale)
+            {
+                double varU = 0, cov = 0;
+                foreach (var (t, m) in pts)
+                {
+                    double du = m - center - meanU;
+                    double dr = (t - m) - meanR;
+                    varU += du * du;
+                    cov += du * dr;
+                }
+                if (varU > 1e-6) c1 = Math.Clamp(cov / varU, -0.25, 0.25);
+            }
+            double c0 = Math.Clamp(meanR - c1 * meanU, -250, 250);
+            return (c0, c1);
+        }
+
+        private async Task PlayBubblePopAnimationAsync()
+        {
+            var scale = new DoubleAnimation(1.0, 1.7, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+            };
+            var fade = new DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(180));
+            TestBubbleScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scale);
+            TestBubbleScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scale);
+            TestBubble.BeginAnimation(OpacityProperty, fade);
+            await Task.Delay(320);
+            TestBubbleScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
+            TestBubbleScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, null);
+            TestBubble.BeginAnimation(OpacityProperty, null);
+        }
+
+        private void MoveBubbleTo(WpfPoint p)
+        {
+            System.Windows.Controls.Canvas.SetLeft(TestBubble, p.X - TestBubble.Width / 2);
+            System.Windows.Controls.Canvas.SetTop(TestBubble, p.Y - TestBubble.Height / 2);
+            System.Windows.Controls.Canvas.SetLeft(TestBubbleRingBg, p.X - TestBubbleRingBg.Width / 2);
+            System.Windows.Controls.Canvas.SetTop(TestBubbleRingBg, p.Y - TestBubbleRingBg.Height / 2);
+            System.Windows.Controls.Canvas.SetLeft(TestBubbleRingFg, p.X - TestBubbleRingFg.Width / 2);
+            System.Windows.Controls.Canvas.SetTop(TestBubbleRingFg, p.Y - TestBubbleRingFg.Height / 2);
+            TestBubble.Visibility = Visibility.Visible;
+            TestBubbleRingBg.Visibility = Visibility.Visible;
+            TestBubbleRingFg.Visibility = Visibility.Visible;
+        }
+
+        private void HideBubble()
+        {
+            TestBubble.Visibility = Visibility.Collapsed;
+            TestBubbleRingBg.Visibility = Visibility.Collapsed;
+            TestBubbleRingFg.Visibility = Visibility.Collapsed;
+        }
+
+        private static WpfPoint MedianPoint(List<WpfPoint> pts)
+        {
+            var xs = pts.Select(p => p.X).OrderBy(v => v).ToList();
+            var ys = pts.Select(p => p.Y).OrderBy(v => v).ToList();
+            return new WpfPoint(xs[xs.Count / 2], ys[ys.Count / 2]);
+        }
+
         private void MoveDotTo(WpfPoint screenPoint)
         {
             System.Windows.Controls.Canvas.SetLeft(Dot, screenPoint.X - Dot.Width / 2);
@@ -1307,15 +1894,17 @@ namespace ConditioningControlPanel
         // of the perimeter as filled (0..1). StrokeDashArray is expressed in
         // *stroke-thickness multiples*, so we divide the pixel perimeter by the
         // stroke thickness to get the right unit.
-        private void UpdateProgressRing(double progress)
+        private void UpdateProgressRing(double progress) => UpdateRing(DotRingFg, progress);
+
+        private static void UpdateRing(System.Windows.Shapes.Ellipse ring, double progress)
         {
             progress = Math.Clamp(progress, 0.0, 1.0);
-            double radius = (DotRingFg.Width - DotRingFg.StrokeThickness) / 2.0;
+            double radius = (ring.Width - ring.StrokeThickness) / 2.0;
             double perimeter = 2.0 * Math.PI * radius;
-            double units = perimeter / DotRingFg.StrokeThickness;
+            double units = perimeter / ring.StrokeThickness;
             double visible = progress * units;
             double gap = Math.Max(0.001, units - visible);
-            DotRingFg.StrokeDashArray = new DoubleCollection(new[] { visible, gap });
+            ring.StrokeDashArray = new DoubleCollection(new[] { visible, gap });
         }
 
         private void ResetProgressRing()

@@ -1021,6 +1021,17 @@ namespace ConditioningControlPanel
             }
         }
 
+        internal void ChkWebcamDriftCorrection_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            if (LabTab.ChkWebcamDriftCorrection == null || App.Settings?.Current == null) return;
+            bool v = LabTab.ChkWebcamDriftCorrection.IsChecked == true;
+            App.Settings.Current.WebcamAutoDriftCorrection = v;
+            AppendWebcamDebugLog(v
+                ? "Auto drift correction enabled — clicks near your gaze will fine-tune calibration."
+                : "Auto drift correction disabled.");
+        }
+
         internal void ChkRestrictGazeToCalScreen_Changed(object sender, RoutedEventArgs e)
         {
             if (_isLoading || _restrictGazeCheckboxSyncing) return;

@@ -540,6 +540,10 @@
                                               ToolTip="{loc:Str tooltip_webcam_show_debug_cursor}"
                                               Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,0,8"
                                               Checked="ChkWebcamDebugCursor_Changed" Unchecked="ChkWebcamDebugCursor_Changed"/>
+                                    <CheckBox x:Name="ChkWebcamDriftCorrection" x:FieldModifier="internal" Content="Auto drift correction"
+                                              ToolTip="Keeps the calibration fresh automatically: when you click somewhere while looking at it, the gaze mapping gets a tiny nudge toward the click. Corrects the slow drift that used to need a Quick Recal."
+                                              Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="12,0,0,8"
+                                              Checked="ChkWebcamDriftCorrection_Changed" Unchecked="ChkWebcamDriftCorrection_Changed"/>
                                 </WrapPanel>
                                 <TextBlock x:Name="TxtWebcamDebugCounters" x:FieldModifier="internal"
                                            Text="Face: — | Blinks: 0 | Gaze: —"
