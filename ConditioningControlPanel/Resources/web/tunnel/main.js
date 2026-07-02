@@ -88,6 +88,8 @@ function build() {
 
   const clock = new THREE.Clock();
   let paused = false, running = false, rafId = 0, demoT = 0;
+  let dtS = 1 / 60;      // smoothed dt: uneven rAF under the busy game reads as camera jitter
+  let lastVig = -1;      // skip the per-frame DOM write when the vignette barely changed
 
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
@@ -103,19 +105,22 @@ function build() {
     if (paused) return;
     let dt = clock.getDelta();
     if (dt > 0.05) dt = 0.05;
+    // camera advance uses a smoothed dt so one late frame doesn't lurch the rail forward
+    dtS += (dt - dtS) * 0.25;
 
-    const f = rail.update(dt);
+    const f = rail.update(dtS);
     const render = zones.render(rail.s);
     tunnel.update(rail.s, dt, render);
     fog.update(f, render);
     powerups.update(rail.s, dt);
     zones.trim(rail.s);
 
-    // zone-crossing whoosh (kept subtle — it fires on every zone boundary)
-    if (zones.crossed(rail.s)) sfxBridge.play('tunnel_zone', 0.26);
+    // zone-crossing whoosh — near-subliminal by design, scaled by speed
+    if (zones.crossed(rail.s)) sfxBridge.play('tunnel_zone', 0.012 + 0.018 * rail.intensity01);
 
-    // vignette follows speed for a rush feel
-    vig.style.opacity = String(0.12 + 0.55 * rail.intensity01);
+    // vignette follows speed for a rush feel (written only on real change)
+    const vigNow = 0.12 + 0.55 * rail.intensity01;
+    if (Math.abs(vigNow - lastVig) > 0.005) { lastVig = vigNow; vig.style.opacity = String(vigNow); }
 
     if (demoMode) { demoT -= dt; if (demoT <= 0) { powerups.spawn(null, 80); demoT = 4; } }
 
@@ -158,12 +163,15 @@ function build() {
           fog.reset();
           rail.startIntro();
           setPaused(false);
-          sfxBridge.play('tunnel_fall', 0.5);
+          // no plunge SFX: the fall whoosh read harsh + loud; the ambient bed carries the drop
           break;
         case 'run-end':
           curtain.style.opacity = '1';        // fade to black
           rail.startExit();
-          sfxBridge.play('tunnel_exit', 0.5);
+          sfxBridge.play('tunnel_exit', 0.32);
+          break;
+        case 'streak':
+          rail.setStreak(d.combo | 0);
           break;
         case 'zone-hint':
           zones.setHint(d.depth, d.intensity);
@@ -203,6 +211,7 @@ function build() {
     curtain.style.opacity = '0';
     zones.ensure(at + Q.aheadUnits);
     tunnel.generateTo(at + Q.aheadUnits);
+    tunnel._buildAheadChunks(at, Infinity);   // teleport: bypass the 1-chunk/frame amortization
     rail.state = 'run'; rail.s = at; rail.v = 30;
   }
 }

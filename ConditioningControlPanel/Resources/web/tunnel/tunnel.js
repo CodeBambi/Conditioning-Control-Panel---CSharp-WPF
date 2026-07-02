@@ -26,6 +26,7 @@ import { Q } from './quality.js';
 
 const STEP = 2.0;         // world units between stations
 const RADIUS = 6.0;       // tube radius
+const _stepQ = new THREE.Quaternion();   // scratch — _step runs many times/sec, don't allocate
 const RINGS_PER_UNIT = 1 / 7;   // perpendicular rings: one every ~7 units
 const TURNS_PER_UNIT = 1 / 20;  // helical spiral pitch
 
@@ -123,7 +124,7 @@ export class Tunnel {
     // Seed the first station and pre-generate + build the opening corridor.
     this._pushStation();
     this.generateTo(Q.aheadUnits);
-    this._buildAheadChunks(0);
+    this._buildAheadChunks(0, Infinity);   // boot: build the whole corridor at once
   }
 
   // ---- station generation -------------------------------------------------
@@ -149,11 +150,18 @@ export class Tunnel {
 
   _step() {
     const z = this.zones.steeringAt(this._s).steer;
-    const dyaw = (z.yaw + z.wind * Math.sin(this._s * z.windFreq) + z.wobble * this._noise('y')) * STEP;
-    const dpitch = (z.pitch + z.wobble * 0.6 * this._noise('p')) * STEP;
+    let ky = z.yaw + z.wind * Math.sin(this._s * z.windFreq) + z.wobble * this._noise('y');
+    let kp = z.pitch + z.wobble * 0.6 * this._noise('p');
+    // Cap combined curvature: an arc tighter than ~3 tube radii folds the wall into itself
+    // (reads as dark shards slicing across the view and "inside the wall" camera moments).
+    const KMAX = 0.052;   // rad per world unit -> min bend radius ~19 vs tube diameter 12
+    const k = Math.hypot(ky, kp);
+    if (k > KMAX) { ky *= KMAX / k; kp *= KMAX / k; }
+    const dyaw = ky * STEP;
+    const dpitch = kp * STEP;
     const droll = z.roll * STEP;
 
-    const q = new THREE.Quaternion();
+    const q = _stepQ;
     if (dyaw) { q.setFromAxisAngle(this._N, dyaw); this._T.applyQuaternion(q); this._B.applyQuaternion(q); }
     if (dpitch) { q.setFromAxisAngle(this._B, dpitch); this._T.applyQuaternion(q); this._N.applyQuaternion(q); }
     if (droll) { q.setFromAxisAngle(this._T, droll); this._N.applyQuaternion(q); this._B.applyQuaternion(q); }
@@ -221,15 +229,18 @@ export class Tunnel {
     return { a0, a1, mesh, geom };
   }
 
-  /** Build chunks forward until they cover generated stations near the head. */
-  _buildAheadChunks(camS) {
+  /** Build chunks forward until they cover generated stations near the head.
+   *  maxBuilds amortizes the cost: mid-run only ONE chunk per frame (even at 2x streak
+   *  speed we need ~2/sec) — several builds landing in a single frame reads as a hitch. */
+  _buildAheadChunks(camS, maxBuilds = 1) {
     const span = Q.chunkStations;
-    // keep building while there are enough fresh stations ahead of the last chunk
-    while (this._headIndex - this._nextChunkStart >= span) {
+    let built = 0;
+    while (this._headIndex - this._nextChunkStart >= span && built < maxBuilds) {
       const a0 = this._nextChunkStart;
       const a1 = a0 + span;                 // shares boundary station with the next chunk
       this._chunks.push(this._buildChunk(a0, a1));
       this._nextChunkStart = a1;
+      built++;
     }
   }
 

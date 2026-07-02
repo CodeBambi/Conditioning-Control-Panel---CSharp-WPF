@@ -333,7 +333,10 @@ public sealed class ChaosModeService
             _overlay.OnRunAgain = RunAgain;
             _overlay.OnDismissed = OnOverlayClosed;
             _overlay.Show();
-            if (!isRestart) ChaosSfx.Play("fall_in", 0.55f);   // the falling whoosh under the countdown
+            if (!isRestart) ChaosSfx.Play("fall_in", 0.28f);   // the falling whoosh under the countdown (kept soft)
+            // Warm the tunnel's WebView2 + three.js under the countdown (no-op when the toggle is
+            // off) so BeginRun's fade-in is instant instead of seconds of black.
+            ChaosTunnelService.Preload();
             _overlay.ShowCountdown(BeginRun, shortFlash: isRestart);   // 1s flash on RunAgain
 
             // The run's topmost windows (overlay/FX/payload washes/bubbles) would otherwise bury an
@@ -508,6 +511,10 @@ public sealed class ChaosModeService
         // window when off). Non-topmost like the backdrop, so it needs no z-order handling.
         ChaosTunnelService.Show();
         ChaosTunnelService.SendZoneHint(_state.ActIndex, Math.Min(1.0, (_state.ActIndex - 1) / 5.0));
+        // Fall speed follows the streak: seed it (super-slow start) and track every Combo change
+        // (gain, halve, break) through the state's own setter — no per-call-site wiring.
+        ChaosTunnelService.SetStreak(_state.Combo, _state.ComboMult);
+        _state.PropertyChanged += OnStateChangedForTunnel;
         ChaosNarrativeHooks.OnMoment("run_start", BuildNarrativeCtx());
 
         // Arm crash diagnostics: fresh peak, baseline sample, and the sentinel goes live for THIS run.
@@ -2125,6 +2132,17 @@ public sealed class ChaosModeService
         if (until > _heavyUntilUtc) _heavyUntilUtc = until;
     }
 
+    /// <summary>Mirrors the pop streak into the tunnel background so the fall accelerates with
+    /// the combo and brakes when it halves/breaks. Combo only ever changes on the UI thread
+    /// (timers + click handlers), so this posts straight through.</summary>
+    private void OnStateChangedForTunnel(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(ChaosRunState.Combo)) return;
+        var st = _state;
+        if (st == null) return;
+        try { ChaosTunnelService.SetStreak(st.Combo, st.ComboMult); } catch { }
+    }
+
     /// <summary>Any video ending during a run (natural end, attention-check retry, cap) starts
     /// the teardown quarantine so no cascade rises into the LibVLC disposal churn.</summary>
     private void OnVideoEndedDuringRun(object? sender, EventArgs e)
@@ -3194,6 +3212,7 @@ public sealed class ChaosModeService
         _hud = null;
         _overlay = null;
         _fx = null;
+        if (_state != null) _state.PropertyChanged -= OnStateChangedForTunnel;
         _state = null;
         _active = false;
         _spawning = false;

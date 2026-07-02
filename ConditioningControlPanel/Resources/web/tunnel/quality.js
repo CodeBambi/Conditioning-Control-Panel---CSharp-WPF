@@ -13,7 +13,7 @@
 export const Q = {
   tier: 'desktop',
   antialias: true,
-  maxDpr: 1.75,          // devicePixelRatio cap (page sits behind a busy game)
+  maxDpr: 1.5,           // devicePixelRatio cap (page sits behind a busy game)
   bloom: true,           // UnrealBloom composer (lazy-loaded, degrades gracefully)
   tubeRadial: 26,        // tunnel radial segments
   chunkStations: 22,     // control points per tube chunk

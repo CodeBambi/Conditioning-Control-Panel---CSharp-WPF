@@ -59,6 +59,24 @@ internal static class ChaosTunnelService
 
     private static Dispatcher Ui => Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
+    /// <summary>Build the window + WebView and start loading the page WITHOUT starting a run.
+    /// Called when the countdown starts so the ~2s WebView2/three.js warm-up happens under it
+    /// instead of showing as a black screen after GO. The page idles behind its black curtain
+    /// until <see cref="Show"/> posts run-start.</summary>
+    public static void Preload()
+    {
+        if (!Enabled) return;
+        try
+        {
+            // RunAgain lands here while the previous run's exit anim/watchdog is still going —
+            // claim the warm window so neither the watchdog nor the in-flight exit-done kills it.
+            CancelExitWatchdog();
+            _runActive = true;
+            if (_window == null) Build();
+        }
+        catch (Exception ex) { App.Logger?.Warning("ChaosTunnelService.Preload failed: {E}", ex.Message); }
+    }
+
     /// <summary>Spawn the tunnel and kick off the falling intro. No-op (and closes any stray
     /// window) when the feature is off.</summary>
     public static void Show()
@@ -68,8 +86,11 @@ internal static class ChaosTunnelService
         {
             if (_window == null) Build();
             _runActive = true;
+            _lastStreak = -1;   // fresh run: the first SetStreak(0) must go through
             CancelExitWatchdog();
-            // Queued until 'ready'; the page plays the plunge + fall SFX on receipt.
+            if (_ready) StartAmbient();   // preloaded page: 'ready' already fired with no run active
+            StartZGuard();
+            // Queued until 'ready'; the page fades in from its curtain on receipt.
             PostToPage(new { type = "run-start" });
         }
         catch (Exception ex) { App.Logger?.Warning("ChaosTunnelService.Show failed: {E}", ex.Message); }
@@ -86,6 +107,18 @@ internal static class ChaosTunnelService
     {
         if (_window == null) return;
         PostToPage(new { type = "intensity", value });
+    }
+
+    private static int _lastStreak = -1;
+
+    /// <summary>Fall speed is tied to the pop streak: the page starts the descent near-stalled,
+    /// accelerates as the combo climbs, and brakes hard when the streak halves/breaks.</summary>
+    public static void SetStreak(int combo, double mult)
+    {
+        if (_window == null) return;
+        if (combo == _lastStreak) return;
+        _lastStreak = combo;
+        PostToPage(new { type = "streak", combo, mult });
     }
 
     /// <summary>A fullscreen video covers the tunnel — tell the page to pause its render loop
@@ -166,6 +199,11 @@ internal static class ChaosTunnelService
         _window.SourceInitialized += (_, _) => ApplyExStyles(_window);
         _window.Closed += (_, _) => { /* teardown handled in DisposeAll */ };
         _window.Show();
+        // Sink to the BOTTOM of the z-order: the game's windows can run NON-topmost (pin-on-top
+        // off / Free Desktop), and this window is created after the HUD/sidebar — freshly shown
+        // it would land above them and swallow the whole game UI. At the bottom, everything sits
+        // over it; MainWindow is the one thing that must stay under it, and the z-guard owns that.
+        SinkToBottom();
 
         _ = InitWebAsync();
         App.Logger?.Information("ChaosTunnelService window up (non-topmost, opaque, WebView2 tunnel)");
@@ -184,9 +222,13 @@ internal static class ChaosTunnelService
 
             // --disable-direct-composition-video-overlays: keep the WebGL swapchain composited
             // through DWM so it stays BELOW the topmost overlays (the app's established anti-MPO flag).
+            // CalculateNativeWinOcclusion: the chaos game stacks layered windows over the tunnel;
+            // Chromium's occlusion tracker can decide the page is covered and throttle rAF, which
+            // shows as skipped frames — turn it off.
             var options = new CoreWebView2EnvironmentOptions
             {
-                AdditionalBrowserArguments = "--disable-direct-composition-video-overlays"
+                AdditionalBrowserArguments =
+                    "--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion"
             };
             var env = await CoreWebView2Environment
                 .CreateAsync(browserExecutableFolder: null, userDataFolder: userDataFolder, options: options)
@@ -253,6 +295,9 @@ internal static class ChaosTunnelService
                     App.Logger?.Information("ChaosTunnel powerup-click: {Id}", (string?)o["id"]);
                     break;
                 case "exit-done":
+                    // A RunAgain inside the exit window re-arms _runActive — don't kill the
+                    // window the new run is about to fade back in.
+                    if (_runActive) { CancelExitWatchdog(); break; }
                     CancelExitWatchdog();
                     DisposeAll();
                     break;
@@ -296,6 +341,7 @@ internal static class ChaosTunnelService
     private static void DisposeAll()
     {
         CancelExitWatchdog();
+        StopZGuard();
         StopAmbient();
         try { if (_web?.CoreWebView2 != null) { _web.CoreWebView2.NavigationStarting -= OnNavigationStarting; _web.CoreWebView2.WebMessageReceived -= OnWebMessageReceived; } } catch { }
         try { _web?.Dispose(); } catch { }
@@ -375,6 +421,138 @@ internal static class ChaosTunnelService
             return total;
         }
     }
+
+    // ============================ z-guard ============================
+    // The tunnel is non-topmost by design (the topmost game windows stack above it), but
+    // MainWindow is ALSO non-topmost — an attached avatar commenting on an effect re-activates
+    // it and it rises over the tunnel. While a run is live, demote MainWindow back below the
+    // tunnel when that happens. Targeted (touches only MainWindow) so a user-disabled
+    // ChaosPinOnTop stack is never reshuffled.
+
+    private static DispatcherTimer? _zGuard;
+    private static HwndSource? _mainHook;
+
+    private static void SinkToBottom()
+    {
+        try
+        {
+            var h = _window != null ? new WindowInteropHelper(_window).Handle : IntPtr.Zero;
+            if (h == IntPtr.Zero) return;
+            SetWindowPos(h, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        catch { }
+    }
+
+    private static void StartZGuard()
+    {
+        if (_zGuard == null)
+        {
+            _zGuard = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+            _zGuard.Tick += (_, _) => EnforceBelowTunnel();
+            _zGuard.Start();
+            EnforceBelowTunnel();   // don't wait a tick — tuck MainWindow under right now
+        }
+        // Preventive hook: rewrite MainWindow raise-to-top REQUESTS in flight (no visible flash),
+        // whatever their source — avatar pair-raise, activation, level-up/achievement chains.
+        if (_mainHook == null)
+        {
+            try
+            {
+                var main = Application.Current?.MainWindow;
+                var h = main != null ? new WindowInteropHelper(main).Handle : IntPtr.Zero;
+                if (h != IntPtr.Zero)
+                {
+                    _mainHook = HwndSource.FromHwnd(h);
+                    _mainHook?.AddHook(MainWndProc);
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("ChaosTunnel.StartZGuard hook: {E}", ex.Message); }
+        }
+    }
+
+    private static void StopZGuard()
+    {
+        try { _zGuard?.Stop(); } catch { }
+        _zGuard = null;
+        try { _mainHook?.RemoveHook(MainWndProc); } catch { }
+        _mainHook = null;
+    }
+
+    /// <summary>While the run is live, a MainWindow z-order raise to HWND_TOP is rewritten to land
+    /// just below the tunnel — the raise never paints, so there is no flash to correct. Topmost
+    /// raises (panic key's visibility pulse) are deliberately left alone.</summary>
+    private static IntPtr MainWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_WINDOWPOSCHANGING = 0x0046;
+        if (msg != WM_WINDOWPOSCHANGING || !_runActive || _window == null) return IntPtr.Zero;
+        try
+        {
+            var tunH = new WindowInteropHelper(_window).Handle;
+            if (tunH == IntPtr.Zero || !IsWindow(tunH)) return IntPtr.Zero;
+            var wp = Marshal.PtrToStructure<WINDOWPOS>(lParam);
+            if ((wp.flags & SWP_NOZORDER) != 0) return IntPtr.Zero;
+            if (wp.hwndInsertAfter == IntPtr.Zero)   // HWND_TOP
+            {
+                wp.hwndInsertAfter = tunH;
+                Marshal.StructureToPtr(wp, lParam, false);
+            }
+        }
+        catch { }
+        return IntPtr.Zero;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WINDOWPOS
+    {
+        public IntPtr hwnd;
+        public IntPtr hwndInsertAfter;
+        public int x, y, cx, cy;
+        public uint flags;
+    }
+
+    private static void EnforceBelowTunnel()
+    {
+        try
+        {
+            if (!_runActive || _window == null) return;
+            var main = Application.Current?.MainWindow;
+            if (main == null || main == _window) return;
+            var mainH = new WindowInteropHelper(main).Handle;
+            var tunH = new WindowInteropHelper(_window).Handle;
+            if (mainH == IntPtr.Zero || tunH == IntPtr.Zero) return;
+            if (!IsWindowVisible(mainH) || IsIconic(mainH)) return;
+
+            // Walk upward from the tunnel; if MainWindow sits anywhere above it, slot it back below.
+            var h = tunH;
+            for (int i = 0; i < 512; i++)
+            {
+                h = GetWindow(h, GW_HWNDPREV);
+                if (h == IntPtr.Zero) return;
+                if (h == mainH)
+                {
+                    App.Logger?.Debug("ChaosTunnel z-guard: MainWindow was above the tunnel — demoting");
+                    SetWindowPos(mainH, tunH, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+                    return;
+                }
+            }
+        }
+        catch { }
+    }
+
+    private static readonly IntPtr HWND_BOTTOM = new(1);
+    private const uint GW_HWNDPREV = 3;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_NOOWNERZORDER = 0x0200;
+    [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+        int x, int y, int cx, int cy, uint flags);
 
     // Absorb clicks (NO WS_EX_TRANSPARENT) but never steal focus / show in Alt-Tab.
     private static void ApplyExStyles(Window w)

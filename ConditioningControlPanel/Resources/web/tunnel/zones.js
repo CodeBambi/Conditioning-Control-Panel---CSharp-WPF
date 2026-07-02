@@ -31,7 +31,7 @@ const ZONES = [
   },
   {
     name: 'twist-turns', event: 'dogleg', minLen: 100, maxLen: 170, bold: 1,
-    steer: { yaw: 0.020, pitch: 0.003, roll: 0.004, wind: 0.026, windFreq: 0.030, wobble: 0.010 },
+    steer: { yaw: 0.016, pitch: 0.003, roll: 0.004, wind: 0.018, windFreq: 0.030, wobble: 0.010 },
     speed: { target: 30, accel: 0.9 },
     palette: { bg1: hex(0x241033), bg2: hex(0x0e0820), line: hex(0xff79d0), spiral: hex(0x8a5cff), fog: hex(0x1c0e2c) },
     fogDensity: 0.018, glowMul: 1.1, scroll: 0.8,
@@ -52,14 +52,17 @@ const ZONES = [
   },
   {
     name: 'acid-rush', event: 'fast-accel', minLen: 120, maxLen: 190, bold: 2,
-    steer: { yaw: 0.018, pitch: 0.004, roll: 0.008, wind: 0.030, windFreq: 0.04, wobble: 0.012 },
+    steer: { yaw: 0.016, pitch: 0.004, roll: 0.008, wind: 0.022, windFreq: 0.04, wobble: 0.012 },
     speed: { target: 50, accel: 1.9 },
     palette: { bg1: hex(0x0a1f0d), bg2: hex(0x04120a), line: hex(0x9bff3c), spiral: hex(0x38f5c0), fog: hex(0x081a0c) },
     fogDensity: 0.020, glowMul: 1.5, scroll: 1.4,
   },
   {
-    name: 'loop-under', event: 'loop', minLen: 90, maxLen: 130, bold: 3,
-    steer: { yaw: 0.006, pitch: 0.070, roll: 0.006, wind: 0.008, windFreq: 0.03, wobble: 0.006 },
+    // Was a full vertical loop (pitch 0.070): a 360 closes back through its own entry and the
+    // tube folds into itself. Now a helical dive — strong pitch UNDER the curvature cap plus
+    // real yaw drift so successive coils never occupy the same space.
+    name: 'loop-under', event: 'helix-dive', minLen: 90, maxLen: 130, bold: 3,
+    steer: { yaw: 0.020, pitch: 0.034, roll: 0.006, wind: 0.008, windFreq: 0.03, wobble: 0.006 },
     speed: { target: 30, accel: 1.1 },
     palette: { bg1: hex(0x241a06), bg2: hex(0x120c04), line: hex(0xffcf5f), spiral: hex(0xb06bff), fog: hex(0x1c1406) },
     fogDensity: 0.020, glowMul: 1.25, scroll: 0.7,
