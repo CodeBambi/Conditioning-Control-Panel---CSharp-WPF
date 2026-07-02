@@ -487,6 +487,7 @@ public partial class MainWindow : Window
         try
         {
             await TryShowWelcomeDialogAsync();
+            await TryShowWhatsNewDialogAsync();
             await TryShowSeasonRecapAsync();
         }
         catch (Exception ex)
@@ -513,6 +514,12 @@ public partial class MainWindow : Window
 
         settings.Welcomed = true;
         settingsService.Save();
+    }
+
+    private async Task TryShowWhatsNewDialogAsync()
+    {
+        // Shown once after an update, when LastSeenVersion lags the running version.
+        await WhatsNewDialog.ShowIfNeeded(this);
     }
 
     private async Task TryShowSeasonRecapAsync()

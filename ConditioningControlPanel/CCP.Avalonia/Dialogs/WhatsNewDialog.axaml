@@ -1,0 +1,69 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:ConditioningControlPanel.Core.Localization"
+        x:Class="ConditioningControlPanel.Avalonia.Dialogs.WhatsNewDialog" x:DataType="x:Object"
+        Title="{Binding [label_what_s_new], Source={x:Static loc:LocalizationManager.Instance}}"
+        Height="560"
+        Width="520"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        WindowDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://CCP.Avalonia/Dialogs/DialogResources.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Window.Resources>
+
+  <Border Background="{DynamicResource DarkerBgBrush}"
+          CornerRadius="12"
+          BorderBrush="{DynamicResource PinkBrush}"
+          BorderThickness="2"
+          BoxShadow="0 8 24 0 #80000000">
+    <Grid Margin="25" RowDefinitions="Auto,*,Auto">
+
+      <!-- Title -->
+      <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,18">
+        <TextBlock Text="{Binding [label_text_10], Source={x:Static loc:LocalizationManager.Instance}}"
+                   FontSize="28"
+                   Foreground="{DynamicResource PinkBrush}"
+                   VerticalAlignment="Center"
+                   Margin="0,0,14,0" />
+        <TextBlock x:Name="TxtTitle"
+                   Foreground="{DynamicResource PinkBrush}"
+                   FontSize="22"
+                   FontWeight="Bold"
+                   VerticalAlignment="Center" />
+      </StackPanel>
+
+      <!-- Notes (scrollable, fills remaining space so long notes never push the button off-screen) -->
+      <Border Grid.Row="1"
+              Background="{DynamicResource PanelBgBrush}"
+              CornerRadius="6"
+              Padding="12"
+              Margin="0,0,0,20">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <TextBlock x:Name="TxtNotes"
+                     Foreground="#C0C0C0"
+                     FontSize="13"
+                     TextWrapping="Wrap"
+                     LineHeight="20" />
+        </ScrollViewer>
+      </Border>
+
+      <!-- OK button (always pinned at the bottom) -->
+      <Button Grid.Row="2"
+              x:Name="BtnOk"
+              Content="{Binding [btn_ok], Source={x:Static loc:LocalizationManager.Instance}}"
+              Click="BtnOk_Click"
+              HorizontalAlignment="Right"
+              Theme="{StaticResource ActionButton}"
+              FontSize="15"
+              Padding="40,12" />
+    </Grid>
+  </Border>
+</Window>

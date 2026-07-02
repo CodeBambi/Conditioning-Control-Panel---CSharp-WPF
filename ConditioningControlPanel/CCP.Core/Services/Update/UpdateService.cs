@@ -35,7 +35,40 @@ public class UpdateService : IUpdateService, IDisposable
     public bool IsDownloading { get; private set; }
 
     /// <inheritdoc />
-    public string CurrentVersion => "6.2.2";
+    public string CurrentVersion => "6.2.5";
+
+    /// <summary>
+    /// Hard-coded current application version (single source for heads that need a const,
+    /// e.g. the What's-New dialog title). Mirrors the WPF UpdateService.AppVersion constant.
+    /// </summary>
+    public const string AppVersion = "6.2.5";
+
+    /// <summary>
+    /// Patch notes for the current version — shown in the update/what's-new dialogs and used as a
+    /// fallback when GitHub release notes are unavailable. Update together with <see cref="AppVersion"/>.
+    /// </summary>
+    public const string CurrentPatchNotes = @"v6.2.5 - Tunnel Vision
+
+✨ NEW
+- Endless rabbit-hole tunnel: an opt-in 3D tunnel background for Chaos that
+  speeds up as your streak climbs. Find the toggle in the Chaos settings.
+- Eye tracking, rebuilt. Calibration is shorter and far more accurate, the
+  bubble test now fine-tunes itself from where you actually aimed, and the
+  gaze cursor glides smoothly and locks onto bubbles and targets instead of
+  jittering past them.
+- Heads-up before calibrating: dim-lit rooms make eye tracking inconsistent,
+  so put some light on your face for best results.
+
+🔧 BUG FIXES
+- ""Hey Bambi"" now catches you even when you speak the moment the mic opens.
+- Bubbles on a second monitor with different display scaling pop correctly
+  again.
+
+⚡ PERFORMANCE
+- Chaos stays smooth during heavy floods by shedding render work when the
+  bubble field stacks up.
+
+Season: Jelly July";
 
     public UpdateService(IUpdateInstaller installer, ISettingsService settingsService, ILogger<UpdateService>? logger = null)
     {
