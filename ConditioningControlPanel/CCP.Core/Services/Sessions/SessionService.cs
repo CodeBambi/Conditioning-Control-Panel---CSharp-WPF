@@ -46,6 +46,16 @@ public sealed class SessionService : ISessionService, IDisposable
 
     public SessionState State => _state;
     public ConditioningControlPanel.Models.Session? CurrentSession => _currentSession;
+
+    /// <summary>
+    /// Randomized pink-filter/spiral delayed-start minutes for the current session.
+    /// Exposed so the effect orchestrator's delayed enables use the same jittered minute
+    /// as the ramp gating above (WPF SessionEngine shares one field between
+    /// UpdateRampingValues and CheckDelayedFeatures).
+    /// </summary>
+    public double RandomizedPinkStartMinute => _randomizedPinkStartMinute;
+    /// <inheritdoc cref="RandomizedPinkStartMinute"/>
+    public double RandomizedSpiralStartMinute => _randomizedSpiralStartMinute;
     public int CurrentPhaseIndex => _currentPhaseIndex;
     public int PauseCount => _pauseCount;
     public int XPPenalty => _pauseCount * 100;

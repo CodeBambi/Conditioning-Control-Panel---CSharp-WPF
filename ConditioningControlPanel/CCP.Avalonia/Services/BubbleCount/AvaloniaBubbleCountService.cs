@@ -133,6 +133,11 @@ public sealed class AvaloniaBubbleCountService : IBubbleCountService
         {
             _isBusy = false;
             BubbleCountWindow.ForceCloseAll();
+            // Also close any fullscreen result window (strict mode hides its Esc escape);
+            // WPF StopEngine force-closes it too (MainWindow.StartStop.cs:328).
+            // ForceCloseAll marks the window completed before Close, so the
+            // onComplete(false) path is not re-triggered.
+            BubbleCountResultWindow.ForceCloseAll();
             _bubbles?.Resume();
             _logger?.LogDebug("BubbleCount: busy state reset");
         }
