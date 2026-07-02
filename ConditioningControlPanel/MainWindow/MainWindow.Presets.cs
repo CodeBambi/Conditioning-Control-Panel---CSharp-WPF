@@ -1174,21 +1174,82 @@ namespace ConditioningControlPanel
         private void OnSessionLogReady(object? sender, SessionLogReadyEventArgs e)
         {
             var log = e.Log;
-            Dispatcher.BeginInvoke(() =>
+            Dispatcher.BeginInvoke(() => ShowSessionSummaryWhenClear(log, attempt: 0));
+        }
+
+        /// <summary>
+        /// Shows the session-complete dialog once any in-flight video teardown has finished.
+        /// A bubble-triggered bonus video can still be tearing down when the session log
+        /// arrives; its dying fullscreen surface renders as a stuck white plane that buries
+        /// the modal summary (#462). No cleanup is forced here: the realistic race always has
+        /// a CloseAll already in flight (a fresh ForceCleanup would just no-op on its
+        /// _isCleaningUp guard, and running one synchronously risks a UI-thread LibVLC wedge),
+        /// so this only waits it out. The wait is cleanup-aware because CloseAll pumps the
+        /// dispatcher at Background priority — our timer ticks run INSIDE that pump, and
+        /// showing the modal there would suspend the teardown under the dialog.
+        /// </summary>
+        private void ShowSessionSummaryWhenClear(Models.SessionLog log, int attempt)
+        {
+            try
             {
-                try
+                if (Dispatcher.HasShutdownStarted) return;
+
+                var cleaning = App.Video?.IsCleaningUp == true;
+                var videoBusy = cleaning
+                    || App.Video?.IsPlaying == true
+                    || App.Video?.HasOpenWindows == true;
+                // Soft cap ~3s; while a CloseAll is actively in flight keep waiting up to 10s
+                // (its flag clears in a finally, so this terminates).
+                if (videoBusy && (attempt < 15 || (cleaning && attempt < 50)))
                 {
-                    var dialog = new SessionCompleteWindow(log)
+                    var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+                    retry.Tick += (_, _) =>
                     {
-                        Owner = IsLoaded ? this : null,
+                        retry.Stop();
+                        ShowSessionSummaryWhenClear(log, attempt + 1);
                     };
-                    dialog.ShowDialog();
+                    retry.Start();
+                    return;
                 }
-                catch (Exception ex)
+
+                // ApplicationIdle sits BELOW the Background priority CloseAll pumps at, so the
+                // modal can never open re-entrantly inside a teardown's message pump.
+                Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
                 {
-                    App.Logger?.Error(ex, "Failed to show post-session log dialog");
-                }
-            });
+                    try
+                    {
+                        if (Dispatcher.HasShutdownStarted) return;
+                        // If we capped out because a NEW video legitimately started (autonomy
+                        // can trigger one right after session end), don't steal topmost/focus
+                        // from it — show buried, like the pre-fix behavior.
+                        var videoUp = App.Video?.IsPlaying == true;
+                        var dialog = new SessionCompleteWindow(log)
+                        {
+                            Owner = IsLoaded ? this : null,
+                            // Pulse above any straggler surface, then drop back to normal once
+                            // rendered so the summary can't pin itself over other apps.
+                            Topmost = !videoUp,
+                        };
+                        if (!videoUp)
+                        {
+                            dialog.ContentRendered += (_, _) =>
+                            {
+                                dialog.Topmost = false;
+                                dialog.Activate();
+                            };
+                        }
+                        dialog.ShowDialog();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Error(ex, "Failed to show post-session log dialog");
+                    }
+                }));
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to schedule post-session log dialog");
+            }
         }
         
         private void OnSessionProgressUpdated(object? sender, SessionProgressEventArgs e)

@@ -222,7 +222,7 @@ namespace ConditioningControlPanel
             }
 
             // Start autonomy service (requires Patreon)
-            var hasPatreonAccess = settings.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+            var hasPatreonAccess = App.Patreon?.HasPremiumAccess == true;
             if (hasPatreonAccess && settings.AutonomyModeEnabled && settings.AutonomyConsentGiven)
             {
                 App.Autonomy?.Start();
@@ -314,13 +314,20 @@ namespace ConditioningControlPanel
             // Only stop autonomy if it was started by the session engine (i.e., user didn't enable it independently).
             // If the user has autonomy enabled in settings, let it keep running after session ends.
             var s = App.Settings?.Current;
-            var hasPatreon = (s?.PatreonTier ?? 0) >= 1 || App.Patreon?.IsWhitelisted == true;
+            var hasPatreon = App.Patreon?.HasPremiumAccess == true;
             if (!(hasPatreon && s != null && s.AutonomyModeEnabled && s.AutonomyConsentGiven))
             {
                 App.Autonomy?.Stop();
             }
             App.SkillTree?.Stop();
             App.Audio.ForceUnduck();
+
+            // The engine is stopping: nothing queued should fire afterwards, and the current
+            // interaction slot must not stay claimed by a video we just tore down — Video.Stop's
+            // CloseAll never calls Complete, and the queue's stuck-timer would otherwise hold the
+            // slot for 5 minutes (#462). Reset BEFORE the ForceCloseAll calls below so a genuine
+            // lock-card Complete can't dequeue a stale interaction either.
+            App.InteractionQueue?.ForceReset();
 
             // Force close any open lock card / quiz windows (panic button should close them immediately)
             LockCardWindow.ForceCloseAll();

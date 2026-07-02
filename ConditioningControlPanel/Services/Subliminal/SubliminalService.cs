@@ -32,6 +32,24 @@ namespace ConditioningControlPanel.Services
         // Per-window show generation: a new show on the same window invalidates the previous
         // storyboard's Completed (which would otherwise blank the new text early).
         private readonly Dictionary<Window, int> _showGeneration = new();
+
+        // SOLID MODE (#461): subliminal cards rendered as children of the ONE shared
+        // click-through host (ChaosBubbleHostOverlay) instead of the per-screen keep-alive
+        // layered windows above — one less full-screen layered surface contending on the
+        // shared WPF render thread. One card per screen, replaced outright by the next show.
+        private sealed class HostedCard
+        {
+            public string ScreenKey = "";
+            public Grid Root = null!;
+            public Canvas TextCanvas = null!;
+            public double OriginPxX, OriginPxY;   // screen's physical top-left
+            public double Scale = 1.0;            // physical px per card-local DIP
+        }
+        private readonly List<HostedCard> _hostedCards = new();
+        // One ref-counted hold on the shared host while any card could be up — NOT per show
+        // (host churn is exactly what solid mode exists to remove). Released on Stop/Dispose,
+        // or when a one-shot's card fades out with the service not running.
+        private bool _hostRefHeld;
         private readonly string _audioPath;
         private string[]? _audioFilesCache;
         private DateTime _audioFilesCacheTime;
@@ -97,6 +115,11 @@ namespace ConditioningControlPanel.Services
                 }
                 catch { }
             }
+
+            // Solid mode: pull any hosted cards off the shared canvas and release the host ref
+            // (removing canvas children is safe mid-run — only window churn deadlocks).
+            RemoveHostedCard(_ => true);
+            ReleaseHostRef();
 
             StopAudio();
 
@@ -593,9 +616,22 @@ namespace ConditioningControlPanel.Services
                 : new[] { System.Windows.Forms.Screen.PrimaryScreen! };
             var stealsFocus = App.Settings.Current.SubliminalStealsFocus;
 
+            // Solid mode can't steal focus (the shared host is NOACTIVATE by contract), so the
+            // StealsFocus opt-in falls back to the classic per-screen windows.
+            var useHost = App.Settings.Current.SubliminalSolidMode && !stealsFocus;
+
             foreach (var screen in screens)
             {
                 if (screen == null) continue;
+                // ShowHostedSubliminal reports whether the shared host could take this screen's
+                // card; when it can't (host created primary-only before DualMonitorEnabled
+                // flipped, or the host failed to come up), fall through to the classic window
+                // so the subliminal is never silently invisible.
+                if (useHost && ShowHostedSubliminal(screen, text, bgColor, textColor, borderColor,
+                        bgTransparent, targetOpacity, durationMs))
+                {
+                    continue;
+                }
                 var win = GetOrCreateScreenWindow(screen);
                 BuildSubliminalContent(win, text, bgColor, textColor, borderColor, bgTransparent);
                 if (!win.IsVisible) win.Show();   // stays shown (transparent) between flashes; only
@@ -614,6 +650,189 @@ namespace ConditioningControlPanel.Services
         }
 
         private const int WS_EX_LAYERED = 0x00080000;
+
+        /// <summary>
+        /// SOLID MODE (#461): render one subliminal card for <paramref name="screen"/> as a child
+        /// of the shared click-through host instead of the keep-alive layered window. Same fade
+        /// envelope; the card removes itself from the host canvas when the storyboard completes.
+        /// Returns false when the host can't display this screen (caller falls back to classic).
+        /// </summary>
+        private bool ShowHostedSubliminal(System.Windows.Forms.Screen screen, string text,
+            Color bgColor, Color textColor, Color borderColor, bool bgTransparent,
+            double targetOpacity, int durationMs)
+        {
+            HostedCard? card = null;
+            try
+            {
+                var key = screen.DeviceName ?? "primary";
+
+                // One card per screen: a new show replaces the previous outright, matching the
+                // classic path's content swap on the reused window.
+                RemoveHostedCard(c => c.ScreenKey == key);
+
+                var scale = GetMonitorDpi(screen) / 96.0;
+                if (scale <= 0) scale = 1.0;
+                var bounds = screen.Bounds;              // physical px
+                double dipW = bounds.Width / scale;
+                double dipH = bounds.Height / scale;
+
+                var grid = new Grid
+                {
+                    Width = dipW,
+                    Height = dipH,
+                    Background = Brushes.Transparent,
+                    IsHitTestVisible = false,
+                    Opacity = 0
+                };
+                if (!bgTransparent)
+                {
+                    grid.Children.Add(new System.Windows.Shapes.Rectangle
+                    {
+                        Fill = new SolidColorBrush(bgColor),
+                        IsHitTestVisible = false
+                    });
+                }
+
+                // Same outlined-text construction as BuildSubliminalContent, but positioned now:
+                // the card's size is known up front, no ActualWidth round-trip needed.
+                var textCanvas = new Canvas { IsHitTestVisible = false };
+                var fontSize = 120;
+                var offsets = new (double x, double y)[]
+                {
+                    (-3, -3), (3, -3), (-3, 3), (3, 3),
+                    (0, -4), (0, 4), (-4, 0), (4, 0)
+                };
+                var centerX = dipW / 2.0;
+                var centerY = dipH / 2.0;
+                foreach (var (ox, oy) in offsets)
+                {
+                    var borderText = CreateTextBlock(text, fontSize, borderColor);
+                    borderText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    Canvas.SetLeft(borderText, centerX - borderText.DesiredSize.Width / 2 + ox);
+                    Canvas.SetTop(borderText, centerY - borderText.DesiredSize.Height / 2 + oy);
+                    textCanvas.Children.Add(borderText);
+                }
+                var mainText = CreateTextBlock(text, fontSize, textColor);
+                mainText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                Canvas.SetLeft(mainText, centerX - mainText.DesiredSize.Width / 2);
+                Canvas.SetTop(mainText, centerY - mainText.DesiredSize.Height / 2);
+                textCanvas.Children.Add(mainText);
+                grid.Children.Add(textCanvas);
+
+                EnsureHostRef();
+
+                // The host's stage bounds are fixed at creation. If it can't cover this screen
+                // (created primary-only before DualMonitorEnabled flipped, or Show() failed and
+                // _active is null), placing here would draw off-canvas — invisible with no error.
+                if (!ChaosBubbleHostOverlay.CoversPoint(bounds.X + 8, bounds.Y + 8))
+                {
+                    if (!_isRunning && _hostedCards.Count == 0)
+                        ReleaseHostRef();   // one-shot fallback must not strand the host hold
+                    return false;
+                }
+
+                // Above hosted flashes (ZIndex 1000): the text must stay readable over an image.
+                System.Windows.Controls.Panel.SetZIndex(grid, 1200);
+                // Mixed-DPI: the host renders at ONE scale; a card on a differently-scaled screen
+                // compensates with a LayoutTransform (same fix as the bubble/flash host visuals).
+                var hostScale = ChaosBubbleHostOverlay.RenderScale;
+                if (hostScale > 0 && Math.Abs(hostScale - scale) > 0.001)
+                    grid.LayoutTransform = new ScaleTransform(scale / hostScale, scale / hostScale);
+                ChaosBubbleHostOverlay.Add(grid);
+                ChaosBubbleHostOverlay.Place(grid, bounds.X, bounds.Y);   // physical px
+                ChaosBubbleHostOverlay.RaiseActive();   // classic path re-asserts HWND_TOPMOST per show
+
+                card = new HostedCard
+                {
+                    ScreenKey = key,
+                    Root = grid,
+                    TextCanvas = textCanvas,
+                    OriginPxX = bounds.X,
+                    OriginPxY = bounds.Y,
+                    Scale = scale
+                };
+                _hostedCards.Add(card);
+
+                // Same envelope as AnimateSubliminal, driving the element's opacity.
+                var fadeMs = TimeSpan.FromMilliseconds(50);
+                var storyboard = new Storyboard();
+                var fadeIn = new DoubleAnimation(0, targetOpacity, fadeMs);
+                Storyboard.SetTarget(fadeIn, grid);
+                Storyboard.SetTargetProperty(fadeIn, new PropertyPath(UIElement.OpacityProperty));
+                storyboard.Children.Add(fadeIn);
+                var hold = new DoubleAnimation(targetOpacity, targetOpacity, TimeSpan.FromMilliseconds(durationMs))
+                {
+                    BeginTime = fadeMs
+                };
+                Storyboard.SetTarget(hold, grid);
+                Storyboard.SetTargetProperty(hold, new PropertyPath(UIElement.OpacityProperty));
+                storyboard.Children.Add(hold);
+                var fadeOut = new DoubleAnimation(targetOpacity, 0, fadeMs)
+                {
+                    BeginTime = fadeMs + TimeSpan.FromMilliseconds(durationMs)
+                };
+                Storyboard.SetTarget(fadeOut, grid);
+                Storyboard.SetTargetProperty(fadeOut, new PropertyPath(UIElement.OpacityProperty));
+                storyboard.Children.Add(fadeOut);
+
+                storyboard.Completed += (s, e) =>
+                {
+                    // May already be gone (replaced by a newer show, or Stop) — removal is idempotent.
+                    RemoveHostedCard(c => ReferenceEquals(c, card));
+                    // A one-shot with the service not running must not hold the host forever.
+                    if (!_isRunning && _hostedCards.Count == 0)
+                        ReleaseHostRef();
+                };
+                storyboard.Begin();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Subliminal ShowHostedSubliminal: {E}", ex.Message);
+                // A throw after EnsureHostRef but before Begin() means no Completed callback
+                // will ever run — pull the half-built card off the canvas (it would sit there
+                // invisible forever) and don't strand a one-shot's host hold.
+                if (card != null)
+                    RemoveHostedCard(c => ReferenceEquals(c, card));
+                if (!_isRunning && _hostedCards.Count == 0)
+                    ReleaseHostRef();
+                // Report failure so the caller renders this screen classically instead.
+                return false;
+            }
+        }
+
+        /// <summary>Detach matching hosted cards from the shared canvas (idempotent).</summary>
+        private void RemoveHostedCard(Func<HostedCard, bool> match)
+        {
+            for (int i = _hostedCards.Count - 1; i >= 0; i--)
+            {
+                var card = _hostedCards[i];
+                if (!match(card)) continue;
+                _hostedCards.RemoveAt(i);
+                try
+                {
+                    card.Root.BeginAnimation(UIElement.OpacityProperty, null);
+                    ChaosBubbleHostOverlay.Remove(card.Root);
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>Take this service's single reference on the shared host.</summary>
+        private void EnsureHostRef()
+        {
+            if (_hostRefHeld) return;
+            _hostRefHeld = true;
+            ChaosBubbleHostOverlay.EnsureCreated();
+        }
+
+        /// <summary>Release the host reference (the host closes only at its LAST owner's release).</summary>
+        private void ReleaseHostRef()
+        {
+            if (!_hostRefHeld) return;
+            _hostRefHeld = false;
+            ChaosBubbleHostOverlay.CloseActive();
+        }
 
         /// <summary>
         /// Get the keep-alive subliminal window for a screen, creating (and showing, at
@@ -819,6 +1038,38 @@ namespace ConditioningControlPanel.Services
                     int top = wr.Top + (int)Math.Floor((minY - pad) * scale);
                     int right = wr.Left + (int)Math.Ceiling((maxX + pad) * scale);
                     int bottom = wr.Top + (int)Math.Ceiling((maxY + pad) * scale);
+                    if (right > left && bottom > top)
+                        rects.Add(new System.Drawing.Rectangle(left, top, right - left, bottom - top));
+                }
+
+                // Solid mode: hosted cards live on the shared host canvas, not in _screenWindows.
+                // Card-local DIPs → physical via the screen origin + per-screen scale captured at
+                // show time (the LayoutTransform makes one card DIP render as Scale physical px).
+                foreach (var card in _hostedCards)
+                {
+                    if (card.Root.Opacity <= 0.01) continue;
+
+                    double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+                    bool any = false;
+                    foreach (var child in card.TextCanvas.Children)
+                    {
+                        if (child is not TextBlock tb || string.IsNullOrEmpty(tb.Text)) continue;
+                        double l = Canvas.GetLeft(tb), t = Canvas.GetTop(tb);
+                        if (double.IsNaN(l) || double.IsNaN(t)) continue;
+                        tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                        double w = tb.DesiredSize.Width, h = tb.DesiredSize.Height;
+                        if (w <= 0 || h <= 0) continue;
+                        minX = Math.Min(minX, l); minY = Math.Min(minY, t);
+                        maxX = Math.Max(maxX, l + w); maxY = Math.Max(maxY, t + h);
+                        any = true;
+                    }
+                    if (!any) continue;
+
+                    const double hostPad = 40;
+                    int left = (int)Math.Floor(card.OriginPxX + (minX - hostPad) * card.Scale);
+                    int top = (int)Math.Floor(card.OriginPxY + (minY - hostPad) * card.Scale);
+                    int right = (int)Math.Ceiling(card.OriginPxX + (maxX + hostPad) * card.Scale);
+                    int bottom = (int)Math.Ceiling(card.OriginPxY + (maxY + hostPad) * card.Scale);
                     if (right > left && bottom > top)
                         rects.Add(new System.Drawing.Rectangle(left, top, right - left, bottom - top));
                 }

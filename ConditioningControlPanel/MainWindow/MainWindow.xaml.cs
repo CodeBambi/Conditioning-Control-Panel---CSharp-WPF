@@ -582,7 +582,7 @@ namespace ConditioningControlPanel
                 if (s != null && s.AutonomyResumeOnStartup && s.AutonomyModeEnabled && s.AutonomyConsentGiven
                     && App.Autonomy?.IsEnabled != true)
                 {
-                    var hasAccess = s.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+                    var hasAccess = App.Patreon?.HasPremiumAccess == true;
                     if (hasAccess)
                     {
                         App.Autonomy?.Start();

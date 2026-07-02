@@ -753,6 +753,9 @@ public static class ChaosBubbleVariants
         {
             // Trigger-bubble use: strip the fuse/defuse so it fires on pop, and float up gently.
             motion = ChaosMotion.FloatUp;
+            // Payloads may tone themselves down on the calm dashboard (e.g. video skips the
+            // chaos random-segment arm — there is no 15s cap outside a run, #456/#458).
+            payload.Ambient = true;
         }
 
         return new EffectBubbleSpec

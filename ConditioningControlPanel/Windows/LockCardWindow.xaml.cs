@@ -691,8 +691,17 @@ namespace ConditioningControlPanel
                 catch { }
             }
 
-            // Notify InteractionQueue that lock card is complete (triggers queued items)
-            App.InteractionQueue?.Complete(Services.InteractionQueueService.InteractionType.LockCard);
+            // Notify InteractionQueue that lock card is complete (triggers queued items).
+            // Guarded on the slot actually being ours: engine stop calls this as blanket
+            // cleanup, and an unconditional Complete(LockCard) here cleared whatever WAS
+            // current (e.g. an in-flight Video), letting the session summary race the video
+            // teardown (#462). The current-interaction check also dedups against OnClosing's
+            // last-window release (whichever runs first wins; the other sees a foreign slot).
+            if (windowsToClose.Count > 0 &&
+                App.InteractionQueue?.CurrentInteraction == Services.InteractionQueueService.InteractionType.LockCard)
+            {
+                App.InteractionQueue.Complete(Services.InteractionQueueService.InteractionType.LockCard);
+            }
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
@@ -713,6 +722,15 @@ namespace ConditioningControlPanel
             _voiceMode = false;
             StopVoiceSolve();
             _allWindows.Remove(this);
+            // Non-strict cards can be closed without completing (Alt+F4, titlebar) — if this
+            // was the last one, release the interaction slot or videos/lock cards stay blocked
+            // for the 5-minute stuck timer. Guarded on CurrentInteraction so a close arriving
+            // after something else became current can't clear the wrong slot (#462).
+            if (_allWindows.Count == 0 &&
+                App.InteractionQueue?.CurrentInteraction == Services.InteractionQueueService.InteractionType.LockCard)
+            {
+                App.InteractionQueue.Complete(Services.InteractionQueueService.InteractionType.LockCard);
+            }
             base.OnClosing(e);
         }
 

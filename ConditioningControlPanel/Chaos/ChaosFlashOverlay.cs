@@ -83,7 +83,7 @@ public sealed class ChaosFlashOverlay : Window
         _img = new Image { Stretch = Stretch.UniformToFill };
         Content = _img;
 
-        SourceInitialized += (_, _) => ApplyExStyles();
+        SourceInitialized += (_, _) => { ApplyExStyles(); PlacePhysical(); };
         Loaded += (_, _) =>
         {
             if (_pending is { } p) { _pending = null; DisplayCore(p.path, p.durationMs, p.opacity); }
@@ -196,10 +196,46 @@ public sealed class ChaosFlashOverlay : Window
         catch { }
     }
 
+    /// <summary>
+    /// Stamps the HWND to the stage's PHYSICAL pixel bounds. StageBounds() sizes the ctor in
+    /// DIPs from SystemParameters.VirtualScreen*, which use the PRIMARY monitor's scale — on a
+    /// mixed-DPI desktop a spanning window rendered at one scale then falls short of the taller
+    /// screen's bottom (#456). Runs at SourceInitialized, before the layered surface is realized,
+    /// so this is not the forbidden mid-run resize.
+    /// </summary>
+    private void PlacePhysical()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero) return;
+
+            bool dual = App.Settings?.Current?.DualMonitorEnabled ?? true;
+            var b = dual
+                ? System.Windows.Forms.SystemInformation.VirtualScreen
+                : System.Windows.Forms.Screen.PrimaryScreen?.Bounds ?? System.Drawing.Rectangle.Empty;
+            if (b.Width <= 0 || b.Height <= 0) return;
+            SetWindowPos(hwnd, IntPtr.Zero, b.X, b.Y, b.Width, b.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        catch (Exception ex) { App.Logger?.Debug("ChaosFlashOverlay.PlacePhysical: {E}", ex.Message); }
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        // A spanning window whose majority monitor changed gets a WM_DPICHANGED, and WPF then
+        // re-applies the ctor's primary-scale DIP size — undoing the physical stamp. Re-place
+        // after WPF finishes its own resize (Background priority).
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(PlacePhysical));
+    }
+
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int WS_EX_TRANSPARENT = 0x00000020;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
     [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hwnd, int index);
     [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 }

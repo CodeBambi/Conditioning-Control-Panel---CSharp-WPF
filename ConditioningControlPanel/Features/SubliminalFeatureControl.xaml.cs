@@ -46,6 +46,7 @@ namespace ConditioningControlPanel.Features
                 ChkWhispers.IsChecked = s.SubAudioEnabled;
                 SliderWhisperVol.Value = s.SubAudioVolume;
                 TxtWhisperVol.Text = $"{s.SubAudioVolume}%";
+                ChkSolidMode.IsChecked = s.SubliminalSolidMode;
             }
             finally { _isLoading = false; }
         }
@@ -57,7 +58,8 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.SubliminalDuration) ||
                 e.PropertyName == nameof(Models.AppSettings.SubliminalOpacity) ||
                 e.PropertyName == nameof(Models.AppSettings.SubAudioEnabled) ||
-                e.PropertyName == nameof(Models.AppSettings.SubAudioVolume))
+                e.PropertyName == nameof(Models.AppSettings.SubAudioVolume) ||
+                e.PropertyName == nameof(Models.AppSettings.SubliminalSolidMode))
             {
                 Dispatcher.BeginInvoke(new Action(LoadFromSettings));
             }
@@ -121,6 +123,17 @@ namespace ConditioningControlPanel.Features
             TxtWhisperVol.Text = $"{v}%";
             s.SubAudioVolume = v;
             App.Settings?.Save();
+        }
+
+        private void ChkSolidMode_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.SubliminalSolidMode = ChkSolidMode.IsChecked ?? false;
+            App.Settings?.Save();
+            // No service bounce needed: each show reads the setting, so the next subliminal
+            // uses the new renderer. An in-flight card finishes out on whichever spawned it.
         }
 
         private void BtnManageMessages_Click(object sender, RoutedEventArgs e)

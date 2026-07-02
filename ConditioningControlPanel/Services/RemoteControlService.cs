@@ -815,6 +815,12 @@ namespace ConditioningControlPanel.Services
                 App.LockCard?.Stop();
                 App.Wallpaper?.Deactivate();
 
+                // Reset the queue BEFORE the ForceCloseAll calls: a lock-card Complete fired
+                // by ForceCloseAll would otherwise dequeue a still-queued interaction (e.g. a
+                // video) and pop it right after "stop everything" (#462 ordering, same as
+                // StopEngineCore).
+                App.InteractionQueue?.ForceReset();
+
                 // Force close any open game/lock windows
                 LockCardWindow.ForceCloseAll();
                 BubbleCountWindow.ForceCloseAll();
@@ -828,8 +834,6 @@ namespace ConditioningControlPanel.Services
                     App.Settings.Current.PanicKeyEnabled = true;
                 }
                 App.Overlay?.RefreshOverlays();
-
-                App.InteractionQueue?.ForceReset();
 
                 // Stop session engine and main engine if running
                 MainWindowRef?.StopSessionFromRemote();
@@ -914,6 +918,10 @@ namespace ConditioningControlPanel.Services
                 App.LockCard?.Stop();
                 App.Wallpaper?.Deactivate();
 
+                // Reset BEFORE ForceCloseAll so a lock-card Complete can't dequeue a stale
+                // interaction into the cleaned-up state (see StopRemoteEffects).
+                App.InteractionQueue?.ForceReset();
+
                 LockCardWindow.ForceCloseAll();
                 BubbleCountWindow.ForceCloseAll();
 
@@ -926,8 +934,6 @@ namespace ConditioningControlPanel.Services
                     App.Settings.Current.PanicKeyEnabled = true;
                 }
                 App.Overlay?.RefreshOverlays();
-
-                App.InteractionQueue?.ForceReset();
 
                 // Restore window visibility but don't stop engine/autonomy
                 if (MainWindowRef != null)
