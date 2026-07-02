@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ConditioningControlPanel.Services.Speech
 {
@@ -125,6 +126,49 @@ namespace ConditioningControlPanel.Services.Speech
                 else if (++_silenceFrames > _hangoverFrames) _voiced = false;
             }
             return _voiced;
+        }
+    }
+
+    /// <summary>
+    /// Short rolling buffer of the most recent capture chunks, kept while the gate says "silent".
+    /// Any energy/VAD gate only flips to "voiced" AFTER speech has already started — the unvoiced /h/
+    /// of "hey" sits below every onset threshold — so a gate that simply drops silent frames clips the
+    /// start of the wake word off before the recognizer ever sees it. Instead of dropping, the caller
+    /// pushes silent chunks here and, on the silent→voiced transition, drains the buffer into the
+    /// decoder ahead of the current chunk: the decoder receives the onset it would otherwise have lost,
+    /// and steady room tone still never reaches it (the buffer is bounded and overwritten).
+    /// Chunks are held by reference — callers must hand over per-callback arrays they won't reuse.
+    /// Not thread-safe; confine to the capture callback like the rest of the front-end.
+    /// </summary>
+    internal sealed class PreRollBuffer
+    {
+        private readonly Queue<float[]> _chunks = new();
+        private readonly int _capSamples;
+        private int _totalSamples;
+
+        public PreRollBuffer(int sampleRate, double seconds = 0.8)
+        {
+            _capSamples = Math.Max(1, (int)(sampleRate * Math.Clamp(seconds, 0.1, 5.0)));
+        }
+
+        /// <summary>Buffer one silent chunk, evicting the oldest audio beyond the cap.</summary>
+        public void Push(float[] chunk)
+        {
+            if (chunk.Length == 0) return;
+            _chunks.Enqueue(chunk);
+            _totalSamples += chunk.Length;
+            while (_totalSamples > _capSamples && _chunks.Count > 1)
+                _totalSamples -= _chunks.Dequeue().Length;
+        }
+
+        /// <summary>Hand back everything buffered (oldest first) and reset. Empty array when nothing held.</summary>
+        public float[][] Drain()
+        {
+            if (_chunks.Count == 0) return Array.Empty<float[]>();
+            var all = _chunks.ToArray();
+            _chunks.Clear();
+            _totalSamples = 0;
+            return all;
         }
     }
 }
