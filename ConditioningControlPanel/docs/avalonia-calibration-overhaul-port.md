@@ -49,11 +49,24 @@ the merge additions + one retired legacy field), so the port was a faithful diff
     query exists. Documented refinement.
   - GazeDebugCursorService +306 = lock-state visualization on the debug cursor. Documented refinement.
 
-## Verification caveat
-This is the eye-tracker core. The port mirrors the WPF math exactly (diff-driven, not from
-memory) and compiles clean, but it has **not** been live-verified with a webcam, and the
-Avalonia `--smoke-test` could not be run (it launches the UI app, which needs an interactive
-desktop session unavailable in this environment). Both remain release gates.
+## Verification status
+The port mirrors the WPF math exactly (diff-driven, not from memory), compiles clean
+(`CCP.Desktop.slnf` 0 errors), and Core tests pass (108/108). The Avalonia Windows head
+`--smoke-test` **now runs to completion** (EXIT 0, 45 tabs visited, Chaos run exercised):
+0 unhandled/unobserved exceptions. Remaining smoke findings:
+- `OverlayClickThrough: No overlay window was created` — **pre-existing test-vs-architecture
+  mismatch**, not a code bug: `AvaloniaOverlayService` renders on `CompositorEngine` layers
+  (`_pinkTintLayer`/`_spiralLayer`/`_brainDrainLayer`), same design as FlashLayer/BubbleLayer;
+  the smoke check looks for separate `*OverlayWindow*` windows (WPF-style) that the Avalonia
+  layer design intentionally never creates. Verifying the layer's hit-test-ignoring behaviour
+  would require a smoke-harness change, out of merge-port scope.
+- 4 `[Info] ChaosRun` lines (run narration, not errors).
+A racy `InvalidCastException: RotateTransform → Visual` in `Animation.RunAsync` surfaced in
+one run but not another; none of the merge-port files add any `Animation.RunAsync`/transform
+animation (confirmed by grep — only SeasonRecapCard/SplashScreen/AttentionCheckControl do,
+which this work did not touch), so it is pre-existing.
+Still NOT live-verified with a webcam (no device) — that remains a release gate for the
+gaze math.
 
 ## Source merge commits
 - `fce9713d` feat(gaze): calibration overhaul — accuracy corrections, target lock-on, motion shaping, lighting comp
