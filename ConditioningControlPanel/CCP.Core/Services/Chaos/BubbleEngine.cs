@@ -193,7 +193,8 @@ public sealed class BubbleEngine
         _spawnTimer = new DispatcherTimer { Interval = interval };
         _spawnTimer.Tick += (_, _) =>
         {
-            if (_isRunning && !_isPaused && _bubbles.Count < MaxAmbientBubbles)
+            if (_isRunning && !_isPaused && _bubbles.Count < MaxAmbientBubbles
+                && !ConditioningControlPanel.Core.Services.DisplayChangeCoordinator.SpawnsSuppressed)
                 SpawnBubble();
         };
         _spawnTimer.Start();
@@ -201,7 +202,8 @@ public sealed class BubbleEngine
 
     public void SpawnOnce()
     {
-        if (_isRunning && !_isPaused)
+        if (_isRunning && !_isPaused
+            && !ConditioningControlPanel.Core.Services.DisplayChangeCoordinator.SpawnsSuppressed)
             SpawnBubble();
     }
 
