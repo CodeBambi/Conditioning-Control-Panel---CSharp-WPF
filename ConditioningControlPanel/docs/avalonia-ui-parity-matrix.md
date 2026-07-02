@@ -29,7 +29,7 @@ the void marks happened.
 | # | Lot | Status | Evidence / notes |
 |---|---|---|---|
 | 1 | Data/settings persistence + paths | **passed 2026-07-02** | 7 defects found+fixed (`e9501ce8`,`a2d1b9a8`,`b694b543`): secret-store no-op regression, 2 missing migrations, exit-flush gaps, quests serializer, roadmap drift, Roaming-migration orphaning, corrupt-file quarantine. Core tests 108→119; smoke 45 tabs clean for this area; deferred rows on task board ("Discovered by WS0 lot 1") |
-| 2 | Session engine + start/stop | todo | |
+| 2 | Session engine + start/stop | **passed 2026-07-03** | 15 verified divergences fixed across 4 commits (`9cd64bce`,`70857d09`,`44fc1421`,`61f339fc`): preset settings apply/restore, session-log single-owner w/ real elapsed/XP, per-session + manual intensity ramps, scheduler auto start/stop, engine-only plain START (WPF parity), delayed feature starts + bubble bursts, pause stops stimuli, dead VM panic path (P0), lockdown gates, autonomy arm/stop, launch behaviors, conditioning-tracker corruption (P0), achievement snapshots. 19-agent adversarial verify; Core tests 119→159; smoke: baseline noise only + 1 known stale harness assertion (chip filed; message proves engine-only contract). NOT exercised: live side-by-side pause/panic/scheduler-window vs WPF |
 | 3 | Overlays/compositor + click-through input | todo | |
 | 4 | Video/audio | todo | |
 | 5 | Speech/mic + gaze/calibration | todo | includes BLOCKED calibration port triage |
