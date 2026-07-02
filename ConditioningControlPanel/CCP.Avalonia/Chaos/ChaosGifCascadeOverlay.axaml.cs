@@ -8,6 +8,7 @@ using global::Avalonia.Media;
 using global::Avalonia.Media.Imaging;
 using global::Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Helpers;
+using ConditioningControlPanel.Core.Services.Chaos;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -288,12 +289,7 @@ var bmp = new Bitmap(stream);
     {
         try
         {
-            var dir =
-Path.Combine(AvaloniaChaosEnv.EffectiveAssetsPath ?? "", "images");
-            if (!Directory.Exists(dir)) return new List<string>();
-            return Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly)
-                .Where(f => Extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
-                .ToList();
+            return ChaosImagePool.GetFiles(AvaloniaChaosEnv.EffectiveAssetsPath ?? "");
         }
         catch { return new List<string>(); }
     }

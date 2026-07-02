@@ -1022,6 +1022,9 @@ namespace ConditioningControlPanel
                     flushToDiskInterval: TimeSpan.FromSeconds(1))
                 .CreateLogger();
 
+            // Route the shared (Core) display-change spawn-suppress diagnostic through our logger.
+            Services.UI.DisplayChangeCoordinator.DebugLog = msg => Logger.Debug(msg);
+
             // Log the RUNTIME version (not just the source constant) + memory baseline. A stale
             // publish can ship old code under a new label; this line is how we catch that, and the
             // working-set baseline anchors the chaos OOM telemetry.

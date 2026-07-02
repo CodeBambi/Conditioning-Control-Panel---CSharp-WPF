@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using NAudio.Wave;
 using Newtonsoft.Json.Linq;
 using Vosk;
+using ConditioningControlPanel.Core.Services.Speech;
 
 namespace ConditioningControlPanel.Services.Speech
 {

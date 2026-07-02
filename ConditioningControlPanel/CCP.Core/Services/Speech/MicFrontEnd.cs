@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ConditioningControlPanel.Services.Speech
+namespace ConditioningControlPanel.Core.Services.Speech
 {
     /// <summary>
     /// First-order high-pass (DC-blocker) filter that strips low-frequency rumble — AC units, fans,
@@ -11,7 +11,7 @@ namespace ConditioningControlPanel.Services.Speech
     /// capture session (it holds filter state); call it from the DataAvailable callback BEFORE
     /// measuring RMS and BEFORE handing samples to Vosk / sherpa.
     /// </summary>
-    internal sealed class HighPassFilter
+    public sealed class HighPassFilter
     {
         // y[n] = R * (y[n-1] + x[n] - x[n-1]);  pole at R. Cutoff rises as R falls.
         private readonly float _r;
@@ -68,7 +68,7 @@ namespace ConditioningControlPanel.Services.Speech
     /// This is the live-path promotion of the noise-floor logic that previously lived only inside the
     /// sherpa wake calibration sweep. One instance per capture session (holds floor + latch state).
     /// </summary>
-    internal sealed class NoiseGate
+    public sealed class NoiseGate
     {
         private readonly double _triggerFactor; // enter-speech SNR multiple over the floor
         private readonly double _releaseFactor; // stay-in-speech multiple (< trigger => hysteresis)
@@ -140,7 +140,7 @@ namespace ConditioningControlPanel.Services.Speech
     /// Chunks are held by reference — callers must hand over per-callback arrays they won't reuse.
     /// Not thread-safe; confine to the capture callback like the rest of the front-end.
     /// </summary>
-    internal sealed class PreRollBuffer
+    public sealed class PreRollBuffer
     {
         private readonly Queue<float[]> _chunks = new();
         private readonly int _capSamples;

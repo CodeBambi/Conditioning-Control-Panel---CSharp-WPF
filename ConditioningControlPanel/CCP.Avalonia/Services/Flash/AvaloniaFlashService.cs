@@ -150,6 +150,10 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
     {
         if (!IsRunning) return;
 
+        // Don't spawn a fresh overlay surface while the display topology / DPI is mid-change (the
+        // compositor is rebuilding surfaces; adding one now risks a churn/tear burst). Mirrors WPF.
+        if (ConditioningControlPanel.Core.Services.DisplayChangeCoordinator.SpawnsSuppressed) return;
+
         var settings = _settings.Current;
         if (settings == null) return;
 

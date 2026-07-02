@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Core.Services;
 
 namespace ConditioningControlPanel.Avalonia.Platform;
 
@@ -70,6 +71,9 @@ public sealed class AvaloniaScreenProvider : IScreenProvider
         var signature = ComputeLayoutSignature();
         if (signature == _lastLayoutSignature) return;
         _lastLayoutSignature = signature;
+        // Mirror the WPF display-change path: quiesce layered-window spawns for a beat while the
+        // compositor/overlay surfaces settle after a monitor/DPI change.
+        DisplayChangeCoordinator.NotifyDisplayChange("screens-changed");
         _screensChanged?.Invoke(this, EventArgs.Empty);
     }
 

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NAudio.Wave;
 using SherpaOnnx;
+using ConditioningControlPanel.Core.Services.Speech;
 
 namespace ConditioningControlPanel.Services.Speech
 {

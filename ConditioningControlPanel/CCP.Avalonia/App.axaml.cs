@@ -303,6 +303,9 @@ public partial class App : Application
                 retainedFileCountLimit: 7)
             .WriteTo.Console()
             .CreateLogger();
+
+        // Route the shared (Core) display-change spawn-suppress diagnostic through Serilog.
+        ConditioningControlPanel.Core.Services.DisplayChangeCoordinator.DebugLog = msg => Log.Logger.Debug(msg);
     }
 
     private static void OnAchievementUnlocked(object? sender, ConditioningControlPanel.Models.Achievement achievement)
