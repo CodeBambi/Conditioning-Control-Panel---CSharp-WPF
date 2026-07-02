@@ -307,6 +307,12 @@ namespace ConditioningControlPanel
             timer.Tick += (s, e) =>
             {
                 timer.Stop();
+                // Panic/engine stop force-closed everything while we were polling: bail without
+                // firing the completion callback — in strict mode OnGameComplete(false) retries
+                // the game, resurrecting a fullscreen bubble count seconds after "stop everything".
+                // (Normal mercy flow keeps the hidden result windows in _allWindows until
+                // CompleteAll, so an empty list can only mean ForceCloseAll ran.)
+                if (_allWindows.Count == 0) return;
                 // Check if lock card is still open
                 if (LockCardWindow.IsAnyOpen())
                 {

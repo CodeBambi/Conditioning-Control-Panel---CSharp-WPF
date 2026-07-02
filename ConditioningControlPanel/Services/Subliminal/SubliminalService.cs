@@ -623,10 +623,13 @@ namespace ConditioningControlPanel.Services
             foreach (var screen in screens)
             {
                 if (screen == null) continue;
-                if (useHost)
+                // ShowHostedSubliminal reports whether the shared host could take this screen's
+                // card; when it can't (host created primary-only before DualMonitorEnabled
+                // flipped, or the host failed to come up), fall through to the classic window
+                // so the subliminal is never silently invisible.
+                if (useHost && ShowHostedSubliminal(screen, text, bgColor, textColor, borderColor,
+                        bgTransparent, targetOpacity, durationMs))
                 {
-                    ShowHostedSubliminal(screen, text, bgColor, textColor, borderColor, bgTransparent,
-                        targetOpacity, durationMs);
                     continue;
                 }
                 var win = GetOrCreateScreenWindow(screen);
@@ -652,11 +655,13 @@ namespace ConditioningControlPanel.Services
         /// SOLID MODE (#461): render one subliminal card for <paramref name="screen"/> as a child
         /// of the shared click-through host instead of the keep-alive layered window. Same fade
         /// envelope; the card removes itself from the host canvas when the storyboard completes.
+        /// Returns false when the host can't display this screen (caller falls back to classic).
         /// </summary>
-        private void ShowHostedSubliminal(System.Windows.Forms.Screen screen, string text,
+        private bool ShowHostedSubliminal(System.Windows.Forms.Screen screen, string text,
             Color bgColor, Color textColor, Color borderColor, bool bgTransparent,
             double targetOpacity, int durationMs)
         {
+            HostedCard? card = null;
             try
             {
                 var key = screen.DeviceName ?? "primary";
@@ -716,6 +721,16 @@ namespace ConditioningControlPanel.Services
 
                 EnsureHostRef();
 
+                // The host's stage bounds are fixed at creation. If it can't cover this screen
+                // (created primary-only before DualMonitorEnabled flipped, or Show() failed and
+                // _active is null), placing here would draw off-canvas — invisible with no error.
+                if (!ChaosBubbleHostOverlay.CoversPoint(bounds.X + 8, bounds.Y + 8))
+                {
+                    if (!_isRunning && _hostedCards.Count == 0)
+                        ReleaseHostRef();   // one-shot fallback must not strand the host hold
+                    return false;
+                }
+
                 // Above hosted flashes (ZIndex 1000): the text must stay readable over an image.
                 System.Windows.Controls.Panel.SetZIndex(grid, 1200);
                 // Mixed-DPI: the host renders at ONE scale; a card on a differently-scaled screen
@@ -727,7 +742,7 @@ namespace ConditioningControlPanel.Services
                 ChaosBubbleHostOverlay.Place(grid, bounds.X, bounds.Y);   // physical px
                 ChaosBubbleHostOverlay.RaiseActive();   // classic path re-asserts HWND_TOPMOST per show
 
-                var card = new HostedCard
+                card = new HostedCard
                 {
                     ScreenKey = key,
                     Root = grid,
@@ -769,15 +784,20 @@ namespace ConditioningControlPanel.Services
                         ReleaseHostRef();
                 };
                 storyboard.Begin();
+                return true;
             }
             catch (Exception ex)
             {
                 App.Logger?.Debug("Subliminal ShowHostedSubliminal: {E}", ex.Message);
-                // A throw after EnsureHostRef but before the storyboard began means no
-                // Completed callback will ever release a one-shot's host hold — don't strand
-                // the fullscreen host window for the rest of the app session.
+                // A throw after EnsureHostRef but before Begin() means no Completed callback
+                // will ever run — pull the half-built card off the canvas (it would sit there
+                // invisible forever) and don't strand a one-shot's host hold.
+                if (card != null)
+                    RemoveHostedCard(c => ReferenceEquals(c, card));
                 if (!_isRunning && _hostedCards.Count == 0)
                     ReleaseHostRef();
+                // Report failure so the caller renders this screen classically instead.
+                return false;
             }
         }
 
