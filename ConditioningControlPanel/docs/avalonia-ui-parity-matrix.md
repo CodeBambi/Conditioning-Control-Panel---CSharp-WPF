@@ -28,7 +28,7 @@ the void marks happened.
 
 | # | Lot | Status | Evidence / notes |
 |---|---|---|---|
-| 1 | Data/settings persistence + paths | wip | claimed 2026-07-02 (task board) |
+| 1 | Data/settings persistence + paths | **passed 2026-07-02** | 7 defects found+fixed (`e9501ce8`,`a2d1b9a8`,`b694b543`): secret-store no-op regression, 2 missing migrations, exit-flush gaps, quests serializer, roadmap drift, Roaming-migration orphaning, corrupt-file quarantine. Core tests 108→119; smoke 45 tabs clean for this area; deferred rows on task board ("Discovered by WS0 lot 1") |
 | 2 | Session engine + start/stop | todo | |
 | 3 | Overlays/compositor + click-through input | todo | |
 | 4 | Video/audio | todo | |
