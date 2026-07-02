@@ -145,6 +145,18 @@ namespace ConditioningControlPanel.Models
         // Permanent progression (for title tier resolution).
         [JsonProperty("highest_level_ever")] public int HighestLevelEver { get; set; }
 
+        // Schema 2 (Prestige / Ditzy Data PRO). Zero on schema-1 snapshots — render "—".
+        [JsonProperty("peak_level")] public int PeakLevel { get; set; }
+        [JsonProperty("points_spent_season")] public int PointsSpentSeason { get; set; }
+        [JsonProperty("lifetime_points_spent")] public long LifetimePointsSpent { get; set; }
+        [JsonProperty("skills_owned")] public int SkillsOwned { get; set; }
+
+        /// <summary>
+        /// The actual "yyyy-MM-dd" active dates for the season (not just the count) —
+        /// feeds the PRO activity heatmap across past months. Empty on schema-1 snapshots.
+        /// </summary>
+        [JsonProperty("active_days")] public List<string> ActiveDays { get; set; } = new();
+
         // Status flags shown as pills under the hero.
         [JsonProperty("is_supporter")] public bool IsSupporter { get; set; }
         [JsonProperty("is_og")] public bool IsOg { get; set; }
@@ -153,7 +165,7 @@ namespace ConditioningControlPanel.Models
         [JsonProperty("feature_use")] public Dictionary<string, int> FeatureUse { get; set; } = new();
         [JsonProperty("features_total")] public int FeaturesTotal { get; set; }
 
-        [JsonProperty("schema")] public int Schema { get; set; } = 1;
+        [JsonProperty("schema")] public int Schema { get; set; } = 2;
     }
 
     /// <summary>

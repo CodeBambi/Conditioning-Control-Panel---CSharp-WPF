@@ -796,6 +796,27 @@ public class AchievementService : IDisposable
     }
 
     /// <summary>
+    /// Track sparkle points spent on an enhancement purchase (the Prestige metric).
+    /// </summary>
+    public void TrackSkillPointsSpent(int amount)
+    {
+        if (amount <= 0) return;
+        _progress.LifetimeSkillPointsSpent += amount;
+        _isDirty = true;
+    }
+
+    /// <summary>
+    /// Adopt the server's authoritative lifetime_points_spent when it is ahead of ours
+    /// (other device, migration backfill). Never lowers the local value — Prestige is monotonic.
+    /// </summary>
+    public void ReconcileLifetimePointsSpent(long serverValue)
+    {
+        if (serverValue <= _progress.LifetimeSkillPointsSpent) return;
+        _progress.LifetimeSkillPointsSpent = serverValue;
+        _isDirty = true;
+    }
+
+    /// <summary>
     /// Mark progress dirty so the next autosave persists it. Used by GamificationBridge
     /// after it mutates a counter on <see cref="Progress"/> without going through a
     /// dedicated Track* method (which would otherwise leave the change unsaved).

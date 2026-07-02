@@ -20,6 +20,15 @@ public class SkillDefinition
     public string? SecretRequirementDesc { get; set; }
 
     /// <summary>
+    /// Permanent skills survive the seasonal reset (stat/analytics displays — the
+    /// "non-mechanical" nodes). Non-permanent (mechanical/XP-economy) skills are
+    /// removed by the server at season rollover and must be re-purchased.
+    /// Derived from <see cref="PermanentIds"/>, which must mirror the server's
+    /// authoritative PERMANENT_SKILL_IDS list.
+    /// </summary>
+    public bool IsPermanent => PermanentIds.Contains(Id);
+
+    /// <summary>
     /// Effect type identifier for applying the skill's bonus
     /// </summary>
     public SkillEffectType EffectType { get; set; }
@@ -35,6 +44,14 @@ public class SkillDefinition
     public string LocalizedDescription => Loc.Get($"skill_{Id}_desc");
     /// <summary>Localized skill flavor text (falls back to hardcoded FlavorText)</summary>
     public string LocalizedFlavorText => Loc.Get($"skill_{Id}_flavor");
+
+    /// <summary>Ids of all permanent (season-persistent) skills.</summary>
+    public static IReadOnlyList<string> PermanentIds { get; } =
+        new List<string>
+        {
+            "pink_hours", "ditzy_data", "hive_mind", "trophy_case", "popular_girl", "eternal_doll",
+            "ditzy_data_pro", "season_rewind", "bestie_records", "brain_drain_report", "certified_data_bimbo"
+        };
 
     /// <summary>
     /// All skill definitions in the bimbo enhancement tree
@@ -346,6 +363,76 @@ public class SkillDefinition
             FlavorText = "Your dedication is FOREVER. Lifetime stats that never reset... you've always been a bimbo~",
             Description = "Shows lifetime stats across all seasons",
             EffectType = SkillEffectType.LifetimeStats,
+            EffectValue = 0
+        },
+
+        // ═══════════════════════════════════════════════════════════════
+        // TIER 6 - Ditzy Data PRO (analytics branch, permanent, 150-1000 points —
+        // priced as the long-game sink for banked veteran balances)
+        // ═══════════════════════════════════════════════════════════════
+        new()
+        {
+            Id = "ditzy_data_pro",
+            Name = "Ditzy Data PRO",
+            Icon = "📈👛",
+            Tier = 6,
+            Cost = 150,
+            PrerequisiteId = "better_quests",
+            FlavorText = "Regular numbers are for regular girls. YOUR numbers get a whole upgrade, you spreadsheet princess~",
+            Description = "Unlocks the PRO lifetime dashboard with every stat the app has ever counted",
+            EffectType = SkillEffectType.StatDisplay,
+            EffectValue = 0
+        },
+        new()
+        {
+            Id = "season_rewind",
+            Name = "Season Rewind",
+            Icon = "⏪💭",
+            Tier = 6,
+            Cost = 250,
+            PrerequisiteId = "ditzy_data_pro",
+            FlavorText = "Wanna see how much emptier you got since last month? The graphs remember even when you don't~",
+            Description = "Season-over-season comparison of your past seasons",
+            EffectType = SkillEffectType.StatDisplay,
+            EffectValue = 0
+        },
+        new()
+        {
+            Id = "bestie_records",
+            Name = "Bestie Records",
+            Icon = "🏅💖",
+            Tier = 6,
+            Cost = 350,
+            PrerequisiteId = "season_rewind",
+            FlavorText = "Every record you break makes the old you SO jealous. Keep beating her~",
+            Description = "Personal best timeline: all-time records plus each season's peaks",
+            EffectType = SkillEffectType.StatDisplay,
+            EffectValue = 0
+        },
+        new()
+        {
+            Id = "brain_drain_report",
+            Name = "Brain Drain Report",
+            Icon = "🧠📉",
+            Tier = 6,
+            Cost = 500,
+            PrerequisiteId = "bestie_records",
+            FlavorText = "A full report on exactly which toys melted you the most. For science! Giggle.",
+            Description = "Per-feature usage breakdown, this season and lifetime",
+            EffectType = SkillEffectType.StatDisplay,
+            EffectValue = 0
+        },
+        new()
+        {
+            Id = "certified_data_bimbo",
+            Name = "Certified Data Bimbo",
+            Icon = "🎓✨",
+            Tier = 6,
+            Cost = 1000,
+            PrerequisiteId = "brain_drain_report",
+            FlavorText = "You looked at ALL the numbers and understood, like, none of them. Certified!!",
+            Description = "Capstone: Prestige history per season plus a certified badge on your tree",
+            EffectType = SkillEffectType.StatDisplay,
             EffectValue = 0
         }
     };

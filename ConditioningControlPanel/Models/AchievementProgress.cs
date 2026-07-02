@@ -108,6 +108,13 @@ public class AchievementProgress
 
     /// <summary>All-time total skill points earned</summary>
     public int TotalSkillPointsEarned { get; set; }
+
+    /// <summary>
+    /// All-time sparkle points SPENT on enhancements — the Prestige metric. Monotonic:
+    /// never reset by seasons, logout-safe via achievements.json, server-reconciled
+    /// upward from lifetime_points_spent. Re-buying seasonal nodes raises it.
+    /// </summary>
+    public long LifetimeSkillPointsSpent { get; set; }
     
     /// <summary>Avatar click count for rapid clicking detection</summary>
     public int AvatarClickCount { get; set; }

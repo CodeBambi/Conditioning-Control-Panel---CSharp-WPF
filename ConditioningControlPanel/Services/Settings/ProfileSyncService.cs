@@ -518,6 +518,8 @@ namespace ConditioningControlPanel.Services
                             ["total_bubbles_popped"] = achievementProgress?.TotalBubblesPopped ?? 0,
                             ["total_video_minutes"] = Math.Round(achievementProgress?.TotalVideoMinutes ?? 0, 1),
                             ["total_lock_cards_completed"] = achievementProgress?.TotalLockCardsCompleted ?? 0,
+                            // Prestige (advisory — server value is authoritative and monotonic)
+                            ["lifetime_points_spent"] = achievementProgress?.LifetimeSkillPointsSpent ?? 0,
                             // Quest streak data
                             ["daily_quest_streak"] = settings.DailyQuestStreak,
                             ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("o") ?? "",
@@ -612,8 +614,11 @@ namespace ConditioningControlPanel.Services
                         }
                         else if (v2Result?.SkillPoints.HasValue == true)
                         {
-                            // Take max of server/local — skill points only increase (level-ups, bubble pops)
-                            // so the higher value is always correct; prevents stale server value overwriting local level-up awards
+                            // Take max of server/local — skill points only increase (level-ups, bubble
+                            // pops) and are NEVER reset by seasons (policy: the balance is permanent;
+                            // only mechanical skills reset), so the higher value is always correct.
+                            // This also shields the balance from an older server that still zeroes
+                            // skill_points at rollover.
                             var maxPoints = Math.Max(v2Result.SkillPoints.Value, settings.SkillPoints);
                             if (maxPoints != settings.SkillPoints)
                             {
@@ -624,8 +629,11 @@ namespace ConditioningControlPanel.Services
                             }
                         }
 
-                        // Merge unlocked skills from server (union — never lose skills)
-                        if (v2Result?.UnlockedSkills != null && v2Result.UnlockedSkills.Count > 0)
+                        // Merge unlocked skills from server (union — never lose skills).
+                        // Skipped on level_reset: the rollover legitimately REMOVES mechanical
+                        // skills; union-merging here would resurrect them (the reset handler
+                        // below applies the authoritative post-rollover list instead).
+                        if (v2Result?.UnlockedSkills != null && v2Result.UnlockedSkills.Count > 0 && v2Result?.LevelReset != true)
                         {
                             var localSkills = settings.UnlockedSkills ?? new List<string>();
                             var skillsToAdd = v2Result.UnlockedSkills.Except(localSkills).ToList();
@@ -641,6 +649,13 @@ namespace ConditioningControlPanel.Services
                                 settings.UnlockedSkills = localSkills;
                                 App.Settings?.Save();
                             }
+                        }
+
+                        // Prestige: adopt the server's lifetime_points_spent when ahead (other
+                        // device / migration backfill). Monotonic — never lowered.
+                        if (v2Result?.LifetimePointsSpent != null)
+                        {
+                            App.Achievements?.ReconcileLifetimePointsSpent(v2Result.LifetimePointsSpent.Value);
                         }
 
                         // Sync oopsie insurance season usage from server
@@ -808,6 +823,21 @@ namespace ConditioningControlPanel.Services
                             // Use server's highest_level_ever (preserved across resets for permanent unlocks)
                             settings.HighestLevelEver = v2Result.User.HighestLevelEver ?? 0;
 
+                            // Seasonal skill reset: the POINT BALANCE is never reset (policy — points
+                            // persist across seasons; the max-merge above keeps the higher value).
+                            // Only the tree resets: rebuild it as server list ∪ locally-owned
+                            // PERMANENT nodes. The union half protects stat/analytics purchases
+                            // against an older server that still wipes unlocked_skills to [] at
+                            // rollover; mechanical nodes are dropped and must be re-bought
+                            // (the Prestige loop).
+                            var permanentOwned = (settings.UnlockedSkills ?? new List<string>())
+                                .Where(id => Models.SkillDefinition.PermanentIds.Contains(id));
+                            settings.UnlockedSkills = (v2Result.UnlockedSkills ?? new List<string>())
+                                .Union(permanentOwned).ToList();
+
+                            // Clear seasonal flags and tear down effects of dropped mechanical skills
+                            App.SkillTree?.OnSeasonReset();
+
                             // Season Recap: a level_reset IS the reset — flag the recap so it
                             // surfaces even mid-month (monthly rollover otherwise also triggers it
                             // via the month check). Then nudge the UI to present it now if MainWindow
@@ -901,6 +931,7 @@ namespace ConditioningControlPanel.Services
                         // XP & Progression stats
                         ["total_xp_earned"] = Math.Round(achievementProgress?.TotalXPEarned ?? 0, 0),
                         ["total_skill_points_earned"] = achievementProgress?.TotalSkillPointsEarned ?? 0,
+                        ["lifetime_points_spent"] = achievementProgress?.LifetimeSkillPointsSpent ?? 0,
                         // Time stats
                         ["total_pink_filter_minutes"] = Math.Round(achievementProgress?.TotalPinkFilterMinutes ?? 0, 1),
                         ["total_spiral_minutes"] = Math.Round(achievementProgress?.TotalSpiralMinutes ?? 0, 1),
@@ -1708,6 +1739,11 @@ namespace ConditioningControlPanel.Services
                     var sp = Convert.ToInt32(spEarned);
                     if (sp > progress.TotalSkillPointsEarned) { progress.TotalSkillPointsEarned = sp; needsSave = true; }
                 }
+                if (cloudStats.TryGetValue("lifetime_points_spent", out var lifetimeSpent))
+                {
+                    var ls = Convert.ToInt64(lifetimeSpent);
+                    if (ls > progress.LifetimeSkillPointsSpent) { progress.LifetimeSkillPointsSpent = ls; needsSave = true; }
+                }
                 if (cloudStats.TryGetValue("total_pink_filter_minutes", out var pinkMin))
                 {
                     var pm = Convert.ToDouble(pinkMin);
@@ -2047,6 +2083,19 @@ namespace ConditioningControlPanel.Services
                         merged.Add(skill);
                     settings.UnlockedSkills = merged.ToList();
                 }
+
+                // Prestige: count the spend locally, then adopt the server total when it's
+                // ahead (it already includes this purchase, so this never double-counts —
+                // reconcile only raises). Also feed the season's spend bucket for the recap.
+                var purchasedSkill = Models.SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
+                if (purchasedSkill != null)
+                {
+                    App.Achievements?.TrackSkillPointsSpent(purchasedSkill.Cost);
+                    SeasonRecapService.TrackPointsSpent(purchasedSkill.Cost);
+                }
+                if (result.LifetimePointsSpent.HasValue)
+                    App.Achievements?.ReconcileLifetimePointsSpent(result.LifetimePointsSpent.Value);
+
                 App.Settings?.Save();
 
                 App.Logger?.Information("Skill purchased via server: {SkillId}, {Points} points remaining",
@@ -2802,6 +2851,9 @@ namespace ConditioningControlPanel.Services
             [JsonProperty("level_reset")]
             public bool? LevelReset { get; set; }
 
+            [JsonProperty("lifetime_points_spent")]
+            public long? LifetimePointsSpent { get; set; }
+
             [JsonProperty("total_xp_earned")]
             public double? TotalXpEarned { get; set; }
 
@@ -2867,6 +2919,9 @@ namespace ConditioningControlPanel.Services
 
             [JsonProperty("unlocked_skills")]
             public List<string>? UnlockedSkills { get; set; }
+
+            [JsonProperty("lifetime_points_spent")]
+            public long? LifetimePointsSpent { get; set; }
         }
 
         private class ChangeDisplayNameResponse

@@ -124,6 +124,16 @@ namespace ConditioningControlPanel.Services
             s.TrackSeasonFeature(featureKey);
         }
 
+        /// <summary>Count sparkle points spent on an enhancement this season (Prestige delta).</summary>
+        public static void TrackPointsSpent(int amount)
+        {
+            if (amount <= 0) return;
+            var s = App.Settings?.Current; if (s == null) return;
+            EnsureBucket(s);
+            s.SeasonPointsSpent += amount;
+            // No Save() here — PurchaseSkillAsync saves right after adopting server values.
+        }
+
         // ---------- snapshot + rollover ----------
 
         /// <summary>
@@ -197,6 +207,12 @@ namespace ConditioningControlPanel.Services
                 IsOg = s.IsSeason0Og,
                 FeatureUse = new Dictionary<string, int>(s.SeasonFeatureUse),
                 FeaturesTotal = SeasonFeatureKeys.TotalCount,
+                // Schema 2 (Prestige / Ditzy Data PRO)
+                PeakLevel = Math.Max(s.SeasonPeakLevel, s.PlayerLevel),
+                PointsSpentSeason = s.SeasonPointsSpent,
+                LifetimePointsSpent = App.Achievements?.Progress?.LifetimeSkillPointsSpent ?? 0,
+                SkillsOwned = s.UnlockedSkills?.Count ?? 0,
+                ActiveDays = new List<string>(s.SeasonActiveDays),
             };
         }
 
@@ -209,6 +225,8 @@ namespace ConditioningControlPanel.Services
             s.SeasonPeakRank = 0;
             s.SeasonPeakRankTotal = 0;
             s.SeasonFeatureUse = new Dictionary<string, int>();
+            s.SeasonPeakLevel = 0;
+            s.SeasonPointsSpent = 0;
             s.SeasonStatsSeason = newSeasonKey;
             App.Settings?.Save();
             App.Logger?.Information("SeasonRecap: rolled season counters to {Season}", newSeasonKey);
