@@ -1,0 +1,191 @@
+# SKIA REBUILD GOAL - Windows + Linux, functionality first
+
+Created: 2026-07-02. Status: DRAFT, pending owner review. Supersedes `EXECUTION_GOAL.md`
+as the active autonomous driver once approved (that doc's goal was declared complete
+2026-06-23 and is stale). `unified-compositor-engine-goal.md` and
+`unified-compositor-engine-plan.md` remain the detail tracker for Workstreams 1-2 and are
+NOT replaced by this file.
+
+## The goal, in one paragraph
+
+Finish rebuilding the Conditioning Control Panel as an Avalonia v12 app whose every
+feature WORKS on Windows and Linux: build, launch, and run all current WPF features (or
+improved versions of them). Functionality is the contract; the implementation underneath
+is not. Old WPF code, old dependencies, and old architectural choices carry zero
+sentimental weight: replace anything if the replacement is faster, safer, or simpler,
+as long as the user-visible behavior survives or improves. All real-time visuals
+(engine mode: session effects; game mode: Chaos) render through the unified Skia
+compositor, not per-effect windows.
+
+## What matters and what does not
+
+| Matters (the contract) | Does not matter |
+|---|---|
+| Every current feature works end-to-end in the running app | Which library/dependency provides it |
+| At least as fast and smooth as WPF; low-end machines are a hard requirement | Whether the code resembles the WPF code |
+| Windows AND Linux: build, launch, features function | Matching WPF pixel-for-pixel (keep the design language, see `dashboard-design`) |
+| Overlays stay tinted glass: user keeps using the PC while conditioning runs | Keeping legacy per-effect windows |
+| Privacy/security posture never regresses (see Guardrails) | Preserving old workarounds whose reason died |
+
+"Improved" is explicitly allowed and encouraged: if a feature can be made faster, more
+reliable, or more secure with a big change, make the big change. Record what and why in
+the task board.
+
+## Rendering doctrine: Skia everywhere
+
+Avalonia v12 already renders ALL controls through Skia; standard Avalonia UI (tabs,
+dialogs, dashboard) is therefore already Skia-rendered and stays as Avalonia controls.
+The doctrine this goal adds:
+
+1. **Every animated or real-time visual effect renders as a compositor layer** in the
+   existing `CompositorEngine` (one topmost click-through window per monitor, z-ordered
+   `IAvaloniaLayer`s, one 60Hz tick). No new per-effect `Window`s. Ever.
+2. **Engine mode** (session effects: video, flash, subliminal, bouncing text, spiral,
+   brain drain, pink tint, bubbles) and **game mode** (Chaos: field FX, DVD, cascades,
+   cursor glow, banners, timers, e-stim glow, vibe trails, pop text) both target the
+   compositor. Chaos migration is a first-class workstream, not a leftover.
+3. Windows that remain windows are the INTERACTIVE surfaces only: main UI, dialogs,
+   AvatarTube, lock card, quiz/mantra/HUD-style interactive overlays. Rule of thumb: if
+   the user clicks IN it, it may be a window; if it just draws, it is a layer.
+4. Custom Skia drawing uses the established v12 primitives (`ICustomDrawOperation` +
+   `ISkiaSharpApiLeaseFeature` lease, or `CompositionCustomVisualHandler` for
+   render-thread loops). Persistent `SKImage`s, engine-owned invalidation, no per-frame
+   `SKBitmap` allocation (see `unified-compositor-engine` skill rules).
+
+## Skills to drive this goal (invoke them; do not re-derive)
+
+| Skill | When |
+|---|---|
+| `avalonia-research` | MANDATORY before any Avalonia API use, any new dependency, any bug/exception, and every Linux-specific mechanism. Also for finding faster/lighter replacements (that mandate is standing) |
+| `port-plan` | Start of every session: read trackers, pick ONE task, claim it, slice it |
+| `wpf-parity` | Before implementing: extract the WPF behavior contract; after merging main |
+| `port-feature` | The implementation workflow + WPF-to-v12 cheatsheet + verification ladder |
+| `unified-compositor-engine` | All compositor/layer/video work (Workstreams 1-3) |
+| `overlay-clickthrough` | All window ex-style, hook, hit-test, topmost work; Linux click-through design |
+| `dashboard-design` | Any user-facing surface; 5-theme reskin is part of done |
+| `port-audit` | End of every workstream and after every merge from main |
+
+## Current state (verified 2026-07-02; re-verify with `port-audit` if this doc is old)
+
+Done: full project skeleton builds (`CCP.Desktop.slnf`, 0 errors when tree is clean);
+Core tests green; UI parity matrix fully verified 2026-06-23 via Windows-head smoke test
+(44 tabs, ~34 dialogs, 12 feature popups, 5-theme reskin); Avalonia beats WPF on startup
+(~2.5s vs ~4.2s) and memory (~422MB vs ~1218MB); effect services (flash, subliminal,
+bouncing text, pink tint, spiral, brain drain, bubbles) already render as compositor
+layers; CI-style Linux/macOS builds exist as a workflow file (not active on GitHub).
+
+Open (this goal's actual work):
+- UCE video layer does not render; legacy `AvaloniaMultiMonitorVideoService` is the only
+  working video path. Audio controls and attention checks bypass the UCE path.
+- Chaos overlays (~23 window classes) are not on the compositor.
+- Avalonia mouse hook cannot swallow clicks (WPF can): bubble/flash pops leak the click
+  to the app underneath. Decide and fix, or explicitly accept and document.
+- Linux: head builds and launches in a VM, but there is ZERO click-through code
+  (`SupportsClickThrough = IsWindows`), no input hooks, no verified feature sweep.
+- Doc drift: several trackers lag the code; fix as encountered.
+
+## Workstreams, in order
+
+### WS1: Video through the compositor (Windows)
+Execute `unified-compositor-engine-plan.md` phases A-E, one unchecked task per
+iteration: prove `VideoLayer`/`MandatoryVideoLayer` render, wire audio
+(volume/device/mute), rehome attention checks, kill the per-frame `SKBitmap` alloc
+(Phase D), verify all layers over video, then flip the default and delete the legacy
+video windows (Phase E only after parity is proven by running). Freedom clause applies:
+if research shows a better decoder path than LibVLC callbacks (FFmpeg-based, GPU
+frames), it may replace LibVLC per-platform, behind the existing seams, with benchmarks.
+
+### WS2: Game mode (Chaos) onto the compositor
+Migrate the passive Chaos overlays to layers (field FX, Skia FX, flash, cascades, DVD,
+cursor glow, vibe trail, e-stim glow, banners, wave timer, pop text, announcer).
+Interactive Chaos surfaces (HUD, boon bar, toy button, unlock card, backdrop, bubbles'
+click handling) keep their input model per `overlay-clickthrough` (hook + layer
+hit-testing preferred over interactive windows where feasible). Resolve the hook
+click-swallow gap here: give `AvaloniaMouseHook` a swallow path (WPF semantics,
+including the hold-to-defuse no-swallow exception) or document acceptance. Chaos run
+must hold 60fps target / 30fps floor during heavy activity on a low-end machine.
+
+### WS3: Windows completion sweep
+`port-audit` over the whole app; every remaining effect-window candidate either becomes
+a layer, is justified as interactive, or gets a task-board row. Re-verify the parity
+matrix rows invalidated by WS1/WS2. Perf gate: `--benchmark` and `--max-benchmark` not
+worse than `docs/benchmark-optimized.json`.
+
+### WS4: Linux bring-up to feature parity
+Target: `dotnet build` + launch + full feature sweep on Linux (X11 first; Wayland
+best-effort). Per feature: make it work, improve it, or gate it gracefully (never trap
+input, never crash). Known mechanisms to research and implement via `avalonia-research`
++ `overlay-clickthrough`:
+- Click-through: XShape/XFixes input region on X11 (implement `IOverlaySurface
+  .SetClickThrough` for Linux); Wayland input regions where the compositor honors them.
+- Global mouse position/clicks for bubbles: evdev/XInput2/XRecord alternatives, or
+  fall back to interactive host-overlay input.
+- Video: system libvlc (no official Linux NuGet; document required packages), or the
+  WS1 replacement decoder if adopted.
+- Not portable by nature (wallpaper, WebView2 browser, WASAPI ducking, some hooks):
+  research a Linux-native equivalent first (e.g. layer-shell wallpaper, WebKitGTK or
+  system-browser flow, PipeWire/PulseAudio ducking); if none is proportionate, degrade
+  gracefully and record the gap.
+Verification per `docs/linux-vm-testing.md` + `build-linux.sh`; add a Linux column or
+section to the parity matrix and sweep every feature there.
+
+### WS5: Better/faster/safer replacements (standing, opportunistic)
+Any iteration may propose a replacement (dependency, decoder, IPC, storage, crypto,
+browser integration) if research shows a materially faster or more secure option. Rules:
+research first, benchmark before/after, keep the seam, one replacement per commit,
+record rationale + pin versions in the task board. A replacement that regresses Windows
+is reverted, not patched around.
+
+## Loop protocol (how an autonomous session runs this goal)
+
+1. `port-plan`: read this file, the task board, and the UCE plan; check `git status`
+   and recent log (parallel WIP exists; a red build may not be yours).
+2. Claim ONE task (append-only ledger row, claim commit).
+3. `wpf-parity` for the behavior contract; `avalonia-research` for every API touched.
+4. Implement per `port-feature` / `unified-compositor-engine` / `overlay-clickthrough`.
+5. Verify: build slnf (`-clp:ErrorsOnly`, 0 errors), Core tests (count never decreases),
+   `--smoke-test` (Debug), exercise the feature running side-by-side with WPF, 5-theme
+   sweep for UI, multi-monitor for overlays, Linux VM check for WS4 tasks.
+6. Update trackers (UCE plan checkboxes, parity matrix, task board, this file's
+   "Current state" if it materially changed). Commit `feat(av): ...` / `fix(av): ...`,
+   one task per commit, tree green.
+7. Stop conditions: a change would diverge from WPF behavior (product decision needed);
+   research contradicts project code with no safe answer; a guardrail would be crossed;
+   or the tree is broken by parallel WIP you do not own.
+
+Commands (from repo root):
+```bash
+dotnet build ConditioningControlPanel/CCP.Desktop.slnf -clp:ErrorsOnly
+dotnet test ConditioningControlPanel/tests/CCP.Core.Tests/CCP.Core.Tests.csproj
+dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj [-- --smoke-test|--benchmark|--max-benchmark]
+dotnet run --project ConditioningControlPanel/ConditioningControlPanel.csproj   # WPF reference
+# Linux (in VM, from ConditioningControlPanel/): ./build-linux.sh   (see docs/linux-vm-testing.md)
+```
+
+## Definition of Done
+
+- [ ] Video, audio controls, and attention checks run through the compositor on Windows; legacy video windows deleted (WS1 Phase E complete).
+- [ ] All passive Chaos visuals are compositor layers; a full Chaos run holds the FPS floor; hook swallow gap resolved or explicitly accepted in the task board.
+- [ ] No passive effect window remains in `CCP.Avalonia` (audited); interactive windows are justified.
+- [ ] Windows: every parity-matrix item re-verified `[x]` after WS1-3; benchmarks not worse than `benchmark-optimized.json`.
+- [ ] Linux: app builds and launches; every feature works, is improved, or degrades gracefully with a recorded gap; click-through works on X11; parity matrix has a completed Linux sweep.
+- [ ] 5-theme reskin passes everywhere; no raw loc keys; no stubs/no-ops for shipped features.
+- [ ] WPF head still builds and runs (reference until Done is signed off).
+- [ ] Trackers truthful: task board, UCE plan, parity matrix, this file.
+
+## Guardrails (non-negotiable)
+
+- Never modify the WPF head's behavior; it is the reference implementation.
+- Never delete the legacy video path before WS1 Phase E is proven by running.
+- Privacy/security never regress: webcam frames never hit disk/network; deeper-enhancement
+  validation stays (NaN/Infinity/UNC/control chars/bounds); no UNC/extended-length paths
+  for `--play`/`--edit`; subliminals stay IN screen capture by design (`WDA_NONE`);
+  keyword-highlight/brain-drain capture exclusion stays; secrets stay in the secret-store
+  seam.
+- `Microsoft.WindowsAppSDK` stays pinned (`ExcludeAssets="all"`); never removed.
+- Chokepoint files (DI registrations, `App.axaml`, csproj/slnf, loc JSON) follow the
+  swarm rules in `port-plan` when sessions run in parallel.
+- Windows never degrades to enable Linux; Linux degrades gracefully where the platform
+  genuinely cannot do a thing.
+- Out of scope for this goal: Android/macOS feature work (their builds must stay green),
+  iOS, server-side changes.

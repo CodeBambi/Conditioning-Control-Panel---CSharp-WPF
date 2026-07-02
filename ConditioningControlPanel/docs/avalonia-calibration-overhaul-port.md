@@ -1,6 +1,14 @@
 # Avalonia port: calibration / eye-tracking overhaul (merge fce9713d + dfbe20c4)
 
-Status: **NOT PORTED — requires a dedicated, webcam-verified effort.**
+Status: **NOT PORTED — blocked. Requires a dedicated, webcam-verified effort that first reconciles stack divergence.**
+
+## BLOCKED STOP (evidence-backed, gathered this session)
+The goal's BLOCKED STOP clause applies. Three concrete blockers:
+1. **Stack divergence (not a clean mirror):** the Avalonia webcam stack is NOT a pre-merge copy of the WPF one. `WebcamCalibrationData.cs` already diverged (WPF 369 lines vs Avalonia 249 lines) *before* the merge additions. So the merge changes can't be applied as a mechanical diff — the port must reconcile the existing divergence *and* layer the merge on top, across the data model, the 3083-line tracker, and the calibration window.
+2. **Unverifiable here:** the completion audit requires a live-webcam behavior comparison + a `--smoke-test` that exercises the gaze tracker. No webcam is available, so even a faithful port can't be audited complete.
+3. **Stakes + constraints:** this is the eye-tracker core. An unverified port of diverged+merged gaze math risks silent regressions, which the goal's "preserve behavior" / "no unverified narrowing" / "no dead code" constraints forbid. The feature is also atomic — the algorithm consumes IrisRange/AxisCorrection/GazeTrim that only the calibration window populates, so a partial port is either dead code or a dormant/risky branch.
+
+Full analysis of the merge diff was completed (the 13 tracking hunks + the data-model additions are mapped below), so a dedicated effort can proceed diff-in-hand.
 This is the v6.2.5 "eye tracking rebuilt" feature. It is the single largest and
 highest-stakes change in the merge (~2,000 insertions / 14 files), and it rewrites the
 per-frame gaze pipeline — the core of the eye tracker. A faithful port needs live webcam
