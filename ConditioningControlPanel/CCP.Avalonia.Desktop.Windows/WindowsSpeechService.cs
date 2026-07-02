@@ -182,6 +182,16 @@ public sealed class WindowsSpeechService : ISpeechRecognitionService, IDisposabl
         {
             var matchThreshold = options.MatchThreshold ?? SettingDouble("SpeechMatchThreshold", 0.62);
             var loudnessThreshold = options.LoudnessThreshold ?? SettingDouble("SpeechLoudnessThreshold", 0.04);
+
+            // Mic noise front-end (opt-out via settings): high-pass out AC/fan/hum rumble and gate
+            // onset on an adaptive noise floor instead of the fixed loudness threshold alone, so a hot
+            // day's AC hum self-raises the trigger point rather than tripping it. DSP lives in CCP.Core
+            // (HighPassFilter / NoiseGate). Mirrors the WPF SpeechService front-end.
+            var nsEnabled = SettingBool("SpeechNoiseSuppression", true);
+            var gateFactor = SettingDouble("SpeechNoiseGateFactor", 4.0);
+            var hpf = nsEnabled ? new HighPassFilter(SampleRate) : null;
+            var gate = nsEnabled ? new NoiseGate(gateFactor) : null;
+
             var normalizedTarget = SpeechMatching.Normalize(target);
 
             var tcs = new TaskCompletionSource<PhraseResult>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -211,7 +221,10 @@ public sealed class WindowsSpeechService : ISpeechRecognitionService, IDisposabl
                     if (hh.Length > tn)
                         score = Math.Max(score, SpeechMatching.Similarity(normalizedTarget, string.Join(' ', hh.Take(tn))));
                 }
-                var loud = peakRms >= loudnessThreshold;
+                // With the adaptive gate on, a phrase must clear whichever is higher: the fixed floor
+                // or the room-tone-scaled onset gate — so hum can't be mistaken for "said out loud".
+                var loudGate = gate != null ? Math.Max(loudnessThreshold, gate.EnterGate) : loudnessThreshold;
+                var loud = peakRms >= loudGate;
                 return new PhraseResult
                 {
                     Transcript = transcript?.Trim() ?? "",
@@ -240,11 +253,16 @@ public sealed class WindowsSpeechService : ISpeechRecognitionService, IDisposabl
                     if (Volatile.Read(ref done) != 0) return;
                     try
                     {
+                        // Strip low-frequency rumble in place BEFORE measuring RMS and before Vosk sees it.
+                        hpf?.ProcessPcm16(e.Buffer, e.BytesRecorded);
+
                         double rms = Rms(e.Buffer, e.BytesRecorded);
                         peakRms = Math.Max(peakRms, rms);
                         RaiseLevel(rms);
 
-                        if (rms >= loudnessThreshold) Volatile.Write(ref speechStarted, 1);
+                        // Speech onset: the adaptive gate tracks the room floor; falls back to the fixed threshold.
+                        bool voiced = gate != null ? gate.Update(rms) : rms >= loudnessThreshold;
+                        if (voiced) Volatile.Write(ref speechStarted, 1);
 
                         lock (recLock)
                         {
@@ -443,6 +461,18 @@ public sealed class WindowsSpeechService : ISpeechRecognitionService, IDisposabl
             var current = _settings.Current;
             var p = current?.GetType().GetProperty(name);
             if (p?.GetValue(current) is int i) return i;
+        }
+        catch { }
+        return fallback;
+    }
+
+    private bool SettingBool(string name, bool fallback)
+    {
+        try
+        {
+            var current = _settings.Current;
+            var p = current?.GetType().GetProperty(name);
+            if (p?.GetValue(current) is bool b) return b;
         }
         catch { }
         return fallback;
