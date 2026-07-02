@@ -29,8 +29,10 @@ public interface ISessionService
     bool SessionStartPanicKey { get; }
 
     event EventHandler? SessionStarted;
-    event EventHandler? SessionStopped;
+    event EventHandler<SessionStoppedEventArgs>? SessionStopped;
     event EventHandler<SessionCompletedEventArgs>? SessionCompleted;
+    event EventHandler? SessionPaused;
+    event EventHandler? SessionResumed;
     event EventHandler<SessionPhaseChangedEventArgs>? PhaseChanged;
     event EventHandler<SessionProgressEventArgs>? ProgressUpdated;
 

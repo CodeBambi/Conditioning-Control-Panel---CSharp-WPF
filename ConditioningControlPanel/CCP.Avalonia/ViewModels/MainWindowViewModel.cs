@@ -957,7 +957,7 @@ public partial class MainWindowViewModel : ObservableObject
                 UpdateStartButton();
                 StopConditioningTimeTracker();
                 _effectOrchestrator?.StopEffects();
-                _sessionLog?.EndSession(completed: false, _sessionService.ElapsedTime, 0);
+                // Session log end is owned by Core SessionService (real elapsed/XP/completed flag).
             });
         };
 
@@ -972,8 +972,6 @@ public partial class MainWindowViewModel : ObservableObject
                 _progressionService?.AddXP(e.XPEarned, XPSource.Session);
                 RefreshProgressionHeader();
                 _logger?.LogInformation("Session completed: {Name}, XP: {XP}", e.Session.Name, e.XPEarned);
-
-                _sessionLog?.EndSession(completed: true, e.Duration, e.XPEarned);
 
                 try
                 {

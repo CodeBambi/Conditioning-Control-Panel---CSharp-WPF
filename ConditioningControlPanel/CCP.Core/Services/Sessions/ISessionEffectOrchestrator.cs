@@ -13,4 +13,10 @@ public interface ISessionEffectOrchestrator
 
     /// <summary>Stop all running session effects.</summary>
     void StopEffects();
+
+    /// <summary>
+    /// Per-second scheduling hook driven by the session tick (delayed feature starts,
+    /// intermittent bubble bursts). Called only while the session is running.
+    /// </summary>
+    void TickEffects(Session session, TimeSpan elapsed);
 }

@@ -63,8 +63,9 @@ public static class BenchmarkContext
                 return;
             }
 
-            // Sample memory after the app has settled for 10 s.
-            await Task.Delay(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            // Sample memory after the app has settled for 10 s. Stay on the UI thread:
+            // the session measured below creates a DispatcherTimer that never ticks off it.
+            await Task.Delay(TimeSpan.FromSeconds(10));
             SampleMemory();
 
             // Measure idle frame rate + CPU on the main window.
@@ -112,7 +113,6 @@ public static class BenchmarkContext
         var lockCard = services.GetService<ILockCardService>();
         var popQuiz = services.GetService<IPopQuizService>();
         var bubbleCount = services.GetService<IBubbleCountService>();
-        var sessionLog = services.GetService<ISessionLogService>();
         var chaos = services.GetService<IChaosService>();
 
         // Build a session that has EVERY effect flag flipped on at MAX settings.
@@ -176,7 +176,7 @@ public static class BenchmarkContext
 
         try
         {
-            sessionLog?.BeginSession(session);
+            // Session log begin/end is owned by Core SessionService (StartSessionAsync below).
             orchestrator?.StartEffects(session);
             await sessionService.StartSessionAsync(session, cancellationToken);
 

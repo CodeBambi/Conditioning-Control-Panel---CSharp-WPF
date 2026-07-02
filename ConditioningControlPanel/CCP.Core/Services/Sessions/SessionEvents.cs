@@ -46,6 +46,23 @@ public class SessionProgressEventArgs : EventArgs
 }
 
 /// <summary>
+/// Event args raised when a session stops (both early stop and natural completion).
+/// Carries the final elapsed time captured before state reset, because
+/// <c>ISessionService.ElapsedTime</c> returns zero once the service is idle.
+/// </summary>
+public class SessionStoppedEventArgs : EventArgs
+{
+    public TimeSpan FinalElapsed { get; }
+    public bool Completed { get; }
+
+    public SessionStoppedEventArgs(TimeSpan finalElapsed, bool completed)
+    {
+        FinalElapsed = finalElapsed;
+        Completed = completed;
+    }
+}
+
+/// <summary>
 /// Event args raised when a session completes successfully.
 /// </summary>
 public class SessionCompletedEventArgs : EventArgs

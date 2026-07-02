@@ -11,7 +11,6 @@ using ConditioningControlPanel.Core.Services.Overlays;
 using ConditioningControlPanel.Core.Services.Quiz;
 using ConditioningControlPanel.Core.Services.Sessions;
 using ConditioningControlPanel.Core.Services.Settings;
-using ConditioningControlPanel.Core.Services.SessionLog;
 using ConditioningControlPanel.Core.Services.Subliminal;
 using ConditioningControlPanel.Core.Services.Video;
 using ConditioningControlPanel.Models;
@@ -40,7 +39,6 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
     private ILockCardService? _lockCard;
     private IBubbleService? _bubbles;
     private IBubbleCountService? _bubbleCount;
-    private ISessionLogService? _sessionLog;
     private IPopQuizService? _popQuiz;
 
     public AvaloniaSessionEffectOrchestrator(
@@ -62,7 +60,6 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
     private ILockCardService? LockCard => _lockCard ??= _services.GetService<ILockCardService>();
     private IBubbleService? Bubbles => _bubbles ??= _services.GetService<IBubbleService>();
     private IBubbleCountService? BubbleCount => _bubbleCount ??= _services.GetService<IBubbleCountService>();
-    private ISessionLogService? SessionLog => _sessionLog ??= _services.GetService<ISessionLogService>();
     private IPopQuizService? PopQuiz => _popQuiz ??= _services.GetService<IPopQuizService>();
 
     public void StartEffects(Session session)
@@ -71,7 +68,6 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
         var s = session.Settings;
 
         _logger?.LogInformation("Starting session effects for {SessionName}", session.Name);
-        TryRun("session log begin", () => SessionLog?.BeginSession(session));
 
         TryRun("overlay", () => Overlay?.Start());
 
@@ -98,8 +94,8 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
     {
         _logger?.LogInformation("Stopping all session effects");
 
-        // Note: session log end is handled by SessionService.SessionCompleted so we get
-        // the real duration/XP/completed flag. Stopping effects alone does not end the log.
+        // Note: session log begin/end is owned by Core SessionService so the log gets the
+        // real duration/XP/completed flag. Stopping effects alone does not end the log.
         TryRun("flash", () => Flash?.Stop());
         TryRun("video", () => Video?.Stop());
         TryRun("subliminal", () => Subliminal?.Stop());
@@ -110,6 +106,13 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
         TryRun("bubbles", () => Bubbles?.Stop());
         TryRun("pop quiz", () => PopQuiz?.Stop());
         TryRun("overlay", () => Overlay?.Stop());
+    }
+
+    public void TickEffects(Session session, TimeSpan elapsed)
+    {
+        // Seam only for now: per-tick scheduling (delayed pink/spiral/bubble starts,
+        // intermittent bubble bursts) is ported in a follow-up change.
+        _logger?.LogTrace("Session effect tick at {Elapsed} for {SessionName}", elapsed, session.Name);
     }
 
     private void TryRun(string name, Action action)

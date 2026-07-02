@@ -422,7 +422,6 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
         try
         {
             await _session.StartSessionAsync(session);
-            _sessionLog?.BeginSession(session);
 
             if (parameters?["strict_lock"]?.Value<bool>() == true)
             {
