@@ -102,6 +102,8 @@ public sealed class SettingsService : ISettingsService
                     settings.MigrateLoudnessThreshold();
                     return settings;
                 }
+
+                QuarantineCorruptSettingsFile();
             }
             else
             {
@@ -111,6 +113,7 @@ public sealed class SettingsService : ISettingsService
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not load settings");
+            QuarantineCorruptSettingsFile();
         }
 
         WasSettingsFileMissing = true;
@@ -118,6 +121,26 @@ public sealed class SettingsService : ISettingsService
         var fresh = new AppSettings();
         MergeBuiltInAwarenessPresets(fresh);
         return fresh;
+    }
+
+    /// <summary>
+    /// An unreadable settings file would otherwise be clobbered with defaults by the
+    /// first debounced save, silently destroying years of user data that may be
+    /// hand-recoverable (truncated tail, encoding glitch). Preserve a copy first.
+    /// </summary>
+    private void QuarantineCorruptSettingsFile()
+    {
+        try
+        {
+            if (!File.Exists(_settingsPath)) return;
+            var quarantinePath = _settingsPath + ".corrupt";
+            File.Copy(_settingsPath, quarantinePath, overwrite: true);
+            Log.Warning("Settings file unreadable; preserved a copy at {Path} before falling back to defaults", quarantinePath);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to preserve unreadable settings file");
+        }
     }
 
     private void MigrateAuthToken(string rawJson)
