@@ -192,6 +192,7 @@ public sealed class AvaloniaChaosService : IChaosService
                     };
                     _overlay.OnDismissed = OnOverlayClosed;
                     _overlay.Show();
+                    _tunnel?.Preload(); // warm the WebView2/three.js init under the countdown
                     _overlay.ShowCountdown(BeginRun);
 
                     ChaosEffectBannerOverlay.EnsureCreated();
@@ -664,6 +665,9 @@ public sealed class AvaloniaChaosService : IChaosService
         _state.RunTimeText = $"{(int)_state.ElapsedSec / 60}:{(int)_state.ElapsedSec % 60:00}";
         _state.ActWaveText = $"I · {_waveIndex}";
         _state.RunProgress = _state.ElapsedSec / _state.RunDurationSec;
+
+        // Fall speed tracks the pop streak (mirrors WPF ChaosModeService mid-run SetStreak).
+        try { _tunnel?.SetStreak(_state.Combo, _state.ComboMult); } catch (Exception ex) { _logger?.LogDebug("ChaosTunnel SetStreak failed: {E}", ex.Message); }
     }
 
     private void ShowDraft()
