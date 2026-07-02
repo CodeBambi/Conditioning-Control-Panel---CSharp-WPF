@@ -24,11 +24,11 @@ namespace ConditioningControlPanel.Services
     // highlighted the wrong thing (#443). Expand it via PrepareTargetWindowAction before those steps.
     internal static class CompanionTutorialPrep
     {
-        public static readonly Action<Window> ExpandBehaviourSection = w =>
+        public static readonly Action<object> ExpandBehaviourSection = o =>
         {
             try
             {
-                var ex = FindExpander(w, "SectionBehaviour");
+                var ex = FindExpander(o as Window, "SectionBehaviour");
                 if (ex != null) ex.IsExpanded = true;
             }
             catch { }
