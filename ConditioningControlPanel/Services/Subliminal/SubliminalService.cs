@@ -118,16 +118,7 @@ namespace ConditioningControlPanel.Services
 
             // Solid mode: pull any hosted cards off the shared canvas and release the host ref
             // (removing canvas children is safe mid-run — only window churn deadlocks).
-            foreach (var card in _hostedCards.ToList())
-            {
-                try
-                {
-                    card.Root.BeginAnimation(UIElement.OpacityProperty, null);
-                    ChaosBubbleHostOverlay.Remove(card.Root);
-                }
-                catch { }
-            }
-            _hostedCards.Clear();
+            RemoveHostedCard(_ => true);
             ReleaseHostRef();
 
             StopAudio();
@@ -711,14 +702,12 @@ namespace ConditioningControlPanel.Services
                 foreach (var (ox, oy) in offsets)
                 {
                     var borderText = CreateTextBlock(text, fontSize, borderColor);
-                    borderText.Tag = (ox, oy, true);
                     borderText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                     Canvas.SetLeft(borderText, centerX - borderText.DesiredSize.Width / 2 + ox);
                     Canvas.SetTop(borderText, centerY - borderText.DesiredSize.Height / 2 + oy);
                     textCanvas.Children.Add(borderText);
                 }
                 var mainText = CreateTextBlock(text, fontSize, textColor);
-                mainText.Tag = (0.0, 0.0, false);
                 mainText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 Canvas.SetLeft(mainText, centerX - mainText.DesiredSize.Width / 2);
                 Canvas.SetTop(mainText, centerY - mainText.DesiredSize.Height / 2);
@@ -784,6 +773,11 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Debug("Subliminal ShowHostedSubliminal: {E}", ex.Message);
+                // A throw after EnsureHostRef but before the storyboard began means no
+                // Completed callback will ever release a one-shot's host hold — don't strand
+                // the fullscreen host window for the rest of the app session.
+                if (!_isRunning && _hostedCards.Count == 0)
+                    ReleaseHostRef();
             }
         }
 

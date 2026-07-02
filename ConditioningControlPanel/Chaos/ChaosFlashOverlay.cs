@@ -210,38 +210,32 @@ public sealed class ChaosFlashOverlay : Window
             var hwnd = new WindowInteropHelper(this).Handle;
             if (hwnd == IntPtr.Zero) return;
 
-            int l, t, w, h;
             bool dual = App.Settings?.Current?.DualMonitorEnabled ?? true;
-            if (dual)
-            {
-                l = GetSystemMetrics(SM_XVIRTUALSCREEN);
-                t = GetSystemMetrics(SM_YVIRTUALSCREEN);
-                w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-                h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            }
-            else
-            {
-                var b = System.Windows.Forms.Screen.PrimaryScreen?.Bounds;
-                if (b is not { } pb) return;
-                l = pb.X; t = pb.Y; w = pb.Width; h = pb.Height;
-            }
-            SetWindowPos(hwnd, IntPtr.Zero, l, t, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+            var b = dual
+                ? System.Windows.Forms.SystemInformation.VirtualScreen
+                : System.Windows.Forms.Screen.PrimaryScreen?.Bounds ?? System.Drawing.Rectangle.Empty;
+            if (b.Width <= 0 || b.Height <= 0) return;
+            SetWindowPos(hwnd, IntPtr.Zero, b.X, b.Y, b.Width, b.Height, SWP_NOZORDER | SWP_NOACTIVATE);
         }
         catch (Exception ex) { App.Logger?.Debug("ChaosFlashOverlay.PlacePhysical: {E}", ex.Message); }
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        // A spanning window whose majority monitor changed gets a WM_DPICHANGED, and WPF then
+        // re-applies the ctor's primary-scale DIP size — undoing the physical stamp. Re-place
+        // after WPF finishes its own resize (Background priority).
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(PlacePhysical));
     }
 
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int WS_EX_TRANSPARENT = 0x00000020;
-    private const int SM_XVIRTUALSCREEN = 76;
-    private const int SM_YVIRTUALSCREEN = 77;
-    private const int SM_CXVIRTUALSCREEN = 78;
-    private const int SM_CYVIRTUALSCREEN = 79;
     private const uint SWP_NOZORDER = 0x0004;
     private const uint SWP_NOACTIVATE = 0x0010;
     [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hwnd, int index);
     [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
-    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int nIndex);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 }

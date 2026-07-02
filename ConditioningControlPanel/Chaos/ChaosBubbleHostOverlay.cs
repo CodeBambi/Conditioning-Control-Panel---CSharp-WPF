@@ -117,6 +117,11 @@ public sealed class ChaosBubbleHostOverlay : Window
             {
                 try
                 {
+                    // A new owner may have EnsureCreated'd between the decrement and this
+                    // deferred close running (e.g. subliminal Stop immediately followed by a
+                    // one-shot show on the same UI-thread turn). Closing then would strand the
+                    // new owner with a null _active and every Add/Place silently no-oping.
+                    if (System.Threading.Volatile.Read(ref _refCount) > 0) return;
                     var w = _active;
                     _active = null;
                     if (w != null) { w._canvas.Children.Clear(); w.Close(); }

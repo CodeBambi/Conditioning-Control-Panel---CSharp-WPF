@@ -46,6 +46,13 @@ public abstract class EffectPayload
     /// Dashboard trigger bubbles raise it so effects linger longer than the brisk chaos cadence.</summary>
     public double DurationMult { get; set; } = 1.0;
 
+    /// <summary>True when this payload was built for a dashboard "Trigger Bubble" rather than a
+    /// chaos-run bubble (set in ChaosBubbleVariants.Build). Some payloads behave differently on
+    /// the calm dashboard — e.g. video must not arm a random start segment there (#456/#458).
+    /// A per-instance flag, NOT App.Chaos.IsRunning at fire time: ambient bubbles can pop while
+    /// a chaos run happens to be active, and a run can end between spawn and pop.</summary>
+    public bool Ambient { get; set; }
+
     /// <summary>
     /// Global multiplier on time-based payload durations (flashes/overlays linger). Set &gt;1 by
     /// the darter slow-mo power-up so "images last longer" while time is slowed; restored to 1
@@ -153,7 +160,7 @@ public sealed class VideoPayload : EffectPayload
             // Only chaos caps playback at ~15s, making a random start a "random slice".
             // Dashboard trigger bubbles reuse this payload uncapped, so arming there made
             // the full mandatory video start midway (#456/#458).
-            if (App.Chaos?.IsRunning == true)
+            if (!Ambient)
                 App.Video?.ArmRandomSegment(SEGMENT_SEC);
             App.Video?.TriggerVideo(silentIfEmpty: true);
         }

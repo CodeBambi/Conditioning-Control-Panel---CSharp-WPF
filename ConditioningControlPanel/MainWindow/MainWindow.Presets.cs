@@ -1174,42 +1174,57 @@ namespace ConditioningControlPanel
         private void OnSessionLogReady(object? sender, SessionLogReadyEventArgs e)
         {
             var log = e.Log;
-            Dispatcher.BeginInvoke(() =>
-            {
-                try
-                {
-                    // A bubble-triggered bonus video can still be tearing down when the session
-                    // log arrives; its dying fullscreen surface renders as a stuck white plane
-                    // that buries the modal summary (#462). Make sure it's really gone first.
-                    try
-                    {
-                        if (App.Video?.IsPlaying == true || App.Video?.HasOpenWindows == true)
-                            App.Video.ForceCleanup(synchronous: true);
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning(ex, "Pre-summary video cleanup failed");
-                    }
+            Dispatcher.BeginInvoke(() => ShowSessionSummaryWhenClear(log, attempt: 0));
+        }
 
-                    var dialog = new SessionCompleteWindow(log)
-                    {
-                        Owner = IsLoaded ? this : null,
-                        // Pulse above any straggler topmost surface, then drop back to normal
-                        // once rendered so the summary can't pin itself over other apps.
-                        Topmost = true,
-                    };
-                    dialog.ContentRendered += (_, _) =>
-                    {
-                        dialog.Topmost = false;
-                        dialog.Activate();
-                    };
-                    dialog.ShowDialog();
-                }
-                catch (Exception ex)
+        /// <summary>
+        /// Shows the session-complete dialog once any in-flight video teardown has finished.
+        /// A bubble-triggered bonus video can still be tearing down when the session log
+        /// arrives; its dying fullscreen surface renders as a stuck white plane that buries
+        /// the modal summary (#462). A synchronous ForceCleanup here is no help — CloseAll
+        /// early-returns when a cleanup is already in flight, and synchronous LibVLC disposal
+        /// on the UI thread risks a wedge — so nudge an async cleanup and poll briefly instead.
+        /// </summary>
+        private void ShowSessionSummaryWhenClear(Models.SessionLog log, int attempt)
+        {
+            try
+            {
+                var videoBusy = App.Video?.IsPlaying == true || App.Video?.HasOpenWindows == true;
+                if (videoBusy && attempt < 15)   // 15 x 200ms = up to 3s, then show anyway
                 {
-                    App.Logger?.Error(ex, "Failed to show post-session log dialog");
+                    if (attempt == 0)
+                    {
+                        try { App.Video?.ForceCleanup(); }
+                        catch (Exception ex) { App.Logger?.Warning(ex, "Pre-summary video cleanup failed"); }
+                    }
+                    var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+                    retry.Tick += (_, _) =>
+                    {
+                        retry.Stop();
+                        ShowSessionSummaryWhenClear(log, attempt + 1);
+                    };
+                    retry.Start();
+                    return;
                 }
-            });
+
+                var dialog = new SessionCompleteWindow(log)
+                {
+                    Owner = IsLoaded ? this : null,
+                    // Pulse above any straggler topmost surface, then drop back to normal
+                    // once rendered so the summary can't pin itself over other apps.
+                    Topmost = true,
+                };
+                dialog.ContentRendered += (_, _) =>
+                {
+                    dialog.Topmost = false;
+                    dialog.Activate();
+                };
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to show post-session log dialog");
+            }
         }
         
         private void OnSessionProgressUpdated(object? sender, SessionProgressEventArgs e)

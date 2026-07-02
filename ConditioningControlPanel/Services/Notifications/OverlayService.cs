@@ -1740,7 +1740,7 @@ public class OverlayService : IDisposable
     /// Gets the actual physical pixel bounds of a monitor using Win32 APIs.
     /// This is the most reliable method for multi-monitor setups with different DPI.
     /// </summary>
-    private PhysicalScreenBounds GetPhysicalScreenBounds(System.Windows.Forms.Screen screen)
+    private PhysicalScreenBounds GetPhysicalScreenBounds(System.Windows.Forms.Screen screen, bool quiet = false)
     {
         try
         {
@@ -1763,8 +1763,11 @@ public class OverlayService : IDisposable
                         Height = monitorInfo.rcMonitor.Bottom - monitorInfo.rcMonitor.Top
                     };
 
-                    App.Logger?.Debug("Screen {Name}: Physical bounds from Win32 = ({X},{Y},{W}x{H})",
-                        screen.DeviceName, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+                    // quiet: the ReassertBounds reconciler compares every 5s — logging each
+                    // probe would be steady churn for the zero-drift common case.
+                    if (!quiet)
+                        App.Logger?.Debug("Screen {Name}: Physical bounds from Win32 = ({X},{Y},{W}x{H})",
+                            screen.DeviceName, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
 
                     return bounds;
                 }
@@ -1827,6 +1830,11 @@ public class OverlayService : IDisposable
     /// </summary>
     private void ReassertBounds()
     {
+        // While a monitor/DPI change settles, both the screen cache and the HWND rects are in
+        // flux — repositioning against stale geometry would fight the OS mid-storm (the same
+        // reason the recreate path above defers). The post-settle kick heals any drift.
+        if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed) return;
+
         foreach (var list in new[] { _pinkFilterWindows, _spiralWindows, _brainDrainBlurWindows })
         {
             foreach (var window in list.ToList())
@@ -1854,6 +1862,9 @@ public class OverlayService : IDisposable
     {
         try
         {
+            // Mid display-change storm the geometry is in flux; the post-settle kick heals drift.
+            if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed) return;
+
             var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
             if (hwnd == IntPtr.Zero) return;
             if (window.Tag is not string deviceName) return;
@@ -1861,7 +1872,7 @@ public class OverlayService : IDisposable
             var screen = App.GetAllScreensCached().FirstOrDefault(s => s.DeviceName == deviceName);
             if (screen == null) return;   // monitor unplugged — RecreateOverlays handles that case
 
-            var expected = GetPhysicalScreenBounds(screen);
+            var expected = GetPhysicalScreenBounds(screen, quiet: true);
             if (!GetWindowRect(hwnd, out var rect)) return;
 
             if (rect.Left == expected.Left && rect.Top == expected.Top &&
