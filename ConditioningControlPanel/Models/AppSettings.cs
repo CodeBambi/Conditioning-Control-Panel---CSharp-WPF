@@ -1079,6 +1079,18 @@ namespace ConditioningControlPanel.Models
             set { _subBorderColor = value ?? "#FFFFFF"; OnPropertyChanged(); }
         }
 
+        // Solid mode: render subliminal text cards as children of the ONE shared click-through
+        // host window (ChaosBubbleHostOverlay) instead of a keep-alive layered window per screen.
+        // Each subliminal keep-alive window is another full-screen layered surface contending on
+        // WPF's single render thread — part of the freeze cluster (#461). Ignored while
+        // SubliminalStealsFocus is on (the shared host is NOACTIVATE and can't steal focus).
+        private bool _subliminalSolidMode = false;
+        public bool SubliminalSolidMode
+        {
+            get => _subliminalSolidMode;
+            set { _subliminalSolidMode = value; OnPropertyChanged(); }
+        }
+
         private bool _subliminalStealsFocus = false;
         public bool SubliminalStealsFocus
         {
