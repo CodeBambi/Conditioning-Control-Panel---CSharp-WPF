@@ -1178,9 +1178,30 @@ namespace ConditioningControlPanel
             {
                 try
                 {
+                    // A bubble-triggered bonus video can still be tearing down when the session
+                    // log arrives; its dying fullscreen surface renders as a stuck white plane
+                    // that buries the modal summary (#462). Make sure it's really gone first.
+                    try
+                    {
+                        if (App.Video?.IsPlaying == true || App.Video?.HasOpenWindows == true)
+                            App.Video.ForceCleanup(synchronous: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "Pre-summary video cleanup failed");
+                    }
+
                     var dialog = new SessionCompleteWindow(log)
                     {
                         Owner = IsLoaded ? this : null,
+                        // Pulse above any straggler topmost surface, then drop back to normal
+                        // once rendered so the summary can't pin itself over other apps.
+                        Topmost = true,
+                    };
+                    dialog.ContentRendered += (_, _) =>
+                    {
+                        dialog.Topmost = false;
+                        dialog.Activate();
                     };
                     dialog.ShowDialog();
                 }

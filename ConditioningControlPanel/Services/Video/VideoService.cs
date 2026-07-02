@@ -173,6 +173,13 @@ namespace ConditioningControlPanel.Services
         public bool IsPlaying => _videoPlaying;
 
         /// <summary>
+        /// Whether any video windows still exist. Stays true through teardown after
+        /// <see cref="IsPlaying"/> has already flipped false — use this when something
+        /// must not be shown until the fullscreen surfaces are really gone (#462).
+        /// </summary>
+        public bool HasOpenWindows => _windows.Count > 0;
+
+        /// <summary>
         /// Filename (without extension) of the most recently started video. Stays set after
         /// the video ends so VideoEnded handlers can pass it to companion AI reactions.
         /// </summary>

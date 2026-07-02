@@ -1352,8 +1352,19 @@ namespace ConditioningControlPanel.Services
             if (dispatcher == null || dispatcher.HasShutdownStarted) return;
             dispatcher.BeginInvoke(new Action(() =>
             {
-                try { App.AvatarWindow?.GigglePriority(line, playSound: true, aiGenerated: aiGenerated); }
-                catch (Exception ex) { App.Logger?.Debug("AvatarWindow.GigglePriority failed: {Error}", ex.Message); }
+                try
+                {
+                    var avatar = App.AvatarWindow;
+                    if (avatar == null) return;
+                    // GigglePriority stops the speech timers and clears the queue, so an
+                    // awareness comment fired mid-ramble cut the companion off (#463).
+                    // If she's already speaking, take the normal queued path instead.
+                    if (avatar.IsSpeaking || avatar.IsSpeakingAudio)
+                        avatar.Giggle(line);
+                    else
+                        avatar.GigglePriority(line, playSound: true, aiGenerated: aiGenerated);
+                }
+                catch (Exception ex) { App.Logger?.Debug("AvatarWindow awareness line failed: {Error}", ex.Message); }
             }));
         }
 

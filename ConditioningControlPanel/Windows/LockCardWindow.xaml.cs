@@ -691,8 +691,13 @@ namespace ConditioningControlPanel
                 catch { }
             }
 
-            // Notify InteractionQueue that lock card is complete (triggers queued items)
-            App.InteractionQueue?.Complete(Services.InteractionQueueService.InteractionType.LockCard);
+            // Notify InteractionQueue that lock card is complete (triggers queued items).
+            // Only when we actually closed something: engine stop calls this as blanket
+            // cleanup, and an unconditional Complete(LockCard) here cleared whatever WAS
+            // current (e.g. an in-flight Video), letting the session summary race the
+            // video teardown (#462).
+            if (windowsToClose.Count > 0)
+                App.InteractionQueue?.Complete(Services.InteractionQueueService.InteractionType.LockCard);
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
