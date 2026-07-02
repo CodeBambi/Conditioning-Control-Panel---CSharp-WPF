@@ -47,6 +47,7 @@ namespace ConditioningControlPanel.Features
                 ChkCorruption.IsChecked = s.CorruptionMode;
                 ChkHydraLinked.IsChecked = s.HydraLinkedTiming;
                 ChkGlow.IsChecked = s.FlashGlowEnabled;
+                ChkSolidMode.IsChecked = s.FlashSolidMode;
                 ChkFlashGazePop.IsChecked = s.FlashGazePopEnabled;
                 ChkFlashGazeLinger.IsChecked = s.FlashGazeLingerEnabled;
                 SliderFlashLingerMs.Value = s.FlashGazeLingerExtensionMs;
@@ -66,6 +67,7 @@ namespace ConditioningControlPanel.Features
                 e.PropertyName == nameof(Models.AppSettings.CorruptionMode) ||
                 e.PropertyName == nameof(Models.AppSettings.HydraLinkedTiming) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGlowEnabled) ||
+                e.PropertyName == nameof(Models.AppSettings.FlashSolidMode) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazePopEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerEnabled) ||
                 e.PropertyName == nameof(Models.AppSettings.FlashGazeLingerExtensionMs))
@@ -191,6 +193,17 @@ namespace ConditioningControlPanel.Features
             if (s == null) return;
             s.FlashGlowEnabled = ChkGlow.IsChecked ?? false;
             App.Settings?.Save();
+        }
+
+        private void ChkSolidMode_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_isLoading) return;
+            var s = App.Settings?.Current;
+            if (s == null) return;
+            s.FlashSolidMode = ChkSolidMode.IsChecked ?? false;
+            App.Settings?.Save();
+            // No service bounce needed: each spawn reads the setting, so the next flash uses the
+            // new mode. Live flashes finish out on whichever renderer spawned them.
         }
     }
 }

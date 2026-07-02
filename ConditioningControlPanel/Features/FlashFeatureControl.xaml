@@ -139,6 +139,27 @@
             </StackPanel>
         </Border>
 
+        <!-- Solid mode: shared-host renderer, mirrors the Bubble Pop toggle -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,10,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="Solid mode (game friendly)" Foreground="White" FontSize="14" FontWeight="SemiBold"/>
+                    <TextBlock Text="Draws flashes on one shared overlay instead of a new window per image, so fullscreen games stop reacting to the window churn. Flashes become click-through (no mouse pop or hydra clicks) — gaze pop and stare-to-keep still work. Applies to the next flash."
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                </StackPanel>
+                <CheckBox Grid.Column="1" x:Name="ChkSolidMode"
+                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                          Checked="ChkSolidMode_Changed" Unchecked="ChkSolidMode_Changed"/>
+            </Grid>
+        </Border>
+
         <!-- Gaze interaction toggles (Phase 3). Placeholder copy; voice-pass at ship. -->
         <Border Background="{DynamicResource SurfaceBgBrush}"
                 BorderBrush="{DynamicResource GlassBorderBrush}"

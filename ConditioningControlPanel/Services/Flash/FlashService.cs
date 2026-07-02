@@ -66,6 +66,12 @@ namespace ConditioningControlPanel.Services
         private bool _isRunning;
         private bool _isBusy;
         private bool _oneShotActive; // For TriggerFlashOnce when service not running
+
+        // Solid mode: one ref-counted hold on the shared ChaosBubbleHostOverlay for the whole
+        // flash session (Start→Stop, or a one-shot burst) — NOT per flash. The host has the same
+        // keep-alive contract as every chaos overlay: creating/closing a fullscreen layered window
+        // per flash would reintroduce exactly the churn solid mode exists to remove.
+        private bool _hostRefHeld;
         private bool _noImagesWarningShown;
         
         // Audio - only ONE sound per flash event
@@ -130,11 +136,17 @@ namespace ConditioningControlPanel.Services
         {
             DispatcherHelper.RunOnUI(() =>
             {
+                bool anyHosted = false;
                 lock (_lockObj)
                 {
                     foreach (var w in _activeWindows)
-                        if (!w.IsFadingOut) ForceTopmost(w);
+                    {
+                        if (w.IsFadingOut) continue;
+                        if (w.UsesHost) anyHosted = true;   // no hwnd of its own — raise the shared host instead
+                        else ForceTopmost(w);
+                    }
                 }
+                if (anyHosted) ChaosBubbleHostOverlay.RaiseActive();
             });
         }
 
@@ -253,6 +265,7 @@ namespace ConditioningControlPanel.Services
 
             StopCurrentSound();
             CloseAllWindows();
+            ReleaseHostRef();
 
             // Release cached BitmapSource objects from the LOH on stop
             ClearImageCache();
@@ -983,6 +996,7 @@ namespace ConditioningControlPanel.Services
                             {
                                 _oneShotActive = false;
                                 StopHeartbeat();
+                                ReleaseHostRef();
                                 App.Logger?.Debug("FlashService: One-shot flash completed (all windows faded) uwu~ 🌙");
                             }
                         });
@@ -1081,20 +1095,31 @@ namespace ConditioningControlPanel.Services
                     finalY = monitor.Y + _random.Next(0, Math.Max(1, monitor.Height - geom.Height));
                 }
 
+                // SOLID MODE: no per-flash Window at all. The FlashWindow instance is created but
+                // never shown — it carries the per-flash state (lifetime CTS, gaze rect, hydra data)
+                // while the visual is a child of the ONE shared click-through host. This kills the
+                // per-flash topmost-layered-window churn that some fullscreen games react to.
+                bool useHost = settings.FlashSolidMode;
+
                 // Recycled from the pool when possible — all per-spawn state must be (re)set here.
                 // The window comes back already at geom's size (matched from the pool or freshly
                 // created at that size). NEVER assign Width/Height here: changing the size of an
                 // already-realized layered window forces a synchronous MediaContext.CompleteRender
                 // on the compositor and deadlocks the UI thread under chaos load (see AcquireFlashWindow).
                 // Left/Top is a move (no surface resize) and is safe on a live window.
-                window = AcquireFlashWindow(geom.Width, geom.Height);
+                // (A host-mode state bag has no hwnd, so sizing it is plain property storage.)
+                window = useHost
+                    ? new FlashWindow { UsesHost = true, Width = geom.Width, Height = geom.Height }
+                    : AcquireFlashWindow(geom.Width, geom.Height);
                 window.Left = finalX;
                 window.Top = finalY;
                 window.Frames = imageData.Frames;
                 window.FrameDelay = imageData.FrameDelay;
                 window.StartTime = DateTime.Now;
                 window.CurrentFrameIndex = 0;
-                window.IsClickable = settings.FlashClickable;
+                // The shared host is fully click-through (pops on it would need the global mouse
+                // hook, like bubbles) — solid-mode flashes are gaze-pop/linger only by design.
+                window.IsClickable = settings.FlashClickable && !useHost;
                 window.Background = System.Windows.Media.Brushes.Black;
                 window.IsFadingOut = false;
                 window.LifetimeCts = windowCts;
@@ -1132,6 +1157,10 @@ namespace ConditioningControlPanel.Services
                 RenderOptions.SetEdgeMode(image, EdgeMode.Aliased);
 
                 window.ImageControl = image;
+
+                // The visual root: assigned as window.Content in per-window mode, or added to the
+                // shared host canvas in solid mode (an element can't be both — one logical parent).
+                FrameworkElement content;
 
                 // Roll for lucky flash BEFORE show so we can apply visual effects
                 xpAmount = _soundPlayingForCurrentFlash ? 8 : 4;
@@ -1213,10 +1242,11 @@ namespace ConditioningControlPanel.Services
                     };
 
                     window.Background = System.Windows.Media.Brushes.Transparent;
-                    window.Content = border;
+                    content = border;
                     window.GlowEffect = glowEffect;   // tracked so SafeCloseFlashWindow can stop its animations + free the native blur target
 
-                    // Expand window to accommodate glow padding
+                    // Expand window to accommodate glow padding (in host mode this keeps the
+                    // Left/Top/Width/Height bookkeeping — the gaze rect — matching the visual).
                     var padding = blurRadius / 2;
                     window.Width += padding * 2;
                     window.Height += padding * 2;
@@ -1243,24 +1273,59 @@ namespace ConditioningControlPanel.Services
                 }
                 else
                 {
-                    window.Content = image;
+                    // In host mode the image is a Canvas child, so it needs the black backing and
+                    // explicit size a window shell would otherwise provide.
+                    content = useHost
+                        ? new Border { Background = System.Windows.Media.Brushes.Black, Child = image }
+                        : image;
                 }
 
-                window.Opacity = 0;
+                if (useHost)
+                {
+                    // Size the root to the (possibly glow-expanded) bookkeeping rect; the glow
+                    // border's own Padding re-insets the image, matching per-window layout.
+                    content.Width = window.Width;
+                    content.Height = window.Height;
+                    content.Opacity = 0;
+                    content.IsHitTestVisible = false;
+                    window.HostedRoot = content;
 
-                // Click handler + Alt+Tab hiding are wired ONCE in AcquireFlashWindow (the
-                // handler reads IsClickable per spawn) so recycled windows never stack handlers.
-                window.Cursor = settings.FlashClickable
-                    ? System.Windows.Input.Cursors.Hand
-                    : System.Windows.Input.Cursors.No;
+                    EnsureHostRef();
+                    // Flashes are the top attention layer — sit above any bubbles sharing the host.
+                    System.Windows.Controls.Panel.SetZIndex(content, 1000);
+                    // Mixed-DPI: the host renders at ONE scale; a flash on a differently-scaled
+                    // screen compensates with a LayoutTransform or it draws displaced/mis-sized
+                    // (same fix as the bubble shared host's second-screen bug).
+                    var flashDpi = monitor.DpiScale > 0 ? monitor.DpiScale : 1.0;
+                    var hostScale = ChaosBubbleHostOverlay.RenderScale;
+                    if (hostScale > 0 && Math.Abs(hostScale - flashDpi) > 0.001)
+                        content.LayoutTransform = new ScaleTransform(flashDpi / hostScale, flashDpi / hostScale);
+                    ChaosBubbleHostOverlay.Add(content);
+                    // Place takes PHYSICAL px; the bookkeeping rect is in this monitor's DIPs.
+                    ChaosBubbleHostOverlay.Place(content, window.Left * flashDpi, window.Top * flashDpi);
 
-                window.Show();
-                ApplyClickability(window, settings.FlashClickable);
-                if (!suppressHaptic)
-                    _ = App.Haptics?.FlashDecayVibeAsync();
+                    if (!suppressHaptic)
+                        _ = App.Haptics?.FlashDecayVibeAsync();
+                }
+                else
+                {
+                    window.Content = content;
+                    window.Opacity = 0;
 
-                // Force topmost even over fullscreen apps
-                ForceTopmost(window);
+                    // Click handler + Alt+Tab hiding are wired ONCE in AcquireFlashWindow (the
+                    // handler reads IsClickable per spawn) so recycled windows never stack handlers.
+                    window.Cursor = settings.FlashClickable
+                        ? System.Windows.Input.Cursors.Hand
+                        : System.Windows.Input.Cursors.No;
+
+                    window.Show();
+                    ApplyClickability(window, settings.FlashClickable);
+                    if (!suppressHaptic)
+                        _ = App.Haptics?.FlashDecayVibeAsync();
+
+                    // Force topmost even over fullscreen apps
+                    ForceTopmost(window);
+                }
 
                 lock (_lockObj)
                 {
@@ -1275,7 +1340,17 @@ namespace ConditioningControlPanel.Services
                 try { windowCts.Dispose(); } catch { }
                 if (window != null)
                 {
-                    try { window.LifetimeCts = null; window.Close(); } catch { }
+                    try
+                    {
+                        if (window.HostedRoot != null)
+                        {
+                            ChaosBubbleHostOverlay.Remove(window.HostedRoot);
+                            window.HostedRoot = null;
+                        }
+                        window.LifetimeCts = null;
+                        if (!window.UsesHost) window.Close();
+                    }
+                    catch { }
                 }
                 return;
             }
@@ -1470,7 +1545,9 @@ namespace ConditioningControlPanel.Services
             {
                 try
                 {
-                    if (!window.IsLoaded || !window.IsVisible)
+                    // Host-mode flashes have no hwnd — alive means their visual is still on the
+                    // shared canvas. Per-window flashes keep the loaded/visible liveness check.
+                    if (window.UsesHost ? window.HostedRoot == null : (!window.IsLoaded || !window.IsVisible))
                     {
                         toRemove.Add(window);
                         continue;
@@ -1480,17 +1557,17 @@ namespace ConditioningControlPanel.Services
                     var showThisWindow = DateTime.Now < window.ExpiresAt && !window.IsFadingOut;
                     var targetAlpha = showThisWindow ? maxAlpha : 0.0;
 
-                    // Fade in/out per-window~ uwu
-                    var currentAlpha = window.Opacity;
+                    // Fade in/out per-window~ uwu (VisualOpacity routes to the hosted root in solid mode)
+                    var currentAlpha = window.VisualOpacity;
                     if (targetAlpha > currentAlpha)
                     {
-                        window.Opacity = Math.Min(targetAlpha, currentAlpha + fadeStep);
+                        window.VisualOpacity = Math.Min(targetAlpha, currentAlpha + fadeStep);
                     }
                     else if (targetAlpha < currentAlpha)
                     {
                         var newAlpha = Math.Max(0.0, currentAlpha - fadeStep);
-                        window.Opacity = newAlpha;
-                        
+                        window.VisualOpacity = newAlpha;
+
                         if (newAlpha <= 0)
                         {
                             toRemove.Add(window);
@@ -1588,7 +1665,8 @@ namespace ConditioningControlPanel.Services
                         Y = (int)(screen.Bounds.Y / dpiScale),
                         Width = (int)(screen.Bounds.Width / dpiScale),
                         Height = (int)(screen.Bounds.Height / dpiScale),
-                        IsPrimary = screen.Primary
+                        IsPrimary = screen.Primary,
+                        DpiScale = dpiScale
                     });
                 }
             }
@@ -2233,6 +2311,19 @@ namespace ConditioningControlPanel.Services
                     window.GlowEffect = null;
                 }
 
+                // Solid mode: just detach the visual from the shared canvas — there is no hwnd to
+                // hide/close/pool, and the host itself stays alive (see EnsureHostRef/ReleaseHostRef).
+                if (window.UsesHost)
+                {
+                    if (window.HostedRoot != null)
+                    {
+                        ChaosBubbleHostOverlay.Remove(window.HostedRoot);
+                        window.HostedRoot = null;
+                    }
+                    window.IsFadingOut = false;
+                    return;
+                }
+
                 window.Content = null;
                 window.Effect = null;   // belt-and-suspenders: ensure no effect render-target lingers on the pooled shell
                 window.IsFadingOut = false;
@@ -2274,6 +2365,24 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger.Debug("Could not hide window from Alt+Tab: {Error}", ex.Message);
             }
+        }
+
+        /// <summary>Take the flash session's single reference on the shared host (UI thread; the
+        /// create is synchronous there, so the host is placeable in the same spawn tick).</summary>
+        private void EnsureHostRef()
+        {
+            if (_hostRefHeld) return;
+            _hostRefHeld = true;
+            ChaosBubbleHostOverlay.EnsureCreated();
+        }
+
+        /// <summary>Release the session's host reference (Stop, or one-shot fully faded). The host
+        /// only actually closes when no other owner (chaos run, ambient bubbles) still holds it.</summary>
+        private void ReleaseHostRef()
+        {
+            if (!_hostRefHeld) return;
+            _hostRefHeld = false;
+            ChaosBubbleHostOverlay.CloseActive();
         }
 
         private void ForceTopmost(Window window)
@@ -2346,6 +2455,32 @@ namespace ConditioningControlPanel.Services
         public int CurrentFrameIndex { get; set; }
         public Image? ImageControl { get; set; }
         public bool IsClickable { get; set; }
+
+        /// <summary>
+        /// Solid mode: this instance is never Show()n — it stays a pure state bag (lifetime CTS,
+        /// gaze bookkeeping, hydra data; Left/Top/Width/Height hold the DIP rect as plain values)
+        /// while the visual lives as <see cref="HostedRoot"/> on the shared ChaosBubbleHostOverlay
+        /// canvas. Keeping the FlashWindow shape means GazeFocusService, hydra and the heartbeat
+        /// all work unchanged in both modes.
+        /// </summary>
+        public bool UsesHost { get; set; }
+
+        /// <summary>Solid mode only: the visual on the shared host canvas (null once torn down).</summary>
+        public FrameworkElement? HostedRoot { get; set; }
+
+        /// <summary>
+        /// The fade alpha the heartbeat animates: window Opacity in per-window mode, the hosted
+        /// root's Opacity in solid mode (an unshown Window's Opacity renders nothing).
+        /// </summary>
+        public double VisualOpacity
+        {
+            get => UsesHost ? (HostedRoot?.Opacity ?? 0.0) : Opacity;
+            set
+            {
+                if (UsesHost) { if (HostedRoot != null) HostedRoot.Opacity = value; }
+                else Opacity = value;
+            }
+        }
 
         /// <summary>
         /// The lucky/sparkle glow effect applied this spawn, if any. Held so the pool-return path
@@ -2443,7 +2578,8 @@ namespace ConditioningControlPanel.Services
         public void SetGazeDwellProgress(double t01)
         {
             if (IsFadingOut) return;
-            if (Content is not FrameworkElement fe) return;
+            var fe = UsesHost ? HostedRoot : Content as FrameworkElement;
+            if (fe == null) return;
             var clamped = Math.Max(0.0, Math.Min(1.0, t01));
             var scale = 1.0 + clamped * 0.10;
             // Reuse an existing ScaleTransform if SetGazeDwellProgress put one
@@ -2487,6 +2623,13 @@ namespace ConditioningControlPanel.Services
         public int Width { get; set; }
         public int Height { get; set; }
         public bool IsPrimary { get; set; }
+
+        /// <summary>
+        /// DPI scale of the physical screen these DIP bounds were derived from. Solid mode needs it
+        /// to convert flash DIPs back to physical px for ChaosBubbleHostOverlay.Place, and to build
+        /// the per-child LayoutTransform when this screen's scale differs from the host's render scale.
+        /// </summary>
+        public double DpiScale { get; set; } = 1.0;
     }
 
     /// <summary>

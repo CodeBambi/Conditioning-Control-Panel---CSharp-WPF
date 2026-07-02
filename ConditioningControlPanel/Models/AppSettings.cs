@@ -701,6 +701,18 @@ namespace ConditioningControlPanel.Models
             set { _flashGlowEnabled = value; OnPropertyChanged(); }
         }
 
+        // Solid mode: render flashes as children of the ONE shared click-through host window
+        // (ChaosBubbleHostOverlay) instead of one topmost layered window per flash. The per-flash
+        // window churn near screen centre is what some fullscreen games (e.g. Overwatch) react
+        // badly to — the same reason bubble solid mode exists. Solid-mode flashes are click-through
+        // (no mouse pop/hydra clicks); gaze-pop and stare-linger still work.
+        private bool _flashSolidMode = false;
+        public bool FlashSolidMode
+        {
+            get => _flashSolidMode;
+            set { _flashSolidMode = value; OnPropertyChanged(); }
+        }
+
         private int _flashDuration = 5; // Duration in seconds when audio is disabled (1-30)
         public int FlashDuration
         {
