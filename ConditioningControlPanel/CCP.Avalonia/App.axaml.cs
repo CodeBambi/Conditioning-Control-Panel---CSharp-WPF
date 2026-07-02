@@ -18,6 +18,7 @@ using ConditioningControlPanel.Core.Services.Overlays;
 using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.Roadmap;
 using ConditioningControlPanel.Core.Services.Moderation;
+using ConditioningControlPanel.Core.Services.Scheduler;
 using ConditioningControlPanel.Avalonia.Chaos;
 using ConditioningControlPanel.Avalonia.Services.Theme;
 using ConditioningControlPanel.Core.Localization;
@@ -304,6 +305,18 @@ public partial class App : Application
                         }
                     };
                     dashboardWindow.Opened += applyLaunchBehaviors;
+
+                    // Arm the scheduler engine: 30s window checks after a 60s grace
+                    // period (WPF MainWindow.xaml.cs:443-465). Auto start/stop decisions
+                    // are handled by MainWindowViewModel.WireSchedulerAndRampEvents.
+                    // Guarded by the same isHarnessRun check as the launch behaviors:
+                    // smoke/benchmark own the start/stop lifecycle, and a scheduler
+                    // auto-start would skew their assertions and measurements.
+                    if (dashboardWindow.DataContext is MainWindowViewModel schedulerVm)
+                    {
+                        Services.GetService<ISchedulerService>()
+                            ?.Start(() => schedulerVm.IsEngineRunning);
+                    }
                 }
             }
             else if (ApplicationLifetime is ISingleViewApplicationLifetime singleViewPlatform)

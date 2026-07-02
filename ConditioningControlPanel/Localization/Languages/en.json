@@ -4625,5 +4625,10 @@
   "msg_import_failed": "Import failed.",
   "menu_start_normally": "Start normally",
   "menu_jump_right_in": "Jump right in (randomize + start)",
-  "tooltip_start_options": "Start options"
+  "tooltip_start_options": "Start options",
+  "notif_scheduler_active_title": "Scheduler Active",
+  "notif_scheduler_autostarted_body": "Session auto-started based on schedule.",
+  "notif_scheduler_title": "Scheduler",
+  "notif_scheduler_ended_body": "Scheduled session ended.",
+  "notif_ramp_finished_body": "Intensity ramp finished. Stopping..."
 }

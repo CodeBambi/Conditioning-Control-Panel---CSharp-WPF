@@ -67,7 +67,7 @@ using ConditioningControlPanel.Core.Services.Subliminal;
 using ConditioningControlPanel.Core.Services.Video;
 using ConditioningControlPanel.Core.Services.Webcam;
 using ConditioningControlPanel.Core.Services.BlinkTrainer;
-using ConditioningControlPanel.Core.Services.Sessions;
+using ConditioningControlPanel.Core.Services.Scheduler;
 using ConditioningControlPanel.Core.Services.Update;
 using ConditioningControlPanel.Core.Services.Catalogue;
 using ConditioningControlPanel.Core.Services.Chaos;
@@ -220,6 +220,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SessionFileService>();
         services.AddSingleton<ISessionManager, SessionManager>();
         services.AddSingleton<ISessionService, SessionService>();
+        services.AddSingleton<ISchedulerService, SchedulerService>();
+        services.AddSingleton<IIntensityRampService, IntensityRampService>();
         services.AddSingleton<IRoadmapService, AvaloniaRoadmapService>();
         services.AddSingleton<IQuestService, QuestService>();
         services.AddSingleton<IQuestDefinitionService, QuestDefinitionService>();

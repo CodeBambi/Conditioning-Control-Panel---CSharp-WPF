@@ -19,6 +19,7 @@ using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Companion;
+using ConditioningControlPanel.Core.Services.Scheduler;
 using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Core.Services.Sessions;
 using ConditioningControlPanel.Core.Services.SessionLog;
@@ -58,6 +59,8 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly IAudioPlayer? _audioPlayer;
     private readonly ISfxPlayer? _sfxPlayer;
     private readonly IMultiMonitorVideoService? _multiMonitor;
+    private readonly ISchedulerService? _schedulerService;
+    private readonly IIntensityRampService? _intensityRamp;
 
     private string? _lastBrowserUrl;
     private DispatcherTimer? _clockTimer;
@@ -118,11 +121,14 @@ public partial class MainWindowViewModel : ObservableObject
         _audioPlayer = services.GetService<IAudioPlayer>();
         _sfxPlayer = services.GetService<ISfxPlayer>();
         _multiMonitor = services.GetService<IMultiMonitorVideoService>();
+        _schedulerService = services.GetService<ISchedulerService>();
+        _intensityRamp = services.GetService<IIntensityRampService>();
 
         InitializeTabs();
         UpdateHeaderFromSettings();
         InitializeHeaderRow1();
         WireSessionEvents();
+        WireSchedulerAndRampEvents();
         StartUiTimers();
         RegisterGlobalHotkeys();
         SubscribeProgressionEvents();
@@ -965,6 +971,15 @@ public partial class MainWindowViewModel : ObservableObject
                 _skillTreeService?.Start();
                 if (_sessionService.CurrentSession is { } session)
                     _effectOrchestrator?.StartEffects(session);
+                // Manual intensity ramp also runs during preset sessions (WPF starts the
+                // engine, and with it the ramp, on the preset path too,
+                // MainWindow.Presets.cs:1136-1142 -> StartStop.cs:244-247). Visual writes
+                // stay suppressed while the session is active (session Lerp ramps own the
+                // visuals); audio links and the ramp clock still apply. StartRamp is
+                // idempotent, so a preset joining a live engine-only run keeps the
+                // original user baselines.
+                if (_settingsService?.Current?.IntensityRampEnabled == true)
+                    _intensityRamp?.StartRamp();
             });
         };
 
@@ -981,6 +996,11 @@ public partial class MainWindowViewModel : ObservableObject
                 // engine exactly once per session end.
                 if (!e.Completed)
                     _effectOrchestrator?.StopEffects();
+                // Stop the manual ramp and restore its baselines. This runs AFTER
+                // SessionSettingsScope.Restore (SessionService restores before raising
+                // SessionStopped); IntensityRampService.StopRamp documents why that
+                // ordering cannot clobber the restored user settings.
+                _intensityRamp?.StopRamp();
                 // Session log end is owned by Core SessionService (real elapsed/XP/completed flag).
             });
         };
@@ -1049,6 +1069,65 @@ public partial class MainWindowViewModel : ObservableObject
         if (_sessionLog != null)
         {
             _sessionLog.LogReady += OnSessionLogReady;
+        }
+    }
+
+    /// <summary>
+    /// Scheduler auto start/stop and manual-ramp completion, WPF parity:
+    /// CheckSchedulerOnStartup / SchedulerTimer_Tick (MainWindow.StartStop.cs:507-585)
+    /// and RampTimer_Tick's EndSessionOnRampComplete branch (StartStop.cs:492-500).
+    /// Auto-started runs route through the ENGINE-ONLY path: WPF StartEngine never
+    /// starts a preset session. The scheduler service itself is armed by App.axaml.cs
+    /// after the launch behaviors, and never for harness runs.
+    /// </summary>
+    private void WireSchedulerAndRampEvents()
+    {
+        if (_schedulerService != null)
+        {
+            _schedulerService.AutoStartRequested += (_, e) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    // WPF order: minimize to tray, notify, StartEngine
+                    // (MainWindow.StartStop.cs:519-524). The tray icon is always shown
+                    // in the Avalonia head, so hiding the window IS minimize-to-tray.
+                    if (e.MinimizeToTray)
+                        GetMainWindow()?.Hide();
+                    AddNotification(Loc.Get("notif_scheduler_active_title"),
+                        Loc.Get("notif_scheduler_autostarted_body"));
+                    StartEngineOnlyRun();
+                });
+            };
+
+            _schedulerService.AutoStopRequested += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    // Engine-only stop: StopEngineOnlyRun no-ops while a preset session
+                    // is live, so the scheduler can never kill a preset that took over
+                    // the run mid-window (WPF only stops sessions it started,
+                    // MainWindow.StartStop.cs:567).
+                    StopEngineOnlyRun();
+                    AddNotification(Loc.Get("notif_scheduler_title"),
+                        Loc.Get("notif_scheduler_ended_body"));
+                });
+            };
+        }
+
+        if (_intensityRamp != null)
+        {
+            _intensityRamp.RampCompleted += (_, _) =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    // WPF RampTimer_Tick auto-stop (MainWindow.StartStop.cs:492-500):
+                    // tray notification, then StopEngine. The service only raises this
+                    // when no preset session is active.
+                    AddNotification(Loc.Get("dialog_session_complete"),
+                        Loc.Get("notif_ramp_finished_body"));
+                    StopEngineOnlyRun();
+                });
+            };
         }
     }
 
@@ -1400,6 +1479,10 @@ public partial class MainWindowViewModel : ObservableObject
 
                 if (!confirmed) return;
 
+                // A manual stop inside the scheduled window escapes the scheduler for
+                // the rest of the window (WPF MainWindow.StartStop.cs:92-97).
+                _schedulerService?.NotifyManualStop();
+
                 // UI state (buttons, tracker, effects) resets in the SessionStopped handler.
                 _sessionService.StopSession(completed: false);
                 return;
@@ -1407,6 +1490,7 @@ public partial class MainWindowViewModel : ObservableObject
 
             // Engine-only run stops silently: WPF shows a confirmation only when a preset
             // session is live (MainWindow.StartStop.cs:47-98).
+            _schedulerService?.NotifyManualStop();
             StopEngineOnlyRun();
             return;
         }
@@ -1414,6 +1498,9 @@ public partial class MainWindowViewModel : ObservableObject
         // Plain START with no preset selected is an ENGINE-ONLY run in WPF
         // (BtnStart_Click -> StartEngine, MainWindow.StartStop.cs:99-104): no session
         // lifecycle, no duration cap, no XP, no completion window.
+        // A manual START clears the scheduler's one-stop escape flag; WPF clears it
+        // only on this button, not on the start-menu shortcuts (StartStop.cs:101-103).
+        _schedulerService?.NotifyManualStart();
         StartEngineOnlyRun();
     }
 
@@ -1446,6 +1533,11 @@ public partial class MainWindowViewModel : ObservableObject
             // Reuse the settings->session fan-out so the orchestrator starts exactly
             // the services the live settings enable.
             _effectOrchestrator.StartEffects(Session.QuickStartFromSettings(settings));
+
+            // Manual intensity ramp starts with the engine (WPF StartEngine,
+            // MainWindow.StartStop.cs:244-247).
+            if (settings.IntensityRampEnabled)
+                _intensityRamp?.StartRamp();
 
             _isEngineOnlyRun = true;
             IsEngineRunning = true;
@@ -1483,6 +1575,10 @@ public partial class MainWindowViewModel : ObservableObject
         {
             _logger?.LogWarning(ex, "Failed to stop engine-only effects");
         }
+
+        // Stop the ramp timer and restore its baselines (WPF StopEngine,
+        // MainWindow.StartStop.cs:333).
+        _intensityRamp?.StopRamp();
 
         IsEngineRunning = false;
         UpdateStartButton();
