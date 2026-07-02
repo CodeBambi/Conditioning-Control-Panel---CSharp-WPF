@@ -96,6 +96,7 @@ public sealed class SettingsService : ISettingsService
                     MigrateKeywordTriggerActions(settings);
                     MergeBuiltInAwarenessPresets(settings);
                     settings.MigrateFromContentModeToMod();
+                    settings.MigrateLoudnessThreshold();
                     return settings;
                 }
             }

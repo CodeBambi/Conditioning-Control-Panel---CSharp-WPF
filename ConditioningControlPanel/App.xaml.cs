@@ -1162,6 +1162,17 @@ namespace ConditioningControlPanel
 
             splash.SetProgress(0.2, "Loading settings...");
 
+            // Back the Core secure-store seams with the WPF DPAPI stores BEFORE the
+            // settings load: AppSettings.AuthToken/OpenRouterApiKey route through these
+            // (they were no-op stubs after the model collapse, which silently broke
+            // token/API-key persistence).
+            Core.Services.SecureAuthTokenStore.Wire(
+                Services.SecureAuthTokenStore.Retrieve,
+                Services.SecureAuthTokenStore.Store);
+            Core.Services.SecureApiKeyStore.Wire(
+                Services.SecureApiKeyStore.Retrieve,
+                Services.SecureApiKeyStore.Store);
+
             // Initialize services
             Settings = new SettingsService();
 

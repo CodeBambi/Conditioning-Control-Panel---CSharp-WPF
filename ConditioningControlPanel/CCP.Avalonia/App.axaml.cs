@@ -98,6 +98,25 @@ public partial class App : Application
             Services = serviceCollection.BuildServiceProvider();
             Tutorial = new Avalonia.Services.Tutorial.AvaloniaTutorialService();
 
+            // Back the Core secure-store seams (AppSettings.AuthToken / OpenRouterApiKey)
+            // with ISecretStore BEFORE anything resolves ISettingsService; unwired they
+            // are no-op stubs and login/API-key values silently fail to persist.
+            var secretStore = Services.GetRequiredService<ISecretStore>();
+            ConditioningControlPanel.Core.Services.SecureAuthTokenStore.Wire(
+                () => secretStore.Retrieve("auth_token") is { Length: > 0 } b ? System.Text.Encoding.UTF8.GetString(b) : null,
+                v =>
+                {
+                    if (string.IsNullOrEmpty(v)) secretStore.Delete("auth_token");
+                    else secretStore.Store("auth_token", System.Text.Encoding.UTF8.GetBytes(v));
+                });
+            ConditioningControlPanel.Core.Services.SecureApiKeyStore.Wire(
+                () => secretStore.Retrieve("openrouter_api_key") is { Length: > 0 } b ? System.Text.Encoding.UTF8.GetString(b) : null,
+                v =>
+                {
+                    if (string.IsNullOrEmpty(v)) secretStore.Delete("openrouter_api_key");
+                    else secretStore.Store("openrouter_api_key", System.Text.Encoding.UTF8.GetBytes(v));
+                });
+
             // Allow command-line/benchmark runs to point at the user's media folder
             // without opening the settings UI.
             if (!string.IsNullOrWhiteSpace(OverrideAssetsPath))
@@ -122,6 +141,19 @@ public partial class App : Application
             // Wire the static Core App stub so copied model code can reach settings.
             CoreApp.Services = Services;
             CoreApp.SkillTree.Start();
+
+            // One-shot settings migrations WPF runs at startup (App.xaml.cs). Must run
+            // before anything reads the migrated fields (Flash UI, GazeFocusService).
+            try
+            {
+                var migrationSettings = Services.GetRequiredService<ISettingsService>();
+                migrationSettings.Current.RunFlashClickableDecouplingMigration();
+                migrationSettings.Save();
+            }
+            catch (Exception ex)
+            {
+                Log.Logger?.Warning(ex, "Settings migration failed (non-fatal, defaults apply)");
+            }
 
             // Initialize localization before any UI is created so {loc:Str} bindings resolve.
             LocalizationManager.Instance.Initialize(CoreApp.Settings.Current?.Language ?? "en");
@@ -189,6 +221,13 @@ public partial class App : Application
 
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
+                // Centralized persistence flush. Every exit path funnels through
+                // desktop.Shutdown() (Exit menu, tray Exit, panic-key double press,
+                // OS logoff), but only the Exit menu flushed settings, and nothing
+                // disposed the achievement/quest services, losing up to 30s of dirty
+                // counters that WPF preserves via OnExit disposal.
+                desktop.Exit += (_, _) => FlushPersistentState();
+
                 desktop.MainWindow = desktop.Args switch
                 {
                     var a when a != null && a.Contains("--audio-spike") => new AudioSpikeWindow(),
@@ -273,6 +312,31 @@ public partial class App : Application
             }
             catch { }
         }
+    }
+
+    private static bool _stateFlushed;
+
+    /// <summary>
+    /// Flush all debounce/interval-saved persistent state. Runs on desktop lifetime
+    /// Exit so every shutdown path is covered; safe to call more than once.
+    /// </summary>
+    private static void FlushPersistentState()
+    {
+        if (_stateFlushed) return;
+        _stateFlushed = true;
+
+        try { Services?.GetService<ISettingsService>()?.SaveImmediate(); }
+        catch (Exception ex) { Log.Logger?.Warning(ex, "Settings flush on exit failed"); }
+
+        try { (Services?.GetService<IAchievementService>() as IDisposable)?.Dispose(); }
+        catch (Exception ex) { Log.Logger?.Warning(ex, "Achievement flush on exit failed"); }
+
+        try { (Services?.GetService<IQuestService>() as IDisposable)?.Dispose(); }
+        catch (Exception ex) { Log.Logger?.Warning(ex, "Quest flush on exit failed"); }
+
+        // Parity with WPF OnExit: drop decrypted secrets from memory.
+        ConditioningControlPanel.Core.Services.SecureAuthTokenStore.ClearMemoryCache();
+        ConditioningControlPanel.Core.Services.SecureApiKeyStore.ClearMemoryCache();
     }
 
     private static void RestoreMainWindow(Window? window)
