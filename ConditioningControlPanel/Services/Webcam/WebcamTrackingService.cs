@@ -1985,44 +1985,12 @@ namespace ConditioningControlPanel.Services
                 // projected to the same clamped extreme and the cursor sat
                 // pinned at a screen edge ("locked to the sides").
                 const double IrisClampMarginFrac = 0.35;
-                double mMinX = IrisClampMarginFrac, mMaxX = IrisClampMarginFrac;
-                double mMinY = IrisClampMarginFrac, mMaxY = IrisClampMarginFrac;
-
-                // Lighting asymmetry (declared in the calibration's step-0
-                // picker): one-sided light compresses the measured iris
-                // deviation toward the shadow side, so the calibrated range
-                // under-covers it — the clamp then saturates early and the
-                // user can't reach the far side of the screen. Widen the
-                // margin on the shadow side only. Which iris-sign maps to
-                // that screen side comes from the polynomial's linear terms
-                // (∂x/∂ix, ∂y/∂iy), so this is mirror-agnostic.
-                if (Calibration?.LightSource is { Length: > 0 } lightSrc
-                    && Calibration?.Polynomial is { } lp
-                    && lp.X.Length >= 3 && lp.Y.Length >= 3)
-                {
-                    const double ShadowMarginFrac = 0.60;
-                    bool xGrows = lp.X[1] >= 0;   // screen-x increases with irisDx
-                    bool yGrows = lp.Y[2] >= 0;   // screen-y increases with irisDy
-                    switch (lightSrc)
-                    {
-                        case "right":  // light user-right → weak toward screen-left
-                            if (xGrows) mMinX = ShadowMarginFrac; else mMaxX = ShadowMarginFrac;
-                            break;
-                        case "left":   // light user-left → weak toward screen-right
-                            if (xGrows) mMaxX = ShadowMarginFrac; else mMinX = ShadowMarginFrac;
-                            break;
-                        case "top":    // overhead → brow shadow, weak looking down
-                            if (yGrows) mMaxY = ShadowMarginFrac; else mMinY = ShadowMarginFrac;
-                            break;
-                    }
-                }
-
                 double spanX = Math.Max(1e-6, range.MaxX - range.MinX);
                 double spanY = Math.Max(1e-6, range.MaxY - range.MinY);
-                smoothDx = Math.Max(range.MinX - spanX * mMinX,
-                           Math.Min(range.MaxX + spanX * mMaxX, smoothDx));
-                smoothDy = Math.Max(range.MinY - spanY * mMinY,
-                           Math.Min(range.MaxY + spanY * mMaxY, smoothDy));
+                smoothDx = Math.Max(range.MinX - spanX * IrisClampMarginFrac,
+                           Math.Min(range.MaxX + spanX * IrisClampMarginFrac, smoothDx));
+                smoothDy = Math.Max(range.MinY - spanY * IrisClampMarginFrac,
+                           Math.Min(range.MaxY + spanY * IrisClampMarginFrac, smoothDy));
             }
 
             var screenPoint = ProjectGazeToScreen(smoothDx, smoothDy);

@@ -80,11 +80,6 @@ namespace ConditioningControlPanel
         // no re-entrancy.
         private readonly TaskCompletionSource<bool> _introDone =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
-        // Step-0 lighting picker: "left"/"right"/"top"/"front"/"back" or ""
-        // (skipped). Feeds the shadow-side weight floor in the fit and is
-        // stamped into the calibration for the runtime clamp asymmetry.
-        private TaskCompletionSource<string?>? _lightDone;
-        private string _lightChoice = "";
         private Storyboard? _ringPulse;
         private bool _ringIsFull;
         // Index of the dot currently being sampled. Read by OnRawIris so
@@ -122,38 +117,17 @@ namespace ConditioningControlPanel
             // that will never fire.
             App.Webcam.OnTrackingStateChanged += OnWebcamStateChanged;
 
+            // Show the intro overlay first so users know what's coming —
+            // the dot grid + validation checks are otherwise a surprise.
+            // DotCanvas / StatusPanel stay hidden until the user clicks
+            // Continue (or presses ESC, which cancels).
             DotCanvas.Visibility = Visibility.Collapsed;
             StatusPanel.Visibility = Visibility.Collapsed;
-            // Surface the blink-shortcut hint while the user is reading the
-            // pre-calibration panels (and again on the verify panel) — but
-            // not during the dot grid, where it would sit over the top-row
-            // dots.
-            ShortcutHintBanner.Visibility = Visibility.Visible;
-
-            // Step 0 (skippable): lighting picker. Preselect the remembered
-            // choice so returning users can just confirm with one click.
-            HighlightLightTile(App.Settings?.Current?.WebcamLightSource ?? "");
-            _lightDone = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            LightSourcePanel.Visibility = Visibility.Visible;
-            var light = await _lightDone.Task;
-            LightSourcePanel.Visibility = Visibility.Collapsed;
-            if (_cancelled) return;
-            _lightChoice = light ?? "";
-            if (!string.IsNullOrEmpty(_lightChoice))
-            {
-                var s = App.Settings?.Current;
-                if (s != null && s.WebcamLightSource != _lightChoice)
-                {
-                    s.WebcamLightSource = _lightChoice;
-                    App.Settings?.Save();
-                }
-            }
-
-            // Then the intro overlay so users know what's coming — the dot
-            // grid + validation checks are otherwise a surprise. DotCanvas /
-            // StatusPanel stay hidden until the user clicks Continue (or
-            // presses ESC, which cancels).
             IntroPanel.Visibility = Visibility.Visible;
+            // Surface the blink-shortcut hint while the user is reading the
+            // intro (and again on the verify panel) — but not during the dot
+            // grid, where it would sit over the top-row dots.
+            ShortcutHintBanner.Visibility = Visibility.Visible;
 
             var proceed = await _introDone.Task;
             if (!proceed || _cancelled) return;
@@ -179,29 +153,6 @@ namespace ConditioningControlPanel
             _introDone.TrySetResult(true);
         }
 
-        private void BtnLightPick_Click(object sender, RoutedEventArgs e)
-        {
-            var tag = (sender as FrameworkElement)?.Tag as string;
-            if (string.IsNullOrEmpty(tag)) return;
-            HighlightLightTile(tag);
-            _lightDone?.TrySetResult(tag);
-        }
-
-        private void BtnLightSkip_Click(object sender, RoutedEventArgs e)
-            => _lightDone?.TrySetResult("");
-
-        /// <summary>Pink border on the tile matching the current choice, default chrome on the rest.</summary>
-        private void HighlightLightTile(string choice)
-        {
-            var pink = new SolidColorBrush(Color.FromRgb(0xFF, 0x69, 0xB4));
-            var dim = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x55));
-            foreach (var btn in new[] { BtnLightLeft, BtnLightRight, BtnLightTop, BtnLightFront, BtnLightBack })
-            {
-                try { btn.BorderBrush = (btn.Tag as string) == choice ? pink : dim; }
-                catch { }
-            }
-        }
-
         private void Window_Closed(object sender, EventArgs e)
         {
             IsShowing = false;
@@ -210,9 +161,8 @@ namespace ConditioningControlPanel
             // (or owner-cascade) instead of ESC / Continue. Window_Loaded is
             // async void and awaits _introDone — without this, the awaiter
             // sits orphaned and the calibration handlers stay subscribed
-            // until the next GC pass. Same for the lighting picker.
+            // until the next GC pass.
             _introDone.TrySetResult(false);
-            _lightDone?.TrySetResult(null);
 
             if (App.Webcam != null)
             {
@@ -251,7 +201,6 @@ namespace ConditioningControlPanel
                 _cancelled = true;
                 _collecting = false;
                 _introDone.TrySetResult(false);
-                _lightDone?.TrySetResult(null);
                 DialogResult = false;
                 Close();
             }
@@ -517,35 +466,6 @@ namespace ConditioningControlPanel
             for (int i = 0; i < positions.Length; i++)
                 dotWeights[i] = 1.0 / (dotSpreads[i] * dotSpreads[i] + medSpreadSq + 1e-12);
 
-            // Lighting compensation (step-0 picker): one-sided room light
-            // inflates iris-sample spread on the SHADOW side of the grid, so
-            // the inverse-spread weighting above would demote exactly the
-            // dots that side needs and the fit comes out great on the lit
-            // side, poor on the other ("with the window on my right I
-            // struggled to reach the left side of the screen"). Floor the
-            // shadow-side weights at the median weight so both halves pull
-            // the polynomial equally. Light from the user's right shadows
-            // their gaze range toward screen-LEFT (they reported the far
-            // side from the window as the weak one), and overhead light
-            // (brow shadow) hurts looking DOWN.
-            if (_lightChoice is "left" or "right" or "top")
-            {
-                double medWeight = MedianOf(dotWeights);
-                for (int i = 0; i < positions.Length; i++)
-                {
-                    int row = i / GridSize, col = i % GridSize;
-                    bool shadow = _lightChoice switch
-                    {
-                        "right" => col < GridSize / 2,   // screen-left half
-                        "left" => col >= GridSize - GridSize / 2, // screen-right half
-                        "top" => row >= GridSize - GridSize / 2,  // bottom half
-                        _ => false,
-                    };
-                    if (shadow && dotWeights[i] < medWeight) dotWeights[i] = medWeight;
-                }
-                App.Logger?.Information("WebcamCalibration: lighting comp active (source={Light})", _lightChoice);
-            }
-
             // Absolute residual floor for outlier-dot rejection: a dot is only a
             // drop candidate if its fit residual exceeds BOTH the robust
             // statistical threshold AND this fraction of the screen, so a tight
@@ -741,7 +661,6 @@ namespace ConditioningControlPanel
                 HeadPoseComp = null,
                 IrisRange = new IrisRangeData { MinX = irMinX, MaxX = irMaxX, MinY = irMinY, MaxY = irMaxY },
                 AxisCorrection = axisCorrection,
-                LightSource = string.IsNullOrEmpty(_lightChoice) ? null : _lightChoice,
             };
 
             // Live-apply (in-memory only, no disk write yet) so the verify
@@ -1761,6 +1680,19 @@ namespace ConditioningControlPanel
                 double cx = ActualWidth / 2.0, cy = ActualHeight / 2.0;
                 var (x0, x1) = FitAxisTrim(samples.Select(s => (s.Target.X, s.Measured.X)).ToList(), cx, ActualWidth * 0.15);
                 var (y0, y1) = FitAxisTrim(samples.Select(s => (s.Target.Y, s.Measured.Y)).ToList(), cy, ActualHeight * 0.15);
+
+                // Half-strength learning rate on the SCALE terms only. The
+                // slope is estimated from just two distinct bubble rows /
+                // columns, so a single noisy median swings it hard — live
+                // logs showed y1 slamming its ±0.25 clamp in alternating
+                // directions across consecutive runs (chasing each run's
+                // noise instead of converging). Applying half of the fitted
+                // slope per run turns that oscillation into a damped
+                // approach; repeat runs still reach the true scale, just in
+                // 2-3 passes. Offsets stay full-strength — they average all
+                // samples and were converging fine.
+                x1 *= 0.5;
+                y1 *= 0.5;
 
                 foreach (var (t, m) in samples)
                 {

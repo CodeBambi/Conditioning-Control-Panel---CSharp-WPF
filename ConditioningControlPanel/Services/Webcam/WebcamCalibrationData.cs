@@ -114,13 +114,11 @@ namespace ConditioningControlPanel.Services
         [JsonProperty] public AxisCorrectionData? AxisCorrection { get; set; }
 
         /// <summary>
-        /// Main light-source direction the user declared in the calibration
-        /// lighting picker (step 0): "left", "right", "top", "front", "back",
-        /// or null when skipped. One-sided light inflates iris noise on the
-        /// shadow side of the gaze range; the runtime widens the iris-clamp
-        /// margin on that side (see the clamp block in EmitGazeEvents) so the
-        /// user can still reach the far side of the screen. Stamped per
-        /// calibration — the fit itself was also weighted with this hint.
+        /// Legacy. Short-lived lighting hint from a retired step-0 lighting
+        /// picker (first "which direction is your light", then "is the room
+        /// dim") — both were dropped in favor of a plain warning that dim
+        /// rooms are inconsistent. Kept so saves written by those builds
+        /// still deserialize; never read.
         /// </summary>
         [JsonProperty] public string? LightSource { get; set; }
 

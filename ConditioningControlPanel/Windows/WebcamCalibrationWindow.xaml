@@ -96,109 +96,6 @@
                        Margin="0,4,0,0" HorizontalAlignment="Center" FontFamily="Consolas"/>
         </StackPanel>
 
-        <!-- Step 0 (skippable): lighting picker. One-sided room light skews
-             tracking toward the lit side — the calibration fit and the
-             runtime clamp compensate for the declared shadow side. Each tile
-             is a mini infographic: the user's face as the webcam sees it,
-             shaded away from the sun. -->
-        <Border x:Name="LightSourcePanel" Visibility="Collapsed"
-                Background="#181820" BorderBrush="#FF69B4" BorderThickness="2"
-                CornerRadius="14" Padding="36,28,36,28"
-                HorizontalAlignment="Center" VerticalAlignment="Center"
-                MaxWidth="860">
-            <StackPanel>
-                <TextBlock Text="Before we start — your lighting" Foreground="#FFFFFF"
-                           FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                <TextBlock Foreground="#CCCCCC" FontSize="14" TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,14"
-                           Text="Where is your main light (window or lamp) coming from? Light from one side makes eye tracking stronger on that side and weaker on the other — telling us lets calibration compensate."/>
-                <UniformGrid Columns="5" HorizontalAlignment="Center" Margin="0,4,0,10">
-                    <Button x:Name="BtnLightLeft" Tag="left" Click="BtnLightPick_Click" Margin="6" Padding="0"
-                            Background="#22252E" BorderBrush="#3A3A55" BorderThickness="2" Cursor="Hand">
-                        <StackPanel Margin="10,10,10,12">
-                            <Grid Width="96" Height="70">
-                                <Ellipse Width="24" Height="24" HorizontalAlignment="Left" VerticalAlignment="Center" Fill="#FFD94A"/>
-                                <Ellipse Width="40" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Ellipse.Fill>
-                                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
-                                            <GradientStop Color="#FFE3C0" Offset="0.3"/>
-                                            <GradientStop Color="#584A62" Offset="0.9"/>
-                                        </LinearGradientBrush>
-                                    </Ellipse.Fill>
-                                </Ellipse>
-                            </Grid>
-                            <TextBlock Text="From my left" Foreground="#EEEEEE" FontSize="12"
-                                       HorizontalAlignment="Center" Margin="0,8,0,0"/>
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="BtnLightRight" Tag="right" Click="BtnLightPick_Click" Margin="6" Padding="0"
-                            Background="#22252E" BorderBrush="#3A3A55" BorderThickness="2" Cursor="Hand">
-                        <StackPanel Margin="10,10,10,12">
-                            <Grid Width="96" Height="70">
-                                <Ellipse Width="24" Height="24" HorizontalAlignment="Right" VerticalAlignment="Center" Fill="#FFD94A"/>
-                                <Ellipse Width="40" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Ellipse.Fill>
-                                        <LinearGradientBrush StartPoint="1,0.5" EndPoint="0,0.5">
-                                            <GradientStop Color="#FFE3C0" Offset="0.3"/>
-                                            <GradientStop Color="#584A62" Offset="0.9"/>
-                                        </LinearGradientBrush>
-                                    </Ellipse.Fill>
-                                </Ellipse>
-                            </Grid>
-                            <TextBlock Text="From my right" Foreground="#EEEEEE" FontSize="12"
-                                       HorizontalAlignment="Center" Margin="0,8,0,0"/>
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="BtnLightTop" Tag="top" Click="BtnLightPick_Click" Margin="6" Padding="0"
-                            Background="#22252E" BorderBrush="#3A3A55" BorderThickness="2" Cursor="Hand">
-                        <StackPanel Margin="10,10,10,12">
-                            <Grid Width="96" Height="70">
-                                <Ellipse Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Top" Fill="#FFD94A"/>
-                                <Ellipse Width="40" Height="48" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-4">
-                                    <Ellipse.Fill>
-                                        <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
-                                            <GradientStop Color="#FFE3C0" Offset="0.25"/>
-                                            <GradientStop Color="#584A62" Offset="0.9"/>
-                                        </LinearGradientBrush>
-                                    </Ellipse.Fill>
-                                </Ellipse>
-                            </Grid>
-                            <TextBlock Text="From above" Foreground="#EEEEEE" FontSize="12"
-                                       HorizontalAlignment="Center" Margin="0,8,0,0"/>
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="BtnLightFront" Tag="front" Click="BtnLightPick_Click" Margin="6" Padding="0"
-                            Background="#22252E" BorderBrush="#3A3A55" BorderThickness="2" Cursor="Hand">
-                        <StackPanel Margin="10,10,10,12">
-                            <Grid Width="96" Height="70">
-                                <Ellipse Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,2,0,0" Fill="#FFD94A" Opacity="0.85"/>
-                                <Ellipse Width="40" Height="48" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-4" Fill="#FFE3C0"/>
-                            </Grid>
-                            <TextBlock Text="In front / even" Foreground="#EEEEEE" FontSize="12"
-                                       HorizontalAlignment="Center" Margin="0,8,0,0"/>
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="BtnLightBack" Tag="back" Click="BtnLightPick_Click" Margin="6" Padding="0"
-                            Background="#22252E" BorderBrush="#3A3A55" BorderThickness="2" Cursor="Hand">
-                        <StackPanel Margin="10,10,10,12">
-                            <Grid Width="96" Height="70">
-                                <Ellipse Width="52" Height="52" HorizontalAlignment="Center" VerticalAlignment="Center" Fill="#FFD94A" Opacity="0.55"/>
-                                <Ellipse Width="40" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center" Fill="#3B3344"/>
-                            </Grid>
-                            <TextBlock Text="Behind me" Foreground="#EEEEEE" FontSize="12"
-                                       HorizontalAlignment="Center" Margin="0,8,0,0"/>
-                        </StackPanel>
-                    </Button>
-                </UniformGrid>
-                <TextBlock Foreground="#888888" FontSize="12" TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,14"
-                           Text="Backlight (window behind you) is the hardest for the camera — if you can, face the light instead."/>
-                <Button x:Name="BtnLightSkip" Content="Skip — not sure / it changes"
-                        Padding="24,8" Background="#33334A" Foreground="#DDDDDD"
-                        BorderThickness="0" FontSize="13"
-                        Cursor="Hand" HorizontalAlignment="Center"
-                        Click="BtnLightSkip_Click"/>
-            </StackPanel>
-        </Border>
-
         <Border x:Name="IntroPanel" Visibility="Collapsed"
                 Background="#181820" BorderBrush="#FF69B4" BorderThickness="2"
                 CornerRadius="14" Padding="36,28,36,28"
@@ -242,10 +139,15 @@
                     </StackPanel>
                 </Grid>
 
+                <TextBlock Foreground="#FFC96E" FontSize="12.5"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap" Margin="0,0,0,8">
+                    ⚠ Dim-lit rooms make eye tracking super inconsistent — put some light on your face if you can.
+                </TextBlock>
                 <TextBlock Foreground="#888888" FontSize="12"
                            HorizontalAlignment="Center" TextAlignment="Center"
                            TextWrapping="Wrap" Margin="0,0,0,18">
-                    Sit comfortably, with even lighting on your face. ESC cancels at any time.
+                    Sit comfortably. ESC cancels at any time.
                 </TextBlock>
 
                 <Button x:Name="BtnIntroContinue" Content="Continue"

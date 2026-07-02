@@ -4601,18 +4601,6 @@ namespace ConditioningControlPanel.Models
             set { _webcamAutoDriftCorrection = value; OnPropertyChanged(); }
         }
 
-        // Where the user's main light source sits, declared in the
-        // calibration lighting picker (step 0): "left", "right", "top",
-        // "front" (facing them / even), "back" (backlit), or "" when
-        // skipped/never asked. Remembered so the picker preselects it on
-        // the next calibration.
-        private string _webcamLightSource = "";
-        public string WebcamLightSource
-        {
-            get => _webcamLightSource;
-            set { _webcamLightSource = value ?? ""; OnPropertyChanged(); }
-        }
-
         // Box 2 — Focus Training
         private bool _focusGameEnabled;
         public bool FocusGameEnabled
