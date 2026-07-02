@@ -33,11 +33,21 @@ the merge additions + one retired legacy field), so the port was a faithful diff
   calibration sample-collection + polynomial-fit pipeline — a separate feature effort
   that predates the merge, out of scope here. Until then the new algorithm branches are
   reachable but not yet driven by a calibration run.
-- `GazeDebugCursorService` (+306): on-screen gaze debug cursor.
-- `GazeFocusService` (+47): drives `SetGazeAttractor` for live gaze-pop bubbles.
-- `GazeDriftCorrectionService`: reconcile the richer WPF impl (+239) with the Core
-  `IGazeDriftCorrectionService` marker + Windows impl already added (the
-  `WebcamAutoDriftCorrection` AppSettings toggle already exists in Core).
+- `GazeDriftCorrectionService` (+239): **DONE** — fully ported to the Windows head
+  (commit 591e898d): click-driven residual nudging, fixation detection, persistence, adapted
+  to the Avalonia `IMouseHook` / `Dispatcher.UIThread` / `ISettingsService` seams.
+- `GazeFocusService` (+47) + `GazeDebugCursorService` (+306): the BASE features are already
+  ported (`AvaloniaGazeFocusService` rect-based gaze dwell/blink-pop + `AvaloniaGazeDebugCursorService`,
+  both registered in DI + consumed by `BlinkTrainerTabViewModel`, smoke-tested at port time).
+  The merge deltas are niche refinements, not core feature gaps:
+  - GazeFocusService +47 = the `SetGazeAttractor` consumer wiring (pull the cursor toward the
+    dwell target). Low-value in the Avalonia rect-based pop model (pops everything in a 60-DIP
+    radius — inherently forgiving, unlike WPF's single-best-target precision pop); a faithful
+    port needs a target-presence query (added `IBubbleService`/`IFlashService` surface).
+    `SetGazeAttractor`/`ClearGazeAttractor` exist on the tracker (ported) + `SetGazeAttractor`
+    takes coords in the OnGazeMove space, so the wiring itself is trivial once a target-presence
+    query exists. Documented refinement.
+  - GazeDebugCursorService +306 = lock-state visualization on the debug cursor. Documented refinement.
 
 ## Verification caveat
 This is the eye-tracker core. The port mirrors the WPF math exactly (diff-driven, not from

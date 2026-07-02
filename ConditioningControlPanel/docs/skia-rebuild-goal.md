@@ -208,7 +208,7 @@ is reverted, not patched around.
    sweep for UI, multi-monitor for overlays, Linux VM check for WS4 tasks.
 6. Update trackers (UCE plan checkboxes, parity matrix, task board, this file's
    "Current state" if it materially changed). Commit `feat(av): ...` / `fix(av): ...`,
-   one task per commit, tree green.
+   one task per commit, tree green. Then compact per "Context discipline" below.
 7. Stop conditions: a change would diverge from WPF behavior (product decision needed);
    research contradicts project code with no safe answer; a guardrail would be crossed;
    or the tree is broken by parallel WIP you do not own.
@@ -221,6 +221,44 @@ dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.A
 dotnet run --project ConditioningControlPanel/ConditioningControlPanel.csproj   # WPF reference
 # Linux (in VM, from ConditioningControlPanel/): ./build-linux.sh   (see docs/linux-vm-testing.md)
 ```
+
+## Context discipline (when to compact, and how to stay cheap)
+
+A bloated context produces worse code, not just bigger bills: constraints scroll out of
+attention, half-remembered file contents get edited wrong, and reviews go soft. Treat
+compaction as a quality gate. Trackers are the external memory; the transcript is
+disposable.
+
+**Compact at these moments:**
+1. After every completed task: trackers updated, committed, THEN compact. This is the
+   natural boundary; never carry a finished task's context into the next one.
+2. After every verification milestone inside a long task (green build, lot check passed).
+3. After any large read (a 100KB+ file sliced, the task-board ledger, a WPF archaeology
+   dive) ONCE the extracted contract/findings are written into a tracker row. Carry the
+   conclusion forward, never the file contents.
+4. At ~50-60% of the context window, unconditionally: finish the in-flight edit, write
+   down state, compact. Do not push to 80% "to finish the task"; that is where mistakes
+   cluster.
+5. Before starting a WS0 review lot: reviewers start clean so their judgment is not
+   anchored by implementation context.
+
+**Before compacting, write down (in the task board row or the relevant doc):** the
+task/lot in progress, the next concrete step, files touched so far, the WPF contract or
+research findings extracted, and the exact commands to re-verify. If a build is red,
+record why before compacting, never after.
+
+**Never:** compact mid-edit or with unexplained red state; resume after compaction
+without re-reading the claimed task-board row and this goal's relevant workstream.
+
+**Token hygiene while working (keeps compaction rare and cheap):**
+- Grep for the member, then Read the enclosing range. Never full-read the 100KB+ files
+  (the list is in the `wpf-parity` skill); never re-read unchanged files.
+- Fan large sweeps (inventories, multi-file reviews, research) out to subagents that
+  return structured conclusions; keep raw file dumps out of the main context.
+- One claimed task per session where possible; a session that sprawls across tasks pays
+  the full context twice and does both tasks worse.
+- Write findings into trackers the moment they are established, not at session end;
+  anything only in the transcript is one compaction away from being lost.
 
 ## Definition of Done
 

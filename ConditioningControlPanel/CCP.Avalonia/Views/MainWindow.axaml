@@ -996,6 +996,9 @@
             <DataTemplate DataType="tabs:LockdownTabViewModel">
               <tabViews:LockdownTabView />
             </DataTemplate>
+            <DataTemplate DataType="tabs:SheListeningTabViewModel">
+              <tabViews:SheListeningTabView />
+            </DataTemplate>
             <DataTemplate DataType="tabs:TabItemViewModel">
               <tabViews:PlaceholderTabView />
             </DataTemplate>
