@@ -238,7 +238,19 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         private const double MarCloseRatio = 1.30;
         private const double MarAbsoluteOpen = 0.38;   // enter open if MAR exceeds this regardless of baseline
         private const double MarAbsoluteClose = 0.28;  // stay open until MAR drops below this (absolute hysteresis)
-        private const int MinMouthOpenMs = 80;
+        // Speech guard on the RELATIVE open path. A purely relative threshold
+        // is a false-positive machine for users with a low resting MAR: 1.65×
+        // a 0.10 baseline is ~0.17, and ordinary talking sweeps 0.15-0.30 all
+        // day. Real deliberate opens sit ~0.5+. The relative path therefore
+        // ALSO requires this absolute floor; the separate MarAbsoluteOpen path
+        // is unaffected. Kept below speech peaks' ceiling so shouting doesn't
+        // fire, above dim-light baseline inflation so the relative path still
+        // has a job.
+        private const double MarSpeechFloor = 0.32;
+        // Was 80 ms — shorter than one spoken syllable, so any speech frame
+        // run above threshold fired. A deliberate "open wide" gesture is held;
+        // requiring a sustained window filters talking without hurting it.
+        private const int MinMouthOpenMs = 250;
         private const int MouthCooldownMs = 800;
         // Median-of-N smoothing on raw MAR. FaceMesh inner-lip landmarks are
         // noisy on webcams; a single-frame spike dipping below the close
@@ -262,9 +274,14 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             13, 312, 311, 310, 415, 308, 324, 318, 402, 317,
             14, 87, 178, 88, 95, 78, 191, 80, 81, 82
         };
-        private const double TongueEnterRatio = 0.22;   // tongue_px / valid_px
-        private const double TongueLeaveRatio = 0.14;
-        private const int MinTongueOutMs = 150;
+        // Enter/leave ratios and the minimum hold were tightened together
+        // (0.22/0.14/150ms → 0.28/0.18/350ms): with the looser values, pink
+        // inner-lip pixels during ordinary talking cleared the ratio for a
+        // couple of frames and fired constantly. A real deliberate tongue-out
+        // shows a big pink area and is held — it clears all three easily.
+        private const double TongueEnterRatio = 0.28;   // tongue_px / valid_px
+        private const double TongueLeaveRatio = 0.18;
+        private const int MinTongueOutMs = 350;
         private const int TongueCooldownMs = 700;
         private const int TongueDiagLogIntervalMs = 3000;
         // HSV bands (OpenCV: H ∈ [0,179], S/V ∈ [0,255]). Tuned loose because
@@ -562,6 +579,99 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         private const double ScreenOneEuroBeta = 0.02;
         private readonly OneEuroFilter _screenXFilter = new(ScreenOneEuroMinCutoff, ScreenOneEuroBeta, OneEuroDCutoff);
         private readonly OneEuroFilter _screenYFilter = new(ScreenOneEuroMinCutoff, ScreenOneEuroBeta, OneEuroDCutoff);
+
+        // Two-eye consistency gate. The projected gaze is the AVERAGE of the
+        // two per-eye iris vectors, so a single-eye failure (glasses glare,
+        // hair, a lash clipping the iris model) yanks the average even though
+        // the user's gaze never moved — one of the two big "cursor flies
+        // across the screen" sources. Two defenses, both adaptive so they
+        // scale across setups instead of hardcoding one camera's noise:
+        //   • Disagreement gate: the left/right vectors normally differ by a
+        //     stable per-user amount (vergence + face asymmetry). We track a
+        //     rolling median of |vL − vR| and drop frames whose disagreement
+        //     spikes far above it — one eye is lying, and we can't tell which.
+        //   • Transient one-eye drop: if we've been running on two eyes and
+        //     suddenly only one detects, that's occlusion/noise, not a new
+        //     steady state — skip emission briefly rather than jump to the
+        //     one-eye average. If the one-eye state PERSISTS we accept it as
+        //     the new normal (some users genuinely track with one eye).
+        // Both gates fail open after MaxGateSkipFrames consecutive skips so a
+        // genuine regime change (user turned, new glasses) can't mute gaze
+        // output forever.
+        private const int EyeDisagreementBaselineFrames = 90;
+        private const int EyeDisagreementMinSamples = 15;
+        private const double EyeDisagreementRatio = 3.0;   // spike = baseline×ratio + floor
+        private const double EyeDisagreementFloor = 0.04;  // iris units; below this never gate
+        private const int TwoEyeStreakRequired = 15;       // frames of 2-eye before 1-eye counts as transient
+        // Short fail-open budget (~270ms at 30fps). Head movement legitimately
+        // shifts how the two eyes disagree (foreshortening hits the far eye
+        // harder), so a long budget turned every head turn into freeze-then-
+        // jump: output held for the full budget, then failed open with a
+        // discrete jolt to the new position. A short budget still rejects the
+        // single-frame glint/lash spikes it exists for, while a sustained
+        // regime change passes through quickly enough for the smoothing chain
+        // to absorb it as a glide instead of a snap.
+        private const int MaxGateSkipFrames = 8;
+        private readonly Queue<double> _eyeDisagreementBuffer = new();
+        private int _twoEyeStreak;
+        private int _gateSkipStreak;
+
+        // Gaze lock-on — an optional "the user is trying to hit THIS" hint
+        // set by UI flows that know the current target (the calibration
+        // bubble test, GazeFocusService for live gaze-pop bubbles). Unlike
+        // the old static attractor, the lock is STATEFUL: an engagement
+        // level builds while the gaze lingers near the target and drains
+        // when it leaves — or when the gaze sway grows too large relative to
+        // the target radius, so a user who is clearly not holding the target
+        // loses the lock gradually instead of it snapping off. While
+        // engaged, the deviation from the target is contracted (wobble stays
+        // visible, scaled down in proportion to the lock), tapering to
+        // nothing past 2.5× the radius so there's no seam at the boundary.
+        //
+        // Consumers that need the uncontracted point (residual/accuracy
+        // math) read LastPreLockGaze instead of inverting the transform.
+        private const double GazeLockMaxStrength = 0.93; // deviation contraction at full engagement
+        private const double GazeLockCaptureFrac = 3.5;  // capture zone, × radius — quadrant-scale for a typical bubble
+        private const double GazeLockBuildRate = 0.22;   // per-frame engagement growth toward 1 (~0.2s to lock at 30fps)
+        private const double GazeLockLeaveDrain = 0.05;  // per-frame drain while outside the capture zone (~0.6s release)
+        private const double GazeLockSwayFrac = 1.4;     // sway (EMA dips) above this ×radius starts draining the lock
+        private const double GazeLockSwayDrain = 0.12;   // drain rate per unit of excess swayNorm
+        private volatile GazeAttractorTarget? _attractor;
+
+        // Lock state — touched only on the capture thread inside EmitGazeEvents.
+        private double _lockEngage;
+        private double _lockCenterX = double.NaN, _lockCenterY = double.NaN;
+        private double _gazeEmaX = double.NaN, _gazeEmaY = double.NaN;
+        private double _swayEma;
+
+        private sealed record GazeAttractorTarget(double X, double Y, double Radius);
+        private sealed record GazeSnapshot(double X, double Y);
+        private volatile GazeSnapshot? _lastPreLockGaze;
+
+        /// <summary>
+        /// The most recent gaze point BEFORE the lock-on contraction (but
+        /// after all mapping/smoothing/edge stages). Accuracy/residual math
+        /// must use this instead of the OnGazeMove point so the lock doesn't
+        /// flatter the measurement. Null until the first emitted frame.
+        /// </summary>
+        public CorePoint? LastPreLockGaze
+            => _lastPreLockGaze is { } s ? new CorePoint(s.X, s.Y) : null;
+
+        /// <summary>Declare the current gaze target (coordinates in the OnGazeMove DIP space). Safe to call every tick with a drifting center — lock engagement carries over unless the center jumps by more than the radius. UI-thread safe; the capture thread picks it up next frame.</summary>
+        public void SetGazeAttractor(double centerX, double centerY, double radius)
+            => _attractor = new GazeAttractorTarget(centerX, centerY, radius);
+
+        public void ClearGazeAttractor() => _attractor = null;
+
+        // NOTE: a dispersion-lock fixation stabilizer (I-DT-style centroid
+        // hold as the final output stage) was tried here and REVERTED after
+        // live testing: it locked onto spurious mid-saccade clusters and
+        // parked the cursor at random screen positions ("lingering"), and at
+        // saturated edge projections it read as the cursor being glued to the
+        // bezel. The One-Euro chain + gaze attractor cover stability without
+        // the failure mode. Don't reintroduce a hard lock on the general
+        // cursor path — target-scoped stickiness (SetGazeAttractor) is the
+        // acceptable form.
 
         // Head-pose state — solvePnP-derived yaw/pitch (radians), smoothed to
         // match iris smoothing. Used to apply a geometric correction on the
@@ -863,6 +973,54 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             }
             _logger?.LogInformation("AvaloniaWebcamTrackingService: runtime offset {State} (persist={Persist})",
                 offset == null ? "cleared" : "set", persist);
+        }
+
+        /// <summary>
+        /// Fold a newly-measured per-axis linear correction (from the bubble
+        /// test) into the calibration's GazeTrim. The new fit was measured
+        /// with the existing trim ACTIVE, so the two compose (apply old,
+        /// then new): for x' = x + a0 + a1·u then x'' = x' + b0 + b1·u',
+        /// the composition is c0 = a0 + b0 + b1·a0, c1 = a1 + b1 + a1·b1.
+        /// Composed coefficients are clamped so repeated tests can't wind
+        /// the map up into something wild.
+        /// </summary>
+        public void ApplyGazeTrim(double x0, double x1, double y0, double y1,
+            double centerX, double centerY, bool persist)
+        {
+            const double MaxOffset = 300;   // DIPs
+            const double MaxScale = 0.35;   // ±35% stretch, total
+
+            lock (_stateLock)
+            {
+                var current = Calibration;
+                if (current == null) return;
+
+                double cx0 = x0, cx1 = x1, cy0 = y0, cy1 = y1;
+                if (current.GazeTrim is { } old)
+                {
+                    cx0 = old.X0 + x0 + x1 * old.X0;
+                    cx1 = old.X1 + x1 + old.X1 * x1;
+                    cy0 = old.Y0 + y0 + y1 * old.Y0;
+                    cy1 = old.Y1 + y1 + old.Y1 * y1;
+                }
+                var composed = new GazeTrimData
+                {
+                    X0 = Math.Clamp(cx0, -MaxOffset, MaxOffset),
+                    X1 = Math.Clamp(cx1, -MaxScale, MaxScale),
+                    Y0 = Math.Clamp(cy0, -MaxOffset, MaxOffset),
+                    Y1 = Math.Clamp(cy1, -MaxScale, MaxScale),
+                    CenterX = centerX,
+                    CenterY = centerY,
+                    CapturedAt = DateTime.UtcNow,
+                };
+                var updated = current.WithGazeTrim(composed);
+                if (persist) updated.Save(_environment, _calibrationLogger);
+                Calibration = updated;
+
+                _logger?.LogInformation(
+                    "AvaloniaWebcamTrackingService: gaze trim applied — total x0={X0:F0} x1={X1:F3} y0={Y0:F0} y1={Y1:F3} (persist={Persist})",
+                    composed.X0, composed.X1, composed.Y0, composed.Y1, persist);
+            }
         }
 
         public void Dispose()
@@ -1327,6 +1485,9 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             _rightRefCxBuffer.Clear(); _rightRefCyBuffer.Clear(); _rightRefWBuffer.Clear();
             _irisDxMedianBuffer.Clear(); _irisDyMedianBuffer.Clear();
             _screenXFilter.Reset(); _screenYFilter.Reset();
+            _eyeDisagreementBuffer.Clear();
+            _twoEyeStreak = 0;
+            _gateSkipStreak = 0;
             _yawSmoothBuffer.Clear();
             _pitchSmoothBuffer.Clear();
             _headPoseValid = false;
@@ -1486,21 +1647,70 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
 
             // 6) Iris-vector for gaze (head-pose stable, normalized against
             //    eye-corner midpoint and scaled by corner-to-corner distance).
-            double sumDx = 0, sumDy = 0;
-            int count = 0;
+            //    Gated for two-eye consistency before it feeds the smoothing
+            //    chain — see the gate constants block for the model.
+            (double Dx, double Dy)? vLeft = null, vRight = null;
             if (leftEye != null)
             {
-                var v = NormalizeIrisVectorSmoothed(leftEye.IrisCenter, landmarks[LeftEyeOuterIdx], landmarks[LeftEyeInnerIdx],
+                vLeft = NormalizeIrisVectorSmoothed(leftEye.IrisCenter, landmarks[LeftEyeOuterIdx], landmarks[LeftEyeInnerIdx],
                     _leftRefCxBuffer, _leftRefCyBuffer, _leftRefWBuffer);
-                sumDx += v.Dx; sumDy += v.Dy; count++;
             }
             if (rightEye != null)
             {
-                var v = NormalizeIrisVectorSmoothed(rightEye.IrisCenter, landmarks[RightEyeOuterIdx], landmarks[RightEyeInnerIdx],
+                vRight = NormalizeIrisVectorSmoothed(rightEye.IrisCenter, landmarks[RightEyeOuterIdx], landmarks[RightEyeInnerIdx],
                     _rightRefCxBuffer, _rightRefCyBuffer, _rightRefWBuffer);
-                sumDx += v.Dx; sumDy += v.Dy; count++;
             }
-            EmitGazeEvents(sumDx / count, sumDy / count);
+
+            if (vLeft.HasValue && vRight.HasValue)
+            {
+                double ddx = vLeft.Value.Dx - vRight.Value.Dx;
+                double ddy = vLeft.Value.Dy - vRight.Value.Dy;
+                double disagreement = Math.Sqrt(ddx * ddx + ddy * ddy);
+
+                bool spike = false;
+                if (_eyeDisagreementBuffer.Count >= EyeDisagreementMinSamples)
+                {
+                    double baseline = PercentileOf(_eyeDisagreementBuffer, 0.50);
+                    spike = disagreement > baseline * EyeDisagreementRatio + EyeDisagreementFloor;
+                }
+
+                if (spike && _gateSkipStreak < MaxGateSkipFrames)
+                {
+                    // One eye is off (glint, lash, partial lid) — the average
+                    // would jump. Hold the last output instead; don't feed the
+                    // outlier into the baseline either.
+                    _gateSkipStreak++;
+                    return;
+                }
+
+                _gateSkipStreak = 0;
+                _twoEyeStreak++;
+                EnqueueWithCap(_eyeDisagreementBuffer, disagreement, EyeDisagreementBaselineFrames);
+                EmitGazeEvents(
+                    (vLeft.Value.Dx + vRight.Value.Dx) / 2.0,
+                    (vLeft.Value.Dy + vRight.Value.Dy) / 2.0);
+            }
+            else
+            {
+                var v = vLeft ?? vRight;
+                if (!v.HasValue) return;
+
+                if (_twoEyeStreak >= TwoEyeStreakRequired && _gateSkipStreak < MaxGateSkipFrames)
+                {
+                    // Sudden one-eye frame after a healthy two-eye run —
+                    // transient occlusion. Skipping (holding last output)
+                    // beats emitting the one-eye average, which sits at a
+                    // different point than the two-eye average and reads as
+                    // a cursor jump. Persistent one-eye falls through once
+                    // the skip budget is spent.
+                    _gateSkipStreak++;
+                    return;
+                }
+
+                _gateSkipStreak = 0;
+                _twoEyeStreak = 0;
+                EmitGazeEvents(v.Value.Dx, v.Value.Dy);
+            }
         }
 
         /// <summary>
@@ -1670,6 +1880,8 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             _rightRefCxBuffer.Clear(); _rightRefCyBuffer.Clear(); _rightRefWBuffer.Clear();
             _irisDxMedianBuffer.Clear(); _irisDyMedianBuffer.Clear();
             _screenXFilter.Reset(); _screenYFilter.Reset();
+            _twoEyeStreak = 0;
+            _gateSkipStreak = 0;
             if (_consecutiveNoFaceFrames > FaceLostFramesThreshold * 2)
             {
                 _gazeBuffer.Clear();
@@ -1719,8 +1931,21 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
 
             // Raw iris vector — used by the calibration window to sample reference
             // points. Always fires (when eyes are open); calibration consumers
-            // expect a per-frame event during sampling.
+            // expect a per-frame event during sampling. Fired BEFORE head-pose
+            // comp so the calibration fits (grid polynomial AND the guided
+            // motion comp itself) train on the uncompensated signal.
             Dispatch(() => OnRawIris?.Invoke(irisDx, irisDy));
+
+            // NOTE: head-pose compensation is fully RETIRED (2026-07-02). Two
+            // generations died here: (1) natural-variance fits — PnP noise
+            // dominated when the user held still; (2) guided-motion fits from
+            // a dedicated calibration phase — the pitch term actively fought
+            // vertical gaze (cursor stuck at the bottom of the screen), and
+            // even the yaw-only variant wasn't worth its calibration step.
+            // Saved calibrations may still carry HeadPoseComp/BaselineHeadPose
+            // fields; they are deliberately ignored. Robustness to head
+            // movement comes from the smoothing chain + iris-range clamp +
+            // axis residual correction instead.
 
             // Two-output smoothing split:
             //   sideSmooth*  — rolling mean → ClassifyGazeSide. The side classifier
@@ -1777,14 +2002,71 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             var emit = _lastEmittedSide;
             Dispatch(() => OnGazeSide?.Invoke(emit));
 
-            // Head-pose compensation was retired here. The PnP head-pose
-            // estimator from face landmarks is noisier than the natural head
-            // movement during normal use, so applying empirically-fit comp
-            // coefficients was injecting variance instead of removing it
-            // (consistent with Funes Mora & Odobez 2013, who observed the
-            // same below ~5° rotation noise). The polynomial fit is fed the
-            // raw smoothed iris vector. BaselineHeadPose / HeadPoseComp on
-            // legacy calibrations are simply ignored.
+            // (Head-pose compensation, when a guided-motion fit exists, was
+            // already applied to irisDx/irisDy upstream — before the
+            // smoothing split — so both the side classifier and this cursor
+            // path see the corrected signal. An earlier natural-variance comp
+            // that lived at this spot was retired as noise; see the comp
+            // block after the OnRawIris dispatch for the current pipeline.)
+
+            // Clamp the smoothed iris vector to the calibrated range plus a
+            // margin before projecting. The polynomial is only valid inside
+            // the hull it was trained on; its quadratic terms extrapolate
+            // violently outside it, so an iris sample past the calibrated
+            // extremes (glance at the keyboard, residual glint noise) used to
+            // sling the cursor way past the screen and the bounds clamp
+            // pinned it to an edge until the filters recovered. The margin
+            // leaves room to reach the bezel-adjacent strip the EdgeMargin
+            // dots couldn't cover, without letting extrapolation run away.
+            if (Calibration?.IrisRange is { } range)
+            {
+                // Margin is deliberately generous: its job is only to bound the
+                // polynomial's quadratic blow-up, not to fence normal use. A
+                // tight margin (first tried 0.18) saturated as soon as head
+                // drift shifted the iris baseline — every eye movement then
+                // projected to the same clamped extreme and the cursor sat
+                // pinned at a screen edge ("locked to the sides").
+                const double IrisClampMarginFrac = 0.35;
+                double mMinX = IrisClampMarginFrac, mMaxX = IrisClampMarginFrac;
+                double mMinY = IrisClampMarginFrac, mMaxY = IrisClampMarginFrac;
+
+                // Lighting asymmetry (declared in the calibration's step-0
+                // picker): one-sided light compresses the measured iris
+                // deviation toward the shadow side, so the calibrated range
+                // under-covers it — the clamp then saturates early and the
+                // user can't reach the far side of the screen. Widen the
+                // margin on the shadow side only. Which iris-sign maps to
+                // that screen side comes from the polynomial's linear terms
+                // (∂x/∂ix, ∂y/∂iy), so this is mirror-agnostic.
+                if (Calibration?.LightSource is { Length: > 0 } lightSrc
+                    && Calibration?.Polynomial is { } lp
+                    && lp.X.Length >= 3 && lp.Y.Length >= 3)
+                {
+                    const double ShadowMarginFrac = 0.60;
+                    bool xGrows = lp.X[1] >= 0;   // screen-x increases with irisDx
+                    bool yGrows = lp.Y[2] >= 0;   // screen-y increases with irisDy
+                    switch (lightSrc)
+                    {
+                        case "right":  // light user-right → weak toward screen-left
+                            if (xGrows) mMinX = ShadowMarginFrac; else mMaxX = ShadowMarginFrac;
+                            break;
+                        case "left":   // light user-left → weak toward screen-right
+                            if (xGrows) mMaxX = ShadowMarginFrac; else mMinX = ShadowMarginFrac;
+                            break;
+                        case "top":    // overhead → brow shadow, weak looking down
+                            if (yGrows) mMaxY = ShadowMarginFrac; else mMinY = ShadowMarginFrac;
+                            break;
+                    }
+                }
+
+                double spanX = Math.Max(1e-6, range.MaxX - range.MinX);
+                double spanY = Math.Max(1e-6, range.MaxY - range.MinY);
+                smoothDx = Math.Max(range.MinX - spanX * mMinX,
+                           Math.Min(range.MaxX + spanX * mMaxX, smoothDx));
+                smoothDy = Math.Max(range.MinY - spanY * mMinY,
+                           Math.Min(range.MaxY + spanY * mMaxY, smoothDy));
+            }
+
             var screenPoint = ProjectGazeToScreen(smoothDx, smoothDy);
             if (screenPoint.HasValue)
             {
@@ -1810,25 +2092,167 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
                     p = new CorePoint(p.X + off.Dx, p.Y + off.Dy);
                 }
 
-                // Clamp to monitor bounds so the cursor sticks at the edge
-                // rather than disappearing off-screen when the user glances
-                // past the bezel. Without this, looking at the wall above
-                // the monitor projects to negative Y and the cursor drops
-                // out of sight; the user can't tell whether tracking is
-                // still working or has lost the face. EdgePad keeps the
-                // cursor visualization (typically 14–36 DIP) wholly visible.
+                // Bubble-test trim — per-axis offset + scale measured against
+                // the test bubbles ("cursor went up but the bubble was
+                // down" → the map is stretched; the trim un-stretches it).
+                // Applied before the pre-lock snapshot so a rerun of the
+                // bubble test measures residuals WITH the trim active and
+                // fits only the remainder (corrections converge instead of
+                // double-applying).
+                if (Calibration?.GazeTrim is { } trim)
+                {
+                    p = new CorePoint(
+                        p.X + trim.X0 + trim.X1 * (p.X - trim.CenterX),
+                        p.Y + trim.Y0 + trim.Y1 * (p.Y - trim.CenterY));
+                }
+
+                // Soft screen edges instead of a hard clamp. Nobody actually
+                // looks at the last few pixels of the bezel — a cursor parked
+                // flat against an edge only ever means the mapping saturated,
+                // and it reads as "stuck" (repeated user report). The outer
+                // band compresses smoothly: motion into it slows down, an
+                // off-screen projection settles a bit short of the edge
+                // instead of pinning flat against it, and normal mid-screen
+                // gaze is untouched.
                 if (Calibration?.MonitorBounds is { } bounds && bounds.Width > 0 && bounds.Height > 0)
                 {
-                    const double EdgePad = 4.0;
-                    var maxX = bounds.Width - EdgePad;
-                    var maxY = bounds.Height - EdgePad;
+                    double bandX = Math.Clamp(bounds.Width * 0.055, 28, 90);
+                    double bandY = Math.Clamp(bounds.Height * 0.055, 28, 90);
                     p = new CorePoint(
-                        Math.Max(EdgePad, Math.Min(p.X, maxX)),
-                        Math.Max(EdgePad, Math.Min(p.Y, maxY)));
+                        SoftEdge(p.X, 0, bounds.Width, bandX),
+                        SoftEdge(p.Y, 0, bounds.Height, bandY));
                 }
+
+                // Snapshot BEFORE the lock-on so accuracy/residual consumers
+                // (calibration bubble test) can read the unflattered point.
+                _lastPreLockGaze = new GazeSnapshot(p.X, p.Y);
+
+                p = ApplyGazeLock(p);
+
+                // Final motion shaping: the emitted cursor is a slowed
+                // follower of the mapped point, not the mapped point itself.
+                // Small deviations are heavily damped (the cursor glides, its
+                // direction stays consistent, residual jitter is fine), while
+                // a genuinely large error — the user snapped their gaze
+                // across the screen — ramps the follow speed up smoothly so
+                // saccades are caught in a beat without ever teleporting.
+                // This also makes the target lock read as natural drift
+                // instead of an obvious magnet snap.
+                p = ShapeCursorMotion(p);
+
                 Dispatch(() => OnGazeMove?.Invoke(p));
                 UpdateLongStareHeuristic(p);
             }
+        }
+
+        // Output follower state — capture thread only.
+        private double _followX = double.NaN, _followY = double.NaN;
+
+        /// <summary>
+        /// Distance-adaptive exponential follower (see the comment at the
+        /// call site). Follow fraction per frame eases quadratically from
+        /// FollowMin (smooth glide) to FollowMax (saccade catch-up) as the
+        /// distance to the mapped point approaches RampDist — quadratic so
+        /// mid-size corrections stay calm and only real gaze jumps get the
+        /// speed. Never snaps: even at max the approach is exponential.
+        /// </summary>
+        private CorePoint ShapeCursorMotion(CorePoint target)
+        {
+            const double FollowMin = 0.09;  // ~370ms time constant at 30fps — a slow, deliberate glide
+            const double FollowMax = 0.48;  // large jumps land in ~4-5 frames, still eased
+            const double RampDist = 480.0;  // DIPs to reach full catch-up speed
+
+            if (double.IsNaN(_followX)) { _followX = target.X; _followY = target.Y; return target; }
+            double ex = target.X - _followX, ey = target.Y - _followY;
+            double dist = Math.Sqrt(ex * ex + ey * ey);
+            double t = Math.Min(1.0, dist / RampDist);
+            double alpha = FollowMin + (FollowMax - FollowMin) * t * t;
+            _followX += ex * alpha;
+            _followY += ey * alpha;
+            return new CorePoint(_followX, _followY);
+        }
+
+        /// <summary>
+        /// Soft edge compression for one axis. Inside the inner region the
+        /// value passes through untouched; within the outer band it is
+        /// compressed with a tanh so approach slows smoothly; a wildly
+        /// off-screen projection asymptotes ~0.2×band short of the true
+        /// edge — visible, clearly "over there", but never glued flat to
+        /// the bezel.
+        /// </summary>
+        private static double SoftEdge(double v, double lo, double hi, double band)
+        {
+            double innerLo = lo + band, innerHi = hi - band;
+            if (innerHi <= innerLo) return Math.Max(lo, Math.Min(hi, v));
+            if (v < innerLo) return innerLo - band * 0.8 * Math.Tanh((innerLo - v) / band);
+            if (v > innerHi) return innerHi + band * 0.8 * Math.Tanh((v - innerHi) / band);
+            return v;
+        }
+
+        /// <summary>
+        /// Stateful target lock-on (see the constant block by SetGazeAttractor).
+        /// Engagement builds while the PRE-lock gaze lingers inside the capture
+        /// zone and drains when it leaves or when the measured sway outgrows
+        /// the target radius — the release is gradual, never a snap. Sway and
+        /// distance are always measured on the raw point, so the lock can't
+        /// feed its own output back and hold forever. Capture thread only.
+        /// </summary>
+        private CorePoint ApplyGazeLock(CorePoint p)
+        {
+            var att = _attractor;
+            if (att == null)
+            {
+                _lockEngage = 0;
+                _lockCenterX = _lockCenterY = double.NaN;
+                _gazeEmaX = _gazeEmaY = double.NaN;
+                _swayEma = 0;
+                return p;
+            }
+
+            // Target switch (a different bubble, not the same one drifting):
+            // engagement doesn't carry over to a new target.
+            if (!double.IsNaN(_lockCenterX))
+            {
+                double mdx = att.X - _lockCenterX, mdy = att.Y - _lockCenterY;
+                if (Math.Sqrt(mdx * mdx + mdy * mdy) > att.Radius) _lockEngage = 0;
+            }
+            _lockCenterX = att.X;
+            _lockCenterY = att.Y;
+
+            // Sway estimate: EMA of the deviation from a short-horizon EMA of
+            // the raw gaze — roughly the wobble amplitude in DIPs.
+            if (double.IsNaN(_gazeEmaX)) { _gazeEmaX = p.X; _gazeEmaY = p.Y; }
+            _gazeEmaX += (p.X - _gazeEmaX) * 0.25;
+            _gazeEmaY += (p.Y - _gazeEmaY) * 0.25;
+            double wx = p.X - _gazeEmaX, wy = p.Y - _gazeEmaY;
+            _swayEma += (Math.Sqrt(wx * wx + wy * wy) - _swayEma) * 0.15;
+
+            double dx = p.X - att.X, dy = p.Y - att.Y;
+            double dist = Math.Sqrt(dx * dx + dy * dy);
+
+            if (dist <= att.Radius * GazeLockCaptureFrac)
+                _lockEngage += (1.0 - _lockEngage) * GazeLockBuildRate;
+            else
+                _lockEngage -= GazeLockLeaveDrain;
+
+            double swayNorm = _swayEma / Math.Max(1e-6, att.Radius);
+            if (swayNorm > GazeLockSwayFrac)
+                _lockEngage -= (swayNorm - GazeLockSwayFrac) * GazeLockSwayDrain;
+
+            _lockEngage = Math.Max(0, Math.Min(1, _lockEngage));
+            if (_lockEngage <= 0) return p;
+
+            // Distance taper: full pull inside the radius, fading to nothing
+            // by 4× — quadrant reach, so an engaged lock draws the cursor in
+            // from anywhere in the target's region of the screen.
+            double taper = dist <= att.Radius
+                ? 1.0
+                : dist <= att.Radius * 4.0
+                    ? (att.Radius * 4.0 - dist) / (att.Radius * 3.0)
+                    : 0.0;
+            double k = GazeLockMaxStrength * _lockEngage * taper;
+            if (k <= 0) return p;
+            return new CorePoint(p.X - dx * k, p.Y - dy * k);
         }
 
         private GazeSide ClassifyGazeSide(double irisDx)
@@ -1920,6 +2344,17 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
                     y = poly.Y[0] + poly.Y[1] * irisDx + poly.Y[2] * irisDy
                       + poly.Y[3] * ix2 + poly.Y[4] * iy2 + poly.Y[5] * ixy;
                 }
+                // Axis residual correction — cancels the polynomial's
+                // systematic per-row/per-column bias (measured at calibration
+                // finalize from the grid's own dots). This is what stops the
+                // "everything is skewed toward the top, can't reach the
+                // bottom" failure: without it a bottom row that projects
+                // 150 px high stays 150 px high forever.
+                if (Calibration?.AxisCorrection is { } ac)
+                {
+                    x = ApplyAxisCurve(ac.SrcX, ac.DstX, x);
+                    y = ApplyAxisCurve(ac.SrcY, ac.DstY, y);
+                }
                 return new CorePoint(x, y);
             }
 
@@ -1932,6 +2367,22 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             if (Math.Abs(hw) < 1e-9) return null;
 
             return new CorePoint(hx / hw, hy / hw);
+        }
+
+        /// <summary>
+        /// Piecewise-linear map through calibration anchors (see
+        /// AxisCorrectionData): linear interpolation between anchors,
+        /// end-segment slope beyond them. Anchors are validated monotonic
+        /// and gain-sane at build time, so no guards are needed per frame.
+        /// </summary>
+        private static double ApplyAxisCurve(double[] src, double[] dst, double v)
+        {
+            int n = src.Length;
+            if (n < 2 || dst.Length != n) return v;
+            int i = 1;
+            while (i < n - 1 && v > src[i]) i++;
+            double t = (v - src[i - 1]) / (src[i] - src[i - 1]);
+            return dst[i - 1] + t * (dst[i] - dst[i - 1]);
         }
 
         private void UpdateLongStareHeuristic(CorePoint point)
@@ -2251,9 +2702,13 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             // it doesn't, fall back to the relative ratio alone.
             bool absoluteOpenUsable  = MarAbsoluteOpen  > _marBaseline;
             bool absoluteCloseUsable = MarAbsoluteClose > _marBaseline;
+            // Relative path requires the speech floor too — see MarSpeechFloor.
+            // (No mouth-sensitivity slider on this head, so openScale is 1.0.)
+            double speechFloor = MarSpeechFloor;
             bool nowOpen = _mouthOpen
                 ? (mar > MarCloseRatio * _marBaseline || (absoluteCloseUsable && mar > MarAbsoluteClose))
-                : (mar > MarOpenRatio  * _marBaseline || (absoluteOpenUsable  && mar > MarAbsoluteOpen));
+                : ((mar > MarOpenRatio * _marBaseline && mar > speechFloor)
+                    || (absoluteOpenUsable && mar > MarAbsoluteOpen));
 
             if (nowOpen && !_mouthOpen)
             {

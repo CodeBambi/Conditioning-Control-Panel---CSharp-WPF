@@ -1,19 +1,39 @@
 # Avalonia port: calibration / eye-tracking overhaul (merge fce9713d + dfbe20c4)
 
-Status: **NOT PORTED — blocked. Requires a dedicated, webcam-verified effort that first reconciles stack divergence.**
+Status: **CORE PORTED (data model + per-frame algorithm). Remaining surface: calibration window UX + 3 diagnostic/focus services. Live-webcam verification still required before release.**
 
-## BLOCKED STOP (evidence-backed, gathered this session)
-The goal's BLOCKED STOP clause applies. Three concrete blockers:
-1. **Stack divergence (not a clean mirror):** the Avalonia webcam stack is NOT a pre-merge copy of the WPF one. `WebcamCalibrationData.cs` already diverged (WPF 369 lines vs Avalonia 249 lines) *before* the merge additions. So the merge changes can't be applied as a mechanical diff — the port must reconcile the existing divergence *and* layer the merge on top, across the data model, the 3083-line tracker, and the calibration window.
-2. **Unverifiable here:** the completion audit requires a live-webcam behavior comparison + a `--smoke-test` that exercises the gaze tracker. No webcam is available, so even a faithful port can't be audited complete.
-3. **Stakes + constraints:** this is the eye-tracker core. An unverified port of diverged+merged gaze math risks silent regressions, which the goal's "preserve behavior" / "no unverified narrowing" / "no dead code" constraints forbid. The feature is also atomic — the algorithm consumes IrisRange/AxisCorrection/GazeTrim that only the calibration window populates, so a partial port is either dead code or a dormant/risky branch.
+## What is ported (this effort)
+The heart of the v6.2.5 "eye tracking rebuilt" change — the data model and the per-frame
+gaze pipeline — is mirrored faithfully from the WPF source into the Avalonia Windows head:
+- `WebcamCalibrationData`: `IrisRange` / `AxisCorrection` / `LightSource` / `GazeTrim` fields,
+  the `IrisRangeData` / `AxisCorrectionData` / `GazeTrimData` classes, and `WithGazeTrim`.
+- `AvaloniaWebcamTrackingService`: all 13 algorithm hunks — tightened mouth/tongue timing
+  (`MarSpeechFloor`, `MinMouthOpenMs` 250, tongue ratios), the two-eye disagreement gate,
+  the stateful gaze lock-on/attractor (`SetGazeAttractor`/`ClearGazeAttractor`/`ApplyGazeLock`/
+  `LastPreLockGaze`), motion-shaping follower (`ShapeCursorMotion`), soft screen edges
+  (`SoftEdge`), the calibrated iris-range clamp with lighting-shadow margin, bubble-test
+  gaze trim (`ApplyGazeTrim` + runtime application), and post-polynomial axis residual
+  correction (`ApplyAxisCurve`). Build green; Core tests 108/108.
 
-Full analysis of the merge diff was completed (the 13 tracking hunks + the data-model additions are mapped below), so a dedicated effort can proceed diff-in-hand.
-This is the v6.2.5 "eye tracking rebuilt" feature. It is the single largest and
-highest-stakes change in the merge (~2,000 insertions / 14 files), and it rewrites the
-per-frame gaze pipeline — the core of the eye tracker. A faithful port needs live webcam
-verification (impossible in a headless/CI context) so it does not silently regress gaze
-accuracy, lock-on, or the disagreement gate.
+The earlier "BLOCKED STOP / stack divergence" note in this doc was **disproven**: the active
+fields of the two `WebcamCalibrationData.cs` files align (the line-count gap was comments +
+the merge additions + one retired legacy field), so the port was a faithful diff-mirror.
+
+## Remaining surface (follow-up)
+- `WebcamCalibrationWindow` (+641 / −110): the calibration flow that *populates* the new
+  `IrisRange`/`AxisCorrection`/`GazeTrim`/`LightSource` data, plus the dim-room warning that
+  replaced the lighting picker (dfbe20c4). Until this lands the new algorithm branches are
+  reachable but not yet driven by a calibration run.
+- `GazeDebugCursorService` (+306): on-screen gaze debug cursor.
+- `GazeFocusService` (+47): drives `SetGazeAttractor` for live gaze-pop bubbles.
+- `GazeDriftCorrectionService`: reconcile the richer WPF impl (+239) with the Core
+  `IGazeDriftCorrectionService` marker + Windows impl already added (the
+  `WebcamAutoDriftCorrection` AppSettings toggle already exists in Core).
+
+## Verification caveat
+This is the eye-tracker core. The port mirrors the WPF math exactly (diff-driven, not from
+memory) and compiles clean, but it has **not** been live-verified with a webcam — that
+remains a release gate (bubble lock-on, disagreement gating, drift recal, iris clamp).
 
 ## Source merge commits
 - `fce9713d` feat(gaze): calibration overhaul — accuracy corrections, target lock-on, motion shaping, lighting comp

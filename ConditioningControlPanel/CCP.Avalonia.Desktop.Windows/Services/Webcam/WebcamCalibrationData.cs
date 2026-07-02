@@ -86,6 +86,53 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         /// </summary>
         [JsonProperty] public RuntimeOffsetData? RuntimeOffset { get; set; }
 
+        /// <summary>
+        /// Calibrated min/max of the smoothed iris vector, per axis. At
+        /// runtime clamps the live (smoothed) iris vector to this range plus a
+        /// margin before projecting: the 2nd-order polynomial is only trained
+        /// inside the calibrated hull, and its quadratic terms extrapolate
+        /// violently outside it — a single bad iris sample (glint, half-blink)
+        /// used to sling the cursor across the screen. Null on calibrations
+        /// from older app versions — projection path skips the clamp.
+        /// </summary>
+        [JsonProperty] public IrisRangeData? IrisRange { get; set; }
+
+        /// <summary>
+        /// Post-polynomial per-axis residual correction. The polynomial's
+        /// systematic per-row/per-column bias (e.g. "everything in the bottom
+        /// row projects 150 px too high" — the user literally can't reach the
+        /// bottom of the screen) is measured at finalize time by re-projecting
+        /// each grid row/column's mean iris vector and comparing to the true
+        /// dot position; the anchors stored here define a piecewise-linear
+        /// warp applied after the polynomial. Null on old saves or when the
+        /// anchors came out non-monotonic (degenerate fit) — projection path
+        /// skips the warp.
+        /// </summary>
+        [JsonProperty] public AxisCorrectionData? AxisCorrection { get; set; }
+
+        /// <summary>
+        /// Legacy. Short-lived lighting hint from a retired step-0 lighting
+        /// picker (first "which direction is your light", then "is the room
+        /// dim") — both were dropped in favor of a plain warning that dim
+        /// rooms are inconsistent. Kept so saves written by those builds
+        /// still deserialize; never read.
+        /// </summary>
+        [JsonProperty] public string? LightSource { get; set; }
+
+        /// <summary>
+        /// Per-axis linear trim fit from the bubble-test residuals — the
+        /// bubbles are ground truth ("the user was trying to look THERE"),
+        /// so the gap between each bubble and where the cursor actually
+        /// hovered is a measured mapping error. Offset + scale per axis:
+        ///   x' = x + X0 + X1·(x − CenterX),  y' = y + Y0 + Y1·(y − CenterY)
+        /// which captures both whole-map drift and the "cursor went up but
+        /// the bubble was down" stretch/compression error. Applied after
+        /// RuntimeOffset; repeated bubble tests COMPOSE into this (see
+        /// AvaloniaWebcamTrackingService.ApplyGazeTrim). Null until the user
+        /// runs a bubble test; cleared by a fresh calibration.
+        /// </summary>
+        [JsonProperty] public GazeTrimData? GazeTrim { get; set; }
+
         public static string GetFilePath(IAppEnvironment environment)
             => Path.Combine(environment.UserDataPath, FileName);
 
@@ -157,7 +204,22 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
                 BaselineHeadPose = this.BaselineHeadPose,
                 HeadPoseComp = this.HeadPoseComp,
                 RuntimeOffset = offset,
+                IrisRange = this.IrisRange,
+                AxisCorrection = this.AxisCorrection,
+                LightSource = this.LightSource,
+                GazeTrim = this.GazeTrim,
             };
+        }
+
+        /// <summary>
+        /// Shallow clone with <see cref="GazeTrim"/> replaced — same
+        /// swap-don't-mutate contract as <see cref="WithRuntimeOffset"/>.
+        /// </summary>
+        public WebcamCalibrationData WithGazeTrim(GazeTrimData? trim)
+        {
+            var clone = WithRuntimeOffset(this.RuntimeOffset);
+            clone.GazeTrim = trim;
+            return clone;
         }
     }
 
@@ -244,6 +306,52 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
     {
         [JsonProperty] public double Dx { get; set; }
         [JsonProperty] public double Dy { get; set; }
+        [JsonProperty] public DateTime CapturedAt { get; set; }
+    }
+
+    /// <summary>
+    /// Calibrated min/max of the smoothed iris vector, per axis. See
+    /// <see cref="WebcamCalibrationData.IrisRange"/> for how it's used.
+    /// </summary>
+    public class IrisRangeData
+    {
+        [JsonProperty] public double MinX { get; set; }
+        [JsonProperty] public double MaxX { get; set; }
+        [JsonProperty] public double MinY { get; set; }
+        [JsonProperty] public double MaxY { get; set; }
+    }
+
+    /// <summary>
+    /// Piecewise-linear post-polynomial warp, one curve per axis. SrcX[i] is
+    /// where the polynomial projected grid column i (mean over its dots),
+    /// DstX[i] is where that column actually was; likewise SrcY/DstY for rows.
+    /// Runtime maps the projected coordinate through the curve (linear
+    /// between anchors, end-segment slope beyond them), which cancels the
+    /// polynomial's systematic per-band bias — the dominant "cursor is skewed
+    /// toward the top / can't reach the bottom" failure. Arrays are sorted
+    /// ascending by Src and strictly monotonic in BOTH arrays (enforced at
+    /// build time; non-monotonic fits store null instead).
+    /// </summary>
+    public class AxisCorrectionData
+    {
+        [JsonProperty] public double[] SrcX { get; set; } = Array.Empty<double>();
+        [JsonProperty] public double[] DstX { get; set; } = Array.Empty<double>();
+        [JsonProperty] public double[] SrcY { get; set; } = Array.Empty<double>();
+        [JsonProperty] public double[] DstY { get; set; } = Array.Empty<double>();
+    }
+
+    /// <summary>
+    /// Per-axis linear correction (offset + center-relative scale) measured
+    /// by the bubble accuracy test. See <see cref="WebcamCalibrationData.GazeTrim"/>.
+    /// </summary>
+    public class GazeTrimData
+    {
+        [JsonProperty] public double X0 { get; set; }
+        [JsonProperty] public double X1 { get; set; }
+        [JsonProperty] public double Y0 { get; set; }
+        [JsonProperty] public double Y1 { get; set; }
+        [JsonProperty] public double CenterX { get; set; }
+        [JsonProperty] public double CenterY { get; set; }
         [JsonProperty] public DateTime CapturedAt { get; set; }
     }
 }

@@ -67,14 +67,22 @@ The doctrine this goal adds:
 
 ## Current state (verified 2026-07-02; re-verify with `port-audit` if this doc is old)
 
-Done: full project skeleton builds (`CCP.Desktop.slnf`, 0 errors when tree is clean);
-Core tests green; UI parity matrix fully verified 2026-06-23 via Windows-head smoke test
-(44 tabs, ~34 dialogs, 12 feature popups, 5-theme reskin); Avalonia beats WPF on startup
-(~2.5s vs ~4.2s) and memory (~422MB vs ~1218MB); effect services (flash, subliminal,
-bouncing text, pink tint, spiral, brain drain, bubbles) already render as compositor
-layers; CI-style Linux/macOS builds exist as a workflow file (not active on GitHub).
+Exists (structurally): full project skeleton builds (`CCP.Desktop.slnf`, 0 errors when
+tree is clean); Core tests green; effect services (flash, subliminal, bouncing text,
+pink tint, spiral, brain drain, bubbles) render as compositor layers; Avalonia measured
+faster than WPF on startup (~2.5s vs ~4.2s) and memory (~422MB vs ~1218MB); CI-style
+Linux/macOS builds exist as a workflow file (not active on GitHub).
+
+**Trust level: NONE. Owner's ruling (2026-07-02): the port was built largely by hand and
+no prior verification claim is trusted, including the 2026-06-23 parity-matrix sweep and
+every `[x]` in `avalonia-ui-parity-matrix.md`. Treat the ENTIRE port (CCP.Core,
+CCP.Avalonia, all heads) as unverified until it passes WS0.**
 
 Open (this goal's actual work):
+- The whole port needs review and re-verification (WS0). Known-shaky spots to hit early:
+  the calibration-overhaul port is explicitly BLOCKED (stack divergence, see the
+  docs(av) BLOCKED STOP commit), and there is uncommitted WIP in the tree
+  (`WebcamCalibrationData.cs`).
 - UCE video layer does not render; legacy `AvaloniaMultiMonitorVideoService` is the only
   working video path. Audio controls and attention checks bypass the UCE path.
 - Chaos overlays (~23 window classes) are not on the compositor.
@@ -85,6 +93,57 @@ Open (this goal's actual work):
 - Doc drift: several trackers lag the code; fix as encountered.
 
 ## Workstreams, in order
+
+### WS0: Verify and correct existing work (the ENTIRE port is unverified)
+
+The port was built by hand. Nothing is assumed correct because it exists, compiles, ran
+once, or has a checkmark somewhere. There is NO trusted baseline: prior verification
+claims (including the 2026-06-23 sweep) are void. WS0 earns trust area by area, and it
+runs FIRST because building WS1+ on unreviewed foundations compounds any mistake.
+
+**Scope:** all of `CCP.Core`, `CCP.Avalonia`, `CCP.Avalonia.Desktop*`, and the WPF-side
+seam code (`CCP.WindowsOnly`). First action: reset every row of
+`avalonia-ui-parity-matrix.md` to `[ ]` with a note pointing at this goal (the matrix
+was reset once before for exactly this reason; repeat it).
+
+**Review lots:** slice the port into area lots and work through them by risk, highest
+first: (1) data/settings persistence and paths (data loss is unrecoverable), (2) session
+engine + start/stop, (3) overlays/compositor + click-through input, (4) video/audio,
+(5) speech/mic + gaze/calibration (known shaky; includes the BLOCKED calibration port
+and the uncommitted WIP), (6) chaos/game mode, (7) progression/quests/economy,
+(8) browser/integrations, (9) tabs and dialogs, (10) theming/mods, (11) heads/DI/startup.
+A lot is a reviewable unit (one service area or view cluster), small enough to exercise
+end-to-end in one session.
+
+**Per review lot, run three checks:**
+1. **Correctness vs contract** (`wpf-parity`): extract the WPF behavior for the touched
+   feature and exercise the Avalonia side against it in the running app. Any divergence
+   is a bug row, fixed before the lot passes.
+2. **Adversarial code review** against the skill rubrics: v12 correctness
+   (`avalonia-research` + plan section 21 gotchas), compositor doctrine
+   (`unified-compositor-engine` rules), overlay input scars (`overlay-clickthrough`),
+   DI/seam and ponytail conventions (`port-plan`), theming (`dashboard-design`),
+   security/privacy (`port-audit` section 6). Use independent reviewer agents per rubric
+   dimension and verify findings before acting; unverified review findings are noise.
+3. **Optimality check, proportionate:** flag over-engineering (needless abstractions,
+   new deps that did not earn their weight), per-frame allocations, timer sprawl,
+   redundant windows that should be layers, and perf regressions (`--benchmark` when the
+   lot touches hot paths).
+
+**Correction policy (what "made correct" means):**
+- Functional bugs and guardrail violations: fix immediately, in the lot.
+- Measurably suboptimal (slower, heavier, less safe, violates a skill rule): fix if the
+  change is proportionate; otherwise file a prioritized task-board row with evidence.
+- Working but merely unidiomatic/taste-level: leave it (ponytail). Churn is not quality.
+- Matrix hygiene: rows only earn `[x]` again through a lot's pass; verification evidence
+  (what was exercised, on which head, vs which WPF behavior) goes in the matrix row.
+- Triage the BLOCKED calibration-overhaul port explicitly: decide resume, re-scope, or
+  revert, and record it. Same for the uncommitted `WebcamCalibrationData.cs` WIP.
+
+WS0 for an area is done when its lots pass all three checks, corrections are merged, and
+the matrix rows for that area are re-verified. Later workstreams may start for an area
+once ITS WS0 pass is clean (no need to finish all of WS0 globally first); WS1 (video)
+requires lots 2-4 clean since it builds directly on them.
 
 ### WS1: Video through the compositor (Windows)
 Execute `unified-compositor-engine-plan.md` phases A-E, one unchecked task per
@@ -140,7 +199,8 @@ is reverted, not patched around.
 
 1. `port-plan`: read this file, the task board, and the UCE plan; check `git status`
    and recent log (parallel WIP exists; a red build may not be yours).
-2. Claim ONE task (append-only ledger row, claim commit).
+2. Claim ONE task (append-only ledger row, claim commit). If the task builds on an area
+   that has not passed WS0 review yet, run that area's WS0 lot first (or as the task).
 3. `wpf-parity` for the behavior contract; `avalonia-research` for every API touched.
 4. Implement per `port-feature` / `unified-compositor-engine` / `overlay-clickthrough`.
 5. Verify: build slnf (`-clp:ErrorsOnly`, 0 errors), Core tests (count never decreases),
@@ -164,6 +224,7 @@ dotnet run --project ConditioningControlPanel/ConditioningControlPanel.csproj   
 
 ## Definition of Done
 
+- [ ] WS0 complete: the ENTIRE port reviewed lot by lot (contract + adversarial rubric + optimality), corrections merged, the parity matrix re-earned from a full reset with evidence per row, calibration-port blockage resolved or formally re-scoped.
 - [ ] Video, audio controls, and attention checks run through the compositor on Windows; legacy video windows deleted (WS1 Phase E complete).
 - [ ] All passive Chaos visuals are compositor layers; a full Chaos run holds the FPS floor; hook swallow gap resolved or explicitly accepted in the task board.
 - [ ] No passive effect window remains in `CCP.Avalonia` (audited); interactive windows are justified.
