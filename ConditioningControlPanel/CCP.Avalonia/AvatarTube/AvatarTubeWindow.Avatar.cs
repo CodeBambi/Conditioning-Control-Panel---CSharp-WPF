@@ -44,6 +44,87 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private readonly AvaloniaModResourceResolver? _resourceResolver;
         private AvaloniaAnimatedGif? _animatedAvatarGif;
 
+        #region Takeover countdown bar
+        // A thin pink bar under the avatar that drains toward the next random Takeover action. The
+        // ticker only runs while Takeover is enabled (gated on IAutonomyService.EnabledChanged), so
+        // there is no always-on render loop when the feature is idle. Mirrors the WPF AvatarTubeWindow.
+        private DispatcherTimer? _takeoverCountdownTimer;
+        private readonly ScaleTransform _takeoverCountdownScale = new(1, 1);
+        private Core.Services.Autonomy.IAutonomyService? _countdownAutonomy;
+
+        internal void InitTakeoverCountdownBar()
+        {
+            try
+            {
+                if (TakeoverCountdownFill != null)
+                    TakeoverCountdownFill.RenderTransform = _takeoverCountdownScale;
+                _countdownAutonomy = App.Services?.GetService<Core.Services.Autonomy.IAutonomyService>();
+                if (_countdownAutonomy == null) return;
+                _countdownAutonomy.EnabledChanged -= OnAutonomyEnabledChangedForBar;
+                _countdownAutonomy.EnabledChanged += OnAutonomyEnabledChangedForBar;
+                Opened -= OnOpenedStartCountdownBar;
+                Opened += OnOpenedStartCountdownBar;
+                if (_countdownAutonomy.IsEnabled) StartCountdownTicker();
+            }
+            catch { }
+        }
+
+        private void OnOpenedStartCountdownBar(object? sender, EventArgs e)
+        {
+            try { if (_countdownAutonomy?.IsEnabled == true) StartCountdownTicker(); } catch { }
+        }
+
+        private void OnAutonomyEnabledChangedForBar(object? sender, bool enabled)
+        {
+            try
+            {
+                if (!Dispatcher.UIThread.CheckAccess())
+                {
+                    Dispatcher.UIThread.Post(() => OnAutonomyEnabledChangedForBar(sender, enabled));
+                    return;
+                }
+                if (enabled) StartCountdownTicker();
+                else
+                {
+                    _takeoverCountdownTimer?.Stop();
+                    if (TakeoverCountdownBar != null) TakeoverCountdownBar.IsVisible = false;
+                }
+            }
+            catch { }
+        }
+
+        private void StartCountdownTicker()
+        {
+            if (_takeoverCountdownTimer == null)
+            {
+                _takeoverCountdownTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+                _takeoverCountdownTimer.Tick += TakeoverCountdown_Tick;
+            }
+            _takeoverCountdownTimer.Start();
+        }
+
+        private void TakeoverCountdown_Tick(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (TakeoverCountdownBar == null) return;
+                var show = _settings?.Current?.ShowTakeoverCountdownBar == true
+                           && _countdownAutonomy?.IsEnabled == true;
+                double? frac = show ? _countdownAutonomy?.NextRandomFireFraction : null;
+
+                if (frac == null)
+                {
+                    if (TakeoverCountdownBar.IsVisible) TakeoverCountdownBar.IsVisible = false;
+                    return;
+                }
+
+                if (!TakeoverCountdownBar.IsVisible) TakeoverCountdownBar.IsVisible = true;
+                _takeoverCountdownScale.ScaleX = frac.Value;
+            }
+            catch { }
+        }
+        #endregion
+
         private double _breathPhase;
         private double _wobblePhase;
         private double _mistPhase;

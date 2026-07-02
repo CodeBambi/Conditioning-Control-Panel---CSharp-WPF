@@ -12,6 +12,15 @@ public interface IAutonomyService
     bool IsIdleTimerRunning { get; }
     bool IsRandomTimerRunning { get; }
 
+    /// <summary>
+    /// Fraction (0..1) of the interval remaining until the next random-action fire — drives the avatar
+    /// countdown bar. Null when the random timer isn't running (nothing to count down to).
+    /// </summary>
+    double? NextRandomFireFraction { get; }
+
+    /// <summary>Raised when autonomous mode is started (true) or stopped (false).</summary>
+    event EventHandler<bool>? EnabledChanged;
+
     /// <summary>Raised when an autonomous action is selected and about to run.</summary>
     event EventHandler<AutonomyActionEventArgs>? ActionTriggered;
 

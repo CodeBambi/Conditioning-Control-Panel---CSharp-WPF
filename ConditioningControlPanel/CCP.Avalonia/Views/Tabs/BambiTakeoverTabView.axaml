@@ -194,6 +194,10 @@
                   <CheckBox Content="{loc:Str tab_bambi_takeover_random_trigger_content}"
                             IsChecked="{Binding AutonomyRandomTrigger, Mode=TwoWay}"
                             Margin="0,0,16,8" />
+                  <CheckBox Content="⏳ Show next-takeover countdown bar"
+                            ToolTip.Tip="A pink bar under the avatar that empties before the next random action."
+                            IsChecked="{Binding ShowTakeoverCountdownBar, Mode=TwoWay}"
+                            Margin="0,0,16,8" />
                   <CheckBox Content="{loc:Str tab_bambi_takeover_time_aware_content}"
                             IsChecked="{Binding AutonomyTimeAware, Mode=TwoWay}"
                             Margin="0,0,16,8" />

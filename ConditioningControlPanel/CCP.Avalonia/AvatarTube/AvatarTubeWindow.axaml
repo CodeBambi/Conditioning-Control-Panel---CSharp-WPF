@@ -340,6 +340,24 @@
                 <TranslateTransform Y="0"/>
               </Image.RenderTransform>
             </Image>
+
+            <!-- Takeover countdown bar: a thin pink bar that drains toward the next random action. -->
+            <Border x:Name="TakeoverCountdownBar"
+                    VerticalAlignment="Bottom"
+                    HorizontalAlignment="Center"
+                    Width="150" Height="4"
+                    Margin="0,0,0,2"
+                    CornerRadius="2"
+                    Background="#33FF69B4"
+                    IsVisible="False"
+                    ZIndex="6">
+              <Border x:Name="TakeoverCountdownFill"
+                      Width="150" Height="4"
+                      CornerRadius="2"
+                      Background="{DynamicResource PinkBrush}"
+                      HorizontalAlignment="Left"
+                      RenderTransformOrigin="0,0.5"/>
+            </Border>
           </Grid>
         </Border>
 

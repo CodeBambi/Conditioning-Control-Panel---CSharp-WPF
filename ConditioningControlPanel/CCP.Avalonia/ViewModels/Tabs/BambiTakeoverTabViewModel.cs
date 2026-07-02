@@ -113,6 +113,16 @@ public partial class BambiTakeoverTabViewModel : TabItemViewModel
     private bool _canTriggerBubbleCount;
 
     [ObservableProperty]
+    private bool _showTakeoverCountdownBar = true;
+
+    partial void OnShowTakeoverCountdownBarChanged(bool value)
+    {
+        if (_settingsService?.Current == null) return;
+        _settingsService.Current.ShowTakeoverCountdownBar = value;
+        Save();
+    }
+
+    [ObservableProperty]
     private int _announcementChance = 50;
 
     [ObservableProperty]
@@ -313,6 +323,7 @@ public partial class BambiTakeoverTabViewModel : TabItemViewModel
         AutonomyInterval = s.AutonomyRandomIntervalSeconds;
         AutonomyIdleTrigger = s.AutonomyIdleTriggerEnabled;
         AutonomyRandomTrigger = s.AutonomyRandomTriggerEnabled;
+        ShowTakeoverCountdownBar = s.ShowTakeoverCountdownBar;
         AutonomyTimeAware = s.AutonomyTimeAwareEnabled;
         AnnouncementChance = s.AutonomyAnnouncementChance;
         CanTriggerFlash = s.AutonomyCanTriggerFlash;

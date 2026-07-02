@@ -71,6 +71,10 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         _logger = logger;
         _compositor = compositor;
         _mouseHook = mouseHook;
+        // Avalonia always renders flashes on the single shared compositor canvas (FlashLayer) — there
+        // is no per-window flash path. This is exactly what WPF's opt-in FlashSolidMode achieves (one
+        // shared overlay host instead of many layered windows), so the feature is inherently always-on
+        // here; AppSettings.FlashSolidMode has no per-window fallback to gate and is intentionally ignored.
         _flashLayer = compositor != null ? new FlashLayer() : null;
         if (_flashLayer != null)
             _compositor?.RegisterLayer(_flashLayer);

@@ -182,6 +182,8 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
                 _sessionService.SessionStopped += OnSessionStopped;
             _modService = App.Services.GetService<global::ConditioningControlPanel.IModService>();
             _resourceResolver = App.Services.GetService<AvaloniaModResourceResolver>();
+
+            try { InitTakeoverCountdownBar(); } catch { }
             _portraitService = App.Services.GetService<IAvatarPortraitService>();
             if (_modService != null)
                 _modService.ActiveModChanged += OnModChanged;

@@ -65,6 +65,10 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
 
     private DispatcherTimer? _idleTimer;
     private DispatcherTimer? _randomTimer;
+    // Anchor for the avatar countdown bar: when the next random fire is due, and the interval it
+    // was scheduled over (so NextRandomFireFraction can report remaining/total).
+    private DateTime _nextRandomFireAt;
+    private double _nextRandomIntervalSeconds;
     private DispatcherTimer? _cooldownTimer;
     private DispatcherTimer? _heartbeatTimer;
 
@@ -73,6 +77,21 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
     public bool IsEnabled => _isEnabled;
     public bool IsIdleTimerRunning => _idleTimer != null;
     public bool IsRandomTimerRunning => _randomTimer != null;
+
+    /// <inheritdoc />
+    public event EventHandler<bool>? EnabledChanged;
+
+    /// <inheritdoc />
+    public double? NextRandomFireFraction
+    {
+        get
+        {
+            if (_randomTimer == null || _nextRandomIntervalSeconds <= 0) return null;
+            var remaining = (_nextRandomFireAt - DateTime.UtcNow).TotalSeconds;
+            if (remaining <= 0) return 0;
+            return Math.Clamp(remaining / _nextRandomIntervalSeconds, 0.0, 1.0);
+        }
+    }
     public bool IsActionInProgress { get; private set; }
 
     public event EventHandler<AutonomyActionEventArgs>? ActionTriggered;
@@ -164,7 +183,6 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
         _forceTestMode = false;
         _lastUserActivity = DateTime.Now;
         UpdateMood();
-
         StartIdleTimer();
         StartRandomTimer();
         StartHeartbeatTimer();
@@ -179,12 +197,15 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
         // Arm the "Hey Bambi" wake loop if mic consent is given + the engine is available. Voice is
         // otherwise decoupled from Takeover (the She's Listening UI also calls RefreshVoiceInputModes).
         RefreshVoiceInputModes();
+
+        try { EnabledChanged?.Invoke(this, true); } catch { }
     }
 
     public void Stop()
     {
         if (!_isEnabled) return;
         _isEnabled = false;
+        try { EnabledChanged?.Invoke(this, false); } catch { }
         _forceTestMode = false;
 
         _idleTimer?.Stop();
@@ -330,6 +351,9 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
             intervalSeconds = baseInterval + (_random.NextDouble() * variance * 2 - variance);
             intervalSeconds = Math.Max(10, intervalSeconds);
         }
+
+        _nextRandomFireAt = DateTime.UtcNow.AddSeconds(intervalSeconds);
+        _nextRandomIntervalSeconds = intervalSeconds;
 
         _randomTimer = StartOneShotTimer(TimeSpan.FromSeconds(intervalSeconds), () =>
         {
