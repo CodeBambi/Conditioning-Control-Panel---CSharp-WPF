@@ -235,6 +235,11 @@ public partial class App : Application
             }
             catch { }
 
+            // Activate click-driven gaze drift correction (constructs the head's implementation, which
+            // self-starts). No-op on heads without a real webcam tracker.
+            try { Services.GetService<ConditioningControlPanel.Core.Services.Webcam.IGazeDriftCorrectionService>(); }
+            catch { }
+
             // Start Awareness Engine keyword triggers (premium-gated) and screen OCR if enabled.
             try
             {

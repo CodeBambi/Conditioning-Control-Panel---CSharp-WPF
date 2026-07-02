@@ -67,7 +67,10 @@ class Program
             services.AddSingleton<IStartupRegistration, WindowsStartupRegistration>();
             services.AddSingleton<IBrowserHost, WebView2BrowserHost>();
             services.AddSingleton<IAudioWaveformProvider, NAudioWaveformProvider>();
-            services.AddSingleton<IWebcamService, AvaloniaWebcamTrackingService>();
+            services.AddSingleton<AvaloniaWebcamTrackingService>();
+            services.AddSingleton<IWebcamService>(sp => sp.GetRequiredService<AvaloniaWebcamTrackingService>());
+            services.AddSingleton<ConditioningControlPanel.Core.Services.Webcam.IGazeDriftCorrectionService,
+                                  GazeDriftCorrectionService>();
             services.AddSingleton<IScreenOcrService, AvaloniaScreenOcrService>();
             // Real offline speech engine (Vosk + NAudio); overrides the shared NullSpeechService.
             services.AddSingleton<ConditioningControlPanel.Core.Services.Speech.ISpeechRecognitionService, WindowsSpeechService>();
