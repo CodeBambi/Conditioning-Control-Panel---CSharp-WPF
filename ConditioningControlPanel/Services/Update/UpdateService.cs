@@ -20,39 +20,32 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.2.4";
+        public const string AppVersion = "6.2.5";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.2.4 - Jelly July
+        public const string CurrentPatchNotes = @"v6.2.5 - Tunnel Vision
 
 ✨ NEW
-- Takeover countdown bar: a thin pink bar under your companion drains toward the
-  next surprise Takeover, so you can see it coming. Toggle it in the Takeover tab.
-- Smarter microphone. An adaptive noise gate and high-pass filter make wake words
-  and spoken mantras far more reliable in noisy rooms.
+- Endless rabbit-hole tunnel: an opt-in 3D tunnel background for Chaos that
+  speeds up as your streak climbs. Find the toggle in the Chaos settings.
+- Eye tracking, rebuilt. Calibration is shorter and far more accurate, the
+  bubble test now fine-tunes itself from where you actually aimed, and the
+  gaze cursor glides smoothly and locks onto bubbles and targets instead of
+  jittering past them.
+- Heads-up before calibrating: dim-lit rooms make eye tracking inconsistent,
+  so put some light on your face for best results.
 
 🔧 BUG FIXES
-- Re-logging into the same account no longer wipes your progression and level.
-- Stopped unnecessary re-copying of your assets folder on some launches.
-- Season recap now shows the correct month.
-- Sessions keep your timeline segments, credit videos you actually watched, and
-  respect ramp vs preset settings.
-- Fixed overlays clobbering your pink-opacity setting, web videos showing a black
-  screen, and closing to the tray with the X button.
-- Muting keeps ambient bubbles, the animated avatar pins correctly, and the
-  tutorial no longer gets stuck.
-- Dashboard remote toggle, webcam mouth sensitivity, and picking your mic by name
-  all work again.
-- Takeover on-screen cues stay above other overlays.
+- ""Hey Bambi"" now catches you even when you speak the moment the mic opens.
+- Bubbles on a second monitor with different display scaling pop correctly
+  again.
 
-⚡ PERFORMANCE & STABILITY
-- Big freeze fixes: less layered-window pressure and smoother handling when moving
-  between monitors or when DPI changes.
-- Fixed startup freezes when relaunching the app several times in a row.
-- crash.log now rotates per version, so bug reports carry the right logs.
+⚡ PERFORMANCE
+- Chaos stays smooth during heavy floods by shedding render work when the
+  bubble field stacks up.
 
 Season: Jelly July";
 
