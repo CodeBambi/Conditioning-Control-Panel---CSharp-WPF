@@ -24,7 +24,7 @@
                      HorizontalScrollBarVisibility="Visible"
                      VerticalScrollBarVisibility="Disabled"
                      PreviewMouseWheel="SkillTreeScroller_PreviewMouseWheel">
-                <Canvas x:Name="SkillTreeCanvas" x:FieldModifier="internal" Width="2400" Height="460" HorizontalAlignment="Left">
+                <Canvas x:Name="SkillTreeCanvas" x:FieldModifier="internal" Width="3760" Height="460" HorizontalAlignment="Left">
                     <!-- Header and skill nodes will be drawn programmatically -->
                 </Canvas>
             </ScrollViewer>

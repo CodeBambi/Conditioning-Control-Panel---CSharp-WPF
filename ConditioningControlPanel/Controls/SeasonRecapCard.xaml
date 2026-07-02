@@ -243,6 +243,11 @@
                                 </Border>
                             </UniformGrid>
 
+                            <!-- PRESTIGE (lifetime points spent; hidden on pre-schema-2 snapshots) -->
+                            <TextBlock Text="{Binding PrestigeLineText}" Visibility="{Binding PrestigeVisibility}"
+                                       FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{StaticResource RecapGoldBrush}" Margin="2,8,0,0"/>
+
                             <!-- BADGES -->
                             <Grid Margin="0,14,0,8">
                                 <TextBlock Text="{Binding BadgesTitle}" FontSize="18" FontWeight="SemiBold"

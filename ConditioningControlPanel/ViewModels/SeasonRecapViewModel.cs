@@ -100,6 +100,19 @@ namespace ConditioningControlPanel.ViewModels
         public string StatDaysActiveLabel => Loc.Get("recap_stat_days_active");
         public string StatStreakLabel => Loc.Get("recap_stat_longest_streak");
 
+        // ---------- prestige strip (schema-2 snapshots; hidden when zero / v1) ----------
+        public Visibility PrestigeVisibility => _s.LifetimePointsSpent > 0 ? Visibility.Visible : Visibility.Collapsed;
+        public string PrestigeLineText
+        {
+            get
+            {
+                var t = $"✦ {Loc.Get("recap_prestige_label")} {_s.LifetimePointsSpent:N0}";
+                if (_s.PointsSpentSeason > 0)
+                    t += "  ·  " + Loc.GetF("recap_prestige_delta", _s.PointsSpentSeason);
+                return t;
+            }
+        }
+
         // ---------- badge row ----------
         public string BadgesTitle => Loc.Get("recap_badges_title");
 
