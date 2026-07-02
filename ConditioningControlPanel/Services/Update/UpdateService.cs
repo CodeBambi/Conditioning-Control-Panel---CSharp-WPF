@@ -20,32 +20,67 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.2.5";
+        public const string AppVersion = "6.2.6";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.2.5 - Tunnel Vision
+        public const string CurrentPatchNotes = @"v6.2.6 - Tunnel Vision
 
 ✨ NEW
-- Endless rabbit-hole tunnel: an opt-in 3D tunnel background for Chaos that
-  speeds up as your streak climbs. Find the toggle in the Chaos settings.
-- Eye tracking, rebuilt. Calibration is shorter and far more accurate, the
-  bubble test now fine-tunes itself from where you actually aimed, and the
-  gaze cursor glides smoothly and locks onto bubbles and targets instead of
-  jittering past them.
-- Heads-up before calibrating: dim-lit rooms make eye tracking inconsistent,
-  so put some light on your face for best results.
+- Prestige: the enhancement tree now survives the seasons. Stat and
+  analytics enhancements stay yours forever, mechanical enhancements
+  reset each season, and every sparkle you ever spend raises your
+  permanent Prestige rank. Your sparkle point balance is never lost at
+  season reset anymore.
+- Ditzy Data PRO: five new analytics enhancements at the end of the
+  tree, for the data nerds. A lifetime dashboard with an activity
+  heatmap calendar, season-by-season charts, a personal bests timeline,
+  and a per-feature usage report. The capstone certifies you.
+- Endless rabbit-hole tunnel: an opt-in 3D tunnel background for Chaos
+  that speeds up as your streak climbs. Find the toggle in the Chaos
+  settings.
+- Eye tracking, rebuilt. Calibration is shorter and far more accurate,
+  the bubble test now fine-tunes itself from where you actually aimed,
+  and the gaze cursor glides smoothly and locks onto bubbles and
+  targets instead of jittering past them. Heads-up before calibrating:
+  dim-lit rooms make eye tracking inconsistent, so put some light on
+  your face for best results.
+- Animated .webp images now actually animate everywhere: flashes, the
+  glitch wash, the image cascade, and tease bubbles.
+- Solid mode for flashes and subliminals: opt-in renderers that draw on
+  one shared overlay instead of popping separate windows. If your
+  fullscreen game kicks to desktop when a flash fires, turn these on.
 
 🔧 BUG FIXES
-- ""Hey Bambi"" now catches you even when you speak the moment the mic opens.
-- Bubbles on a second monitor with different display scaling pop correctly
-  again.
+- The splash screen no longer goes ""Not Responding"" when you click it
+  while the app loads.
+- Premium features check your live subscription instead of a stale
+  cached tier, and Discord logins with a linked Patreon keep premium
+  access through the change.
+- Logging out fully clears your login token.
+- ""Hey Bambi"" now catches you even when you speak the moment the mic
+  opens.
+- Videos triggered by bubbles start from the beginning instead of
+  midway through.
+- The countdown bar stays glued to its spot instead of detaching.
+- Your end-of-session summary no longer hides behind a leftover video
+  window.
+- Companion awareness lines wait their turn instead of cutting off what
+  she is currently saying.
+- Overlays keep full screen coverage and bubbles pop correctly on
+  setups where monitors use different display scaling.
+- Turning voice off while a Voice Lock Card is open switches it to
+  typed solving instead of leaving it unsolvable.
 
 ⚡ PERFORMANCE
-- Chaos stays smooth during heavy floods by shedding render work when the
-  bubble field stacks up.
+- Chaos stays smooth during heavy floods by shedding render work when
+  the bubble field stacks up.
+
+📦 SIZE
+- The install is roughly 280 MB lighter: voicelines re-encoded and UI
+  art optimized, with no audible or visible quality loss.
 
 Season: Jelly July";
 
