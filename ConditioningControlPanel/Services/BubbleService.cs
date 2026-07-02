@@ -2254,6 +2254,7 @@ internal class Bubble
     private double _teaseLifeRemainingMs;
     private System.Windows.Shapes.Ellipse? _teaseShine;   // glossy highlight — pulsed as the perf-safe shimmer
     private bool _teaseAnimated;                          // holds one of the animated-gif budget slots
+    private Image? _teaseImg;                             // webp frame-loop target — Destroy must Detach it (Forever clock pins the Image)
     private readonly Action<Bubble>? _onTeaseTouched;
     private readonly Action<Bubble>? _onTeaseDenied;
     private static string[]? _teaseGifPool;               // cached listing of EffectiveAssetsPath/teasebubble
@@ -4254,7 +4255,11 @@ internal class Bubble
             };
             RenderOptions.SetBitmapScalingMode(img, PerformanceProfile.ScalingMode(PerformanceProfile.CurrentTier));
             bool animate = false;
-            if (path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)
+            bool isGif = path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
+            bool isAnimatedWebp = !isGif
+                && path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase)
+                && AnimatedWebp.IsAnimated(path);
+            if ((isGif || isAnimatedWebp)
                 && _teaseAnimatedAlive < ChaosTuning.TEASE_MAX_ANIMATED)
             {
                 long len = 0;
@@ -4265,9 +4270,20 @@ internal class Bubble
             {
                 _teaseAnimated = true;
                 _teaseAnimatedAlive++;
-                XamlAnimatedGif.AnimationBehavior.SetRepeatBehavior(img, System.Windows.Media.Animation.RepeatBehavior.Forever);
-                XamlAnimatedGif.AnimationBehavior.SetAutoStart(img, true);
-                XamlAnimatedGif.AnimationBehavior.SetSourceUri(img, new Uri(path, UriKind.Absolute));
+                if (isGif)
+                {
+                    XamlAnimatedGif.AnimationBehavior.SetRepeatBehavior(img, System.Windows.Media.Animation.RepeatBehavior.Forever);
+                    XamlAnimatedGif.AnimationBehavior.SetAutoStart(img, true);
+                    XamlAnimatedGif.AnimationBehavior.SetSourceUri(img, new Uri(path, UriKind.Absolute));
+                }
+                else
+                {
+                    // XamlAnimatedGif is GIF-only — webp loops via a pre-decoded (off-thread,
+                    // display-size) frame animation. Held in _teaseImg so Destroy can Detach it:
+                    // the Forever clock pins the Image until cleared.
+                    _teaseImg = img;
+                    AnimatedWebp.AttachAnimation(img, path, Math.Max(64, (int)inner));
+                }
             }
             else
             {
@@ -4401,6 +4417,7 @@ internal class Bubble
 
         // Release this tease's animated-gif budget slot (process-wide cap).
         if (_teaseAnimated) { _teaseAnimated = false; _teaseAnimatedAlive = Math.Max(0, _teaseAnimatedAlive - 1); }
+        if (_teaseImg != null) { AnimatedWebp.Detach(_teaseImg); _teaseImg = null; }
 
         // Drop the visual tree + decoded-bitmap references NOW. Window.Close() alone defers
         // teardown to finalization, which lags badly under chaos's rapid spawn/close churn and

@@ -158,10 +158,14 @@ public sealed class ChaosGifCascadeOverlay : Window
         {
             string path = _files[_rng.Next(_files.Count)];
             var img = new Image { Stretch = Stretch.Uniform, Opacity = _opacity };
-            // A gif only animates while the animated budget has room and it isn't huge;
-            // otherwise it falls as a still (BitmapImage on a .gif decodes the first frame).
+            // A gif/animated-webp only animates while the animated budget has room and it isn't
+            // huge; otherwise it falls as a still (BitmapImage decodes the first frame).
             bool animate = false;
-            if (path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) && _animatedAlive < MAX_ANIMATED)
+            bool isGif = path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
+            bool isAnimatedWebp = !isGif
+                && path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase)
+                && Services.AnimatedWebp.IsAnimated(path);
+            if ((isGif || isAnimatedWebp) && _animatedAlive < MAX_ANIMATED)
             {
                 long len = 0;
                 try { len = new FileInfo(path).Length; } catch { }
@@ -170,9 +174,18 @@ public sealed class ChaosGifCascadeOverlay : Window
             if (animate)
             {
                 _animatedAlive++;
-                AnimationBehavior.SetRepeatBehavior(img, System.Windows.Media.Animation.RepeatBehavior.Forever);
-                AnimationBehavior.SetAutoStart(img, true);
-                AnimationBehavior.SetSourceUri(img, new Uri(path, UriKind.Absolute));
+                if (isGif)
+                {
+                    AnimationBehavior.SetRepeatBehavior(img, System.Windows.Media.Animation.RepeatBehavior.Forever);
+                    AnimationBehavior.SetAutoStart(img, true);
+                    AnimationBehavior.SetSourceUri(img, new Uri(path, UriKind.Absolute));
+                }
+                else
+                {
+                    // XamlAnimatedGif is GIF-only — webp loops via a pre-decoded (off-thread,
+                    // display-size) frame animation instead. Detached with the faller.
+                    Services.AnimatedWebp.AttachAnimation(img, path, (int)_gifSize);
+                }
             }
             else
             {
@@ -250,7 +263,7 @@ public sealed class ChaosGifCascadeOverlay : Window
                 f.Move.Y = f.Y;
                 if (f.Y > Height + _gifSize)
                 {
-                    try { AnimationBehavior.SetSourceUri(f.Img, null); f.Img.Source = null; } catch { }
+                    try { AnimationBehavior.SetSourceUri(f.Img, null); Services.AnimatedWebp.Detach(f.Img); f.Img.Source = null; } catch { }
                     if (f.Animated) _animatedAlive = Math.Max(0, _animatedAlive - 1);
                     _canvas.Children.Remove(f.Img);
                     _fallers.RemoveAt(i);
@@ -291,7 +304,7 @@ public sealed class ChaosGifCascadeOverlay : Window
         GoIdle();
         foreach (var f in _fallers)
         {
-            try { AnimationBehavior.SetSourceUri(f.Img, null); f.Img.Source = null; } catch { }
+            try { AnimationBehavior.SetSourceUri(f.Img, null); Services.AnimatedWebp.Detach(f.Img); f.Img.Source = null; } catch { }
         }
         _fallers.Clear();
         _animatedAlive = 0;
