@@ -1020,7 +1020,7 @@
           <Grid Grid.Row="1"
                 ColumnDefinitions="*,*">
             <Grid Grid.Column="0"
-                  ColumnDefinitions="*,Auto"
+                  ColumnDefinitions="*,Auto,Auto"
                   Margin="0,0,8,0">
               <Button Grid.Column="0"
                       Command="{Binding StartSessionCommand}"
@@ -1046,10 +1046,42 @@
                              VerticalAlignment="Center" />
                 </StackPanel>
               </Button>
+              <!-- Start options caret (Start normally / Jump right in), WPF BtnStartMenu parity. -->
               <Button Grid.Column="1"
+                      Width="52"
+                      Height="50"
+                      Margin="6,0,0,0"
+                      Theme="{StaticResource PinkButton}"
+                      Background="{DynamicResource AccentGradientBrush}"
+                      IsEnabled="{Binding !RemoteControlConnected}"
+                      IsVisible="{Binding !RemoteControlConnected}"
+                      ToolTip.Tip="{loc:Str tooltip_start_options}">
+                <TextBlock Text="▼"
+                           FontSize="16"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center" />
+                <Button.Flyout>
+                  <MenuFlyout Placement="Top">
+                    <MenuItem Header="{loc:Str menu_start_normally}"
+                              Click="MenuStartNormal_Click">
+                      <MenuItem.Icon>
+                        <TextBlock Text="▶" />
+                      </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="{loc:Str menu_jump_right_in}"
+                              Click="MenuJumpRightIn_Click">
+                      <MenuItem.Icon>
+                        <TextBlock Text="🎲" />
+                      </MenuItem.Icon>
+                    </MenuItem>
+                  </MenuFlyout>
+                </Button.Flyout>
+              </Button>
+              <Button Grid.Column="2"
                       Content="{Binding PauseButtonText}"
                       Command="{Binding TogglePauseSessionCommand}"
-                      IsVisible="{Binding IsEngineRunning}"
+                      IsVisible="{Binding IsSessionActive}"
                       Width="50"
                       Height="50"
                       Margin="5,0,0,0"

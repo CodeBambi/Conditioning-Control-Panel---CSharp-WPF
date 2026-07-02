@@ -39,8 +39,8 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly IDialogService? _dialogService;
     private readonly IUpdateService? _updateService;
     private readonly ILogger<MainWindowViewModel>? _logger;
-    private readonly IInputHook? _inputHook;
     private readonly IHotkeyProvider? _hotkeyProvider;
+    private readonly ILockdownService? _lockdownService;
     private readonly ITrayIcon? _trayIcon;
     private readonly IWindowChrome? _windowChrome;
     private readonly IOverlaySurface? _overlaySurface;
@@ -61,7 +61,6 @@ public partial class MainWindowViewModel : ObservableObject
 
     private string? _lastBrowserUrl;
     private DispatcherTimer? _clockTimer;
-    private DispatcherTimer? _sessionProgressTimer;
     private DispatcherTimer? _conditioningTimeTimer;
     private DispatcherTimer? _statPillTimer;
     private DispatcherTimer? _bannerTimer;
@@ -71,6 +70,12 @@ public partial class MainWindowViewModel : ObservableObject
     private double _conditioningBaselineMinutes;
     private int _conditioningSecondsCounter;
     private bool _isDisposed;
+
+    /// <summary>
+    /// True while a plain START (no preset session) drives the effect services directly,
+    /// mirroring WPF's engine-only StartEngine run. No SessionService lifecycle is involved.
+    /// </summary>
+    private bool _isEngineOnlyRun;
 
     /// <summary>
     /// Design-time constructor. Populates the tab shell so the Avalonia designer
@@ -94,8 +99,8 @@ public partial class MainWindowViewModel : ObservableObject
         _dialogService = services.GetService<IDialogService>();
         _updateService = services.GetService<IUpdateService>();
         _logger = services.GetRequiredService<ILogger<MainWindowViewModel>>();
-        _inputHook = services.GetService<IInputHook>();
         _hotkeyProvider = services.GetService<IHotkeyProvider>();
+        _lockdownService = services.GetService<ILockdownService>();
         _trayIcon = services.GetService<ITrayIcon>();
         _windowChrome = services.GetService<IWindowChrome>();
         _overlaySurface = services.GetService<IOverlaySurface>();
@@ -120,7 +125,6 @@ public partial class MainWindowViewModel : ObservableObject
         WireSessionEvents();
         StartUiTimers();
         RegisterGlobalHotkeys();
-        HookInput();
         SubscribeProgressionEvents();
         SubscribeCompanionEvents();
         SubscribeRemoteControlEvents();
@@ -191,6 +195,14 @@ public partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isEngineRunning;
+
+    /// <summary>
+    /// True only while a preset session (SessionService lifecycle) is active.
+    /// Engine-only runs keep this false so session-only UI (pause button) stays hidden,
+    /// mirroring WPF where BtnPauseSession is visible only during sessions.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSessionActive;
 
     [ObservableProperty]
     private string _startButtonIcon = "▶";
@@ -941,22 +953,34 @@ public partial class MainWindowViewModel : ObservableObject
         {
             Dispatcher.UIThread.Post(() =>
             {
+                // A preset session takes ownership of the run (any engine-only effects
+                // are subsumed and will be stopped by the session stop path).
+                _isEngineOnlyRun = false;
                 IsEngineRunning = true;
+                IsSessionActive = true;
                 UpdateStartButton();
                 StartConditioningTimeTracker();
+                // Per-start skill-tree hook (time-of-day tracking + weekly streak-shield
+                // reset), WPF StartEngine parity (MainWindow.StartStop.cs:162-163).
+                _skillTreeService?.Start();
                 if (_sessionService.CurrentSession is { } session)
                     _effectOrchestrator?.StartEffects(session);
             });
         };
 
-        _sessionService.SessionStopped += (_, _) =>
+        _sessionService.SessionStopped += (_, e) =>
         {
             Dispatcher.UIThread.Post(() =>
             {
                 IsEngineRunning = false;
+                IsSessionActive = false;
                 UpdateStartButton();
                 StopConditioningTimeTracker();
-                _effectOrchestrator?.StopEffects();
+                // On natural completion the SessionCompleted handler stops effects;
+                // stopping here too would double-stop every service. WPF stops the
+                // engine exactly once per session end.
+                if (!e.Completed)
+                    _effectOrchestrator?.StopEffects();
                 // Session log end is owned by Core SessionService (real elapsed/XP/completed flag).
             });
         };
@@ -965,23 +989,52 @@ public partial class MainWindowViewModel : ObservableObject
         {
             Dispatcher.UIThread.Post(() =>
             {
-                IsEngineRunning = false;
-                UpdateStartButton();
-                StopConditioningTimeTracker();
                 _effectOrchestrator?.StopEffects();
                 _progressionService?.AddXP(e.XPEarned, XPSource.Session);
                 RefreshProgressionHeader();
                 _logger?.LogInformation("Session completed: {Name}, XP: {XP}", e.Session.Name, e.XPEarned);
 
-                try
+                if (_sessionLog == null)
                 {
-                    var completeWindow = new Windows.SessionCompleteWindow(e.Session, e.Duration, e.XPEarned);
-                    completeWindow.Show();
+                    // Legacy fallback only: with a session log service present, the
+                    // completion window is shown from LogReady with the real media list
+                    // (WPF parity, MainWindow.xaml.cs:336-342).
+                    try
+                    {
+                        var completeWindow = new Windows.SessionCompleteWindow(e.Session, e.Duration, e.XPEarned);
+                        completeWindow.Show();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogWarning(ex, "Failed to show session complete window");
+                    }
                 }
-                catch (Exception ex)
-                {
-                    _logger?.LogWarning(ex, "Failed to show session complete window");
-                }
+            });
+        };
+
+        _sessionService.SessionPaused += (_, _) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                // WPF SessionEngine.PauseSession stops every effect service
+                // (SessionEngine.cs:391-402); pause must clear the screen.
+                _effectOrchestrator?.StopEffects();
+                UpdatePauseButton();
+                UpdateSessionStatus();
+            });
+        };
+
+        _sessionService.SessionResumed += (_, _) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                // WPF SessionEngine.ResumeSession restarts services per session settings
+                // (SessionEngine.cs:424-437). StartEffects does not re-begin the media log
+                // (log lifecycle is owned by Core SessionService), so resume is log-safe.
+                if (_sessionService.CurrentSession is { } session)
+                    _effectOrchestrator?.StartEffects(session);
+                UpdatePauseButton();
+                UpdateSessionStatus();
             });
         };
 
@@ -992,29 +1045,43 @@ public partial class MainWindowViewModel : ObservableObject
                 SessionStatusText = $"{e.Elapsed:mm\\:ss} / {e.Elapsed + e.Remaining:mm\\:ss} ({e.ProgressPercent:F0}%)";
             });
         };
+
+        if (_sessionLog != null)
+        {
+            _sessionLog.LogReady += OnSessionLogReady;
+        }
+    }
+
+    private void OnSessionLogReady(object? sender, SessionLogReadyEventArgs e)
+    {
+        // WPF shows the post-session media review for BOTH completion and abort
+        // (MainWindow.xaml.cs:336-342 -> MainWindow.Presets.cs:1174-1192).
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                var completeWindow = new Windows.SessionCompleteWindow(e.Log);
+                completeWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to show post-session log dialog");
+            }
+        });
     }
 
     private void StartUiTimers()
     {
+        // DispatcherTimer ticks already run on the UI thread; no re-posting needed.
+        // Session status is event-driven via ProgressUpdated (the old always-on 1Hz
+        // session-progress timer duplicated that work every second, even while idle).
         _clockTimer = StartPeriodicTimer(TimeSpan.FromSeconds(1), () =>
-        {
-            Dispatcher.UIThread.Post(() => CurrentTimeText = DateTime.Now.ToString("HH:mm"));
-        });
+            CurrentTimeText = DateTime.Now.ToString("HH:mm"));
 
-        _sessionProgressTimer = StartPeriodicTimer(TimeSpan.FromSeconds(1), () =>
-        {
-            Dispatcher.UIThread.Post(UpdateSessionStatus);
-        });
-
-        _statPillTimer = StartPeriodicTimer(TimeSpan.FromSeconds(30), () =>
-        {
-            Dispatcher.UIThread.Post(UpdateConditioningTimeDisplay);
-        });
+        _statPillTimer = StartPeriodicTimer(TimeSpan.FromSeconds(30), UpdateConditioningTimeDisplay);
 
         _bannerTimer = StartPeriodicTimer(TimeSpan.FromSeconds(7), () =>
-        {
-            Dispatcher.UIThread.Post(() => CurrentBannerIndex = (CurrentBannerIndex + 1) % 3);
-        });
+            CurrentBannerIndex = (CurrentBannerIndex + 1) % 3);
     }
 
     private void UpdateSessionStatus()
@@ -1072,10 +1139,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         StartButtonFlashOpacity = 0.5;
 
-        _ = StartOneShotTimer(TimeSpan.FromMilliseconds(400), () =>
-        {
-            Dispatcher.UIThread.Post(() => StartButtonFlashOpacity = 1.0);
-        });
+        _ = StartOneShotTimer(TimeSpan.FromMilliseconds(400), () => StartButtonFlashOpacity = 1.0);
     }
 
     #region Tab Navigation
@@ -1297,45 +1361,168 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        if (IsEngineRunning || _sessionService.State != SessionState.Idle)
+        var sessionActive = _sessionService.State != SessionState.Idle;
+
+        if (IsEngineRunning || sessionActive)
         {
-            var stopSession = _sessionService.CurrentSession;
-            var elapsed = _sessionService.ElapsedTime;
-            var remaining = _sessionService.RemainingTime;
-            var potentialXp = stopSession?.BonusXP ?? 0;
-            var penalty = _sessionService.XPPenalty;
-            var finalXp = Math.Max(0, potentialXp - penalty);
+            // WPF blocks any stop while lockdown is active (MainWindow.StartStop.cs:40-45).
+            if (_lockdownService?.IsActive == true)
+            {
+                await (_dialogService?.ShowMessageAsync(
+                    Loc.Get("title_lockdown"),
+                    Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"),
+                    DialogSeverity.Warning) ?? Task.CompletedTask);
+                return;
+            }
 
-            var confirmed = await (_dialogService?.ShowConfirmationAsync(
-                Loc.Get("title_confirm_stop"),
-                $"{Loc.Get("msg_stop_session_confirm")}\n\n" +
-                $"{stopSession?.Icon} {stopSession?.Name}\n" +
-                $"{Loc.Get("label_elapsed")}: {elapsed:mm\\:ss}\n" +
-                $"{Loc.Get("label_remaining")}: {remaining:mm\\:ss}\n\n" +
-                $"{Loc.Get("msg_xp_lost")}: {finalXp} XP") ?? Task.FromResult(false));
+            if (sessionActive)
+            {
+                // Preset session: confirm the XP loss before stopping, showing the
+                // level-multiplied bonus XP at stake (WPF MainWindow.StartStop.cs:50-81,
+                // MainWindow.Presets.cs:1294-1319).
+                var stopSession = _sessionService.CurrentSession;
+                var elapsed = _sessionService.ElapsedTime;
+                var remaining = _sessionService.RemainingTime;
+                var level = _settingsService?.Current?.PlayerLevel ?? 1;
+                var multiplier = _progressionService?.GetSessionXPMultiplier(level) ?? 1.0;
+                var potentialXp = (int)Math.Round((stopSession?.BonusXP ?? 0) * multiplier);
+                var penaltyText = _sessionService.PauseCount > 0
+                    ? Loc.GetF("msg_plus_pause_penalty_0", _sessionService.XPPenalty)
+                    : "";
 
-            if (!confirmed) return;
+                var confirmed = await (_dialogService?.ShowConfirmationAsync(
+                    Loc.Get("title_stop_session_confirm"),
+                    Loc.GetF("msg_stop_session_body",
+                        stopSession?.Icon, stopSession?.Name,
+                        $"{(int)elapsed.TotalMinutes:D2}:{elapsed.Seconds:D2}",
+                        $"{(int)remaining.TotalMinutes:D2}:{remaining.Seconds:D2}",
+                        potentialXp, penaltyText)) ?? Task.FromResult(false));
 
-            _sessionService.StopSession(completed: false);
-            IsEngineRunning = false;
-            UpdateStartButton();
-            StopConditioningTimeTracker();
+                if (!confirmed) return;
+
+                // UI state (buttons, tracker, effects) resets in the SessionStopped handler.
+                _sessionService.StopSession(completed: false);
+                return;
+            }
+
+            // Engine-only run stops silently: WPF shows a confirmation only when a preset
+            // session is live (MainWindow.StartStop.cs:47-98).
+            StopEngineOnlyRun();
             return;
         }
 
-        var session = _sessionService.CurrentSession ?? Session.QuickStartFromSettings(_settingsService.Current);
+        // Plain START with no preset selected is an ENGINE-ONLY run in WPF
+        // (BtnStart_Click -> StartEngine, MainWindow.StartStop.cs:99-104): no session
+        // lifecycle, no duration cap, no XP, no completion window.
+        StartEngineOnlyRun();
+    }
+
+    /// <summary>
+    /// Starts an engine-only run: effect services driven directly from live settings,
+    /// with no SessionService lifecycle. Mirrors WPF StartEngine
+    /// (MainWindow.StartStop.cs:151-266): runs until stopped, earns no XP, shows no
+    /// completion window. Preset sessions (Sessions tab) keep the full session lifecycle.
+    /// </summary>
+    internal void StartEngineOnlyRun()
+    {
+        if (IsEngineRunning || _sessionService?.State != SessionState.Idle) return;
+
+        var settings = _settingsService?.Current;
+        if (settings == null || _effectOrchestrator == null)
+        {
+            _logger?.LogInformation("Engine-only start requested but settings/orchestrator are unavailable.");
+            return;
+        }
 
         try
         {
-            await _sessionService.StartSessionAsync(session);
+            // WPF StartEngine parity: per-start session counter and skill-tree hook
+            // (MainWindow.StartStop.cs:161-163). AvaloniaSkillTreeService.Start is
+            // idempotent per call (shield-reset check + time-of-day count).
+            settings.TotalSessions++;
+            _settingsService?.Save();
+            _skillTreeService?.Start();
+
+            // Reuse the settings->session fan-out so the orchestrator starts exactly
+            // the services the live settings enable.
+            _effectOrchestrator.StartEffects(Session.QuickStartFromSettings(settings));
+
+            _isEngineOnlyRun = true;
             IsEngineRunning = true;
             UpdateStartButton();
+            // WPF shows no countdown for plain runs, just a running indicator.
+            SessionStatusText = Loc.Get("label_running");
             StartConditioningTimeTracker();
+
+            _logger?.LogInformation("Engine started (engine-only run)");
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to start session");
+            _logger?.LogError(ex, "Failed to start engine-only run");
         }
+    }
+
+    /// <summary>
+    /// Stops an engine-only run. Mirrors WPF StopEngine (MainWindow.StartStop.cs:270-353):
+    /// silent stop, no XP, no completion window. Preset-session stops go through
+    /// SessionService.StopSession instead.
+    /// </summary>
+    internal void StopEngineOnlyRun()
+    {
+        if (!IsEngineRunning && !_isEngineOnlyRun) return;
+        // A live preset session owns its own stop path (SessionStopped handler).
+        if (_sessionService != null && _sessionService.State != SessionState.Idle) return;
+
+        _isEngineOnlyRun = false;
+
+        try
+        {
+            _effectOrchestrator?.StopEffects();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to stop engine-only effects");
+        }
+
+        IsEngineRunning = false;
+        UpdateStartButton();
+        StopConditioningTimeTracker();
+
+        _logger?.LogInformation("Engine stopped (engine-only run)");
+    }
+
+    [RelayCommand]
+    private void StartNormally()
+    {
+        // WPF MenuStartNormal_Click (MainWindow.StartStop.cs:118-121): no-op while running.
+        if (!IsEngineRunning && _sessionService?.State == SessionState.Idle)
+            StartEngineOnlyRun();
+    }
+
+    /// <summary>
+    /// "Jump right in": turns on a fun, non-overwhelming mix, randomizes its pacing,
+    /// then starts the engine. Ports WPF RandomizeAndStart (MainWindow.StartStop.cs:133-149)
+    /// verbatim; setters clamp, so the random ranges are always safe.
+    /// </summary>
+    [RelayCommand]
+    private void JumpRightIn()
+    {
+        var s = _settingsService?.Current;
+        if (s != null)
+        {
+            var rng = new Random();
+            s.FlashEnabled = true;
+            s.FlashFrequency = rng.Next(20, 81);      // 20-80 flashes/hr
+            s.SimultaneousImages = rng.Next(2, 9);    // 2-8 at once
+            s.SubliminalEnabled = true;
+            s.SubliminalFrequency = rng.Next(3, 13);  // 3-12 per minute
+            s.SpiralEnabled = rng.Next(2) == 0;       // 50/50
+            s.PinkFilterEnabled = rng.Next(2) == 0;   // 50/50
+            _settingsService?.Save();
+        }
+
+        if (!IsEngineRunning && _sessionService?.State == SessionState.Idle)
+            StartEngineOnlyRun();
     }
 
     [RelayCommand]
@@ -1344,6 +1531,16 @@ public partial class MainWindowViewModel : ObservableObject
         var sessionService = _sessionService;
         if (sessionService == null || sessionService.State == SessionState.Idle)
             return;
+
+        // WPF blocks pause AND resume while lockdown is active (MainWindow.Presets.cs:1325-1330).
+        if (_lockdownService?.IsActive == true)
+        {
+            await (_dialogService?.ShowMessageAsync(
+                Loc.Get("title_lockdown"),
+                Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_pause_du"),
+                DialogSeverity.Warning) ?? Task.CompletedTask);
+            return;
+        }
 
         try
         {
@@ -1378,35 +1575,39 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void StartConditioningTimeTracker()
     {
+        // WPF guard (MainWindow.UiUpdates.cs:458): never reset the baseline while running.
+        if (_conditioningTimeTimer != null) return;
+
         _conditioningStartTime = DateTime.Now;
         _conditioningBaselineMinutes = _settingsService?.Current?.TotalConditioningMinutes ?? 0;
         _conditioningSecondsCounter = 0;
 
-        _conditioningTimeTimer?.Stop();
         _conditioningTimeTimer = StartPeriodicTimer(TimeSpan.FromSeconds(1), () =>
         {
-            Dispatcher.UIThread.Post(() =>
-            {
-                _conditioningSecondsCounter++;
-                UpdateConditioningTimeDisplay();
+            _conditioningSecondsCounter++;
+            UpdateConditioningTimeDisplay();
 
-                if (_conditioningSecondsCounter >= 60)
+            if (_conditioningSecondsCounter >= 60)
+            {
+                _conditioningSecondsCounter = 0;
+                var settings = _settingsService?.Current;
+                if (settings != null)
                 {
-                    _conditioningSecondsCounter = 0;
-                    var settings = _settingsService?.Current;
-                    if (settings != null)
-                    {
-                        settings.TotalConditioningMinutes += 1.0;
-                        _settingsService?.Save(suppressCloudBackup: false);
-                    }
+                    settings.TotalConditioningMinutes += 1.0;
+                    _settingsService?.Save(suppressCloudBackup: false);
                 }
-            });
+            }
         });
     }
 
     private void StopConditioningTimeTracker()
     {
-        _conditioningTimeTimer?.Stop();
+        // WPF guard (MainWindow.UiUpdates.cs:523): stopping a tracker that never started
+        // would compute elapsed from DateTime.MinValue and persist ~1 billion bogus
+        // conditioning minutes (which cloud sync would then keep forever).
+        if (_conditioningTimeTimer == null) return;
+
+        _conditioningTimeTimer.Stop();
         _conditioningTimeTimer = null;
 
         var elapsed = DateTime.Now - _conditioningStartTime;
@@ -1620,6 +1821,9 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private async Task ExitApplicationAsync()
     {
+        // WPF refuses to exit while lockdown is active (tray exit, MainWindow.xaml.cs:289).
+        if (_lockdownService?.IsActive == true) return;
+
         if (_sessionService?.State == SessionState.Running)
         {
             var confirm = await (_dialogService?.ShowConfirmationAsync(
@@ -1629,9 +1833,22 @@ public partial class MainWindowViewModel : ObservableObject
             _sessionService.StopSession(completed: false);
         }
 
-        StopUiTimers();
         StopConditioningTimeTracker();
-        ReleaseInputHook();
+        StopUiTimers();
+
+        // Synchronous effect teardown before Shutdown: the posted SessionStopped/engine
+        // handlers race process exit (WPF exits only after KillAllAudio + StopEngine,
+        // MainWindow.xaml.cs:849-877).
+        try
+        {
+            _effectOrchestrator?.StopEffects();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to stop effects during exit");
+        }
+        _isEngineOnlyRun = false;
+        IsEngineRunning = false;
 
         try
         {
@@ -1725,64 +1942,12 @@ public partial class MainWindowViewModel : ObservableObject
         });
     }
 
-    private void HookInput()
-    {
-        if (_inputHook == null || _platformCapabilities?.SupportsInputHooks != true) return;
-
-        try
-        {
-            _inputHook.KeyPressed += OnInputKeyPressed;
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Failed to hook input");
-        }
-    }
-
-    private void ReleaseInputHook()
-    {
-        try
-        {
-            _inputHook?.Dispose();
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Failed to release input hook");
-        }
-    }
-
-    private void OnInputKeyPressed(object? sender, KeyboardHookEventArgs e)
-    {
-        var settings = _settingsService?.Current;
-        if (settings == null) return;
-
-        if (settings.PanicKeyEnabled)
-        {
-            var panicKeyString = settings.PanicKey;
-            if (int.TryParse(panicKeyString, out var panicVk) && panicVk == e.VirtualKeyCode)
-            {
-                Dispatcher.UIThread.Post(HandlePanicKeyPress);
-            }
-        }
-    }
-
-    private async void HandlePanicKeyPress()
-    {
-        if (_sessionService?.State == SessionState.Running)
-        {
-            _logger?.LogInformation("Panic key pressed while session running.");
-            _sessionService.PauseSession();
-            _sessionService.StopSession(completed: false);
-            IsEngineRunning = false;
-            UpdateStartButton();
-            StopConditioningTimeTracker();
-        }
-        else
-        {
-            _logger?.LogInformation("Panic key pressed while idle; exiting application.");
-            await ExitApplicationAsync();
-        }
-    }
+    // Panic-key handling lives solely in Views/MainWindow.axaml.cs (name-based key match,
+    // WPF-contract pause-preserve on first press + double-press-to-exit). The former
+    // ViewModel handler parsed PanicKey as an integer VK code (PanicKey stores key NAMES),
+    // and its semantics forfeited the session / exited on a single press - deleted.
+    // The IInputHook singleton is owned by the DI container; this VM neither subscribes
+    // to nor disposes it.
 
     #endregion
 
@@ -1813,15 +1978,14 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void StopUiTimers()
     {
+        // The conditioning-time timer is owned by Start/StopConditioningTimeTracker
+        // (stopping it here would bypass the persistence flush and defeat the
+        // stop-tracker guard), so it is deliberately not touched.
         _clockTimer?.Stop();
-        _sessionProgressTimer?.Stop();
-        _conditioningTimeTimer?.Stop();
         _statPillTimer?.Stop();
         _bannerTimer?.Stop();
         _xpFlashTimer?.Stop();
         _clockTimer = null;
-        _sessionProgressTimer = null;
-        _conditioningTimeTimer = null;
         _statPillTimer = null;
         _bannerTimer = null;
         _xpFlashTimer = null;
@@ -1834,7 +1998,11 @@ public partial class MainWindowViewModel : ObservableObject
 
         StopUiTimers();
         StopConditioningTimeTracker();
-        ReleaseInputHook();
+
+        if (_sessionLog != null)
+        {
+            _sessionLog.LogReady -= OnSessionLogReady;
+        }
 
         if (_hotkeyProvider != null)
         {

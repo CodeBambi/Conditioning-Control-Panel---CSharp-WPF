@@ -269,7 +269,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<AudioWaveformCache>();
 
         // ViewModels
-        services.AddTransient<MainWindowViewModel>();
+        // Singleton: sole owner of app-lifetime session wiring (effect start/stop, XP grant,
+        // panic) on singleton services; a second instance would double-subscribe those events.
+        services.AddSingleton<MainWindowViewModel>();
         services.AddTransient<AppInfoTabViewModel>();
         services.AddTransient<SettingsTabViewModel>();
         services.AddTransient<PresetsTabViewModel>();

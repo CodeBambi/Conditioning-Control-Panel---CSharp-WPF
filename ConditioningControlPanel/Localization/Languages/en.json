@@ -4622,5 +4622,8 @@
   "title_companion_level_up": "Companion Level Up!",
   "msg_companion_level_up_fmt": "{0} reached Level {1}!",
   "msg_imported_n_triggers": "Imported {0} custom trigger(s).",
-  "msg_import_failed": "Import failed."
+  "msg_import_failed": "Import failed.",
+  "menu_start_normally": "Start normally",
+  "menu_jump_right_in": "Jump right in (randomize + start)",
+  "tooltip_start_options": "Start options"
 }

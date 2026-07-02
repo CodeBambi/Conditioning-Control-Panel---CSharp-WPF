@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -139,8 +140,10 @@ public partial class App : Application
             AvaloniaAppEnvironment.MigrateFromLegacyRoamingPath();
 
             // Wire the static Core App stub so copied model code can reach settings.
+            // Note: no launch-time SkillTree.Start() - WPF calls it per engine start only
+            // (MainWindow.StartStop.cs:162), and a launch call would skew the time-of-day
+            // usage counters that feed the night_shift/early_bird secret skills.
             CoreApp.Services = Services;
-            CoreApp.SkillTree.Start();
 
             // One-shot settings migrations WPF runs at startup (App.xaml.cs). Must run
             // before anything reads the migrated fields (Flash UI, GazeFocusService).
@@ -254,6 +257,54 @@ public partial class App : Application
                 }
 
                 tray.Show();
+
+                // Launch behaviors, WPF MainWindow.xaml.cs:2102-2121: StartMinimized ->
+                // AutoStartEngine -> ForceVideoOnLaunch, in that order, once the window
+                // has opened. Spike windows are excluded (real dashboard only), and so are
+                // harness runs (smoke/benchmark own the start/stop lifecycle themselves;
+                // an auto-started engine would skew their assertions and measurements).
+                var isHarnessRun = desktop.Args?.Any(a =>
+                    a is "--smoke-test" or "--benchmark" or "--max-benchmark") == true;
+                if (!isHarnessRun && desktop.MainWindow is MainWindow dashboardWindow)
+                {
+                    EventHandler? applyLaunchBehaviors = null;
+                    applyLaunchBehaviors = async (_, _) =>
+                    {
+                        dashboardWindow.Opened -= applyLaunchBehaviors;
+                        try
+                        {
+                            var launchSettings = Services.GetRequiredService<ISettingsService>().Current;
+                            if (launchSettings == null) return;
+
+                            if (launchSettings.StartMinimized)
+                            {
+                                // Let the window fully render before hiding (WPF waits 100ms
+                                // to avoid black-window artifacts). Tray restore already exists.
+                                await Task.Delay(100);
+                                dashboardWindow.Hide();
+                            }
+
+                            if (launchSettings.AutoStartEngine &&
+                                dashboardWindow.DataContext is MainWindowViewModel vm)
+                            {
+                                // WPF AutoStartEngine calls StartEngine(): an engine-only run,
+                                // never a timed preset session.
+                                vm.StartEngineOnlyRun();
+                            }
+
+                            if (launchSettings.ForceVideoOnLaunch)
+                            {
+                                await Task.Delay(200);
+                                TriggerStartupVideo();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Logger?.Warning(ex, "Launch behaviors failed");
+                        }
+                    };
+                    dashboardWindow.Opened += applyLaunchBehaviors;
+                }
             }
             else if (ApplicationLifetime is ISingleViewApplicationLifetime singleViewPlatform)
             {
@@ -337,6 +388,36 @@ public partial class App : Application
         // Parity with WPF OnExit: drop decrypted secrets from memory.
         ConditioningControlPanel.Core.Services.SecureAuthTokenStore.ClearMemoryCache();
         ConditioningControlPanel.Core.Services.SecureApiKeyStore.ClearMemoryCache();
+    }
+
+    /// <summary>
+    /// Plays the configured startup video, or a random one when none is set.
+    /// WPF MainWindow.UiUpdates.cs:1421 TriggerStartupVideo parity.
+    /// </summary>
+    private static void TriggerStartupVideo()
+    {
+        try
+        {
+            var settings = Services?.GetService<ISettingsService>()?.Current;
+            var video = Services?.GetService<ConditioningControlPanel.Core.Services.Video.IVideoService>();
+            if (settings == null || video == null) return;
+
+            var startupPath = settings.StartupVideoPath;
+            if (!string.IsNullOrEmpty(startupPath) && File.Exists(startupPath))
+            {
+                Log.Information("Playing startup video: {Path}", startupPath);
+                video.PlaySpecificVideo(startupPath, settings.StrictLockEnabled);
+            }
+            else
+            {
+                Log.Information("Playing random startup video");
+                video.TriggerVideo();
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Logger?.Warning(ex, "Startup video failed");
+        }
     }
 
     private static void RestoreMainWindow(Window? window)

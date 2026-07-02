@@ -20,6 +20,7 @@ using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services;
 using ConditioningControlPanel.Core.Services.Sessions;
 using ConditioningControlPanel.Core.Services.Settings;
+using ConditioningControlPanel.Core.Services.Video;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ConditioningControlPanel.Avalonia.Views;
@@ -204,10 +205,23 @@ public partial class MainWindow : Window
         _lastPanicPress = now;
 
         // First press while running: stop audio and pause the active session.
+        // Effects stop via the SessionPaused -> StopEffects wiring in the view model.
         if (_sessionService?.State == SessionState.Running)
         {
             try { _audioPlayer?.Stop(); } catch { /* best effort */ }
             _sessionService.PauseSession();
+            RestoreWindow();
+            return;
+        }
+
+        // First press while an engine-only run is active (plain START, no session):
+        // stop the engine, mirroring WPF panic-while-running -> StopEngine
+        // (MainWindow.xaml.cs:811).
+        if (_sessionService?.State == SessionState.Idle &&
+            DataContext is MainWindowViewModel { IsEngineRunning: true } vm)
+        {
+            try { _audioPlayer?.Stop(); } catch { /* best effort */ }
+            vm.StopEngineOnlyRun();
             RestoreWindow();
             return;
         }
@@ -220,10 +234,31 @@ public partial class MainWindow : Window
             {
                 try { _audioPlayer?.Stop(); } catch { /* best effort */ }
                 _sessionService?.StopSession(completed: false);
+
+                // Synchronous teardown before Shutdown (WPF MainWindow.xaml.cs:849-877):
+                // the SessionStopped cleanup is posted to the dispatcher and would race
+                // process exit, leaving orphaned LibVLC windows and unsaved settings.
+                try { App.Services?.GetService<ISessionEffectOrchestrator>()?.StopEffects(); } catch { /* best effort */ }
+                try { App.Services?.GetService<IVideoService>()?.ForceCleanup(); } catch { /* best effort */ }
+                try { _settingsService?.SaveImmediate(); } catch { /* best effort */ }
+
                 try { _avatarTubeWindow?.Close(); } catch { /* best effort */ }
                 desktop.Shutdown();
             }
         }
+    }
+
+    // Start-options flyout (Start normally / Jump right in), WPF MainWindow.StartStop.cs:118-126.
+    private void MenuStartNormal_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm)
+            vm.StartNormallyCommand.Execute(null);
+    }
+
+    private void MenuJumpRightIn_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm)
+            vm.JumpRightInCommand.Execute(null);
     }
 
     private void RestoreWindow()
