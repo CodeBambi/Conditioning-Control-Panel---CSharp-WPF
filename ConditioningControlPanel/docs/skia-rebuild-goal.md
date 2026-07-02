@@ -1,6 +1,7 @@
 # SKIA REBUILD GOAL - Windows + Linux, functionality first
 
-Created: 2026-07-02. Status: DRAFT, pending owner review. Supersedes `EXECUTION_GOAL.md`
+Created: 2026-07-02. Status: APPROVED by owner 2026-07-02 — this is the active
+autonomous driver. Supersedes `EXECUTION_GOAL.md`
 as the active autonomous driver once approved (that doc's goal was declared complete
 2026-06-23 and is stale). `unified-compositor-engine-goal.md` and
 `unified-compositor-engine-plan.md` remain the detail tracker for Workstreams 1-2 and are
