@@ -242,6 +242,9 @@ WindowDecorations = WindowDecorations.None;
 
         _fade?.Dispose();
         _fade = new OpacityFade(this, 0, 1, IN_MS);
+        // Scale-pop the content in (WPF BackEase EaseOut 0.85→1.0 over IN_MS+70, amplitude 0.6) —
+        // not a static 0.85.
+        AvaloniaChaosAnim.ScalePop(scale, 0.85, 1.0, IN_MS + 70);
         _life.Start();
     }
 

@@ -27,6 +27,7 @@ public partial class ChaosEStimGlowOverlay : Window
 
     private readonly DispatcherTimer _follow;
     private readonly Ellipse _halo;
+    private ScalePulse? _tremble;
 
     public ChaosEStimGlowOverlay()
     {
@@ -52,6 +53,7 @@ public partial class ChaosEStimGlowOverlay : Window
         brush.GradientStops.Add(new GradientStop(Color.FromArgb(120, 0x9C, 0x5C, 0xFF), 0.45));
         brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0x9C, 0x5C, 0xFF), 1.0));
 
+        var haloScale = new ScaleTransform(1, 1);
         _halo = new Ellipse
         {
             Width = HALO_SIZE, Height = HALO_SIZE,
@@ -59,8 +61,14 @@ public partial class ChaosEStimGlowOverlay : Window
             IsHitTestVisible = false,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
+            RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+            RenderTransform = haloScale,
         };
         Content = _halo;
+
+        // A quick electric tremble — charged, not breathing (WPF DoubleAnimation 0.88↔1.10 / 160ms
+        // AutoReverse Forever SineEase). ScalePulse's period is the full up+down cycle => 320ms.
+        _tremble = new ScalePulse(haloScale, 0.88, 1.10, 320);
 
         _follow = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(FOLLOW_MS) };
         _follow.Tick += FollowTick;
@@ -139,7 +147,7 @@ public partial class ChaosEStimGlowOverlay : Window
                 {
                     var w = _active;
                     _active = null;
-                    if (w != null) { w._follow.Stop(); w.Close(); }
+                    if (w != null) { w._follow.Stop(); w._tremble?.Dispose(); w.Close(); }
                 }
                 catch { }
             });

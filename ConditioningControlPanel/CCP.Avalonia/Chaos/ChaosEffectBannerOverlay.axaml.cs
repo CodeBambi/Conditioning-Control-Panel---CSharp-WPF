@@ -85,6 +85,7 @@ WindowDecorations = WindowDecorations.None;
                 try
                 {
                     if (_active == null) { _active = new ChaosEffectBannerOverlay(); ((global::Avalonia.Controls.Window)_active).Show(); }
+                    accent = ChaosBoonColors.ForOrDefault(id, accent);   // payload-based color language (WPF parity)
                     _active.AddEntry(id, text, accent, artKey);
                     AvaloniaChaosWindowZ.RaiseAboveVideo(_active);
                 }
@@ -155,7 +156,9 @@ WindowDecorations = WindowDecorations.None;
         _fade?.Dispose();
         _fade = new OpacityFade(label, 0, 1, FADE_IN_MS);
         _pulses[id]?.Dispose();
-        _pulses[id] = new ScalePulse(scale, 0.92, 1.10, 840);
+        // A barely-there heartbeat (WPF DoubleAnimation 1.0↔1.03 / 850ms AutoReverse Forever
+        // SineEase). ScalePulse's period is the full up+down cycle => 1700ms.
+        _pulses[id] = new ScalePulse(scale, 1.0, 1.03, 1700);
     }
 
     private void FadeEntry(string id)

@@ -52,9 +52,9 @@ WindowDecorations = WindowDecorations.None;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.Manual;
 
-        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBounds(forcePrimary: true);
+        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBoundsDip();
         Position = new PixelPoint((int)sl, (int)st);
-        Width = sw;
+        Width = sw;   // DIP (StageBoundsDip already divided the physical span by scaling)
         Height = sh;
 
         _canvas = new Canvas { IsHitTestVisible = false };
@@ -173,37 +173,57 @@ WindowDecorations = WindowDecorations.None;
         return b;
     }
 
-    private Point? Local(Point px) => new Point(px.X - Position.X, px.Y - Position.Y);
+    private double Scale => RenderScaling <= 0 ? 1.0 : RenderScaling;
+
+    /// <summary>Physical screen px → this window's local DIPs. <see cref="Window.Position"/> is
+    /// physical px while the canvas is laid out in the window's DIPs (<see cref="Scale"/>), so the
+    /// physical offset must be divided by the scaling.</summary>
+    private Point? Local(Point px)
+    {
+        double s = Scale;
+        return new Point((px.X - Position.X) / s, (px.Y - Position.Y) / s);
+    }
 
     private void DrawRipple(Point centerPx, double radiusPx, double lifeMs)
     {
         if (Local(centerPx) is not Point c) return;
-        double r = radiusPx;
+        double r = radiusPx / Scale;
+        var st = new ScaleTransform(0.05, 0.05);
         var ring = NewRing(c, r, RingColor, 6);
+        ring.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+        ring.RenderTransform = st;
         Canvas.SetLeft(ring, c.X - r);
         Canvas.SetTop(ring, c.Y - r);
         _canvas.Children.Add(ring);
         _transientCount++;
+        // The ring EXPANDS from a point (WPF ScaleTransform 0.05→1.0, cubic ease-out) as it fades.
+        AvaloniaChaosAnim.ScaleTo(st, 0.05, 1.0, lifeMs, AvaloniaChaosAnim.EasingMode.EaseOut);
         _ = new OpacityFade(ring, 0.95, 0, lifeMs, () => RemoveTransient(ring));
     }
 
     private void DrawSnapRipple(Point centerPx, double radiusPx, double lifeMs)
     {
         if (Local(centerPx) is not Point c) return;
-        double r = radiusPx;
-        var front = NewRing(c, r, Color.FromRgb(0x7A, 0xE0, 0xFF), 6);
-        Canvas.SetLeft(front, c.X - r);
-        Canvas.SetTop(front, c.Y - r);
-        _canvas.Children.Add(front);
-        _transientCount++;
-        _ = new OpacityFade(front, 0.95, 0, lifeMs, () => RemoveTransient(front));
-        var echo = NewRing(c, r * 0.82, Color.FromRgb(0xFF, 0x69, 0xB4), 3.5);
-        Canvas.SetLeft(echo, c.X - r * 0.82);
-        Canvas.SetTop(echo, c.Y - r * 0.82);
-        _canvas.Children.Add(echo);
-        _transientCount++;
-        _ = new OpacityFade(echo, 0.65, 0, lifeMs, () => RemoveTransient(echo));
+        double r = radiusPx / Scale;
+        // Cyan front grows LINEARLY (matches the linear kill-front); the pink echo rides eased behind.
+        AddCastRing(c, r, lifeMs, Color.FromRgb(0x7A, 0xE0, 0xFF), 6, 0.95, eased: false);
+        AddCastRing(c, r * 0.82, lifeMs, Color.FromRgb(0xFF, 0x69, 0xB4), 3.5, 0.65, eased: true);
         AddRadialShards(c, r, lifeMs);
+    }
+
+    private void AddCastRing(Point c, double r, double lifeMs, Color color, double thickness, double fromOpacity, bool eased)
+    {
+        var st = new ScaleTransform(0.05, 0.05);
+        var ring = NewRing(c, r, color, thickness);
+        ring.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+        ring.RenderTransform = st;
+        Canvas.SetLeft(ring, c.X - r);
+        Canvas.SetTop(ring, c.Y - r);
+        _canvas.Children.Add(ring);
+        _transientCount++;
+        AvaloniaChaosAnim.ScaleTo(st, 0.05, 1.0, lifeMs,
+            eased ? AvaloniaChaosAnim.EasingMode.EaseOut : AvaloniaChaosAnim.EasingMode.Linear);
+        _ = new OpacityFade(ring, fromOpacity, 0, lifeMs, () => RemoveTransient(ring));
     }
 
     private void AddRadialShards(Point center, double radius, double lifeMs)
@@ -311,7 +331,38 @@ WindowDecorations = WindowDecorations.None;
         Canvas.SetTop(zone, c.Y - r);
         _canvas.Children.Add(zone);
         _transientCount++;
-        _ = new OpacityFade(zone, 0.55, 0, lifeMs, () => RemoveTransient(zone));
+        // A crackling flicker for its whole life, then a quick fade-away at the end (WPF keyframes).
+        StartCrackleFade(zone, lifeMs, () => RemoveTransient(zone));
+    }
+
+    /// <summary>Random-opacity crackle (0.55–1.0, repicked every ~90ms), then a linear fade to 0
+    /// over the final crackle window — mirrors the WPF residue keyframe animation.</summary>
+    private static void StartCrackleFade(Control target, double lifeMs, Action onComplete)
+    {
+        var rng = new Random();
+        int steps = Math.Max(2, (int)(lifeMs / 90));
+        double fadeStartMs = Math.Min(Math.Max(1, lifeMs - 1), (steps - 1) * 90.0);
+        double startMs = Environment.TickCount64;
+        double lastFlickMs = -1000;
+        double flick = 0.55 + rng.NextDouble() * 0.45;
+        target.Opacity = flick;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        timer.Tick += (_, _) =>
+        {
+            double elapsed = Environment.TickCount64 - startMs;
+            if (elapsed >= lifeMs) { timer.Stop(); target.Opacity = 0; onComplete(); return; }
+            if (elapsed < fadeStartMs)
+            {
+                if (elapsed - lastFlickMs >= 90) { lastFlickMs = elapsed; flick = 0.55 + rng.NextDouble() * 0.45; }
+                target.Opacity = flick;
+            }
+            else
+            {
+                double f = (elapsed - fadeStartMs) / Math.Max(1, lifeMs - fadeStartMs);
+                target.Opacity = flick * (1 - f);
+            }
+        };
+        timer.Start();
     }
 
     private void UpdateTether(int key, Point aPx, Point bPx)
@@ -323,6 +374,8 @@ WindowDecorations = WindowDecorations.None;
             {
                 Stroke = TetherBrush,
                 StrokeThickness = 3.5,
+                StrokeDashArray = new global::Avalonia.Collections.AvaloniaList<double> { 4, 3 },
+                StrokeLineCap = PenLineCap.Round,
                 IsHitTestVisible = false,
                 Opacity = 0.55,
             };

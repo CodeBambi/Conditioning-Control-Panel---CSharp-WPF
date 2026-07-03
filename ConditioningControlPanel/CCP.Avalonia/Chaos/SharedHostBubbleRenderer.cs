@@ -34,7 +34,11 @@ public sealed class SharedHostBubbleRenderer : IBubbleRenderer
         if (!_bubbles.TryGetValue(state.Id, out var bubble)) return;
 
         ApplyVisualState(bubble, state);
-        ChaosBubbleHostOverlay.Place(bubble, state.X, state.Y);
+        // BubbleState.X/Y are per-screen LOGICAL DIPs; the host places in PHYSICAL px (the
+        // cross-screen-safe currency), so convert with the bubble's own screen scaling first
+        // (same seam the compositor BubbleLayer uses: physical = logical * scaling).
+        double s = state.Scaling > 0 ? state.Scaling : 1.0;
+        ChaosBubbleHostOverlay.Place(bubble, state.X * s, state.Y * s);
     }
 
     public void SetLabel(Guid id, string label)

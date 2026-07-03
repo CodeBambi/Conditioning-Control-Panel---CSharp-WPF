@@ -42,6 +42,7 @@ public partial class ChaosEStimOverlay : Window
     private double _elapsedMs;
     private int _strikeSeq;
     private OpacityFade? _lifeFade;
+    private DispatcherTimer? _hold;
 
     public static void Arm() => ChaosEStimGlowOverlay.Arm();
     public static void Disarm() => ChaosEStimGlowOverlay.Disarm();
@@ -111,7 +112,7 @@ public partial class ChaosEStimOverlay : Window
                 {
                     var w = _active;
                     _active = null;
-                    if (w != null) { w._tick.Stop(); w.Close(); }
+                    if (w != null) { w._tick.Stop(); w._hold?.Stop(); w.Close(); }
                 }
                 catch { }
             });
@@ -135,9 +136,9 @@ WindowDecorations = WindowDecorations.None;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.Manual;
 
-        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBounds(forcePrimary: true);
+        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBoundsDip();
         Position = new PixelPoint((int)sl, (int)st);
-        Width = sw;
+        Width = sw;   // DIP (StageBoundsDip already divided the physical span by scaling)
         Height = sh;
 
         _canvas = new Canvas { IsHitTestVisible = false };
@@ -151,10 +152,14 @@ WindowDecorations = WindowDecorations.None;
 
     private void BeginStrike(IReadOnlyList<(Point From, Point To)> boltsPx)
     {
-        Point Local(Point px) => new Point(px.X - Position.X, px.Y - Position.Y);
+        // px is physical screen px; the canvas is laid out in the window's DIPs at RenderScaling,
+        // so convert the physical offset from the (physical-px) window origin into DIPs.
+        double scale = RenderScaling <= 0 ? 1.0 : RenderScaling;
+        Point Local(Point px) => new Point((px.X - Position.X) / scale, (px.Y - Position.Y) / scale);
 
         _tick.Stop();
         _lifeFade?.Dispose();
+        _hold?.Stop();
         _canvas.Children.Clear();
         _segments.Clear();
         _glows.Clear();
@@ -206,13 +211,22 @@ WindowDecorations = WindowDecorations.None;
 
         int seq = ++_strikeSeq;
         Opacity = STRIKE_OPACITY;
-        _lifeFade = new OpacityFade(this, STRIKE_OPACITY, 0, HOT_MS + FADE_MS, () =>
+        // Hold the bolt hot for HOT_MS, THEN fade over FADE_MS (WPF keyframes: discrete hold at 0
+        // and HOT_MS, linear to 0 at HOT_MS+FADE_MS) — not one continuous fade from full brightness.
+        _hold = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(HOT_MS) };
+        _hold.Tick += (_, _) =>
         {
+            _hold?.Stop();
             if (seq != _strikeSeq) return;
-            _tick.Stop();
-            _canvas.Children.Clear();
-            try { Hide(); } catch { }
-        });
+            _lifeFade = new OpacityFade(this, STRIKE_OPACITY, 0, FADE_MS, () =>
+            {
+                if (seq != _strikeSeq) return;
+                _tick.Stop();
+                _canvas.Children.Clear();
+                try { Hide(); } catch { }
+            });
+        };
+        _hold.Start();
     }
 
     private void JitterBolts()

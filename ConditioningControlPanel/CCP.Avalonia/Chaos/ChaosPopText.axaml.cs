@@ -32,7 +32,6 @@ public partial class ChaosPopText : Window
 
     private readonly Grid _root = new();
     private readonly DispatcherTimer _holdTimer = new();
-    private readonly DispatcherTimer _riseTimer = new();
     private OpacityFade? _outFade;
     private bool _closed;
 
@@ -64,7 +63,6 @@ WindowDecorations = WindowDecorations.None;
             _holdTimer.Stop();
             _outFade?.Dispose();
             _outFade = new OpacityFade(this, Opacity, 0, OUT_MS, Retire);
-            _riseTimer.Stop();
         };
 
         Opened += (_, _) => ApplyExStyles();
@@ -141,18 +139,11 @@ WindowDecorations = WindowDecorations.None;
         _holdTimer.Stop();
         _holdTimer.Start();
 
-        rise.Y = 6;
-        _riseTimer.Stop();
-        _riseTimer.Interval = TimeSpan.FromMilliseconds(16);
-        double startMs = Environment.TickCount64;
-        double totalMs = IN_MS + HOLD_MS + OUT_MS;
-        _riseTimer.Tick += (_, _) =>
-        {
-            double t = Math.Min(1, (Environment.TickCount64 - startMs) / totalMs);
-            rise.Y = 6 - RISE_DIP * t;
-            if (t >= 1) _riseTimer.Stop();
-        };
-        _riseTimer.Start();
+        // Self-contained rise on a FRESH transform per Play (WPF DoubleAnimation 6 → -RISE_DIP over
+        // the whole life). The old code re-subscribed _riseTimer.Tick on every pooled reuse, so
+        // stale handlers accumulated and each fired Stop() on the fresh rise — this owns its timer.
+        AvaloniaChaosAnim.AnimateDouble(rise, TranslateTransform.YProperty, 6, -RISE_DIP,
+            IN_MS + HOLD_MS + OUT_MS, AvaloniaChaosAnim.EasingMode.Linear);
     }
 
     private void Retire()
@@ -161,7 +152,6 @@ WindowDecorations = WindowDecorations.None;
         try
         {
             _holdTimer.Stop();
-            _riseTimer.Stop();
             _outFade?.Dispose();
             Opacity = 0;
             _root.Children.Clear();
@@ -175,7 +165,6 @@ WindowDecorations = WindowDecorations.None;
     {
         _closed = true;
         try { _holdTimer.Stop(); } catch { }
-        try { _riseTimer.Stop(); } catch { }
         base.OnClosed(e);
     }
 

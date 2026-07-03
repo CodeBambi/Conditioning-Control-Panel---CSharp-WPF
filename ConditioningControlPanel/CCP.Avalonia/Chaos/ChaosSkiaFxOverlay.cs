@@ -198,9 +198,9 @@ public sealed class ChaosSkiaFxOverlay : Window
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.Manual;
 
-        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBounds(forcePrimary: true);
+        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBoundsDip();
         Position = new PixelPoint((int)sl, (int)st);
-        Width = sw;
+        Width = sw;   // DIP (StageBoundsDip already divided the physical span by scaling)
         Height = sh;
 
         _sk = new SkiaFxControl(this) { IsHitTestVisible = false };
@@ -573,11 +573,12 @@ public sealed class ChaosSkiaFxOverlay : Window
 
     private Point? Local(Point px)
     {
-        // px is assumed physical screen pixels; convert to window-local DIPs.
+        // px is physical screen px; the Skia field draws in the window's DIPs (canvas.Scale is
+        // RenderScaling). Position is physical px too, so subtract it in the SAME (physical) space
+        // BEFORE dividing to DIPs: (px - Position) / scale.
         var scale = RenderScaling;
         if (scale <= 0) return null;
-        var p = new Point(px.X / scale, px.Y / scale);
-        return new Point(p.X - Position.X, p.Y - Position.Y);
+        return new Point((px.X - Position.X) / scale, (px.Y - Position.Y) / scale);
     }
 
     private void ApplyExStyles() => ChaosWin32Helper.ApplyOverlayExStyles(this, true);

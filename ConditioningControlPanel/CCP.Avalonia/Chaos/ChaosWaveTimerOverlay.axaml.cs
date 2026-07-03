@@ -23,11 +23,10 @@ public partial class ChaosWaveTimerOverlay : Window
     private readonly TextBlock _wave;
     private readonly TextBlock _clock;
     private readonly TextBlock _score;
-    private readonly DispatcherTimer _blink = new();
+    private OpacityPulse? _blink;
 
     private bool _urgent;
     private bool _finalRush;
-    private bool _blinkVisible = true;
 
     public ChaosWaveTimerOverlay()
     {
@@ -90,26 +89,25 @@ WindowDecorations = WindowDecorations.None;
         };
         Content = _pill;
 
-        var wa = GetPrimaryWorkArea();
-        Position = new PixelPoint((int)wa.X + (int)wa.Width - 180, (int)wa.Y + 10);
+        var wa = GetPrimaryWorkArea();   // physical px
+        double scale0 = AvaloniaChaosWindowZ.PrimaryScaling();
+        Position = new PixelPoint((int)(wa.Right - 180 * scale0), (int)(wa.Y + 10 * scale0));
         PropertyChanged += (_, e) =>
         {
             if (e.Property == ClientSizeProperty)
             {
                 try
                 {
-                    var area = GetPrimaryWorkArea();
-                    Position = new PixelPoint((int)(area.Right - ClientSize.Width - 14), (int)area.Y + 10);
+                    var area = GetPrimaryWorkArea();   // physical px
+                    double scale = RenderScaling <= 0 ? AvaloniaChaosWindowZ.PrimaryScaling() : RenderScaling;
+                    // area.* are physical px; ClientSize + the 14/10 gaps are DIPs — convert to px
+                    // before assigning the physical-px Position (WPF did this all in DIP space).
+                    Position = new PixelPoint(
+                        (int)(area.Right - ClientSize.Width * scale - 14 * scale),
+                        (int)(area.Y + 10 * scale));
                 }
                 catch { }
             }
-        };
-
-        _blink.Interval = TimeSpan.FromMilliseconds(420);
-        _blink.Tick += (_, _) =>
-        {
-            _blinkVisible = !_blinkVisible;
-            _clock.Opacity = _blinkVisible ? 1.0 : 0.25;
         };
 
         Opened += (_, _) => ApplyExStyles();
@@ -201,10 +199,17 @@ WindowDecorations = WindowDecorations.None;
         if (finalRush != _finalRush)
         {
             _finalRush = finalRush;
-            if (finalRush) _blink.Start();
+            if (finalRush)
+            {
+                // Smooth pulse (WPF DoubleAnimation 1.0↔0.25 / 420ms AutoReverse Forever), not a
+                // hard 420ms opacity toggle. The pulse period is the full up+down cycle => 840ms.
+                _blink?.Dispose();
+                _blink = new OpacityPulse(_clock, 0.25, 1.0, 840);
+            }
             else
             {
-                _blink.Stop();
+                _blink?.Dispose();
+                _blink = null;
                 _clock.Opacity = 1.0;
             }
         }
@@ -213,7 +218,7 @@ WindowDecorations = WindowDecorations.None;
     private void CloseNow()
     {
         if (ReferenceEquals(_active, this)) _active = null;
-        try { _blink.Stop(); } catch { }
+        try { _blink?.Dispose(); } catch { }
         try { Close(); } catch { }
     }
 

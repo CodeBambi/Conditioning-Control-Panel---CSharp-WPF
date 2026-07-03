@@ -26,10 +26,23 @@ namespace ConditioningControlPanel.Avalonia.Chaos;
 public sealed class ChaosBubbleHostOverlay : Window
 {
     private static ChaosBubbleHostOverlay? _active;
+    private static int _refCount;
     private readonly Canvas _canvas;
     private readonly ILogger<ChaosBubbleHostOverlay>? _logger;
 
     public static bool IsReady => _active != null;
+
+    /// <summary>The host's render scale (DPI/96 of the monitor Avalonia composed it for). Bubbles on
+    /// a screen with a different scale can compensate with a transform of bubbleScale/RenderScale.
+    /// Mirrors WPF ChaosBubbleHostOverlay.RenderScale.</summary>
+    public static double RenderScale
+    {
+        get
+        {
+            double s = _active?.RenderScaling ?? 1.0;
+            return s > 0 ? s : 1.0;
+        }
+    }
 
     private ChaosBubbleHostOverlay()
     {
@@ -46,9 +59,9 @@ public sealed class ChaosBubbleHostOverlay : Window
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.Manual;
 
-        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBounds(forcePrimary: true);
+        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBoundsDip();
         Position = new PixelPoint((int)sl, (int)st);
-        Width = sw;
+        Width = sw;   // DIP (StageBoundsDip already divided the physical span by scaling)
         Height = sh;
 
         _canvas = new Canvas { IsHitTestVisible = false };
@@ -57,9 +70,12 @@ public sealed class ChaosBubbleHostOverlay : Window
         Opened += (_, _) => ApplyExStyles();
     }
 
-    /// <summary>Create + show the host at run start (shared-host mode only).</summary>
+    /// <summary>Take a reference on the host, creating + showing it if this is the first owner. Each
+    /// call must be balanced by exactly one <see cref="CloseActive"/>; the window only dies on the
+    /// last release (WPF parity — a chaos run ending must not close a host the ambient game holds).</summary>
     public static void EnsureCreated()
     {
+        System.Threading.Interlocked.Increment(ref _refCount);
         try
         {
             if (Dispatcher.UIThread.CheckAccess())
@@ -103,22 +119,30 @@ public sealed class ChaosBubbleHostOverlay : Window
         catch { }
     }
 
-    /// <summary>Position a bubble visual. Coordinates are GLOBAL DIPs; the host subtracts its own
-    /// origin so the child lands in canvas-local space. UI thread only.</summary>
-    public static void Place(Control el, double globalLeftDip, double globalTopDip)
+    /// <summary>Position a bubble visual. Coordinates are PHYSICAL virtual-desktop px (the
+    /// cross-screen-safe currency the mouse-hook hit discs live in); the host converts into its own
+    /// canvas-local DIPs via its physical-px origin (<see cref="Window.Position"/>) + render scale.
+    /// Mirrors WPF ChaosBubbleHostOverlay.Place. UI thread only.</summary>
+    public static void Place(Control el, double xPx, double yPx)
     {
         var w = _active;
         if (w == null || el == null) return;
-        Canvas.SetLeft(el, globalLeftDip - w.Position.X);
-        Canvas.SetTop(el, globalTopDip - w.Position.Y);
+        double scale = w.RenderScaling <= 0 ? 1.0 : w.RenderScaling;
+        Canvas.SetLeft(el, (xPx - w.Position.X) / scale);
+        Canvas.SetTop(el, (yPx - w.Position.Y) / scale);
     }
 
     /// <summary>Re-stack the live host above a mandatory video. UI thread only.</summary>
     public static void RaiseActive() => AvaloniaChaosWindowZ.RaiseTopmost(_active);
 
-    /// <summary>Instant teardown (run end / shutdown) — the only place this window dies.</summary>
+    /// <summary>Release one reference. The window is torn down (run end / shutdown) only when the
+    /// LAST owner releases — a chaos run ending must not close a host the ambient game still holds
+    /// (WPF parity). UI thread marshalled.</summary>
     public static void CloseActive()
     {
+        int n = System.Threading.Interlocked.Decrement(ref _refCount);
+        if (n > 0) return;                                                              // another owner still needs it
+        if (n < 0) { System.Threading.Interlocked.Exchange(ref _refCount, 0); return; } // unbalanced — clamp
         try
         {
             if (Dispatcher.UIThread.CheckAccess())

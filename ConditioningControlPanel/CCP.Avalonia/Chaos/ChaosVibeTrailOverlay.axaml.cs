@@ -31,7 +31,7 @@ public partial class ChaosVibeTrailOverlay : Window
     private readonly Ellipse[] _dots = new Ellipse[TRAIL_DOTS];
     private readonly ScaleTransform[] _dotScales = new ScaleTransform[TRAIL_DOTS];
     private readonly DispatcherTimer _follow = new();
-    private readonly DispatcherTimer _pulse = new();
+    private ScalePulse? _buzz;
 
 #if WINDOWS
     private int _dotIndex;
@@ -54,9 +54,9 @@ WindowDecorations = WindowDecorations.None;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.Manual;
 
-        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBounds(forcePrimary: true);
+        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBoundsDip();
         Position = new PixelPoint((int)sl, (int)st);
-        Width = sw;
+        Width = sw;   // DIP (StageBoundsDip already divided the physical span by scaling)
         Height = sh;
 
         _canvas = new Canvas { IsHitTestVisible = false };
@@ -111,18 +111,10 @@ WindowDecorations = WindowDecorations.None;
         };
         _canvas.Children.Add(_glow);
 
-        _pulse.Interval = TimeSpan.FromMilliseconds(180);
-        double pulseDir = 1;
-        double pulseScale = 1.0;
-        _pulse.Tick += (_, _) =>
-        {
-            pulseScale += pulseDir * 0.01;
-            if (pulseScale >= 1.12) pulseDir = -1;
-            else if (pulseScale <= 0.9) pulseDir = 1;
-            glowScale.ScaleX = pulseScale;
-            glowScale.ScaleY = pulseScale;
-        };
-        _pulse.Start();
+        // A quick buzz-pulse (WPF DoubleAnimation 0.9↔1.12 / 180ms AutoReverse Forever, SineEase) —
+        // the sibling CursorGlow breathes slowly; this one is charged. ScalePulse's period is the
+        // full up+down cycle, so 180ms half-period => 360ms.
+        _buzz = new ScalePulse(glowScale, 0.9, 1.12, 360);
 
         _follow.Interval = TimeSpan.FromMilliseconds(TICK_MS);
         _follow.Tick += FollowTick;
@@ -198,7 +190,7 @@ WindowDecorations = WindowDecorations.None;
                 {
                     var w = _active;
                     _active = null;
-                    if (w != null) { w._follow.Stop(); w.Close(); }
+                    if (w != null) { w._follow.Stop(); w._buzz?.Dispose(); w.Close(); }
                 }
                 catch { }
             });

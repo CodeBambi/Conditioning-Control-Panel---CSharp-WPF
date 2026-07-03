@@ -49,7 +49,9 @@ public partial class ChaosDvdOverlay : Window
     private bool _splitSpent;
     private int _splitBouncesLeft;
     private bool _closed;
-    private double _vx, _vy;
+    private double _vx, _vy;          // DIP/s (BASE_SPEED is a DIP/s feel constant, WPF parity)
+    private double _x, _y;           // DIP motion state; converted to physical px only at Position
+    private double _scale = 1.0;     // primary screen scaling (px = DIP * _scale)
     private static DateTime _lastBounceCue;
     private double _remainingSec;
     private int _hueIndex;
@@ -165,8 +167,12 @@ WindowDecorations = WindowDecorations.None;
         _label.Fill = FrozenBrush(Hues[_hueIndex]);
         _label.Build();
 
-        var wa = GetWorkArea();
-        double speed = BASE_SPEED * Math.Clamp(speedMult, 0.3, 2.0);
+        // Work entirely in DIPs (WPF is all-DIP): speed is a DIP/s feel constant, Width/Height are
+        // the label's DIP size, and the work area is converted to DIPs. Only Position (physical px)
+        // and the bubble-engine rects (physical px) are converted back with _scale.
+        _scale = AvaloniaChaosWindowZ.PrimaryScaling();
+        var wa = GetWorkAreaDip(_scale);
+        double speed = BASE_SPEED * Math.Clamp(speedMult, 0.3, 2.0);   // DIP/s
         double angle = _rng.NextDouble() * Math.PI / 3 + Math.PI / 9;
         _vx = vxOverride ?? speed * Math.Cos(angle) * (_rng.Next(2) == 0 ? 1 : -1);
         _vy = vyOverride ?? speed * Math.Sin(angle) * (_rng.Next(2) == 0 ? 1 : -1);
@@ -176,11 +182,11 @@ WindowDecorations = WindowDecorations.None;
         AvaloniaChaosWindowZ.RaiseAboveVideo(this);
         ApplyExStyles(_clickable);
 
-        Width = _label.Width;
-        Height = _label.Height;
-        Position = new PixelPoint(
-            (int)(startX ?? wa.X + _rng.NextDouble() * Math.Max(1, wa.Width - Width)),
-            (int)(startY ?? wa.Y + _rng.NextDouble() * Math.Max(1, wa.Height - Height)));
+        Width = _label.Width;       // DIP
+        Height = _label.Height;     // DIP
+        _x = startX ?? wa.X + _rng.NextDouble() * Math.Max(1, wa.Width - Width);
+        _y = startY ?? wa.Y + _rng.NextDouble() * Math.Max(1, wa.Height - Height);
+        Position = new PixelPoint((int)(_x * _scale), (int)(_y * _scale));
 
         Opacity = 0;
         _fade?.Dispose();
@@ -214,7 +220,7 @@ WindowDecorations = WindowDecorations.None;
         double baseAng = Math.Atan2(_vy, _vx);
         double ang = baseAng + (_rng.Next(2) == 0 ? 0.61 : -0.61);
         Acquire().Begin(_remainingSec, 1.0, _fontScale, _label.Text, true,
-            Position.X, Position.Y, Math.Cos(ang) * spd, Math.Sin(ang) * spd);
+            _x, _y, Math.Cos(ang) * spd, Math.Sin(ang) * spd);
         AvaloniaChaosSfx.Play("dvd_bounce", 0.4f);
     }
 
@@ -226,15 +232,16 @@ WindowDecorations = WindowDecorations.None;
             _remainingSec -= dt;
             if (_remainingSec <= 0) { FadeOutAndRetire(); return; }
 
-            var wa = GetWorkArea();
-            double x = Position.X + _vx * dt;
-            double y = Position.Y + _vy * dt;
+            var wa = GetWorkAreaDip(_scale);   // DIP
+            double x = _x + _vx * dt;          // DIP
+            double y = _y + _vy * dt;
             bool bounced = false;
             if (x <= wa.X) { x = wa.X; _vx = Math.Abs(_vx); bounced = true; }
             else if (x + Width >= wa.Right) { x = wa.Right - Width; _vx = -Math.Abs(_vx); bounced = true; }
             if (y <= wa.Y) { y = wa.Y; _vy = Math.Abs(_vy); bounced = true; }
             else if (y + Height >= wa.Bottom) { y = wa.Bottom - Height; _vy = -Math.Abs(_vy); bounced = true; }
-            Position = new PixelPoint((int)x, (int)y);
+            _x = x; _y = y;
+            Position = new PixelPoint((int)(x * _scale), (int)(y * _scale));
 
             if (bounced)
             {
@@ -257,17 +264,19 @@ WindowDecorations = WindowDecorations.None;
                         double baseAng = Math.Atan2(_vy, _vx);
                         double ang = baseAng + (_rng.Next(2) == 0 ? 0.61 : -0.61);
                         Acquire().Begin(_remainingSec, 1.0, _fontScale, null, false,
-                            Position.X, Position.Y, Math.Cos(ang) * spd, Math.Sin(ang) * spd,
+                            _x, _y, Math.Cos(ang) * spd, Math.Sin(ang) * spd,
                             _splitBouncesLeft);
                         AvaloniaChaosSfx.Play("dvd_launch", 0.35f);
                     }
                 }
             }
 
-            AvaloniaChaosEnv.Bubbles?.PopBubblesInRect(new Rect(x, y, Width, Height));
+            // The bubble engine works in PHYSICAL px (IAvaloniaBubbleService rects are px).
+            var rectPx = new Rect(x * _scale, y * _scale, Width * _scale, Height * _scale);
+            AvaloniaChaosEnv.Bubbles?.PopBubblesInRect(rectPx);
 
             if (_splitOnRabbit && !_splitSpent
-                && AvaloniaChaosEnv.Bubbles?.AnyDarterIntersects(new Rect(x, y, Width, Height)) == true)
+                && AvaloniaChaosEnv.Bubbles?.AnyDarterIntersects(rectPx) == true)
             {
                 _splitSpent = true;
                 SplitInTwo();
@@ -323,9 +332,17 @@ WindowDecorations = WindowDecorations.None;
         var screens = AvaloniaChaosWindowZ.GetScreens();
         var primary = screens?.Primary;
         if (primary == null) return new Rect(0, 0, 1920, 1080);
-        var wa =
-primary.WorkingArea;
-        return new Rect(wa.X, wa.Y, wa.Width, wa.Height);
+        var wa = primary.WorkingArea;
+        return new Rect(wa.X, wa.Y, wa.Width, wa.Height);   // physical px
+    }
+
+    /// <summary>The primary work area in DIPs (physical px / scaling) — the space the logo's
+    /// DIP-sized label and DIP/s velocity live in.</summary>
+    private static Rect GetWorkAreaDip(double scale)
+    {
+        if (scale <= 0) scale = 1.0;
+        var wa = GetWorkArea();   // physical px
+        return new Rect(wa.X / scale, wa.Y / scale, wa.Width / scale, wa.Height / scale);
     }
 
     private void ApplyExStyles(bool clickable) => ChaosWin32Helper.ApplyOverlayExStyles(this, !clickable);

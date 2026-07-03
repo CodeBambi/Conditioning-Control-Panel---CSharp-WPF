@@ -45,9 +45,9 @@ public sealed class ChaosDvdHostOverlay : Window
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.Manual;
 
-        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBounds(forcePrimary: true);
+        var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBoundsDip();
         Position = new PixelPoint((int)sl, (int)st);
-        Width = sw;
+        Width = sw;   // DIP (StageBoundsDip already divided the physical span by scaling)
         Height = sh;
 
         _canvas = new Canvas { IsHitTestVisible = false };
@@ -99,14 +99,16 @@ public sealed class ChaosDvdHostOverlay : Window
         catch { }
     }
 
-    /// <summary>Position a logo visual. Coordinates are GLOBAL DIPs; the host subtracts its own
-    /// origin so the child lands in canvas-local space. UI thread only.</summary>
-    public static void Place(Control el, double globalLeftDip, double globalTopDip)
+    /// <summary>Position a logo visual. Coordinates are PHYSICAL virtual-desktop px; the host
+    /// converts into its own canvas-local DIPs via its physical-px origin
+    /// (<see cref="Window.Position"/>) + render scale. UI thread only.</summary>
+    public static void Place(Control el, double xPx, double yPx)
     {
         var w = _active;
         if (w == null || el == null) return;
-        Canvas.SetLeft(el, globalLeftDip - w.Position.X);
-        Canvas.SetTop(el, globalTopDip - w.Position.Y);
+        double scale = w.RenderScaling <= 0 ? 1.0 : w.RenderScaling;
+        Canvas.SetLeft(el, (xPx - w.Position.X) / scale);
+        Canvas.SetTop(el, (yPx - w.Position.Y) / scale);
     }
 
     /// <summary>Re-stack the live host above a mandatory video. UI thread only.</summary>

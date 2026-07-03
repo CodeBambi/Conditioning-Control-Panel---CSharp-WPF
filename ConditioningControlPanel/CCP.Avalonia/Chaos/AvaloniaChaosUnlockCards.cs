@@ -291,12 +291,50 @@ public static class ChaosUnlockCards
                 var (cue, vol) = CueFor(d);
                 AvaloniaChaosSfx.Play(cue, vol);
 
-                // TODO: Avalonia replacements for the accent-glow flare and icon pop animations.
-                // The card already has a static BoxShadow; animated scaling/pulsing is deferred.
+                // The icon pops in a breath after the card body (WPF BackEase EaseOut 0.4→1.0,
+                // 380ms, 100ms delay), and the accent glow flares once (WPF DropShadow blur 24→46 /
+                // opacity 0.5→0.9) — mirrored here on the Border's BoxShadow.
+                AvaloniaChaosAnim.ScalePop(iconScale, 0.4, 1.0, 380, startDelayMs: 100);
+                FlareBoxShadow(border, d.Accent, baseBlur: 24, peakBlur: 46, durationMs: 380);
             }
             catch (Exception ex) { App.Services?.GetRequiredService<ILogger<object>>().LogInformation("Unlock card flair failed: {E}", ex.Message); }
         };
         return border;
-}
+    }
 
+    /// <summary>Flare the card's accent glow once: the Border's BoxShadow blur + alpha swell then
+    /// settle back to the resting shadow (WPF DropShadowEffect blur 24→46 / opacity 0.5→0.9,
+    /// AutoReverse SineEase over the duration).</summary>
+    private static void FlareBoxShadow(Border border, Color color, double baseBlur, double peakBlur, double durationMs)
+    {
+        double startMs = Environment.TickCount64;
+        double half = Math.Max(1, durationMs / 2.0);
+        var timer = new global::Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        timer.Tick += (_, _) =>
+        {
+            double elapsed = Environment.TickCount64 - startMs;
+            double phase = Math.Min(2, elapsed / half);          // 0..2 (swell then settle)
+            double t = phase <= 1 ? phase : 2 - phase;
+            double eased = (1 - Math.Cos(t * Math.PI)) / 2.0;    // sine ease in-out
+            double blur = baseBlur + (peakBlur - baseBlur) * eased;
+            byte a = (byte)(0x80 + (0xE6 - 0x80) * eased);       // ~0.5 -> ~0.9 alpha
+            border.BoxShadow = new BoxShadows(new BoxShadow
+            {
+                Color = Color.FromArgb(a, color.R, color.G, color.B),
+                Blur = blur,
+                Spread = 0,
+            });
+            if (elapsed >= durationMs)
+            {
+                timer.Stop();
+                border.BoxShadow = new BoxShadows(new BoxShadow
+                {
+                    Color = Color.FromArgb(0x80, color.R, color.G, color.B),
+                    Blur = baseBlur,
+                    Spread = 0,
+                });
+            }
+        };
+        timer.Start();
+    }
 }
