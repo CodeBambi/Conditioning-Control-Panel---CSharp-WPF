@@ -94,6 +94,36 @@ public sealed class AvaloniaAudioPlayer : IAudioPlayer
             if (string.IsNullOrEmpty(deviceId))
                 return;
 
+            // Validate the endpoint against LibVLC's own enumeration first: LibVLC
+            // silently routes audio to nowhere (effective mute) when handed a stale or
+            // foreign device ID (WPF #270/#251/#244 cluster; WS0 lot 4 A1-13). If the
+            // ID isn't recognized, keep the default endpoint instead.
+            var known = false;
+            try
+            {
+                var enumerated = _player.AudioOutputDeviceEnum;
+                if (enumerated != null)
+                {
+                    foreach (var dev in enumerated)
+                    {
+                        if (string.Equals(dev.DeviceIdentifier, deviceId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            known = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Enumeration unsupported on this platform/output module - attempt anyway,
+                // matching the video path's fall-through behavior (LibVlcAudioHelper).
+                known = true;
+            }
+
+            if (!known)
+                return;
+
             // LibVLCSharp provides SetOutputDevice on MediaPlayer for LibVLC 3.x+.
             // Failure is non-fatal: playback falls back to the default endpoint.
             _player.SetOutputDevice(deviceId);

@@ -882,9 +882,6 @@
             <DataTemplate DataType="tabs:PatreonTabViewModel">
               <tabViews:PatreonTabView />
             </DataTemplate>
-            <DataTemplate DataType="tabs:AttentionCheckTabViewModel">
-              <features:AttentionCheckFeatureControl />
-            </DataTemplate>
             <DataTemplate DataType="tabs:BouncingTextTabViewModel">
               <features:BouncingTextFeatureControl />
             </DataTemplate>

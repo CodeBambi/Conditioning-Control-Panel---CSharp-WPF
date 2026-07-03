@@ -12,6 +12,8 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Platform
     public sealed class DesktopWallpaperProvider : IWallpaperProvider
     {
         private string? _originalMacOsWallpaper;
+        private string? _originalLinuxWallpaperUri;
+        private bool _linuxOriginalCaptured;
 
         public void SetWallpaper(string? imagePath)
         {
@@ -33,6 +35,14 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Platform
             if (OperatingSystem.IsMacOS() && !string.IsNullOrEmpty(_originalMacOsWallpaper))
             {
                 SetMacOsWallpaper(_originalMacOsWallpaper);
+            }
+            else if (OperatingSystem.IsLinux() && !string.IsNullOrEmpty(_originalLinuxWallpaperUri))
+            {
+                // Best-effort GNOME restore (WS0 lot 4 V2-2: turning the override off must
+                // not leave the user's desktop permanently changed). Other DEs (feh/nitrogen)
+                // have no queryable "current wallpaper"; they degrade gracefully.
+                TryRun("gsettings", $"set org.gnome.desktop.background picture-uri {_originalLinuxWallpaperUri}");
+                TryRun("gsettings", $"set org.gnome.desktop.background picture-uri-dark {_originalLinuxWallpaperUri}");
             }
         }
 
@@ -59,10 +69,23 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Platform
             catch { return null; }
         }
 
-        private static void SetLinuxWallpaper(string imagePath)
+        private void SetLinuxWallpaper(string imagePath)
         {
             var absolute = Path.GetFullPath(imagePath);
             var uri = new Uri(absolute).AbsoluteUri;
+
+            if (!_linuxOriginalCaptured)
+            {
+                // Capture once, before the first override; gsettings echoes the value
+                // quoted (e.g. 'file:///...'), which set accepts back verbatim.
+                _linuxOriginalCaptured = true;
+                try
+                {
+                    var current = RunProcess("gsettings", "get org.gnome.desktop.background picture-uri");
+                    _originalLinuxWallpaperUri = string.IsNullOrWhiteSpace(current) ? null : current.Trim();
+                }
+                catch { _originalLinuxWallpaperUri = null; }
+            }
 
             // GNOME / Cinnamon
             if (TryRun("gsettings", $"set org.gnome.desktop.background picture-uri \"{uri}\""))

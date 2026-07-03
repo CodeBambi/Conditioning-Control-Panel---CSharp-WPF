@@ -323,7 +323,12 @@ public partial class MiniPlayerWindow : Window
                 Close();
                 break;
             case Key.Space:
-                TogglePlayPause();
+                // WPF contract: Space only toggles the media player; for GIF previews it
+                // is a no-op (the play/pause button is hidden for GIFs too) - WS0 lot 4 V2-8.
+                if (_mediaPlayer != null)
+                {
+                    TogglePlayPause();
+                }
                 e.Handled = true;
                 break;
             case Key.Left:
@@ -355,32 +360,32 @@ public partial class MiniPlayerWindow : Window
                 VideoView.MediaPlayer = null;
             }
 
-            if (_mediaPlayer != null)
-            {
-                try
-                {
-                    if (_mediaPlayer.IsPlaying)
-                    {
-                        _mediaPlayer.Stop();
-                    }
-                }
-                catch { /* Ignore stop errors */ }
-
-                try
-                {
-                    _mediaPlayer.Dispose();
-                }
-                catch { /* Ignore dispose errors */ }
-
-                _mediaPlayer = null;
-            }
-
-            try
-            {
-                _media?.Dispose();
-            }
-            catch { /* Ignore dispose errors */ }
+            // Defer the LibVLC player/media dispose to a background task like every
+            // other LibVLC surface in the port (AvaloniaInlineLoopVideo, multi-monitor
+            // service): synchronous MediaPlayer.Dispose() on the UI thread can deadlock
+            // in LibVLCSharp while callbacks are in flight (WS0 lot 4 R1-14).
+            var player = _mediaPlayer;
+            var media = _media;
+            _mediaPlayer = null;
             _media = null;
+            if (player != null || media != null)
+            {
+                _ = System.Threading.Tasks.Task.Run(async () =>
+                {
+                    try
+                    {
+                        if (player != null && player.IsPlaying)
+                        {
+                            player.Stop();
+                        }
+                    }
+                    catch { /* Ignore stop errors */ }
+
+                    await System.Threading.Tasks.Task.Delay(400).ConfigureAwait(false);
+                    try { player?.Dispose(); } catch { /* Ignore dispose errors */ }
+                    try { media?.Dispose(); } catch { /* Ignore dispose errors */ }
+                });
+            }
 
             try
             {

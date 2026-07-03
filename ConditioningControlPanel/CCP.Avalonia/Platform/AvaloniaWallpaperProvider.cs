@@ -16,11 +16,22 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 public sealed class AvaloniaWallpaperProvider : IWallpaperProvider
 {
     private const int SPI_SETDESKWALLPAPER = 0x0014;
+    private const int SPI_GETDESKWALLPAPER = 0x0073;
     private const int SPIF_UPDATEINIFILE = 0x01;
     private const int SPIF_SENDCHANGE = 0x02;
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool SystemParametersInfo(int uiAction, int uiParam, string pvParam, int fWinIni);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "SystemParametersInfoW")]
+    private static extern bool SystemParametersInfoGet(int uiAction, int uiParam, System.Text.StringBuilder pvParam, int fWinIni);
+
+    // The user's own wallpaper, captured before the first override so Deactivate can
+    // put it back. WPF WallpaperService does the same via SPI_GETDESKWALLPAPER; before
+    // this fix RestoreOriginalWallpaper was a no-op and turning the override off left
+    // the desktop permanently changed (WS0 lot 4 V2-2, data integrity).
+    private string? _originalWallpaperPath;
+    private bool _originalCaptured;
 
     public void SetWallpaper(string? imagePath)
     {
@@ -29,6 +40,8 @@ public sealed class AvaloniaWallpaperProvider : IWallpaperProvider
 
         try
         {
+            CaptureOriginalWallpaperOnce();
+
             if (OperatingSystem.IsWindows())
             {
                 SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, Path.GetFullPath(imagePath), SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
@@ -54,8 +67,65 @@ public sealed class AvaloniaWallpaperProvider : IWallpaperProvider
 
     public void RestoreOriginalWallpaper()
     {
-        // No original wallpaper is cached by this provider. The higher-level
-        // wallpaper service can re-call SetWallpaper with the saved original path.
+        try
+        {
+            if (!_originalCaptured)
+                return;
+
+            var original = _originalWallpaperPath;
+            _originalCaptured = false;
+            _originalWallpaperPath = null;
+
+            if (string.IsNullOrWhiteSpace(original) || !File.Exists(original))
+                return;
+
+            if (OperatingSystem.IsWindows())
+            {
+                SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, Path.GetFullPath(original), SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                SetLinuxWallpaper(original);
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                SetMacWallpaper(original);
+            }
+        }
+        catch
+        {
+            // Best-effort; wallpaper restore is not critical to app function.
+        }
+    }
+
+    private void CaptureOriginalWallpaperOnce()
+    {
+        if (_originalCaptured)
+            return;
+
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var buffer = new System.Text.StringBuilder(520);
+                if (SystemParametersInfoGet(SPI_GETDESKWALLPAPER, buffer.Capacity, buffer, 0))
+                {
+                    _originalWallpaperPath = buffer.ToString();
+                }
+            }
+            // Linux/macOS: reading the current wallpaper varies per desktop environment;
+            // capture is Windows-only for now and Restore degrades gracefully elsewhere.
+        }
+        catch
+        {
+            _originalWallpaperPath = null;
+        }
+        finally
+        {
+            // Mark captured even on failure so we never overwrite the saved value with
+            // one of our own overrides on a later SetWallpaper call.
+            _originalCaptured = true;
+        }
     }
 
     private static void SetLinuxWallpaper(string imagePath)

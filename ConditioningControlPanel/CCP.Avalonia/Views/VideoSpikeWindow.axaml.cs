@@ -65,6 +65,32 @@ public partial class VideoSpikeWindow : Window
         _currentMedia = null;
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        // Debug-only spike harness, but still release the private LibVLC instance so
+        // repeated opens don't leak native resources (WS0 lot 4 R1-11). Deferred
+        // background dispose per the port's LibVLC teardown convention.
+        var player = _player;
+        var media = _currentMedia;
+        var libVlc = _libVlc;
+        _player = null;
+        _currentMedia = null;
+        _libVlc = null;
+        if (VideoView != null)
+        {
+            VideoView.MediaPlayer = null;
+        }
+        _ = System.Threading.Tasks.Task.Run(async () =>
+        {
+            try { player?.Stop(); } catch { }
+            await System.Threading.Tasks.Task.Delay(400).ConfigureAwait(false);
+            try { player?.Dispose(); } catch { }
+            try { media?.Dispose(); } catch { }
+            try { libVlc?.Dispose(); } catch { }
+        });
+        base.OnClosed(e);
+    }
+
     private static string? FindSampleVideo()
     {
         var candidates = new[]

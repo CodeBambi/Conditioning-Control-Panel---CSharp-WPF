@@ -28,9 +28,6 @@
   <DataTemplate x:Key="{x:Type tabs:PatreonTabViewModel}" DataType="tabs:PatreonTabViewModel">
     <tabViews:PatreonTabView />
   </DataTemplate>
-  <DataTemplate x:Key="{x:Type tabs:AttentionCheckTabViewModel}" DataType="tabs:AttentionCheckTabViewModel">
-    <features:AttentionCheckFeatureControl />
-  </DataTemplate>
   <DataTemplate x:Key="{x:Type tabs:BouncingTextTabViewModel}" DataType="tabs:BouncingTextTabViewModel">
     <features:BouncingTextFeatureControl />
   </DataTemplate>

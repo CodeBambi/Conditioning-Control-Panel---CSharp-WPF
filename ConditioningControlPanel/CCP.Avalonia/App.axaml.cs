@@ -234,9 +234,13 @@ public partial class App : Application
 
                 desktop.MainWindow = desktop.Args switch
                 {
+#if DEBUG
+                    // Dev spike harness windows are Debug-only, like the smoke harness
+                    // (WS0 lot 4 R1-10: they must not ship reachable in Release builds).
                     var a when a != null && a.Contains("--audio-spike") => new AudioSpikeWindow(),
                     var a when a != null && a.Contains("--inline-loop-spike") => new InlineLoopSpikeWindow(),
                     var a when a != null && a.Contains("--video-spike") => new VideoSpikeWindow(),
+#endif
                     _ => new MainWindow
                     {
                         DataContext = Services.GetRequiredService<MainWindowViewModel>()
@@ -327,16 +331,11 @@ public partial class App : Application
                 };
             }
 
-            // Start attention-check scheduler if the user has it enabled.
-            try
-            {
-                var settings = Services.GetRequiredService<ISettingsService>().Current;
-                if (settings?.AttentionCheckEnabled == true)
-                {
-                    Services.GetRequiredService<IAttentionCheckService>().Start();
-                }
-            }
-            catch { }
+            // The gaze-dwell attention-check mechanic was scrapped pre-ship in WPF per
+            // design call (Core AppSettings.AttentionCheckEnabled comment: "disabled by
+            // default and has no UI surface in this release"). WPF constructs the service
+            // but never Start()s it. Parity: do NOT auto-start it here (WS0 lot 4 T1-1).
+            // The service, control, and dialogs stay in the codebase for a future revival.
 
             // Activate click-driven gaze drift correction (constructs the head's implementation, which
             // self-starts). No-op on heads without a real webcam tracker.
