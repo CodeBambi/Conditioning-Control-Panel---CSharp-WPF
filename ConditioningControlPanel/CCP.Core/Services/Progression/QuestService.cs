@@ -166,10 +166,25 @@ public sealed class QuestService : IQuestService, IDisposable
         _ = Task.Run(() => SaveProgress());
     }
 
-    private void OnQuestsChanged()
+    /// <summary>
+    /// Persist immediately (write+rename) and notify listeners. Used on state-changing
+    /// events that must survive a crash: quest completion, reroll, and generation.
+    /// </summary>
+    private void SaveAndNotify()
+    {
+        _isDirty = false;
+        SaveProgress();
+        QuestsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Mark progress dirty for the 30s autosave timer and notify listeners WITHOUT a
+    /// synchronous disk write. Used for high-frequency incremental progress (per flash,
+    /// bubble, minute) so we don't hammer the disk with a write+rename on every tick.
+    /// </summary>
+    private void MarkDirtyAndNotify()
     {
         _isDirty = true;
-        SaveProgress();
         QuestsChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -182,10 +197,36 @@ public sealed class QuestService : IQuestService, IDisposable
     {
         bool changed = false;
 
-        // Daily quest: generate if missing/expired and slots remain.
-        if ((Progress.DailyQuest == null || Progress.IsDailyExpired()) && !Progress.AreAllDailyQuestsCompleted())
+        // Daily quest: on a new day (or when missing), preserve a completion that ran
+        // past midnight before the counter resets, then generate a fresh daily.
+        if (Progress.IsDailyExpired() || Progress.DailyQuest == null)
         {
-            GenerateDailyQuest();
+            // If the expiring quest was completed today (ran past midnight), preserve the
+            // completion count so it isn't lost when the daily counter resets on the new day.
+            bool wasCompletedToday = Progress.DailyQuest?.IsCompleted == true
+                && Progress.DailyQuest.CompletedAt?.Date == DateTime.Today;
+
+            Progress.GetDailyQuestsCompletedToday(); // triggers the new-day reset
+
+            if (wasCompletedToday && Progress.DailyQuestsCompletedToday == 0)
+            {
+                Progress.DailyQuestsCompletedToday = 1;
+                _logger?.LogInformation("Quest day rollover: preserved completion count (quest completed today on expired quest)");
+            }
+
+            if (!Progress.AreAllDailyQuestsCompleted())
+            {
+                GenerateDailyQuest();
+            }
+            changed = true;
+        }
+
+        // Reconcile: daily quest is completed today but the counter doesn't reflect it.
+        if (Progress.DailyQuest?.IsCompleted == true
+            && Progress.DailyQuest.CompletedAt?.Date == DateTime.Today
+            && Progress.GetDailyQuestsCompletedToday() == 0)
+        {
+            Progress.DailyQuestsCompletedToday = 1;
             changed = true;
         }
 
@@ -245,7 +286,7 @@ public sealed class QuestService : IQuestService, IDisposable
 
         if (changed)
         {
-            OnQuestsChanged();
+            SaveAndNotify();
         }
     }
 
@@ -296,8 +337,6 @@ public sealed class QuestService : IQuestService, IDisposable
     }
 
     private bool HasPremiumAccess => _settingsService.Current?.HasCachedPremiumAccess == true;
-
-    private static bool IsQuestAvailableForLevel(QuestCategory category) => true;
 
     private bool IsQuestAvailableForTier(QuestDefinition quest)
     {
@@ -393,7 +432,7 @@ public sealed class QuestService : IQuestService, IDisposable
         GenerateDailyQuest(excludeId: oldId);
         Progress.DailyRerollsUsed++;
         _logger?.LogInformation("Daily quest rerolled from {OldId} to {NewId}", oldId, Progress.DailyQuest?.DefinitionId);
-        OnQuestsChanged();
+        SaveAndNotify();
         return true;
     }
 
@@ -416,7 +455,7 @@ public sealed class QuestService : IQuestService, IDisposable
         GenerateWeeklyQuest(excludeId: oldId);
         Progress.WeeklyRerollsUsed++;
         _logger?.LogInformation("Weekly quest rerolled from {OldId} to {NewId}", oldId, Progress.WeeklyQuest?.DefinitionId);
-        OnQuestsChanged();
+        SaveAndNotify();
         return true;
     }
 
@@ -464,7 +503,7 @@ public sealed class QuestService : IQuestService, IDisposable
 
         if (changed)
         {
-            OnQuestsChanged();
+            MarkDirtyAndNotify();
         }
     }
 
@@ -600,7 +639,7 @@ public sealed class QuestService : IQuestService, IDisposable
             }
             else
             {
-                OnQuestsChanged();
+                MarkDirtyAndNotify();
             }
         }
     }
@@ -618,7 +657,7 @@ public sealed class QuestService : IQuestService, IDisposable
             }
             else
             {
-                OnQuestsChanged();
+                MarkDirtyAndNotify();
             }
         }
     }
@@ -631,6 +670,18 @@ public sealed class QuestService : IQuestService, IDisposable
         {
             CompleteQuest(Progress.DailyQuest, def, QuestType.Daily);
         }
+    }
+
+    /// <inheritdoc />
+    public void FixStreakDay(DateTime date)
+    {
+        var day = date.Date;
+        if (!Progress.DailyQuestCompletionDates.Any(d => d.Date == day))
+        {
+            Progress.DailyQuestCompletionDates.Add(day);
+        }
+        SaveProgress();
+        _logger?.LogInformation("Streak day fixed (Oopsie Insurance): {Date}", day);
     }
 
     private void CompleteQuest(ActiveQuest quest, QuestDefinition def, QuestType type)
@@ -649,7 +700,8 @@ public sealed class QuestService : IQuestService, IDisposable
             Progress.TotalDailyQuestsCompleted++;
 
             var today = DateTime.Today;
-            if (!Progress.DailyQuestCompletionDates.Contains(today))
+            bool firstCompletionToday = !Progress.DailyQuestCompletionDates.Contains(today);
+            if (firstCompletionToday)
             {
                 Progress.DailyQuestCompletionDates.Add(today);
             }
@@ -673,12 +725,11 @@ public sealed class QuestService : IQuestService, IDisposable
                 }
             }
 
-            if (!Progress.DailyQuestCompletionDates.Contains(today))
-            {
-                Progress.DailyQuestCompletionDates.Add(today);
-            }
-
-            AdvanceQuestStreak();
+            // Grow the streak only on the first completion of a new day so up to three
+            // dailies/day don't triple-count it. The calendar (trimmed to 90 days) stays
+            // the source of truth for detecting BREAKS; RecalculateStreak repairs upward.
+            if (firstCompletionToday)
+                AdvanceQuestStreak();
             RecalculateStreak();
         }
         else
@@ -689,11 +740,22 @@ public sealed class QuestService : IQuestService, IDisposable
         Progress.TotalXPFromQuests += xp;
         _progression?.AddXP(xp, XPSource.Other);
 
+        // Perfect-week bonus (7/14/30-day daily streaks), awarded on daily completions only.
+        if (type == QuestType.Daily)
+        {
+            var perfectWeekBonus = _skillTreeService.CheckPerfectWeekBonus();
+            if (perfectWeekBonus > 0)
+            {
+                _progression?.AddXP(perfectWeekBonus, XPSource.Other);
+                _logger?.LogInformation("Perfect-week bonus awarded: {XP} XP", perfectWeekBonus);
+            }
+        }
+
         _logger?.LogInformation(
             "Quest completed: {QuestName} ({Type}) - Awarded {XP} XP",
             def.Name, type, xp);
 
-        OnQuestsChanged();
+        SaveAndNotify();
 
         try
         {
@@ -707,7 +769,7 @@ public sealed class QuestService : IQuestService, IDisposable
         if (type == QuestType.Daily && Progress.DailyQuestsCompletedToday < MaxDailyQuestsPerDay)
         {
             GenerateDailyQuest(excludeId: def.Id);
-            OnQuestsChanged();
+            SaveAndNotify();
         }
     }
 
@@ -718,7 +780,8 @@ public sealed class QuestService : IQuestService, IDisposable
         int playerLevel = settings?.PlayerLevel ?? 1;
         int questStreak = settings?.DailyQuestStreak ?? 0;
         int baseXp = GetDailyDefinition()?.XPReward ?? 150;
-        return (int)Math.Round(baseXp * (1 + playerLevel * 0.04) * (1 + questStreak * 0.03));
+        double betterQuestsMultiplier = _skillTreeService.GetRerollBonusMultiplier();
+        return (int)Math.Round(baseXp * (1 + playerLevel * 0.04) * betterQuestsMultiplier * (1 + questStreak * 0.03));
     }
 
     /// <inheritdoc />
@@ -728,7 +791,8 @@ public sealed class QuestService : IQuestService, IDisposable
         int playerLevel = settings?.PlayerLevel ?? 1;
         int questStreak = settings?.DailyQuestStreak ?? 0;
         int baseXp = GetWeeklyDefinition()?.XPReward ?? 600;
-        return (int)Math.Round(baseXp * (1 + playerLevel * 0.04) * (1 + questStreak * 0.03));
+        double betterQuestsMultiplier = _skillTreeService.GetRerollBonusMultiplier();
+        return (int)Math.Round(baseXp * (1 + playerLevel * 0.04) * betterQuestsMultiplier * (1 + questStreak * 0.03));
     }
 
     private void AdvanceQuestStreak()

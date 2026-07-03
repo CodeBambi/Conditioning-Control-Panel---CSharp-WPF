@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Avalonia.Media;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ConditioningControlPanel.Core.Localization;
@@ -16,7 +17,7 @@ namespace ConditioningControlPanel.Avalonia.ViewModels.Tabs;
 /// Avalonia port of the WPF MainWindow.Quests and MainWindow.QuestsTab partials.
 /// Drives the Transformation Roadmap track selection and the Daily/Weekly quest panel.
 /// </summary>
-public partial class QuestsTabViewModel : TabItemViewModel
+public partial class QuestsTabViewModel : TabItemViewModel, IDisposable
 {
     private readonly IRoadmapService? _roadmap;
     private readonly ISettingsService? _settingsService;
@@ -25,7 +26,9 @@ public partial class QuestsTabViewModel : TabItemViewModel
     private readonly IQuestService? _questService;
     private readonly IQuestDefinitionService? _questDefinitions;
     private readonly ISkillTreeService? _skillTreeService;
+    private readonly IModService? _modService;
     private QuestProgress _questProgress;
+    private DispatcherTimer? _fixStreakStatusTimer;
 
     public QuestsTabViewModel() : base("quests", "Quests", "📜")
     {
@@ -72,25 +75,53 @@ public partial class QuestsTabViewModel : TabItemViewModel
         if (_questDefinitions != null)
         {
             SeasonTitle = _questDefinitions.SeasonTitle;
-            _questDefinitions.QuestDefinitionsUpdated += () =>
-            {
-                SeasonTitle = _questDefinitions.SeasonTitle;
-                RefreshQuestUI();
-            };
+            _questDefinitions.QuestDefinitionsUpdated += OnQuestDefinitionsUpdated;
             _ = Task.Run(async () => await _questDefinitions.InitializeAsync());
         }
 
-        modService.ActiveModChanged += (_, _) =>
-        {
-            RefreshQuestUI();
-            OnPropertyChanged(nameof(DailyImageUri));
-            OnPropertyChanged(nameof(WeeklyImageUri));
-        };
+        _modService = modService;
+        modService.ActiveModChanged += OnActiveModChanged;
     }
 
     private void OnQuestsChanged(object? sender, EventArgs e)
     {
         RefreshQuestUI();
+    }
+
+    private void OnQuestDefinitionsUpdated()
+    {
+        if (_questDefinitions != null)
+            SeasonTitle = _questDefinitions.SeasonTitle;
+        RefreshQuestUI();
+    }
+
+    private void OnActiveModChanged(object? sender, ModPackage e)
+    {
+        RefreshQuestUI();
+        OnPropertyChanged(nameof(DailyImageUri));
+        OnPropertyChanged(nameof(WeeklyImageUri));
+    }
+
+    /// <summary>
+    /// Detach all singleton-service event subscriptions so this view-model isn't leaked
+    /// (the services outlive the tab). Called when the tab/window is torn down.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_questService != null)
+            _questService.QuestsChanged -= OnQuestsChanged;
+        if (_roadmap != null)
+        {
+            _roadmap.StepCompleted -= OnRoadmapStepCompleted;
+            _roadmap.TrackUnlocked -= OnRoadmapTrackUnlocked;
+        }
+        if (_questDefinitions != null)
+            _questDefinitions.QuestDefinitionsUpdated -= OnQuestDefinitionsUpdated;
+        if (_modService != null)
+            _modService.ActiveModChanged -= OnActiveModChanged;
+
+        _fixStreakStatusTimer?.Stop();
+        _fixStreakStatusTimer = null;
     }
 
     #region Tab Switching
@@ -570,10 +601,10 @@ public partial class QuestsTabViewModel : TabItemViewModel
             Loc.GetF("msg_fix_streak_day_confirm", day.Date.ToString("MMMM d"))) ?? Task.FromResult(false));
         if (!confirm) return;
 
-        // TODO: wire to ProfileSyncService once extracted to CCP.Core.
         _logger?.LogInformation("Oopsie Insurance used to fix {Date} for 500 XP (server-validated)", day.Date);
 
-        _questProgress.DailyQuestCompletionDates.Add(day.Date);
+        // Persist the streak fix FIRST so a crash can't spend XP without recording the fix.
+        _questService?.FixStreakDay(day.Date);
 
         settings.PlayerXP = Math.Max(0, settings.PlayerXP - 500);
         settings.SeasonalStreakRecoveryUsed = true;
@@ -584,14 +615,20 @@ public partial class QuestsTabViewModel : TabItemViewModel
         FixStreakStatusVisible = true;
         RefreshCalendar();
 
-        _ = Task.Run(async () =>
+        // Auto-hide the status after 3s on the UI thread. A one-shot DispatcherTimer keeps the
+        // ObservableProperty mutation on the dispatcher thread (Task.Run would mutate off-thread).
+        _fixStreakStatusTimer?.Stop();
+        _fixStreakStatusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _fixStreakStatusTimer.Tick += (_, _) =>
         {
-            await Task.Delay(TimeSpan.FromSeconds(3));
+            _fixStreakStatusTimer?.Stop();
+            _fixStreakStatusTimer = null;
             if (!IsStreakFixMode)
             {
                 FixStreakStatusVisible = false;
             }
-        });
+        };
+        _fixStreakStatusTimer.Start();
     }
 
     private void ExitStreakFixMode()
