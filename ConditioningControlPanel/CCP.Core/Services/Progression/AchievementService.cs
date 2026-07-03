@@ -2,6 +2,7 @@ using System.Linq;
 using System.Text.Json;
 using Avalonia.Threading;
 using ConditioningControlPanel.Core.Services.Autonomy;
+using ConditioningControlPanel.Core.Services.Deeper;
 using ConditioningControlPanel.Models;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,6 +20,17 @@ public sealed class AchievementService : IAchievementService, IDisposable
     private readonly string _progressPath;
     private readonly DispatcherTimer _saveTimer;
     private readonly DispatcherTimer _trackingTimer;
+
+    // Serializes every persistence path (synchronous Save() callers and the background
+    // autosave tick) so writers never race, tear the file, or serialize _progress concurrently.
+    private readonly object _saveLock = new();
+
+    // Hot-path service refs resolved once (lazily) and cached, so the 1-second time tracker
+    // never pays for DI resolution or reflection on every tick.
+    private IQuestService? _questService;
+    private bool _questServiceResolved;
+    private IAutonomyService? _autonomyService;
+    private bool _autonomyServiceResolved;
 
     private AchievementProgress _progress;
     private bool _isDirty;
@@ -79,12 +91,18 @@ public sealed class AchievementService : IAchievementService, IDisposable
 
     private AchievementProgress LoadProgress()
     {
+        var tmpPath = _progressPath + ".tmp";
+
         try
         {
             if (File.Exists(_progressPath))
             {
                 var json = File.ReadAllText(_progressPath);
-                return JsonSerializer.Deserialize<AchievementProgress>(json) ?? new AchievementProgress();
+                var progress = JsonSerializer.Deserialize<AchievementProgress>(json);
+                if (progress != null)
+                {
+                    return progress;
+                }
             }
         }
         catch (Exception ex)
@@ -92,26 +110,62 @@ public sealed class AchievementService : IAchievementService, IDisposable
             _logger.LogError(ex, "Failed to load achievement progress");
         }
 
+        // Recover from an atomic-write temp file if the main file is missing or corrupt
+        // (e.g. the process was killed after the tmp write but before the move completed).
+        if (File.Exists(tmpPath))
+        {
+            try
+            {
+                var json = File.ReadAllText(tmpPath);
+                var progress = JsonSerializer.Deserialize<AchievementProgress>(json);
+                if (progress != null)
+                {
+                    _logger.LogWarning("Recovered achievement progress from temp file {Path}", tmpPath);
+                    try { File.Move(tmpPath, _progressPath, overwrite: true); } catch { }
+                    return progress;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to recover achievement progress from {Path}", tmpPath);
+            }
+        }
+
         return new AchievementProgress();
     }
 
     /// <inheritdoc />
-    public void Save()
-    {
-        try
-        {
-            var dir = Path.GetDirectoryName(_progressPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
+    public void Save() => WriteProgressAtomic();
 
-            var json = JsonSerializer.Serialize(_progress, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_progressPath, json);
-        }
-        catch (Exception ex)
+    /// <summary>
+    /// Single lock-guarded atomic writer for <see cref="_progress"/>. Every persistence path —
+    /// the synchronous <see cref="Save"/> callers (TryUnlock/TrackVideoWatched/TrackLockCardCompletion)
+    /// and the background autosave tick — funnels through here so writers never race each other,
+    /// never tear the file, and never serialize the same object graph concurrently. Serialization
+    /// happens inside the lock, then the JSON is written to a temp file and atomically moved into
+    /// place, so a crash mid-write can never corrupt achievements.json. Mirrors QuestService.SaveProgress.
+    /// </summary>
+    private void WriteProgressAtomic()
+    {
+        lock (_saveLock)
         {
-            _logger.LogError(ex, "Failed to save achievement progress");
+            try
+            {
+                var dir = Path.GetDirectoryName(_progressPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                var json = JsonSerializer.Serialize(_progress, new JsonSerializerOptions { WriteIndented = true });
+                var tmpPath = _progressPath + ".tmp";
+                File.WriteAllText(tmpPath, json);
+                File.Move(tmpPath, _progressPath, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save achievement progress");
+            }
         }
     }
 
@@ -120,22 +174,9 @@ public sealed class AchievementService : IAchievementService, IDisposable
         if (!_isDirty) return;
 
         _isDirty = false;
-        var json = JsonSerializer.Serialize(_progress, new JsonSerializerOptions { WriteIndented = true });
-        var path = _progressPath;
-        _ = Task.Run(() =>
-        {
-            try
-            {
-                var dir = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-                File.WriteAllText(path, json);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to save achievement progress");
-            }
-        });
+        // May offload to a worker thread, but the serialize + write both run inside
+        // WriteProgressAtomic's lock, so this can never race a synchronous Save() caller.
+        _ = Task.Run(WriteProgressAtomic);
     }
 
     /// <inheritdoc />
@@ -250,7 +291,7 @@ public sealed class AchievementService : IAchievementService, IDisposable
         // autonomy is enabled/running. Mirrors the spiral/pink accumulation pattern.
         // Resolved lazily via CoreApp.Services to avoid a circular DI dependency
         // (AvaloniaAutonomyService -> IFlashService -> IAchievementService).
-        var autonomy = CoreApp.Services?.GetService<IAutonomyService>();
+        var autonomy = ResolveAutonomyService();
         if (autonomy?.IsEnabled == true)
         {
             var elapsed = (now - _lastAutonomyCheck).TotalMinutes;
@@ -721,6 +762,22 @@ public sealed class AchievementService : IAchievementService, IDisposable
     }
 
     /// <inheritdoc />
+    public void TrackSkillPointsSpent(int amount)
+    {
+        if (amount <= 0) return;
+        _progress.LifetimeSkillPointsSpent += amount;
+        _isDirty = true;
+    }
+
+    /// <inheritdoc />
+    public void ReconcileLifetimePointsSpent(long serverValue)
+    {
+        if (serverValue <= _progress.LifetimeSkillPointsSpent) return;
+        _progress.LifetimeSkillPointsSpent = serverValue;
+        _isDirty = true;
+    }
+
+    /// <inheritdoc />
     public void MarkDirty() => _isDirty = true;
 
     /// <inheritdoc />
@@ -837,15 +894,9 @@ public sealed class AchievementService : IAchievementService, IDisposable
     {
         try
         {
-            var overlay = CoreApp.Overlay;
-            if (overlay == null) return false;
-
-            // Prefer a strongly typed interface if the head wires one up.
-            if (overlay is IOverlaySurface surface) return surface.IsVisible;
-
-            // Fall back to dynamic for legacy WPF OverlayService.
-            dynamic d = overlay;
-            return d.IsRunning == true;
+            // The Core service only runs under the Avalonia heads, where the overlay is an
+            // IOverlaySurface. Typed check avoids the DLR (no `dynamic`) on the 1-second tick.
+            return CoreApp.Overlay is IOverlaySurface surface && surface.IsVisible;
         }
         catch
         {
@@ -857,11 +908,9 @@ public sealed class AchievementService : IAchievementService, IDisposable
     {
         try
         {
-            var deeper = CoreApp.DeeperHost;
-            if (deeper == null) return false;
-
-            dynamic d = deeper;
-            return d.IsActivelyPlaying == true;
+            // Typed cast instead of `dynamic` — CoreApp.DeeperHost is the Core EnhancementHostService
+            // (or null) under the Avalonia heads that consume this service.
+            return CoreApp.DeeperHost is EnhancementHostService host && host.IsActivelyPlaying;
         }
         catch
         {
@@ -869,36 +918,58 @@ public sealed class AchievementService : IAchievementService, IDisposable
         }
     }
 
-    private static bool GetDynamicBoolean(object? target, string propertyName)
+    /// <summary>
+    /// Resolves the shared <see cref="IQuestService"/> once (lazily) and caches it so the
+    /// per-second tracker pays neither DI resolution nor reflection on the hot path. Prefers the
+    /// DI-registered singleton and falls back to the legacy <see cref="CoreApp.Quests"/> locator.
+    /// </summary>
+    private IQuestService? ResolveQuestService()
     {
-        try
-        {
-            if (target == null) return false;
-
-            var property = target.GetType().GetProperty(propertyName);
-            if (property != null && property.PropertyType == typeof(bool))
-            {
-                return (bool)property.GetValue(target)!;
-            }
-
-            dynamic d = target;
-            return d[propertyName] == true || d.GetType().GetProperty(propertyName)?.GetValue(d) == true;
-        }
-        catch
-        {
-            return false;
-        }
+        if (_questServiceResolved) return _questService;
+        _questService = CoreApp.Services?.GetService<IQuestService>() ?? CoreApp.Quests as IQuestService;
+        if (_questService != null) _questServiceResolved = true;
+        return _questService;
     }
 
+    /// <summary>
+    /// Resolves the <see cref="IAutonomyService"/> once (lazily) and caches it, replacing the
+    /// per-tick <c>GetService</c> call in the time tracker.
+    /// </summary>
+    private IAutonomyService? ResolveAutonomyService()
+    {
+        if (_autonomyServiceResolved) return _autonomyService;
+        _autonomyService = CoreApp.Services?.GetService<IAutonomyService>();
+        if (_autonomyService != null) _autonomyServiceResolved = true;
+        return _autonomyService;
+    }
+
+    /// <summary>
+    /// Forwards achievement-side events into the quest tracker via strongly typed calls.
+    /// Replaces the previous <c>MethodInfo.Invoke</c> reflection dispatch so the 1-second
+    /// tracking tick stays reflection-free.
+    /// </summary>
     private void TryQuestTrack(string methodName, params object[] args)
     {
+        var quests = ResolveQuestService();
+        if (quests == null) return;
+
         try
         {
-            var quests = CoreApp.Quests;
-            if (quests == null) return;
-
-            var method = quests.GetType().GetMethod(methodName);
-            method?.Invoke(quests, args);
+            switch (methodName)
+            {
+                case "TrackPinkFilterMinutes": quests.TrackPinkFilterMinutes((double)args[0]); break;
+                case "TrackSpiralMinutes": quests.TrackSpiralMinutes((double)args[0]); break;
+                case "TrackBrainDrainMinutes": quests.TrackBrainDrainMinutes((double)args[0]); break;
+                case "TrackAutonomyMinutes": quests.TrackAutonomyMinutes((double)args[0]); break;
+                case "TrackVideoMinutes": quests.TrackVideoMinutes((double)args[0]); break;
+                case "TrackFlashImage": quests.TrackFlashImage(); break;
+                case "TrackBubblePopped": quests.TrackBubblePopped(); break;
+                case "TrackLockCardCompleted": quests.TrackLockCardCompleted(); break;
+                case "TrackSessionCompleted": quests.TrackSessionCompleted(); break;
+                default:
+                    _logger.LogDebug("Unmapped quest track call {MethodName}", methodName);
+                    break;
+            }
         }
         catch (Exception ex)
         {
