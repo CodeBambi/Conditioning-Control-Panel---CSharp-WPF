@@ -1016,8 +1016,16 @@ internal sealed class SmokeTestRunner
             await DelayAsync(1000);
 
             var lifetime = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
+            // Avalonia renders overlays on a shared CompositorEngine host (CompositorWindow),
+            // not per-overlay WPF-style OverlayWindow instances — match both names so the
+            // click-through/taskbar/decoration checks below apply to whichever host exists.
             var overlayWindows = lifetime?.Windows
-                .Where(w => w.GetType().Name.Contains("OverlayWindow", StringComparison.OrdinalIgnoreCase))
+                .Where(w =>
+                {
+                    var name = w.GetType().Name;
+                    return name.Contains("OverlayWindow", StringComparison.OrdinalIgnoreCase)
+                        || name.Contains("CompositorWindow", StringComparison.OrdinalIgnoreCase);
+                })
                 .ToList() ?? new List<Window>();
 
             if (overlayWindows.Count == 0)
