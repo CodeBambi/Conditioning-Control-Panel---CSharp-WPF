@@ -51,6 +51,27 @@ internal static class LibVlcAudioHelper
         }
     }
 
+    /// <summary>
+    /// Applies volume/mute only — no output-device re-bind. Used for live volume-slider
+    /// updates, matching the WPF contract (UpdatePlayingVideosVolume writes Volume only).
+    /// </summary>
+    public static void ApplyVolume(this MediaPlayer player, AppSettings? settings, bool withAudio)
+    {
+        try
+        {
+            var effectiveVolume = withAudio ? GetEffectiveVolume(settings) : 0;
+            player.Mute = effectiveVolume <= 0;
+            if (effectiveVolume > 0)
+            {
+                player.Volume = effectiveVolume;
+            }
+        }
+        catch
+        {
+            // Player may be mid-teardown; volume updates are best-effort.
+        }
+    }
+
     private static void ApplyOutputDevice(MediaPlayer player, string deviceId, ILogger? logger)
     {
         try

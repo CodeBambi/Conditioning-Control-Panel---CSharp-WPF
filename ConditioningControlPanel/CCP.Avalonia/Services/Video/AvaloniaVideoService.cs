@@ -126,19 +126,28 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _overlay = overlay;
         _multiMonitor = multiMonitor;
         _compositor = compositor;
-        _videoLayer = compositor != null ? new VideoLayer(libVlc, _logger) : null;
-        _mandatoryVideoLayer = compositor != null ? new MandatoryVideoLayer(libVlc, _logger) : null;
+        // WS0 lot 4 (skia-rebuild-goal.md): the LEGACY video path (multi-monitor service /
+        // per-window fallback) is the contract holder until UCE plan Phase E proves the
+        // compositor video layer by running. VideoLayer/MandatoryVideoLayer exist but their
+        // frame path is unproven (unified-compositor-engine skill "headline blockers"), so
+        // routing video into them by default plays audio with no visible frames AND used to
+        // strand the scheduler (_isVideoActive never cleared). Compositor video is therefore
+        // an explicit WS1 dev opt-in via CCP_UCE_VIDEO=1; the default stays legacy.
+        var useCompositorVideo = compositor != null &&
+            string.Equals(Environment.GetEnvironmentVariable("CCP_UCE_VIDEO"), "1", StringComparison.Ordinal);
+        _videoLayer = useCompositorVideo ? new VideoLayer(libVlc, _logger) : null;
+        _mandatoryVideoLayer = useCompositorVideo ? new MandatoryVideoLayer(libVlc, _logger) : null;
         if (_videoLayer != null)
         {
             _compositor?.RegisterLayer(_videoLayer);
             _videoLayer.VideoStarted += (_, _) => VideoStarted?.Invoke(this, EventArgs.Empty);
-            _videoLayer.VideoEnded += (_, _) => VideoEnded?.Invoke(this, EventArgs.Empty);
+            _videoLayer.VideoEnded += (_, _) => OnCompositorVideoEnded();
         }
         if (_mandatoryVideoLayer != null)
         {
             _compositor?.RegisterLayer(_mandatoryVideoLayer);
             _mandatoryVideoLayer.VideoStarted += (_, _) => VideoStarted?.Invoke(this, EventArgs.Empty);
-            _mandatoryVideoLayer.VideoEnded += (_, _) => VideoEnded?.Invoke(this, EventArgs.Empty);
+            _mandatoryVideoLayer.VideoEnded += (_, _) => OnCompositorVideoEnded();
         }
 
         if (_multiMonitor != null)
@@ -509,12 +518,30 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
     public void UpdateVolume()
     {
-        _currentWindow?.ApplyAudioSettings();
+        // WPF contract (VideoService.UpdatePlayingVideosVolume): a live volume change only
+        // writes Volume to active players. Re-applying the output device here would re-bind
+        // the audio endpoint mid-playback on every slider drag (WS0 lot 4 V1-22).
+        _currentWindow?.ApplyVolume();
         if (_multiMonitor?.IsPlaying == true)
         {
             _multiMonitor.SetVolume(LibVlcAudioHelper.GetEffectiveVolume(_settings.Current));
-            _multiMonitor.SetAudioOutputDevice(_settings.Current?.AudioOutputDeviceId);
         }
+    }
+
+    /// <summary>
+    /// Compositor-path natural end: clear the scheduler's in-flight guard and disarm the
+    /// max-duration cap (the legacy window/multi-monitor paths do this via CleanupInternal,
+    /// which the compositor path never reaches). Runs on the UI thread — the layers post
+    /// VideoEnded via the dispatcher. WS0 lot 4 fix (R1-3): without this, the first natural
+    /// compositor end left _isVideoActive true forever and the scheduler skipped every
+    /// subsequent video.
+    /// </summary>
+    private void OnCompositorVideoEnded()
+    {
+        _isVideoActive = false;
+        _maxDurationTimer?.Stop();
+        _maxDurationTimer = null;
+        VideoEnded?.Invoke(this, EventArgs.Empty);
     }
 
     private string? PickRandomVideo()
@@ -1218,6 +1245,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
         public void ApplyAudioSettings() => _mediaPlayer?.ApplyAudioSettings(_settings.Current, _withAudio, _logger);
 
+        /// <summary>Volume/mute only — no output-device re-bind (live slider path).</summary>
+        public void ApplyVolume() => _mediaPlayer?.ApplyVolume(_settings.Current, _withAudio);
+
         public event Action? VideoStarted;
         public event Action? VideoEnded;
 
@@ -1293,7 +1323,10 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         {
             if (_isPrimary && _onPositionChanged != null)
             {
-                Dispatcher.UIThread.Post(() => _onPositionChanged((long)(_mediaPlayer?.Time * 1000 ?? -1)));
+                // MediaPlayer.Time is already milliseconds — the event contract is ms
+                // (WS0 lot 4 fix V1-6/R1-5: the old *1000 emitted microseconds and broke
+                // Deeper enhancement time rules by three orders of magnitude).
+                Dispatcher.UIThread.Post(() => _onPositionChanged(_mediaPlayer?.Time ?? -1));
             }
         }
 
