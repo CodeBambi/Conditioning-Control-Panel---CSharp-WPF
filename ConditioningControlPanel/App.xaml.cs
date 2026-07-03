@@ -898,8 +898,12 @@ namespace ConditioningControlPanel
                 if (ackWait == null)
                 {
                     // Primary predates the ack handshake (mid-upgrade) or its kernel objects are
-                    // gone. Preserve the legacy behavior: poke it to show, then exit quietly —
-                    // never kill a process we can't positively identify as wedged.
+                    // gone. Poke it to show, but don't bail out instantly: this is exactly the
+                    // update-from-pre-handshake scenario (#466 — 6.0.0 → 6.2.x "fails to launch"),
+                    // where the installer's /RESTARTAPPLICATIONS relaunched us while the OLD build
+                    // was still exiting and holding the mutex. Wait briefly for the mutex to free
+                    // and take over as primary; only exit if a live legacy primary actually keeps
+                    // it. Never kill a process we can't positively identify as wedged.
                     try
                     {
                         var signal = EventWaitHandle.OpenExisting(ShowSignalName);
@@ -908,50 +912,64 @@ namespace ConditioningControlPanel
                     }
                     catch { }
 
-                    splash?.CloseImmediate();
-                    Shutdown();
-                    return;
-                }
+                    bool tookOver = false;
+                    try { tookOver = _mutex.WaitOne(TimeSpan.FromSeconds(8)); }
+                    catch (AbandonedMutexException) { tookOver = true; } // old build died holding it — we own it now
+                    catch { }
 
-                // Clear any stale ack from a prior handshake, poke the primary, then wait for it
-                // to confirm liveness from its UI thread.
-                try { ackWait.Reset(); } catch { }
-                try
+                    if (!tookOver)
+                    {
+                        splash?.CloseImmediate();
+                        Shutdown();
+                        return;
+                    }
+
+                    _mutexOwned = true;
+                    try { ConsumeFileOpenHandoff(); } catch { }
+                    // Fall through — the legacy primary is gone; this instance is now the primary.
+                }
+                else
                 {
-                    var signal = EventWaitHandle.OpenExisting(ShowSignalName);
-                    signal.Set();
-                    signal.Dispose();
+                    // Clear any stale ack from a prior handshake, poke the primary, then wait for it
+                    // to confirm liveness from its UI thread.
+                    try { ackWait.Reset(); } catch { }
+                    try
+                    {
+                        var signal = EventWaitHandle.OpenExisting(ShowSignalName);
+                        signal.Set();
+                        signal.Dispose();
+                    }
+                    catch { }
+
+                    bool acknowledged = false;
+                    try { acknowledged = ackWait.WaitOne(ShowAckTimeoutMs); } catch { }
+                    try { ackWait.Dispose(); } catch { }
+
+                    if (acknowledged)
+                    {
+                        // Primary is alive and surfaced its window — nothing more to do.
+                        splash?.CloseImmediate();
+                        Shutdown();
+                        return;
+                    }
+
+                    // No acknowledgment within the window: the primary is wedged or headless. Kill it
+                    // and take over. (Logger isn't up yet here; we record the recovery once it is.)
+                    _recoveredFromStaleInstance = true;
+                    KillStaleInstances();
+
+                    // Claim single-instance ownership now that the zombie is gone. If it died holding
+                    // the mutex, WaitOne throws AbandonedMutexException but we DO acquire it.
+                    try { if (_mutex!.WaitOne(TimeSpan.FromSeconds(3))) _mutexOwned = true; }
+                    catch (AbandonedMutexException) { _mutexOwned = true; }
+                    catch { }
+
+                    // We kept the parsed _pendingFileOpen* fields and will fulfill them ourselves, so
+                    // drop any on-disk handoff to avoid a spurious re-open on a later signal.
+                    try { ConsumeFileOpenHandoff(); } catch { }
+
+                    // Fall through — this instance is now the primary.
                 }
-                catch { }
-
-                bool acknowledged = false;
-                try { acknowledged = ackWait.WaitOne(ShowAckTimeoutMs); } catch { }
-                try { ackWait.Dispose(); } catch { }
-
-                if (acknowledged)
-                {
-                    // Primary is alive and surfaced its window — nothing more to do.
-                    splash?.CloseImmediate();
-                    Shutdown();
-                    return;
-                }
-
-                // No acknowledgment within the window: the primary is wedged or headless. Kill it
-                // and take over. (Logger isn't up yet here; we record the recovery once it is.)
-                _recoveredFromStaleInstance = true;
-                KillStaleInstances();
-
-                // Claim single-instance ownership now that the zombie is gone. If it died holding
-                // the mutex, WaitOne throws AbandonedMutexException but we DO acquire it.
-                try { if (_mutex!.WaitOne(TimeSpan.FromSeconds(3))) _mutexOwned = true; }
-                catch (AbandonedMutexException) { _mutexOwned = true; }
-                catch { }
-
-                // We kept the parsed _pendingFileOpen* fields and will fulfill them ourselves, so
-                // drop any on-disk handoff to avoid a spurious re-open on a later signal.
-                try { ConsumeFileOpenHandoff(); } catch { }
-
-                // Fall through — this instance is now the primary.
             }
 
             // Create signal for other instances to request showing our window, plus the ack gate

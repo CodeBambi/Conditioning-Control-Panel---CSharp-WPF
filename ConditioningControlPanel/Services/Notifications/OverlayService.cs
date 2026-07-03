@@ -678,6 +678,22 @@ public class OverlayService : IDisposable
         else dispatcher.Invoke(apply);
     }
 
+    /// <summary>
+    /// Releases the pink/spiral ramp holds set by <see cref="SetSustainedOverlayOpacity"/>
+    /// WITHOUT tearing the overlays down. Called when a session ends but the overlays may
+    /// legitimately stay up (the user had them enabled before the session): the 500ms
+    /// settings-sync takes ownership again on its next tick and re-applies the user's
+    /// saved opacity. Stop/panic paths don't need this — StopPinkFilter/StopSpiral
+    /// already clear the holds.
+    /// </summary>
+    public void ReleaseOpacityRampHolds()
+    {
+        _rampPinkOpacity = null;
+        _rampSpiralOpacity = null;
+        _lastAppliedPinkOpacity = -1;
+        _lastAppliedSpiralOpacity = -1;
+    }
+
     private void ApplyPinkOpacityDirect(double opacity)
     {
         var (fr, fg, fb) = GetFilterRgb();

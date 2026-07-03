@@ -525,28 +525,30 @@ namespace ConditioningControlPanel.Services
                 App.Settings.Current.ImageScale = settings.FlashScale;
             }
             
-            // Pink filter ramp (only after randomized start minute)
+            // Pink filter ramp (only after randomized start minute).
+            // Drive the overlay DIRECTLY (same path as Deeper enhancement ramps) instead of
+            // writing the ramped value into App.Settings.Current.PinkFilterOpacity: that value
+            // is the user's persisted setting and auto-saves to disk, so an app kill/crash
+            // mid-session froze the ramp maximum into settings.json permanently — the
+            // "screen keeps getting more pink and stays that way" reports (#471, #476).
+            // The snapshot in RestoreSettings only heals a CLEAN stop.
             if (settings.PinkFilterEnabled && elapsedMinutes >= _randomizedPinkStartMinute)
             {
                 var pinkDuration = totalMinutes - _randomizedPinkStartMinute;
                 var pinkProgress = (elapsedMinutes - _randomizedPinkStartMinute) / pinkDuration;
                 pinkProgress = Math.Clamp(pinkProgress, 0, 1);
                 _currentPinkOpacity = Lerp(settings.PinkFilterStartOpacity, settings.PinkFilterEndOpacity, pinkProgress);
-                // Apply to overlay service
-                App.Settings.Current.PinkFilterOpacity = (int)_currentPinkOpacity;
-                if (IsMainWindowValid) _mainWindow.UpdatePinkFilterOpacity((int)_currentPinkOpacity);
+                App.Overlay?.SetSustainedOverlayOpacity("pink_filter", _currentPinkOpacity / 100.0);
             }
-            
-            // Spiral ramp (only after randomized start minute)
+
+            // Spiral ramp (only after randomized start minute) — same direct-drive as pink above.
             if (settings.SpiralEnabled && elapsedMinutes >= _randomizedSpiralStartMinute)
             {
                 var spiralDuration = totalMinutes - _randomizedSpiralStartMinute;
                 var spiralProgress = (elapsedMinutes - _randomizedSpiralStartMinute) / spiralDuration;
                 spiralProgress = Math.Clamp(spiralProgress, 0, 1);
                 _currentSpiralOpacity = Lerp(settings.SpiralOpacity, settings.SpiralOpacityEnd, spiralProgress);
-                // Apply to overlay service
-                App.Settings.Current.SpiralOpacity = (int)_currentSpiralOpacity;
-                if (IsMainWindowValid) _mainWindow.UpdateSpiralOpacity((int)_currentSpiralOpacity);
+                App.Overlay?.SetSustainedOverlayOpacity("spiral", _currentSpiralOpacity / 100.0);
             }
 
             // Bubble frequency ramp
@@ -1137,6 +1139,11 @@ namespace ConditioningControlPanel.Services
             current.PopQuizFrequency = _savedSettings.PopQuizFrequency;
             current.BubbleCountEnabled = _savedSettings.BubbleCountEnabled;
             current.BubbleCountFrequency = _savedSettings.BubbleCountFrequency;
+
+            // The session's pink/spiral ramps drove the overlays directly and set ramp
+            // holds so the settings-sync wouldn't stomp them. Release the holds so the
+            // sync re-applies the user's restored opacities on its next tick.
+            App.Overlay?.ReleaseOpacityRampHolds();
 
             // Apply restored settings to UI
             if (IsMainWindowValid) _mainWindow.ApplySessionSettings();
