@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Chaos;
 using ConditioningControlPanel.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -187,11 +188,23 @@ public static class ChaosLessonHooks
     private const double LAST_BREATH_BRINK_SEC = 0.8;
     private const double CHANNEL_MAX_SEC = 1.5;
 
+    /// <summary>chain_reaction: two treat pops this close in time count as one interlaced pair.
+    /// The Avalonia head does not expose per-pop screen coordinates (WPF's burst-overlap test),
+    /// so this is the time-only proxy for WPF ChaosLessonHooks.cs:112-121 — dense popping (where
+    /// Poppers chains actually happen) still ticks it.</summary>
+    private const double CHAIN_WINDOW_SEC = 0.40;
+    /// <summary>the_pull: the cursor counts as at rest under this much pop-to-pop travel (px).
+    /// Slightly looser than WPF's 3px sampled-rest test to absorb pop-cadence jitter.</summary>
+    private const double PULL_REST_MAX_PX = 8.0;
+
     private static readonly Queue<DateTime> _vibePops = new();
     private static int _loopDefuses;
     private static bool _loopDirty;
     private static DateTime? _channelStartUtc;
     private static double _channelFraction;
+    private static DateTime? _lastTreatPopUtc;                       // chain_reaction time proxy
+    private static (double X, double Y)? _pullSample;                // the_pull cursor-at-rest
+    private static DateTime _busyUntilUtc = DateTime.MinValue;       // blindfold screen-busy window
 
     public static void OnRunStarted()
     {
@@ -200,6 +213,9 @@ public static class ChaosLessonHooks
         _loopDirty = false;
         _channelStartUtc = null;
         _channelFraction = 0;
+        _lastTreatPopUtc = null;
+        _pullSample = null;
+        _busyUntilUtc = DateTime.MinValue;
     }
 
     public static void OnTreatPopped(string variantId)
@@ -207,6 +223,7 @@ public static class ChaosLessonHooks
         Safe(() =>
         {
             var now = DateTime.UtcNow;
+            RegisterScreenBusy(variantId);
             if (variantId == "subliminal") ChaosLessons.Tick("intrusive_thoughts");
             if (!ChaosLessons.IsComplete("vibe_popping"))
             {
@@ -215,6 +232,30 @@ public static class ChaosLessonHooks
                     _vibePops.Dequeue();
                 ChaosLessons.RaiseTo("vibe_popping", _vibePops.Count);
             }
+
+            // chain_reaction: this pop landed while the previous pop's burst still glowed.
+            if (!ChaosLessons.IsComplete("chain_reaction"))
+            {
+                if (_lastTreatPopUtc.HasValue && (now - _lastTreatPopUtc.Value).TotalSeconds <= CHAIN_WINDOW_SEC)
+                    ChaosLessons.Tick("chain_reaction");
+                _lastTreatPopUtc = now;
+            }
+
+            // the_pull: the bubble came to the hand — popped with the cursor at rest.
+            if (!ChaosLessons.IsComplete("the_pull"))
+            {
+                var cur = GetCursor();
+                if (cur.HasValue)
+                {
+                    if (_pullSample.HasValue)
+                    {
+                        double dx = cur.Value.X - _pullSample.Value.X, dy = cur.Value.Y - _pullSample.Value.Y;
+                        if (dx * dx + dy * dy <= PULL_REST_MAX_PX * PULL_REST_MAX_PX) ChaosLessons.Tick("the_pull");
+                    }
+                    _pullSample = (cur.Value.X, cur.Value.Y);
+                }
+            }
+
             ChaosFirstTimes.TryAward(ChaosFirstTimes.Taste);
         });
     }
@@ -237,8 +278,44 @@ public static class ChaosLessonHooks
             }
             _loopDefuses++;
             ChaosLessons.RaiseTo("snap_field", _loopDefuses);
+            // blindfold: snapped a trance while the screen was busy with an effect.
+            if (!ChaosLessons.IsComplete("blindfold") && IsScreenBusy()) ChaosLessons.Tick("blindfold");
             ChaosFirstTimes.TryAward(ChaosFirstTimes.Snap);
         });
+    }
+
+    /// <summary>Mark the screen "busy" for a payload's estimated on-screen lifetime (blindfold).
+    /// Mirrors WPF ChaosLessonHooks.RegisterScreenBusy per-family durations.</summary>
+    private static void RegisterScreenBusy(string variantId)
+    {
+        if (ChaosLessons.IsComplete("blindfold")) return;
+        double sec = variantId switch
+        {
+            "flash" => 1.5,
+            "subliminal" => 1.2,
+            "pink" or "spiral" or "braindrain" => 3.0,
+            "bambifreeze" => 3.0,
+            "video" => 15.0,
+            "htlink" => 8.0,
+            _ => 0,
+        };
+        if (sec <= 0) return;
+        var until = DateTime.UtcNow.AddSeconds(sec);
+        if (until > _busyUntilUtc) _busyUntilUtc = until;
+    }
+
+    /// <summary>Derived "the screen is busy" flag: a recent payload window or a video still playing.</summary>
+    private static bool IsScreenBusy() =>
+        DateTime.UtcNow < _busyUntilUtc || AvaloniaChaosApp.Video?.IsPlaying == true;
+
+    private static (double X, double Y)? GetCursor()
+    {
+        try
+        {
+            var p = App.Services?.GetService<IPointerState>()?.GetCursorPosition();
+            return p.HasValue ? (p.Value.X, p.Value.Y) : null;
+        }
+        catch { return null; }
     }
 
     private static void EndChannel()

@@ -44,6 +44,9 @@ public sealed class AvaloniaChaosService : IChaosService
     private readonly IBrowserHost? _browserHost;
     private readonly IModService? _modService;
     private readonly ConditioningControlPanel.Core.Services.Chaos.IChaosTunnelService? _tunnel;
+    private readonly global::ConditioningControlPanel.ISkillTreeService? _skillTree;
+    private readonly global::ConditioningControlPanel.Core.Services.Progression.IAchievementService? _achievements;
+    private readonly ChaosCrashSentinel? _crashSentinel;
     private readonly Random _rng = new();
 
     private bool _active;
@@ -93,7 +96,10 @@ public sealed class AvaloniaChaosService : IChaosService
         IBouncingTextService? bouncingText = null,
         IBrowserHost? browserHost = null,
         IModService? modService = null,
-        ConditioningControlPanel.Core.Services.Chaos.IChaosTunnelService? tunnel = null)
+        ConditioningControlPanel.Core.Services.Chaos.IChaosTunnelService? tunnel = null,
+        global::ConditioningControlPanel.ISkillTreeService? skillTree = null,
+        global::ConditioningControlPanel.Core.Services.Progression.IAchievementService? achievements = null,
+        ChaosCrashSentinel? crashSentinel = null)
     {
         _bubbles = bubbles;
         _settings = settings;
@@ -110,6 +116,9 @@ public sealed class AvaloniaChaosService : IChaosService
         _browserHost = browserHost;
         _modService = modService;
         _tunnel = tunnel;
+        _skillTree = skillTree;
+        _achievements = achievements;
+        _crashSentinel = crashSentinel;
         AvaloniaChaosCatalogs.EnsureInitialized();
     }
 
@@ -261,6 +270,10 @@ public sealed class AvaloniaChaosService : IChaosService
 
         ChaosLessonHooks.OnRunStarted();
 
+        // Arm the dirty-shutdown sentinel (WPF ChaosModeService.cs:860): a native vanish mid-run
+        // self-reports at the next launch. Cleared on every teardown path (EndRun/CleanupAfterRun).
+        try { _crashSentinel?.Mark(BuildSentinelContext()); } catch { }
+
         var runStartCtx = BuildNarrativeContext(depth: 1);
         ChaosNarrativeHooks.OnRunStarted(runStartCtx);
         var runStartConvo = ChaosNarrativeDirector.Pick(runStartCtx, "run_start");
@@ -276,6 +289,7 @@ public sealed class AvaloniaChaosService : IChaosService
             OnChannelBroken);
         _spawning = true;
         _state.PushEvent("🐇 the descent begins");
+        AvaloniaChaosSfx.Play("fall_in", 0.28f);   // the falling whoosh as the descent opens (WPF ChaosModeService.cs:342)
 
         try { ChaosBackdropService.Show(_state.ActIndex); } catch (Exception ex) { _logger?.LogDebug("ChaosBackdropService.Show failed: {E}", ex.Message); }
 
@@ -285,6 +299,11 @@ public sealed class AvaloniaChaosService : IChaosService
         if (ChaosMeta.State.RunsCompleted == 0)
             ChaosHappyPath.OnFirstDescentStarted(_state);
         try { AvaloniaChaosApp.Bark?.NotifyChaosRunStarted(_state.Config.Difficulty); } catch { }
+
+        // The run-pick ribbon along the top: shows ONLY mantras/sins drafted during THIS descent,
+        // in pick order, beside the clock (WPF ChaosModeService.cs:414-417). RunPickTiles is a plain
+        // List (no CollectionChanged), so SetPicks is re-called after each pick instead of subscribing.
+        ChaosBoonBarOverlay.EnsureCreated();
 
         // Apply equipped start boon, if any.
         var equipped = ChaosMeta.State.EquippedStartBoon;
@@ -298,6 +317,7 @@ public sealed class AvaloniaChaosService : IChaosService
                 _state.PushEvent($"◈ start: {boon.Name}");
             }
         }
+        ChaosBoonBarOverlay.SetPicks(_state.RunPickTiles);
 
         // Apply lifetime boons (passive values + active toy power) and build HUD state.
         ChaosMeta.ApplyLifetimeBoons(_state);
@@ -377,14 +397,15 @@ public sealed class AvaloniaChaosService : IChaosService
         if (_rippleCooldownSec > 0)
         {
             _rippleCooldownSec -= dt;
+            if (_rippleCooldownSec <= 0)
+                AvaloniaChaosSfx.Play("toy_ready", 0.3f);   // the ripple gathered (WPF ChaosModeService.cs:987)
         }
         _state.RippleReady = _rippleCooldownSec <= 0;
         _state.RippleText = _state.RippleReady ? "READY" : $"{Math.Ceiling(_rippleCooldownSec):0}s";
 
         TickActiveToys(dt);
 
-        // Passive focus regen while a run is active.
-        _state.Focus = Math.Min(_state.FocusMax, _state.Focus + AvaloniaChaosTuning.FocusRegenPerSec * dt);
+        // WPF parity (ChaosTuning.cs:11-13): focus is EARNED by pops/rabbits only — no passive regen.
 
         // Advance active channel bookkeeping for the HUD.
         if (_state.IsChanneling)
@@ -487,6 +508,7 @@ public sealed class AvaloniaChaosService : IChaosService
             int gold = 3 + _rng.Next(5);
             ChaosMeta.AddGold(gold);
             _state.PushEvent($"✧ +{gold} gold");
+            AvaloniaChaosSfx.Play("golden_pop", 0.35f);   // WPF ChaosModeService.cs:1799
         }
 
         if (spec.IsGolden)
@@ -494,11 +516,14 @@ public sealed class AvaloniaChaosService : IChaosService
             int gold = 12 + _rng.Next(13);
             ChaosMeta.AddGold(gold);
             _state.PushEvent($"{ChaosGlyphs.Gold} +{gold} gold");
+            AvaloniaChaosSfx.Play("golden_pop", 0.6f);   // coins spill (WPF ChaosModeService.cs:1814)
             ChaosHappyPath.OnGoldFirstSeen();
         }
 
         // Fire the bubble's payload (flash, subliminal, overlay, etc.)
         FirePayload(spec);
+        // Achievement bubble-pop tracker: every benign/prism pop counts (WPF ChaosModeService.cs:1843,1869).
+        try { _achievements?.TrackBubblePopped(); } catch { }
 
         double focusGain = spec.IsGolden ? AvaloniaChaosTuning.FocusPerGolden : AvaloniaChaosTuning.FocusPerPop;
         double basePay = 100 * (_state.DifficultyMult) * (1 + _state.Heat);
@@ -555,11 +580,13 @@ public sealed class AvaloniaChaosService : IChaosService
         {
             _state.Shields--;
             _state.PushEvent("♥ shield absorbed the snap");
+            AvaloniaChaosSfx.Play(_state.Shields == 0 ? "resist_crumble" : "resist_absorb", 0.6f);   // WPF ChaosModeService.cs:1348
         }
         else
         {
             _state.Combo = 0;
             _state.ComboMult = 1.0;
+            AvaloniaChaosSfx.Play("trigger", 0.55f);   // the muffled boom under the effect (WPF ChaosModeService.cs:1355)
         }
 
         _state.Heat = Math.Max(0, _state.Heat - 0.15);
@@ -682,6 +709,7 @@ public sealed class AvaloniaChaosService : IChaosService
         _paused = true;
         _bubbles.SetChaosFrozen(true);
         _bubbles.SetChaosInputLocked(true);
+        AvaloniaChaosSfx.PlayWaveClear();   // the field pops as the draft table comes out (WPF ChaosModeService.cs:1469)
 
         ChaosNarrativeHooks.OnBoonDraft(_waveIndex, BuildNarrativeContext(depth: _waveIndex));
 
@@ -698,6 +726,7 @@ public sealed class AvaloniaChaosService : IChaosService
         _paused = true;
         _bubbles.SetChaosFrozen(true);
         _bubbles.SetChaosInputLocked(true);
+        AvaloniaChaosSfx.PlayWaveClear();   // WPF ChaosModeService.cs:1503
         _scriptedDraftPending = true;
         foreach (var o in options) ChaosMeta.MarkDiscovered("boon:" + o.Id);
         RunOnUi(() => _overlay?.ShowBoonDraft(_waveIndex, options, OnBoonPicked, autoResumeSec: _state.Config.DraftAutoResumeSec));
@@ -730,10 +759,12 @@ public sealed class AvaloniaChaosService : IChaosService
             bool shielded = ChaosHappyPath.ShouldShieldSin(boon.Id);
             _state.ApplyBoon(boon, shielded);
             _state.RunPickTiles.Add(new ChaosSidebarBoon { Id = boon.Id, Name = boon.Name, Glyph = boon.IsCurse ? "☠" : "◈" });
+            ChaosBoonBarOverlay.SetPicks(_state.RunPickTiles);   // ribbon reflects the new pick (WPF ChaosModeService.cs:417)
             _state.PushEvent($"{(boon.IsCurse ? (shielded ? "☠ shielded" : "☠ accepted") : "◈ chose")} {boon.Name}");
             ChaosLessonHooks.OnDraftCardTaken(boon.IsCurse);
             if (boon.IsCurse)
             {
+                AvaloniaChaosSfx.Play("sin_accept", 0.6f);   // WPF ChaosModeService.cs:1569
                 ChaosNarrativeHooks.OnSinAccepted(boon.Id, BuildNarrativeContext(depth: _waveIndex));
                 if (shielded) ChaosHappyPath.OnSinAccepted();
             }
@@ -764,6 +795,8 @@ public sealed class AvaloniaChaosService : IChaosService
         if (!_active || _ending) return;
         _ending = true;
         _spawning = false;
+        try { _crashSentinel?.Clear(); } catch { }               // the field is coming down (WPF ChaosModeService.cs:3126)
+        try { ChaosBoonBarOverlay.CloseActive(); } catch { }     // WPF ChaosModeService.cs:3153
         StopTimers();
         StopKeyHook();
         StopRippleHook();
@@ -775,13 +808,18 @@ public sealed class AvaloniaChaosService : IChaosService
         if (state != null)
         {
             LastRunScore = state.Score;
+            // Her gold tip for the final loop — full-course descents only (WPF EndRun AwardLoopTip).
+            if (ranFullCourse) AwardLoopTip(state);
             ChaosLessonHooks.OnRunCompleted(state.Shields, ranFullCourse, state.Config.Difficulty);
             ChaosNarrativeHooks.OnRunEnded(BuildNarrativeContext(depth: _waveIndex), state.Score, ranFullCourse);
 
             double baseXp = Math.Sqrt(Math.Max(0, state.Score)) * 1.5 + state.RunDurationSec / 60.0 * 35.0 * state.DifficultyMult;
-            double skillMult = 1.0;
+            // Skill-tree XP multiplier for the recap (WPF ChaosModeService.cs:3166 / ChaosModels.cs:535).
+            // Sparks stay on baseXp: IProgressionService.AddXP re-applies the multiplier internally,
+            // so the recap's finalXp reflects the skill tree without double-counting the payout.
+            double skillMult = _skillTree?.GetTotalXpMultiplier() ?? 1.0;
             double finalXp = baseXp * skillMult;
-            int sparks = (int)Math.Round(finalXp);
+            int sparks = (int)Math.Round(baseXp);
             long previousBest = (long)ChaosMeta.State.BestScore;
 
             try { _progression.AddXP(sparks, XPSource.Chaos); }
@@ -816,6 +854,7 @@ public sealed class AvaloniaChaosService : IChaosService
     private void CleanupAfterRun()
     {
         _logger?.LogDebug("CleanupAfterRun called");
+        try { _crashSentinel?.Clear(); } catch { }   // every run teardown funnels here (WPF ChaosModeService.cs:3229)
         try { _tunnel?.CloseActive(); } catch { }
         ChaosHappyPath.OnRunEnded();
         _ending = false;
@@ -835,6 +874,7 @@ public sealed class AvaloniaChaosService : IChaosService
             _hud = null;
             try { _overlay?.Close(); } catch { }
             _overlay = null;
+            try { ChaosBoonBarOverlay.CloseActive(); } catch { }   // WPF ChaosModeService.cs:3239
             try { ChaosBackdropService.CloseActive(); } catch { }
         });
         _state = null;
@@ -1082,9 +1122,10 @@ public sealed class AvaloniaChaosService : IChaosService
         if (_state.ActivesDisabled)
         {
             _state.PushEvent("🫦 the urge holds your hands — no toys");
+            AvaloniaChaosSfx.Play("toy_denied", 0.45f);   // WPF ChaosModeService.cs:2522
             return;
         }
-        if (!toy.IsReady) return;
+        if (!toy.IsReady) { AvaloniaChaosSfx.Play("toy_denied", 0.45f); return; }
         ChaosLessonHooks.OnToyUsed(toy.Id);
         double power = _state.ToyPower.TryGetValue(toy.Id, out var p) ? p : 0;
         bool maxed = _state.MaxedBoons.Contains(toy.Id);
@@ -1252,6 +1293,28 @@ public sealed class AvaloniaChaosService : IChaosService
                 _ => false,
             };
         }
+    }
+
+    /// <summary>Context line stamped into the crash sentinel so a native mid-run vanish
+    /// self-reports its run parameters at the next launch (WPF BuildSentinelContext).</summary>
+    private string BuildSentinelContext() =>
+        string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "mode={0} difficulty={1} waves={2} elapsed={3:F0}s",
+            AvaloniaChaosMode.ActiveMode, _state?.Config?.Difficulty, _waveCount, _state?.ElapsedSec ?? 0);
+
+    /// <summary>Her gold tip for a finished loop (WPF AwardLoopTip). A clean loop pays double.
+    /// Note: the simplified engine has no per-loop detonation counter, so "clean" here means
+    /// zero detonations across the whole descent (a stricter proxy than WPF's final-loop test).</summary>
+    private void AwardLoopTip(ChaosRunState state)
+    {
+        bool clean = state.Detonated == 0;
+        int tip = (int)Math.Round(_rng.Next(3, 7) * state.DifficultyMult);
+        if (clean) tip *= 2;
+        tip = Math.Max(1, tip);
+        ChaosMeta.AddGold(tip);
+        state.PushEvent(clean
+            ? $"{ChaosGlyphs.Gold} clean loop — she tips +{tip} gold"
+            : $"{ChaosGlyphs.Gold} loop done — she tips +{tip} gold");
     }
 
     private ChaosNarrativeContext BuildNarrativeContext(int depth)

@@ -16,7 +16,9 @@ namespace ConditioningControlPanel.Avalonia.Chaos;
 
 #region legacy enums / identifiers
 
-public enum ChaosRank { Curious, Tempted, Slipping, Devoted, Entranced, Lost, Claimed }
+/// <summary>The rank spine — the single source of truth for depth ranks. Order and
+/// ordinals mirror WPF <c>ChaosRanks.cs</c> exactly (Entranced before Devoted; no Lost).</summary>
+public enum ChaosRank { Curious = 0, Tempted = 1, Slipping = 2, Entranced = 3, Devoted = 4, Claimed = 5 }
 public enum ChaosBranch { Control, Greed, Depth }
 public enum ChaosRarity { Common, Uncommon, Rare }
 public enum ChaosSpeaker { Madam, Rabbit, Hatter, Doll, Enemy }
@@ -304,11 +306,12 @@ public sealed class ChaosRunConfig
         };
     }
 
+    // WPF parity (ChaosModels.cs:267-273): Easy 1.0, Medium 1.3, Hard 1.7, Extreme 2.2.
     private static double DifficultyToMult(string? diff) => (diff ?? "Easy") switch
     {
-        "Extreme" => 2.0,
-        "Hard" => 1.5,
-        "Medium" => 1.2,
+        "Extreme" => 2.2,
+        "Hard" => 1.7,
+        "Medium" => 1.3,
         _ => 1.0,
     };
 }
@@ -547,9 +550,14 @@ public static class RevealService
 
 public static class ChaosRanks
 {
-    public static int[] Thresholds { get; } = { 0, 3, 10, 25, 50 };
-    public static string RankLockedTip => "sink deeper to learn this.";
-    public static string CapstoneLockedTip => "the capstone waits for Devoted.";
+    // ---- thresholds (lifetime completed descents) — WPF parity (ChaosRanks.cs:22) ----
+    public static int[] Thresholds { get; } = { 0, 3, 10, 25, 50, 100 };
+
+    /// <summary>[LOCKED] generic tooltip for anything visible but above the player's rank. WPF parity.</summary>
+    public static string RankLockedTip => "she'll sell this to someone deeper.";
+
+    /// <summary>[LOCKED] tooltip for a capstone (final) boon level before Devoted. WPF parity.</summary>
+    public static string CapstoneLockedTip => "the last stitch is hers to give. she gives it to the devoted.";
 
     public static ChaosRank For(int runsCompleted)
     {
@@ -559,10 +567,46 @@ public static class ChaosRanks
         return r;
     }
 
-    public static string Name(ChaosRank rank) => rank.ToString().ToLowerInvariant();
-    public static string NameLower(ChaosRank rank) => Name(rank);
-    public static string Line(ChaosRank rank) => "";
-    public static string RankSpecifics(ChaosRank rank) => $"reach {Thresholds.ElementAtOrDefault((int)rank)} descents.";
+    /// <summary>Lowercase rank word — the recap card renders this bare and huge (WPF parity).</summary>
+    public static string NameLower(ChaosRank rank) => rank switch
+    {
+        ChaosRank.Tempted   => "tempted",
+        ChaosRank.Slipping  => "slipping",
+        ChaosRank.Entranced => "entranced",
+        ChaosRank.Devoted   => "devoted",
+        ChaosRank.Claimed   => "claimed",
+        _                   => "curious",
+    };
+
+    /// <summary>Capitalized rank word for the dollhouse top bar (WPF parity).</summary>
+    public static string Name(ChaosRank rank) => rank switch
+    {
+        ChaosRank.Tempted   => "Tempted",
+        ChaosRank.Slipping  => "Slipping",
+        ChaosRank.Entranced => "Entranced",
+        ChaosRank.Devoted   => "Devoted",
+        ChaosRank.Claimed   => "Claimed",
+        _                   => "Curious",
+    };
+
+    /// <summary>[LOCKED] one line under the bare rank word on the rank card. WPF parity (ChaosRanks.cs:74).</summary>
+    public static string Line(ChaosRank rank) => rank switch
+    {
+        ChaosRank.Tempted   => "tempted. three times down. you can stop calling it curiosity.",
+        ChaosRank.Slipping  => "slipping. the climb out takes longer every time. you noticed. you came anyway.",
+        ChaosRank.Entranced => "entranced. you don't fall anymore. you arrive.",
+        ChaosRank.Devoted   => "devoted. the dollhouse keeps a room warm for you now. it always knew it would.",
+        ChaosRank.Claimed   => "claimed. it stopped counting your visits a long time ago. so did you.",
+        _                   => "",
+    };
+
+    /// <summary>Hover specifics for a rank gate: exact rank, exact descent count, live progress. WPF parity.</summary>
+    public static string RankSpecifics(ChaosRank needed)
+    {
+        int need = Thresholds[Math.Clamp((int)needed, 0, Thresholds.Length - 1)];
+        int have = ChaosMeta.State.RunsCompleted;
+        return $"unlocks at {Name(needed)}: {need} descents finished. you've finished {have}.";
+    }
 }
 
 public static class ChaosUpgrades
@@ -791,13 +835,6 @@ public static class ChaosTips
 
         ToolTip.SetTip(element, panel);
     }
-}
-
-public static class ChaosSfx
-{
-    public static void Play(string name, float scale = 0.5f) { }
-    public static void PlayBoonReveal(bool rare) { }
-    public static void PlayBoonPicked() { }
 }
 
 public static class ChaosNarrator

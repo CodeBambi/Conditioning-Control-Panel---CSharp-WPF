@@ -17,11 +17,11 @@ public static class ChaosTuning
     public const double FocusPerHeavy = 15;    // heavy giant (3x pay, slightly more focus)
 
     /// <summary>
-    /// Passive focus regeneration per second while a run is active.
-    /// The WPF original has no passive regen; this is an Avalonia-port convenience
-    /// so new players are not permanently starved while the rest of the economy is stubbed.
+    /// Passive focus regeneration per second. WPF parity (WPF ChaosTuning.cs:11-13): focus is
+    /// EARNED by popping treats and catching rabbits only — there is NO passive regen and no decay.
+    /// Kept as a zero constant (not deleted) to document the deliberate WPF-parity decision.
     /// </summary>
-    public const double FocusRegenPerSec = 2.0;
+    public const double FocusRegenPerSec = 0.0;
 
     /// <summary>Focus bar turns red and pulses below this value.</summary>
     public const double FocusLowThreshold = 30;
