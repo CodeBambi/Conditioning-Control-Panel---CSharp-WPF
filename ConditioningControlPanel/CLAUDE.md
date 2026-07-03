@@ -23,7 +23,7 @@ dotnet run
 | `MainWindow/MainWindow.xaml:~569` | `BtnUpdateAvailable` Content + ToolTip loc keys |
 | `Localization/Languages/*.json` (9 files) | `btn_vX_Y_Z_is_out` + `tooltip_vX_Y_Z_*` keys |
 
-Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.txt` (plain-text notes for the GitHub release; no em-dashes). After signing: push main, tag `vX.Y.Z`, create the GitHub release (mark Latest), POST server marquee + update-banner (`x-admin-token`), announce on Discord. Note: de.json contains a pre-existing control character that strict JSON parsers reject; validate with a lenient parser (Newtonsoft tolerates it).
+Use `/release X.Y.Z "Subtitle"` to automate this. Also write `../notes-vX.Y.Z.txt` (plain-text notes for the GitHub release; no em-dashes). After signing: push main, tag `vX.Y.Z`, create the GitHub release (mark Latest), POST server marquee + update-banner (`x-admin-token`), update download links + version badge in `C:\Projects\cclabs-site` (index.html + guide-getting-started.html, then commit+push and `vercel deploy --prod`), announce on Discord. Note: de.json contains a pre-existing control character that strict JSON parsers reject; validate with a lenient parser (Newtonsoft tolerates it).
 
 ### Important Paths
 | Path | Purpose |
