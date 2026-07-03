@@ -565,9 +565,32 @@ public partial class MainWindow : Window
         if (settingsService.Current is not { } settings)
             return;
 
-        var currentSeason = DateTime.UtcNow.ToString("yyyy-MM");
-        if (!settings.SeasonResetPending && settings.LastSeasonResetSeen == currentSeason)
+        // S8: the season boundary is SERVER-authoritative (SeasonRecapService.CurrentSeasonKey),
+        // NOT the local wall-clock 1st-of-month. Keying off wall-clock rolled the bucket prematurely
+        // and mislabeled the card (#450); prefer the server CurrentSeason, falling back to wall-clock
+        // only when it is unknown (not logged in / invite users).
+        var currentSeason = SeasonRecapService.CurrentSeasonKey;
+        var lastSeasonSeen = settings.LastSeasonResetSeen;
+        var statsSeason = settings.SeasonStatsSeason ?? "";
+
+        // Seasons only ever move FORWARD. Fire only when the current season is strictly AFTER the
+        // last one we showed a recap for, or when a server reset is really pending (current strictly
+        // ahead of the live stats bucket). Ordinal compare is chronological for zero-padded yyyy-MM;
+        // an empty lastSeasonSeen (first run) is "before" any real key so first-timers still fire.
+        var monthRolled = string.CompareOrdinal(currentSeason, lastSeasonSeen) > 0;
+        var reallyPending = settings.SeasonResetPending && string.CompareOrdinal(currentSeason, statsSeason) > 0;
+        if (!monthRolled && !reallyPending)
+        {
+            // A replayed level_reset can leave SeasonResetPending set on an upgrade launch even when
+            // the season didn't change. Clear the stale latch and skip, so we don't fire a spurious
+            // "Season N ended" recap for the in-progress month or a backward one during a desync.
+            if (settings.SeasonResetPending)
+            {
+                settings.SeasonResetPending = false;
+                settingsService.Save();
+            }
             return;
+        }
 
         // Only surface the recap for users who have progression to lose.
         if (settings.HighestLevelEver < 2)
@@ -578,22 +601,47 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Snapshot the just-ended season BEFORE its counters are cleared, then roll the bucket.
         var snapshot = SeasonRecapService.CaptureAndRollover(currentSeason);
-        if (snapshot == null)
-        {
-            settings.LastSeasonResetSeen = currentSeason;
-            settings.SeasonResetPending = false;
-            settingsService.Save();
-            return;
-        }
 
-        var vm = new SeasonRecapViewModel(snapshot);
-        var window = new SeasonRecapWindow(vm);
-        await window.ShowDialog(this);
-
+        // Advance the persisted idempotency latch immediately after the destructive roll and BEFORE
+        // presenting, so a throw while showing the card can't cause the next launch to re-roll the
+        // now-empty season and permanently lose the recap.
         settings.LastSeasonResetSeen = currentSeason;
         settings.SeasonResetPending = false;
         settingsService.Save();
+
+        if (snapshot != null)
+        {
+            var vm = new SeasonRecapViewModel(snapshot);
+            var window = new SeasonRecapWindow(vm);
+            await window.ShowDialog(this);
+        }
+        else
+        {
+            // No meaningful season data yet (e.g. first reset after this feature shipped, before any
+            // tracking accrued) — surface the legacy fallback notice so the user still understands
+            // what happened, instead of silently advancing the latch.
+            var message =
+                "The monthly leaderboard season has rotated. This happens at the start of every month so everyone has a fresh chance to climb the rankings.\n\n" +
+                "What resets:\n" +
+                "  - Current Level and XP\n" +
+                "  - Daily quest streak\n" +
+                "  - Monthly leaderboard position\n" +
+                "  - Mechanical enhancements (re-buy them to raise your Prestige)\n\n" +
+                "What's preserved:\n" +
+                "  - All achievements\n" +
+                "  - Highest Level Ever (yours: " + settings.HighestLevelEver + ")\n" +
+                "  - Your sparkle points balance\n" +
+                "  - Permanent stat enhancements and your Prestige\n" +
+                "  - Total lifetime XP\n" +
+                "  - Patreon perks and whitelist\n\n" +
+                "Welcome to season " + currentSeason + "!";
+
+            var dialogService = App.Services?.GetService<IDialogService>();
+            if (dialogService != null)
+                await dialogService.ShowMessageAsync("New Season Started", message);
+        }
     }
 
     #endregion

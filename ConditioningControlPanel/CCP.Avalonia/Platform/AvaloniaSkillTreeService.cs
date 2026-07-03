@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ConditioningControlPanel.Core.Services;
+using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Models;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace ConditioningControlPanel.Avalonia.Platform;
@@ -17,11 +20,20 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 public sealed class AvaloniaSkillTreeService : ISkillTreeService, IDisposable
 {
     private readonly ISettingsService _settingsService;
+    private readonly IServiceProvider? _services;
     private readonly ILogger<AvaloniaSkillTreeService>? _logger;
 
-    public AvaloniaSkillTreeService(ISettingsService settingsService, ILogger<AvaloniaSkillTreeService>? logger = null)
+    // R3: debounce the per-second conditioning-time disk write. Minutes are applied to the
+    // in-memory settings on every call (readers stay current) but the disk Save() is flushed at
+    // most once per minute (or on Stop/Dispose) instead of a full settings write every 1s tick.
+    private double _unsavedConditioningMinutes;
+    private DateTime _lastConditioningFlushUtc = DateTime.UtcNow;
+    private const double ConditioningFlushIntervalSeconds = 60.0;
+
+    public AvaloniaSkillTreeService(ISettingsService settingsService, IServiceProvider? services = null, ILogger<AvaloniaSkillTreeService>? logger = null)
     {
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+        _services = services;
         _logger = logger;
     }
 
@@ -98,6 +110,18 @@ public sealed class AvaloniaSkillTreeService : ISkillTreeService, IDisposable
         ApplySkillEffects(skillId, settings);
         _settingsService.Save();
 
+        // S6/PS-4 prestige accrual: record the spend into lifetime (achievements -> prestige rank)
+        // and this-season (recap card) counters after the successful local purchase.
+        try
+        {
+            _services?.GetService<IAchievementService>()?.TrackSkillPointsSpent(skill.Cost);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to accrue lifetime skill-points-spent for prestige");
+        }
+        SeasonRecapService.TrackPointsSpent(skill.Cost);
+
         SkillUnlocked?.Invoke(this, skillId);
         return Task.FromResult<(bool, string?)>((true, null));
     }
@@ -147,7 +171,8 @@ public sealed class AvaloniaSkillTreeService : ISkillTreeService, IDisposable
     /// <inheritdoc />
     public void Stop()
     {
-        // No background timers to stop in this port.
+        // Persist any conditioning minutes accumulated since the last debounced flush.
+        FlushConditioningTime();
     }
 
     public void Dispose() => Stop();
@@ -228,8 +253,25 @@ public sealed class AvaloniaSkillTreeService : ISkillTreeService, IDisposable
         var settings = _settingsService.Current;
         if (settings == null || minutes <= 0) return;
 
+        // Apply to the in-memory model on every call so live readers stay current.
         settings.TotalConditioningMinutes += minutes;
         settings.SeasonConditioningMinutes += minutes;
+
+        // R3: AddConditioningTime is called on a ~1s cadence during a session; a full settings
+        // Save() every second is wasteful. Accumulate and flush the disk write at most once per
+        // minute; Stop()/Dispose() flush the remainder so a graceful exit loses nothing.
+        _unsavedConditioningMinutes += minutes;
+        if ((DateTime.UtcNow - _lastConditioningFlushUtc).TotalSeconds >= ConditioningFlushIntervalSeconds)
+        {
+            FlushConditioningTime();
+        }
+    }
+
+    private void FlushConditioningTime()
+    {
+        _lastConditioningFlushUtc = DateTime.UtcNow;
+        if (_unsavedConditioningMinutes <= 0) return;
+        _unsavedConditioningMinutes = 0;
         _settingsService.Save();
     }
 
@@ -266,6 +308,72 @@ public sealed class AvaloniaSkillTreeService : ISkillTreeService, IDisposable
         {
             _logger?.LogWarning(ex, "PinkRushStarted subscriber threw");
         }
+    }
+
+    /// <inheritdoc />
+    public double GetRerollBonusMultiplier() => HasSkill("better_quests") ? 1.25 : 1.0;
+
+    /// <inheritdoc />
+    public int CheckPerfectWeekBonus()
+    {
+        var settings = _settingsService.Current;
+        if (settings == null) return 0;
+        if (!HasSkill("perfect_bimbo_week")) return 0;
+
+        var streak = settings.DailyQuestStreak;
+        var playerLevel = settings.PlayerLevel;
+
+        int baseXP;
+        if (streak == 30) baseXP = 10000;
+        else if (streak == 14) baseXP = 6000;
+        else if (streak % 7 == 0 && streak >= 7) baseXP = 3000;
+        else return 0;
+
+        // Scale with player level (+2% per level), mirroring WPF SkillTreeService.CheckPerfectWeekBonus.
+        var scaledXP = (int)Math.Round(baseXP * (1 + playerLevel * 0.02));
+        _logger?.LogInformation(
+            "Perfect Bimbo Week bonus awarded! {XP} XP (base {BaseXP}, streak {Streak}, level {Level})",
+            scaledXP, baseXP, streak, playerLevel);
+        return scaledXP;
+    }
+
+    /// <inheritdoc />
+    public void OnSeasonReset()
+    {
+        var settings = _settingsService.Current;
+        if (settings == null) return;
+
+        // Reset seasonal flags.
+        settings.SeasonalStreakRecoveryUsed = false;
+        settings.CurrentStreak = 0;
+        settings.LastStreakDate = null;
+        settings.DailyQuestStreak = 0;
+        settings.LastDailyQuestDate = null;
+
+        // Prune the tree to permanent nodes (fallback when the server didn't send the
+        // post-rollover list). Mechanical/XP-economy nodes are removed and must be re-purchased —
+        // that re-buy is the Prestige loop. Mirrors WPF SkillTreeService.OnSeasonReset.
+        var owned = settings.UnlockedSkills ?? new List<string>();
+        var kept = owned.Where(id => SkillDefinition.PermanentIds.Contains(id)).ToList();
+        var removed = owned.Count - kept.Count;
+        if (removed > 0)
+        {
+            settings.UnlockedSkills = kept;
+
+            // Tear down live effects whose skills were just dropped.
+            if (!HasSkill("pink_rush") && settings.PinkRushActive)
+            {
+                settings.PinkRushActive = false;
+                settings.PinkRushEndTime = null;
+            }
+            if (!HasSkill("good_girl_streak"))
+                settings.StreakShieldsRemaining = 0;
+        }
+
+        _logger?.LogInformation(
+            "Season reset: seasonal flags cleared, {Removed} mechanical skill(s) removed, {Kept} permanent kept",
+            removed, kept.Count);
+        _settingsService.Save();
     }
 
     #endregion
