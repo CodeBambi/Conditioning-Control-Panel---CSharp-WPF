@@ -12,11 +12,16 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Chaos;
 using ConditioningControlPanel.Avalonia.Compositor;
 using ConditioningControlPanel.Avalonia.Compositor.Layers;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Avalonia.Services.Overlays;
 using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Core.Services.Chaos;
+using ConditioningControlPanel.Core.Services.Companion;
+using ConditioningControlPanel.Core.Services.Content;
+using ConditioningControlPanel.Core.Services.Flash;
 using ConditioningControlPanel.Core.Services.Overlays;
 using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.Settings;
@@ -44,12 +49,17 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     private readonly IOverlayService? _overlay;
     private readonly LibVLC _libVlc;
     private readonly VideoMetadataCache _metadataCache;
-    private readonly IAudioDeviceService? _audioDeviceService;
     private readonly IModService? _mods;
     private readonly IAchievementService? _achievements;
     private readonly IProgressionService? _progression;
     private readonly ILogger<AvaloniaVideoService>? _logger;
     private readonly IMultiMonitorVideoService? _multiMonitor;
+    private readonly AvaloniaMultiMonitorVideoService? _multiMonitorImpl;
+    private readonly IContentPackService? _contentPacks;
+    private readonly ISystemAudioDucker? _audioDucker;
+    private readonly IFlashService? _flash;
+    private readonly IBubbleService? _bubbles;
+    private readonly ICompanionService? _companion;
     private readonly Random _random = new();
     private readonly object _sync = new();
     private readonly List<string> _videoFiles = new();
@@ -85,6 +95,21 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     private bool _isDisposed;
     private bool _codecWarningShown;
 
+    // ---- WPF-parity playback state (WS0 lot 4 wave 3) ----
+    // Shuffled no-repeat queues (WPF GetNextVideo/RefillVideoQueues, VideoService.cs:2628-2810):
+    // each queue is consumed until empty, then refilled with a fresh Fisher-Yates shuffle.
+    private Queue<string> _videoQueue = new();
+    private Queue<(string PackId, PackFileEntry File)> _packVideoQueue = new();
+    private readonly List<string> _tempPackFiles = new();
+    // Duck guard so retries/attention loops never double-duck (WPF VideoService.cs:1156-1158).
+    private bool _duckedForVideo;
+    // Position-based watch-credit watermark (WPF FinalizeWatchCredit, VideoService.cs:2313-2340).
+    private long _lastWatchPositionMs;
+    private double _creditedWatchSeconds;
+    // Invalidates a pending 1.3s pre-announce start when Stop/cleanup runs during the delay.
+    private int _playRequestVersion;
+    private DispatcherTimer? _preAnnounceTimer;
+
     // ---- chaos random-segment mode (one-shot) ----
     // The NEXT triggered video jumps to a random position leaving at least _segmentSec of
     // runway (the chaos 15s cap then ends it — so the player sees a random 15s slice, not
@@ -109,7 +134,12 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         ILogger<AvaloniaVideoService>? logger = null,
         IOverlayService? overlay = null,
         IMultiMonitorVideoService? multiMonitor = null,
-        CompositorEngine? compositor = null)
+        CompositorEngine? compositor = null,
+        IContentPackService? contentPacks = null,
+        ISystemAudioDucker? audioDucker = null,
+        IFlashService? flash = null,
+        IBubbleService? bubbles = null,
+        ICompanionService? companion = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
@@ -118,7 +148,7 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _libVlc = libVlc ?? throw new ArgumentNullException(nameof(libVlc));
         SharedLibVLC = _libVlc;
         _metadataCache = metadataCache ?? throw new ArgumentNullException(nameof(metadataCache));
-        _audioDeviceService = audioDeviceService;
+        _ = audioDeviceService; // retained for ctor compatibility; no longer used directly
         _mods = mods;
         _achievements = achievements;
         _progression = progression;
@@ -126,6 +156,11 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _overlay = overlay;
         _multiMonitor = multiMonitor;
         _compositor = compositor;
+        _contentPacks = contentPacks;
+        _audioDucker = audioDucker;
+        _flash = flash;
+        _bubbles = bubbles;
+        _companion = companion;
         // WS0 lot 4 (skia-rebuild-goal.md): the LEGACY video path (multi-monitor service /
         // per-window fallback) is the contract holder until UCE plan Phase E proves the
         // compositor video layer by running. VideoLayer/MandatoryVideoLayer exist but their
@@ -154,6 +189,18 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         {
             _multiMonitor.PlaybackStarted += OnMultiMonitorPlaybackStarted;
             _multiMonitor.PlaybackEnded += OnMultiMonitorPlaybackEnded;
+        }
+
+        // The live Windows multi-monitor path surfaces user key intent (ESC dismiss / panic
+        // force-stop) and surface clicks from its own windows; wire them back into this
+        // service's cleanup + attention-target contract (WPF SetupStrictHandlers /
+        // BringTargetsToFront parity).
+        _multiMonitorImpl = multiMonitor as AvaloniaMultiMonitorVideoService;
+        if (_multiMonitorImpl != null)
+        {
+            _multiMonitorImpl.DismissRequested += OnMultiMonitorDismissRequested;
+            _multiMonitorImpl.PanicRequested += OnMultiMonitorPanicRequested;
+            _multiMonitorImpl.SurfaceClicked += OnMultiMonitorSurfaceClicked;
         }
 
         RefreshVideosPath();
@@ -322,18 +369,36 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _cts = null;
 
         Dispatcher.UIThread.Invoke(() => CleanupInternal(notifyEnded: false));
+
+        // WPF ForceCleanup parity (VideoService.cs:888): a hard stop resets the duck
+        // refcount immediately instead of releasing a single reference.
+        _duckedForVideo = false;
+        try { _audioDucker?.ForceUnduck(); } catch { /* best effort */ }
         _logger?.LogInformation("AvaloniaVideoService stopped");
     }
 
     public void RefreshVideosPath()
     {
         LoadVideoFiles();
+        // Invalidate the shuffled queues so the next pick refills from the new file set.
+        lock (_sync)
+        {
+            _videoQueue.Clear();
+            _packVideoQueue.Clear();
+        }
     }
 
     public void PlaySpecificVideo(string videoPath, bool strictMode)
     {
         if (_isDisposed) return;
         if (string.IsNullOrWhiteSpace(videoPath)) return;
+        // Defense-in-depth (repo CLI-boundary policy): reject UNC (\\server) and
+        // extended-length (\\?\) paths before any filesystem probe.
+        if (videoPath.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            _logger?.LogWarning("AvaloniaVideoService: PlaySpecificVideo rejected UNC/extended-length path");
+            return;
+        }
         var path = videoPath;
         if (!Path.IsPathRooted(path))
             path = Path.Combine(_environment.EffectiveAssetsPath, "videos", path);
@@ -349,6 +414,12 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     {
         if (_isDisposed) return;
         if (string.IsNullOrWhiteSpace(url)) return;
+        // Defense-in-depth (repo CLI-boundary policy): reject UNC and extended-length paths.
+        if (url.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            _logger?.LogWarning("AvaloniaVideoService: PlayUrl rejected UNC/extended-length path");
+            return;
+        }
         Dispatcher.UIThread.Invoke(() => PlayUrlCore(url));
     }
 
@@ -369,6 +440,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         {
             CleanupInternal(notifyEnded: true);
             try { _interactionQueue.ForceReset(); } catch { /* best effort */ }
+            // WPF ForceCleanup parity (VideoService.cs:888): reset the duck refcount.
+            _duckedForVideo = false;
+            try { _audioDucker?.ForceUnduck(); } catch { /* best effort */ }
         });
     }
 
@@ -400,6 +474,7 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             }
         }
 
+        files = ApplyDisabledAssetFilter(files);
         files = ApplyDurationFilter(files);
 
         lock (_sync)
@@ -407,6 +482,30 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _videoFiles.Clear();
             _videoFiles.AddRange(files);
         }
+    }
+
+    /// <summary>
+    /// Removes user-disabled videos from the folder-sourced list (blacklist; WPF
+    /// RefillVideoQueues parity, VideoService.cs:2733-2755). Keys use the relative-path
+    /// format written by the Assets tab (forward slashes, relative to the assets root)
+    /// and compare case-insensitively so Windows-cased paths can't slip past.
+    /// </summary>
+    private List<string> ApplyDisabledAssetFilter(List<string> files)
+    {
+        var disabledPaths = _settings.Current?.DisabledAssetPaths;
+        if (disabledPaths == null || disabledPaths.Count == 0) return files;
+
+        static string Norm(string p) => p.Replace('\\', '/');
+        var basePath = _environment.EffectiveAssetsPath;
+        var disabled = new HashSet<string>(disabledPaths.Select(Norm), StringComparer.OrdinalIgnoreCase);
+        var beforeCount = files.Count;
+        var filtered = files.Where(f => !disabled.Contains(Norm(Path.GetRelativePath(basePath, f)))).ToList();
+        if (filtered.Count != beforeCount)
+        {
+            _logger?.LogDebug("AvaloniaVideoService: {Before} -> {After} after disabled-asset filter",
+                beforeCount, filtered.Count);
+        }
+        return filtered;
     }
 
     /// <summary>
@@ -467,7 +566,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         if (settings == null || !settings.MandatoryVideosEnabled) return;
         lock (_sync)
         {
-            if (_videoFiles.Count == 0) return;
+            // Pack-only libraries are valid: the queues refill lazily from active content
+            // packs even when the videos folder is empty (WPF GetNextVideo parity).
+            if (_videoFiles.Count == 0 && _contentPacks == null) return;
         }
 
         _scheduledTimer?.Stop();
@@ -502,18 +603,151 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
     public void PlayRandomVideo()
     {
-        string? file;
-        lock (_sync)
+        var file = GetNextVideo();
+        if (file == null)
         {
-            if (_videoFiles.Count == 0)
-            {
-                _logger?.LogDebug("AvaloniaVideoService: PlayRandomVideo called but no videos are available");
-                return;
-            }
-            file = _videoFiles[Random.Shared.Next(_videoFiles.Count)];
+            _logger?.LogDebug("AvaloniaVideoService: PlayRandomVideo called but no videos are available");
+            return;
         }
         var strict = _settings.Current?.StrictLockEnabled ?? false;
         Dispatcher.UIThread.Invoke(() => PlayFile(file, strict));
+    }
+
+    /// <summary>
+    /// Dequeues the next video from the shuffled queues (WPF GetNextVideo parity,
+    /// VideoService.cs:2628-2670): refill when both queues are empty, weight the
+    /// regular-vs-pack choice by remaining count, and decrypt pack entries to a
+    /// tracked temp file. Returns null when no videos are available at all.
+    /// </summary>
+    private string? GetNextVideo()
+    {
+        bool needRefill;
+        lock (_sync)
+        {
+            needRefill = _videoQueue.Count == 0 && _packVideoQueue.Count == 0;
+        }
+        if (needRefill)
+        {
+            RefillVideoQueues();
+        }
+
+        string? regular = null;
+        (string PackId, PackFileEntry File)? pack = null;
+        lock (_sync)
+        {
+            if (_videoQueue.Count == 0 && _packVideoQueue.Count == 0) return null;
+
+            bool usePackVideo = false;
+            if (_videoQueue.Count > 0 && _packVideoQueue.Count > 0)
+            {
+                // Both available — pick randomly, weighted by remaining count.
+                var totalCount = _videoQueue.Count + _packVideoQueue.Count;
+                usePackVideo = _random.Next(totalCount) >= _videoQueue.Count;
+            }
+            else if (_packVideoQueue.Count > 0)
+            {
+                usePackVideo = true;
+            }
+
+            if (usePackVideo && _packVideoQueue.Count > 0)
+            {
+                pack = _packVideoQueue.Dequeue();
+            }
+            else if (_videoQueue.Count > 0)
+            {
+                regular = _videoQueue.Dequeue();
+            }
+        }
+
+        if (pack is { } packVideo)
+        {
+            // Decrypt the pack video to a temp file; tracked for cleanup on refill/dispose.
+            var tempPath = _contentPacks?.GetPackFileTempPath(packVideo.PackId, packVideo.File);
+            if (!string.IsNullOrEmpty(tempPath))
+            {
+                _tempPackFiles.Add(tempPath);
+                _logger?.LogDebug("AvaloniaVideoService: using pack video {Name} from pack {PackId}",
+                    packVideo.File.OriginalName, packVideo.PackId);
+                return tempPath;
+            }
+            // Decryption failed — fall back to the regular queue (WPF GetNextVideo contract).
+            lock (_sync)
+            {
+                return _videoQueue.Count > 0 ? _videoQueue.Dequeue() : null;
+            }
+        }
+
+        return regular;
+    }
+
+    /// <summary>
+    /// Refills both shuffled queues (WPF RefillVideoQueues parity, VideoService.cs:2674-2810):
+    /// rescans the videos folder (disabled-asset + duration filters applied in
+    /// <see cref="LoadVideoFiles"/>), Fisher-Yates-shuffles the result, and appends the
+    /// active content packs' videos as a separately shuffled queue. The pack service applies
+    /// its own DisabledAssetPaths (pack:{id}/{name}) filter internally.
+    /// </summary>
+    private void RefillVideoQueues()
+    {
+        CleanupTempPackFiles();
+        LoadVideoFiles();
+
+        List<string> files;
+        lock (_sync)
+        {
+            files = new List<string>(_videoFiles);
+        }
+        ShuffleList(files);
+
+        var packVideos = new List<(string PackId, PackFileEntry File)>();
+        if (_contentPacks != null)
+        {
+            try
+            {
+                packVideos = _contentPacks.GetAllActivePackVideos();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning("AvaloniaVideoService: failed to enumerate pack videos: {Error}", ex.Message);
+            }
+        }
+        ShuffleList(packVideos);
+
+        lock (_sync)
+        {
+            _videoQueue = new Queue<string>(files);
+            _packVideoQueue = new Queue<(string PackId, PackFileEntry File)>(packVideos);
+        }
+
+        _logger?.LogInformation("AvaloniaVideoService: queues refilled — {RegularCount} regular videos, {PackCount} pack videos",
+            files.Count, packVideos.Count);
+    }
+
+    /// <summary>Fisher-Yates shuffle for reliable randomization (WPF ShuffleList parity).</summary>
+    private void ShuffleList<T>(IList<T> list)
+    {
+        for (var i = list.Count - 1; i > 0; i--)
+        {
+            var j = _random.Next(i + 1);
+            (list[i], list[j]) = (list[j], list[i]);
+        }
+    }
+
+    /// <summary>Best-effort deletion of decrypted pack temp files (WPF CleanupTempPackFiles parity).</summary>
+    private void CleanupTempPackFiles()
+    {
+        foreach (var tempFile in _tempPackFiles)
+        {
+            try
+            {
+                if (File.Exists(tempFile)) File.Delete(tempFile);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogDebug("AvaloniaVideoService: failed to delete temp pack file: {Error}", ex.Message);
+            }
+        }
+        _tempPackFiles.Clear();
     }
 
     public void UpdateVolume()
@@ -541,15 +775,17 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _isVideoActive = false;
         _maxDurationTimer?.Stop();
         _maxDurationTimer = null;
-        VideoEnded?.Invoke(this, EventArgs.Empty);
-    }
-
-    private string? PickRandomVideo()
-    {
-        lock (_sync)
+        FinalizeWatchCredit();
+        if (_duckedForVideo)
         {
-            if (_videoFiles.Count == 0) return null;
-            return _videoFiles[Random.Shared.Next(_videoFiles.Count)];
+            _duckedForVideo = false;
+            try { _audioDucker?.Unduck(); } catch { /* best effort */ }
+        }
+        try { _bubbles?.Resume(); } catch { /* best effort */ }
+        VideoEnded?.Invoke(this, EventArgs.Empty);
+        if (IsRunning && _settings.Current?.FlashEnabled == true)
+        {
+            try { _flash?.Start(); } catch { /* best effort */ }
         }
     }
 
@@ -558,9 +794,38 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         if (_isDisposed) return;
         CleanupInternal(notifyEnded: false);
 
-        // Mark the slot active (for the scheduler's in-flight guard) and arm the hard cap so no
-        // mandatory video can overrun VideoMaxDurationSeconds. Both are cleared in CleanupInternal.
+        // Mark the slot active immediately (before the pre-announce delay) so the scheduler's
+        // in-flight guard holds during the 1.3s window. Cleared in CleanupInternal.
         _isVideoActive = true;
+
+        // WPF PlayVideo contract (VideoService.cs:1141-1170): announce the incoming video,
+        // stop flashes, duck other apps, then delay playback 1.3s so the avatar/companion
+        // can announce it. PlayUrl deliberately skips all of this (WPF parity).
+        VideoAboutToStart?.Invoke(this, EventArgs.Empty);
+        try { _flash?.Stop(); } catch { /* best effort */ }
+
+        var settings = _settings.Current;
+        if (settings?.AudioDuckingEnabled == true && !_duckedForVideo)
+        {
+            _duckedForVideo = true;
+            try { _audioDucker?.Duck(settings.DuckingLevel); } catch { /* best effort */ }
+        }
+
+        var version = ++_playRequestVersion;
+        _preAnnounceTimer?.Stop();
+        _preAnnounceTimer = StartOneShotTimer(TimeSpan.FromSeconds(1.3), () =>
+        {
+            _preAnnounceTimer = null;
+            // Stop()/cleanup during the delay bumps the version — never start a stale video.
+            if (_isDisposed || version != _playRequestVersion) return;
+            StartVideoPlayback(filePath, strictMode);
+        });
+    }
+
+    private void StartVideoPlayback(string filePath, bool strictMode)
+    {
+        // Arm the hard cap so no mandatory video can overrun VideoMaxDurationSeconds.
+        // Cleared in CleanupInternal.
         StartMaxDurationTimer();
 
         _compositor?.Start();
@@ -573,9 +838,13 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         {
             _interactionQueue.TryStart("Video", () =>
             {
+                _multiMonitorImpl?.SetStrictMode(strictMode);
                 _multiMonitor.PlayFile(filePath);
                 _multiMonitor.SetVolume(LibVlcAudioHelper.GetEffectiveVolume(_settings.Current));
                 _multiMonitor.SetAudioOutputDevice(_settings.Current?.AudioOutputDeviceId);
+                // Ambient bubbles pause + clear so they don't fight the video for clicks or
+                // z-order (WPF StartVideoPlayback, VideoService.cs:1270).
+                try { _bubbles?.PauseAndClear(); } catch { /* best effort */ }
             });
             return;
         }
@@ -589,9 +858,14 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
                 _currentWindow = CreateWindow(screen, filePath, fromUrl: false, strictMode);
                 _currentWindow.Show();
                 SpawnSecondaryWindows(filePath, fromUrl: false, strictMode);
+                try { _bubbles?.PauseAndClear(); } catch { /* best effort */ }
                 // Disarm random segment now that a video is playing
                 _segmentArmedAtUtc = DateTime.MinValue;
             });
+        }
+        else
+        {
+            try { _bubbles?.PauseAndClear(); } catch { /* best effort */ }
         }
     }
 
@@ -614,6 +888,7 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         {
             _interactionQueue.TryStart("Video", () =>
             {
+                _multiMonitorImpl?.SetStrictMode(false);
                 _multiMonitor.PlayUrl(url);
                 _multiMonitor.SetVolume(LibVlcAudioHelper.GetEffectiveVolume(_settings.Current));
                 _multiMonitor.SetAudioOutputDevice(_settings.Current?.AudioOutputDeviceId);
@@ -641,11 +916,43 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
     private void OnMultiMonitorPlaybackEnded(object? sender, EventArgs e)
     {
-        Dispatcher.UIThread.Post(() =>
+        // Natural multi-monitor end: run the full teardown (watch credit, unduck, bubble
+        // resume, flash restart, scheduler-guard reset). CleanupInternal's Stop() call
+        // no-ops because the multi-monitor service already stopped itself.
+        Dispatcher.UIThread.Post(() => CleanupInternal(notifyEnded: true));
+    }
+
+    private void OnMultiMonitorDismissRequested(object? sender, EventArgs e)
+    {
+        // Non-strict ESC on the live multi-monitor path: dismiss the current video with the
+        // NORMAL cleanup path — the session keeps running (WPF VideoService.cs:1822-1835).
+        Dispatcher.UIThread.Post(() => CleanupInternal(notifyEnded: true));
+    }
+
+    private void OnMultiMonitorPanicRequested(object? sender, EventArgs e)
+    {
+        // The user-rebindable panic key force-ends playback (WPF ForceCleanup contract).
+        ForceCleanup();
+    }
+
+    private void OnMultiMonitorSurfaceClicked(object? sender, EventArgs e)
+    {
+        Dispatcher.UIThread.Post(BringTargetsToFront);
+    }
+
+    /// <summary>
+    /// Raises every active attention target back above the video surfaces. WPF parity: the
+    /// click overlay on each video window calls BringTargetsToFront so a click on the video
+    /// can't bury the clickable targets (VideoService.cs:1490-1512).
+    /// </summary>
+    private void BringTargetsToFront()
+    {
+        List<FloatingText> targets;
+        lock (_attentionTargets)
         {
-            try { _interactionQueue.Complete("Video"); } catch { }
-            VideoEnded?.Invoke(this, EventArgs.Empty);
-        });
+            targets = _attentionTargets.ToList();
+        }
+        foreach (var t in targets) t.BringToFront();
     }
 
     private void SpawnSecondaryWindows(string source, bool fromUrl, bool strictMode)
@@ -653,16 +960,23 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         try
         {
             var settings = _settings.Current;
-            if (settings == null || !settings.DualMonitorEnabled) return;
-
             var allScreens = _screens.GetAllScreens();
             if (allScreens.Count <= 1) return;
+            if (!ShouldFillSecondaryMonitors(settings, allScreens.Count))
+            {
+                if (settings?.DualMonitorEnabled == true)
+                {
+                    _logger?.LogInformation("AvaloniaVideoService: skipping {Count} secondary video decoder(s) on {Total} monitors to avoid lag; enable 'Fill all monitors with video' to override.",
+                        allScreens.Count - 1, allScreens.Count);
+                }
+                return;
+            }
 
             var primary = _screens.GetPrimaryScreen() ?? allScreens[0];
             foreach (var screen in allScreens)
             {
                 if (screen == primary) continue;
-                var win = new VideoOverlayWindow(_settings, _libVlc, screen, source, fromUrl, strictMode, () => { }, _logger, withAudio: false, isPrimary: false);
+                var win = new VideoOverlayWindow(_settings, _libVlc, screen, source, fromUrl, strictMode, () => { }, _logger, withAudio: false, isPrimary: false, onSurfaceClicked: BringTargetsToFront);
                 _secondaryWindows.Add(win);
                 win.Show();
             }
@@ -711,11 +1025,16 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             },
             onPositionChanged: ms =>
             {
+                // Watermark for FinalizeWatchCredit: the furthest position actually reached.
+                if (ms > _lastWatchPositionMs) _lastWatchPositionMs = ms;
                 try { PrimaryPlaybackTimeMsChanged?.Invoke(ms); } catch { /* no-op if no subscribers */ }
             },
             segmentArmed: isSegmentArmed,
             segmentFraction: segFraction,
-            segmentSec: isSegmentArmed ? _segmentSec : 0);
+            segmentSec: isSegmentArmed ? _segmentSec : 0,
+            onDismissRequested: () => CleanupInternal(notifyEnded: true),
+            onPanicRequested: ForceCleanup,
+            onSurfaceClicked: BringTargetsToFront);
         win.VideoStarted += OnVideoWindowStarted;
         win.VideoEnded += OnVideoWindowEnded;
         return win;
@@ -745,11 +1064,7 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
         if (settings.AttentionChecksEnabled)
         {
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(2000);
-                Dispatcher.UIThread.Post(SetupAttention);
-            });
+            StartOneShotTimer(TimeSpan.FromSeconds(2), SetupAttention);
         }
     }
 
@@ -879,9 +1194,6 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
                 if (screen == null) continue;
                 FloatingText? target = null;
                 target = new FloatingText(
-                    _libVlc,
-                    _audioDeviceService,
-                    _environment,
                     settings,
                     screen,
                     text,
@@ -911,13 +1223,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
                         if (remaining.Count > 0)
                         {
-                            _ = Task.Run(async () =>
+                            StartOneShotTimer(TimeSpan.FromMilliseconds(300), () =>
                             {
-                                await Task.Delay(300);
-                                Dispatcher.UIThread.Post(() =>
-                                {
-                                    foreach (var t in remaining) t.BringToFront();
-                                });
+                                foreach (var t in remaining) t.BringToFront();
                             });
                         }
                     });
@@ -927,23 +1235,19 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             }
 
             var lifespan = Math.Max(1, settings.AttentionLifespan) * 1000;
-            _ = Task.Run(async () =>
+            StartOneShotTimer(TimeSpan.FromMilliseconds(lifespan), () =>
             {
-                await Task.Delay(lifespan);
-                Dispatcher.UIThread.Post(() =>
+                lock (_attentionTargets)
                 {
-                    lock (_attentionTargets)
+                    foreach (var t in spawnedTargets)
                     {
-                        foreach (var t in spawnedTargets)
+                        if (_attentionTargets.Contains(t))
                         {
-                            if (_attentionTargets.Contains(t))
-                            {
-                                _attentionTargets.Remove(t);
-                                t.Destroy();
-                            }
+                            _attentionTargets.Remove(t);
+                            t.Destroy();
                         }
                     }
-                });
+                }
             });
         }
         catch (Exception ex)
@@ -984,6 +1288,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
                 loop = true;
                 _achievements?.TrackAttentionCheckFailed();
                 _achievements?.TrackVideoAttentionCheckFailed();
+                // Trainer companion penalty on a failed video attention check
+                // (WPF VideoService.cs:2124-2138).
+                _companion?.OnAttentionCheckFailed();
             }
         }
 
@@ -1004,18 +1311,16 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
                     _attentionHits = 0;
                     _attentionSpawnTimes.Clear();
                     _interactionQueue.ExtendTimeout(TimeSpan.FromMinutes(5));
-                    var retryVideo = PickRandomVideo();
+                    var retryVideo = GetNextVideo();
                     PlayFile(string.IsNullOrEmpty(retryVideo) ? _currentRetryPath! : retryVideo, _currentStrictMode);
                 });
             }
             return;
         }
 
-        if (_currentDurationSeconds > 0)
-        {
-            _achievements?.TrackVideoWatched(_currentDurationSeconds);
-        }
-
+        // Watch credit is position-based and handled by FinalizeWatchCredit inside
+        // CleanupInternal (WPF parity: crediting the full duration here over-counted
+        // dismissed/interrupted videos).
         CleanupInternal(notifyEnded: true);
     }
 
@@ -1064,14 +1369,10 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _messageWindows.Add(win);
         }
 
-        _ = Task.Run(async () =>
+        StartOneShotTimer(TimeSpan.FromMilliseconds(ms), () =>
         {
-            await Task.Delay(ms);
-            Dispatcher.UIThread.Post(() =>
-            {
-                CloseMessageWindows();
-                then();
-            });
+            CloseMessageWindows();
+            then();
         });
     }
 
@@ -1086,6 +1387,13 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
     private void CleanupInternal(bool notifyEnded)
     {
+        // Invalidate any pending 1.3s pre-announce start and credit the seconds actually
+        // watched BEFORE stopping the players (their clocks die with Stop()).
+        _playRequestVersion++;
+        _preAnnounceTimer?.Stop();
+        _preAnnounceTimer = null;
+        FinalizeWatchCredit();
+
         _multiMonitor?.Stop();
 
         _attentionTimer?.Stop();
@@ -1129,12 +1437,77 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _currentStrictMode = false;
         _currentDurationSeconds = 0;
 
+        if (_duckedForVideo)
+        {
+            _duckedForVideo = false;
+            try { _audioDucker?.Unduck(); } catch { /* best effort */ }
+        }
+
         try { _interactionQueue.Complete("Video"); } catch { }
 
         if (notifyEnded)
         {
+            // WPF Cleanup ordering (VideoService.cs:2595-2616): unduck, resume bubbles,
+            // notify ended, then restart flashes only while the engine is still running
+            // and the feature is enabled. Retry/preempt teardowns (notifyEnded=false)
+            // keep bubbles paused and flashes stopped, exactly like WPF's CloseAll path.
+            try { _bubbles?.Resume(); } catch { /* best effort */ }
             VideoEnded?.Invoke(this, EventArgs.Empty);
+            if (IsRunning && _settings.Current?.FlashEnabled == true)
+            {
+                try { _flash?.Start(); } catch { /* best effort */ }
+            }
         }
+    }
+
+    /// <summary>
+    /// Credit the seconds actually watched of the current video toward stats/quests, then reset
+    /// for the next video (WPF FinalizeWatchCredit, VideoService.cs:2313-2340). Position-based
+    /// and watermarked via <see cref="_creditedWatchSeconds"/> so repeated teardown calls
+    /// (natural end, ESC, panic, max-duration cap, attention retry) can't double-count, while an
+    /// interrupted video still credits what was watched. Never throws.
+    /// </summary>
+    private void FinalizeWatchCredit()
+    {
+        try
+        {
+            long liveMs = -1;
+            try { liveMs = _currentWindow?.MediaPlayer?.Time ?? -1; }
+            catch { /* player may already be disposed */ }
+            if (liveMs > _lastWatchPositionMs) _lastWatchPositionMs = liveMs;
+
+            var multiMs = _multiMonitorImpl?.ConsumePlaybackTimeMs() ?? -1;
+            if (multiMs > _lastWatchPositionMs) _lastWatchPositionMs = multiMs;
+
+            var watchedSec = _lastWatchPositionMs / 1000.0;
+            var uncredited = watchedSec - _creditedWatchSeconds;
+            if (uncredited >= 1.0)
+            {
+                _creditedWatchSeconds = watchedSec;
+                _achievements?.TrackVideoWatched(uncredited);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug("AvaloniaVideoService.FinalizeWatchCredit error: {Error}", ex.Message);
+        }
+        finally
+        {
+            _lastWatchPositionMs = 0;
+            _creditedWatchSeconds = 0;
+        }
+    }
+
+    /// <summary>
+    /// WPF ShouldFillSecondaryMonitors parity (VideoService.cs:933-938): the primary always
+    /// fills; secondaries only when DualMonitorEnabled; and on 3+ monitors only when the user
+    /// opts in via FillAllMonitorsWithVideo (avoids N independent decoders lagging, #389).
+    /// </summary>
+    private static bool ShouldFillSecondaryMonitors(AppSettings? settings, int screenCount)
+    {
+        if (settings?.DualMonitorEnabled != true) return false;
+        if (screenCount <= 2) return true;
+        return settings.FillAllMonitorsWithVideo;
     }
 
     private ScreenInfo GetPrimaryScreen()
@@ -1178,6 +1551,13 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _multiMonitor.PlaybackStarted -= OnMultiMonitorPlaybackStarted;
             _multiMonitor.PlaybackEnded -= OnMultiMonitorPlaybackEnded;
         }
+        if (_multiMonitorImpl != null)
+        {
+            _multiMonitorImpl.DismissRequested -= OnMultiMonitorDismissRequested;
+            _multiMonitorImpl.PanicRequested -= OnMultiMonitorPanicRequested;
+            _multiMonitorImpl.SurfaceClicked -= OnMultiMonitorSurfaceClicked;
+        }
+        CleanupTempPackFiles();
     }
 
     private sealed class VideoOverlayWindow : Window
@@ -1197,11 +1577,15 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         private readonly bool _segmentArmed;
         private readonly double _segmentFraction;
         private readonly double _segmentSec;
+        private readonly Action? _onDismissRequested;
+        private readonly Action? _onPanicRequested;
+        private readonly Action? _onSurfaceClicked;
         private MediaPlayer? _mediaPlayer;
         private Media? _media;
         private bool _isPlaying;
+        private bool _segmentSeekApplied;
 
-        public VideoOverlayWindow(ISettingsService settings, LibVLC libVlc, ScreenInfo screen, string source, bool fromUrl, bool strictMode, Action onClosed, ILogger<AvaloniaVideoService>? logger, bool withAudio = true, bool isPrimary = false, Action<bool>? onCodecWarning = null, Action<long>? onPositionChanged = null, bool segmentArmed = false, double segmentFraction = 0, double segmentSec = 0)
+        public VideoOverlayWindow(ISettingsService settings, LibVLC libVlc, ScreenInfo screen, string source, bool fromUrl, bool strictMode, Action onClosed, ILogger<AvaloniaVideoService>? logger, bool withAudio = true, bool isPrimary = false, Action<bool>? onCodecWarning = null, Action<long>? onPositionChanged = null, bool segmentArmed = false, double segmentFraction = 0, double segmentSec = 0, Action? onDismissRequested = null, Action? onPanicRequested = null, Action? onSurfaceClicked = null)
         {
             _settings = settings;
             _libVlc = libVlc;
@@ -1217,12 +1601,17 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _segmentArmed = segmentArmed;
             _segmentFraction = segmentFraction;
             _segmentSec = segmentSec;
+            _onDismissRequested = onDismissRequested;
+            _onPanicRequested = onPanicRequested;
+            _onSurfaceClicked = onSurfaceClicked;
 
             WindowDecorations = WindowDecorations.None;
-            Topmost = false;
+            // WPF parity (VideoService.cs:1317-1320): video windows are Topmost and only the
+            // audio-bearing (primary) window activates so it receives ESC/panic keys.
+            Topmost = true;
             ShowInTaskbar = false;
             CanResize = false;
-            ShowActivated = false;
+            ShowActivated = withAudio;
             WindowState = WindowState.Normal;
 
             this.ConstrainToScreen(screen);
@@ -1238,6 +1627,7 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             Closing += OnClosing;
             Closed += OnClosed;
             KeyDown += OnKeyDown;
+            PointerPressed += OnPointerPressed;
         }
 
         public bool IsPlaying => _isPlaying;
@@ -1257,7 +1647,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             {
                 _mediaPlayer = new MediaPlayer(_libVlc)
                 {
-                    EnableHardwareDecoding = true
+                    // WPF parity (VideoService.cs:1337): the user setting is an escape hatch
+                    // for the rare systems with broken hardware decoders.
+                    EnableHardwareDecoding = _settings.Current?.VideoHardwareDecoding ?? true
                 };
                 _mediaPlayer.ApplyAudioSettings(_settings.Current, _withAudio, _logger);
                 _mediaPlayer.EndReached += OnEndReached;
@@ -1274,27 +1666,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
                 _videoView.MediaPlayer = _mediaPlayer;
                 _mediaPlayer.Play(_media);
-
-                // Apply random-segment seek if chaos armed (must run before first frame decodes)
-                if (_isPrimary && _segmentArmed && _segmentSec > 0)
-                {
-                    try
-                    {
-                        var length = _mediaPlayer?.Length ?? 0;
-                        if (length > 0)
-                        {
-                            var targetMs = (long)(_segmentFraction * (length - _segmentSec * 1000));
-                            if (targetMs >= 0)
-                            {
-                                if (_mediaPlayer != null)
-                            {
-                                _mediaPlayer.Time = Math.Max(0, targetMs);
-                            }
-                            }
-                        }
-                    }
-                    catch { /* no-op on seek failure */ }
-                }
+                // The chaos random-segment seek is applied in OnLengthChanged, once the real
+                // media length is known — Length is still 0 here (the media hasn't parsed yet),
+                // so seeking now silently no-oped (WS0 lot 4 fix R1-21).
             }
             catch (Exception ex)
             {
@@ -1316,7 +1690,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             // Re-apply audio settings once playback is active; some LibVLC aout backends
             // only honor volume/output-device changes after the audio stream has started.
             _mediaPlayer?.ApplyAudioSettings(_settings.Current, _withAudio, _logger);
-            VideoStarted?.Invoke();
+            // Fires from LibVLC's thread — marshal so subscribers (timers, interaction
+            // queue) always run on the UI thread.
+            Dispatcher.UIThread.Post(() => VideoStarted?.Invoke());
         }
 
         private void OnPrimaryPositionChanged(object? sender, MediaPlayerPositionChangedEventArgs e)
@@ -1332,7 +1708,36 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
         private void OnLengthChanged(object? sender, MediaPlayerLengthChangedEventArgs e)
         {
-            // Length is in ms.
+            // Length is in ms. The chaos random-segment seek runs here: LengthChanged is the
+            // first point where the real duration is known (WPF VideoService.cs:1369-1403).
+            // The seek itself is deferred ~700ms until the player is actually rolling —
+            // seeking mid-creation blanks the primary view.
+            if (!_isPrimary || !_segmentArmed || _segmentSeekApplied || _segmentSec <= 0) return;
+            var segMs = (long)(_segmentSec * 1000);
+            if (e.Length <= segMs) return;
+            var startMs = (long)((e.Length - segMs) * _segmentFraction);
+            if (startMs <= 500) return;
+            _segmentSeekApplied = true;
+            Dispatcher.UIThread.Post(() =>
+            {
+                StartOneShotTimer(TimeSpan.FromMilliseconds(700), () =>
+                {
+                    try
+                    {
+                        var player = _mediaPlayer;
+                        if (player != null && _isPlaying && player.IsSeekable)
+                        {
+                            player.Time = startMs;
+                            _logger?.LogInformation("AvaloniaVideoService: random segment — seeking to {Start}s of {Len}s",
+                                startMs / 1000, e.Length / 1000);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogDebug("AvaloniaVideoService: random-segment seek failed: {Error}", ex.Message);
+                    }
+                });
+            });
         }
 
         private void OnEndReached(object? sender, EventArgs e)
@@ -1357,30 +1762,67 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         private void OnClosed(object? sender, EventArgs e)
         {
             _isPlaying = false;
+            var player = _mediaPlayer;
+            var media = _media;
+            _mediaPlayer = null;
+            _media = null;
             try
             {
-                if (_mediaPlayer != null)
+                if (player != null)
                 {
-                    _mediaPlayer.EndReached -= OnEndReached;
-                    _mediaPlayer.LengthChanged -= OnLengthChanged;
-                    _mediaPlayer.Playing -= OnPlaying;
-                    _mediaPlayer.Stop();
+                    player.EndReached -= OnEndReached;
+                    player.LengthChanged -= OnLengthChanged;
+                    player.Playing -= OnPlaying;
+                    if (_isPrimary) player.PositionChanged -= OnPrimaryPositionChanged;
+                    player.Stop();
                 }
                 _videoView.MediaPlayer = null;
-                _mediaPlayer?.Dispose();
-                _mediaPlayer = null;
-                _media?.Dispose();
-                _media = null;
             }
             catch { }
+            if (player != null || media != null)
+            {
+                // Defer native disposal off the UI thread: LibVLC teardown can block while
+                // its internal threads unwind (same deferred pattern as the sibling video
+                // services; WS0 lot 4 fix R1-13).
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(500);
+                    try { player?.Dispose(); } catch { /* best effort */ }
+                    try { media?.Dispose(); } catch { /* best effort */ }
+                });
+            }
             VideoEnded?.Invoke();
             _onClosed();
         }
 
         private void OnKeyDown(object? sender, KeyEventArgs e)
         {
-            if (!_strictMode) return;
-            if (e.Key == Key.Escape ||
+            var settings = _settings.Current;
+            var isPanicKey = settings?.PanicKeyEnabled == true &&
+                string.Equals(e.Key.ToString(), settings.PanicKey, StringComparison.OrdinalIgnoreCase);
+
+            if (!_strictMode)
+            {
+                // WPF contract (SetupStrictHandlers non-strict branch, VideoService.cs:1822-1835):
+                // ESC is the hardcoded "dismiss current video" key (normal cleanup; the session
+                // keeps running), while the user's rebindable panic key force-ends the run.
+                if (e.Key == Key.Escape)
+                {
+                    e.Handled = true;
+                    _onDismissRequested?.Invoke();
+                    return;
+                }
+                if (isPanicKey)
+                {
+                    e.Handled = true;
+                    _onPanicRequested?.Invoke();
+                }
+                return;
+            }
+
+            // Strict mode: block the panic key, system keys and Alt+F4 (WPF VideoService.cs:1793-1801).
+            if (e.Key == Key.Escape || e.Key == Key.System || isPanicKey ||
+                (e.Key == Key.F4 && e.KeyModifiers.HasFlag(KeyModifiers.Alt)) ||
                 (e.Key == Key.Tab && (e.KeyModifiers == KeyModifiers.Alt || e.KeyModifiers == KeyModifiers.Control)) ||
                 e.Key == Key.LeftAlt || e.Key == Key.RightAlt ||
                 e.Key == Key.LWin || e.Key == Key.RWin)
@@ -1388,49 +1830,58 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
                 e.Handled = true;
             }
         }
+
+        private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+        {
+            // WPF parity (VideoService.cs:1490-1512): a click on the video surface raises the
+            // attention targets back above the video windows instead of burying them.
+            e.Handled = true;
+            _onSurfaceClicked?.Invoke();
+        }
     }
 
     internal sealed class FloatingText
     {
-        private const int GWL_EXSTYLE = -20;
-        private const int WS_EX_TOOLWINDOW = 0x00000080;
-        private const int WS_EX_APPWINDOW = 0x00040000;
-
+        // Win32 for reliable z-order management: re-assert HWND_TOPMOST periodically so
+        // targets stay above subliminals and fullscreen video windows (WPF FloatingText
+        // parity, VideoService.cs:3232-3245).
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+        private static readonly IntPtr HwndTopmost = new(-1);
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_FRAMECHANGED = 0x0020;
 
         private readonly Window _win;
         private readonly DispatcherTimer _timer;
         private readonly Action _onHit;
-        private readonly LibVLC _libVlc;
-        private readonly IAudioDeviceService? _audioDeviceService;
-        private readonly string _baseDirectory;
         private readonly double _masterVolume;
         private double _x, _y, _vx, _vy;
         private readonly double _minX, _minY, _maxX, _maxY;
-        private readonly double _width, _height;
+        private readonly double _widthPx, _heightPx;
+        private IntPtr _hwnd;
+        private int _tickCount;
         private bool _dead;
         private bool _clicked;
 
-        public FloatingText(LibVLC libVlc, IAudioDeviceService? audioDeviceService, IAppEnvironment environment, AppSettings settings, ScreenInfo screen, string text, int size, Action onHit)
+        public FloatingText(AppSettings settings, ScreenInfo screen, string text, int size, Action onHit)
         {
-            _libVlc = libVlc;
-            _audioDeviceService = audioDeviceService;
-            _baseDirectory = environment.BaseDirectory;
             _onHit = onHit;
             _masterVolume = settings.MasterVolume / 100.0;
 
             size = Math.Max(40, size);
             text = FormatTriggerText(text);
 
+            // All movement math is in PHYSICAL pixels: Window.Position is a physical-pixel
+            // PixelPoint, so mixing DIP-divided bounds into it drifted targets on scaled
+            // monitors (WS0 lot 4 fix R1-2).
             var area = screen.WorkingArea;
-            double areaX = area.X / screen.Scaling;
-            double areaY = area.Y / screen.Scaling;
-            double areaWidth = area.Width / screen.Scaling;
-            double areaHeight = area.Height / screen.Scaling;
+            double areaX = area.X;
+            double areaY = area.Y;
+            double areaWidth = area.Width;
+            double areaHeight = area.Height;
 
             var marginX = Math.Min(150, areaWidth * 0.08);
             var marginY = Math.Min(100, areaHeight * 0.08);
@@ -1472,10 +1923,11 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             formattedText.TextAlignment = TextAlignment.Center;
 
             const double outlineThickness = 7.5;
-            _width = formattedText.WidthIncludingTrailingWhitespace + outlineThickness * 2 + 60;
-            _height = formattedText.Height + outlineThickness * 2 + 40;
-            _width = Math.Max(_width, 150);
-            _height = Math.Max(_height, 60);
+            var widthDip = Math.Max(formattedText.WidthIncludingTrailingWhitespace + outlineThickness * 2 + 60, 150);
+            var heightDip = Math.Max(formattedText.Height + outlineThickness * 2 + 40, 60);
+            // Window.Width/Height stay in DIPs; the clamping math below runs in physical px.
+            _widthPx = widthDip * screen.Scaling;
+            _heightPx = heightDip * screen.Scaling;
 
             var textBlock = new TextBlock
             {
@@ -1519,22 +1971,23 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
                 ShowInTaskbar = false,
                 CanResize = false,
                 ShowActivated = false,
-                Width = _width,
-                Height = _height,
+                Width = widthDip,
+                Height = heightDip,
                 Content = container,
                 WindowStartupLocation = WindowStartupLocation.Manual
             };
 
-            var spawnRangeX = Math.Max(0, (_maxX - _width) - _minX);
-            var spawnRangeY = Math.Max(0, (_maxY - _height) - _minY);
+            var spawnRangeX = Math.Max(0, (_maxX - _widthPx) - _minX);
+            var spawnRangeY = Math.Max(0, (_maxY - _heightPx) - _minY);
             _x = _minX + Random.Shared.NextDouble() * spawnRangeX;
             _y = _minY + Random.Shared.NextDouble() * spawnRangeY;
-            _x = Math.Clamp(_x, _minX, Math.Max(_minX, _maxX - _width));
-            _y = Math.Clamp(_y, _minY, Math.Max(_minY, _maxY - _height));
+            _x = Math.Clamp(_x, _minX, Math.Max(_minX, _maxX - _widthPx));
+            _y = Math.Clamp(_y, _minY, Math.Max(_minY, _maxY - _heightPx));
 
             var angle = Random.Shared.NextDouble() * Math.PI * 2;
-            _vx = Math.Cos(angle) * 3.0;
-            _vy = Math.Sin(angle) * 3.0;
+            // 3 DIP/tick in WPF — scaled to physical px so speed matches across DPI.
+            _vx = Math.Cos(angle) * 3.0 * screen.Scaling;
+            _vy = Math.Sin(angle) * 3.0 * screen.Scaling;
 
             _win.Position = new PixelPoint((int)_x, (int)_y);
 
@@ -1554,15 +2007,24 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
                 _x += _vx;
                 _y += _vy;
                 if (_x < _minX) { _x = _minX; _vx = Math.Abs(_vx); }
-                if (_x + _width > _maxX) { _x = _maxX - _width; _vx = -Math.Abs(_vx); }
+                if (_x + _widthPx > _maxX) { _x = _maxX - _widthPx; _vx = -Math.Abs(_vx); }
                 if (_y < _minY) { _y = _minY; _vy = Math.Abs(_vy); }
-                if (_y + _height > _maxY) { _y = _maxY - _height; _vy = -Math.Abs(_vy); }
+                if (_y + _heightPx > _maxY) { _y = _maxY - _heightPx; _vy = -Math.Abs(_vy); }
                 _win.Position = new PixelPoint((int)_x, (int)_y);
+
+                // Re-assert topmost every ~2 ticks (32ms) so targets stay above subliminals
+                // and fullscreen video windows (WPF VideoService.cs:3232-3245).
+                _tickCount++;
+                if (_tickCount >= 2 && _hwnd != IntPtr.Zero)
+                {
+                    _tickCount = 0;
+                    SetWindowPos(_hwnd, HwndTopmost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
             };
 
-            _win.Opened += (s, e) =>
+            _win.Opened += (_, _) =>
             {
-                ApplyToolWindowStyle(_win);
+                ApplyOverlayStyles();
                 _timer.Start();
             };
 
@@ -1572,7 +2034,14 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         public void BringToFront()
         {
             if (_dead) return;
-            try { _win.Topmost = true; }
+            try
+            {
+                _win.Topmost = true;
+                if (_hwnd != IntPtr.Zero)
+                {
+                    SetWindowPos(_hwnd, HwndTopmost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
+            }
             catch { }
         }
 
@@ -1639,17 +2108,19 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             return fallback;
         }
 
-        private static void ApplyToolWindowStyle(Window window)
+        private void ApplyOverlayStyles()
         {
             if (!OperatingSystem.IsWindows()) return;
             try
             {
-                var hwnd = window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
-                if (hwnd == IntPtr.Zero) return;
-                var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                exStyle |= WS_EX_TOOLWINDOW;
-                exStyle &= ~WS_EX_APPWINDOW;
-                SetWindowLong(hwnd, GWL_EXSTYLE, exStyle);
+                _hwnd = _win.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+                if (_hwnd == IntPtr.Zero) return;
+                // WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE via the shared chaos helper (targets stay
+                // clickable — NOACTIVATE only prevents focus stealing), then flush the frame
+                // change so the styles take effect immediately (WS0 lot 4 fix V1-17/R1-8).
+                ChaosWin32Helper.ApplyOverlayExStyles(_win, transparent: false);
+                SetWindowPos(_hwnd, HwndTopmost, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
             }
             catch { }
         }

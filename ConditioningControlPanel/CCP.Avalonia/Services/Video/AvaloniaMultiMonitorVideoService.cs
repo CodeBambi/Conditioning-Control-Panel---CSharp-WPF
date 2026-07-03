@@ -14,7 +14,9 @@ using Avalonia.Platform;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Core.Services.Video;
+using ConditioningControlPanel.Models;
 using LibVLCSharp.Shared;
 using VlcMediaPlayer = LibVLCSharp.Shared.MediaPlayer;
 
@@ -29,6 +31,7 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
 {
     private readonly LibVLC _libVlc;
     private readonly IScreenProvider _screenProvider;
+    private readonly ISettingsService? _settings;
     private readonly ILogger<AvaloniaMultiMonitorVideoService> _logger;
 
     private VlcMediaPlayer? _mediaPlayer;
@@ -42,23 +45,69 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
     private bool _isPlaying;
     private string? _outputDeviceId;
     private bool _disposed;
-    private Task? _playerDisposeTask;
+    // Key contract for the current playback (WPF SetupStrictHandlers parity); reset on Stop().
+    private bool _strictMode;
+    // Last known playback position for watch credit (read at teardown, after Stop()).
+    private long _lastPlaybackTimeMs = -1;
+    // Cached copy of _windowData for the render loop — refreshed on window-list changes so
+    // OnRenderTick never allocates per tick (WS0 lot 4 fix R1-12).
+    private (Window Window, WriteableBitmap Bitmap, Image ImageControl)[] _windowSnapshot =
+        Array.Empty<(Window, WriteableBitmap, Image)>();
     private readonly DispatcherTimer _renderTimer;
 
     public event EventHandler? PlaybackStarted;
     public event EventHandler? PlaybackEnded;
     public event EventHandler<string>? PlaybackError;
 
+    /// <summary>
+    /// Raised when the user presses ESC on a NON-strict video: dismiss with the normal
+    /// cleanup path so the session keeps running (WPF SetupStrictHandlers contract,
+    /// VideoService.cs:1822-1835).
+    /// </summary>
+    public event EventHandler? DismissRequested;
+
+    /// <summary>
+    /// Raised when the user presses the configured panic key on a NON-strict video:
+    /// force-end playback (WPF ForceCleanup contract).
+    /// </summary>
+    public event EventHandler? PanicRequested;
+
+    /// <summary>Raised when the user clicks any video surface (raises attention targets).</summary>
+    public event EventHandler? SurfaceClicked;
+
     public bool IsPlaying => _isPlaying;
+
+    /// <summary>
+    /// Best-effort playback position in ms for watch credit. Consuming resets the captured
+    /// value so a later teardown pass can't double-count the same playback.
+    /// </summary>
+    internal long ConsumePlaybackTimeMs()
+    {
+        long live = -1;
+        try { live = _mediaPlayer?.Time ?? -1; }
+        catch { /* player may already be disposed */ }
+        var result = Math.Max(live, _lastPlaybackTimeMs);
+        _lastPlaybackTimeMs = -1;
+        return result;
+    }
+
+    /// <summary>
+    /// Sets the key contract for the CURRENT playback: strict videos block the panic key,
+    /// system keys and Alt+F4; non-strict videos surface ESC/panic via
+    /// <see cref="DismissRequested"/>/<see cref="PanicRequested"/>. Reset on <see cref="Stop"/>.
+    /// </summary>
+    internal void SetStrictMode(bool strict) => _strictMode = strict;
 
     public AvaloniaMultiMonitorVideoService(
         LibVLC libVlc,
         IScreenProvider screenProvider,
-        ILogger<AvaloniaMultiMonitorVideoService> logger)
+        ILogger<AvaloniaMultiMonitorVideoService> logger,
+        ISettingsService? settings = null)
     {
         _libVlc = libVlc;
         _screenProvider = screenProvider;
         _logger = logger;
+        _settings = settings;
 
         _renderTimer = new DispatcherTimer
         {
@@ -92,15 +141,20 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
                 _bufferValid = true;
             }
 
+            _lastPlaybackTimeMs = -1;
             _mediaPlayer = new VlcMediaPlayer(_libVlc);
             _mediaPlayer.Mute = false;
             _mediaPlayer.Volume = 100;
+            // WPF parity (VideoService.cs:1337): the user setting is an escape hatch for the
+            // rare systems with broken hardware decoders; default stays hardware-on.
+            _mediaPlayer.EnableHardwareDecoding = _settings?.Current?.VideoHardwareDecoding ?? true;
             _mediaPlayer.SetVideoCallbacks(LockCallback, null, DisplayCallback);
             _mediaPlayer.SetVideoFormat("RV32", _videoWidth, _videoHeight, _videoWidth * 4);
 
             _mediaPlayer.Playing += OnPlaying;
             _mediaPlayer.EndReached += OnEndReached;
             _mediaPlayer.EncounteredError += OnError;
+            _mediaPlayer.TimeChanged += OnTimeChanged;
 
             Dispatcher.UIThread.Invoke(CreateWindows);
             Dispatcher.UIThread.Invoke(() => _renderTimer.Start());
@@ -149,6 +203,13 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
     /// </summary>
     public void Stop()
     {
+        // Idempotent: every teardown path (dismiss, panic, natural end, service cleanup)
+        // may call Stop; do nothing when there is nothing to stop (WS0 lot 4 fix R1-4).
+        if (!_isPlaying && _mediaPlayer == null && _windowData.Count == 0)
+            return;
+
+        _strictMode = false;
+
         // CRITICAL: Invalidate buffer FIRST to stop render loop from using it
         _bufferValid = false;
         _isPlaying = false;
@@ -156,18 +217,33 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
 
         Dispatcher.UIThread.Invoke(() => _renderTimer.Stop());
 
-        try
-        {
-            _mediaPlayer?.Stop();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogInformation("AvaloniaMultiMonitorVideo: Error stopping media player: {Error}", ex.Message);
-        }
+        var playerToDispose = _mediaPlayer;
+        _mediaPlayer = null;
 
-        // Wait a bit for LibVLC to fully stop rendering while pumping the UI thread,
-        // preventing deadlocks when LibVLC threads need to marshal to the UI thread.
-        WaitWithMessagePump(150);
+        if (playerToDispose != null)
+        {
+            // Capture the final position for watch credit before the player clock dies.
+            try
+            {
+                var time = playerToDispose.Time;
+                if (time > _lastPlaybackTimeMs) _lastPlaybackTimeMs = time;
+            }
+            catch { /* best effort */ }
+
+            playerToDispose.Playing -= OnPlaying;
+            playerToDispose.EndReached -= OnEndReached;
+            playerToDispose.EncounteredError -= OnError;
+            playerToDispose.TimeChanged -= OnTimeChanged;
+
+            try
+            {
+                playerToDispose.Stop();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogInformation("AvaloniaMultiMonitorVideo: Error stopping media player: {Error}", ex.Message);
+            }
+        }
 
         Dispatcher.UIThread.Invoke(() =>
         {
@@ -183,18 +259,15 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
                 }
             }
             _windowData.Clear();
+            _windowSnapshot = Array.Empty<(Window, WriteableBitmap, Image)>();
         });
-
-        var playerToDispose = _mediaPlayer;
-        _mediaPlayer = null;
 
         if (playerToDispose != null)
         {
-            playerToDispose.Playing -= OnPlaying;
-            playerToDispose.EndReached -= OnEndReached;
-            playerToDispose.EncounteredError -= OnError;
-
-            _playerDisposeTask = Task.Run(async () =>
+            // Deferred background dispose: LibVLC teardown can block while its internal
+            // threads unwind, so never dispose synchronously on the UI thread. This replaces
+            // the old reentrant WaitWithMessagePump (WS0 lot 4 fix R1-4).
+            _ = Task.Run(async () =>
             {
                 await Task.Delay(500);
                 try
@@ -232,28 +305,6 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
         }
 
         _logger.LogInformation("AvaloniaMultiMonitorVideo: Playback stopped");
-    }
-
-    /// <summary>
-    /// Waits for a specified number of milliseconds while continuing to pump the Avalonia dispatcher.
-    /// </summary>
-    private static void WaitWithMessagePump(int milliseconds)
-    {
-        var endTime = DateTime.UtcNow.AddMilliseconds(milliseconds);
-        while (DateTime.UtcNow < endTime)
-        {
-            try
-            {
-                Dispatcher.UIThread.Invoke(
-                    () => { },
-                    DispatcherPriority.Background);
-            }
-            catch
-            {
-                return;
-            }
-            Thread.Sleep(10);
-        }
     }
 
     /// <summary>
@@ -352,11 +403,17 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
             return;
         }
 
-        _logger.LogInformation("AvaloniaMultiMonitorVideo: Creating windows for {Count} screens: {Names}",
-            screens.Count, string.Join(", ", screens.Select(s => s.Name)));
+        var primary = _screenProvider.GetPrimaryScreen() ?? screens[0];
+        var fillSecondaries = ShouldFillSecondaryMonitors(_settings?.Current, screens.Count);
+
+        _logger.LogInformation("AvaloniaMultiMonitorVideo: Creating windows for {Count} screens (fillSecondaries={Fill}): {Names}",
+            screens.Count, fillSecondaries, string.Join(", ", screens.Select(s => s.Name)));
 
         foreach (var screen in screens)
         {
+            var isPrimary = ReferenceEquals(screen, primary) ||
+                string.Equals(screen.Name, primary.Name, StringComparison.Ordinal);
+            if (!isPrimary && !fillSecondaries) continue;
             try
             {
                 var bitmap = new WriteableBitmap(
@@ -365,7 +422,7 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
                     global::Avalonia.Platform.PixelFormat.Bgra8888,
                     global::Avalonia.Platform.AlphaFormat.Unpremul);
 
-                var (window, imageControl) = CreateFullscreenWindow(screen, bitmap);
+                var (window, imageControl) = CreateFullscreenWindow(screen, bitmap, isPrimary);
                 window.Show();
                 _windowData.Add((window, bitmap, imageControl));
 
@@ -378,10 +435,25 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
             }
         }
 
+        _windowSnapshot = _windowData.ToArray();
         _logger.LogInformation("AvaloniaMultiMonitorVideo: Successfully created {Count} windows", _windowData.Count);
     }
 
-    private (Window Window, Image ImageControl) CreateFullscreenWindow(ScreenInfo screen, WriteableBitmap bitmap)
+    /// <summary>
+    /// WPF ShouldFillSecondaryMonitors parity (VideoService.cs:933-938): the primary always
+    /// fills; secondaries only when DualMonitorEnabled; and on 3+ monitors only when the user
+    /// opts in via FillAllMonitorsWithVideo (avoids per-monitor render targets lagging, #389).
+    /// Without injected settings the legacy fill-all behavior is preserved.
+    /// </summary>
+    private static bool ShouldFillSecondaryMonitors(AppSettings? settings, int screenCount)
+    {
+        if (settings == null) return true;
+        if (!settings.DualMonitorEnabled) return false;
+        if (screenCount <= 2) return true;
+        return settings.FillAllMonitorsWithVideo;
+    }
+
+    private (Window Window, Image ImageControl) CreateFullscreenWindow(ScreenInfo screen, WriteableBitmap bitmap, bool isPrimary)
     {
         var image = new Image
         {
@@ -404,20 +476,69 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
             CanResize = false,
             Topmost = true,
             ShowInTaskbar = false,
+            // WPF parity (VideoService.cs:1317-1320): only the audio-bearing primary window
+            // activates so it receives ESC/panic keys; secondaries never steal focus.
+            ShowActivated = isPrimary,
             Background = Brushes.Black,
             Content = grid
         };
         window.ConstrainToScreen(screen);
 
-        window.KeyDown += (s, e) =>
+        if (isPrimary)
         {
-            if (e.Key == Key.Escape)
-            {
-                Stop();
-            }
+            window.KeyDown += OnPrimaryKeyDown;
+        }
+
+        // A click on any video surface raises the attention targets back above the video
+        // windows instead of burying them (WPF click-overlay contract, VideoService.cs:1490-1512).
+        window.PointerPressed += (_, e) =>
+        {
+            e.Handled = true;
+            SurfaceClicked?.Invoke(this, EventArgs.Empty);
         };
 
         return (window, image);
+    }
+
+    /// <summary>
+    /// WPF SetupStrictHandlers parity (VideoService.cs:1789-1835). Non-strict: ESC dismisses
+    /// via <see cref="DismissRequested"/> (normal cleanup; the session keeps running) and the
+    /// user's panic key force-stops via <see cref="PanicRequested"/>. Strict: the panic key,
+    /// system keys and Alt+F4 are blocked.
+    /// </summary>
+    private void OnPrimaryKeyDown(object? sender, KeyEventArgs e)
+    {
+        var settings = _settings?.Current;
+        var isPanicKey = settings?.PanicKeyEnabled == true &&
+            string.Equals(e.Key.ToString(), settings.PanicKey, StringComparison.OrdinalIgnoreCase);
+
+        if (_strictMode)
+        {
+            if (e.Key == Key.Escape || e.Key == Key.System || isPanicKey ||
+                (e.Key == Key.F4 && e.KeyModifiers.HasFlag(KeyModifiers.Alt)) ||
+                (e.Key == Key.Tab && (e.KeyModifiers == KeyModifiers.Alt || e.KeyModifiers == KeyModifiers.Control)) ||
+                e.Key == Key.LeftAlt || e.Key == Key.RightAlt ||
+                e.Key == Key.LWin || e.Key == Key.RWin)
+            {
+                e.Handled = true;
+            }
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            if (DismissRequested != null) DismissRequested.Invoke(this, EventArgs.Empty);
+            else Stop();
+            return;
+        }
+
+        if (isPanicKey)
+        {
+            e.Handled = true;
+            if (PanicRequested != null) PanicRequested.Invoke(this, EventArgs.Empty);
+            else Stop();
+        }
     }
 
     #region LibVLC Callbacks
@@ -463,7 +584,8 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
         if (!_bufferValid || !_frameReady)
             return;
 
-        var windows = _windowData.ToArray();
+        // Cached snapshot (refreshed on window-list changes) — no per-tick allocation.
+        var windows = _windowSnapshot;
         if (windows.Length == 0)
             return;
 
@@ -531,6 +653,13 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
         });
     }
 
+    private void OnTimeChanged(object? sender, MediaPlayerTimeChangedEventArgs e)
+    {
+        // Track the last known position for watch credit; read at teardown, after Stop()
+        // has already reset the player clock.
+        _lastPlaybackTimeMs = e.Time;
+    }
+
     private void OnEndReached(object? sender, EventArgs e)
     {
         Dispatcher.UIThread.Post(() =>
@@ -558,21 +687,8 @@ public sealed class AvaloniaMultiMonitorVideoService : IMultiMonitorVideoService
 
         Stop();
 
-        if (_playerDisposeTask != null)
-        {
-            try
-            {
-                if (!_playerDisposeTask.Wait(2000))
-                {
-                    _logger.LogWarning("AvaloniaMultiMonitorVideo: Player dispose task did not complete within timeout");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogInformation("AvaloniaMultiMonitorVideo: Error waiting for player dispose: {Error}", ex.Message);
-            }
-        }
-
+        // Player disposal is deferred to a background task by Stop(); never block the UI
+        // thread waiting on LibVLC teardown (WS0 lot 4 fix R1-6).
         _renderTimer.Tick -= OnRenderTick;
 
         _logger.LogInformation("AvaloniaMultiMonitorVideoService disposed");
