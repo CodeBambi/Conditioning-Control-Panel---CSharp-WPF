@@ -36,6 +36,12 @@ public sealed class AvaloniaBlinkTrainerService : IBlinkTrainerService, IDisposa
 {
     private const int MaxTiles = 6;
 
+    // Cold-start readiness wait (W-3/P-7): StartTracking() is fire-and-forget and
+    // IsRunning flips asynchronously, so an immediate check always failed on the
+    // first activation. ~8s upper bound.
+    private const int BlinkWebcamStartTimeoutMs = 8000;
+    private const int BlinkWebcamPollIntervalMs = 50;
+
     private readonly object _lock = new();
     private readonly ISettingsService _settings;
     private readonly IWebcamService _webcam;
@@ -121,7 +127,10 @@ public sealed class AvaloniaBlinkTrainerService : IBlinkTrainerService, IDisposa
             if (!_webcam.IsRunning)
             {
                 _webcam.StartTracking();
-                if (!_webcam.IsRunning)
+                _logger?.LogInformation("BlinkTrainer: waiting for webcam readiness…");
+                // Cold-start race (W-3/P-7): StartTracking() is fire-and-forget, so poll
+                // readiness instead of failing on the immediate IsRunning check.
+                if (!WaitForWebcamReady(BlinkWebcamStartTimeoutMs))
                 {
                     LastError = Loc.GetF("blink_trainer_error_webcam_start_format", "starting");
                     return false;
@@ -190,6 +199,31 @@ public sealed class AvaloniaBlinkTrainerService : IBlinkTrainerService, IDisposa
             _logger?.LogInformation("BlinkTrainer: stopped");
         }
         try { StateChanged?.Invoke(); } catch { }
+    }
+
+    /// <summary>
+    /// Bounded readiness wait for the cold-start race (W-3/P-7). The session toggle
+    /// invokes Start() on a background thread (await Task.Run in the tab VM), so a
+    /// short blocking poll is safe there; if we are somehow on the UI thread we must
+    /// NOT block (the webcam start runs on the UI thread and would deadlock), so we
+    /// return optimistically and let the next blink flow once tracking is up.
+    /// </summary>
+    private bool WaitForWebcamReady(int timeoutMs)
+    {
+        if (_webcam.IsRunning) return true;
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            // On the UI thread: don't block. Tracking will come up shortly.
+            return true;
+        }
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            try { Thread.Sleep(BlinkWebcamPollIntervalMs); }
+            catch (ThreadInterruptedException) { break; }
+            if (_webcam.IsRunning) return true;
+        }
+        return _webcam.IsRunning;
     }
 
     private void Cleanup()

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using global::Avalonia.Controls.ApplicationLifetimes;
 using global::Avalonia.Threading;
@@ -53,6 +54,14 @@ public sealed class GazeDriftCorrectionService : IGazeDriftCorrectionService, ID
     private DateTime _lastNudgeAt = DateTime.MinValue;
     private DateTime _lastPersistAt = DateTime.MinValue;
 
+    // Handler delegates stored as fields so Dispose can unsubscribe them (P-8 leak fix).
+    // Previously the OnTrackingStateChanged + settings PropertyChanged lambdas were
+    // inline and could never be detached, pinning this service (and the tracker)
+    // for the process lifetime.
+    private readonly Action<WebcamTrackingState> _onTrackingStateChanged;
+    private readonly INotifyPropertyChanged? _subscribedSettings;
+    private PropertyChangedEventHandler? _onSettingsChanged;
+
     public GazeDriftCorrectionService(
         AvaloniaWebcamTrackingService tracker,
         IMouseHook mouseHook,
@@ -64,14 +73,20 @@ public sealed class GazeDriftCorrectionService : IGazeDriftCorrectionService, ID
         _settings = settings;
         _logger = logger;
 
-        _tracker.OnTrackingStateChanged += _ => EnsureHookState();
+        _onTrackingStateChanged = _ => EnsureHookState();
+        _tracker.OnTrackingStateChanged += _onTrackingStateChanged;
         if (_settings.Current != null)
         {
-            _settings.Current.PropertyChanged += (_, e) =>
+            _onSettingsChanged = (_, e) =>
             {
                 if (e.PropertyName == "WebcamAutoDriftCorrection")
                     EnsureHookState();
             };
+            // Capture the exact instance we subscribed to so Dispose detaches from
+            // the right object even if SettingsService.Current is later swapped
+            // (cloud restore / Reset replace the instance — see ISettingsService).
+            _subscribedSettings = _settings.Current;
+            _subscribedSettings.PropertyChanged += _onSettingsChanged;
         }
         _mouseHook.LeftButtonDown += OnLeftDown;
         EnsureHookState();
@@ -235,6 +250,9 @@ public sealed class GazeDriftCorrectionService : IGazeDriftCorrectionService, ID
         if (_disposed) return;
         _disposed = true;
         _mouseHook.LeftButtonDown -= OnLeftDown;
+        _tracker.OnTrackingStateChanged -= _onTrackingStateChanged;
+        if (_onSettingsChanged != null && _subscribedSettings != null)
+            _subscribedSettings.PropertyChanged -= _onSettingsChanged;
         if (_subscribed)
         {
             _tracker.OnGazeMove -= OnGazeMove;

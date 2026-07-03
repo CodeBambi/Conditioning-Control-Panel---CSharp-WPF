@@ -40,6 +40,11 @@ public sealed class AvaloniaGazeDebugCursorService : IGazeDebugCursorService, ID
     private bool _faceLost;
     private bool _locked;
 
+    // Cached calibrated screen for the DIP→physical projection (see GazeToPhysical).
+    // Refreshed on subscribe / face-found; GetCalibratedScreen() enumerates screens,
+    // so we avoid calling it on every gaze sample.
+    private ScreenInfo? _calScreen;
+
     public AvaloniaGazeDebugCursorService(IWebcamService webcam)
     {
         _webcam = webcam;
@@ -143,6 +148,7 @@ public sealed class AvaloniaGazeDebugCursorService : IGazeDebugCursorService, ID
             _webcam.OnFaceLost += HandleFaceLost;
             _webcam.OnFaceFound += HandleFaceFound;
             _subscribed = true;
+            RefreshCalibratedScreen();
         }
     }
 
@@ -164,6 +170,7 @@ public sealed class AvaloniaGazeDebugCursorService : IGazeDebugCursorService, ID
         }
 
         _faceLost = false;
+        _calScreen = null;
     }
 
     private void HandleGazeMove(Point p)
@@ -171,11 +178,40 @@ public sealed class AvaloniaGazeDebugCursorService : IGazeDebugCursorService, ID
         if (_cursorWindow == null) return;
         try
         {
-            _cursorWindow.Position = new PixelPoint((int)(p.X - CursorSize / 2.0), (int)(p.Y - CursorSize / 2.0));
+            // Gaze arrives as calibrated-monitor-local DIPs (the OnGazeMove contract —
+            // see GazeDriftCorrectionService.cs:180-193), but Window.Position is a
+            // physical PixelPoint. Project local DIP → physical px before assigning,
+            // keeping the direct (unsmoothed) movement semantics.
+            var phys = GazeToPhysical(p);
+            _cursorWindow.Position = new PixelPoint((int)(phys.X - CursorSize / 2.0), (int)(phys.Y - CursorSize / 2.0));
             if (!_cursorWindow.IsVisible)
                 _cursorWindow.Show();
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Converts a gaze point from calibrated-monitor-local DIPs to physical virtual-
+    /// desktop pixels: <c>physicalPx = monitorOriginPhysical + localDip * scaling</c>.
+    /// This is the inverse of GazeDriftCorrectionService's click→DIP projection
+    /// (ProcessClick: <c>(physicalPx - origin) / dpi</c>). Falls back to treating the
+    /// point as already-physical when no calibrated screen is available (no
+    /// calibration means gaze isn't mapped to a monitor anyway).
+    /// </summary>
+    private Point GazeToPhysical(Point p)
+    {
+        var screen = _calScreen ?? RefreshCalibratedScreen();
+        if (screen == null) return p;
+        var bounds = screen.Bounds;
+        var scale = screen.Scaling > 0 ? screen.Scaling : 1.0;
+        return new Point(bounds.X + p.X * scale, bounds.Y + p.Y * scale);
+    }
+
+    private ScreenInfo? RefreshCalibratedScreen()
+    {
+        try { _calScreen = _webcam.GetCalibratedScreen(); }
+        catch { _calScreen = null; }
+        return _calScreen;
     }
 
     private void HandleFaceLost()
@@ -188,6 +224,7 @@ public sealed class AvaloniaGazeDebugCursorService : IGazeDebugCursorService, ID
     private void HandleFaceFound()
     {
         _faceLost = false;
+        RefreshCalibratedScreen();
         if (_cursorWindow == null) return;
         try { _cursorWindow.Show(); } catch { }
     }
