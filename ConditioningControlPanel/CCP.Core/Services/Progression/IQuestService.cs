@@ -158,6 +158,13 @@ public interface IQuestService
     void CompleteDailyQuest();
 
     /// <summary>
+    /// Persist an Oopsie-Insurance streak fix: mark <paramref name="date"/> completed in quest
+    /// progress and save to disk. Default no-op; the real service overrides. The caller debits
+    /// XP only after this returns so a crash can't spend XP without persisting the fix.
+    /// </summary>
+    void FixStreakDay(System.DateTime date) { }
+
+    /// <summary>
     /// Gets the number of daily rerolls still available this period.
     /// </summary>
     int GetRemainingDailyRerolls();

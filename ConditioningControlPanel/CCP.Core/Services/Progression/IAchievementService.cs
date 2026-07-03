@@ -159,6 +159,20 @@ public interface IAchievementService : IAsyncDisposable
     void TrackSkillPointsEarned(int amount);
 
     /// <summary>
+    /// Track skill points SPENT (Prestige): monotonic accumulate into LifetimeSkillPointsSpent.
+    /// Default no-op so existing fakes compile; the real service overrides.
+    /// WPF parity: AchievementService.TrackSkillPointsSpent.
+    /// </summary>
+    void TrackSkillPointsSpent(int amount) { }
+
+    /// <summary>
+    /// Adopt the server's authoritative lifetime_points_spent when it is ahead of ours
+    /// (Prestige is monotonic; never lowers). Default no-op; the real service overrides.
+    /// WPF parity: AchievementService.ReconcileLifetimePointsSpent.
+    /// </summary>
+    void ReconcileLifetimePointsSpent(long serverValue) { }
+
+    /// <summary>
     /// Mark progress dirty so the next autosave persists it.
     /// </summary>
     void MarkDirty();

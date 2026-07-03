@@ -152,6 +152,19 @@ public interface ISkillTreeService
     int GetDailyStreakBonus(int consecutiveDays);
     int GetDailyFreeRerolls();
     void AddConditioningTime(double minutes);
+
+    /// <summary>
+    /// Prune non-permanent skills at a season reset (keep only SkillDefinition.PermanentIds),
+    /// clear seasonal flags, and tear down seasonal effects. Default no-op; real impl overrides.
+    /// WPF parity: SkillTreeService.OnSeasonReset.
+    /// </summary>
+    void OnSeasonReset() { }
+
+    /// <summary>Quest-reward XP multiplier from the "Better Quests" skill. Default 1.0. WPF: SkillTreeService.GetRerollBonusMultiplier.</summary>
+    double GetRerollBonusMultiplier() => 1.0;
+
+    /// <summary>Perfect-week bonus XP (7/14/30-day) awarded on a daily completion. Default 0. WPF: SkillTreeService.CheckPerfectWeekBonus.</summary>
+    int CheckPerfectWeekBonus() => 0;
 }
 
 public interface IModService
