@@ -139,10 +139,27 @@ public sealed class WindowsSpeechService : ISpeechRecognitionService, IDisposabl
     private static string? ResolveModelDir()
     {
         if (!Directory.Exists(ModelRoot)) return null;
-        if (LooksLikeModel(ModelRoot)) return ModelRoot;
+
+        // P3 S-5: collect every valid model dir (the root itself or a nested folder, the way the
+        // official zips unpack). When more than one is present (e.g. the old small model left alongside
+        // a freshly-dropped lgraph one), prefer the more accurate model — lgraph over a generic name
+        // over the small model — so simply dropping the upgrade in picks it up without deleting the old
+        // folder first. Mirrors WPF SpeechService.ResolveModelDir (SpeechService.cs:215-238).
+        var candidates = new List<string>();
+        if (LooksLikeModel(ModelRoot)) candidates.Add(ModelRoot);
         foreach (var sub in Directory.EnumerateDirectories(ModelRoot))
-            if (LooksLikeModel(sub)) return sub;
-        return null;
+            if (LooksLikeModel(sub)) candidates.Add(sub);
+        if (candidates.Count == 0) return null;
+        if (candidates.Count == 1) return candidates[0];
+
+        static int Rank(string dir)
+        {
+            var name = Path.GetFileName(dir).ToLowerInvariant();
+            if (name.Contains("lgraph")) return 2;
+            if (!name.Contains("small")) return 1;
+            return 0;
+        }
+        return candidates.OrderByDescending(Rank).First();
     }
 
     private static bool LooksLikeModel(string dir) =>
@@ -181,7 +198,7 @@ public sealed class WindowsSpeechService : ISpeechRecognitionService, IDisposabl
         try
         {
             var matchThreshold = options.MatchThreshold ?? SettingDouble("SpeechMatchThreshold", 0.62);
-            var loudnessThreshold = options.LoudnessThreshold ?? SettingDouble("SpeechLoudnessThreshold", 0.04);
+            var loudnessThreshold = options.LoudnessThreshold ?? SettingDouble("SpeechLoudnessThreshold", 0.015);
 
             // Mic noise front-end (opt-out via settings): high-pass out AC/fan/hum rumble and gate
             // onset on an adaptive noise floor instead of the fixed loudness threshold alone, so a hot
@@ -379,10 +396,27 @@ public sealed class WindowsSpeechService : ISpeechRecognitionService, IDisposabl
 
     private int ResolveDeviceNumber()
     {
-        var idx = SettingInt("SpeechInputDeviceIndex", -1);
+        var savedIndex = SettingInt("SpeechInputDeviceIndex", -1);
+        var savedName = SettingString("SpeechInputDeviceName", null);
         try
         {
-            if (idx >= 0 && idx < WaveInEvent.DeviceCount) return idx;
+            // P2 S-4: prefer a match on the saved device NAME (robust to NAudio ordinal reshuffling when
+            // virtual audio devices appear/disappear — the "voice worked yesterday, not today" failure,
+            // #441b), then the saved ordinal if still valid, else 0. Mirrors WPF
+            // SpeechService.ResolveDeviceNumber(int, string) at SpeechService.cs:524-545.
+            if (!string.IsNullOrWhiteSpace(savedName))
+            {
+                int count = WaveInEvent.DeviceCount;
+                for (int i = 0; i < count; i++)
+                {
+                    string name;
+                    try { name = WaveInEvent.GetCapabilities(i).ProductName; }
+                    catch { name = ""; }
+                    if (string.Equals(name, savedName, StringComparison.OrdinalIgnoreCase))
+                        return i;
+                }
+            }
+            if (savedIndex >= 0 && savedIndex < WaveInEvent.DeviceCount) return savedIndex;
         }
         catch { }
         return 0; // WaveIn device 0 == Windows default capture device.
@@ -473,6 +507,18 @@ public sealed class WindowsSpeechService : ISpeechRecognitionService, IDisposabl
             var current = _settings.Current;
             var p = current?.GetType().GetProperty(name);
             if (p?.GetValue(current) is bool b) return b;
+        }
+        catch { }
+        return fallback;
+    }
+
+    private string? SettingString(string name, string? fallback)
+    {
+        try
+        {
+            var current = _settings.Current;
+            var p = current?.GetType().GetProperty(name);
+            if (p?.GetValue(current) is string s) return s;
         }
         catch { }
         return fallback;

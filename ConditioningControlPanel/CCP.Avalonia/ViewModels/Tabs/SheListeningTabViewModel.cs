@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using ConditioningControlPanel.Avalonia.Dialogs;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -26,6 +27,8 @@ public partial class SheListeningTabViewModel : TabItemViewModel
     private readonly ILogger<SheListeningTabViewModel>? _logger;
 
     private bool _syncing;
+    /// <summary>Re-entrancy guard for the async mic-consent flow (turning the checkbox ON).</summary>
+    private bool _consentGateBusy;
 
     [ObservableProperty] private bool _micConsentGiven;
     [ObservableProperty] private bool _wakeWordEnabled;
@@ -123,6 +126,19 @@ public partial class SheListeningTabViewModel : TabItemViewModel
     {
         var wake = _wakeWord;
         if (wake?.IsAvailable != true || _isCalibrating) return;
+
+        // P0 S-1: opening the capture session for calibration requires mic consent. Mirror the WPF
+        // gate at MainWindow.SheListening.cs (SL_Calibrate_Click:124-128): show MicConsentDialog when
+        // consent is absent and abort if declined.
+        if (!(_settings?.Current?.MicConsentGiven == true))
+        {
+            if (!await ShowMicConsentDialogAsync()) return;
+            // Consent was granted via the dialog — reflect it on the bound checkbox without re-firing.
+            _syncing = true;
+            try { MicConsentGiven = true; }
+            finally { _syncing = false; }
+        }
+
         try
         {
             IsCalibrating = true;
@@ -161,7 +177,68 @@ public partial class SheListeningTabViewModel : TabItemViewModel
 
     // ── settings write-back + re-arm on each toggle ──
 
-    partial void OnMicConsentGivenChanged(bool value) => Apply(s => s.MicConsentGiven = value);
+    partial void OnMicConsentGivenChanged(bool value)
+    {
+        if (_syncing) return;
+        if (!value)
+        {
+            // Turning OFF stays a direct toggle — no consent is needed to disable. Mirrors WPF.
+            Apply(s => s.MicConsentGiven = false);
+            return;
+        }
+
+        // Turning ON routes through the consent dialog and only persists if accepted — mirror the
+        // WPF gate at MainWindow.SheListening.cs:38-40. Defer to an async flow because the checkbox
+        // already flipped MicConsentGiven to true; if the user declines we revert it.
+        if (_consentGateBusy) return;
+        _ = RequestMicConsentAsync();
+    }
+
+    /// <summary>
+    /// Async half of the consent gate. If consent is already on record this is a no-op re-arm;
+    /// otherwise the mic consent dialog is shown and the flag is reverted when the user declines.
+    /// </summary>
+    private async Task RequestMicConsentAsync()
+    {
+        _consentGateBusy = true;
+        try
+        {
+            if (_settings?.Current?.MicConsentGiven == true)
+            {
+                Apply(s => s.MicConsentGiven = true); // already consented — persist the flag + re-arm
+                return;
+            }
+
+            var granted = await ShowMicConsentDialogAsync();
+            if (granted)
+            {
+                // The dialog persisted MicConsentGiven=true + logged the grant; just re-arm the loop.
+                _autonomy?.RefreshVoiceInputModes();
+            }
+            else
+            {
+                // Declined → revert the checkbox without re-entering the ON path.
+                _syncing = true;
+                try { MicConsentGiven = false; }
+                finally { _syncing = false; }
+                Apply(s => s.MicConsentGiven = false);
+            }
+        }
+        finally { _consentGateBusy = false; }
+    }
+
+    /// <summary>
+    /// Show the mic consent dialog and await its outcome, mirroring how WebcamConsentDialog is shown
+    /// from BlinkTrainerTabViewModel. Returns true only when every consent gate was completed.
+    /// </summary>
+    private async Task<bool> ShowMicConsentDialogAsync()
+    {
+        var dialog = new MicConsentDialog();
+        var tcs = new System.Threading.Tasks.TaskCompletionSource<bool>();
+        dialog.Closed += (_, _) => tcs.TrySetResult(dialog.ConsentGiven);
+        dialog.Show();
+        return await tcs.Task;
+    }
     partial void OnWakeWordEnabledChanged(bool value) => Apply(s => s.SpeechWakeWordEnabled = value);
     partial void OnPushToTalkEnabledChanged(bool value) => Apply(s => s.SpeechPushToTalkEnabled = value);
     partial void OnWakeWordsChanged(string value) => Apply(s => s.SpeechWakeWords = value?.Trim() ?? "");
@@ -169,7 +246,15 @@ public partial class SheListeningTabViewModel : TabItemViewModel
         => Apply(s => s.SpeechLoudnessThreshold = SensToThreshold(value));
     partial void OnSelectedDeviceChanged(SpeechInputDevice? value)
     {
-        if (value is { } d) Apply(s => s.SpeechInputDeviceIndex = d.Index);
+        if (value is not { } d) return;
+        // P2 S-4: persist BOTH the ordinal and the name so ResolveDeviceNumber can re-find the device by
+        // name even if NAudio reshuffles ordinals when virtual audio devices appear/disappear (#441b).
+        // Mirrors WPF MainWindow.SheListening SL_MicDevice_SelectionChanged (writes SpeechInputDeviceName).
+        Apply(s =>
+        {
+            s.SpeechInputDeviceIndex = d.Index;
+            s.SpeechInputDeviceName = d.Index < 0 ? "" : (d.Name ?? "");
+        });
     }
 
     private void Apply(System.Action<ConditioningControlPanel.Models.AppSettings>? write)

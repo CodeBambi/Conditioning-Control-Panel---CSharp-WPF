@@ -155,8 +155,29 @@ public sealed class SherpaWakeService : ISpeechWakeService, IDisposable
         }
     }
 
-    /// <summary>Forget any cached failure so the next idle IsAvailable rebuilds from current files.</summary>
-    public void ResetInitState() => _failedFingerprint = null;
+    /// <summary>
+    /// Forget any cached init (success or a remembered failure) so the next idle
+    /// <see cref="IsAvailable"/> rebuilds from current files. Mirrors WPF SherpaWakeService.ResetInitState
+    /// (SherpaWakeService.cs:170-190): when no capture session is active, dispose the spotter + clear the
+    /// init fingerprint; when a session IS active, only clear the failure cache so the live engine stays
+    /// (disposing the native handle mid-decode throws an AccessViolation-class native error).
+    /// </summary>
+    public void ResetInitState()
+    {
+        // Never free the engine while a capture session is mid-decode.
+        if (Volatile.Read(ref _sessionActive) != 0)
+        {
+            lock (_gate) { _failedFingerprint = null; }
+            return;
+        }
+        lock (_gate)
+        {
+            try { _spotter?.Dispose(); } catch { }
+            _spotter = null;
+            _initFingerprint = null;
+            _failedFingerprint = null;
+        }
+    }
 
     public async Task<bool> WaitForWakeAsync(CancellationToken ct)
     {
@@ -560,10 +581,27 @@ public sealed class SherpaWakeService : ISpeechWakeService, IDisposable
 
     private int ResolveDeviceNumber()
     {
-        var idx = _settings.Current?.SpeechInputDeviceIndex ?? -1;
+        var savedIndex = _settings.Current?.SpeechInputDeviceIndex ?? -1;
+        var savedName = _settings.Current?.SpeechInputDeviceName;
         try
         {
-            if (idx >= 0 && idx < WaveInEvent.DeviceCount) return idx;
+            // P2 S-4: prefer a match on the saved device NAME (robust to NAudio ordinal reshuffling when
+            // virtual audio devices appear/disappear — #441b), then the saved ordinal if still valid,
+            // else 0. Mirrors WPF SpeechService.ResolveDeviceNumber(int, string). Uses WaveInEvent's
+            // device numbering so indices line up with the WaveInEvent capture instance below.
+            if (!string.IsNullOrWhiteSpace(savedName))
+            {
+                int count = WaveInEvent.DeviceCount;
+                for (int i = 0; i < count; i++)
+                {
+                    string name;
+                    try { name = WaveInEvent.GetCapabilities(i).ProductName; }
+                    catch { name = ""; }
+                    if (string.Equals(name, savedName, StringComparison.OrdinalIgnoreCase))
+                        return i;
+                }
+            }
+            if (savedIndex >= 0 && savedIndex < WaveInEvent.DeviceCount) return savedIndex;
         }
         catch { }
         return 0; // WaveIn device 0 == Windows default capture device.

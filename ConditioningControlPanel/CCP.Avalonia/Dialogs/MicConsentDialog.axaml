@@ -1,0 +1,213 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization;assembly=CCP.Avalonia"
+        x:Class="ConditioningControlPanel.Avalonia.Dialogs.MicConsentDialog" x:DataType="x:Object"
+        Title="{loc:Str dialog_mic_consent_title}"
+        Width="640"
+        Height="620"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{DynamicResource DarkerBgBrush}">
+
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://CCP.Avalonia/Dialogs/DialogResources.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Window.Resources>
+
+  <Grid Margin="32,28,32,24" RowDefinitions="Auto,*,Auto">
+
+    <!-- Step indicator -->
+    <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8" Margin="0,0,0,20">
+      <Ellipse x:Name="DotStep1" Width="10" Height="10" Fill="{DynamicResource PinkBrush}" />
+      <Ellipse x:Name="DotStep2" Width="10" Height="10" Fill="#3A3A52" />
+      <Ellipse x:Name="DotStep3" Width="10" Height="10" Fill="#3A3A52" />
+    </StackPanel>
+
+    <!-- ─── STEP 1 — What this enables ─── -->
+    <ScrollViewer x:Name="PanelStep1" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="16">
+        <TextBlock Text="{loc:Str dialog_mic_consent_intro_header}"
+                   Foreground="{DynamicResource PinkBrush}"
+                   FontSize="22"
+                   FontWeight="Bold" />
+        <TextBlock Text="{loc:Str dialog_mic_consent_intro_sub}"
+                   Foreground="#B0B0B0"
+                   FontSize="12"
+                   TextWrapping="Wrap" />
+
+        <TextBlock Foreground="#E8E8E8"
+                   FontSize="14"
+                   TextWrapping="Wrap"
+                   LineHeight="22"
+                   Text="{loc:Str dialog_mic_consent_intro_body}" />
+
+        <TextBlock Foreground="{DynamicResource PinkBrush}"
+                   FontSize="14"
+                   FontWeight="SemiBold"
+                   Text="{loc:Str dialog_mic_consent_intro_how_header}" />
+
+        <TextBlock Margin="14,0,0,0"
+                   Foreground="#E8E8E8"
+                   FontSize="14"
+                   TextWrapping="Wrap"
+                   LineHeight="22"
+                   Text="{loc:Str dialog_mic_consent_intro_how_on_demand}" />
+
+        <TextBlock Margin="14,0,0,0"
+                   Foreground="#E8E8E8"
+                   FontSize="14"
+                   TextWrapping="Wrap"
+                   LineHeight="22"
+                   Text="{loc:Str dialog_mic_consent_intro_how_alwayson}" />
+
+        <TextBlock Foreground="#9090A8"
+                   FontSize="14"
+                   FontStyle="Italic"
+                   TextWrapping="Wrap"
+                   LineHeight="22"
+                   Text="{loc:Str dialog_mic_consent_intro_read_next}" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- ─── STEP 2 — Privacy contract ─── -->
+    <ScrollViewer x:Name="PanelStep2" Grid.Row="1" VerticalScrollBarVisibility="Auto" IsVisible="False">
+      <StackPanel Spacing="16">
+        <TextBlock Text="{loc:Str dialog_mic_consent_privacy_header}"
+                   Foreground="{DynamicResource PinkBrush}"
+                   FontSize="22"
+                   FontWeight="Bold" />
+        <TextBlock Text="{loc:Str dialog_webcam_consent_always_read_each_line_text}"
+                   Foreground="#B0B0B0"
+                   FontSize="12"
+                   TextWrapping="Wrap" />
+
+        <Border Padding="20"
+                CornerRadius="6"
+                Background="#1F1F38"
+                BorderBrush="{DynamicResource PinkBrush}"
+                BorderThickness="0,0,0,3">
+          <StackPanel Spacing="12">
+            <TextBlock Foreground="#E8E8E8" FontSize="14" TextWrapping="Wrap" LineHeight="22"
+                       Text="{loc:Str dialog_mic_consent_privacy_bullet1}" />
+            <TextBlock Foreground="#E8E8E8" FontSize="14" TextWrapping="Wrap" LineHeight="22"
+                       Text="{loc:Str dialog_mic_consent_privacy_bullet2}" />
+            <TextBlock Foreground="#E8E8E8" FontSize="14" TextWrapping="Wrap" LineHeight="22"
+                       Text="{loc:Str dialog_mic_consent_privacy_bullet3}" />
+            <TextBlock Foreground="#E8E8E8" FontSize="14" TextWrapping="Wrap" LineHeight="22"
+                       Text="{loc:Str dialog_mic_consent_privacy_bullet4}" />
+            <TextBlock Foreground="#E8E8E8" FontSize="14" TextWrapping="Wrap" LineHeight="22"
+                       Text="{loc:Str dialog_mic_consent_privacy_bullet5}" />
+            <TextBlock Foreground="#E8E8E8" FontSize="14" TextWrapping="Wrap" LineHeight="22"
+                       Text="{loc:Str dialog_webcam_consent_can_disable_instantly_panic_key_inapp}" />
+          </StackPanel>
+        </Border>
+
+        <StackPanel Spacing="4">
+          <TextBlock Foreground="#B8B8C8"
+                     FontSize="14"
+                     TextWrapping="Wrap"
+                     LineHeight="22"
+                     Text="{loc:Str dialog_webcam_consent_want_verify_source_code_feature_public_text}" />
+          <TextBlock x:Name="LnkSource"
+                     Text="{loc:Str dialog_webcam_consent_view_on_github_text}"
+                     Foreground="{DynamicResource PinkBrush}"
+                     FontSize="14"
+                     TextDecorations="Underline"
+                     Cursor="Hand"
+                     PointerPressed="LnkSource_Click" />
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- ─── STEP 3 — Explicit consent ─── -->
+    <ScrollViewer x:Name="PanelStep3" Grid.Row="1" VerticalScrollBarVisibility="Auto" IsVisible="False">
+      <StackPanel Spacing="16">
+        <TextBlock Text="{loc:Str dialog_webcam_consent_confirm_consent_text}"
+                   Foreground="{DynamicResource PinkBrush}"
+                   FontSize="22"
+                   FontWeight="Bold" />
+        <TextBlock Text="{loc:Str dialog_webcam_consent_each_box_must_checked_none_prechecked_text}"
+                   Foreground="#B0B0B0"
+                   FontSize="12"
+                   TextWrapping="Wrap" />
+
+        <CheckBox x:Name="ChkConsent1"
+                  Margin="0,8,0,0"
+                  Foreground="#E8E8E8"
+                  FontSize="13"
+                  IsCheckedChanged="ConsentCheckChanged">
+          <TextBlock TextWrapping="Wrap" Text="{loc:Str dialog_mic_consent_consent_check1}" />
+        </CheckBox>
+        <CheckBox x:Name="ChkConsent2"
+                  Foreground="#E8E8E8"
+                  FontSize="13"
+                  IsCheckedChanged="ConsentCheckChanged">
+          <TextBlock TextWrapping="Wrap" Text="{loc:Str dialog_mic_consent_consent_check2}" />
+        </CheckBox>
+        <CheckBox x:Name="ChkConsent3"
+                  Foreground="#E8E8E8"
+                  FontSize="13"
+                  IsCheckedChanged="ConsentCheckChanged">
+          <TextBlock TextWrapping="Wrap" Text="{loc:Str dialog_mic_consent_consent_check3}" />
+        </CheckBox>
+
+        <TextBlock Foreground="#E8E8E8"
+                   FontSize="14"
+                   FontWeight="SemiBold"
+                   Margin="0,12,0,0"
+                   Text="{loc:Str dialog_webcam_consent_type_enable_capitals_confirm}" />
+        <TextBox x:Name="TxtConfirm"
+                 FontSize="14"
+                 Padding="10,8"
+                 Background="#1F1F38"
+                 Foreground="{DynamicResource TextLightBrush}"
+                 BorderBrush="#3A3A52"
+                 BorderThickness="1"
+                 CaretBrush="White"
+                 TextChanged="TxtConfirm_TextChanged" />
+
+        <TextBlock x:Name="TxtConfirmHint"
+                   Foreground="#8888A0"
+                   FontSize="14"
+                   FontStyle="Italic"
+                   TextWrapping="Wrap"
+                   Text="{loc:Str dialog_mic_consent_waiting_3_checkboxes_enable_typed_text}" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- Button row -->
+    <Grid Grid.Row="2" Margin="0,16,0,0" ColumnDefinitions="*,Auto,Auto">
+      <Button x:Name="BtnCancel"
+              Grid.Column="0"
+              HorizontalAlignment="Left"
+              Content="{loc:Str dialog_webcam_consent_cancel_content}"
+              Click="BtnCancel_Click"
+              Theme="{StaticResource SecondaryButton}" />
+
+      <Button x:Name="BtnBack"
+              Grid.Column="1"
+              Margin="0,0,8,0"
+              Content="{loc:Str dialog_webcam_consent_back_content}"
+              Click="BtnBack_Click"
+              IsVisible="False"
+              Theme="{StaticResource SecondaryButton}" />
+
+      <Button x:Name="BtnNext"
+              Grid.Column="2"
+              Content="{loc:Str dialog_webcam_consent_i_want_know_more_content}"
+              Click="BtnNext_Click"
+              Theme="{StaticResource ActionButton}" />
+
+      <Button x:Name="BtnEnable"
+              Grid.Column="2"
+              Content="{loc:Str dialog_mic_consent_enable_content}"
+              Click="BtnEnable_Click"
+              IsEnabled="False"
+              IsVisible="False"
+              Theme="{StaticResource ActionButton}" />
+    </Grid>
+  </Grid>
+</Window>

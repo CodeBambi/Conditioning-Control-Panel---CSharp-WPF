@@ -4,7 +4,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using ConditioningControlPanel.Core.Services.Sessions;
 using ConditioningControlPanel.Core.Services.Speech;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ConditioningControlPanel.Avalonia.Services.Autonomy;
 
@@ -14,11 +16,13 @@ namespace ConditioningControlPanel.Avalonia.Services.Autonomy;
 /// in-character (voiced via the bark manifest); unrecognised speech falls through to a spoken mantra.
 /// Self-protecting: nothing arms unless mic consent is given AND the offline engine is available.
 ///
-/// Parity notes vs WPF (deferred until their substrate lands):
+/// Parity notes vs WPF:
+///  - Dispatched (have an Avalonia seam): all effect toggles, takeover on/off, volume/mute,
+///    panic, stop-listening, pause/resume (ISessionService), and help (spoken hint).
+///  - Intentionally NOT dispatched (no Avalonia seam yet) and therefore correctly UN-acked — saying
+///    one does nothing and voices no false "Okay~": video_pause/video_resume (IVideoService has no
+///    pause/resume), freeze_once (TriggerBambiFreeze), shake_once (screen shake).
 ///  - Push-to-talk needs a key-name→virtual-key map; the hook is here but PTT is a no-op for now.
-///  - A few commands have no Avalonia target yet (video pause/resume, pop-quiz, keyword triggers,
-///    screen shake, freeze, session pause/resume) and are intentionally omitted from the dispatch
-///    table — they simply don't match rather than firing a broken action.
 /// </summary>
 public sealed partial class AvaloniaAutonomyService
 {
@@ -240,8 +244,18 @@ public sealed partial class AvaloniaAutonomyService
             if (intent == null) return false;
         }
 
+        // help is text-only — its entire effect is speaking the "what can I say" hint (WPF help
+        // intent, AutonomyService.VoiceCommands.cs:650). Handle it directly, outside the dispatch table.
+        if (string.Equals(intent.Name, "help", StringComparison.OrdinalIgnoreCase))
+        {
+            SpeakHelp();
+            return true;
+        }
+
         var dispatched = Dispatch(intent);
-        if (intent.Repeatable && dispatched) _lastVoiceIntent = intent;
+        if (!dispatched) return false; // no Avalonia seam for this intent → NO false "Okay~" ack
+
+        if (intent.Repeatable) _lastVoiceIntent = intent;
         SpeakConfirmation(intent);
         return true;
     }
@@ -284,6 +298,8 @@ public sealed partial class AvaloniaAutonomyService
         ["deeper"]           = () => _overlay?.ShowOverlaySustained("braindrain", 0.5),
         ["takeover_on"]      = Start,
         ["takeover_off"]     = Stop,
+        ["pause"]            = () => ResolveSession()?.PauseSession(),
+        ["resume"]           = () => ResolveSession()?.ResumeSession(),
         ["mute"]             = () => SetMute(true),
         ["unmute"]           = () => SetMute(false),
         ["louder"]           = () => AdjustVolume(+15),
@@ -348,6 +364,33 @@ public sealed partial class AvaloniaAutonomyService
             try { _avatar?.GigglePriority(text, playSound: audio != null, aiGenerated: false, phraseAudioPath: audio, barkVoice: audio != null); }
             catch { }
         });
+    }
+
+    /// <summary>
+    /// Speak a "what can I say" hint via the avatar seam (WPF help intent). Text-only (no bark rule);
+    /// lists only the commands that actually dispatch in this head, so it never promises a no-op.
+    /// </summary>
+    private void SpeakHelp()
+    {
+        const string helpText =
+            "ooh lots! try: bubbles, flash me, a video, the spiral, deeper, quiz me, lock me, " +
+            "pause, quieter — or say red to stop everything~!";
+        Dispatcher.UIThread.Post(() =>
+        {
+            try { _avatar?.GigglePriority(helpText, playSound: false, aiGenerated: false); }
+            catch { }
+        });
+    }
+
+    /// <summary>
+    /// Lazily resolve the session service for pause/resume dispatch. Not constructor-injected into the
+    /// autonomy service, so resolve at call time from the head's provider — safe because dispatch runs
+    /// well after DI is built. Returns null on heads without a session service.
+    /// </summary>
+    private ISessionService? ResolveSession()
+    {
+        try { return App.Services?.GetService<ISessionService>(); }
+        catch { return null; }
     }
 
     /// <summary>Fallback when no command was heard: have the companion deliver a spoken mantra prompt.</summary>

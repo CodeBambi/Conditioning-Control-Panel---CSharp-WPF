@@ -21,7 +21,10 @@ public interface ISpeechWakeService
     /// <summary>True while the mic is physically open for a wake wait. Light/drop a privacy pill on change.</summary>
     bool IsListening { get; }
 
-    /// <summary>Raised on the UI thread when <see cref="IsListening"/> flips.</summary>
+    /// <summary>
+    /// Raised when <see cref="IsListening"/> flips. Fires off the capture thread (not the UI thread) —
+    /// handlers that touch UI must marshal onto the UI thread.
+    /// </summary>
     event EventHandler<bool>? ListeningChanged;
 
     /// <summary>
