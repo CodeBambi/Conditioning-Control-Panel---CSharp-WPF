@@ -10,7 +10,7 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);CCP.Core\**;CCP.Avalonia\**;CCP.Avalonia.Desktop\**;CCP.Avalonia.Desktop.Windows\**;CCP.Avalonia.Desktop.Linux\**;CCP.Avalonia.Desktop.macOS\**;CCP.Avalonia.Android\**;CCP.WindowsOnly\**;tests\**</DefaultItemExcludes>
     <AssemblyName>ConditioningControlPanel</AssemblyName>
     <RootNamespace>ConditioningControlPanel</RootNamespace>
-    <Version>6.2.5</Version>
+    <Version>6.2.7</Version>
     <Company>CodeBambi</Company>
     <Product>Conditioning Control Panel</Product>
     <Description>A professional visual conditioning application with gamification features.</Description>

@@ -144,9 +144,28 @@ public class InteractionQueueService
                 App.Logger?.Information("InteractionQueue: Starting queued {Type} (remaining: {Count})",
                     next.Type, _queue.Count);
 
-                // Use dispatcher to avoid stack overflow from nested calls
-                DispatcherHelper.RunOnUI(next.Trigger);
+                DispatchTrigger(next.Trigger);
             }
+        }
+    }
+
+    /// <summary>
+    /// Queue a dequeued trigger asynchronously — NEVER inline. Complete() holds _lock and is
+    /// called from window close handlers (LockCardWindow.OnClosing, PopQuizWindow.OnClosed);
+    /// DispatcherHelper.RunOnUI runs inline when already on the UI thread, which would execute
+    /// a fullscreen trigger (video/lock card) inside the lock and re-entrantly inside Close().
+    /// </summary>
+    private static void DispatchTrigger(Action trigger)
+    {
+        try
+        {
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted) return;
+            dispatcher.BeginInvoke(trigger);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("InteractionQueue: trigger dispatch failed: {Error}", ex.Message);
         }
     }
 
@@ -293,7 +312,7 @@ public class InteractionQueueService
                 App.Logger?.Information("InteractionQueue: Auto-recovery starting queued {Type} (remaining: {Count})",
                     next.Type, _queue.Count);
 
-                DispatcherHelper.RunOnUI(next.Trigger);
+                DispatchTrigger(next.Trigger);
             }
             else
             {

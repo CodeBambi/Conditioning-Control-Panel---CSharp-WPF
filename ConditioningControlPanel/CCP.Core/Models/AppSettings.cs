@@ -262,7 +262,7 @@ namespace ConditioningControlPanel.Models
         private int _skillPoints = 0;
         /// <summary>
         /// Available skill points to spend on the enhancement tree.
-        /// Earned when leveling up: 5 points per level.
+        /// Earned per level-up (SkillTreeService.PointsPerLevel) and per 100 bubbles popped.
         /// </summary>
         public int SkillPoints
         {
@@ -1086,6 +1086,18 @@ namespace ConditioningControlPanel.Models
         {
             get => _subBorderColor;
             set { _subBorderColor = value ?? "#FFFFFF"; OnPropertyChanged(); }
+        }
+
+        // Solid mode: render subliminal text cards as children of the ONE shared click-through
+        // host window (ChaosBubbleHostOverlay) instead of a keep-alive layered window per screen.
+        // Each subliminal keep-alive window is another full-screen layered surface contending on
+        // WPF's single render thread — part of the freeze cluster (#461). Ignored while
+        // SubliminalStealsFocus is on (the shared host is NOACTIVATE and can't steal focus).
+        private bool _subliminalSolidMode = false;
+        public bool SubliminalSolidMode
+        {
+            get => _subliminalSolidMode;
+            set { _subliminalSolidMode = value; OnPropertyChanged(); }
         }
 
         private bool _subliminalStealsFocus = false;
@@ -3995,6 +4007,29 @@ namespace ConditioningControlPanel.Models
         {
             get => _seasonPeakRankTotal;
             set { _seasonPeakRankTotal = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _seasonPeakLevel = 0;
+        /// <summary>
+        /// Highest PlayerLevel reached during SeasonStatsSeason (resets each season).
+        /// Snapshot proxy for "how far did I get this season" since PlayerLevel itself
+        /// is wiped by the server at rollover.
+        /// </summary>
+        public int SeasonPeakLevel
+        {
+            get => _seasonPeakLevel;
+            set { _seasonPeakLevel = Math.Max(0, value); OnPropertyChanged(); }
+        }
+
+        private int _seasonPointsSpent = 0;
+        /// <summary>
+        /// Sparkle points spent on enhancements during SeasonStatsSeason (resets each season).
+        /// Feeds the recap card's Prestige delta and the Season Rewind spend column.
+        /// </summary>
+        public int SeasonPointsSpent
+        {
+            get => _seasonPointsSpent;
+            set { _seasonPointsSpent = Math.Max(0, value); OnPropertyChanged(); }
         }
 
         private Dictionary<string, int> _seasonFeatureUse = new();

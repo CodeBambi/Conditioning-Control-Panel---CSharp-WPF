@@ -99,6 +99,28 @@ public sealed class ChaosBubbleHostOverlay : Window
         Canvas.SetTop(el, (yPx - w._originPxY) / w._scaleX);
     }
 
+    /// <summary>True when the given PHYSICAL px point lies inside the live host's hwnd rect.
+    /// The host's stage bounds are fixed at creation (primary-only unless DualMonitorEnabled
+    /// was on THEN) — per-screen placers use this to detect a screen the host can't show
+    /// (setting flipped mid-hold, or a failed create) and fall back to their classic renderer.
+    /// UI thread only.</summary>
+    public static bool CoversPoint(double xPx, double yPx)
+    {
+        var w = _active;
+        if (w == null) return false;
+        try
+        {
+            if (!w._metricsValid) w.RefreshMetrics();
+            double widthDip = w.ActualWidth > 0 ? w.ActualWidth : w.Width;
+            double heightDip = w.ActualHeight > 0 ? w.ActualHeight : w.Height;
+            double wPx = widthDip * w._scaleX;
+            double hPx = heightDip * w._scaleX;
+            return xPx >= w._originPxX && yPx >= w._originPxY &&
+                   xPx < w._originPxX + wPx && yPx < w._originPxY + hPx;
+        }
+        catch { return false; }
+    }
+
     /// <summary>Re-stack the live host above a mandatory video (see ChaosWindowZ). UI thread only.</summary>
     public static void RaiseActive() => ChaosWindowZ.RaiseTopmost(_active);
 
@@ -117,6 +139,11 @@ public sealed class ChaosBubbleHostOverlay : Window
             {
                 try
                 {
+                    // A new owner may have EnsureCreated'd between the decrement and this
+                    // deferred close running (e.g. subliminal Stop immediately followed by a
+                    // one-shot show on the same UI-thread turn). Closing then would strand the
+                    // new owner with a null _active and every Add/Place silently no-oping.
+                    if (System.Threading.Volatile.Read(ref _refCount) > 0) return;
                     var w = _active;
                     _active = null;
                     if (w != null) { w._canvas.Children.Clear(); w.Close(); }

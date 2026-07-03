@@ -83,7 +83,7 @@ public sealed class ChaosFlashOverlay : Window
         _img = new Image { Stretch = Stretch.UniformToFill };
         Content = _img;
 
-        SourceInitialized += (_, _) => ApplyExStyles();
+        SourceInitialized += (_, _) => { ApplyExStyles(); PlacePhysical(); };
         Loaded += (_, _) =>
         {
             if (_pending is { } p) { _pending = null; DisplayCore(p.path, p.durationMs, p.opacity); }
@@ -119,6 +119,14 @@ public sealed class ChaosFlashOverlay : Window
             AnimationBehavior.SetRepeatBehavior(_img, RepeatBehavior.Forever);
             AnimationBehavior.SetAutoStart(_img, true);
             AnimationBehavior.SetSourceUri(_img, new Uri(path, UriKind.Absolute));
+        }
+        else if (path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase) && Services.AnimatedWebp.IsAnimated(path))
+        {
+            // Animated webp — XamlAnimatedGif is GIF-only, so these washed on as stills. Decode
+            // is capped well below the still path's 2560: unlike XamlAnimatedGif's one-frame-at-
+            // a-time decode, every kept frame stays resident, and a faint 10% wash doesn't need
+            // native res. Decodes off-thread; ClearImage's Detach orphans a superseded decode.
+            Services.AnimatedWebp.AttachAnimation(_img, path, maxDim: 1280, maxFrames: 40);
         }
         else
         {
@@ -160,6 +168,7 @@ public sealed class ChaosFlashOverlay : Window
     {
         _displayGen++;   // orphan any still-in-flight async decode
         try { AnimationBehavior.SetSourceUri(_img, null); } catch { }
+        Services.AnimatedWebp.Detach(_img);   // stops the webp frame loop (Forever clock pins _img)
         try { _img.Source = null; } catch { }
     }
 
@@ -196,10 +205,68 @@ public sealed class ChaosFlashOverlay : Window
         catch { }
     }
 
+    /// <summary>
+    /// Stamps the HWND to the stage's PHYSICAL pixel bounds. StageBounds() sizes the ctor in
+    /// DIPs from SystemParameters.VirtualScreen*, which use the PRIMARY monitor's scale — on a
+    /// mixed-DPI desktop a spanning window rendered at one scale then falls short of the taller
+    /// screen's bottom (#456). Runs at SourceInitialized, before the layered surface is realized,
+    /// so this is not the forbidden mid-run resize.
+    /// </summary>
+    private int _dpiRestamps;   // consecutive DPI-triggered re-stamps; see OnDpiChanged
+
+    private void PlacePhysical()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero) return;
+
+            bool dual = App.Settings?.Current?.DualMonitorEnabled ?? true;
+            var b = dual
+                ? System.Windows.Forms.SystemInformation.VirtualScreen
+                : System.Windows.Forms.Screen.PrimaryScreen?.Bounds ?? System.Drawing.Rectangle.Empty;
+            if (b.Width <= 0 || b.Height <= 0) return;
+
+            // Already at target: converged — reset the oscillation counter and don't touch
+            // the window (a redundant SetWindowPos could itself provoke a WM_DPICHANGED).
+            if (GetWindowRect(hwnd, out var r) &&
+                r.Left == b.X && r.Top == b.Y &&
+                r.Right - r.Left == b.Width && r.Bottom - r.Top == b.Height)
+            {
+                _dpiRestamps = 0;
+                return;
+            }
+
+            SetWindowPos(hwnd, IntPtr.Zero, b.X, b.Y, b.Width, b.Height, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        catch (Exception ex) { App.Logger?.Debug("ChaosFlashOverlay.PlacePhysical: {E}", ex.Message); }
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        // A spanning window whose majority monitor changed gets a WM_DPICHANGED, and WPF then
+        // re-applies the ctor's primary-scale DIP size — undoing the physical stamp. Re-place
+        // after WPF finishes its own resize (Background priority). Capped: on pathological
+        // mixed-DPI geometry the stamp itself can flip the majority monitor back and forth
+        // (stamp → DPI change → WPF shrink → stamp → ...); rather than loop SetWindowPos on a
+        // full-screen layered window (the freeze-cluster signature), give up after a few tries —
+        // the next Show()/PlacePhysical convergence resets the counter.
+        if (_dpiRestamps >= 4) return;
+        _dpiRestamps++;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(PlacePhysical));
+    }
+
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
     private const int WS_EX_TRANSPARENT = 0x00000020;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr hwnd, int index);
     [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
 }

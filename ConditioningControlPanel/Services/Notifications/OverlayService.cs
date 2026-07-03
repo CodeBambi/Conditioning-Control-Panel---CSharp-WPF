@@ -461,6 +461,7 @@ public class OverlayService : IDisposable
         {
             _topmostKickTickCounter = 0;
             ReassertZOrder(force: true);
+            ReassertBounds();   // heal mixed-DPI size drift too (#457)
         }
     }
 
@@ -677,6 +678,22 @@ public class OverlayService : IDisposable
         else dispatcher.Invoke(apply);
     }
 
+    /// <summary>
+    /// Releases the pink/spiral ramp holds set by <see cref="SetSustainedOverlayOpacity"/>
+    /// WITHOUT tearing the overlays down. Called when a session ends but the overlays may
+    /// legitimately stay up (the user had them enabled before the session): the 500ms
+    /// settings-sync takes ownership again on its next tick and re-applies the user's
+    /// saved opacity. Stop/panic paths don't need this — StopPinkFilter/StopSpiral
+    /// already clear the holds.
+    /// </summary>
+    public void ReleaseOpacityRampHolds()
+    {
+        _rampPinkOpacity = null;
+        _rampSpiralOpacity = null;
+        _lastAppliedPinkOpacity = -1;
+        _lastAppliedSpiralOpacity = -1;
+    }
+
     private void ApplyPinkOpacityDirect(double opacity)
     {
         var (fr, fg, fb) = GetFilterRgb();
@@ -811,6 +828,7 @@ public class OverlayService : IDisposable
 
             // Capture screen reference for use in handler
             var targetScreen = screen;
+            HookBoundsRestore(window, targetScreen);
 
             window.SourceInitialized += (s, e) =>
             {
@@ -1236,6 +1254,7 @@ public class OverlayService : IDisposable
             };
 
             var targetScreen = screen;
+            HookBoundsRestore(window, targetScreen);
 
             window.SourceInitialized += (s, e) =>
             {
@@ -1313,6 +1332,7 @@ public class OverlayService : IDisposable
             };
 
             var targetScreen = screen;
+            HookBoundsRestore(window, targetScreen);
 
             window.SourceInitialized += (s, e) =>
             {
@@ -1674,6 +1694,7 @@ public class OverlayService : IDisposable
 
             // Capture screen reference for use in handler
             var targetScreen = screen;
+            HookBoundsRestore(window, targetScreen);
 
             window.SourceInitialized += (s, e) =>
             {
@@ -1735,7 +1756,7 @@ public class OverlayService : IDisposable
     /// Gets the actual physical pixel bounds of a monitor using Win32 APIs.
     /// This is the most reliable method for multi-monitor setups with different DPI.
     /// </summary>
-    private PhysicalScreenBounds GetPhysicalScreenBounds(System.Windows.Forms.Screen screen)
+    private PhysicalScreenBounds GetPhysicalScreenBounds(System.Windows.Forms.Screen screen, bool quiet = false)
     {
         try
         {
@@ -1758,8 +1779,11 @@ public class OverlayService : IDisposable
                         Height = monitorInfo.rcMonitor.Bottom - monitorInfo.rcMonitor.Top
                     };
 
-                    App.Logger?.Debug("Screen {Name}: Physical bounds from Win32 = ({X},{Y},{W}x{H})",
-                        screen.DeviceName, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+                    // quiet: the ReassertBounds reconciler compares every 5s — logging each
+                    // probe would be steady churn for the zero-drift common case.
+                    if (!quiet)
+                        App.Logger?.Debug("Screen {Name}: Physical bounds from Win32 = ({X},{Y},{W}x{H})",
+                            screen.DeviceName, bounds.Left, bounds.Top, bounds.Width, bounds.Height);
 
                     return bounds;
                 }
@@ -1813,6 +1837,76 @@ public class OverlayService : IDisposable
     }
 
     /// <summary>
+    /// Re-asserts the physical-pixel placement of every overlay window whose HWND rect no
+    /// longer matches its screen. Placement is set exactly once at SourceInitialized, and
+    /// every later SetWindowPos passes SWP_NOSIZE — so when a fullscreen video or DPI
+    /// re-evaluation makes WPF re-apply the window's DIP Width/Height (computed with the
+    /// PRIMARY monitor's scale), the wrong size stuck on mixed-DPI secondaries (#457).
+    /// Cheap when nothing drifted: one GetWindowRect compare per overlay window.
+    /// </summary>
+    private void ReassertBounds()
+    {
+        // While a monitor/DPI change settles, both the screen cache and the HWND rects are in
+        // flux — repositioning against stale geometry would fight the OS mid-storm (the same
+        // reason the recreate path above defers). The post-settle kick heals any drift.
+        if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed) return;
+
+        foreach (var list in new[] { _pinkFilterWindows, _spiralWindows, _brainDrainBlurWindows })
+        {
+            foreach (var window in list.ToList())
+                ReassertBoundsFor(window);
+        }
+    }
+
+    /// <summary>
+    /// Tags an overlay window with its target screen (so the drift reconciler can
+    /// re-resolve it after display changes) and restores physical placement whenever
+    /// WPF re-applies DIP bounds on a per-monitor DPI change (#457).
+    /// </summary>
+    private void HookBoundsRestore(Window window, System.Windows.Forms.Screen targetScreen)
+    {
+        window.Tag = targetScreen.DeviceName;
+        window.DpiChanged += (s, e) =>
+        {
+            // Let WPF finish applying its own resize first, then stamp physical bounds back.
+            Application.Current?.Dispatcher?.BeginInvoke(DispatcherPriority.Background,
+                new Action(() => ReassertBoundsFor(window)));
+        };
+    }
+
+    private void ReassertBoundsFor(Window window)
+    {
+        try
+        {
+            // Mid display-change storm the geometry is in flux; the post-settle kick heals drift.
+            if (Services.UI.DisplayChangeCoordinator.SpawnsSuppressed) return;
+
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            if (window.Tag is not string deviceName) return;
+
+            var screen = App.GetAllScreensCached().FirstOrDefault(s => s.DeviceName == deviceName);
+            if (screen == null) return;   // monitor unplugged — RecreateOverlays handles that case
+
+            var expected = GetPhysicalScreenBounds(screen, quiet: true);
+            if (!GetWindowRect(hwnd, out var rect)) return;
+
+            if (rect.Left == expected.Left && rect.Top == expected.Top &&
+                rect.Right - rect.Left == expected.Width && rect.Bottom - rect.Top == expected.Height)
+                return;
+
+            App.Logger?.Debug("Overlay drifted on {Screen}: actual=({L},{T},{W}x{H}) expected=({EL},{ET},{EW}x{EH}) — repositioning",
+                deviceName, rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top,
+                expected.Left, expected.Top, expected.Width, expected.Height);
+            PositionWindowOnScreen(window, screen);
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("ReassertBoundsFor failed: {Error}", ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Re-asserts HWND_TOPMOST on overlay windows. By default only windows that have
     /// actually lost the WS_EX_TOPMOST flag are re-pinned. Pass <paramref name="force"/>
     /// = true to re-issue HWND_TOPMOST unconditionally, which bumps the window to the
@@ -1859,6 +1953,9 @@ public class OverlayService : IDisposable
             // sibling closing leaves us in the topmost layer but possibly behind
             // whatever else was there, so we need to bump to the front.
             ReassertZOrder(force: true);
+            // A closing fullscreen video can also have provoked a DPI re-evaluation that
+            // shrank overlays to primary-scale size on mixed-DPI setups (#457).
+            ReassertBounds();
         });
     }
 
@@ -2074,6 +2171,9 @@ public class OverlayService : IDisposable
 
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     public static extern bool EnumDisplaySettingsEx(string? lpszDeviceName, uint iModeNum, ref DEVMODE lpDevMode, uint dwFlags);

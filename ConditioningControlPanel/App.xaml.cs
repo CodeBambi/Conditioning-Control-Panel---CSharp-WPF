@@ -50,9 +50,16 @@ namespace ConditioningControlPanel
         // ack, a zombie process kept the mutex alive and every relaunch quietly Shutdown()'d,
         // which is the "app freezes on startup, have to relaunch several times" report.
         private const string ShowAckSignalName = "ConditioningControlPanel_ShowAck_Signal";
-        // Generous: exceeds a normal cold start so a healthy but still-initializing primary
-        // (whose dispatcher isn't pumping yet) acks in time and is never mistaken for wedged.
+        // A healthy primary that is still inside OnStartup CANNOT ack from its dispatcher (it
+        // isn't pumping until startup returns — a cold first launch runs 13s+). During that
+        // window the signal-listener thread acks directly (see _startupPhase): it proves the
+        // process is alive-and-initializing, while a dump-suspended or killed process still
+        // acks nothing and gets taken over. After startup, only a pumping dispatcher acks, so
+        // a render-thread-deadlocked zombie is still detected.
         private const int ShowAckTimeoutMs = 10000;
+        // True from process start until the dispatcher pumps for the first time (i.e. until
+        // OnStartup has returned and the message loop is running).
+        private static volatile bool _startupPhase = true;
         private static EventWaitHandle? _showSignal;
         private static EventWaitHandle? _showAckSignal;
         private static bool _recoveredFromStaleInstance;
@@ -819,6 +826,17 @@ namespace ConditioningControlPanel
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // Dump-writer mode: spawned by UiHangWatchdog in a WEDGED sibling CCP process
+            // (`--write-hang-dump <pid> <path>`). Write the minidump from this healthy process
+            // and exit before touching the splash, the single-instance mutex, or any service.
+            if (e.Args.Length >= 3 && e.Args[0] == "--write-hang-dump" && int.TryParse(e.Args[1], out int hangDumpPid))
+            {
+                bool dumpOk = false;
+                try { dumpOk = Services.UiHangWatchdog.TryWriteDumpOfProcess(hangDumpPid, e.Args[2]); } catch { }
+                Environment.Exit(dumpOk ? 0 : 1);
+                return;
+            }
+
             // Render-thread deadlock guard (see avatar-tube-render-deadlock memory): the avatar
             // tube is a layered window sharing WPF's single render thread; a layered ComboBox
             // dropdown resizing/closing while the tube animates can wedge that thread
@@ -842,14 +860,16 @@ namespace ConditioningControlPanel
                 }));
 
             // Show splash screen IMMEDIATELY - before anything else
-            // This ensures users see feedback right away after update/launch
-            _splash = new SplashScreen();
+            // This ensures users see feedback right away after update/launch.
+            // The splash runs on its OWN STA thread with its own dispatcher: everything
+            // below executes synchronously on THIS thread, and a same-thread splash
+            // cannot pump messages during that work — its animations froze mid-bar and
+            // one click marked it "Not Responding". On a dedicated thread it stays
+            // responsive and animating for the whole load. Null if creation failed;
+            // every use below is ?. so startup proceeds splash-less in that case.
+            _splash = SplashScreen.ShowOnOwnThread();
             var splash = _splash;
-            splash.Show();
-            splash.SetProgress(0.0, "Starting...");
-
-            // Force the splash to render before continuing with any initialization
-            splash.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.Render, new Action(() => { }));
+            splash?.SetProgress(0.0, "Starting...");
 
             // Parse "Open with CCP" args. Done before single-instance check so a
             // second-instance launch can write its handoff file before signaling.
@@ -878,8 +898,12 @@ namespace ConditioningControlPanel
                 if (ackWait == null)
                 {
                     // Primary predates the ack handshake (mid-upgrade) or its kernel objects are
-                    // gone. Preserve the legacy behavior: poke it to show, then exit quietly —
-                    // never kill a process we can't positively identify as wedged.
+                    // gone. Poke it to show, but don't bail out instantly: this is exactly the
+                    // update-from-pre-handshake scenario (#466 — 6.0.0 → 6.2.x "fails to launch"),
+                    // where the installer's /RESTARTAPPLICATIONS relaunched us while the OLD build
+                    // was still exiting and holding the mutex. Wait briefly for the mutex to free
+                    // and take over as primary; only exit if a live legacy primary actually keeps
+                    // it. Never kill a process we can't positively identify as wedged.
                     try
                     {
                         var signal = EventWaitHandle.OpenExisting(ShowSignalName);
@@ -888,50 +912,64 @@ namespace ConditioningControlPanel
                     }
                     catch { }
 
-                    splash.Close();
-                    Shutdown();
-                    return;
-                }
+                    bool tookOver = false;
+                    try { tookOver = _mutex.WaitOne(TimeSpan.FromSeconds(8)); }
+                    catch (AbandonedMutexException) { tookOver = true; } // old build died holding it — we own it now
+                    catch { }
 
-                // Clear any stale ack from a prior handshake, poke the primary, then wait for it
-                // to confirm liveness from its UI thread.
-                try { ackWait.Reset(); } catch { }
-                try
+                    if (!tookOver)
+                    {
+                        splash?.CloseImmediate();
+                        Shutdown();
+                        return;
+                    }
+
+                    _mutexOwned = true;
+                    try { ConsumeFileOpenHandoff(); } catch { }
+                    // Fall through — the legacy primary is gone; this instance is now the primary.
+                }
+                else
                 {
-                    var signal = EventWaitHandle.OpenExisting(ShowSignalName);
-                    signal.Set();
-                    signal.Dispose();
+                    // Clear any stale ack from a prior handshake, poke the primary, then wait for it
+                    // to confirm liveness from its UI thread.
+                    try { ackWait.Reset(); } catch { }
+                    try
+                    {
+                        var signal = EventWaitHandle.OpenExisting(ShowSignalName);
+                        signal.Set();
+                        signal.Dispose();
+                    }
+                    catch { }
+
+                    bool acknowledged = false;
+                    try { acknowledged = ackWait.WaitOne(ShowAckTimeoutMs); } catch { }
+                    try { ackWait.Dispose(); } catch { }
+
+                    if (acknowledged)
+                    {
+                        // Primary is alive and surfaced its window — nothing more to do.
+                        splash?.CloseImmediate();
+                        Shutdown();
+                        return;
+                    }
+
+                    // No acknowledgment within the window: the primary is wedged or headless. Kill it
+                    // and take over. (Logger isn't up yet here; we record the recovery once it is.)
+                    _recoveredFromStaleInstance = true;
+                    KillStaleInstances();
+
+                    // Claim single-instance ownership now that the zombie is gone. If it died holding
+                    // the mutex, WaitOne throws AbandonedMutexException but we DO acquire it.
+                    try { if (_mutex!.WaitOne(TimeSpan.FromSeconds(3))) _mutexOwned = true; }
+                    catch (AbandonedMutexException) { _mutexOwned = true; }
+                    catch { }
+
+                    // We kept the parsed _pendingFileOpen* fields and will fulfill them ourselves, so
+                    // drop any on-disk handoff to avoid a spurious re-open on a later signal.
+                    try { ConsumeFileOpenHandoff(); } catch { }
+
+                    // Fall through — this instance is now the primary.
                 }
-                catch { }
-
-                bool acknowledged = false;
-                try { acknowledged = ackWait.WaitOne(ShowAckTimeoutMs); } catch { }
-                try { ackWait.Dispose(); } catch { }
-
-                if (acknowledged)
-                {
-                    // Primary is alive and surfaced its window — nothing more to do.
-                    splash.Close();
-                    Shutdown();
-                    return;
-                }
-
-                // No acknowledgment within the window: the primary is wedged or headless. Kill it
-                // and take over. (Logger isn't up yet here; we record the recovery once it is.)
-                _recoveredFromStaleInstance = true;
-                KillStaleInstances();
-
-                // Claim single-instance ownership now that the zombie is gone. If it died holding
-                // the mutex, WaitOne throws AbandonedMutexException but we DO acquire it.
-                try { if (_mutex!.WaitOne(TimeSpan.FromSeconds(3))) _mutexOwned = true; }
-                catch (AbandonedMutexException) { _mutexOwned = true; }
-                catch { }
-
-                // We kept the parsed _pendingFileOpen* fields and will fulfill them ourselves, so
-                // drop any on-disk handoff to avoid a spurious re-open on a later signal.
-                try { ConsumeFileOpenHandoff(); } catch { }
-
-                // Fall through — this instance is now the primary.
             }
 
             // Create signal for other instances to request showing our window, plus the ack gate
@@ -948,6 +986,16 @@ namespace ConditioningControlPanel
                     {
                         if (_showSignal.WaitOne(1000))
                         {
+                            // Still inside OnStartup: the dispatcher can't pump the ack below until
+                            // init finishes, but this thread being alive is proof enough that we are
+                            // starting, not wedged — ack now so a relaunch during a slow cold start
+                            // doesn't kill a healthy primary mid-init. (A dump-suspended process has
+                            // this thread frozen too, so takeover still catches real zombies.)
+                            if (_startupPhase)
+                            {
+                                try { _showAckSignal?.Set(); } catch { }
+                            }
+
                             Dispatcher.BeginInvoke(() =>
                             {
                                 // Use the stable static ref: Application.Current.MainWindow
@@ -996,7 +1044,7 @@ namespace ConditioningControlPanel
                 typeof(System.Windows.Media.Animation.Timeline),
                 new FrameworkPropertyMetadata(30));
 
-            splash.SetProgress(0.05, "Initializing logging...");
+            splash?.SetProgress(0.05, "Initializing logging...");
 
             // Setup logging - use UserDataPath (writable) instead of BaseDirectory (may be in Program Files)
             string logPath;
@@ -1056,7 +1104,7 @@ namespace ConditioningControlPanel
             // to the logs folder when the dispatcher stops responding for 10s.
             Services.UiHangWatchdog.Start(Dispatcher);
 
-            splash.SetProgress(0.1, "Initializing...");
+            splash?.SetProgress(0.1, "Initializing...");
 
             // Global exception handlers to catch and log crashes instead of hard crashing
             bool errorDialogShown = false;
@@ -1109,7 +1157,7 @@ namespace ConditioningControlPanel
                     errorDialogShown = true;
 
                     // Close splash screen if still open so error dialog is visible
-                    try { _splash?.Close(); } catch { }
+                    try { _splash?.CloseImmediate(); } catch { }
                     _splash = null;
 
                     try
@@ -1146,7 +1194,7 @@ namespace ConditioningControlPanel
                 }
             });
 
-            splash.SetProgress(0.1, "Creating directories...");
+            splash?.SetProgress(0.1, "Creating directories...");
 
             // Create user assets directories in LocalAppData (persists across updates)
             Directory.CreateDirectory(Path.Combine(UserAssetsPath, "images"));
@@ -1160,7 +1208,7 @@ namespace ConditioningControlPanel
             Directory.CreateDirectory(Path.Combine(resourcesPath, "sub_audio"));
             Directory.CreateDirectory(Path.Combine(resourcesPath, "sounds", "mindwipe"));
 
-            splash.SetProgress(0.2, "Loading settings...");
+            splash?.SetProgress(0.2, "Loading settings...");
 
             // Back the Core secure-store seams with the WPF DPAPI stores BEFORE the
             // settings load: AppSettings.AuthToken/OpenRouterApiKey route through these
@@ -1249,21 +1297,21 @@ namespace ConditioningControlPanel
                 else Current?.Dispatcher?.Invoke(Recolor);
             };
 
-            splash.SetProgress(0.3, "Initializing audio...");
+            splash?.SetProgress(0.3, "Initializing audio...");
             Audio = new AudioService();
             Audio.RunStartupDiagnostics();
 
-            splash.SetProgress(0.4, "Initializing flash service...");
+            splash?.SetProgress(0.4, "Initializing flash service...");
             Flash = new FlashService();
 
-            splash.SetProgress(0.5, "Initializing video service...");
+            splash?.SetProgress(0.5, "Initializing video service...");
             Video = new VideoService();
             Video.PreloadLibVLC(); // Pre-load LibVLC in background for faster first video
 
             // Session media log - must be after Flash and Video so it can subscribe to their events.
             SessionLog = new SessionLogService();
 
-            splash.SetProgress(0.6, "Initializing effects...");
+            splash?.SetProgress(0.6, "Initializing effects...");
             Progression = new ProgressionService();
             ActivityTracker = new ActivityTracker();
 
@@ -1290,7 +1338,7 @@ namespace ConditioningControlPanel
             MindWipe = new MindWipeService();
             BrainDrain = new BrainDrainService();
 
-            splash.SetProgress(0.75, "Loading achievements...");
+            splash?.SetProgress(0.75, "Loading achievements...");
             Achievements = new AchievementService();
             // Single seam between feature events and achievement tracking. Constructed
             // here; Start() is called later in OnStartup once feature services exist.
@@ -1314,7 +1362,7 @@ namespace ConditioningControlPanel
             // (AchievementService runs UpdateDailyStreak in its constructor before SkillTree exists)
             Achievements?.Progress?.AwardDeferredStreakBonus();
 
-            splash.SetProgress(0.85, "Initializing companion...");
+            splash?.SetProgress(0.85, "Initializing companion...");
             // Moderation guard + log: substantive content moderation that runs in C# code
             // OUTSIDE the LLM prompt. User-editable prompt sections (Personality,
             // SlutModePersonality, CompanionPrompt, custom Awareness templates, etc.) cannot
@@ -1544,7 +1592,7 @@ namespace ConditioningControlPanel
 
             Logger.Information("Services initialized");
 
-            splash.SetProgress(0.95, "Opening main window...");
+            splash?.SetProgress(0.95, "Opening main window...");
 
             // Show main window — wrapped in try-catch to ensure splash closes on failure
             MainWindow mainWindow;
@@ -1556,7 +1604,7 @@ namespace ConditioningControlPanel
             catch (Exception ex)
             {
                 Logger?.Error(ex, "Failed to create main window");
-                try { splash.Close(); } catch { }
+                try { splash?.CloseImmediate(); } catch { }
                 _splash = null;
                 throw; // Re-throw to let DispatcherUnhandledException show the error
             }
@@ -1614,22 +1662,29 @@ namespace ConditioningControlPanel
                 else mainWindow.Loaded += (_, _) => dispatch();
             }
 
-            // Close splash screen with fade animation
-            // Drop Topmost FIRST so deferred dialogs (What's New, Age Verification) aren't hidden behind it
-            splash.Topmost = false;
-            splash.SetProgress(1.0, "Ready!");
+            // Close splash screen with fade animation. FadeOutAndClose drops Topmost
+            // first (on the splash's own thread) so deferred dialogs (What's New,
+            // Age Verification) aren't hidden behind it.
+            splash?.SetProgress(1.0, "Ready!");
 
             // Activate the main window before AND after the splash fades. Show()
             // alone doesn't reliably foreground the window because the splash
             // was Topmost during init and Windows can give focus to whatever
             // was foreground before launch (Explorer, prior app) when the
             // splash closes. Topmost-pulse is the standard WPF workaround for
-            // ForegroundLockTimeout blocking Activate().
+            // ForegroundLockTimeout blocking Activate(). The after-close callback
+            // fires on the SPLASH thread, so marshal back to the main dispatcher.
             ForceWindowToFront(mainWindow);
-            splash.Closed += (_, _) => ForceWindowToFront(mainWindow);
-
-            splash.FadeOutAndClose();
+            splash?.FadeOutAndClose(() => Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { ForceWindowToFront(mainWindow); }
+                catch (Exception ex) { Logger?.Debug("Post-splash ForceWindowToFront failed: {Error}", ex.Message); }
+            })));
             _splash = null;
+
+            // First dispatcher pump = startup is over: from here on, single-instance acks must
+            // come from the dispatcher itself so a wedged message loop is detected again.
+            Dispatcher.BeginInvoke(new Action(() => _startupPhase = false));
 
             // Age verification gate (first launch only, deferred to ensure splash is fully closed)
             if (Settings?.Current?.HasAcceptedAgeVerification != true)
@@ -1813,7 +1868,7 @@ namespace ConditioningControlPanel
                 var s = Settings?.Current;
                 if (s != null && s.AutonomyResumeOnStartup && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
                 {
-                    var hasPatreonAccess = s.PatreonTier >= 1 || Patreon?.IsWhitelisted == true;
+                    var hasPatreonAccess = Patreon?.HasPremiumAccess == true;
                     if (hasPatreonAccess && Autonomy?.IsEnabled != true)
                     {
                         Autonomy?.Start();

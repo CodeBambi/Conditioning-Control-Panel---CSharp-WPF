@@ -174,6 +174,21 @@ namespace ConditioningControlPanel.Services
         public bool IsPlaying => _videoPlaying;
 
         /// <summary>
+        /// Whether any video windows still exist. Stays true through teardown after
+        /// <see cref="IsPlaying"/> has already flipped false — use this when something
+        /// must not be shown until the fullscreen surfaces are really gone (#462).
+        /// </summary>
+        public bool HasOpenWindows => _windows.Count > 0;
+
+        /// <summary>
+        /// True while CloseAll is tearing windows down. It pumps the dispatcher at Background
+        /// priority while it runs, so anything that must not execute re-entrantly inside that
+        /// pump (e.g. a modal dialog) should wait this out — the flag always clears in a
+        /// finally, so waiting terminates (#462).
+        /// </summary>
+        public bool IsCleaningUp => _isCleaningUp;
+
+        /// <summary>
         /// Filename (without extension) of the most recently started video. Stays set after
         /// the video ends so VideoEnded handlers can pass it to companion AI reactions.
         /// </summary>
@@ -652,6 +667,15 @@ namespace ConditioningControlPanel.Services
             if (ChaosGifCascadeOverlay.IsRaining)
             {
                 App.Logger?.Information("VideoService: TriggerVideo dropped - chaos gif cascade in flight");
+                // When this trigger was DEQUEUED, the queue already claimed the Video slot for
+                // us — dropping without releasing would block every interaction for the
+                // 5-minute stuck window. Safe on non-dequeue paths: current==Video with no
+                // video playing only happens right after a dequeue.
+                if (!_videoPlaying &&
+                    App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.Video)
+                {
+                    App.InteractionQueue.Complete(InteractionQueueService.InteractionType.Video);
+                }
                 return;
             }
 

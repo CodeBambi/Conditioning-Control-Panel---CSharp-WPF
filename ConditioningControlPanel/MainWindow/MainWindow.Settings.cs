@@ -353,7 +353,7 @@ namespace ConditioningControlPanel
             UpdateSliderTexts();
 
             // Start autonomy service if it was enabled (works independently of engine)
-            var hasPatreonAccess = s.PatreonTier >= 1 || App.Patreon?.IsWhitelisted == true;
+            var hasPatreonAccess = App.Patreon?.HasPremiumAccess == true;
             if (hasPatreonAccess && s.AutonomyModeEnabled && s.AutonomyConsentGiven)
             {
                 App.Autonomy?.Start();

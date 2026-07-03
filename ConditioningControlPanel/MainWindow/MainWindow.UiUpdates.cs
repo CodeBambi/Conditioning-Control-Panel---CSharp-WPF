@@ -644,8 +644,14 @@ namespace ConditioningControlPanel
                 if (SettingsTab.CardBouncingText != null) SettingsTab.CardBouncingText.IsLocked = false;
                 if (SettingsTab.CardMindWipe != null) SettingsTab.CardMindWipe.IsLocked = false;
 
-                // Lab Tab: Requires Patreon T2 / whitelist
-                var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2 || (App.Settings?.Current?.PatreonTier ?? 0) >= 2;
+                // Lab Tab: Requires Patreon T2 / whitelist. Cover every entitlement source —
+                // this gate is destructive below (force-clears AllowAiToControlEffects and
+                // SAVES), so a stale-negative here wipes a legit user's setting: live tier,
+                // server-linked tier (Discord login), whitelist, and SubscribeStar T2.
+                var labUnlocked = App.Patreon?.CurrentTier >= PatreonTier.Level2
+                    || (App.Settings?.Current?.PatreonTier ?? 0) >= 2
+                    || App.Patreon?.IsWhitelisted == true
+                    || App.SubscribeStar?.CurrentTier >= PatreonTier.Level2;
                 if (LabTab.LabSmokescreen != null) LabTab.LabSmokescreen.Visibility = labUnlocked ? Visibility.Collapsed : Visibility.Visible;
 
                 // AI effect control lives in the Lab — force-disable for non-T2 users so settings can't outlive the entitlement.

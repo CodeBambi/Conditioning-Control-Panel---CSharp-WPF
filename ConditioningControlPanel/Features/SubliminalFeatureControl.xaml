@@ -110,6 +110,27 @@
             </StackPanel>
         </Border>
 
+        <!-- Solid mode: shared-host renderer, mirrors the Flashes/Bubble Pop toggle -->
+        <Border Background="{DynamicResource SurfaceBgBrush}"
+                BorderBrush="{DynamicResource GlassBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="Solid mode (game friendly)" Foreground="White" FontSize="14" FontWeight="SemiBold"/>
+                    <TextBlock Text="Draws subliminal text on one shared overlay instead of a dedicated window per screen - lighter on the renderer and friendlier to fullscreen games. Ignored while 'steal focus' is on. Applies to the next flash."
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,2,0,0"/>
+                </StackPanel>
+                <CheckBox Grid.Column="1" x:Name="ChkSolidMode"
+                          Style="{StaticResource ToggleStyle}" VerticalAlignment="Center"
+                          Checked="ChkSolidMode_Changed" Unchecked="ChkSolidMode_Changed"/>
+            </Grid>
+        </Border>
+
         <!-- Actions -->
         <Grid>
             <Grid.ColumnDefinitions>

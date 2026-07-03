@@ -126,6 +126,14 @@ namespace ConditioningControlPanel
             nodePositions["reroll_addict"] = (startX + colSpacing * 5, path3Y);
             nodePositions["perfect_bimbo_week"] = (startX + colSpacing * 6, path3Y);
 
+            // TIER 6 (ANALYTICS ROW): single row after all three paths end, vertically
+            // centered — the three paths visually converge into the Ditzy Data PRO chain
+            nodePositions["ditzy_data_pro"] = (startX + colSpacing * 7, path2Y);
+            nodePositions["season_rewind"] = (startX + colSpacing * 8, path2Y);
+            nodePositions["bestie_records"] = (startX + colSpacing * 9, path2Y);
+            nodePositions["brain_drain_report"] = (startX + colSpacing * 10, path2Y);
+            nodePositions["certified_data_bimbo"] = (startX + colSpacing * 11, path2Y);
+
             // Draw connection lines first (so they're behind nodes)
             DrawConnectionLines(nodePositions);
 
@@ -188,6 +196,28 @@ namespace ConditioningControlPanel
                 FontStyle = FontStyles.Italic,
                 Margin = new Thickness(0, 2, 0, 0)
             });
+            // Capstone badge (certified_data_bimbo owned)
+            if (App.SkillTree?.HasSkill("certified_data_bimbo") == true)
+            {
+                var certifiedChip = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromRgb(70, 55, 25)),
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(255, 200, 80)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(10),
+                    Padding = new Thickness(8, 3, 8, 3),
+                    Margin = new Thickness(0, 6, 0, 0),
+                    HorizontalAlignment = HorizontalAlignment.Left
+                };
+                certifiedChip.Child = new TextBlock
+                {
+                    Text = "🎓 " + Loc.Get("skill_certified_data_bimbo_name"),
+                    Foreground = new SolidColorBrush(Color.FromRgb(255, 200, 80)),
+                    FontSize = 10,
+                    FontWeight = FontWeights.Bold
+                };
+                titleStack.Children.Add(certifiedChip);
+            }
             mainStack.Children.Add(titleStack);
 
             // Sparkle Points display
@@ -227,6 +257,59 @@ namespace ConditioningControlPanel
             pointsStack.Children.Add(pointsInfoStack);
             pointsBorder.Child = pointsStack;
             mainStack.Children.Add(pointsBorder);
+
+            // Prestige row — lifetime sparkle points SPENT (monotonic, survives seasons).
+            // Re-buying seasonal nodes raises it: number always goes up.
+            var lifetimeSpent = App.Achievements?.Progress?.LifetimeSkillPointsSpent ?? 0;
+            var prestigeRank = 1 + (int)(lifetimeSpent / 100);
+            var prestigeBorder = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(52, 44, 28)),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(15, 6, 15, 6),
+                Margin = new Thickness(0, 0, 0, 15)
+            };
+            var prestigeStack = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            prestigeStack.Children.Add(new TextBlock
+            {
+                Text = "✦",
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 200, 80)),
+                FontSize = 18,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 10, 0)
+            });
+            var prestigeInfoStack = new StackPanel();
+            prestigeInfoStack.Children.Add(new TextBlock
+            {
+                Text = Loc.Get("label_prestige"),
+                Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                FontSize = 10
+            });
+            var prestigeValueStack = new StackPanel { Orientation = Orientation.Horizontal };
+            prestigeValueStack.Children.Add(new TextBlock
+            {
+                Text = lifetimeSpent.ToString("N0"),
+                Foreground = new SolidColorBrush(Color.FromRgb(255, 200, 80)),
+                FontSize = 16,
+                FontWeight = FontWeights.Bold,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            prestigeValueStack.Children.Add(new TextBlock
+            {
+                Text = "  ✦ " + Loc.GetF("label_prestige_rank", prestigeRank),
+                Foreground = new SolidColorBrush(Color.FromRgb(210, 180, 120)),
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            prestigeInfoStack.Children.Add(prestigeValueStack);
+            prestigeStack.Children.Add(prestigeInfoStack);
+            prestigeBorder.Child = prestigeStack;
+            prestigeBorder.ToolTip = Loc.Get("tooltip_prestige");
+            mainStack.Children.Add(prestigeBorder);
 
             // Ditzy Data Stats Toggle Button (only show if ditzy_data skill is unlocked)
             var hasDitzyData = App.SkillTree?.HasSkill("ditzy_data") == true;
@@ -386,6 +469,13 @@ namespace ConditioningControlPanel
             if (hasDitzyData)
                 mainStack.Children.Add(detailedStatsBorder);
 
+            // Ditzy Data PRO analytics — each Tier 6 node unlocks one expander panel.
+            // Content is built lazily on first expand (Season Rewind reads snapshots from disk).
+            AddProSection(mainStack, "ditzy_data_pro", "📈", "label_pro_lifetime_title", BuildProLifetimePanel);
+            AddProSection(mainStack, "season_rewind", "⏪", "label_pro_rewind_title", BuildSeasonRewindPanel);
+            AddProSection(mainStack, "bestie_records", "🏅", "label_pro_bestie_title", BuildBestieRecordsPanel);
+            AddProSection(mainStack, "brain_drain_report", "🧠", "label_pro_braindrain_title", BuildBrainDrainPanel);
+
             // Stats section
             var statsBorder = new Border
             {
@@ -493,7 +583,17 @@ namespace ConditioningControlPanel
                 mainStack.Children.Add(bonusesWrap);
             }
 
-            headerBorder.Child = mainStack;
+            // The header column can outgrow the fixed-height canvas (stats + analytics
+            // expanders), and the tree only scrolls horizontally — so the header scrolls
+            // its own content vertically. The tab's PreviewMouseWheel handler yields to
+            // this viewer when the cursor is over it.
+            headerBorder.Child = new ScrollViewer
+            {
+                Content = mainStack,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                MaxHeight = 430
+            };
             EnhancementsTab.SkillTreeCanvas.Children.Add(headerBorder);
         }
 
@@ -599,7 +699,7 @@ namespace ConditioningControlPanel
                 Color.FromArgb(85, 200, 160, 255),    // lavender
             };
 
-            for (int i = 0; i < 35; i++)
+            for (int i = 0; i < 55; i++)
             {
                 var size = 3.0 + Random.Shared.NextDouble() * 5.0; // 3-8px
                 var ellipse = new System.Windows.Shapes.Ellipse
@@ -610,7 +710,7 @@ namespace ConditioningControlPanel
                     Opacity = 0
                 };
 
-                Canvas.SetLeft(ellipse, Random.Shared.NextDouble() * 2400);
+                Canvas.SetLeft(ellipse, Random.Shared.NextDouble() * 3760);
                 Canvas.SetTop(ellipse, Random.Shared.NextDouble() * 460);
                 Canvas.SetZIndex(ellipse, -1);
 
@@ -643,12 +743,17 @@ namespace ConditioningControlPanel
                 ("pink_hours", "sparkle_boost_1"),
                 ("pink_hours", "good_girl_streak"),
 
-                // PATH 1 (TOP): Linear progression
+                // PATH 1 (TOP): Linear progression + Tier 6 analytics chain
                 ("ditzy_data", "hive_mind"),
                 ("hive_mind", "trophy_case"),
                 ("trophy_case", "popular_girl"),
                 ("popular_girl", "quest_refresh"),
                 ("quest_refresh", "better_quests"),
+                ("better_quests", "ditzy_data_pro"),
+                ("ditzy_data_pro", "season_rewind"),
+                ("season_rewind", "bestie_records"),
+                ("bestie_records", "brain_drain_report"),
+                ("brain_drain_report", "certified_data_bimbo"),
 
                 // PATH 2 (MIDDLE): Linear progression
                 ("sparkle_boost_1", "sparkle_boost_2"),
@@ -853,6 +958,8 @@ namespace ConditioningControlPanel
             try
             {
                 var skillImageSource = Services.ModResourceResolver.ResolveImage($"skills/{skill.Id}.png");
+                if (skillImageSource == null)
+                    throw new FileNotFoundException($"skills/{skill.Id}.png"); // no art yet — use the gradient fallback below
                 var skillImage = new System.Windows.Controls.Image
                 {
                     Source = skillImageSource,
@@ -912,12 +1019,16 @@ namespace ConditioningControlPanel
             Grid.SetRow(nameLabel, 1);
             contentGrid.Children.Add(nameLabel);
 
-            // Row 3: Cost/Status Button
-            var buttonBg = isUnlocked ? Color.FromRgb(100, 255, 150) :
+            // Row 3: Cost/Status Button. Owned permanent nodes get a gold "FOREVER" badge —
+            // they survive the season reset; owned mechanical nodes keep the green OWNED look
+            // (and reset monthly).
+            var buttonBg = isUnlocked && skill.IsPermanent ? Color.FromRgb(255, 200, 80) :
+                          isUnlocked ? Color.FromRgb(100, 255, 150) :
                           canPurchase ? (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentColorHex() ?? "#FF69B4") :
                           Color.FromRgb(40, 35, 50);
 
-            var buttonText = isUnlocked ? $"💎{skill.Cost} {Loc.Get("label_skill_owned")}" :
+            var buttonText = isUnlocked && skill.IsPermanent ? $"💎{skill.Cost} {Loc.Get("label_skill_permanent")}" :
+                            isUnlocked ? $"💎{skill.Cost} {Loc.Get("label_skill_owned")}" :
                             canPurchase ? $"💎 {skill.Cost}" :
                             $"🔒 {skill.Cost}";
 
@@ -959,6 +1070,7 @@ namespace ConditioningControlPanel
                 2 => (Color.FromRgb(100, 50, 80), Color.FromRgb(60, 30, 50)),   // Pink - Core
                 3 => (Color.FromRgb(80, 60, 100), Color.FromRgb(45, 35, 65)),   // Deep Purple - Specialization
                 4 => (Color.FromRgb(100, 40, 90), Color.FromRgb(55, 25, 50)),   // Hot Pink - Mastery
+                6 => (Color.FromRgb(110, 85, 40), Color.FromRgb(60, 45, 25)),   // Gold - Ditzy Data PRO
                 _ => (Color.FromRgb(60, 40, 80), Color.FromRgb(35, 25, 50))     // Default
             };
 
@@ -973,6 +1085,707 @@ namespace ConditioningControlPanel
                 }
             };
         }
+
+        #region Ditzy Data PRO analytics panels
+
+        /// <summary>
+        /// Adds one PRO expander (toggle button + collapsed panel) to the tree header,
+        /// gated on owning the given Tier 6 node. Mirrors the Ditzy Data expander pattern.
+        /// Panel content is built lazily on first expand (Season Rewind reads disk snapshots).
+        /// </summary>
+        private void AddProSection(StackPanel parent, string skillId, string emoji, string titleLocKey, Func<UIElement> contentFactory)
+        {
+            if (App.SkillTree?.HasSkill(skillId) != true) return;
+
+            var gold = Color.FromRgb(255, 200, 80);
+
+            var button = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(60, 50, 30)),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(0, 0, 0, 10),
+                Cursor = Cursors.Hand,
+                BorderBrush = new SolidColorBrush(gold),
+                BorderThickness = new Thickness(1)
+            };
+            var buttonStack = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+            var arrow = new TextBlock
+            {
+                Text = " ▼",
+                Foreground = new SolidColorBrush(Color.FromRgb(176, 176, 176)),
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            buttonStack.Children.Add(new TextBlock { Text = emoji + " ", FontSize = 12, VerticalAlignment = VerticalAlignment.Center });
+            buttonStack.Children.Add(new TextBlock
+            {
+                Text = Loc.Get(titleLocKey),
+                Foreground = new SolidColorBrush(gold),
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            buttonStack.Children.Add(arrow);
+            button.Child = buttonStack;
+
+            // No inner scroller/height cap: the panel expands fully and the header's own
+            // vertical ScrollViewer (see CreateSkillTreeHeader) handles the overflow —
+            // one scrollbar for the whole column.
+            var panel = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(22, 22, 42)),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 0, 0, 15),
+                Visibility = Visibility.Collapsed
+            };
+
+            var built = false;
+            button.MouseLeftButtonDown += (s, e) =>
+            {
+                if (!built)
+                {
+                    built = true;
+                    try
+                    {
+                        panel.Child = contentFactory();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "PRO panel build failed: {Skill}", skillId);
+                        panel.Child = new TextBlock { Text = "—", Foreground = Brushes.Gray };
+                    }
+                }
+                var isCollapsed = panel.Visibility == Visibility.Collapsed;
+                panel.Visibility = isCollapsed ? Visibility.Visible : Visibility.Collapsed;
+                arrow.Text = isCollapsed ? " ▲" : " ▼";
+            };
+
+            parent.Children.Add(button);
+            parent.Children.Add(panel);
+        }
+
+        /// <summary>Minutes → "H.h h" / "M m" using the existing time loc units.</summary>
+        private static string FormatProMinutes(double minutes) =>
+            minutes >= 60 ? $"{minutes / 60:F1} {Loc.Get("label_hrs")}" : $"{minutes:F0} {Loc.Get("label_min_abbrev")}";
+
+        private static TextBlock ProLabel(string text) => new()
+        {
+            Text = text,
+            Foreground = new SolidColorBrush(Color.FromRgb(140, 140, 140)),
+            FontSize = 9
+        };
+
+        private static TextBlock ProValue(string text) => new()
+        {
+            Text = text,
+            Foreground = new SolidColorBrush(Color.FromRgb(255, 255, 255)),
+            FontSize = 10,
+            FontWeight = FontWeights.Bold
+        };
+
+        // ---- chart primitives (single-series, app accent colors, ink-colored text) ----
+
+        private static readonly Color ChartInkDim = Color.FromRgb(140, 140, 140);
+        private static readonly Color ChartInk = Color.FromRgb(230, 230, 235);
+        private static readonly Color ChartBaseline = Color.FromRgb(58, 58, 85);
+        private static readonly Color ChartPink = Color.FromRgb(255, 105, 180);
+        private static readonly Color ChartGold = Color.FromRgb(255, 200, 80);
+        private static readonly Color ChartSurface = Color.FromRgb(22, 22, 42);   // panel bg — used as mark ring
+        private static readonly Color ChartCellIdle = Color.FromRgb(38, 38, 64);
+
+        /// <summary>
+        /// All seasons with data, oldest → newest (snapshots from disk + the live bucket),
+        /// capped to the most recent <paramref name="cap"/>.
+        /// </summary>
+        private List<(string Key, double Minutes, int Level, List<string> ActiveDays)> GetSeasonSeriesAscending(int cap = 12)
+        {
+            var result = new List<(string, double, int, List<string>)>();
+            var settings = App.Settings?.Current;
+            if (settings == null) return new();
+
+            foreach (var key in Services.SeasonRecapService.ListSeasonKeys().Take(24))
+            {
+                var snap = Services.SeasonRecapService.Load(key);
+                if (snap == null) continue;
+                result.Add((snap.SeasonKey, snap.SeasonMinutes, snap.PeakLevel, snap.ActiveDays ?? new List<string>()));
+            }
+
+            var liveKey = settings.SeasonStatsSeason ?? Services.SeasonRecapService.CurrentSeasonKey;
+            if (!result.Any(r => r.Item1 == liveKey))
+                result.Add((liveKey, settings.SeasonConditioningMinutes,
+                    Math.Max(settings.SeasonPeakLevel, settings.PlayerLevel),
+                    new List<string>(settings.SeasonActiveDays)));
+
+            return result
+                .OrderBy(r => r.Item1, StringComparer.Ordinal)
+                .TakeLast(cap)
+                .Select(r => ((string)r.Item1, (double)r.Item2, (int)r.Item3, (List<string>)r.Item4))
+                .ToList();
+        }
+
+        private static string SeasonMonthLabel(string seasonKey)
+        {
+            if (Models.SeasonNumbering.TryParse(seasonKey, out var y, out var m))
+                return new DateTime(y, m, 1).ToString("MMM", System.Globalization.CultureInfo.InvariantCulture).ToLowerInvariant();
+            return seasonKey;
+        }
+
+        /// <summary>
+        /// Minutes-per-season bar chart: thin pink bars, rounded data ends, 2px gaps,
+        /// month labels in muted ink, values only on the max and newest bars, tooltip per bar.
+        /// </summary>
+        private UIElement BuildSeasonBarChart(List<(string Key, double Minutes, int Level, List<string> ActiveDays)> series)
+        {
+            const double plotH = 78, barW = 20, gap = 10, labelH = 14, valueH = 13;
+            var maxVal = Math.Max(1.0, series.Max(s => s.Minutes));
+            var maxIdx = series.FindIndex(s => s.Minutes == series.Max(x => x.Minutes));
+
+            var canvas = new Canvas
+            {
+                Height = valueH + plotH + labelH,
+                Width = series.Count * (barW + gap) - gap,
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+
+            // recessive baseline
+            canvas.Children.Add(new System.Windows.Shapes.Line
+            {
+                X1 = 0, X2 = canvas.Width, Y1 = valueH + plotH, Y2 = valueH + plotH,
+                Stroke = new SolidColorBrush(ChartBaseline), StrokeThickness = 1
+            });
+
+            for (int i = 0; i < series.Count; i++)
+            {
+                var s = series[i];
+                var h = Math.Max(2, plotH * s.Minutes / maxVal);
+                var x = i * (barW + gap);
+
+                var bar = new Border
+                {
+                    Width = barW,
+                    Height = h,
+                    Background = new SolidColorBrush(ChartPink),
+                    CornerRadius = new CornerRadius(3, 3, 0, 0),
+                    ToolTip = $"{s.Key} · {FormatProMinutes(s.Minutes)}"
+                };
+                Canvas.SetLeft(bar, x);
+                Canvas.SetTop(bar, valueH + plotH - h);
+                canvas.Children.Add(bar);
+
+                // selective direct labels: max bar + newest bar only, in ink (not series color)
+                if (i == maxIdx || i == series.Count - 1)
+                {
+                    var value = new TextBlock
+                    {
+                        Text = FormatProMinutes(s.Minutes),
+                        Foreground = new SolidColorBrush(ChartInk),
+                        FontSize = 8.5,
+                        FontWeight = FontWeights.SemiBold
+                    };
+                    value.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    Canvas.SetLeft(value, x + barW / 2 - value.DesiredSize.Width / 2);
+                    Canvas.SetTop(value, valueH + plotH - h - 12);
+                    canvas.Children.Add(value);
+                }
+
+                var month = new TextBlock
+                {
+                    Text = SeasonMonthLabel(s.Key),
+                    Foreground = new SolidColorBrush(ChartInkDim),
+                    FontSize = 8.5
+                };
+                month.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                Canvas.SetLeft(month, x + barW / 2 - month.DesiredSize.Width / 2);
+                Canvas.SetTop(month, valueH + plotH + 2);
+                canvas.Children.Add(month);
+            }
+
+            return canvas;
+        }
+
+        /// <summary>
+        /// Peak-level-per-season sparkline: 2px gold line, 8px dots with a 2px surface ring,
+        /// only the newest point carries a value label, tooltip per dot.
+        /// </summary>
+        private UIElement BuildLevelSparkline(List<(string Key, double Minutes, int Level, List<string> ActiveDays)> series)
+        {
+            const double plotH = 52, stepW = 30, padTop = 14, labelH = 14, dotR = 4;
+            var pts = series.Where(s => s.Level > 0).ToList();
+            if (pts.Count == 0)
+                return new TextBlock { Text = "—", Foreground = new SolidColorBrush(ChartInkDim), FontSize = 9 };
+
+            var maxLevel = Math.Max(1, pts.Max(p => p.Level));
+            var canvas = new Canvas
+            {
+                Height = padTop + plotH + labelH,
+                Width = Math.Max(stepW, (pts.Count - 1) * stepW) + dotR * 2 + 2,
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+
+            double X(int i) => dotR + 1 + i * stepW;
+            double Y(int level) => padTop + plotH - plotH * level / maxLevel;
+
+            if (pts.Count > 1)
+            {
+                var line = new System.Windows.Shapes.Polyline
+                {
+                    Stroke = new SolidColorBrush(ChartGold),
+                    StrokeThickness = 2,
+                    StrokeLineJoin = PenLineJoin.Round
+                };
+                for (int i = 0; i < pts.Count; i++)
+                    line.Points.Add(new Point(X(i), Y(pts[i].Level)));
+                canvas.Children.Add(line);
+            }
+
+            for (int i = 0; i < pts.Count; i++)
+            {
+                var dot = new System.Windows.Shapes.Ellipse
+                {
+                    Width = dotR * 2, Height = dotR * 2,
+                    Fill = new SolidColorBrush(ChartGold),
+                    Stroke = new SolidColorBrush(ChartSurface),
+                    StrokeThickness = 2,
+                    ToolTip = $"{pts[i].Key} · {Loc.Get("label_rewind_level")} {pts[i].Level}"
+                };
+                Canvas.SetLeft(dot, X(i) - dotR);
+                Canvas.SetTop(dot, Y(pts[i].Level) - dotR);
+                canvas.Children.Add(dot);
+
+                var month = new TextBlock
+                {
+                    Text = SeasonMonthLabel(pts[i].Key),
+                    Foreground = new SolidColorBrush(ChartInkDim),
+                    FontSize = 8.5
+                };
+                month.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                Canvas.SetLeft(month, X(i) - month.DesiredSize.Width / 2);
+                Canvas.SetTop(month, padTop + plotH + 2);
+                canvas.Children.Add(month);
+
+                if (i == pts.Count - 1)
+                {
+                    var value = new TextBlock
+                    {
+                        Text = pts[i].Level.ToString(),
+                        Foreground = new SolidColorBrush(ChartInk),
+                        FontSize = 8.5,
+                        FontWeight = FontWeights.SemiBold
+                    };
+                    value.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    Canvas.SetLeft(value, X(i) - value.DesiredSize.Width / 2);
+                    Canvas.SetTop(value, Y(pts[i].Level) - dotR - 13);
+                    canvas.Children.Add(value);
+                }
+            }
+
+            return canvas;
+        }
+
+        /// <summary>
+        /// GitHub-style activity heatmap: one mini-grid per month (weeks as columns,
+        /// Mon–Sun as rows), pink = active day, dim = inactive, tooltip per cell.
+        /// Months come from the live bucket + snapshot active_days (schema 2+).
+        /// </summary>
+        private UIElement BuildActivityHeatmap()
+        {
+            const double cell = 11, cellGap = 2;
+            // Months without per-day data (schema-1 snapshots only stored the count) are
+            // skipped — an all-dim grid would read as "zero activity" when it wasn't.
+            var months = GetSeasonSeriesAscending(6)
+                .Where(s => s.ActiveDays.Count > 0 && Models.SeasonNumbering.TryParse(s.Key, out _, out _))
+                .ToList();
+            if (months.Count == 0)
+                return new TextBlock { Text = "—", Foreground = new SolidColorBrush(ChartInkDim), FontSize = 9 };
+
+            var strip = new StackPanel { Orientation = Orientation.Horizontal };
+            foreach (var m in months)
+            {
+                Models.SeasonNumbering.TryParse(m.Key, out var year, out var month);
+                var daysInMonth = DateTime.DaysInMonth(year, month);
+                var active = new HashSet<string>(m.ActiveDays);
+                // Monday-first row index; weeks advance by column (GitHub layout)
+                var firstDow = ((int)new DateTime(year, month, 1).DayOfWeek + 6) % 7;
+                var weeks = (int)Math.Ceiling((firstDow + daysInMonth) / 7.0);
+
+                var monthCanvas = new Canvas
+                {
+                    Width = weeks * (cell + cellGap) - cellGap,
+                    Height = 7 * (cell + cellGap) - cellGap
+                };
+                for (int day = 1; day <= daysInMonth; day++)
+                {
+                    var slot = firstDow + day - 1;
+                    var col = slot / 7;
+                    var row = slot % 7;
+                    var dateStr = $"{year:D4}-{month:D2}-{day:D2}";
+                    var isActive = active.Contains(dateStr);
+                    var box = new Border
+                    {
+                        Width = cell, Height = cell,
+                        CornerRadius = new CornerRadius(2),
+                        Background = new SolidColorBrush(isActive ? ChartPink : ChartCellIdle),
+                        ToolTip = dateStr
+                    };
+                    Canvas.SetLeft(box, col * (cell + cellGap));
+                    Canvas.SetTop(box, row * (cell + cellGap));
+                    monthCanvas.Children.Add(box);
+                }
+
+                var monthStack = new StackPanel { Margin = new Thickness(0, 0, 10, 0) };
+                monthStack.Children.Add(monthCanvas);
+                monthStack.Children.Add(new TextBlock
+                {
+                    Text = SeasonMonthLabel(m.Key),
+                    Foreground = new SolidColorBrush(ChartInkDim),
+                    FontSize = 8.5,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, 3, 0, 0)
+                });
+                strip.Children.Add(monthStack);
+            }
+
+            var scroller = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Content = strip
+            };
+            return scroller;
+        }
+
+        /// <summary>Muted section caption used above each PRO chart.</summary>
+        private static TextBlock ProChartTitle(string locKey) => new()
+        {
+            Text = Loc.Get(locKey),
+            Foreground = new SolidColorBrush(ChartInkDim),
+            FontSize = 9,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 4)
+        };
+
+        /// <summary>PRO Lifetime Dashboard — every all-time counter the app tracks, 3-column grid.</summary>
+        private UIElement BuildProLifetimePanel()
+        {
+            var progress = App.Achievements?.Progress;
+            var settings = App.Settings?.Current;
+            var stack = new StackPanel();
+            if (progress == null || settings == null) return stack;
+
+            // Activity heatmap calendar (months from live bucket + snapshot active_days)
+            stack.Children.Add(ProChartTitle("label_heatmap_title"));
+            stack.Children.Add(BuildActivityHeatmap());
+            stack.Children.Add(new Border { Height = 10 });
+
+            var grid = new Grid();
+            for (int c = 0; c < 3; c++)
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            int row = -1, col = 0;
+            void Add(string labelKey, string value)
+            {
+                if (col == 0)
+                {
+                    grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    row++;
+                }
+                var cell = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
+                cell.Children.Add(ProLabel(Loc.Get(labelKey)));
+                cell.Children.Add(ProValue(value));
+                Grid.SetColumn(cell, col);
+                Grid.SetRow(cell, row);
+                grid.Children.Add(cell);
+                col = (col + 1) % 3;
+            }
+
+            Add("label_pro_total_time", FormatProMinutes(settings.TotalConditioningMinutes));
+            Add("label_total_xp_earned_stat", progress.TotalXPEarned.ToString("N0"));
+            Add("label_skill_points_earned", progress.TotalSkillPointsEarned.ToString("N0"));
+
+            Add("label_pro_points_spent", progress.LifetimeSkillPointsSpent.ToString("N0"));
+            Add("label_pro_highest_level", settings.HighestLevelEver.ToString("N0"));
+            Add("label_pro_highest_streak", settings.HighestStreak.ToString("N0"));
+
+            Add("label_pro_chaos_rounds", progress.EnhancementsPlayed.ToString("N0"));
+            Add("label_pro_deeper_time", FormatProMinutes(progress.DeeperMinutes));
+            Add("label_pro_quizzes", progress.QuizzesPassed.ToString("N0"));
+
+            Add("label_pro_keyword_triggers", progress.KeywordTriggersFired.ToString("N0"));
+            Add("label_pro_blinks", progress.BlinkTrainerBlinks.ToString("N0"));
+            Add("label_pro_gaze_pops", progress.GazePops.ToString("N0"));
+
+            Add("label_pro_fastest_lock", progress.FastestLockCardSeconds < double.MaxValue
+                ? $"{progress.FastestLockCardSeconds:F1}s" : "—");
+            Add("label_pro_night_uses", settings.NightTimeUsageCount.ToString("N0"));
+            Add("label_pro_morning_uses", settings.EarlyMorningUsageCount.ToString("N0"));
+
+            stack.Children.Add(grid);
+            return stack;
+        }
+
+        /// <summary>
+        /// Season Rewind — one row per season (live bucket first, then disk snapshots, newest
+        /// first). The time column carries a ▲/▼ delta vs the season before it. The Spent
+        /// column appears once certified_data_bimbo is owned (its capstone perk).
+        /// </summary>
+        private UIElement BuildSeasonRewindPanel()
+        {
+            var settings = App.Settings?.Current;
+            var stack = new StackPanel();
+            if (settings == null) return stack;
+
+            // Trend charts above the table (one measure per chart — never dual-axis)
+            var chartSeries = GetSeasonSeriesAscending(10);
+            if (chartSeries.Count > 0)
+            {
+                stack.Children.Add(ProChartTitle("label_chart_time_per_season"));
+                stack.Children.Add(BuildSeasonBarChart(chartSeries));
+                stack.Children.Add(new Border { Height = 8 });
+                if (chartSeries.Any(s => s.Level > 0))
+                {
+                    stack.Children.Add(ProChartTitle("label_chart_level_per_season"));
+                    stack.Children.Add(BuildLevelSparkline(chartSeries));
+                    stack.Children.Add(new Border { Height = 8 });
+                }
+            }
+
+            var showSpent = App.SkillTree?.HasSkill("certified_data_bimbo") == true;
+
+            // (key, minutes, sessions, days, streak, pct, level, spent, isLive, hasSchema2)
+            var rows = new List<(string Key, double Minutes, int Sessions, int Days, int Streak, int Pct, int Level, int Spent, bool IsLive, bool HasV2)>();
+
+            var liveKey = settings.SeasonStatsSeason ?? Services.SeasonRecapService.CurrentSeasonKey;
+            rows.Add((liveKey,
+                settings.SeasonConditioningMinutes,
+                settings.SeasonSessionsStarted,
+                settings.SeasonActiveDays.Count,
+                settings.SeasonPeakStreak,
+                Services.SeasonRecapService.PercentileFor(settings.SeasonPeakRank, settings.SeasonPeakRankTotal),
+                Math.Max(settings.SeasonPeakLevel, settings.PlayerLevel),
+                settings.SeasonPointsSpent,
+                true, true));
+
+            foreach (var key in Services.SeasonRecapService.ListSeasonKeys().Take(8))
+            {
+                if (key == liveKey) continue; // don't double-list a desynced bucket
+                var snap = Services.SeasonRecapService.Load(key);
+                if (snap == null) continue;
+                rows.Add((snap.SeasonKey, snap.SeasonMinutes, snap.SessionCount, snap.DaysActive,
+                    snap.LongestStreak, snap.Percentile, snap.PeakLevel, snap.PointsSpentSeason,
+                    false, snap.Schema >= 2));
+            }
+
+            var colCount = showSpent ? 8 : 7;
+            var grid = new Grid();
+            for (int c = 0; c < colCount; c++)
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            void AddCell(UIElement el, int r, int c)
+            {
+                Grid.SetRow(el, r);
+                Grid.SetColumn(el, c);
+                grid.Children.Add(el);
+            }
+
+            // Header row
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var headers = new List<string> {
+                "label_rewind_season", "label_rewind_time", "label_rewind_sessions", "label_rewind_days",
+                "label_rewind_streak", "label_rewind_top", "label_rewind_level" };
+            if (showSpent) headers.Add("label_rewind_spent");
+            for (int c = 0; c < headers.Count; c++)
+                AddCell(ProLabel(Loc.Get(headers[c])), 0, c);
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var r = rows[i];
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                var gridRow = i + 1;
+
+                var seasonText = ProValue(r.Key + (r.IsLive ? " •" : ""));
+                if (r.IsLive) seasonText.Foreground = new SolidColorBrush(Color.FromRgb(255, 200, 80));
+                AddCell(seasonText, gridRow, 0);
+
+                // Time with delta vs the season before it (next row down = older)
+                var timeStack = new StackPanel { Orientation = Orientation.Horizontal };
+                timeStack.Children.Add(ProValue(FormatProMinutes(r.Minutes)));
+                if (i + 1 < rows.Count)
+                {
+                    var older = rows[i + 1];
+                    if (r.Minutes > older.Minutes)
+                        timeStack.Children.Add(new TextBlock { Text = " ▲", Foreground = new SolidColorBrush(Color.FromRgb(100, 255, 150)), FontSize = 9 });
+                    else if (r.Minutes < older.Minutes)
+                        timeStack.Children.Add(new TextBlock { Text = " ▼", Foreground = new SolidColorBrush(Color.FromRgb(255, 110, 110)), FontSize = 9 });
+                }
+                AddCell(timeStack, gridRow, 1);
+
+                AddCell(ProValue(r.Sessions.ToString("N0")), gridRow, 2);
+                AddCell(ProValue(r.Days.ToString("N0")), gridRow, 3);
+                AddCell(ProValue(r.Streak.ToString("N0")), gridRow, 4);
+                AddCell(ProValue(r.Pct > 0 ? $"{r.Pct}%" : "—"), gridRow, 5);
+                AddCell(ProValue(r.HasV2 && r.Level > 0 ? r.Level.ToString("N0") : "—"), gridRow, 6);
+                if (showSpent)
+                    AddCell(ProValue(r.HasV2 ? r.Spent.ToString("N0") : "—"), gridRow, 7);
+            }
+
+            stack.Children.Add(grid);
+
+            if (rows.Count <= 1)
+            {
+                stack.Children.Add(new TextBlock
+                {
+                    Text = Loc.Get("label_rewind_empty"),
+                    Foreground = new SolidColorBrush(Color.FromRgb(140, 140, 140)),
+                    FontSize = 9,
+                    FontStyle = FontStyles.Italic,
+                    Margin = new Thickness(0, 6, 0, 0),
+                    TextWrapping = TextWrapping.Wrap
+                });
+            }
+
+            return stack;
+        }
+
+        /// <summary>Bestie Records — all-time personal bests, with the season they happened where known.</summary>
+        private UIElement BuildBestieRecordsPanel()
+        {
+            var progress = App.Achievements?.Progress;
+            var settings = App.Settings?.Current;
+            var stack = new StackPanel();
+            if (progress == null || settings == null) return stack;
+
+            void AddRecord(string labelKey, string value, string? when = null)
+            {
+                var rowGrid = new Grid { Margin = new Thickness(0, 0, 0, 5) };
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var label = ProLabel(Loc.Get(labelKey));
+                label.VerticalAlignment = VerticalAlignment.Center;
+                rowGrid.Children.Add(label);
+                var valueStack = new StackPanel { Orientation = Orientation.Horizontal };
+                valueStack.Children.Add(ProValue(value));
+                if (!string.IsNullOrEmpty(when))
+                    valueStack.Children.Add(new TextBlock
+                    {
+                        Text = $"  {when}",
+                        Foreground = new SolidColorBrush(Color.FromRgb(140, 140, 140)),
+                        FontSize = 9,
+                        VerticalAlignment = VerticalAlignment.Bottom
+                    });
+                Grid.SetColumn(valueStack, 1);
+                rowGrid.Children.Add(valueStack);
+                stack.Children.Add(rowGrid);
+            }
+
+            // Straight all-time records
+            AddRecord("label_longest_session", $"{progress.LongestSessionMinutes:F1} {Loc.Get("label_min_abbrev")}");
+            AddRecord("label_bc_best_streak", progress.BubbleCountBestStreak.ToString("N0"));
+            AddRecord("label_pro_fastest_lock", progress.FastestLockCardSeconds < double.MaxValue
+                ? $"{progress.FastestLockCardSeconds:F1}s" : "—");
+            AddRecord("label_pro_highest_streak", settings.HighestStreak.ToString("N0"));
+            AddRecord("label_pro_highest_level", settings.HighestLevelEver.ToString("N0"));
+
+            // Season-scoped records mined from snapshots + the live bucket
+            var seasons = new List<(string Key, double Minutes, int Rank, int Level)>
+            {
+                (settings.SeasonStatsSeason ?? Services.SeasonRecapService.CurrentSeasonKey,
+                 settings.SeasonConditioningMinutes, settings.SeasonPeakRank,
+                 Math.Max(settings.SeasonPeakLevel, settings.PlayerLevel))
+            };
+            foreach (var key in Services.SeasonRecapService.ListSeasonKeys().Take(24))
+            {
+                var snap = Services.SeasonRecapService.Load(key);
+                if (snap != null) seasons.Add((snap.SeasonKey, snap.SeasonMinutes, snap.PeakRank, snap.PeakLevel));
+            }
+
+            var bestTime = seasons.OrderByDescending(s => s.Minutes).First();
+            if (bestTime.Minutes > 0)
+                AddRecord("label_pro_best_season_time", FormatProMinutes(bestTime.Minutes), bestTime.Key);
+
+            var ranked = seasons.Where(s => s.Rank > 0).OrderBy(s => s.Rank).ToList();
+            if (ranked.Count > 0)
+                AddRecord("label_pro_best_rank", $"#{ranked[0].Rank}", ranked[0].Key);
+
+            var levelled = seasons.Where(s => s.Level > 0).OrderByDescending(s => s.Level).ToList();
+            if (levelled.Count > 0)
+                AddRecord("label_pro_best_season_level", levelled[0].Level.ToString("N0"), levelled[0].Key);
+
+            return stack;
+        }
+
+        /// <summary>
+        /// Brain Drain Report — per-feature engagement, this season and lifetime
+        /// (lifetime = live bucket + every snapshot on disk), with proportional bars.
+        /// </summary>
+        private UIElement BuildBrainDrainPanel()
+        {
+            var settings = App.Settings?.Current;
+            var stack = new StackPanel();
+            if (settings == null) return stack;
+
+            var lifetime = new Dictionary<string, int>(settings.SeasonFeatureUse);
+            foreach (var key in Services.SeasonRecapService.ListSeasonKeys().Take(24))
+            {
+                var snap = Services.SeasonRecapService.Load(key);
+                if (snap == null) continue;
+                foreach (var kv in snap.FeatureUse)
+                {
+                    lifetime.TryGetValue(kv.Key, out var n);
+                    lifetime[kv.Key] = n + kv.Value;
+                }
+            }
+
+            var maxLifetime = Math.Max(1, lifetime.Count > 0 ? lifetime.Values.Max() : 1);
+            var accentLight = (Color)ColorConverter.ConvertFromString(App.Mods?.GetAccentLightColorHex() ?? "#FFB6C1");
+
+            // Column headers
+            var headerGrid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+            var seasonHeader = ProLabel(Loc.Get("label_braindrain_season_lifetime"));
+            Grid.SetColumn(seasonHeader, 1);
+            headerGrid.Children.Add(ProLabel(Loc.Get("recap_badges_title")));
+            headerGrid.Children.Add(seasonHeader);
+            stack.Children.Add(headerGrid);
+
+            foreach (var def in Models.SeasonFeatureKeys.Catalog
+                         .OrderByDescending(d => lifetime.TryGetValue(d.Key, out var n) ? n : 0))
+            {
+                lifetime.TryGetValue(def.Key, out var life);
+                settings.SeasonFeatureUse.TryGetValue(def.Key, out var season);
+
+                var rowGrid = new Grid { Margin = new Thickness(0, 0, 0, 5) };
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+
+                var left = new StackPanel();
+                left.Children.Add(ProLabel(Loc.Get(def.LabelLocKey)));
+                left.Children.Add(new Border
+                {
+                    Height = 5,
+                    Width = 8 + 160.0 * life / maxLifetime,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    CornerRadius = new CornerRadius(2),
+                    Background = new SolidColorBrush(accentLight),
+                    Opacity = life > 0 ? 0.9 : 0.25,
+                    Margin = new Thickness(0, 2, 0, 0)
+                });
+                rowGrid.Children.Add(left);
+
+                var counts = ProValue($"{season:N0} / {life:N0}");
+                counts.VerticalAlignment = VerticalAlignment.Center;
+                Grid.SetColumn(counts, 1);
+                rowGrid.Children.Add(counts);
+
+                stack.Children.Add(rowGrid);
+            }
+
+            return stack;
+        }
+
+        #endregion
 
         /// <summary>
         /// Determines the cell dimensions of the skill grid images
@@ -1290,8 +2103,11 @@ namespace ConditioningControlPanel
                 var pointsLabel = (App.Mods?.GetPointsLabel() ?? Loc.Get("label_sparkle_points")).ToLower();
                 var flavorText = App.Mods?.MakeModAware(skill.FlavorText) ?? skill.LocalizedFlavorText;
                 var descText = App.Mods?.MakeModAware(skill.Description) ?? skill.LocalizedDescription;
+                var confirmMessage = Loc.GetF("msg_purchase_skill", skillName, skill.Cost, pointsLabel, flavorText, descText);
+                // Permanent nodes survive the season; mechanical nodes reset monthly — say so up front
+                confirmMessage += "\n\n" + Loc.Get(skill.IsPermanent ? "msg_skill_permanent_note" : "msg_skill_seasonal_note");
                 var result = MessageBox.Show(
-                    Loc.GetF("msg_purchase_skill", skillName, skill.Cost, pointsLabel, flavorText, descText),
+                    confirmMessage,
                     Loc.Get("dialog_purchase_enhancement"),
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);

@@ -99,7 +99,7 @@ namespace ConditioningControlPanel.Services
                 // Check level-based achievements immediately on level up
                 App.Achievements?.CheckLevelAchievements(settings.PlayerLevel);
 
-                // Award skill points for the enhancement tree (5 points per level)
+                // Award skill points for the enhancement tree (SkillTreeService.PointsPerLevel)
                 App.SkillTree?.OnLevelUp(settings.PlayerLevel);
 
                 // Skip cloud/network features in offline mode

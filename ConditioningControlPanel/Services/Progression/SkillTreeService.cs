@@ -775,6 +775,9 @@ public class SkillTreeService : IDisposable
         // Track total skill points earned (for stats)
         App.Achievements?.TrackSkillPointsEarned(pointsAwarded);
 
+        // Season Rewind: remember the season's peak level (PlayerLevel itself is wiped at rollover)
+        settings.SeasonPeakLevel = Math.Max(settings.SeasonPeakLevel, newLevel);
+
         App.Logger?.Information("Level up to {Level}! Awarded {Points} skill points. Total: {Total}",
             newLevel, pointsAwarded, settings.SkillPoints);
 
@@ -786,8 +789,10 @@ public class SkillTreeService : IDisposable
     #region Season Reset
 
     /// <summary>
-    /// Reset seasonal skill data (called on season change)
-    /// Note: Skill points and unlocked skills persist across seasons
+    /// Mirror the server's seasonal skill reset locally (called from ProfileSyncService when
+    /// a level_reset arrives). Permanent stat/analytics nodes (SkillDefinition.PermanentIds)
+    /// and the point balance survive; mechanical/XP-economy nodes are removed and must be
+    /// re-purchased — that re-buy is the Prestige loop.
     /// </summary>
     public void OnSeasonReset()
     {
@@ -801,7 +806,28 @@ public class SkillTreeService : IDisposable
         settings.DailyQuestStreak = 0;
         settings.LastDailyQuestDate = null;
 
-        App.Logger?.Information("Seasonal skill data reset");
+        // Prune the tree to permanent nodes (fallback when the server didn't send the
+        // post-rollover list — with a new server the level_reset handler has already
+        // replaced UnlockedSkills and this is a no-op).
+        var owned = settings.UnlockedSkills ?? new List<string>();
+        var kept = owned.Where(id => SkillDefinition.PermanentIds.Contains(id)).ToList();
+        var removed = owned.Count - kept.Count;
+        if (removed > 0)
+        {
+            settings.UnlockedSkills = kept;
+
+            // Tear down live effects whose skills were just dropped
+            if (!HasSkill("pink_rush"))
+            {
+                _pinkRushCheckTimer.Stop();
+                if (settings.PinkRushActive) EndPinkRush();
+            }
+            if (!HasSkill("good_girl_streak"))
+                settings.StreakShieldsRemaining = 0;
+        }
+
+        App.Logger?.Information("Season reset: seasonal flags cleared, {Removed} mechanical skill(s) removed, {Kept} permanent kept",
+            removed, kept.Count);
         App.Settings?.Save();
 
         // Sync reset streak to server

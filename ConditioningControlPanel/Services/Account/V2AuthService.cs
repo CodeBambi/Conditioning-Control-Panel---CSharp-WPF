@@ -601,6 +601,19 @@ namespace ConditioningControlPanel.Services
             settings.HasLinkedPatreon = !string.IsNullOrEmpty(user.PatreonId);
             settings.PatreonTier = user.PatreonTier;
 
+            // Discord/unified-login users with a LINKED Patreon sub have no local Patreon
+            // tokens, so PatreonService.CurrentTier stays None and nothing else refreshes the
+            // cached-premium window for them. The canonical HasPremiumAccess gate (now used by
+            // the Takeover paths, #465) relies on that window — extend it here so a
+            // server-confirmed linked tier keeps premium alive, mirroring the 2-week grace
+            // direct Patreon validation writes. Never shorten an existing longer window.
+            if (user.PatreonTier >= 1)
+            {
+                var until = DateTime.UtcNow.AddDays(14);
+                if (settings.PatreonPremiumValidUntil == null || settings.PatreonPremiumValidUntil < until)
+                    settings.PatreonPremiumValidUntil = until;
+            }
+
             // Store auth token if provided
             if (!string.IsNullOrEmpty(authToken))
             {

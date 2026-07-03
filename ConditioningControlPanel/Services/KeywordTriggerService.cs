@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using ConditioningControlPanel.Models;
 using NAudio.Wave;
 
@@ -1346,14 +1347,43 @@ namespace ConditioningControlPanel.Services
             }
         }
 
-        private static void ShowAvatarLine(string line, bool aiGenerated)
+        private static void ShowAvatarLine(string line, bool aiGenerated) =>
+            ShowAvatarLine(line, aiGenerated, attempt: 0);
+
+        private static void ShowAvatarLine(string line, bool aiGenerated, int attempt)
         {
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher == null || dispatcher.HasShutdownStarted) return;
             dispatcher.BeginInvoke(new Action(() =>
             {
-                try { App.AvatarWindow?.GigglePriority(line, playSound: true, aiGenerated: aiGenerated); }
-                catch (Exception ex) { App.Logger?.Debug("AvatarWindow.GigglePriority failed: {Error}", ex.Message); }
+                try
+                {
+                    var avatar = App.AvatarWindow;
+                    if (avatar == null) return;
+                    // GigglePriority stops the speech timers and clears the queue, so an
+                    // awareness comment fired mid-ramble cut the companion off (#463). While
+                    // she's speaking (bubble OR voice clip), wait and retry rather than routing
+                    // through the queued Giggle path — that path drops the AI badge/sound and
+                    // silently discards the line during AI chat.
+                    if (avatar.IsSpeaking || avatar.IsSpeakingAudio)
+                    {
+                        if (attempt >= 16)   // 16 x 750ms = give up after ~12s of nonstop talking
+                        {
+                            App.Logger?.Debug("Awareness comment dropped - companion busy: {Line}", line);
+                            return;
+                        }
+                        var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(750) };
+                        retry.Tick += (_, _) =>
+                        {
+                            retry.Stop();
+                            ShowAvatarLine(line, aiGenerated, attempt + 1);
+                        };
+                        retry.Start();
+                        return;
+                    }
+                    avatar.GigglePriority(line, playSound: true, aiGenerated: aiGenerated);
+                }
+                catch (Exception ex) { App.Logger?.Debug("AvatarWindow awareness line failed: {Error}", ex.Message); }
             }));
         }
 

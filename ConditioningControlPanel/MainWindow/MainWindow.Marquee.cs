@@ -288,11 +288,13 @@ namespace ConditioningControlPanel
                                 "What resets:\n" +
                                 "  - Current Level and XP\n" +
                                 "  - Daily quest streak\n" +
-                                "  - Monthly leaderboard position\n\n" +
+                                "  - Monthly leaderboard position\n" +
+                                "  - Mechanical enhancements (re-buy them to raise your Prestige)\n\n" +
                                 "What's preserved:\n" +
                                 "  - All achievements\n" +
                                 "  - Highest Level Ever (yours: " + highestLevel + ")\n" +
-                                "  - Skill points and unlocked enhancements\n" +
+                                "  - Your sparkle points balance\n" +
+                                "  - Permanent stat enhancements and your Prestige\n" +
                                 "  - Total lifetime XP\n" +
                                 "  - Patreon perks and whitelist\n\n" +
                                 "Welcome to season " + currentSeason + "!";

@@ -181,6 +181,11 @@ namespace ConditioningControlPanel
         private void CleanupAndClose()
         {
             _keepOnTopTimer.Stop();
+            // Mark answered BEFORE completing: OnClosed re-Completes when !_answered as a
+            // safety net, and the ESC path (still unanswered) would otherwise double-Complete —
+            // the second call hits the mismatch branch and clears whatever interaction the
+            // first Complete just dequeued (same #462 class as the lock-card fix).
+            _answered = true;
             App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.PopQuiz);
             Close();
         }

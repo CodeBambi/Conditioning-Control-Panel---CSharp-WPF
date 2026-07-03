@@ -2,21 +2,29 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Loading..."
-        Height="200" Width="400"
+        Height="215" Width="400"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        Topmost="True">
 
-    <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="15" BorderBrush="{DynamicResource PinkBrush}" BorderThickness="2">
+    <!-- NOTE: this window runs on its OWN UI thread (SplashScreen.ShowOnOwnThread) so it
+         stays responsive while App.OnStartup grinds through service init on the main
+         thread. It must therefore be fully self-contained: hardcoded colors, no
+         DynamicResource lookups into Application resources (those brushes are owned by
+         the main thread and cross-thread use throws). -->
+
+    <Border Background="#FF121220" CornerRadius="15" BorderBrush="#FFFF69B4" BorderThickness="2">
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="5" Opacity="0.6"/>
         </Border.Effect>
 
         <Grid Margin="30,20">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -28,7 +36,7 @@
                        Text="Conditioning Control Panel"
                        FontSize="22"
                        FontWeight="Bold"
-                       Foreground="{DynamicResource PinkBrush}"
+                       Foreground="#FFFF69B4"
                        HorizontalAlignment="Center"
                        FontFamily="Segoe UI"/>
 
@@ -39,16 +47,16 @@
                        FontSize="12"
                        Foreground="#AAAAAA"
                        HorizontalAlignment="Center"
-                       Margin="0,10,0,15"
+                       Margin="0,10,0,12"
                        FontFamily="Segoe UI"/>
 
             <!-- Progress bar -->
             <Grid Grid.Row="2" Height="8">
-                <Border Background="{DynamicResource PanelBgBrush}" CornerRadius="4"/>
+                <Border Background="#FF1C1C35" CornerRadius="4"/>
                 <Border x:Name="ProgressFill">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                            <GradientStop Color="{DynamicResource PinkColor}" Offset="0"/>
+                            <GradientStop Color="#FFFF69B4" Offset="0"/>
                             <GradientStop Color="#DA70D6" Offset="1"/>
                         </LinearGradientBrush>
                     </Border.Background>
@@ -62,11 +70,40 @@
                         <Point X="0" Y="0.5"/>
                     </Border.RenderTransformOrigin>
                 </Border>
+                <!-- Shimmer sweep: a continuously-animated highlight band. Because the splash
+                     pumps its own dispatcher, this keeps moving even while the main thread is
+                     busy for many seconds — visible proof the app hasn't hung. -->
+                <Grid ClipToBounds="True">
+                    <Border x:Name="Shimmer" Width="90" HorizontalAlignment="Left" CornerRadius="4">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <GradientStop Color="#00FFFFFF" Offset="0"/>
+                                <GradientStop Color="#50FFFFFF" Offset="0.5"/>
+                                <GradientStop Color="#00FFFFFF" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="ShimmerTranslate" X="-90"/>
+                        </Border.RenderTransform>
+                    </Border>
+                </Grid>
             </Grid>
+
+            <!-- Patience hint (escalates to reassurance text on long loads) -->
+            <TextBlock x:Name="TxtHint"
+                       Grid.Row="3"
+                       Text="Please wait, this can take a moment..."
+                       FontSize="10"
+                       Foreground="#8888A0"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Margin="0,10,0,0"
+                       FontFamily="Segoe UI"/>
 
             <!-- Version -->
             <TextBlock x:Name="TxtVersion"
-                       Grid.Row="3"
+                       Grid.Row="4"
                        Text="v4.3.12"
                        FontSize="10"
                        Foreground="#666666"
