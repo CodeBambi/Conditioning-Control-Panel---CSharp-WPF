@@ -318,24 +318,20 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
             return;
         }
 
-        if (!(_settingsService?.Current?.WebcamConsentGiven == true))
+        // Gate on consent flag AND version, mirroring the WPF
+        // WebcamTrackingService.IsConsentCurrent check. A stale version (from
+        // before a contract bump) is treated as "not consented" so the user
+        // re-runs the multi-gate flow. The dialog is the only path that writes
+        // the consent flag + version + date, so there is no direct flag write
+        // here.
+        if (!IsConsentCurrent())
         {
-            var dialog = new WebcamConsentDialog();
-            var tcs = new TaskCompletionSource<bool>();
-            dialog.Closed += (_, _) => tcs.TrySetResult(dialog.ConsentGiven);
-            dialog.Show();
-            var granted = await tcs.Task;
+            var granted = await ShowConsentDialogAsync();
+            ConsentGranted = granted;
             if (!granted)
             {
                 AppendLog(Loc.Get("blink_trainer_consent_required"));
                 return;
-            }
-
-            ConsentGranted = true;
-            if (_settingsService?.Current != null)
-            {
-                _settingsService.Current.WebcamConsentGiven = true;
-                Save();
             }
         }
 
@@ -345,6 +341,33 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
         StatusText = Loc.Get("blink_trainer_status_starting");
         UpdateStatusColor();
         AppendLog(Loc.Get("blink_trainer_log_start_result"));
+    }
+
+    /// <summary>
+    /// Consent is current only when the flag is set AND the recorded version
+    /// matches the live contract version. Mirrors WPF's
+    /// WebcamTrackingService.IsConsentCurrent.
+    /// </summary>
+    private bool IsConsentCurrent()
+    {
+        var s = _settingsService?.Current;
+        return s?.WebcamConsentGiven == true
+            && s.WebcamConsentVersion == WebcamConsent.ConsentVersion;
+    }
+
+    /// <summary>
+    /// Shows the multi-gate WebcamConsentDialog and awaits its result. The
+    /// dialog itself writes WebcamConsentGiven / WebcamConsentVersion /
+    /// WebcamConsentDate + saves on acceptance — callers must never write
+    /// those flags directly.
+    /// </summary>
+    private async Task<bool> ShowConsentDialogAsync()
+    {
+        var dialog = new WebcamConsentDialog();
+        var tcs = new TaskCompletionSource<bool>();
+        dialog.Closed += (_, _) => tcs.TrySetResult(dialog.ConsentGiven);
+        dialog.Show();
+        return await tcs.Task;
     }
 
     [RelayCommand]
@@ -399,19 +422,16 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
     }
 
     [RelayCommand]
-    private void GrantConsent()
+    private async Task GrantConsentAsync()
     {
-        var settings = _settingsService?.Current;
-        if (settings == null) return;
-
-        settings.WebcamConsentGiven = true;
-        if (string.IsNullOrEmpty(settings.WebcamConsentVersion))
-            settings.WebcamConsentVersion = "1.0";
-        settings.WebcamConsentDate = DateTime.UtcNow;
-        Save();
-
-        ConsentGranted = true;
-        AppendLog(Loc.Get("blink_trainer_log_consent_granted"));
+        // Route the one-click grant through the full multi-gate consent dialog
+        // rather than writing the consent flag directly. The dialog writes the
+        // flag + current version + date and saves; we only mirror its result.
+        var granted = await ShowConsentDialogAsync();
+        ConsentGranted = granted;
+        AppendLog(granted
+            ? Loc.Get("blink_trainer_log_consent_granted")
+            : Loc.Get("blink_trainer_consent_required"));
     }
 
     [RelayCommand]
@@ -452,9 +472,30 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
     private async Task QuickRecalAsync()
     {
         AppendLog(Loc.Get("blink_trainer_log_quick_recal_opening"));
-        _webcam?.Calibrate();
-        await OpenCalibrationWindowAsync();
-        AppendLog(Loc.Get("blink_trainer_log_quick_recal_cancelled"));
+        var result = await OpenQuickRecalWindowAsync();
+        AppendLog(result == true
+            ? Loc.Get("blink_trainer_log_quick_recal_complete")
+            : Loc.Get("blink_trainer_log_quick_recal_cancelled"));
+    }
+
+    private async Task<bool?> OpenQuickRecalWindowAsync()
+    {
+        var tcs = new TaskCompletionSource<bool?>();
+        try
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                var window = new WebcamQuickRecalWindow(null, null, _webcam);
+                window.Closed += (_, _) => tcs.TrySetResult(window.DialogResult);
+                window.Show();
+            });
+            return await tcs.Task;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to open quick-recal window");
+            return false;
+        }
     }
 
     private async Task OpenCalibrationWindowAsync()

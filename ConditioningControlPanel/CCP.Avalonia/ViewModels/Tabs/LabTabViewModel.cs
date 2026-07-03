@@ -42,6 +42,7 @@ public partial class LabTabViewModel : TabItemViewModel
 
     private bool _syncingPlayMode;
     private int _lockdownTimerClickCount;
+    private bool _webcamDevicePopulating;
     private List<string> _wallpaperPool = new();
     private string? _currentWallpaperPath;
     private string? _originalWallpaperPath;
@@ -347,11 +348,27 @@ public partial class LabTabViewModel : TabItemViewModel
     partial void OnIsTrackingChanged(bool value)
     {
         TrackerButtonText = value ? Loc.Get("btn_stop") : Loc.Get("lab_start_tracking");
-        TrackerStatusText = value ? Loc.Get("lab_tracker_status_running") : Loc.Get("lab_tracker_status_stopped");
+        if (!value)
+        {
+            TrackerStatusText = Loc.Get("lab_tracker_status_stopped");
+        }
         TrackerStatusColor = value
             ? GetThemeBrush("SuccessBrush", "#FF00C853")
             : GetThemeBrush("PinkBrush", "#FFFF69B4");
         AppendLog(value ? Loc.Get("lab_log_tracking_started") : Loc.Get("lab_log_tracking_stopped"));
+    }
+
+    partial void OnSelectedWebcamDeviceChanged(WebcamDeviceOption? value)
+    {
+        // RefreshDevices sets the combo programmatically; ignore those
+        // selection pulses so we only persist genuine user picks (mirrors the
+        // WPF _webcamDevicePopulating guard).
+        if (_webcamDevicePopulating) return;
+        if (value == null || _settingsService?.Current == null) return;
+        _settingsService.Current.WebcamDeviceIndex = value.Index;
+        _settingsService.Current.WebcamDeviceName = value.Name;
+        Save();
+        AppendLog(Loc.GetF("blink_trainer_log_camera_set_fmt", value.Name));
     }
 
     partial void OnDebugCursorEnabledChanged(bool value)
@@ -516,10 +533,28 @@ public partial class LabTabViewModel : TabItemViewModel
     [RelayCommand]
     private void RefreshDevices()
     {
-        _webcam?.RefreshDevices();
-        WebcamDevices.Clear();
-        WebcamDevices.Add(new WebcamDeviceOption(0, Loc.Get("blink_trainer_default_camera")));
-        SelectedWebcamDevice = WebcamDevices[0];
+        var devices = _webcam?.EnumerateDevices() ?? Array.Empty<WebcamDeviceInfo>();
+        _webcamDevicePopulating = true;
+        try
+        {
+            WebcamDevices.Clear();
+            if (devices.Count == 0)
+            {
+                WebcamDevices.Add(new WebcamDeviceOption(-1, Loc.Get("lab_no_cameras_detected")));
+                SelectedWebcamDevice = WebcamDevices[0];
+                return;
+            }
+
+            foreach (var d in devices)
+                WebcamDevices.Add(new WebcamDeviceOption(d.Index, d.Name));
+
+            int saved = _settingsService?.Current?.WebcamDeviceIndex ?? -1;
+            SelectedWebcamDevice = WebcamDevices.FirstOrDefault(x => x.Index == saved) ?? WebcamDevices[0];
+        }
+        finally
+        {
+            _webcamDevicePopulating = false;
+        }
         AppendLog(Loc.Get("lab_log_camera_list_refreshed"));
     }
 
@@ -538,9 +573,13 @@ public partial class LabTabViewModel : TabItemViewModel
         if (IsTracking)
         {
             _webcam?.StopTracking();
-            IsTracking = false;
+            // IsTracking is driven by OnTrackingStateChanged below; no optimistic
+            // flip here.
             return;
         }
+
+        if (_webcam == null)
+            return;
 
         var owner = GetMainWindow();
         WebcamLoadingSplash? splash = null;
@@ -550,15 +589,104 @@ public partial class LabTabViewModel : TabItemViewModel
             await Dispatcher.UIThread.InvokeAsync(() => splash.Show(owner));
         }
 
+        // Track start completion through the real event stream rather than a
+        // fixed Task.Delay. OnStartupProgress feeds the splash bar; terminal
+        // OnTrackingStateChanged states resolve the wait and surface honest
+        // status text (starting / tracking / camera-busy / denied / error).
+        var done = new TaskCompletionSource<bool>();
+        void OnProgress(double progress, string status)
+        {
+            splash?.SetProgress(progress, status);
+            if (progress >= 1.0)
+                done.TrySetResult(true);
+        }
+        void OnState(WebcamTrackingState state)
+        {
+            Dispatcher.UIThread.Post(() => ApplyTrackerState(state));
+            switch (state)
+            {
+                case WebcamTrackingState.Tracking:
+                    done.TrySetResult(true);
+                    break;
+                case WebcamTrackingState.CameraInUse:
+                    splash?.ShowErrorAndClose(Loc.Get("lab_tracker_error_camera_in_use"));
+                    done.TrySetResult(false);
+                    break;
+                case WebcamTrackingState.CameraDenied:
+                    splash?.ShowErrorAndClose(Loc.Get("lab_tracker_error_camera_denied"));
+                    done.TrySetResult(false);
+                    break;
+                case WebcamTrackingState.Error:
+                    splash?.ShowErrorAndClose(Loc.Get("lab_tracker_error_generic"));
+                    done.TrySetResult(false);
+                    break;
+                case WebcamTrackingState.Stopped:
+                    // Engine never reached Tracking (user/another caller stopped it).
+                    done.TrySetResult(false);
+                    break;
+            }
+        }
+
+        _webcam.OnStartupProgress += OnProgress;
+        _webcam.OnTrackingStateChanged += OnState;
+        TrackerStatusText = Loc.Get("lab_tracker_status_starting");
+        TrackerStatusColor = GetThemeBrush("PinkBrush", "#FFFF69B4");
         try
         {
-            _webcam?.StartTracking();
-            IsTracking = true;
-            await Task.Delay(500);
+            _webcam.StartTracking();
+            await done.Task;
         }
         finally
         {
+            _webcam.OnStartupProgress -= OnProgress;
+            _webcam.OnTrackingStateChanged -= OnState;
             splash?.CloseSplash();
+        }
+    }
+
+    /// <summary>
+    /// Surfaces the live tracker state honestly. Driving IsTracking from here
+    /// (instead of optimistically after StartTracking) keeps the button, color,
+    /// and log in sync with what the engine actually did.
+    /// </summary>
+    private void ApplyTrackerState(WebcamTrackingState state)
+    {
+        switch (state)
+        {
+            case WebcamTrackingState.Starting:
+                TrackerStatusText = Loc.Get("lab_tracker_status_starting");
+                TrackerStatusColor = GetThemeBrush("PinkBrush", "#FFFF69B4");
+                IsTracking = false;
+                break;
+            case WebcamTrackingState.Tracking:
+                TrackerStatusText = Loc.Get("lab_tracker_status_running");
+                TrackerStatusColor = GetThemeBrush("SuccessBrush", "#FF00C853");
+                IsTracking = true;
+                break;
+            case WebcamTrackingState.FaceLost:
+                TrackerStatusText = Loc.Get("lab_tracker_status_face_lost");
+                TrackerStatusColor = GetThemeBrush("TextMutedBrush", "#FF888888");
+                break;
+            case WebcamTrackingState.CameraInUse:
+                TrackerStatusText = Loc.Get("lab_tracker_status_camera_busy");
+                TrackerStatusColor = GetThemeBrush("TextMutedBrush", "#FF888888");
+                IsTracking = false;
+                break;
+            case WebcamTrackingState.CameraDenied:
+                TrackerStatusText = Loc.Get("lab_tracker_status_denied");
+                TrackerStatusColor = GetThemeBrush("TextMutedBrush", "#FF888888");
+                IsTracking = false;
+                break;
+            case WebcamTrackingState.Error:
+                TrackerStatusText = Loc.Get("lab_tracker_status_error");
+                TrackerStatusColor = GetThemeBrush("TextMutedBrush", "#FF888888");
+                IsTracking = false;
+                break;
+            default:
+                TrackerStatusText = Loc.Get("lab_tracker_status_stopped");
+                TrackerStatusColor = GetThemeBrush("PinkBrush", "#FFFF69B4");
+                IsTracking = false;
+                break;
         }
     }
 
@@ -575,7 +703,7 @@ public partial class LabTabViewModel : TabItemViewModel
     {
         _webcam?.Calibrate();
         AppendLog(Loc.Get("lab_log_quick_recal_requested"));
-        await OpenWebcamWindowAsync(() => new WebcamQuickRecalWindow(_frameSource));
+        await OpenWebcamWindowAsync(() => new WebcamQuickRecalWindow(_frameSource, null, _webcam));
     }
 
     [RelayCommand]
@@ -583,7 +711,7 @@ public partial class LabTabViewModel : TabItemViewModel
     {
         _webcam?.TestTracker();
         AppendLog(Loc.Get("lab_log_tracker_test_requested"));
-        await OpenWebcamWindowAsync(() => new WebcamGazeTrackerWindow(_frameSource));
+        await OpenWebcamWindowAsync(() => new WebcamGazeTrackerWindow(_frameSource, null, _webcam));
     }
 
     [RelayCommand]

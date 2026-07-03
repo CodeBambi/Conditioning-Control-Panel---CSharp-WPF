@@ -12,6 +12,7 @@ using CommunityToolkit.Mvvm.Input;
 using ConditioningControlPanel.Avalonia.Dialogs;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Avalonia.Views.Deeper;
+using ConditioningControlPanel.Avalonia.Windows;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Catalogue;
@@ -586,15 +587,65 @@ public partial class DeeperTabViewModel : TabItemViewModel
                 Loc.Get("deeper_webcam_consent_missing")) ?? Task.CompletedTask);
             return;
         }
-        WebcamCalibrationStatusText = Loc.GetF("blink_trainer_calibration_calibrated_format", Loc.Get("blink_trainer_section_webcam"));
-        await Task.CompletedTask;
+
+        await OpenCalibrationWindowAsync();
+        // The calibration window is honest that full calibration is not
+        // available yet in this version; reflect whether a calibration
+        // actually exists (carried over from the classic app) instead of
+        // claiming success.
+        WebcamCalibrationStatusText = _webcamService?.HasCalibration == true
+            ? Loc.GetF("blink_trainer_calibration_calibrated_format", Loc.Get("blink_trainer_section_webcam"))
+            : Loc.Get("blink_trainer_calibration_none");
     }
 
     [RelayCommand]
     private async Task QuickRecalWebcamAsync()
     {
         _logger?.LogInformation("Quick recal Deeper webcam requested");
-        await CalibrateWebcamAsync();
+        if (!IsWebcamConsentGranted)
+        {
+            await (_dialogService?.ShowMessageAsync(
+                Loc.Get("title_not_implemented"),
+                Loc.Get("deeper_webcam_consent_missing")) ?? Task.CompletedTask);
+            return;
+        }
+
+        var result = await OpenQuickRecalWindowAsync();
+        // Set status from the actual outcome: a successful sample means a
+        // calibrated tracker; anything else falls back to whether a
+        // calibration exists at all.
+        WebcamCalibrationStatusText = (result == true || _webcamService?.HasCalibration == true)
+            ? Loc.GetF("blink_trainer_calibration_calibrated_format", Loc.Get("blink_trainer_section_webcam"))
+            : Loc.Get("blink_trainer_calibration_none");
+    }
+
+    private async Task OpenCalibrationWindowAsync()
+    {
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            try { new WebcamCalibrationWindow().Show(); }
+            catch (Exception ex) { _logger?.LogWarning(ex, "Failed to open calibration window"); }
+        });
+    }
+
+    private async Task<bool?> OpenQuickRecalWindowAsync()
+    {
+        var tcs = new TaskCompletionSource<bool?>();
+        try
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                var window = new WebcamQuickRecalWindow(null, null, _webcamService);
+                window.Closed += (_, _) => tcs.TrySetResult(window.DialogResult);
+                window.Show();
+            });
+            return await tcs.Task;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to open quick-recal window");
+            return false;
+        }
     }
 
     [RelayCommand]

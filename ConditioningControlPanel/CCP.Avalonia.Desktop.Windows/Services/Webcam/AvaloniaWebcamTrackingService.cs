@@ -74,18 +74,10 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
     //             follow-up that would need a dedicated model.
     // ─────────────────────────────────────────────────────────────────────────────
 
-    public enum GazeSide { Left, Right, Center }
-
-    public enum WebcamTrackingState
-    {
-        Stopped,
-        Starting,
-        Tracking,
-        FaceLost,
-        CameraInUse,
-        CameraDenied,
-        Error
-    }
+    // GazeSide and WebcamTrackingState are defined once on the IWebcamService
+    // seam (ConditioningControlPanel.Core.Services.Webcam) and imported via the
+    // using directive above. They used to live here; the single Core definition
+    // keeps the events and UI agreeing on the same type without re-mapping.
 
     /// <summary>
     /// Local, offline webcam-based eye and gaze tracking. Powers Lab Box 1
@@ -98,8 +90,13 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         /// Bumped any time we add a new sensor type, broaden what the camera
         /// observes, or change what numbers are stored. On bump, the consent
         /// dialog re-runs from screen 1 for every existing user.
+        ///
+        /// The literal lives once on the seam (<see cref="WebcamConsent.ConsentVersion"/>)
+        /// so the tracker, the consent dialog, and the Lab / Blink Trainer
+        /// view-models all agree on what "current" means; this const re-exports
+        /// it for the header contract comment above and any in-file callers.
         /// </summary>
-        public const string ConsentVersion = "1.0";
+        public const string ConsentVersion = WebcamConsent.ConsentVersion;
 
         /// <summary>
         /// True when the user has granted consent AND the recorded consent
@@ -398,6 +395,49 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
                 && screen.Bounds.Width == width
                 && screen.Bounds.Height == height;
         }
+
+        /// <summary>
+        /// True when a calibration (homography / polynomial fit) is loaded and
+        /// available for gaze projection. Quick Recal and the tracker test both
+        /// require this; without it they surface an honest "not calibrated"
+        /// message instead of a fake-success path.
+        /// </summary>
+        public bool HasCalibration => Calibration != null;
+
+        /// <summary>
+        /// Portable snapshot of the current quick-recal offset for the seam, or
+        /// null when no calibration is loaded / quick-recal has never run.
+        /// </summary>
+        public RuntimeGazeOffset? GetRuntimeOffset()
+        {
+            var off = Calibration?.RuntimeOffset;
+            return off == null ? null : new RuntimeGazeOffset(off.Dx, off.Dy, off.CapturedAt);
+        }
+
+        /// <summary>
+        /// Seam overload of the runtime-offset setter that takes raw axis deltas
+        /// and forwards to the canonical <see cref="SetRuntimeOffset(RuntimeOffsetData?, bool)"/>.
+        /// No-op when no calibration is loaded. Used by the Quick Recal window.
+        /// </summary>
+        void IWebcamService.SetRuntimeOffset(double dx, double dy, bool persist)
+            => SetRuntimeOffset(new RuntimeOffsetData { Dx = dx, Dy = dy, CapturedAt = DateTime.UtcNow }, persist);
+
+        /// <summary>
+        /// Drop the quick-recal offset via the same atomic swap path as the
+        /// setter. Used by Quick Recal to sample raw projection output, then
+        /// restore on cancel.
+        /// </summary>
+        public void ClearRuntimeOffset(bool persist) => SetRuntimeOffset(null, persist);
+
+        /// <summary>
+        /// Seam view of <see cref="EnumerateDevices()"/>: maps the concrete
+        /// device record into the portable <see cref="WebcamDeviceInfo"/>. The
+        /// public <see cref="EnumerateDevices()"/> keeps its Desktop.Windows
+        /// return type for in-project callers (and the COM enumerator cannot
+        /// move to Core), so the interface member is implemented explicitly.
+        /// </summary>
+        IReadOnlyList<WebcamDeviceInfo> IWebcamService.EnumerateDevices()
+            => EnumerateDevices().Select(d => new WebcamDeviceInfo(d.Index, d.Name)).ToList();
 
         public event Action? OnBlink;
         public event Action<CorePoint>? OnLongStare;

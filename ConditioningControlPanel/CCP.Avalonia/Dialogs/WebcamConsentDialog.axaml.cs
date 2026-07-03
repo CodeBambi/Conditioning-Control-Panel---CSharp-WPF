@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using ConditioningControlPanel.Core.Localization;
+using ConditioningControlPanel.Core.Services.Webcam;
 
 using Microsoft.Extensions.DependencyInjection;
 namespace ConditioningControlPanel.Avalonia.Dialogs;
@@ -20,8 +21,10 @@ public partial class WebcamConsentDialog : Window
 
     private const string SourceUrl = "https://github.com/CC-Labs-llc/Conditioning-Control-Panel---CSharp-WPF/blob/main/ConditioningControlPanel/Services/WebcamTrackingService.cs";
 
-    // TODO: WebcamTrackingService is not yet ported to CCP.Core.
-    private const string ConsentVersion = "1.0";
+    // Single source of truth: the literal lives on the Core seam so the
+    // tracker, this dialog, and the Lab / Blink Trainer view-models all agree
+    // on what "current" means.
+    private const string ConsentVersion = WebcamConsent.ConsentVersion;
 
     private enum Step { Intro = 1, Privacy = 2, Consent = 3, Calibrate = 4 }
     private Step _step = Step.Intro;
