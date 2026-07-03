@@ -275,7 +275,9 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
                 break;
 
             case "duck_audio":
-                _ducker?.Duck();
+                // Duck at the user's configured strength (WPF RemoteControlService.cs:1115
+                // hardcodes Duck(80); DuckingLevel defaults to 80, honoring user overrides).
+                _ducker?.Duck(_settingsService.Current?.DuckingLevel ?? 80);
                 break;
 
             case "unduck_audio":

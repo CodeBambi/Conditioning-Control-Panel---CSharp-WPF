@@ -968,7 +968,8 @@ public sealed class AvaloniaKeywordTriggerService : IKeywordTriggerService, IDis
         bool anyDuck = actions.OfType<PlayAudioAction>().Any(a => a.DuckSystemAudio);
         if (anyDuck && _settingsService.Current?.AudioDuckingEnabled == true && _audioDucker != null)
         {
-            _audioDucker.Duck();
+            // Pass the user's ducking strength (WPF KeywordTriggerService.cs:1126).
+            _audioDucker.Duck(_settingsService.Current?.DuckingLevel ?? 80);
             didDuck = true;
         }
 
@@ -1249,7 +1250,8 @@ public sealed class AvaloniaKeywordTriggerService : IKeywordTriggerService, IDis
 
             if (trigger.DuckAudio && _settingsService.Current?.AudioDuckingEnabled == true && _audioDucker != null)
             {
-                _audioDucker.Duck();
+                // Pass the user's ducking strength (WPF KeywordTriggerService.cs:1384).
+                _audioDucker.Duck(_settingsService.Current?.DuckingLevel ?? 80);
                 didDuck = true;
             }
 

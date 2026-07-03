@@ -176,8 +176,9 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
 
             // Restore system audio ducked by keyword triggers/remote commands that a
             // stop/panic interrupted (WPF App.Audio.ForceUnduck, StartStop.cs:323).
-            // Unduck is a no-op when nothing is ducked.
-            TryRun("unduck", () => Ducker?.Unduck());
+            // ForceUnduck resets the duck ref count and restores immediately; it is a
+            // no-op when nothing is ducked.
+            TryRun("unduck", () => Ducker?.ForceUnduck());
         }
     }
 
