@@ -125,7 +125,7 @@ public partial class SheListeningTabViewModel : TabItemViewModel
     private async Task CalibrateWakeAsync()
     {
         var wake = _wakeWord;
-        if (wake?.IsAvailable != true || _isCalibrating) return;
+        if (wake?.IsAvailable != true || IsCalibrating) return;
 
         // P0 S-1: opening the capture session for calibration requires mic consent. Mirror the WPF
         // gate at MainWindow.SheListening.cs (SL_Calibrate_Click:124-128): show MicConsentDialog when
