@@ -453,7 +453,6 @@ public partial class ChaosOverlayWindow : Window
 
         chosen.Art.BorderThickness = new Thickness(5);
         chosen.Art.BoxShadow = new BoxShadows(new BoxShadow { Color = Color.FromArgb(0xF2, hi.R, hi.G, hi.B), Blur = 24, Spread = 0 });
-        _ = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16), Tag = Environment.TickCount64 };
         var flashTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         double flashStart = Environment.TickCount64;
         flashTimer.Tick += (_, _) =>
@@ -808,9 +807,16 @@ public partial class ChaosOverlayWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         base.OnClosed(e);
+        // Stop every 16ms/interval DispatcherTimer this window owns so none keep ticking against a
+        // closed window (WPF stops these implicitly when the visual tree tears down).
         _countdownTimer?.Stop();
         _rankBeatTimer?.Stop();
         _rankCardTimer?.Stop();
+        _revealTimer?.Stop();
+        _autoResumeTimer?.Stop();
+        _confirmTimer?.Stop();
+        _bgPanTimer?.Stop();
+        _storyAdvanceBounceTimer?.Stop();
         OnDismissed?.Invoke();
     }
 
@@ -823,6 +829,9 @@ public partial class ChaosOverlayWindow : Window
     private Action? _onConversationComplete;
     private bool _storyClosing;
     private DispatcherTimer? _bgPanTimer;
+    /// <summary>16ms drift on the advance chevron. Stored so it is stopped on close / teardown
+    /// (mirrors WPF killing StoryAdvanceT's animation in CloseConversation).</summary>
+    private DispatcherTimer? _storyAdvanceBounceTimer;
 
     public void ShowConversation(ChaosConversation convo, IImage? backdrop, Action? onComplete)
     {
@@ -864,7 +873,7 @@ public partial class ChaosOverlayWindow : Window
             AnimateDouble(_storyPortraitT, TranslateTransform.XProperty, fromX, 0, 290, EaseOutBack);
         }
 
-        _ = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16), Tag = Environment.TickCount64 };
+        _storyAdvanceBounceTimer?.Stop();
         var bounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         double bounceStart = Environment.TickCount64;
         bounce.Tick += (_, _) =>
@@ -872,6 +881,7 @@ public partial class ChaosOverlayWindow : Window
             double t = (Environment.TickCount64 - bounceStart) / 520.0;
             _storyAdvanceT.X = (Math.Sin(t * Math.PI * 2) + 1) / 2 * 6;
         };
+        _storyAdvanceBounceTimer = bounce;
         bounce.Start();
 
         StartBgPan();
@@ -927,6 +937,7 @@ public partial class ChaosOverlayWindow : Window
     {
         if (_storyClosing) return;
         _storyClosing = true;
+        _storyAdvanceBounceTimer?.Stop();
         StopBgPan();
         ChaosNarrator.EndCard();
 

@@ -195,7 +195,6 @@ public sealed class ChaosToyButtonWindow : Window
     private void PressPulse()
     {
         _press.ScaleX = _press.ScaleY = 0.86;
-        _ = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16), Tag = Environment.TickCount64 };
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         double startMs = Environment.TickCount64;
         timer.Tick += (_, _) =>
@@ -213,6 +212,17 @@ public sealed class ChaosToyButtonWindow : Window
         const double c1 = 1.70158;
         const double c3 = c1 + 1;
         return 1 + c3 * Math.Pow(t - 1, 3) + c1 * Math.Pow(t - 1, 2);
+    }
+
+    /// <summary>Stop the Ready-state glow pulse (a 16ms <see cref="DispatcherTimer"/>) on close. Without
+    /// this, closing the button while Ready leaves the pulse ticking against a torn-down window — the
+    /// visual-state change that normally stops it never fires. WPF stops render-thread animations
+    /// implicitly on window teardown; the ported DispatcherTimer does not.</summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        try { _pulseTimer?.Stop(); } catch { }
+        _pulseTimer = null;
     }
 
     public void RaiseToTopmost() => AvaloniaChaosWindowZ.RaiseTopmost(this);

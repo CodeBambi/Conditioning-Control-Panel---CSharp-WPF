@@ -184,9 +184,11 @@ public sealed class ChaosTunnelService : IChaosTunnelService, IDisposable
                 }
             }
             catch { }
+            ApplyExStyles();
             SinkToBottom();
         };
         _window.Show();
+        ApplyExStyles();
         SinkToBottom();
         _ = _host.NavigateAsync(new Uri(StartUrl));
         _logger?.LogInformation("ChaosTunnelService window up (non-topmost, opaque, WebView2 tunnel)");
@@ -327,6 +329,22 @@ public sealed class ChaosTunnelService : IChaosTunnelService, IDisposable
         catch { }
     }
 
+    // The tunnel is opaque and click-absorbing by design (NO WS_EX_TRANSPARENT: clicks reach the page
+    // for power-up raycasting). But without NOACTIVATE every click steals foreground focus, and without
+    // TOOLWINDOW it shows in Alt-Tab. Mirrors WPF ChaosTunnelService.ApplyExStyles (SourceInitialized).
+    private void ApplyExStyles()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        try
+        {
+            var h = _window?.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+            if (h == IntPtr.Zero) return;
+            var ex = GetWindowLong(h, GWL_EXSTYLE);
+            SetWindowLong(h, GWL_EXSTYLE, ex | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+        }
+        catch (Exception ex) { _logger?.LogDebug("ChaosTunnelService.ApplyExStyles: {E}", ex.Message); }
+    }
+
     private void DisposeAll()
     {
         CancelExitWatchdog();
@@ -350,8 +368,17 @@ public sealed class ChaosTunnelService : IChaosTunnelService, IDisposable
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint flags);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SetWindowLong(IntPtr hWnd, int nIndex, uint dwNewLong);
+
     private static readonly IntPtr HWND_BOTTOM = new(1);
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_NOACTIVATE = 0x0010;
+    private const int GWL_EXSTYLE = -20;
+    private const uint WS_EX_TOOLWINDOW = 0x00000080;
+    private const uint WS_EX_NOACTIVATE = 0x08000000;
 }

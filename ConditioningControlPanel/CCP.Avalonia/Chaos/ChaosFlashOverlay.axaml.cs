@@ -31,17 +31,26 @@ public partial class ChaosFlashOverlay : Window
     private static ChaosFlashOverlay? _active;
     private static readonly Random _rng = new();
 
+    private readonly ILogger<ChaosFlashOverlay> _logger;
     private readonly Image _img;
     private readonly DispatcherTimer _life = new();
     private OpacityFade? _fade;
     private AvaloniaAnimatedGif? _anim;
+    private Bitmap? _still;
     private (string path, int durationMs, double opacity)? _pending;
+
+    /// <summary>Guards the async still-decode against a newer wash / a clear. Bumped by
+    /// <see cref="ClearImage"/> (and by every <see cref="DisplayCore"/>), so an in-flight decode whose
+    /// generation no longer matches is discarded instead of overwriting the current image. WPF parity
+    /// (ChaosFlashOverlay.cs _displayGen).</summary>
+    private int _displayGen;
 
     public ChaosFlashOverlay()
     {
         InitializeComponent();
 
-_img = new Image { Stretch = Stretch.UniformToFill, IsHitTestVisible = false };
+        _logger = App.Services.GetRequiredService<ILogger<ChaosFlashOverlay>>();
+        _img = new Image { Stretch = Stretch.UniformToFill, IsHitTestVisible = false };
         Content = _img;
 
         var (sl, st, sw, sh) = AvaloniaChaosWindowZ.StageBounds(forcePrimary: true);
@@ -104,6 +113,7 @@ _img = new Image { Stretch = Stretch.UniformToFill, IsHitTestVisible = false };
     {
         _life.Stop();
         ClearImage();
+        int gen = ++_displayGen;
 
         if (path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
         {
@@ -121,12 +131,33 @@ _img = new Image { Stretch = Stretch.UniformToFill, IsHitTestVisible = false };
         }
         else
         {
-            try
+            // Decode OFF the UI thread and at display size. The old synchronous full-native-res decode
+            // stalled the UI thread for the whole parse on every wash (a phone photo is 4000+ px wide —
+            // ~100MB of BGRA nobody sees at a 10% full-screen wash). UniformToFill covers the stage by
+            // WIDTH, so decoding at stage width is lossless on screen; the 500ms fade-in hides the gap.
+            // WPF parity: ChaosFlashOverlay.cs DisplayCore.
+            int decodeWidth = (int)Math.Min(2560, Math.Max(640, Width));
+            string file = path;
+            Task.Run(() =>
             {
-                using var stream = File.OpenRead(path);
-_img.Source = new Bitmap(stream);
-            }
-            catch { _img.Source = null; }
+                try
+                {
+                    using var stream = File.OpenRead(file);
+                    var bmp = Bitmap.DecodeToWidth(stream, decodeWidth);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        // A newer wash, a clear/teardown, or a closed window superseded this decode.
+                        if (gen != _displayGen || !IsVisible)
+                        {
+                            try { bmp.Dispose(); } catch { }
+                            return;
+                        }
+                        try { _still = bmp; _img.Source = bmp; }
+                        catch { try { bmp.Dispose(); } catch { } }
+                    });
+                }
+                catch (Exception ex) { _logger?.LogInformation("ChaosFlashOverlay decode: {E}", ex.Message); }
+            });
         }
 
         double peak = Math.Clamp(opacity, 0.02, 1.0);
@@ -138,9 +169,12 @@ _img.Source = new Bitmap(stream);
 
     private void ClearImage()
     {
+        _displayGen++;   // orphan any still-in-flight async decode
         try { _img.Source = null; } catch { }
         _anim?.Dispose();
         _anim = null;
+        _still?.Dispose();
+        _still = null;
     }
 
     private void CloseNow()

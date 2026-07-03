@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -214,9 +215,32 @@ public static class AvaloniaChaosArt
             : new[] { user, AppContext.BaseDirectory };
     }
 
+    // Decoded bitmaps are cached per full path and shared across every visual that shows the same art.
+    // WITHOUT this cache each call decoded a fresh native bitmap — and per-bubble-spawn callers (several
+    // per second during a run) piled up hundreds of decoded sprites in unmanaged memory, climbing to a
+    // 2GB+ OOM hard crash (WPF ChaosArt.cs:27, chaos-bubble-oom-leak). Keyed by full path so user-asset
+    // overrides and bundled art never collide; the null "no such file" result is cached too.
+    private static readonly ConcurrentDictionary<string, IImage?> _cache = new();
+
+    /// <summary>Upper bound on distinct cached entries. Chaos art is a small, mostly-static set, but a
+    /// pathological caller must not grow the cache without limit — when full it is dropped wholesale
+    /// (a cheap re-decode) rather than risk unbounded native memory.</summary>
+    private const int MaxCacheEntries = 512;
+
+    /// <summary>Load an image from an explicit path, or null if absent/blank/unreadable. Results
+    /// (including the null "no such file") are memoised and the decoded bitmap is shared across all
+    /// callers — never decode the same art twice. WPF parity (ChaosArt.TryLoad).</summary>
     public static IImage? TryLoad(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        if (_cache.Count >= MaxCacheEntries && !_cache.ContainsKey(path))
+            _cache.Clear();
+        return _cache.GetOrAdd(path, static p => LoadUncached(p));
+    }
+
+    private static IImage? LoadUncached(string path)
+    {
+        if (!File.Exists(path)) return null;
         try
         {
             var ext = Path.GetExtension(path).ToLowerInvariant();
