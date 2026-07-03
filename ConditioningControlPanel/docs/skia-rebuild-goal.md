@@ -88,6 +88,19 @@ Open (this goal's actual work):
   WINDOW pipeline (sample collection + polynomial fit + persist), which was a fake-success
   shell; lot 5 made it honest ("not available yet") and filed the ~1300-1500 LoC port as its
   own row. Quick-recal and the tracker-test window are now real.
+- **Merge sync (main → feat/crossplatform, `5ce70de6`, 2026-07-03):** WPF shipped new
+  behavior the port must catch up to; full backlog in the task board under
+  "Sync-from-main: merge 5ce70de6". Two VERIFIED P0s re-open closed lots: (1) lot 2 — the
+  shared Core session ramp (`SessionService.cs:400,408`, `IntensityRampService.cs:122,128`)
+  writes ramped pink/spiral opacity into auto-saving `settings.Current` → data-loss on
+  crash (WPF #471/#476 direct-drive + `ReleaseOpacityRampHolds` fix unported); (2) lot 1 —
+  `ProfileSyncService` is entirely absent, so the prestige/season-reset policy is missing.
+  Remaining-lot scope now also includes: Ditzy Data PRO / Prestige skill-tree analytics
+  (lot 7), the #462 interaction-race fix cluster (lots 2/3), #463/#465/#455 companion +
+  account integration fixes (lot 8), `SubliminalSolidMode` #461 (lot 3), and animated `.webp`
+  (already ~70% covered by `SkiaImageDecoder`/SKCodec — extension-gate broadening only, NO
+  new dependency). Core-model deltas (skill nodes, schema-2 recap, prestige field) and the
+  new loc keys auto-flow to both heads; only the consuming services/UI need porting.
 - UCE video layer does not render; legacy `AvaloniaMultiMonitorVideoService` is the only
   working video path. Audio controls and attention checks bypass the UCE path.
 - Chaos overlays (~23 window classes) are not on the compositor.
@@ -268,7 +281,7 @@ without re-reading the claimed task-board row and this goal's relevant workstrea
 
 ## Definition of Done
 
-- [ ] WS0 complete: the ENTIRE port reviewed lot by lot (contract + adversarial rubric + optimality), corrections merged, the parity matrix re-earned from a full reset with evidence per row, calibration-port blockage resolved or formally re-scoped.
+- [ ] WS0 complete: the ENTIRE port reviewed lot by lot (contract + adversarial rubric + optimality), corrections merged, the parity matrix re-earned from a full reset with evidence per row, calibration-port blockage resolved or formally re-scoped. Any lot RE-OPENED by a later merge from main (see the task-board "Sync-from-main" backlogs; merge `5ce70de6` re-opened lots 1/2/3/4/6) must be re-closed before WS0 is done.
 - [ ] Video, audio controls, and attention checks run through the compositor on Windows; legacy video windows deleted (WS1 Phase E complete).
 - [ ] All passive Chaos visuals are compositor layers; a full Chaos run holds the FPS floor; hook swallow gap resolved or explicitly accepted in the task board.
 - [ ] No passive effect window remains in `CCP.Avalonia` (audited); interactive windows are justified.

@@ -1421,6 +1421,35 @@ by hand.** (The merge also left a stale `using ConditioningControlPanel.Localiza
 
 ---
 
+### 19.3-2 Current sync backlog — `main` merge `5ce70de6` (2026-07-03, WPF ~6.2.7)
+
+`main` merged into `feat/crossplatform` (range `f9348d7e..5ce70de6`; 51 code files under the asset re-compression).
+**Full prioritized backlog lives in `avalonia-migration-task-board.md` → "Sync-from-main: merge 5ce70de6"** (source of
+truth; 4-agent parity analysis + first-hand P0 verification). Headlines:
+
+- **Two P0s re-open closed WS0 lots** — lot 2: shared Core session ramp writes ramped pink/spiral opacity into
+  auto-saving `settings.Current` (`SessionService.cs:400,408` / `IntensityRampService.cs:122,128`) → crash data-loss
+  (WPF #471/#476 `SetSustainedOverlayOpacity` + `ReleaseOpacityRampHolds` direct-drive unported); lot 1:
+  `ProfileSyncService` entirely absent → prestige/season-reset policy missing.
+- **Ditzy Data PRO / Prestige** (skill-tree analytics): 5 Tier-6 nodes + `IsPermanent`/`PermanentIds`, schema-2
+  `SeasonRecap`, monotonic `LifetimeSkillPointsSpent` — Core models auto-flow; the prestige service logic + 4 analytics
+  panels + 3 charts are unported (lot 7).
+- **#462 interaction-race cluster** (async trigger dispatch, ForceReset ordering, LockCard slot guard, session-summary
+  defer, BubbleCount panic bail) — lots 2/3.
+- **Integration lags**: #463 companion busy-retry, #465 linked-Patreon +14d + `HasPremiumAccess` gate audit, #455
+  logout clears `AuthToken` (lot 8).
+- **Animated `.webp`**: ~70% already covered by Avalonia `SkiaImageDecoder`/SKCodec — broaden extension gates only,
+  **no `AnimatedWebp.cs` port, no new dep** (lot 3/6). `SubliminalSolidMode` #461 shared-host render path (lot 3).
+- **Auto-flows (no action)**: Core-model deltas + the new loc keys (WPF-folder `Localization/Languages/*.json` is the
+  built Content source; do NOT touch the dead `CCP.Core/Localization` copy).
+- **WPF-only infra (no port action)**: `UiHangWatchdog`, `SplashScreen` STA overhaul, `App` single-instance/minidump,
+  `UpdateService` version 6.2.7 — Windows-head seams; lot-11 note only.
+
+> **Merge-trap check done:** this merge had no modify/delete conflicts on `CCP.Core/Models` (unlike the 6.1.7 sync);
+> the 4 shared model files (SkillTree/SeasonRecap/AchievementProgress/AppSettings) merged cleanly and auto-flow.
+
+---
+
 ### 19.3a Previously completed — 6.1.6 sync (commit `22caaab4`, 2026-06-21)
 
 These `main` changes landed in the WPF head and have been ported (kept for record):
