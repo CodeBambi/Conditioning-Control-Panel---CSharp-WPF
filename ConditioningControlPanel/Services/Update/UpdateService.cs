@@ -20,13 +20,24 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.2.6";
+        public const string AppVersion = "6.2.7";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.2.6 - Tunnel Vision
+        public const string CurrentPatchNotes = @"v6.2.7 - Tunnel Vision
+
+🚑 HOTFIX
+- Fixed the app freezing on the loading screen on a cold first launch
+  (the ""Still loading... the app is fine"" hang). The freeze detector
+  mistook a slow first start for a real hang and its crash-dump then
+  froze the app for real. No more relaunching a few times to get in.
+- Ramping sessions no longer permanently overwrite your saved pink
+  filter and spiral opacity when the app closes mid-session. If yours
+  got stuck at maximum pink, just set the sliders back once.
+- Updating from 6.0.x no longer fails to launch right after the
+  installer restarts the app.
 
 ✨ NEW
 - Prestige: the enhancement tree now survives the seasons. Stat and
