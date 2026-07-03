@@ -81,9 +81,13 @@ CCP.Avalonia, all heads) as unverified until it passes WS0.**
 
 Open (this goal's actual work):
 - The whole port needs review and re-verification (WS0). Known-shaky spots to hit early:
-  the calibration-overhaul port is explicitly BLOCKED (stack divergence, see the
-  docs(av) BLOCKED STOP commit), and there is uncommitted WIP in the tree
-  (`WebcamCalibrationData.cs`).
+  the calibration-overhaul port TRIAGE was resolved in WS0 lot 5 — the earlier BLOCKED STOP
+  (stack divergence) was disproven and the core data model + 13 algorithm hunks landed
+  (commit 837aaa1d, see docs/avalonia-calibration-overhaul-port.md); the `WebcamCalibrationData.cs`
+  "uncommitted WIP" was already committed. The REAL remaining gap is the 16-point calibration
+  WINDOW pipeline (sample collection + polynomial fit + persist), which was a fake-success
+  shell; lot 5 made it honest ("not available yet") and filed the ~1300-1500 LoC port as its
+  own row. Quick-recal and the tracker-test window are now real.
 - UCE video layer does not render; legacy `AvaloniaMultiMonitorVideoService` is the only
   working video path. Audio controls and attention checks bypass the UCE path.
 - Chaos overlays (~23 window classes) are not on the compositor.
@@ -110,8 +114,8 @@ was reset once before for exactly this reason; repeat it).
 **Review lots:** slice the port into area lots and work through them by risk, highest
 first: (1) data/settings persistence and paths (data loss is unrecoverable), (2) session
 engine + start/stop, (3) overlays/compositor + click-through input, (4) video/audio,
-(5) speech/mic + gaze/calibration (known shaky; includes the BLOCKED calibration port
-and the uncommitted WIP), (6) chaos/game mode, (7) progression/quests/economy,
+(5) speech/mic + gaze/calibration (lot 5 PASSED 2026-07-03; the calibration port is now
+formally re-scoped: core landed, the 16-point window pipeline is filed as its own row), (6) chaos/game mode, (7) progression/quests/economy,
 (8) browser/integrations, (9) tabs and dialogs, (10) theming/mods, (11) heads/DI/startup.
 A lot is a reviewable unit (one service area or view cluster), small enough to exercise
 end-to-end in one session.
@@ -138,8 +142,9 @@ end-to-end in one session.
 - Working but merely unidiomatic/taste-level: leave it (ponytail). Churn is not quality.
 - Matrix hygiene: rows only earn `[x]` again through a lot's pass; verification evidence
   (what was exercised, on which head, vs which WPF behavior) goes in the matrix row.
-- Triage the BLOCKED calibration-overhaul port explicitly: decide resume, re-scope, or
-  revert, and record it. Same for the uncommitted `WebcamCalibrationData.cs` WIP.
+- Triage the BLOCKED calibration-overhaul port explicitly: done in WS0 lot 5 (BLOCKED
+  disproven, core landed in 837aaa1d, real gap = 16-point window pipeline filed as a row).
+  The "uncommitted WebcamCalibrationData.cs WIP" was already committed before lot 5.
 
 WS0 for an area is done when its lots pass all three checks, corrections are merged, and
 the matrix rows for that area are re-verified. Later workstreams may start for an area
