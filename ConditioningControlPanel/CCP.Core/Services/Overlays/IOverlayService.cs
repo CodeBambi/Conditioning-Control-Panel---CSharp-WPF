@@ -42,6 +42,15 @@ public interface IOverlayService
     /// <summary>Update the opacity of an overlay shown via <see cref="ShowOverlaySustained"/>.</summary>
     void SetSustainedOverlayOpacity(string kind, double opacity);
 
+    /// <summary>
+    /// Releases the pink/spiral opacity ramp holds set by <see cref="SetSustainedOverlayOpacity"/>
+    /// WITHOUT tearing the overlays down: the settings-driven refresh re-takes ownership on its
+    /// next tick and re-applies the user's saved opacity. Called when a session ends but the
+    /// overlays may legitimately stay up (the user had them enabled before the session).
+    /// WPF parity: OverlayService.ReleaseOpacityRampHolds.
+    /// </summary>
+    void ReleaseOpacityRampHolds();
+
     /// <summary>Pre-decode the configured spiral GIF off the UI thread to avoid hitches.</summary>
     void WarmSpiralCache();
 

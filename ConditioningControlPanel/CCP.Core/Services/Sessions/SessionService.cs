@@ -2,6 +2,7 @@ using System.Diagnostics;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Models;
 using Avalonia.Threading;
+using ConditioningControlPanel.Core.Services.Overlays;
 using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.SessionLog;
 using ConditioningControlPanel.Core.Services.Settings;
@@ -23,6 +24,7 @@ public sealed class SessionService : ISessionService, IDisposable
     private readonly ISessionLogService? _sessionLog;
     private readonly IAchievementService? _achievements;
     private readonly ISessionEffectOrchestrator? _effectOrchestrator;
+    private readonly IOverlayService? _overlay;
     private readonly SessionSettingsScope _settingsScope = new();
     private readonly Random _random = new();
     private readonly Stopwatch _wallClockStopwatch = new();
@@ -118,13 +120,15 @@ public sealed class SessionService : ISessionService, IDisposable
         IProgressionService progression,
         ISessionLogService? sessionLog = null,
         IAchievementService? achievements = null,
-        ISessionEffectOrchestrator? effectOrchestrator = null)
+        ISessionEffectOrchestrator? effectOrchestrator = null,
+        IOverlayService? overlay = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _progression = progression ?? throw new ArgumentNullException(nameof(progression));
         _sessionLog = sessionLog;
         _achievements = achievements;
         _effectOrchestrator = effectOrchestrator;
+        _overlay = overlay;
     }
 
     public Task StartSessionAsync(ConditioningControlPanel.Models.Session session, CancellationToken cancellationToken = default)
@@ -191,6 +195,10 @@ public sealed class SessionService : ISessionService, IDisposable
 
         // Restore the user's pre-session settings BEFORE SessionStopped fires (WPF parity).
         _settingsScope.Restore(_settings.Current);
+
+        // Drop the pink/spiral ramp holds so the overlay's settings-sync re-applies the restored
+        // user opacity on its next tick (WPF SessionEngine.cs ReleaseOpacityRampHolds parity).
+        _overlay?.ReleaseOpacityRampHolds();
 
         SessionStopped?.Invoke(this, new SessionStoppedEventArgs(finalElapsedTime, completed));
 
@@ -392,20 +400,27 @@ public sealed class SessionService : ISessionService, IDisposable
             current.ImageScale = settings.FlashScale;
         }
 
-        // Pink filter ramp (only after randomized start minute)
+        // Pink filter ramp (only after randomized start minute).
+        // Direct-drive the overlay (WPF SessionEngine #471/#476 parity) instead of writing the
+        // ramped value into current.PinkFilterOpacity: that is the user's persisted setting and
+        // auto-saves to disk, so an app kill/crash mid-ramp froze the ramp maximum into
+        // settings.json permanently ("screen stays max pink"). SessionSettingsScope.Restore only
+        // heals a CLEAN stop; the START opacity it seeded is the worst-case frozen value now.
         if (settings.PinkFilterEnabled && elapsedMinutes >= _randomizedPinkStartMinute)
         {
             var pinkDuration = totalMinutes - _randomizedPinkStartMinute;
             var pinkProgress = Math.Clamp((elapsedMinutes - _randomizedPinkStartMinute) / pinkDuration, 0, 1);
-            current.PinkFilterOpacity = (int)Lerp(settings.PinkFilterStartOpacity, settings.PinkFilterEndOpacity, pinkProgress);
+            var pinkRamp = Lerp(settings.PinkFilterStartOpacity, settings.PinkFilterEndOpacity, pinkProgress);
+            _overlay?.SetSustainedOverlayOpacity("pink_filter", pinkRamp / 100.0);
         }
 
-        // Spiral ramp (only after randomized start minute)
+        // Spiral ramp (only after randomized start minute) — same direct-drive as pink, no settings write.
         if (settings.SpiralEnabled && elapsedMinutes >= _randomizedSpiralStartMinute)
         {
             var spiralDuration = totalMinutes - _randomizedSpiralStartMinute;
             var spiralProgress = Math.Clamp((elapsedMinutes - _randomizedSpiralStartMinute) / spiralDuration, 0, 1);
-            current.SpiralOpacity = (int)Lerp(settings.SpiralOpacity, settings.SpiralOpacityEnd, spiralProgress);
+            var spiralRamp = Lerp(settings.SpiralOpacity, settings.SpiralOpacityEnd, spiralProgress);
+            _overlay?.SetSustainedOverlayOpacity("spiral", spiralRamp / 100.0);
         }
 
         // Bubble frequency ramp (stepped: +1 every 5 minutes past the start minute)

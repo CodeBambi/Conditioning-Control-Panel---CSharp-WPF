@@ -425,6 +425,24 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         });
     }
 
+    public void ReleaseOpacityRampHolds()
+    {
+        if (_isDisposed) return;
+
+        // WPF parity (OverlayService.ReleaseOpacityRampHolds): drop the pink/spiral ramp holds
+        // so the 500ms settings-sync (UpdateOverlays) re-takes ownership and re-applies the
+        // user's saved opacity. Reset BOTH dedupe sentinels per path, else the next tick sees
+        // "unchanged" and never re-applies, leaving the ramped value stuck on screen.
+        Dispatcher.UIThread.Invoke(() =>
+        {
+            _adHocPinkOpacity = null;
+            _adHocSpiralOpacity = null;
+            _lastAppliedPinkOpacity = -1;
+            _lastAppliedPinkColor = Colors.Transparent;
+            _lastAppliedSpiralOpacity = -1;
+        });
+    }
+
     public void WarmSpiralCache()
     {
         // WPF parity (OverlayService.WarmSpiralCache): pre-decode the spiral GIF frames off

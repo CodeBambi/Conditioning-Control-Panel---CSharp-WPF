@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
+using ConditioningControlPanel.Core.Services.Overlays;
 using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.SessionLog;
 using ConditioningControlPanel.Core.Services.Sessions;
@@ -96,6 +97,33 @@ public class SessionEngineTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
+    private sealed class FakeOverlayService : IOverlayService
+    {
+        public double? LastPink;
+        public double? LastSpiral;
+        public int ReleaseCount;
+
+        public bool IsRunning => false;
+        public bool BypassLevelCheck { get; set; }
+        public void Start() { }
+        public void Stop() { }
+        public void RefreshOverlays() { }
+        public void PulseOverlays() { }
+        public void RefreshForMultiMonitorChange() { }
+        public void ShowOverlayTimed(string kind, int durationMs, double opacity) { }
+        public void ShowOverlaySustained(string kind, double opacity) { }
+        public void HideOverlaySustained(string kind) { }
+        public void SetSustainedOverlayOpacity(string kind, double opacity)
+        {
+            if (kind == "pink_filter") LastPink = opacity;
+            else if (kind == "spiral") LastSpiral = opacity;
+        }
+        public void ReleaseOpacityRampHolds() => ReleaseCount++;
+        public void WarmSpiralCache() { }
+        public void NotifyTopWindowOpened() { }
+        public void NotifyTopWindowClosed() { }
+    }
+
     private static Session CreateSession(int durationMinutes = 10, int bonusXP = 400)
     {
         return new Session
@@ -118,6 +146,61 @@ public class SessionEngineTests
     {
         var method = typeof(SessionService).GetMethod("OnTick", BindingFlags.NonPublic | BindingFlags.Instance)!;
         method.Invoke(service, null);
+    }
+
+    [AvaloniaFact]
+    public async Task SessionRamp_DirectDrivesOverlay_DoesNotMutatePersistedOpacity()
+    {
+        // Lot-2 re-visit (merge 5ce70de6): the session pink/spiral ramp must direct-drive the
+        // overlay (WPF SessionEngine #471/#476) and NOT write the ramped value into the
+        // auto-saving settings.Current, which used to freeze the ramp maximum into settings.json
+        // on a crash/kill mid-session. IntensityRampService (the MANUAL ramp) intentionally still
+        // writes settings — that matches WPF RampTimer_Tick and is deliberately not touched here.
+        var settings = new FakeSettingsService();
+        var overlay = new FakeOverlayService();
+        var service = new SessionService(settings, new FakeProgressionService(), overlay: overlay);
+
+        var session = CreateSession();
+        session.Settings.PinkFilterEnabled = true;
+        session.Settings.PinkFilterStartMinute = 0;
+        session.Settings.PinkFilterStartOpacity = 10;
+        session.Settings.PinkFilterEndOpacity = 50;
+        session.Settings.SpiralEnabled = true;
+        session.Settings.SpiralStartMinute = 0;
+        session.Settings.SpiralOpacity = 5;
+        session.Settings.SpiralOpacityEnd = 45;
+
+        await service.StartSessionAsync(session);
+
+        // Scope.Apply seeds the START opacity into settings for immediate (StartMinute==0) ramps.
+        Assert.Equal(10, settings.Current.PinkFilterOpacity);
+        Assert.Equal(5, settings.Current.SpiralOpacity);
+
+        // Drive the ramp to 50% (5 of 10 minutes). StartMinute==0 => randomized start == 0.
+        InvokeRamp(service, 5.0, 10.0);
+
+        // Overlay was direct-driven with the lerped value, normalized 0..1.
+        Assert.NotNull(overlay.LastPink);
+        Assert.Equal(0.30, overlay.LastPink!.Value, 3);   // Lerp(10,50,0.5)=30 -> 0.30
+        Assert.NotNull(overlay.LastSpiral);
+        Assert.Equal(0.25, overlay.LastSpiral!.Value, 3);  // Lerp(5,45,0.5)=25 -> 0.25
+
+        // The persisted settings were NOT mutated by the ramp (still the seeded START values);
+        // under the pre-fix bug these would read 30 and 25 and auto-save to disk on crash.
+        Assert.Equal(10, settings.Current.PinkFilterOpacity);
+        Assert.Equal(5, settings.Current.SpiralOpacity);
+    }
+
+    [AvaloniaFact]
+    public async Task StopSession_ReleasesOverlayRampHolds()
+    {
+        var overlay = new FakeOverlayService();
+        var service = new SessionService(new FakeSettingsService(), new FakeProgressionService(), overlay: overlay);
+        await service.StartSessionAsync(CreateSession());
+
+        service.StopSession(completed: false);
+
+        Assert.True(overlay.ReleaseCount >= 1);
     }
 
     [AvaloniaFact]
@@ -360,10 +443,11 @@ public class SessionEngineTests
     }
 
     [AvaloniaFact]
-    public async Task RampInterpolation_WritesLerpedValuesIntoLiveSettings()
+    public async Task RampInterpolation_WritesFlashLerpIntoSettings_ButDirectDrivesPinkOverlay()
     {
         var settings = new FakeSettingsService();
-        var service = new SessionService(settings, new FakeProgressionService());
+        var overlay = new FakeOverlayService();
+        var service = new SessionService(settings, new FakeProgressionService(), overlay: overlay);
 
         var session = CreateSession(durationMinutes: 10);
         session.Settings = new SessionSettings
@@ -381,26 +465,34 @@ public class SessionEngineTests
 
         await service.StartSessionAsync(session);
 
+        // Flash opacity/frequency still ramp INTO settings (WPF parity — only pink/spiral were
+        // moved off settings by #471/#476). Pink is direct-driven to the overlay and must NOT
+        // mutate the persisted PinkFilterOpacity, which stays at the scope-seeded start of 10.
         InvokeRamp(service, 0, 10);
         Assert.Equal(20, settings.Current.FlashOpacity);
         Assert.Equal(10, settings.Current.FlashFrequency);
         Assert.Equal(10, settings.Current.PinkFilterOpacity);
+        Assert.Equal(0.10, overlay.LastPink!.Value, 3);
 
         InvokeRamp(service, 5, 10);
         Assert.Equal(60, settings.Current.FlashOpacity);
         Assert.Equal(60, settings.Current.FlashFrequency);
-        Assert.Equal(30, settings.Current.PinkFilterOpacity);
+        Assert.Equal(10, settings.Current.PinkFilterOpacity);   // unchanged by the ramp
+        Assert.Equal(0.30, overlay.LastPink!.Value, 3);
 
         InvokeRamp(service, 10, 10);
         Assert.Equal(100, settings.Current.FlashOpacity);
         Assert.Equal(110, settings.Current.FlashFrequency);
-        Assert.Equal(50, settings.Current.PinkFilterOpacity);
+        Assert.Equal(10, settings.Current.PinkFilterOpacity);   // unchanged by the ramp
+        Assert.Equal(0.50, overlay.LastPink!.Value, 3);
 
         service.StopSession(completed: false);
 
-        // Restore puts the pre-session values back after ramping mutated them.
+        // Restore puts the pre-session flash values back after ramping mutated them; the pink
+        // ramp holds are released so the overlay's settings-sync re-takes ownership.
         Assert.Equal(80, settings.Current.FlashOpacity);
         Assert.Equal(10, settings.Current.FlashFrequency);
+        Assert.True(overlay.ReleaseCount >= 1);
     }
 
     [AvaloniaFact]
