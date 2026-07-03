@@ -50,9 +50,16 @@ namespace ConditioningControlPanel
         // ack, a zombie process kept the mutex alive and every relaunch quietly Shutdown()'d,
         // which is the "app freezes on startup, have to relaunch several times" report.
         private const string ShowAckSignalName = "ConditioningControlPanel_ShowAck_Signal";
-        // Generous: exceeds a normal cold start so a healthy but still-initializing primary
-        // (whose dispatcher isn't pumping yet) acks in time and is never mistaken for wedged.
+        // A healthy primary that is still inside OnStartup CANNOT ack from its dispatcher (it
+        // isn't pumping until startup returns — a cold first launch runs 13s+). During that
+        // window the signal-listener thread acks directly (see _startupPhase): it proves the
+        // process is alive-and-initializing, while a dump-suspended or killed process still
+        // acks nothing and gets taken over. After startup, only a pumping dispatcher acks, so
+        // a render-thread-deadlocked zombie is still detected.
         private const int ShowAckTimeoutMs = 10000;
+        // True from process start until the dispatcher pumps for the first time (i.e. until
+        // OnStartup has returned and the message loop is running).
+        private static volatile bool _startupPhase = true;
         private static EventWaitHandle? _showSignal;
         private static EventWaitHandle? _showAckSignal;
         private static bool _recoveredFromStaleInstance;
@@ -819,6 +826,17 @@ namespace ConditioningControlPanel
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // Dump-writer mode: spawned by UiHangWatchdog in a WEDGED sibling CCP process
+            // (`--write-hang-dump <pid> <path>`). Write the minidump from this healthy process
+            // and exit before touching the splash, the single-instance mutex, or any service.
+            if (e.Args.Length >= 3 && e.Args[0] == "--write-hang-dump" && int.TryParse(e.Args[1], out int hangDumpPid))
+            {
+                bool dumpOk = false;
+                try { dumpOk = Services.UiHangWatchdog.TryWriteDumpOfProcess(hangDumpPid, e.Args[2]); } catch { }
+                Environment.Exit(dumpOk ? 0 : 1);
+                return;
+            }
+
             // Render-thread deadlock guard (see avatar-tube-render-deadlock memory): the avatar
             // tube is a layered window sharing WPF's single render thread; a layered ComboBox
             // dropdown resizing/closing while the tube animates can wedge that thread
@@ -950,6 +968,16 @@ namespace ConditioningControlPanel
                     {
                         if (_showSignal.WaitOne(1000))
                         {
+                            // Still inside OnStartup: the dispatcher can't pump the ack below until
+                            // init finishes, but this thread being alive is proof enough that we are
+                            // starting, not wedged — ack now so a relaunch during a slow cold start
+                            // doesn't kill a healthy primary mid-init. (A dump-suspended process has
+                            // this thread frozen too, so takeover still catches real zombies.)
+                            if (_startupPhase)
+                            {
+                                try { _showAckSignal?.Set(); } catch { }
+                            }
+
                             Dispatcher.BeginInvoke(() =>
                             {
                                 // Use the stable static ref: Application.Current.MainWindow
@@ -1621,6 +1649,10 @@ namespace ConditioningControlPanel
                 catch (Exception ex) { Logger?.Debug("Post-splash ForceWindowToFront failed: {Error}", ex.Message); }
             })));
             _splash = null;
+
+            // First dispatcher pump = startup is over: from here on, single-instance acks must
+            // come from the dispatcher itself so a wedged message loop is detected again.
+            Dispatcher.BeginInvoke(new Action(() => _startupPhase = false));
 
             // Age verification gate (first launch only, deferred to ensure splash is fully closed)
             if (Settings?.Current?.HasAcceptedAgeVerification != true)
