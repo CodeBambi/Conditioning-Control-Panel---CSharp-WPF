@@ -1,25 +1,28 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using Avalonia;
-using Avalonia.Media;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
-using ConditioningControlPanel.Avalonia.Compositor.Layers;
 using ConditioningControlPanel.Core.Platform;
 using SkiaSharp;
 
 namespace ConditioningControlPanel.Avalonia.Compositor.Layers;
 
 /// <summary>
-/// Renders flash image popups. The service controls spawning and lifetime;
-/// this layer handles position, fade, and rendering.
-/// Supports animated GIFs via frame-by-frame decoding with SkiaSharp.
+/// Renders flash image popups. The service owns decoding (via its LRU frame cache) and
+/// spawning; this layer handles fade, GIF frame advance at the file's real frame delays,
+/// and rendering.
+///
+/// Lifetime discipline (UCE rule 8): Render draws while holding _sync, and every
+/// <see cref="SkiaFrameSet.Release"/> for an item's frames also happens under _sync
+/// (expiry, click, Clear), so the render thread can never draw a disposed SKImage.
+/// Snapshotting the reference and drawing outside the lock does NOT extend the native
+/// handle's lifetime — that was the 0xC0000005 use-after-free class BubbleLayer documents
+/// (AvaloniaUI/Avalonia#13521).
 /// </summary>
 public sealed class FlashLayer : BaseLayer
 {
     private readonly List<FlashItem> _items = new();
     private readonly object _sync = new();
+    // Reused paint: only touched inside Render under _sync. Never disposed (layer lives app-long).
+    private readonly SKPaint _paint = new();
     private const double FADE_PER_SEC = 3.0;
 
     public override int ZIndex => CompositorLayers.Flash;
@@ -32,101 +35,44 @@ public sealed class FlashLayer : BaseLayer
         }
     }
 
-    /// <summary>Spawn a new flash image. Returns the item ID for tracking.</summary>
-    public Guid Spawn(string? filePath, Bitmap bitmap, double x, double y, double width, double height, double maxOpacity, int lifetimeMs, bool clickable)
+    /// <summary>
+    /// Spawn a flash from a pre-decoded frame set. Takes ownership of one reference on
+    /// <paramref name="frames"/>; it is released (under _sync) when the item is removed
+    /// by expiry, click, or <see cref="Clear"/>. Returns the item ID for tracking.
+    /// </summary>
+    public Guid Spawn(SkiaFrameSet frames, double x, double y, double width, double height,
+        double maxOpacity, int lifetimeMs, bool clickable)
     {
-        // Fast path: create item with single frame immediately so it appears without blocking.
-        var firstFrame = ConvertFirstFrame(bitmap);
-        if (firstFrame == null) return Guid.Empty;
-
-        var id = Guid.NewGuid();
-        var item = new FlashItem(id, new[] { firstFrame }, x, y, width, height, maxOpacity, lifetimeMs, clickable);
+        var item = new FlashItem(Guid.NewGuid(), frames, x, y, width, height, maxOpacity, lifetimeMs, clickable);
         lock (_sync)
         {
             _items.Add(item);
         }
-
-        // If this is an animated GIF, decode remaining frames on a background thread.
-        if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
-        {
-            var ext = Path.GetExtension(filePath).ToLowerInvariant();
-            if (ext == ".gif")
-            {
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        var frames = ExtractGifFrames(filePath);
-                        if (frames != null && frames.Length > 1)
-                        {
-                            Dispatcher.UIThread.Post(() =>
-                            {
-                                lock (_sync)
-                                {
-                                    if (!_items.Contains(item)) return;
-                                    item.SetFrames(frames);
-                                }
-                            });
-                        }
-                        else
-                        {
-                            // No animation; dispose any allocated frames.
-                            if (frames != null)
-                                foreach (var f in frames) f?.Dispose();
-                        }
-                    }
-                    catch { /* best effort */ }
-                });
-            }
-        }
-
-        return id;
-    }
-
-    private static SKImage? ConvertFirstFrame(Bitmap bitmap)
-    {
-        try
-        {
-            using var stream = new MemoryStream();
-            bitmap.Save(stream);
-            stream.Position = 0;
-            return SKImage.FromEncodedData(stream);
-        }
-        catch { return null; }
-    }
-
-    private static SKImage[]? ExtractGifFrames(string filePath)
-    {
-        try
-        {
-            using var codec = SKCodec.Create(filePath);
-            if (codec == null || codec.FrameCount <= 1) return null;
-
-            var frames = new SKImage[codec.FrameCount];
-            var info = new SKImageInfo(codec.Info.Width, codec.Info.Height);
-            for (int i = 0; i < codec.FrameCount; i++)
-            {
-                using var frameBitmap = new SKBitmap(info);
-                var opts = new SKCodecOptions(i);
-                codec.GetPixels(frameBitmap.Info, frameBitmap.GetPixels(), opts);
-                frames[i] = SKImage.FromBitmap(frameBitmap);
-            }
-            return frames;
-        }
-        catch { return null; }
+        return item.Id;
     }
 
     public void RemoveItem(Guid id)
     {
         lock (_sync)
         {
-            _items.RemoveAll(i => i.Id == id);
+            for (int i = _items.Count - 1; i >= 0; i--)
+            {
+                if (_items[i].Id == id)
+                {
+                    _items[i].ReleaseFrames(); // under _sync: no render pass can be mid-draw
+                    _items.RemoveAt(i);
+                }
+            }
         }
     }
 
     public void Clear()
     {
-        lock (_sync) { _items.Clear(); }
+        lock (_sync)
+        {
+            foreach (var item in _items) item.ReleaseFrames();
+            _items.Clear();
+        }
     }
 
     public void RemoveItem(FlashItem item) => RemoveItem(item.Id);
@@ -140,35 +86,34 @@ public sealed class FlashLayer : BaseLayer
             {
                 var item = _items[i];
                 item.Update(dt, FADE_PER_SEC);
-                if (item.IsDone) _items.RemoveAt(i);
+                if (item.IsDone)
+                {
+                    item.ReleaseFrames(); // under _sync: safe deterministic disposal (no finalizer backlog)
+                    _items.RemoveAt(i);
+                }
             }
         }
     }
 
     public override void Render(SKCanvas canvas, ConditioningControlPanel.Core.Platform.PixelRect bounds, TimeSpan deltaTime)
     {
-        // Snapshot each item's current draw state (frame + opacity + transform) under the lock so the
-        // GPU render thread never dereferences an SKImage that SetFrames()/Update() is disposing or
-        // replacing on the UI thread. Drawing is done outside the lock to minimize contention.
-        List<(FlashItem item, SKImage? frame, double opacity, double x, double y, double w, double h)> snapshot;
+        // Draw while holding _sync (see class doc). Contention is negligible: the UI thread
+        // only takes this lock for list bookkeeping, and drawing records into the Skia
+        // command stream rather than rasterizing inline.
         lock (_sync)
         {
-            snapshot = _items
-                .Where(i => i.Opacity > 0)
-                .Select(i => (i, i.CurrentFrame, i.Opacity, i.X, i.Y, i.Width, i.Height))
-                .ToList();
-        }
-
-        foreach (var entry in snapshot)
-        {
-            var image = entry.frame;
-            if (image == null) continue;
-            using var paint = new SKPaint
+            for (int i = 0; i < _items.Count; i++)
             {
-                Color = new SKColor(255, 255, 255, (byte)(entry.opacity * 255))
-            };
-            var dest = new SKRect((float)entry.x, (float)entry.y, (float)(entry.x + entry.w), (float)(entry.y + entry.h));
-            canvas.DrawImage(image, dest, paint);
+                var item = _items[i];
+                if (item.Opacity <= 0) continue;
+                var image = item.CurrentFrame;
+                if (image == null) continue;
+
+                _paint.Color = new SKColor(255, 255, 255, (byte)(item.Opacity * 255));
+                var dest = new SKRect((float)item.X, (float)item.Y,
+                    (float)(item.X + item.Width), (float)(item.Y + item.Height));
+                canvas.DrawImage(image, dest, _paint);
+            }
         }
     }
 
@@ -190,8 +135,7 @@ public sealed class FlashLayer : BaseLayer
     public sealed class FlashItem
     {
         public Guid Id { get; }
-        private SKImage[] _frames;
-        public SKImage[] Frames => _frames;
+        private SkiaFrameSet? _frames;
         public double X { get; }
         public double Y { get; }
         public double Width { get; }
@@ -206,11 +150,20 @@ public sealed class FlashLayer : BaseLayer
         private bool _isFadingOut;
         private int _currentFrame;
         private double _frameTimer;
-        private const double FrameDuration = 0.08; // ~12.5 fps for GIFs
 
-        public SKImage CurrentFrame => Frames.Length > 0 ? Frames[_currentFrame % Frames.Length] : Frames[0];
+        /// <summary>Current frame, or null once the frames have been released.</summary>
+        public SKImage? CurrentFrame
+        {
+            get
+            {
+                var frames = _frames;
+                if (frames == null || frames.Frames.Length == 0) return null;
+                return frames.Frames[_currentFrame % frames.Frames.Length];
+            }
+        }
 
-        public FlashItem(Guid id, SKImage[] frames, double x, double y, double width, double height, double maxOpacity, int lifetimeMs, bool clickable)
+        public FlashItem(Guid id, SkiaFrameSet frames, double x, double y, double width, double height,
+            double maxOpacity, int lifetimeMs, bool clickable)
         {
             Id = id;
             _frames = frames;
@@ -225,13 +178,15 @@ public sealed class FlashLayer : BaseLayer
             OriginalLifetimeMs = lifetimeMs;
         }
 
-        public void SetFrames(SKImage[] newFrames)
+        /// <summary>
+        /// Drop this item's reference on its frame set. Must be called under the layer's
+        /// _sync (all call sites are), so a final release can never race an in-flight draw.
+        /// </summary>
+        internal void ReleaseFrames()
         {
-            if (newFrames == null || newFrames.Length == 0) return;
-            foreach (var f in Frames) f?.Dispose();
-            _frames = newFrames;
-            _currentFrame = 0;
-            _frameTimer = 0;
+            var frames = _frames;
+            _frames = null;
+            frames?.Release();
         }
 
         public void Update(double dt, double fadePerSec)
@@ -248,14 +203,19 @@ public sealed class FlashLayer : BaseLayer
                 if (Opacity <= 0) IsDone = true;
             }
 
-            // Advance GIF frames
-            if (Frames.Length > 1)
+            // Advance GIF frames at the file's real per-frame delays (from SKCodec.FrameInfo).
+            var frames = _frames;
+            if (frames != null && frames.IsAnimated)
             {
+                var delays = frames.FrameDelaysSeconds;
                 _frameTimer += dt;
-                if (_frameTimer >= FrameDuration)
+                var guard = 0;
+                while (guard++ < 1000)
                 {
-                    _frameTimer = 0;
-                    _currentFrame = (_currentFrame + 1) % Frames.Length;
+                    var delay = delays[_currentFrame % delays.Length];
+                    if (delay <= 0.0005 || _frameTimer < delay) break;
+                    _frameTimer -= delay;
+                    _currentFrame = (_currentFrame + 1) % frames.Frames.Length;
                 }
             }
         }

@@ -33,7 +33,8 @@ public partial class LevelFeaturesTabViewModel : TabItemViewModel
 
     public const int BubbleCountLevel = 50;
     public const int BouncingTextLevel = 60;
-    public const int BrainDrainLevel = 70;
+    // Shared with AvaloniaOverlayService's service-side gate (WPF parity) — single source of truth.
+    public const int BrainDrainLevel = AppSettings.BrainDrainUnlockLevel;
     public const int MindWipeLevel = 75;
 
     public LevelFeaturesTabViewModel() : base("levelfeatures", "Level Features", "🎚️")

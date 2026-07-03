@@ -6,7 +6,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using ConditioningControlPanel;
 using ConditioningControlPanel.Avalonia.Compositor;
@@ -16,6 +15,7 @@ using ConditioningControlPanel.Core.Services.Flash;
 using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Models;
+using SkiaSharp;
 
 namespace ConditioningControlPanel.Avalonia.Services.Flash;
 
@@ -45,6 +45,9 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
     private readonly IMouseHook? _mouseHook;
     private readonly Dictionary<string, (List<string> files, DateTime lastScan)> _fileCache = new();
     private readonly Dictionary<Guid, FlashClickData> _clickData = new();
+    // LRU decode cache (WPF FlashService._imageDecodeCache parity): one decode per file,
+    // shared across spawns via ref-counted SkiaFrameSets. Persists across Stop/Start.
+    private readonly FlashImageCache _frameCache = new();
 
     private string _imagesPath = "";
     private CancellationTokenSource? _cts;
@@ -224,6 +227,7 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
     private void SpawnFlash(ImageData data, AppSettings settings, int hydraGeneration, int remainingMs = -1)
     {
         if (!IsRunning && !data.OneShot) return;
+        if (_flashLayer == null) return;
 
         var geom = data.Geometry;
         var monitor = data.Monitor;
@@ -241,20 +245,92 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
             };
         }
 
-        var bitmap = data.Bitmap;
-        if (bitmap == null) return;
-
         var maxOpacity = settings.FlashOpacity / 100.0;
         var lifetimeMs = remainingMs > 0 ? remainingMs : Math.Max(500, (int)(settings.FlashDuration * 1000));
-        var id = _flashLayer?.Spawn(data.FilePath, bitmap, geom.X, geom.Y, geom.Width, geom.Height, maxOpacity, lifetimeMs, settings.FlashClickable);
+        SpawnDecoded(data.FilePath, geom, monitor, maxOpacity, lifetimeMs, settings.FlashClickable,
+            hydraGeneration, data.OneShot);
+    }
 
-        if (id.HasValue && id.Value != Guid.Empty)
+    /// <summary>
+    /// Decode <paramref name="filePath"/> off the UI thread (single decode per file via the
+    /// LRU cache — WPF LoadImageAsync parity) and post the flash into the compositor layer
+    /// once frames are ready. Replaces the old UI-thread Bitmap -> PNG -> SKImage triple
+    /// decode that hitched every overlay on each spawn.
+    /// </summary>
+    private void SpawnDecoded(string filePath, ImageGeometry geom, ImageGeometry monitor,
+        double maxOpacity, int lifetimeMs, bool clickable, int hydraGeneration, bool oneShot)
+    {
+        var decodeMax = ComputeDecodeMaxDim();
+        _ = Task.Run(() =>
         {
-            lock (_sync)
+            SkiaFrameSet? frames = null;
+            try
             {
-                _clickData[id.Value] = new FlashClickData(
-                    data.FilePath, lifetimeMs, hydraGeneration, monitor, settings.FlashClickable);
+                frames = _frameCache.GetOrDecode(filePath, decodeMax);
+                if (frames == null)
+                {
+                    _logger?.LogDebug("AvaloniaFlashService: failed to decode {Path}", filePath);
+                    return;
+                }
+
+                var set = frames;
+                frames = null; // ownership moves to the UI-thread continuation
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if ((!IsRunning && !oneShot) || _flashLayer == null)
+                    {
+                        set.Release(); // never entered the layer — no renderer can reference it
+                        return;
+                    }
+
+                    var id = _flashLayer.Spawn(set, geom.X, geom.Y, geom.Width, geom.Height,
+                        maxOpacity, lifetimeMs, clickable);
+                    lock (_sync)
+                    {
+                        _clickData[id] = new FlashClickData(filePath, lifetimeMs, hydraGeneration, monitor, clickable);
+                    }
+                });
             }
+            catch (Exception ex)
+            {
+                frames?.Release();
+                _logger?.LogDebug("AvaloniaFlashService: spawn decode failed for {Path}: {Error}", filePath, ex.Message);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Largest pixel dimension to decode a flash image/GIF frame at. WPF parity:
+    /// FlashService.ComputeDecodeMaxDim uses the performance tier's cap (1024 at the
+    /// default Quality tier) scaled by ImageScale, clamped 256..2048. The port has no
+    /// performance-tier system yet, so the Quality cap applies unconditionally.
+    /// </summary>
+    private int ComputeDecodeMaxDim()
+    {
+        var scale = _settings.Current?.ImageScale ?? 100;
+        var dim = (int)(1024 * (scale / 100.0));
+        return Math.Clamp(dim, 256, 2048);
+    }
+
+    /// <summary>
+    /// Header-only pixel size probe (SKCodec parses the header without decoding pixels) —
+    /// cheap enough for the UI thread, replacing the old full new Bitmap(path) decode.
+    /// </summary>
+    private static (int w, int h) ProbeImagePixelSize(string path)
+    {
+        try
+        {
+            using var codec = SKCodec.Create(path);
+            if (codec != null && codec.Info.Width > 0)
+                return (codec.Info.Width, codec.Info.Height);
+
+            // Rare fallback for formats SKCodec cannot stream.
+            using var bmp = SKBitmap.Decode(path);
+            return bmp != null ? (bmp.Width, bmp.Height) : (0, 0);
+        }
+        catch
+        {
+            return (0, 0);
         }
     }
 
@@ -358,20 +434,25 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         var path = files[_random.Next(files.Count)];
         try
         {
-            var bitmap = new Bitmap(path);
+            var (pxW, pxH) = ProbeImagePixelSize(path);
+            if (pxW <= 0 || pxH <= 0)
+            {
+                _logger?.LogDebug("AvaloniaFlashService: could not read image size for {Path}", path);
+                return null;
+            }
+
             var monitor = GetRandomMonitor();
             var scale = Math.Min(1.0, Math.Min(
-                monitor.Width / (bitmap.PixelSize.Width / monitor.Scaling),
-                monitor.Height / (bitmap.PixelSize.Height / monitor.Scaling)));
-            var w = (int)(bitmap.PixelSize.Width / monitor.Scaling * scale);
-            var h = (int)(bitmap.PixelSize.Height / monitor.Scaling * scale);
+                monitor.Width / (pxW / monitor.Scaling),
+                monitor.Height / (pxH / monitor.Scaling)));
+            var w = (int)(pxW / monitor.Scaling * scale);
+            var h = (int)(pxH / monitor.Scaling * scale);
             var x = (int)(monitor.X + _random.Next(0, Math.Max(1, (int)(monitor.Width - w))));
             var y = (int)(monitor.Y + _random.Next(0, Math.Max(1, (int)(monitor.Height - h))));
 
             return new ImageData
             {
                 FilePath = path,
-                Bitmap = bitmap,
                 Geometry = new ImageGeometry { X = x, Y = y, Width = w, Height = h },
                 Monitor = monitor
             };
@@ -494,54 +575,36 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         if (!IsRunning) return;
 
         var settings = _settings.Current;
-        if (settings == null) return;
+        if (settings == null || _flashLayer == null) return;
 
-        Bitmap? bitmap = null;
-        try
+        var path = imagePath;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
         {
-            if (!string.IsNullOrEmpty(imagePath) && File.Exists(imagePath))
-            {
-                bitmap = new Bitmap(imagePath);
-            }
-            else
-            {
-                var files = GetImageFiles();
-                if (files.Count > 0)
-                {
-                    var path = files[_random.Next(files.Count)];
-                    bitmap = new Bitmap(path);
-                    imagePath = path;
-                }
-            }
+            var files = GetImageFiles();
+            if (files.Count == 0) return;
+            path = files[_random.Next(files.Count)];
         }
-        catch (Exception ex)
+
+        var (pxW, pxH) = ProbeImagePixelSize(path);
+        if (pxW <= 0 || pxH <= 0)
         {
-            _logger?.LogDebug("AvaloniaFlashService: failed to load one-shot image: {Error}", ex.Message);
+            _logger?.LogDebug("AvaloniaFlashService: failed to load one-shot image {Path}", path);
             return;
         }
 
-        if (bitmap == null) return;
-
         var monitor = GetRandomMonitor();
         var scale = Math.Min(1.0, Math.Min(
-            monitor.Width / (bitmap.PixelSize.Width / monitor.Scaling),
-            monitor.Height / (bitmap.PixelSize.Height / monitor.Scaling)));
-        var w = (int)(bitmap.PixelSize.Width / monitor.Scaling * scale);
-        var h = (int)(bitmap.PixelSize.Height / monitor.Scaling * scale);
+            monitor.Width / (pxW / monitor.Scaling),
+            monitor.Height / (pxH / monitor.Scaling)));
+        var w = (int)(pxW / monitor.Scaling * scale);
+        var h = (int)(pxH / monitor.Scaling * scale);
         var x = (int)(monitor.X + _random.Next(0, Math.Max(1, (int)(monitor.Width - w))));
         var y = (int)(monitor.Y + _random.Next(0, Math.Max(1, (int)(monitor.Height - h))));
 
         var maxOpacity = settings.FlashOpacity / 100.0;
-        var id = _flashLayer?.Spawn(imagePath, bitmap, x, y, w, h, maxOpacity, durationMs, settings.FlashClickable);
-
-        if (id.HasValue && id.Value != Guid.Empty)
-        {
-            lock (_sync)
-            {
-                _clickData[id.Value] = new FlashClickData(
-                    imagePath ?? "", durationMs, 0, monitor, settings.FlashClickable);
-            }
-        }
+        var geom = new ImageGeometry { X = x, Y = y, Width = w, Height = h };
+        SpawnDecoded(path, geom, monitor, maxOpacity, durationMs, settings.FlashClickable,
+            hydraGeneration: 0, oneShot: true);
     }
 
     public bool GazePop(ConditioningControlPanel.Core.Platform.PixelRect rect)
@@ -564,12 +627,14 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
     {
         Stop();
         lock (_sync) { _clickData.Clear(); }
+        // Stop() cleared the layer's items (releasing their frame refs under the layer's
+        // render lock); dropping the cache refs now deterministically disposes the frames.
+        _frameCache.Clear();
     }
 
     private sealed class ImageData
     {
         public string FilePath { get; set; } = "";
-        public Bitmap? Bitmap { get; set; }
         public ImageGeometry Geometry { get; set; } = new();
         public ImageGeometry Monitor { get; set; } = new();
         public bool OneShot { get; set; }

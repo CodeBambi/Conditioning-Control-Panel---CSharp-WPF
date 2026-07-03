@@ -26,10 +26,27 @@ public sealed class CompositorEngine : IDisposable
     private readonly ILogger<CompositorEngine>? _logger;
     private readonly IScreenProvider? _screenProvider;
     private readonly List<CompositorWindow> _windows = new();
+    // Second, capture-excluded surface (one window per monitor, WDA_EXCLUDEFROMCAPTURE).
+    // Created lazily on the first tick where a layer with ExcludeFromCapture=true is active
+    // (today: BrainDrainLayer only), torn down again after 500ms of excluded-idle.
+    // Inter-surface z caveat: two sibling topmost windows cannot interleave layers, so the
+    // excluded surface is shown LAST and therefore sits above every main-surface layer
+    // (brain drain z55 renders above spiral z60 / pink tint z70). WPF's inter-window z was
+    // show-order based too, so this is the documented, accepted order.
+    private readonly List<CompositorWindow> _excludedWindows = new();
     private readonly SortedList<int, ILayer> _layers = new();
     private readonly DispatcherTimer _timer;
     private readonly object _layerLock = new();
     private DateTime? _emptySince;
+    private DateTime? _excludedEmptySince;
+    // Epochs cancel staggered window-creation timers that outlive their surface
+    // (engine stopped, or the excluded surface torn down, before a 250ms timer fired).
+    private int _mainEpoch;
+    private int _excludedEpoch;
+    // Epoch for which excluded-surface creation has already been scheduled; prevents the
+    // tick from re-scheduling (and duplicating) a staggered batch when the first window
+    // creation failed but later staggered windows are still pending.
+    private int _excludedScheduledEpoch = -1;
 
     private DateTime _lastFrame = DateTime.MinValue;
     private bool _disposed;
@@ -76,20 +93,22 @@ public sealed class CompositorEngine : IDisposable
         // same frame races inside Avalonia v12's Win32 platform backend and intermittently
         // faults with a native access violation (0xC0000005) before managed code runs. Giving
         // each window a full message-pump cycle to finish its native init eliminates the race.
-        StaggeredCreateWindows(screens);
+        StaggeredCreateWindows(screens, excludeFromCapture: false);
     }
 
-    private void StaggeredCreateWindows(IReadOnlyList<ScreenInfo> screens)
+    private void StaggeredCreateWindows(IReadOnlyList<ScreenInfo> screens, bool excludeFromCapture)
     {
         if (_disposed || screens.Count == 0) return;
 
-        // Create the first window synchronously so Start() has at least one window up, then
+        // Create the first window synchronously so the caller has at least one window up, then
         // create the remaining windows on staggered DispatcherTimers (~250ms apart). Creating
         // several transparent topmost windows in the same frame races inside Avalonia v12's
         // Win32 platform backend and intermittently faults with a native access violation
         // (0xC0000005) before managed code runs. Spacing them out gives each native window
-        // surface time to fully initialize its render thread.
-        CreateOneWindow(screens[0]);
+        // surface time to fully initialize its render thread. The excluded surface obeys the
+        // same stagger rule.
+        var epoch = excludeFromCapture ? _excludedEpoch : _mainEpoch;
+        CreateOneWindow(screens[0], excludeFromCapture);
         MaybeStartTimer();
 
         for (int i = 1; i < screens.Count; i++)
@@ -100,26 +119,30 @@ public sealed class CompositorEngine : IDisposable
             t.Tick += (_, _) =>
             {
                 t.Stop();
-                CreateOneWindow(screen);
+                // The surface this window was scheduled for may have been torn down while
+                // the timer was pending; creating it now would leak an orphaned window.
+                var currentEpoch = excludeFromCapture ? _excludedEpoch : _mainEpoch;
+                if (currentEpoch != epoch) return;
+                CreateOneWindow(screen, excludeFromCapture);
                 MaybeStartTimer();
             };
             t.Start();
         }
     }
 
-    private void CreateOneWindow(ScreenInfo screen)
+    private void CreateOneWindow(ScreenInfo screen, bool excludeFromCapture)
     {
         if (_disposed) return;
         try
         {
-            var window = new CompositorWindow(screen, this);
+            var window = new CompositorWindow(screen, this, excludeFromCapture);
             window.Show();
             // ApplyNativeTransparency is deferred to the window's Opened handler (next
             // dispatcher tick). Calling SetWindowLong/SetWindowSubclass synchronously right
             // after Show() races with Avalonia's native window initialization + render thread
             // startup, causing an intermittent native access violation (0xC0000005).
-            _windows.Add(window);
-            _logger?.LogInformation("CompositorWindow created on {Screen}", screen.Name);
+            (excludeFromCapture ? _excludedWindows : _windows).Add(window);
+            _logger?.LogInformation("CompositorWindow created on {Screen} (excludeFromCapture={Excluded})", screen.Name, excludeFromCapture);
         }
         catch (Exception ex)
         {
@@ -137,17 +160,33 @@ public sealed class CompositorEngine : IDisposable
         }
     }
 
-    /// <summary>Stops the update loop and closes all compositor windows.</summary>
+    /// <summary>Stops the update loop and closes all compositor windows (both surfaces).</summary>
     public void Stop()
     {
         _emptySince = null;
         _timer.Stop();
+        _mainEpoch++; // cancel any pending staggered main-window creation
         foreach (var window in _windows.ToList())
         {
             try { window.Close(); } catch { /* ignore */ }
         }
         _windows.Clear();
+        CloseExcludedWindows();
         _logger?.LogInformation("CompositorEngine stopped");
+    }
+
+    /// <summary>Closes the capture-excluded surface windows (excluded layers went idle or engine stopped).</summary>
+    private void CloseExcludedWindows()
+    {
+        _excludedEmptySince = null;
+        _excludedEpoch++; // cancel any pending staggered excluded-window creation
+        if (_excludedWindows.Count == 0) return;
+        foreach (var window in _excludedWindows.ToList())
+        {
+            try { window.Close(); } catch { /* ignore */ }
+        }
+        _excludedWindows.Clear();
+        _logger?.LogInformation("CompositorEngine: excluded surface closed");
     }
 
     /// <summary>Register a layer with the compositor. Layer is ordered by <see cref="ILayer.ZIndex"/>.</summary>
@@ -203,8 +242,11 @@ public sealed class CompositorEngine : IDisposable
         }
     }
 
-    /// <summary>Number of compositor windows (one per monitor).</summary>
+    /// <summary>Number of main-surface compositor windows (one per monitor).</summary>
     public int WindowCount => _windows.Count;
+
+    /// <summary>Number of capture-excluded surface windows (0 unless an excluded layer is active).</summary>
+    public int ExcludedWindowCount => _excludedWindows.Count;
 
     /// <summary>True when the update loop is running.</summary>
     public bool IsRunning => _timer.IsEnabled;
@@ -233,10 +275,14 @@ public sealed class CompositorEngine : IDisposable
     }
 
     /// <summary>
-    /// Render all active layers into the given Skia canvas. Called from the render thread
-    /// via <see cref="CompositorDrawOp"/>.
+    /// Render the active layers belonging to one surface into the given Skia canvas.
+    /// Called from the render thread via <see cref="CompositorDrawOp"/>.
+    /// Capture affinity split: the main surface renders only layers with
+    /// <c>ExcludeFromCapture == false</c>; the excluded surface renders only layers with
+    /// <c>ExcludeFromCapture == true</c>. <paramref name="screen"/> identifies the monitor
+    /// whose window is being drawn (used by screen-aware layers such as the brain-drain blur).
     /// </summary>
-    public void RenderToCanvas(SKCanvas canvas, PixelRect bounds)
+    public void RenderToCanvas(SKCanvas canvas, PixelRect bounds, ScreenInfo? screen = null, bool excludedSurface = false)
     {
         // Clear to transparent so inactive pixels pass through to the desktop.
         // Avalonia's render thread may clear to a solid color before our ICustomDrawOperation
@@ -246,7 +292,9 @@ public sealed class CompositorEngine : IDisposable
         IAvaloniaLayer[] activeLayers;
         lock (_layerLock)
         {
-            activeLayers = _layers.Values.OfType<IAvaloniaLayer>().Where(l => l.IsActive).ToArray();
+            activeLayers = _layers.Values.OfType<IAvaloniaLayer>()
+                .Where(l => l.IsActive && l.ExcludeFromCapture == excludedSurface)
+                .ToArray();
         }
 
         foreach (var layer in activeLayers)
@@ -254,7 +302,7 @@ public sealed class CompositorEngine : IDisposable
             try
             {
                 canvas.Save();
-                layer.Render(canvas, bounds, TimeSpan.Zero);
+                layer.Render(canvas, bounds, screen, TimeSpan.Zero);
                 canvas.Restore();
             }
             catch (Exception ex) { _logger?.LogDebug(ex, "Layer {Layer} render failed", layer.GetType().Name); }
@@ -280,6 +328,12 @@ public sealed class CompositorEngine : IDisposable
             activeLayers = _layers.Values.OfType<IAvaloniaLayer>().Where(l => l.IsActive).ToArray();
         }
 
+        var anyExcludedActive = false;
+        foreach (var layer in activeLayers)
+        {
+            if (layer.ExcludeFromCapture) { anyExcludedActive = true; break; }
+        }
+
         // Keep compositor topmost whenever active layers are present.
         // WS_EX_LAYERED | WS_EX_TRANSPARENT handles click-through natively,
         // so we no longer need to lower the compositor for dialogs.
@@ -290,6 +344,33 @@ public sealed class CompositorEngine : IDisposable
             {
                 try { window.Topmost = shouldBeTopmost; }
                 catch { }
+            }
+        }
+
+        // Capture-excluded surface lifecycle: create lazily on first excluded-layer
+        // activation (staggered, same v12 native-race rule as the main windows), tear
+        // down after 500ms of excluded-idle so the surface does not outlive the effect.
+        // Created after the main windows -> shown last -> sits above the main surface.
+        if (anyExcludedActive)
+        {
+            _excludedEmptySince = null;
+            if (_excludedWindows.Count == 0 && _excludedScheduledEpoch != _excludedEpoch)
+            {
+                _excludedScheduledEpoch = _excludedEpoch;
+                var screens = _screenProvider?.GetAllScreens() ?? Array.Empty<ScreenInfo>();
+                if (screens.Count == 0)
+                {
+                    screens = new[] { new ScreenInfo("fallback", new PixelRect(0, 0, 1920, 1080), new PixelRect(0, 0, 1920, 1080), 1.0) };
+                }
+                StaggeredCreateWindows(screens, excludeFromCapture: true);
+            }
+        }
+        else if (_excludedWindows.Count > 0)
+        {
+            _excludedEmptySince ??= now;
+            if ((now - _excludedEmptySince.Value).TotalMilliseconds > 500)
+            {
+                CloseExcludedWindows();
             }
         }
 
@@ -323,6 +404,18 @@ public sealed class CompositorEngine : IDisposable
                 window.GetControl().InvalidateVisual();
             }
             catch (Exception ex) { _logger?.LogDebug(ex, "Compositor control invalidation failed"); }
+        }
+
+        // The excluded surface is invalidated for as long as it exists — even when its
+        // layers just went inactive — so its last visible frame is cleared to transparent
+        // before the idle teardown closes it.
+        foreach (var window in _excludedWindows)
+        {
+            try
+            {
+                window.GetControl().InvalidateVisual();
+            }
+            catch (Exception ex) { _logger?.LogDebug(ex, "Excluded compositor control invalidation failed"); }
         }
     }
 

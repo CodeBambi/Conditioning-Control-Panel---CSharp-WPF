@@ -17,6 +17,13 @@ public abstract class BaseLayer : IAvaloniaLayer
 
     public virtual bool IsActive => _activated;
 
+    /// <summary>
+    /// Capture affinity (see <see cref="IAvaloniaLayer.ExcludeFromCapture"/>). Only
+    /// <c>BrainDrainLayer</c> overrides this to true; the main compositor surface must
+    /// stay capturable so subliminals appear in the user's recordings BY DESIGN.
+    /// </summary>
+    public virtual bool ExcludeFromCapture => false;
+
     public virtual void OnActivated()
     {
         _activated = true;

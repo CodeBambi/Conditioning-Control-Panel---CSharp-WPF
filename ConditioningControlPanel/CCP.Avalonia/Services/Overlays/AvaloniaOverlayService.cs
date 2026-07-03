@@ -9,6 +9,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Compositor;
 using ConditioningControlPanel.Avalonia.Compositor.Layers;
@@ -41,7 +42,6 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
     private readonly BrainDrainLayer _brainDrainLayer;
     private readonly Dictionary<string, SustainedOverlayState> _sustainedOverlays = new();
     private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
-    private readonly DispatcherTimer _brainDrainPulseTimer = new() { Interval = TimeSpan.FromMilliseconds(50) };
 
     private bool _isRunning;
     private bool _isDisposed;
@@ -52,7 +52,6 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
     private int? _adHocSpiralOpacity;
     private int? _adHocBrainDrainIntensity;
     private string _lastSpiralCacheKey = "";
-    private double _brainDrainPulsePhase;
 
     public AvaloniaOverlayService(
         ISettingsService settings,
@@ -71,12 +70,28 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         _pinkTintLayer = new PinkTintLayer();
         _spiralLayer = new SpiralLayer();
         _brainDrainLayer = new BrainDrainLayer();
+
+        // Register the layers once for the service lifetime instead of per Start/Stop.
+        // Registration only makes them available to the engine — IsActive is content-driven,
+        // so idle layers render nothing and cost nothing. This keeps the ad-hoc brain-drain
+        // path (Deeper actions, 'deeper' voice command, chaos payloads) functional while the
+        // service is stopped, matching WPF's ShowOverlayTimed which creates blur windows on
+        // demand; previously the layer was unregistered in Stop() and ad-hoc brain drain was
+        // a silent no-op outside sessions.
+        _compositor?.RegisterLayer(_pinkTintLayer);
+        _compositor?.RegisterLayer(_spiralLayer);
+        _compositor?.RegisterLayer(_brainDrainLayer);
+
         _updateTimer.Tick += UpdateOverlays;
-        _brainDrainPulseTimer.Tick += BrainDrainPulseTick;
         _screens.ScreensChanged += (_, _) => RefreshForMultiMonitorChange();
     }
 
     public bool IsRunning => _isRunning;
+
+    // Set by remote-control commands (AvaloniaRemoteCommandExecutor) but intentionally never
+    // consulted: WPF's OverlayService.BypassLevelCheck is write-only in exactly the same way,
+    // so reading it here would be a parity break. If it should ever become functional, wire
+    // it in BOTH heads as a product decision.
     public bool BypassLevelCheck { get; set; }
 
     public void Start()
@@ -90,9 +105,6 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
         _isRunning = true;
         _compositor?.Start();
-        _compositor?.RegisterLayer(_pinkTintLayer);
-        _compositor?.RegisterLayer(_spiralLayer);
-        _compositor?.RegisterLayer(_brainDrainLayer);
         Dispatcher.UIThread.Invoke(RefreshOverlays);
         _updateTimer.Start();
         _logger?.LogInformation("AvaloniaOverlayService started (compositor layers)");
@@ -110,9 +122,8 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
             StopBrainDrain();
             StopAllSustainedOverlays();
         });
-        _compositor?.UnregisterLayer(_pinkTintLayer);
-        _compositor?.UnregisterLayer(_spiralLayer);
-        _compositor?.UnregisterLayer(_brainDrainLayer);
+        // Layers stay registered (registered once in the ctor); zeroing their content above
+        // deactivates them, and the engine auto-stops once nothing is active.
         _logger?.LogInformation("AvaloniaOverlayService stopped");
     }
 
@@ -126,7 +137,13 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
             // Render the visual stack bottom-to-top so later windows sit above earlier
             // ones within the topmost layer: brain-drain -> spiral -> pink filter.
-            var brainDrainWanted = settings.BrainDrainEnabled || _adHocBrainDrainIntensity.HasValue;
+            // WPF parity (OverlayService.cs:203, :2190): the persistent BrainDrainEnabled
+            // setting is gated on the level-70 unlock at the service, not just the UI card;
+            // ad-hoc brain drain (Deeper actions, voice, chaos payloads) is deliberately
+            // ungated, exactly like WPF's ShowOverlayTimed path.
+            var brainDrainWanted =
+                (settings.BrainDrainEnabled && settings.IsLevelUnlocked(AppSettings.BrainDrainUnlockLevel))
+                || _adHocBrainDrainIntensity.HasValue;
             if (brainDrainWanted)
             {
                 var intensity = _adHocBrainDrainIntensity ?? settings.BrainDrainIntensity;
@@ -185,7 +202,7 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
             if (hasSpiral)
             {
                 var boostedOpacity = Math.Min((_adHocSpiralOpacity ?? settings.SpiralOpacity) * 2, 100);
-                _spiralLayer.SetSource(_lastSpiralCacheKey, boostedOpacity / 100.0);
+                _spiralLayer.SetSource(_lastSpiralCacheKey, SpiralLayerOpacity(boostedOpacity));
                 _lastAppliedSpiralOpacity = -1;
             }
 
@@ -228,7 +245,9 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
             if ((settings.SpiralEnabled || _adHocSpiralOpacity.HasValue) && !string.IsNullOrEmpty(spiralPath))
                 StartSpiral(spiralPath, _adHocSpiralOpacity ?? settings.SpiralOpacity);
 
-            if (settings.BrainDrainEnabled || _adHocBrainDrainIntensity.HasValue)
+            // Same level-70 gate as RefreshOverlays (WPF parity: OverlayService.cs:381).
+            if ((settings.BrainDrainEnabled && settings.IsLevelUnlocked(AppSettings.BrainDrainUnlockLevel))
+                || _adHocBrainDrainIntensity.HasValue)
                 StartBrainDrain(_adHocBrainDrainIntensity ?? settings.BrainDrainIntensity);
         });
     }
@@ -369,7 +388,18 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
     public void WarmSpiralCache()
     {
-        // Spiral layer loads on-demand; no pre-warming needed.
+        // WPF parity (OverlayService.WarmSpiralCache): pre-decode the spiral GIF frames off
+        // the UI thread so the first chaos spiral of a run does not hitch. No-op if warm.
+        try
+        {
+            var path = GetSpiralPath();
+            if (!string.IsNullOrEmpty(path))
+                _spiralLayer.Preload(path);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug("WarmSpiralCache failed: {Error}", ex.Message);
+        }
     }
 
     private void UpdateOverlays(object? sender, EventArgs e)
@@ -522,9 +552,18 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         }
     }
 
+    /// <summary>
+    /// Map a 0-100 spiral opacity percentage to the layer's paint alpha. WPF parity: every
+    /// spiral path applies a 90% reduction ("Very subtle opacity - 90% reduction",
+    /// WPF OverlayService.cs:1201 and UpdateSpiralOpacity/ApplySpiralOpacityDirect/PulseOverlays),
+    /// so the setting's 0-50 range maps to 0-5% on-screen alpha. Deliberate product decision —
+    /// do not "clean up" this factor.
+    /// </summary>
+    private static double SpiralLayerOpacity(int opacityPercent) => (opacityPercent / 100.0) * 0.1;
+
     private void StartSpiral(string path, int opacityPercent)
     {
-        _spiralLayer.SetSource(path, opacityPercent / 100.0);
+        _spiralLayer.SetSource(path, SpiralLayerOpacity(opacityPercent));
         _lastAppliedSpiralOpacity = opacityPercent;
         _lastSpiralCacheKey = path;
     }
@@ -544,24 +583,27 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         var opacity = _adHocSpiralOpacity ?? settings.SpiralOpacity;
         if (opacity == _lastAppliedSpiralOpacity) return;
 
-        _spiralLayer.SetSource(_lastSpiralCacheKey, opacity / 100.0);
+        _spiralLayer.SetSource(_lastSpiralCacheKey, SpiralLayerOpacity(opacity));
         _lastAppliedSpiralOpacity = opacity;
     }
 
     private void StartBrainDrain(int intensity)
     {
+        // Ad-hoc brain drain must work while the service is stopped (WPF parity), and the
+        // engine may have auto-stopped in the meantime; Start() is idempotent and lazily
+        // recreates the compositor windows.
+        _compositor?.Start();
+        // WPF parity: capture FPS is 60 with BrainDrainHighRefresh, else 30 (WPF additionally
+        // caps by PerformanceProfile tier, which is not ported to the Avalonia head).
+        _brainDrainLayer.SetCaptureFps(_settings.Current?.BrainDrainHighRefresh == true ? 60 : 30);
         _brainDrainLayer.SetIntensity(intensity);
         _lastAppliedBrainDrainIntensity = intensity;
-        _brainDrainPulsePhase = 0;
-        _brainDrainPulseTimer.Start();
     }
 
     private void StopBrainDrain()
     {
-        _brainDrainPulseTimer.Stop();
         _brainDrainLayer.SetIntensity(0);
         _lastAppliedBrainDrainIntensity = -1;
-        _brainDrainPulsePhase = 0;
     }
 
     private void UpdateBrainDrainIntensity(int? intensityOverride = null)
@@ -574,11 +616,6 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
         _brainDrainLayer.SetIntensity(intensity);
         _lastAppliedBrainDrainIntensity = intensity;
-    }
-
-    private void BrainDrainPulseTick(object? sender, EventArgs e)
-    {
-        // Pulse is handled inside BrainDrainLayer.Update()
     }
 
     private static bool IsStaticImageExtension(string path)
@@ -633,8 +670,7 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         _isDisposed = true;
         Stop();
         _updateTimer.Tick -= UpdateOverlays;
-        _brainDrainPulseTimer.Tick -= BrainDrainPulseTick;
-        _brainDrainPulseTimer.Stop();
+        _brainDrainLayer.Dispose(); // frees cached screen-capture frames
     }
 
     private sealed class SustainedOverlayState

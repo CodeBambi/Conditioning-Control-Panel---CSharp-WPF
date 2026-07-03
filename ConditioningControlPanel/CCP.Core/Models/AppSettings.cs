@@ -3877,6 +3877,14 @@ namespace ConditioningControlPanel.Models
         }
 
         /// <summary>
+        /// Progression level historically required for the persistent Brain Drain setting.
+        /// The WPF OverlayService gates BrainDrainEnabled on IsLevelUnlocked(70) at the service
+        /// (OverlayService.cs:203/:2190) and the Avalonia head mirrors that; the Level Features
+        /// UI card shows the same number. Shared here so there is exactly one source of truth.
+        /// </summary>
+        public const int BrainDrainUnlockLevel = 70;
+
+        /// <summary>
         /// Feature level gating has been removed — every feature is available from level 1.
         /// XP, levels, quests, achievements, and the skill tree still exist; they just no longer
         /// gate any features. Method stub preserved so existing call sites keep compiling.

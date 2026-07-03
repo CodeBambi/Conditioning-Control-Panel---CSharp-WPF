@@ -20,11 +20,20 @@ public partial class CompositorWindow : Window
     private readonly CompositorEngine _engine;
     private readonly CompositorControl _control;
     private readonly ILogger<CompositorWindow>? _logger;
+    private readonly bool _excludeFromCapture;
 
-    public CompositorWindow(ScreenInfo screen, CompositorEngine engine)
+    /// <summary>The monitor this window covers.</summary>
+    public ScreenInfo Screen { get; }
+
+    /// <summary>True when this is the capture-excluded surface (hosts brain drain only).</summary>
+    public bool ExcludesFromCapture => _excludeFromCapture;
+
+    public CompositorWindow(ScreenInfo screen, CompositorEngine engine, bool excludeFromCapture = false)
     {
         InitializeComponent();
         _engine = engine;
+        _excludeFromCapture = excludeFromCapture;
+        Screen = screen;
         _logger = App.Services?.GetService<ILogger<CompositorWindow>>();
 
         // Use the full monitor bounds (taskbar included) so overlays cover the
@@ -34,7 +43,7 @@ public partial class CompositorWindow : Window
         Width = screen.Bounds.Width;
         Height = screen.Bounds.Height;
 
-        _control = new CompositorControl(engine);
+        _control = new CompositorControl(engine, screen, excludeFromCapture);
         Content = _control;
 
         Opened += OnWindowOpened;
@@ -111,7 +120,23 @@ public partial class CompositorWindow : Window
             // HTTRANSPARENT and WM_MOUSEACTIVATE -> MA_NOACTIVATE, but those are already
             // provided by WS_EX_TRANSPARENT + WS_EX_NOACTIVATE respectively, so the
             // subclass is redundant and removing it is strictly safer.
-            _logger?.LogDebug("ApplyNativeTransparency: applied EXSTYLE (no subclass)");
+
+            // Capture affinity, applied AFTER the SWP_FRAMECHANGED flush and re-asserted on
+            // Opened/Activated/WindowState just like the ex-styles. The excluded surface hosts
+            // brain drain only (WPF parity: OverlayService brain-drain windows call
+            // SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) "so we don't capture ourselves"
+            // and stay out of streams/recordings/OCR captures).
+            // GUARDRAIL: the main surface must NEVER get a SetWindowDisplayAffinity call —
+            // subliminals (and flash/spiral/pink tint) are visible in capture BY DESIGN
+            // (WPF SubliminalService deliberately sets WDA_NONE).
+            if (_excludeFromCapture)
+            {
+                var affinityOk = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+                if (!affinityOk)
+                    _logger?.LogWarning("ApplyNativeTransparency: SetWindowDisplayAffinity failed (error {Error})", Marshal.GetLastWin32Error());
+            }
+
+            _logger?.LogDebug("ApplyNativeTransparency: applied EXSTYLE (no subclass), excludeFromCapture={Excluded}", _excludeFromCapture);
         }
         catch (Exception ex)
         {
@@ -141,6 +166,9 @@ public partial class CompositorWindow : Window
     private const uint SWP_NOACTIVATE = 0x0010;
     private const uint SWP_FRAMECHANGED = 0x0020;
     private const uint SWP_NOZORDER = 0x0004;
+    // Excludes the window from screenshots, screen recording, and GDI screen capture
+    // (Windows 10 2004+). See the overlay-clickthrough skill for the affinity rules.
+    private const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
     private static extern IntPtr GetWindowLong32(IntPtr hWnd, int nIndex);
@@ -158,4 +186,7 @@ public partial class CompositorWindow : Window
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint dwAffinity);
 }
