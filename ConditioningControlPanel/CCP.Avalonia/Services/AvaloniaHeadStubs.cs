@@ -131,6 +131,12 @@ public sealed class AvaloniaChaosService : IChaosService
             if (ChaosMeta.State.RunsCompleted == 0)
                 config = ChaosHappyPath.BuildFirstRunConfig();
             AvaloniaChaosMode.ActiveMode = config.PlayMode;
+            // WPF parity (ChaosModeService.cs:320): snapshot the user's Pin-on-top setting
+            // BEFORE any chaos window is constructed, "regardless of mode" — a default Free
+            // Desktop run stays pinned topmost; only unchecking the hub's Pin-on-top box
+            // yields the sink-behind behavior. This also makes the hub checkbox functional
+            // (it writes ChaosPinOnTop, which previously had no consumer).
+            AvaloniaChaosMode.PinTopmost = _settings.Current?.ChaosPinOnTop ?? true;
 
             _bubbles.PauseAndClear();
             _state = new ChaosRunState()
@@ -837,6 +843,9 @@ public sealed class AvaloniaChaosService : IChaosService
         _snapFlashRemainingSec = 0;
         _rippleCooldownSec = 0;
         AvaloniaChaosMode.ActiveMode = ChaosPlayMode.Story;
+        // WPF parity (ChaosModeService.cs:3266-3270): reset the pin after the run so
+        // dashboard trigger overlays never inherit a stale demote.
+        AvaloniaChaosMode.PinTopmost = true;
     }
 
     private void OnOverlayClosed()
@@ -989,19 +998,28 @@ public sealed class AvaloniaChaosService : IChaosService
         else RequestStop();
     }
 
+    // Strict Install/Uninstall pairing: the shared IMouseHook is reference-counted across
+    // consumers (flash clicks, bubble pops, this ripple hook). EndRun and CleanupAfterRun
+    // both call StopRippleHook on a normal teardown, so without this flag the second call
+    // would release a hook share owned by another consumer (uninstall-collision class).
+    private bool _rippleHookInstalled;
+
     private void StartRippleHook()
     {
-        if (_mouseHook == null) return;
+        if (_mouseHook == null || _rippleHookInstalled) return;
         try
         {
             _mouseHook.RightButtonUp += OnRippleRightUp;
             _mouseHook.Install();
+            _rippleHookInstalled = true;
         }
         catch (Exception ex) { _logger?.LogWarning(ex, "Chaos ripple hook failed"); }
     }
 
     private void StopRippleHook()
     {
+        if (!_rippleHookInstalled) return;
+        _rippleHookInstalled = false;
         try
         {
             if (_mouseHook != null) _mouseHook.RightButtonUp -= OnRippleRightUp;

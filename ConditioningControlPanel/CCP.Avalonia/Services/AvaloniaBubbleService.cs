@@ -28,6 +28,7 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
     private readonly ILogger<BubbleEngine>? _bubbleEngineLogger;
     private readonly BubbleEngine _ambientEngine;
 
+    private readonly CompositorEngine? _compositor;
     private readonly BubbleLayer? _bubbleLayer;
 
     private BubbleEngine? _chaosEngine;
@@ -66,6 +67,7 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
             effectPayloadFactory: ConditioningControlPanel.Avalonia.Chaos.AvaloniaEffectPayloadFactory.ForVariant);
         _ambientEngine.OnBubblePopped += OnEngineBubblePopped;
         _ambientEngine.EchoSplitRequested += OnEchoSplitRequested;
+        _compositor = compositor;
         _bubbleLayer = compositor != null ? new BubbleLayer() : null;
         if (_bubbleLayer != null)
             compositor?.RegisterLayer(_bubbleLayer);
@@ -100,6 +102,9 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
     public void Start()
     {
         LoadBubbleImage();
+        // Wake the compositor before the first bubble spawns: Start() is idempotent, and the
+        // dashboard Bubble Pop toggle can arrive with the engine never started (no session).
+        RunOnUi(() => _compositor?.Start());
         _ambientEngine.Start();
         InstallMouseHook();
     }
@@ -126,14 +131,18 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
         _chaosEngine?.PopAllChaosPaid();
     }
 
-    public int PopBubblesInRect(ConditioningControlPanel.Core.Platform.PixelRect rectDips)
+    /// <summary>
+    /// Pops every clickable bubble intersecting <paramref name="rectPx"/>, given in
+    /// PHYSICAL virtual-desktop pixels (raw hook / gaze space; IAvaloniaLayer contract).
+    /// </summary>
+    public int PopBubblesInRect(ConditioningControlPanel.Core.Platform.PixelRect rectPx)
     {
         int popped = 0;
 
         // Ambient bubbles — UCE single-surface path: hit-test the Skia BubbleLayer.
         if (_ambientEngine != null && _bubbleLayer != null)
         {
-            foreach (var id in _bubbleLayer.HitTestInRect(rectDips))
+            foreach (var id in _bubbleLayer.HitTestInRect(rectPx))
             {
                 _logger?.LogDebug("PopBubblesInRect popping ambient bubble {Id}", id);
                 _ambientEngine.PopBubble(id);
@@ -143,7 +152,7 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
 
         if (_chaosEngine != null)
         {
-            var hits = _chaosEngine.GetChaosBubblesInRect(rectDips);
+            var hits = _chaosEngine.GetChaosBubblesInRect(rectPx);
             if (hits.Count > 0)
                 _logger?.LogDebug("PopBubblesInRect chaos hits={Hits}", hits.Count);
             foreach (var id in hits)
@@ -160,10 +169,10 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
         return popped;
     }
 
-    public bool AnyDarterIntersects(ConditioningControlPanel.Core.Platform.PixelRect rectDips)
+    public bool AnyDarterIntersects(ConditioningControlPanel.Core.Platform.PixelRect rectPx)
     {
         if (_chaosEngine == null) return false;
-        var hits = _chaosEngine.GetChaosBubblesInRect(rectDips);
+        var hits = _chaosEngine.GetChaosBubblesInRect(rectPx);
         foreach (var id in hits)
         {
             var bubble = _chaosEngine.GetChaosBubble(id);
@@ -404,18 +413,25 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
 
     private void ReleaseMouseHook()
     {
-        if (--_mouseHookRefCount <= 0)
+        // Strict pairing with InstallMouseHook: the shared IMouseHook is reference-counted
+        // across consumers, so an unpaired release (e.g. Stop() without a prior Start())
+        // must NOT reach Uninstall — it would release a share owned by the flash or chaos
+        // ripple consumer.
+        if (_mouseHookRefCount <= 0)
         {
             _mouseHookRefCount = 0;
-            try
-            {
-                _mouseHook.LeftButtonDown -= OnMouseHookLeftDown;
-                _mouseHook.RightButtonDown -= OnMouseHookRightDown;
-                _mouseHook.LeftButtonUp -= OnMouseHookLeftUp;
-            }
-            catch { }
-            _mouseHook.Uninstall();
+            return;
         }
+        if (--_mouseHookRefCount > 0) return;
+
+        try
+        {
+            _mouseHook.LeftButtonDown -= OnMouseHookLeftDown;
+            _mouseHook.RightButtonDown -= OnMouseHookRightDown;
+            _mouseHook.LeftButtonUp -= OnMouseHookLeftUp;
+        }
+        catch { }
+        _mouseHook.Uninstall();
     }
 
     private void OnEchoSplitRequested(ChaosBubbleSpec spec, double x, double y)
@@ -458,20 +474,32 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
 
     // ---- IBubbleRenderer implementation ----
 
+    /// <summary>
+    /// Coordinate seam (IAvaloniaLayer contract): the Core BubbleEngine works in per-screen
+    /// logical units (physical / that bubble's screen scaling — see BubbleEngine spawn
+    /// bounds), while BubbleLayer stores PHYSICAL virtual-desktop pixels so raw hook
+    /// coordinates hit-test directly. Multiplying X/Y/Size by the bubble's own screen
+    /// scaling is the exact inverse of the engine's spawn mapping, per-monitor correct on
+    /// mixed-DPI setups (same math as the engine's own OnSharedHostLeftDown physical discs).
+    /// </summary>
     void IBubbleRenderer.Create(BubbleState state)
     {
         RunOnUi(() =>
         {
             // Single-surface UCE render path: every bubble lives in the Skia BubbleLayer.
             // No per-window bubble windows (eliminates the dual-render race + z-fighting).
+            // Wake the compositor so the bubble actually renders (idempotent, cheap).
+            _compositor?.Start();
+
             var isChaos = state.Spec != null;
             var tint = isChaos ? ((byte)state.Spec!.TintR, (byte)state.Spec.TintG, (byte)state.Spec.TintB) : ((byte, byte, byte)?)null;
             var fuseFraction = state.Spec is { IsLive: true, FuseMs: > 0 }
                 ? Math.Clamp(state.FuseRemainingMs / state.Spec.FuseMs, 0.0, 1.0)
                 : 1.0;
 
+            var s = state.Scaling > 0 ? state.Scaling : 1.0;
             _bubbleLayer?.AddBubble(
-                state.Id, state.X, state.Y, state.Size, state.Opacity, state.Scale,
+                state.Id, state.X * s, state.Y * s, state.Size * s, state.Opacity, state.Scale,
                 state.Spec?.Label, tint, isChaos, fuseFraction, state.Clickable);
         });
     }
@@ -480,7 +508,8 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
     {
         RunOnUi(() =>
         {
-            _bubbleLayer?.UpdateBubble(state.Id, state.X, state.Y, state.Opacity, state.Scale);
+            var s = state.Scaling > 0 ? state.Scaling : 1.0;
+            _bubbleLayer?.UpdateBubble(state.Id, state.X * s, state.Y * s, state.Opacity, state.Scale);
         });
     }
 

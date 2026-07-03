@@ -34,18 +34,20 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
     private readonly IScreenProvider _screens;
     private readonly IAppEnvironment _environment;
     private readonly LibVLC _libVlc;
+    private readonly IModService? _mods;
     private readonly ILogger<AvaloniaOverlayService>? _logger;
     private readonly object _sync = new();
     private readonly CompositorEngine? _compositor;
     private readonly PinkTintLayer _pinkTintLayer;
     private readonly SpiralLayer _spiralLayer;
     private readonly BrainDrainLayer _brainDrainLayer;
-    private readonly Dictionary<string, SustainedOverlayState> _sustainedOverlays = new();
+    private readonly Dictionary<string, OverlayHold> _overlayHolds = new();
     private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
 
     private bool _isRunning;
     private bool _isDisposed;
     private int _lastAppliedPinkOpacity = -1;
+    private Color _lastAppliedPinkColor = Colors.Transparent;
     private int _lastAppliedSpiralOpacity = -1;
     private int _lastAppliedBrainDrainIntensity = -1;
     private int? _adHocPinkOpacity;
@@ -59,7 +61,8 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         IAppEnvironment environment,
         LibVLC libVlc,
         ILogger<AvaloniaOverlayService>? logger = null,
-        CompositorEngine? compositor = null)
+        CompositorEngine? compositor = null,
+        IModService? mods = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _screens = screens ?? throw new ArgumentNullException(nameof(screens));
@@ -67,6 +70,7 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         _libVlc = libVlc ?? throw new ArgumentNullException(nameof(libVlc));
         _logger = logger;
         _compositor = compositor;
+        _mods = mods;
         _pinkTintLayer = new PinkTintLayer();
         _spiralLayer = new SpiralLayer();
         _brainDrainLayer = new BrainDrainLayer();
@@ -171,7 +175,10 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
             var pinkWanted = settings.PinkFilterEnabled || _adHocPinkOpacity.HasValue;
             if (pinkWanted)
             {
-                StartPinkFilter(_adHocPinkOpacity ?? settings.PinkFilterOpacity);
+                // Live pickup with dedupe (WPF UpdateOverlays -> UpdatePinkFilterOpacity):
+                // lot-2 ramps mutate PinkFilterOpacity every 1-2s and this 500ms tick applies
+                // it; the (opacity, color) compare keeps unchanged ticks allocation-free.
+                UpdatePinkFilterOpacity();
             }
             else
             {
@@ -268,25 +275,25 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
         Dispatcher.UIThread.Invoke(() =>
         {
-            if (!_isRunning && normalizedKind != "braindrain") return; // ad-hoc brain-drain can work while service stopped
-
+            // Ad-hoc overlays (Deeper actions, voice commands, chaos payloads) work while the
+            // service is stopped for ALL kinds: WPF's ShowOverlayTimed creates its windows on
+            // demand regardless of Start/Stop. The engine Start lives in the Start* methods;
+            // activation is content-driven, so the engine auto-stops again after Hide.
             ShowSustainedOverlayInternal(normalizedKind, clampedOpacity);
 
-            // Stop any existing timer for this kind first.
-            if (_sustainedOverlays.TryGetValue(normalizedKind, out var existing))
-            {
-                existing.AutoHideTimer?.Stop();
-                existing.AutoHideTimer = null;
-            }
+            // WPF ownership protocol: timed holds are ref-counted and independent of any
+            // sustained hold or persistent setting; each expiry releases only its own hold.
+            var hold = GetHold(normalizedKind);
+            hold.TimedHolds++;
 
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(safeDurationMs) };
-            var state = new SustainedOverlayState(normalizedKind) { AutoHideTimer = timer };
-            _sustainedOverlays[normalizedKind] = state;
-
+            hold.Timers.Add(timer);
             timer.Tick += (_, _) =>
             {
                 timer.Stop();
-                Dispatcher.UIThread.Invoke(() => HideOverlaySustained(normalizedKind));
+                hold.Timers.Remove(timer);
+                hold.TimedHolds = Math.Max(0, hold.TimedHolds - 1);
+                ReleaseOverlayIfUnheld(normalizedKind, hold);
             };
             timer.Start();
         });
@@ -307,13 +314,14 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
         Dispatcher.UIThread.Invoke(() =>
         {
-            if (!_isRunning && normalizedKind != "braindrain") return;
+            // No _isRunning gate: ad-hoc sustained overlays work while the service is stopped
+            // (WPF parity, see ShowOverlayTimed).
 
-            // Idempotent: if already active, leave it to SetSustainedOverlayOpacity to change opacity.
-            if (_sustainedOverlays.ContainsKey(normalizedKind)) return;
-
+            // Always (re)apply, even during a timed hold: the ad-hoc opacity is authoritative
+            // here (unlike WPF's window-exists early-return), and a sustained hold arriving
+            // mid-timed-hold must survive that hold's expiry (WPF _sustainedPinkHeld).
+            GetHold(normalizedKind).SustainedHeld = true;
             ShowSustainedOverlayInternal(normalizedKind, clampedOpacity);
-            _sustainedOverlays[normalizedKind] = new SustainedOverlayState(normalizedKind);
         });
     }
 
@@ -326,29 +334,63 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
         Dispatcher.UIThread.Invoke(() =>
         {
-            if (_sustainedOverlays.TryGetValue(normalizedKind, out var state))
+            var hold = GetHold(normalizedKind);
+            hold.SustainedHeld = false;
+
+            if (normalizedKind == "braindrain")
             {
-                state.AutoHideTimer?.Stop();
-                _sustainedOverlays.Remove(normalizedKind);
+                // WPF parity (OverlayService.cs:622): explicit brain-drain hide is
+                // unconditional; the 500ms refresh restores it if BrainDrainEnabled.
+                _adHocBrainDrainIntensity = null;
+                StopBrainDrain();
+                return;
             }
 
-            switch (normalizedKind)
-            {
-                case "pink":
-                    _adHocPinkOpacity = null;
-                    StopPinkFilter();
-                    break;
-                case "spiral":
-                    _adHocSpiralOpacity = null;
-                    StopSpiral();
-                    break;
-                case "braindrain":
-                    _adHocBrainDrainIntensity = null;
-                    StopBrainDrain();
-                    break;
-            }
+            ReleaseOverlayIfUnheld(normalizedKind, hold);
         });
     }
+
+    /// <summary>
+    /// Tears an ad-hoc overlay down only when its last co-owner releases it: no timed holds,
+    /// no sustained hold, and the persistent setting does not keep it on. When the persistent
+    /// setting holds it, the overlay is re-applied at its own opacity immediately so a timed
+    /// expiry never blinks a user-enabled overlay off (WPF expiry checks the setting too).
+    /// </summary>
+    private void ReleaseOverlayIfUnheld(string kind, OverlayHold hold)
+    {
+        if (hold.TimedHolds > 0 || hold.SustainedHeld) return;
+
+        var settings = _settings.Current;
+        switch (kind)
+        {
+            case "pink":
+                _adHocPinkOpacity = null;
+                if (settings?.PinkFilterEnabled == true) StartPinkFilter(settings.PinkFilterOpacity);
+                else StopPinkFilter();
+                break;
+            case "spiral":
+                _adHocSpiralOpacity = null;
+                if (settings?.SpiralEnabled == true)
+                {
+                    var path = GetSpiralPath();
+                    if (string.IsNullOrEmpty(path)) StopSpiral();
+                    else if (!string.Equals(path, _lastSpiralCacheKey, StringComparison.OrdinalIgnoreCase))
+                        StartSpiral(path, settings.SpiralOpacity);
+                    else UpdateSpiralOpacity();
+                }
+                else StopSpiral();
+                break;
+            case "braindrain":
+                _adHocBrainDrainIntensity = null;
+                if (settings?.BrainDrainEnabled == true && settings.IsLevelUnlocked(AppSettings.BrainDrainUnlockLevel))
+                    StartBrainDrain(settings.BrainDrainIntensity);
+                else StopBrainDrain();
+                break;
+        }
+    }
+
+    private OverlayHold GetHold(string kind) =>
+        _overlayHolds.TryGetValue(kind, out var hold) ? hold : _overlayHolds[kind] = new OverlayHold();
 
     public void SetSustainedOverlayOpacity(string kind, double opacity)
     {
@@ -361,26 +403,23 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
         Dispatcher.UIThread.Invoke(() =>
         {
+            // No _isRunning gates: an ad-hoc overlay shown while the service is stopped must
+            // still honor live opacity ramps (Deeper enhancement ramps drive this path).
             switch (normalizedKind)
             {
                 case "pink":
                     _adHocPinkOpacity = (int)Math.Round(clampedOpacity * 100);
-                    if (_isRunning)
-                        StartPinkFilter(_adHocPinkOpacity.Value);
+                    StartPinkFilter(_adHocPinkOpacity.Value);
                     break;
                 case "spiral":
                     _adHocSpiralOpacity = (int)Math.Round(clampedOpacity * 100);
-                    if (_isRunning)
-                    {
-                        var spiralPath = GetSpiralPath();
-                        if (!string.IsNullOrEmpty(spiralPath))
-                            StartSpiral(spiralPath, _adHocSpiralOpacity.Value);
-                    }
+                    var spiralPath = GetSpiralPath();
+                    if (!string.IsNullOrEmpty(spiralPath))
+                        StartSpiral(spiralPath, _adHocSpiralOpacity.Value);
                     break;
                 case "braindrain":
                     _adHocBrainDrainIntensity = Math.Max(1, (int)Math.Round(clampedOpacity * 100));
-                    if (_isRunning)
-                        StartBrainDrain(_adHocBrainDrainIntensity.Value);
+                    StartBrainDrain(_adHocBrainDrainIntensity.Value);
                     break;
             }
         });
@@ -452,9 +491,14 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
     private void StopAllSustainedOverlays()
     {
-        foreach (var state in _sustainedOverlays.Values.ToList())
-            state.AutoHideTimer?.Stop();
-        _sustainedOverlays.Clear();
+        foreach (var hold in _overlayHolds.Values)
+        {
+            foreach (var timer in hold.Timers)
+                timer.Stop();
+            hold.Timers.Clear();
+            hold.TimedHolds = 0;
+            hold.SustainedHeld = false;
+        }
         _adHocPinkOpacity = null;
         _adHocSpiralOpacity = null;
         _adHocBrainDrainIntensity = null;
@@ -462,14 +506,21 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
     private void StartPinkFilter(int opacityPercent)
     {
-        _pinkTintLayer.SetColor(GetFilterColor(opacityPercent), opacityPercent / 100.0);
+        // Ad-hoc pink must work while the service is stopped (WPF parity), and the engine
+        // may have auto-stopped in the meantime; Start() is idempotent and lazily recreates
+        // the compositor windows.
+        _compositor?.Start();
+        var color = GetFilterColor(opacityPercent);
+        _pinkTintLayer.SetColor(color, opacityPercent / 100.0);
         _lastAppliedPinkOpacity = opacityPercent;
+        _lastAppliedPinkColor = color;
     }
 
     private void StopPinkFilter()
     {
         _pinkTintLayer.SetColor(Colors.Transparent, 0);
         _lastAppliedPinkOpacity = -1;
+        _lastAppliedPinkColor = Colors.Transparent;
     }
 
     private void UpdatePinkFilterOpacity()
@@ -478,24 +529,42 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         if (settings == null) return;
 
         var opacity = _adHocPinkOpacity ?? settings.PinkFilterOpacity;
-        if (opacity == _lastAppliedPinkOpacity) return;
+        var color = GetFilterColor(opacity);
+        if (opacity == _lastAppliedPinkOpacity && color == _lastAppliedPinkColor) return;
 
-        _pinkTintLayer.SetColor(GetFilterColor(opacity), opacity / 100.0);
+        // Applying a change may be the OFF->ON transition after the engine auto-stopped
+        // (all overlays idle >500ms closes the compositor windows); restart it.
+        if (opacity > 0) _compositor?.Start();
+        _pinkTintLayer.SetColor(color, opacity / 100.0);
         _lastAppliedPinkOpacity = opacity;
+        _lastAppliedPinkColor = color;
     }
 
-    private static Color GetFilterColor(int opacityPercent)
+    /// <summary>
+    /// WPF parity (OverlayService.cs:469-472 GetFilterRgb): the pink tint derives from the
+    /// active mod's FilterColor (which itself falls back to the mod accent), with hot pink
+    /// (255,105,180) as the final fallback — not from a theme resource.
+    /// </summary>
+    private Color GetFilterColor(int opacityPercent)
     {
         var alpha = (byte)Math.Clamp(opacityPercent / 100.0 * 255, 0, 255);
-        var accent = AppColor("PinkColor", new Color(0xFF, 0xFF, 0x69, 0xB4));
-        return new Color(alpha, accent.R, accent.G, accent.B);
+        var (r, g, b) = GetFilterRgb();
+        return new Color(alpha, r, g, b);
     }
 
-    private static Color AppColor(string key, Color fallback)
+    private (byte R, byte G, byte B) GetFilterRgb()
     {
-        if (global::Avalonia.Application.Current?.TryGetResource(key, global::Avalonia.Styling.ThemeVariant.Default, out var v) == true && v is Color c)
-            return c;
-        return fallback;
+        try
+        {
+            var hex = _mods?.GetFilterColorHex();
+            if (!string.IsNullOrWhiteSpace(hex))
+            {
+                var c = Color.Parse(hex);
+                return (c.R, c.G, c.B);
+            }
+        }
+        catch { /* malformed mod color — fall through to hot pink */ }
+        return (255, 105, 180);
     }
 
     private string GetSpiralPath()
@@ -563,6 +632,9 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
     private void StartSpiral(string path, int opacityPercent)
     {
+        // Same as StartPinkFilter/StartBrainDrain: ad-hoc spiral works while the service is
+        // stopped and the engine may have auto-stopped; Start() is idempotent.
+        _compositor?.Start();
         _spiralLayer.SetSource(path, SpiralLayerOpacity(opacityPercent));
         _lastAppliedSpiralOpacity = opacityPercent;
         _lastSpiralCacheKey = path;
@@ -583,6 +655,7 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         var opacity = _adHocSpiralOpacity ?? settings.SpiralOpacity;
         if (opacity == _lastAppliedSpiralOpacity) return;
 
+        if (opacity > 0) _compositor?.Start(); // OFF->ON transition may follow an engine auto-stop
         _spiralLayer.SetSource(_lastSpiralCacheKey, SpiralLayerOpacity(opacity));
         _lastAppliedSpiralOpacity = opacity;
     }
@@ -662,7 +735,9 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
     public void NotifyTopWindowOpened() { }
 
-    public void NotifyTopWindowClosed() { }
+    // WPF parity: OverlayService re-pins its windows when a topmost app window closes above
+    // them (the closing window can steal the top band); the compositor exposes a force kick.
+    public void NotifyTopWindowClosed() => _compositor?.ReassertTopmostNow();
 
     public void Dispose()
     {
@@ -673,14 +748,15 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         _brainDrainLayer.Dispose(); // frees cached screen-capture frames
     }
 
-    private sealed class SustainedOverlayState
+    /// <summary>
+    /// Co-ownership record for one ad-hoc overlay kind (WPF ownership protocol: ref-counted
+    /// timed holds + a sustained flag; the persistent setting is the third co-owner and is
+    /// consulted at release time).
+    /// </summary>
+    private sealed class OverlayHold
     {
-        public string Kind { get; }
-        public DispatcherTimer? AutoHideTimer { get; set; }
-
-        public SustainedOverlayState(string kind)
-        {
-            Kind = kind;
-        }
+        public int TimedHolds;
+        public bool SustainedHeld;
+        public readonly List<DispatcherTimer> Timers = new();
     }
 }

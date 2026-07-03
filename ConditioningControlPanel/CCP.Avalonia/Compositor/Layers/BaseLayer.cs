@@ -36,6 +36,15 @@ public abstract class BaseLayer : IAvaloniaLayer
 
     public abstract void Update(TimeSpan deltaTime);
 
+    /// <summary>
+    /// Dirty gate (see <see cref="IAvaloniaLayer.ConsumeDirty"/>). Base implementation
+    /// always reports dirty — correct for continuously animating layers. Static or
+    /// mutator-driven layers override this with a consume-once flag so the engine can skip
+    /// whole-frame re-renders while nothing changed. Declared here (not only as the
+    /// interface default) so derived-class overrides participate in interface dispatch.
+    /// </summary>
+    public virtual bool ConsumeDirty() => true;
+
     public abstract void Render(SKCanvas canvas, ConditioningControlPanel.Core.Platform.PixelRect bounds, TimeSpan deltaTime);
 
     /// <summary>Lerp helper: map value 0..1 onto [min,max].</summary>

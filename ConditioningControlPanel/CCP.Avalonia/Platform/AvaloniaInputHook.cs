@@ -5,21 +5,31 @@ namespace ConditioningControlPanel.Avalonia.Platform;
 
 /// <summary>
 /// Low-level input hook implementation.
-/// On Windows it installs WH_KEYBOARD_LL and WH_MOUSE_LL hooks so panic keys, hotkeys
-/// and idle-detection mouse movement work in the Avalonia head.
+/// On Windows it installs a WH_KEYBOARD_LL hook so panic keys and hotkeys work in the
+/// Avalonia head. Mouse activity for idle detection is NOT a hook: the only consumer
+/// (AvaloniaAutonomyService) needs an activity timestamp, so <see cref="MouseMoved"/> is
+/// driven by a cheap GetLastInputInfo poll (WPF parity: ActivityTracker polls
+/// GetLastInputInfo and never installs a mouse hook). The previous app-lifetime
+/// WH_MOUSE_LL routed EVERY system-wide mouse move (up to 1000Hz on gaming mice) through
+/// this process's UI thread purely to write a timestamp — desktop pointer latency held
+/// hostage to our pump, and a busy pump risked the OS silently unhooking us.
 /// On Linux/macOS/mobile it degrades gracefully to a no-op because global hooks require
 /// platform-native interop that is not available in the shared Avalonia project.
 /// </summary>
 public sealed class AvaloniaInputHook : IInputHook
 {
+    // Poll cadence for GetLastInputInfo. Idle thresholds are minutes, so 2s is precise
+    // enough and effectively free.
+    private const int IdlePollMs = 2000;
+
     private readonly ILogger<AvaloniaInputHook>? _logger;
 
     private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     private HookProc? _keyboardProc;
-    private HookProc? _mouseProc;
     private IntPtr _keyboardHook = IntPtr.Zero;
-    private IntPtr _mouseHook = IntPtr.Zero;
+    private Timer? _idlePollTimer;
+    private uint _lastInputTick;
 
     public AvaloniaInputHook(ILogger<AvaloniaInputHook>? logger = null)
     {
@@ -28,6 +38,13 @@ public sealed class AvaloniaInputHook : IInputHook
     }
 
     public event EventHandler<KeyboardHookEventArgs>? KeyPressed;
+
+    /// <summary>
+    /// User-activity signal (idle detection). Raised from a threadpool timer, at most once
+    /// per poll interval, whenever GetLastInputInfo reports fresh input (mouse OR keyboard —
+    /// both mean "not idle"). Coordinates are the current physical cursor position; consumers
+    /// use this event as a timestamp, not a movement stream.
+    /// </summary>
     public event EventHandler<MouseHookEventArgs>? MouseMoved;
 
     public bool CanSuppressKeys => false;
@@ -39,11 +56,11 @@ public sealed class AvaloniaInputHook : IInputHook
         if (OperatingSystem.IsWindows())
         {
             Unhook(ref _keyboardHook, "keyboard");
-            Unhook(ref _mouseHook, "mouse");
         }
 
         _keyboardProc = null;
-        _mouseProc = null;
+        _idlePollTimer?.Dispose();
+        _idlePollTimer = null;
     }
 
     public AvaloniaInputHook Start()
@@ -55,7 +72,7 @@ public sealed class AvaloniaInputHook : IInputHook
         }
 
         InstallKeyboardHook();
-        InstallMouseHook();
+        StartIdlePoller();
         return this;
     }
 
@@ -87,31 +104,30 @@ public sealed class AvaloniaInputHook : IInputHook
         }
     }
 
-    private void InstallMouseHook()
+    private void StartIdlePoller()
     {
-        if (_mouseHook != IntPtr.Zero)
+        if (_idlePollTimer != null)
             return;
 
+        _idlePollTimer = new Timer(_ => PollLastInput(), null, IdlePollMs, IdlePollMs);
+        _logger?.LogDebug("Idle-detection poller started (GetLastInputInfo every {Ms}ms)", IdlePollMs);
+    }
+
+    private void PollLastInput()
+    {
         try
         {
-            _mouseProc = MouseHookCallback;
-            var moduleHandle = GetModuleHandle(null);
-            _mouseHook = SetWindowsHookEx(WH_MOUSE_LL, _mouseProc, moduleHandle, 0);
-            if (_mouseHook == IntPtr.Zero)
-            {
-                var error = Marshal.GetLastWin32Error();
-                _logger?.LogWarning("SetWindowsHookEx(WH_MOUSE_LL) failed with error {Error}", error);
-                _mouseProc = null;
-            }
-            else
-            {
-                _logger?.LogDebug("Low-level mouse hook installed");
-            }
+            var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+            if (!GetLastInputInfo(ref info)) return;
+            if (info.dwTime == _lastInputTick) return; // no new input since last poll
+            _lastInputTick = info.dwTime;
+
+            GetCursorPos(out var pt);
+            MouseMoved?.Invoke(this, new MouseHookEventArgs(pt.x, pt.y));
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Failed to install low-level mouse hook");
-            _mouseProc = null;
+            _logger?.LogDebug(ex, "Idle poll failed");
         }
     }
 
@@ -155,29 +171,9 @@ public sealed class AvaloniaInputHook : IInputHook
         return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
     }
 
-    private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
-    {
-        if (nCode >= 0 && lParam != IntPtr.Zero && wParam.ToInt32() == WM_MOUSEMOVE)
-        {
-            var info = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-            try
-            {
-                MouseMoved?.Invoke(this, new MouseHookEventArgs(info.pt.x, info.pt.y));
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Exception in low-level mouse hook handler");
-            }
-        }
-
-        return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
-    }
-
     private const int WH_KEYBOARD_LL = 13;
-    private const int WH_MOUSE_LL = 14;
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
-    private const int WM_MOUSEMOVE = 0x0200;
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);
@@ -192,6 +188,14 @@ public sealed class AvaloniaInputHook : IInputHook
     [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr GetModuleHandle(string? lpModuleName);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
     [StructLayout(LayoutKind.Sequential)]
     private struct KBDLLHOOKSTRUCT
     {
@@ -203,19 +207,16 @@ public sealed class AvaloniaInputHook : IInputHook
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct LASTINPUTINFO
+    {
+        public uint cbSize;
+        public uint dwTime;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     private struct POINT
     {
         public int x;
         public int y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MSLLHOOKSTRUCT
-    {
-        public POINT pt;
-        public uint mouseData;
-        public uint flags;
-        public uint time;
-        public IntPtr dwExtraInfo;
     }
 }

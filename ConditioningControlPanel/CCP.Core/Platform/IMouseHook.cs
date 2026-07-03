@@ -3,6 +3,12 @@ namespace ConditioningControlPanel.Core.Platform;
 /// <summary>
 /// Cross-platform low-level mouse hook. On Windows this captures WH_MOUSE_LL events;
 /// on other platforms the events simply never fire.
+///
+/// The implementation is a shared singleton and <see cref="Install"/>/<see cref="Uninstall"/>
+/// are reference-counted: consumers MUST strictly pair their calls (install once when they
+/// start needing events, uninstall once when they stop). Event coordinates are PHYSICAL
+/// screen pixels. Handlers run inside the hook callback and must stay near-free (marshal
+/// real work to the UI thread).
 /// </summary>
 public interface IMouseHook
 {

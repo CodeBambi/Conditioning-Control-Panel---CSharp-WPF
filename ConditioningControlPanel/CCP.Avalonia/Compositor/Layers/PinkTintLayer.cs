@@ -13,8 +13,11 @@ namespace ConditioningControlPanel.Avalonia.Compositor.Layers;
 /// </summary>
 public sealed class PinkTintLayer : BaseLayer
 {
+    // Reused paint (UCE rule: no per-frame allocations). Only touched inside Render.
+    private readonly SKPaint _paint = new();
     private Color _color = Colors.Transparent;
     private double _opacity = 0;
+    private bool _dirty;
 
     public override int ZIndex => CompositorLayers.PinkTint;
 
@@ -22,17 +25,28 @@ public sealed class PinkTintLayer : BaseLayer
 
     public void SetColor(Color color, double opacity)
     {
+        var clamped = Math.Clamp(opacity, 0, 1);
+        if (_color != color || Math.Abs(clamped - _opacity) > 0.0005)
+            _dirty = true;
         _color = color;
-        _opacity = Math.Clamp(opacity, 0, 1);
+        _opacity = clamped;
     }
 
     public override void Update(TimeSpan deltaTime) { }
 
+    // Static fill: repaint only when the service actually changed color/opacity, so a
+    // pink-only frame lets the engine skip the full-screen re-render entirely.
+    public override bool ConsumeDirty()
+    {
+        var dirty = _dirty;
+        _dirty = false;
+        return dirty;
+    }
+
     public override void Render(SKCanvas canvas, ConditioningControlPanel.Core.Platform.PixelRect bounds, TimeSpan deltaTime)
     {
         if (_opacity <= 0) return;
-        var skColor = new SKColor(_color.R, _color.G, _color.B, (byte)(_opacity * 255));
-        using var paint = new SKPaint { Color = skColor };
-        canvas.DrawRect(ToSkRect(bounds), paint);
+        _paint.Color = new SKColor(_color.R, _color.G, _color.B, (byte)(_opacity * 255));
+        canvas.DrawRect(ToSkRect(bounds), _paint);
     }
 }

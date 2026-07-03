@@ -529,7 +529,11 @@ public sealed class BubbleEngine
         if (spec.IsChaperoneLive && bubble.IsShielded)
             return; // chaperone shield bounces the press
 
-        if (_canChannel?.Invoke(spec) != true)
+        // WPF parity (BubbleService.cs:3579): a NULL gate means "channel allowed" —
+        // `_canChannelDefuse?.Invoke(this) == false` only detonates when a wired gate says no.
+        // Do not invert this back to `?.Invoke(spec) != true`: that made a missing gate an
+        // instant detonation for every live press.
+        if (_canChannel != null && !_canChannel(spec))
         {
             _onChannelBroken?.Invoke(spec, "nofocus");
             DetonateBubble(bubble, spec);
@@ -665,8 +669,14 @@ public sealed class BubbleEngine
         return _bubbles.FirstOrDefault(b => b.Id == id);
     }
 
-    /// <summary>Returns ids of chaos bubbles whose bounds intersect the given DIP rectangle.</summary>
-    public IReadOnlyList<Guid> GetChaosBubblesInRect(PixelRect rectDips)
+    /// <summary>
+    /// Returns ids of chaos bubbles whose bounds intersect the given rectangle in
+    /// PHYSICAL virtual-desktop pixels (the space the WH_MOUSE_LL hook and the gaze
+    /// pipeline report). Engine-internal bubble geometry is per-screen logical units
+    /// (physical / screen scaling), so each bubble rect is converted with its own
+    /// screen's scaling before the compare — correct on mixed-DPI setups.
+    /// </summary>
+    public IReadOnlyList<Guid> GetChaosBubblesInRect(PixelRect rectPx)
     {
         var result = new List<Guid>();
         if (!_chaosActive) return result;
@@ -674,8 +684,9 @@ public sealed class BubbleEngine
         foreach (var bubble in _bubbles)
         {
             if (bubble.Spec == null || bubble.IsPopping) continue;
-            var r = new PixelRect(bubble.X, bubble.Y, bubble.Size, bubble.Size);
-            if (r.X < rectDips.Right && r.Right > rectDips.X && r.Y < rectDips.Bottom && r.Bottom > rectDips.Y)
+            var s = bubble.Scaling > 0 ? bubble.Scaling : 1.0;
+            var r = new PixelRect(bubble.X * s, bubble.Y * s, bubble.Size * s, bubble.Size * s);
+            if (r.X < rectPx.Right && r.Right > rectPx.X && r.Y < rectPx.Bottom && r.Bottom > rectPx.Y)
                 result.Add(bubble.Id);
         }
 
@@ -768,7 +779,9 @@ public sealed class BubbleEngine
 
     private BubbleState? MaterializeChaosSpec(ChaosBubbleSpec spec)
     {
-        var screens = _screenProvider.GetAllScreens();
+        // WPF parity (BubbleService.cs:855): bubbles confine to the primary monitor
+        // when DualMonitorEnabled is off.
+        var screens = _screenProvider.GetEffectScreens(_settings.Current?.DualMonitorEnabled != false);
         int screenIndex;
         ScreenInfo screen;
         if (screens.Count == 0)
@@ -948,8 +961,11 @@ public sealed class BubbleEngine
                 bubble.Scale = 1.0 + 0.15 * Math.Sin(bubble.AgeMs / 80.0);
             }
         }
-        else
+        else if (!bubble.IsChanneling)
         {
+            // WPF parity (BubbleService.cs:2971): a channeling bubble is PINNED in place so it
+            // cannot drift out of its own hit circle mid-hold "for free". Motion resumes if the
+            // channel breaks.
             bubble.X += bubble.Vx * dt;
             bubble.Y += bubble.Vy * dt;
 
@@ -1047,6 +1063,29 @@ public sealed class BubbleEngine
         {
             if (bubble.IsChanneling)
             {
+                // WPF parity (BubbleService.cs:3614-3631 TickChannel): the hold only counts while
+                // the cursor stays on the bubble's hit disc — straying off it mid-hold detonates
+                // with reason "release". Compared in PHYSICAL pixels: the pointer is physical and
+                // the disc is engine-logical * this bubble's screen scaling (same math as
+                // OnSharedHostLeftDown), so mixed-DPI rigs behave.
+                var strayCursor = _pointerState.GetCursorPosition();
+                if (strayCursor.HasValue)
+                {
+                    var discCx = (bubble.X + bubble.Size / 2.0) * bubble.Scaling;
+                    var discCy = (bubble.Y + bubble.Size / 2.0) * bubble.Scaling;
+                    var discR = (bubble.Size / 2.0) * bubble.Scaling;
+                    var strayDx = strayCursor.Value.X - discCx;
+                    var strayDy = strayCursor.Value.Y - discCy;
+                    if (strayDx * strayDx + strayDy * strayDy > discR * discR)
+                    {
+                        bubble.IsChanneling = false;
+                        _channelBubbleId = null;
+                        _onChannelBroken?.Invoke(spec, "release");
+                        DetonateBubble(bubble, spec);
+                        return;
+                    }
+                }
+
                 // Hold-to-defuse: the fuse pauses while the channel is held.
                 var elapsedMs = (DateTime.UtcNow - _channelStartUtc).TotalMilliseconds;
                 double t = Math.Clamp(elapsedMs / ChaosTuning.DEFUSE_HOLD_MS, 0.0, 1.0);
@@ -1275,7 +1314,8 @@ public sealed class BubbleEngine
 
     private void SpawnBubble()
     {
-        var screens = _screenProvider.GetAllScreens();
+        // WPF parity (BubbleService.cs:855): primary-only when DualMonitorEnabled is off.
+        var screens = _screenProvider.GetEffectScreens(_settings.Current?.DualMonitorEnabled != false);
         int screenIndex;
         ScreenInfo screen;
         if (screens.Count == 0)

@@ -152,11 +152,15 @@ public sealed class AvaloniaSubliminalService : ISubliminalService, IDisposable
             ? Math.Max(100, overrideDurationMs.Value)
             : Math.Max(100, settings.SubliminalDuration * 17);
 
+        // WPF parity (SubliminalService.cs:583): targetOpacity = (override ?? SubliminalOpacity)/100,
+        // read live per flash so preset/session/remote SubliminalOpacity changes apply immediately.
+        var targetOpacity = Math.Clamp((opacity ?? settings.SubliminalOpacity) / 100.0, 0.0, 1.0);
+
         var bgColor = ParseColor(settings.SubBackgroundColor, Colors.Black);
         var textColor = ParseColor(settings.SubTextColor, Colors.Magenta);
         var bgTransparent = settings.SubBackgroundTransparent;
 
-        _subliminalLayer?.Flash(text, bgColor, textColor, durationMs, bgTransparent);
+        _subliminalLayer?.Flash(text, bgColor, textColor, durationMs, bgTransparent, targetOpacity);
         SubliminalDisplayed?.Invoke(this, EventArgs.Empty);
     }
 

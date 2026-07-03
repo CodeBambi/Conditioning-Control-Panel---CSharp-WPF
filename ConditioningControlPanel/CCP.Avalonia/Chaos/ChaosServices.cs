@@ -40,6 +40,17 @@ public interface IChaosModeState
 {
     ChaosPlayMode ActiveMode { get; set; }
     bool DesktopMode { get; }
+
+    /// <summary>
+    /// Whether chaos windows are pinned into the topmost band. WPF parity
+    /// (ChaosModeService.cs:320, ChaosWindowZ.PinTopmost): driven by the user's
+    /// AppSettings.ChaosPinOnTop (snapshot at run start, default true) "regardless of mode" —
+    /// NOT by DesktopMode. The old DesktopMode-driven inversion (every Free Desktop run born
+    /// non-topmost and actively demoted) is the exact behavior WPF classified as a bug and
+    /// deliberately abandoned; do not couple this back to <see cref="DesktopMode"/>.
+    /// </summary>
+    bool PinTopmost { get; set; }
+
     bool BornTopmost { get; }
     bool NarrativeActive { get; }
 }
@@ -58,7 +69,17 @@ public sealed class ChaosModeState : IChaosModeState
 
     public bool DesktopMode => ActiveMode == ChaosPlayMode.FreeDesktop;
 
-    public bool BornTopmost => !DesktopMode;
+    /// <summary>
+    /// Snapshot of AppSettings.ChaosPinOnTop taken at StartRun and reset to true after the
+    /// run (WPF ChaosModeService.cs:3266 leak guard: dashboard trigger overlays must never
+    /// inherit a stale demote). Default true = pinned.
+    /// </summary>
+    public bool PinTopmost { get; set; } = true;
+
+    // WPF parity: topmost is decoupled from DesktopMode (ChaosWindowZ.cs:35 BornTopmost =>
+    // PinTopmost; ChaosWindowZ.DesktopMode is write-only in WPF). DesktopMode keeps gating
+    // its non-topmost traits (backdrop/narrative/ambient) only.
+    public bool BornTopmost => PinTopmost;
 
     public bool NarrativeActive =>
         _services.GetService<global::ConditioningControlPanel.Core.Services.Settings.ISettingsService>()?.Current?.NarrativeModeEnabled == true

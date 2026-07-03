@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Avalonia;
@@ -23,14 +24,59 @@ public sealed class AvaloniaKeywordHighlightService : IKeywordHighlightService, 
 {
     private readonly Dictionary<string, (Window window, Canvas canvas)> _screenOverlays = new();
     private readonly IScreenProvider _screenProvider;
+    private readonly ISettingsService _settings;
     private readonly ILogger<AvaloniaKeywordHighlightService> _logger;
+    private AppSettings? _hookedSettings;
     private bool _disposed;
 
-    public AvaloniaKeywordHighlightService(IScreenProvider screenProvider, ILogger<AvaloniaKeywordHighlightService> logger)
+    public AvaloniaKeywordHighlightService(
+        IScreenProvider screenProvider,
+        ISettingsService settings,
+        ILogger<AvaloniaKeywordHighlightService> logger)
     {
         _screenProvider = screenProvider ?? throw new ArgumentNullException(nameof(screenProvider));
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        // WPF parity (MainWindow.Awareness.cs:534, MainWindow.KeywordTriggers.cs:214): the
+        // OcrHighlightVisibleInCapture toggle must flip display affinity on EXISTING overlay
+        // windows immediately. The WPF head wires the two checkboxes to RefreshCaptureVisibility;
+        // here we subscribe to the settings model instead so every writer (Awareness tab,
+        // Keyword Triggers tab, remote control, presets) gets the live behavior.
+        _settings.CurrentReplaced += OnSettingsCurrentReplaced;
+        HookSettings(_settings.Current);
     }
+
+    private void HookSettings(AppSettings? settings)
+    {
+        if (_hookedSettings != null)
+            _hookedSettings.PropertyChanged -= OnSettingsPropertyChanged;
+        _hookedSettings = settings;
+        if (settings != null)
+            settings.PropertyChanged += OnSettingsPropertyChanged;
+    }
+
+    private void OnSettingsCurrentReplaced()
+    {
+        HookSettings(_settings.Current);
+        RefreshCaptureVisibility();
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AppSettings.OcrHighlightVisibleInCapture))
+            RefreshCaptureVisibility();
+    }
+
+    /// <summary>
+    /// Unique per-monitor key. WPF keys overlays by the guaranteed-unique GDI DeviceName
+    /// (KeywordHighlightService.cs:96); Avalonia's Screen.DisplayName is the friendly
+    /// monitor model name, identical for same-model monitors, so two screens would collapse
+    /// into one overlay and highlights would land on the wrong monitor. Compose with the
+    /// bounds origin, which is unique per screen within a scan cycle.
+    /// </summary>
+    private static string ScreenKey(ScreenInfo screen) =>
+        $"{screen.Name}|{screen.Bounds.X},{screen.Bounds.Y}";
 
     public void ShowHighlight(List<OcrWordHit> matchedWords)
     {
@@ -39,7 +85,7 @@ public sealed class AvaloniaKeywordHighlightService : IKeywordHighlightService, 
         Dispatcher.UIThread.Post(() =>
         {
             if (_disposed) return;
-            var settings = App.Services?.GetService<ISettingsService>()?.Current;
+            var settings = _settings.Current;
             if (settings?.KeywordHighlightEnabled != true) return;
 
             try
@@ -55,7 +101,7 @@ public sealed class AvaloniaKeywordHighlightService : IKeywordHighlightService, 
                     if (canvas == null || window == null) continue;
 
                     AddHighlightElement(canvas, word.ScreenRect, word.Screen);
-                    touchedScreens.Add(word.Screen.Name);
+                    touchedScreens.Add(ScreenKey(word.Screen));
                     added++;
                 }
 
@@ -88,7 +134,16 @@ public sealed class AvaloniaKeywordHighlightService : IKeywordHighlightService, 
     public void RefreshCaptureVisibility()
     {
         if (_disposed) return;
-        bool visible = App.Services?.GetService<ISettingsService>()?.Current?.OcrHighlightVisibleInCapture == true;
+        if (!OperatingSystem.IsWindows()) return;
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            // Settings can be written from any thread (remote control); window handles are
+            // only touched on the UI thread.
+            Dispatcher.UIThread.Post(RefreshCaptureVisibility);
+            return;
+        }
+
+        bool visible = _settings.Current?.OcrHighlightVisibleInCapture == true;
         uint affinity = visible ? 0u : WDA_EXCLUDEFROMCAPTURE;
 
         foreach (var (window, _) in _screenOverlays.Values)
@@ -105,7 +160,7 @@ public sealed class AvaloniaKeywordHighlightService : IKeywordHighlightService, 
 
     private (Window? window, Canvas? canvas) GetOrCreateOverlay(ScreenInfo screen)
     {
-        var key = screen.Name;
+        var key = ScreenKey(screen);
         if (_screenOverlays.TryGetValue(key, out var existing))
             return existing;
 
@@ -149,7 +204,7 @@ public sealed class AvaloniaKeywordHighlightService : IKeywordHighlightService, 
                         SetWindowLong(handle, GWL_EXSTYLE,
                             exStyle | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED);
 
-                        bool visible = App.Services?.GetService<ISettingsService>()?.Current?.OcrHighlightVisibleInCapture == true;
+                        bool visible = _settings.Current?.OcrHighlightVisibleInCapture == true;
                         if (!visible)
                             SetWindowDisplayAffinity(handle, WDA_EXCLUDEFROMCAPTURE);
                     }
@@ -189,7 +244,7 @@ public sealed class AvaloniaKeywordHighlightService : IKeywordHighlightService, 
         double width = screenRect.Width / scaling;
         double height = screenRect.Height / scaling;
 
-        var highlightColor = ParseHighlightColor(App.Services?.GetService<ISettingsService>()?.Current?.KeywordHighlightColor);
+        var highlightColor = ParseHighlightColor(_settings.Current?.KeywordHighlightColor);
         var fillColor = new Color(0x80, highlightColor.R, highlightColor.G, highlightColor.B);
 
         const double PAD = 10;
@@ -210,7 +265,7 @@ public sealed class AvaloniaKeywordHighlightService : IKeywordHighlightService, 
         Canvas.SetTop(rect, localY - PAD);
         canvas.Children.Add(rect);
 
-        var totalMs = App.Services?.GetService<ISettingsService>()?.Current?.KeywordHighlightDurationMs ?? 1500;
+        var totalMs = _settings.Current?.KeywordHighlightDurationMs ?? 1500;
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(totalMs), IsEnabled = true };
         timer.Tick += (_, _) =>
         {
@@ -264,15 +319,26 @@ public sealed class AvaloniaKeywordHighlightService : IKeywordHighlightService, 
         if (_disposed) return;
         _disposed = true;
 
-        Dispatcher.UIThread.Post(() =>
+        _settings.CurrentReplaced -= OnSettingsCurrentReplaced;
+        HookSettings(null);
+
+        // WPF parity (KeywordHighlightService.Dispose): close synchronously when already on
+        // the dispatcher thread so shutdown-path disposal cannot outrun the dispatcher; only
+        // fall back to Post from background threads.
+        if (Dispatcher.UIThread.CheckAccess())
+            CloseAllOverlays();
+        else
+            Dispatcher.UIThread.Post(CloseAllOverlays);
+    }
+
+    private void CloseAllOverlays()
+    {
+        foreach (var (window, canvas) in _screenOverlays.Values)
         {
-            foreach (var (window, canvas) in _screenOverlays.Values)
-            {
-                try { canvas?.Children.Clear(); } catch { }
-                try { window?.Close(); } catch { }
-            }
-            _screenOverlays.Clear();
-        });
+            try { canvas?.Children.Clear(); } catch { }
+            try { window?.Close(); } catch { }
+        }
+        _screenOverlays.Clear();
     }
 
     #endregion

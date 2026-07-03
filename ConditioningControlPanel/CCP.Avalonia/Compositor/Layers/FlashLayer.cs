@@ -10,6 +10,11 @@ namespace ConditioningControlPanel.Avalonia.Compositor.Layers;
 /// spawning; this layer handles fade, GIF frame advance at the file's real frame delays,
 /// and rendering.
 ///
+/// Coordinate space (see <see cref="IAvaloniaLayer"/> contract): item geometry is PHYSICAL
+/// virtual-desktop pixels. <see cref="HitTest"/> therefore takes raw WH_MOUSE_LL hook
+/// coordinates (physical px) directly — no DIP conversion — and stays correct on
+/// mixed-DPI multi-monitor setups.
+///
 /// Lifetime discipline (UCE rule 8): Render draws while holding _sync, and every
 /// <see cref="SkiaFrameSet.Release"/> for an item's frames also happens under _sync
 /// (expiry, click, Clear), so the render thread can never draw a disposed SKImage.
@@ -117,19 +122,47 @@ public sealed class FlashLayer : BaseLayer
         }
     }
 
-    /// <summary>Hit-test in reverse order (topmost first). Returns the clicked item or null.</summary>
-    public FlashItem? HitTest(double x, double y)
+    /// <summary>
+    /// Hit-test in reverse order (topmost first). Returns the hit item or null.
+    /// Coordinates are PHYSICAL virtual-desktop pixels (raw hook / gaze space).
+    /// With <paramref name="requireClickable"/> true (mouse click-pop path) only items
+    /// spawned clickable match; pass false for the gaze-pop path — WPF deliberately
+    /// decouples gaze targeting from FlashClickable (FlashService.GetGazeTargets returns
+    /// ALL live flashes; solid-mode host flashes are gaze-pop-only by design).
+    /// </summary>
+    public FlashItem? HitTest(double x, double y, bool requireClickable = true)
     {
         lock (_sync)
         {
             for (int i = _items.Count - 1; i >= 0; i--)
             {
                 var item = _items[i];
-                if (item.Clickable && x >= item.X && x <= item.X + item.Width && y >= item.Y && y <= item.Y + item.Height)
+                if (requireClickable && !item.Clickable) continue;
+                if (x >= item.X && x <= item.X + item.Width && y >= item.Y && y <= item.Y + item.Height)
                     return item;
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// True when the given rect (physical px) intersects any live flash, clickable or not.
+    /// Used by the spawn placement loop to avoid stacking flashes; one call replaces the old
+    /// per-click-entry repeated center-point hit-tests.
+    /// </summary>
+    public bool IntersectsAny(double x, double y, double width, double height)
+    {
+        lock (_sync)
+        {
+            for (int i = 0; i < _items.Count; i++)
+            {
+                var item = _items[i];
+                if (x < item.X + item.Width && x + width > item.X
+                    && y < item.Y + item.Height && y + height > item.Y)
+                    return true;
+            }
+        }
+        return false;
     }
 
     public sealed class FlashItem

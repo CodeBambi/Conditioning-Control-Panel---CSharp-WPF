@@ -18,13 +18,12 @@ public sealed class AvaloniaGazeFocusService : IGazeFocusService, IDisposable
     private const int DefaultDwellMs = 1000;
     private const int CooldownMs = 250;
     private const int TickMs = 33; // ~30 FPS
-    private const int GazeRectRadiusDips = 60;
+    private const int GazeRectRadiusPx = 60;
 
     private readonly IWebcamService _webcam;
     private readonly IBubbleService _bubbles;
     private readonly IFlashService _flash;
     private readonly ISettingsService _settings;
-    private readonly IScreenProvider _screens;
     private readonly ILogger<AvaloniaGazeFocusService>? _logger;
 
     private DispatcherTimer? _timer;
@@ -53,7 +52,6 @@ public sealed class AvaloniaGazeFocusService : IGazeFocusService, IDisposable
         _bubbles = bubbles;
         _flash = flash;
         _settings = settings;
-        _screens = screens;
         _logger = logger;
     }
 
@@ -137,7 +135,7 @@ public sealed class AvaloniaGazeFocusService : IGazeFocusService, IDisposable
             if (DateTime.UtcNow < _cooldownUntil) return;
             if (_faceLost || !_lastGazePoint.HasValue) return;
 
-            var rect = ToDipRect(GazeRect(_lastGazePoint.Value));
+            var rect = GazeRect(_lastGazePoint.Value);
             bool popped = false;
 
             try
@@ -188,7 +186,7 @@ public sealed class AvaloniaGazeFocusService : IGazeFocusService, IDisposable
                 return;
             }
 
-            var rect = ToDipRect(GazeRect(_lastGazePoint.Value));
+            var rect = GazeRect(_lastGazePoint.Value);
 
             if (!_dwelling)
             {
@@ -234,28 +232,20 @@ public sealed class AvaloniaGazeFocusService : IGazeFocusService, IDisposable
         }
     }
 
+    /// <summary>
+    /// The pop target around the gaze point, in PHYSICAL screen pixels — the gaze pipeline
+    /// projects to physical coordinates and the compositor layers (BubbleLayer/FlashLayer)
+    /// store physical virtual-desktop px (IAvaloniaLayer contract), so the rect is passed
+    /// through with NO DIP conversion. The old divide-by-scaling step made gaze pops miss
+    /// their targets on any monitor scaled above 100%.
+    /// </summary>
     private PixelRect GazeRect(Point gazePx)
     {
         return new PixelRect(
-            gazePx.X - GazeRectRadiusDips,
-            gazePx.Y - GazeRectRadiusDips,
-            GazeRectRadiusDips * 2,
-            GazeRectRadiusDips * 2);
-    }
-
-    private PixelRect ToDipRect(PixelRect rectPx)
-    {
-        var scale = GetGazeScale();
-        return new PixelRect(rectPx.X / scale, rectPx.Y / scale, rectPx.Width / scale, rectPx.Height / scale);
-    }
-
-    private double GetGazeScale()
-    {
-        var screen = _webcam.GetCalibratedScreen();
-        if (screen != null && screen.Scaling > 0) return screen.Scaling;
-
-        var primary = _screens.GetPrimaryScreen();
-        return primary?.Scaling > 0 ? primary.Scaling : 1.0;
+            gazePx.X - GazeRectRadiusPx,
+            gazePx.Y - GazeRectRadiusPx,
+            GazeRectRadiusPx * 2,
+            GazeRectRadiusPx * 2);
     }
 
     public void Dispose() => Stop();

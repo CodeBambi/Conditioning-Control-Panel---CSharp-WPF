@@ -55,6 +55,10 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
     private bool _isBusy;
     private bool _noImagesWarningShown;
     private readonly List<string> _lastDisplayedImagePaths = new();
+    // Hook subscription state: strictly paired Install/Uninstall (the shared IMouseHook is
+    // ref-counted; an unpaired Uninstall used to tear down the bubble service's hook too).
+    private bool _hookSubscribed;
+    private AppSettings? _observedSettings;
 
     public AvaloniaFlashService(
         ISettingsService settings,
@@ -116,12 +120,12 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         _cts = new CancellationTokenSource();
         _noImagesWarningShown = false;
 
-        // Install mouse hook for flash click detection
-        if (_mouseHook != null && settings.FlashClickable)
-        {
-            _mouseHook.LeftButtonDown += OnMouseLeftDown;
-            try { _mouseHook.Install(); } catch { }
-        }
+        // Install mouse hook for flash click detection. Applied live: WPF re-reads
+        // FlashClickable per spawn (FlashService.ApplyClickability), so the Avalonia head
+        // watches the setting and installs/uninstalls the hook subscription mid-session.
+        _observedSettings = settings;
+        settings.PropertyChanged += OnSettingsPropertyChanged;
+        UpdateHookSubscription(settings.FlashClickable);
 
         ScheduleNext();
         _logger?.LogInformation("AvaloniaFlashService started, images path: {Path}", _imagesPath);
@@ -139,18 +143,52 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         _cts?.Dispose();
         _cts = null;
 
-        // Uninstall mouse hook
-        if (_mouseHook != null)
+        if (_observedSettings != null)
         {
-            _mouseHook.LeftButtonDown -= OnMouseLeftDown;
-            try { _mouseHook.Uninstall(); } catch { }
+            _observedSettings.PropertyChanged -= OnSettingsPropertyChanged;
+            _observedSettings = null;
         }
+        // Paired uninstall: only releases the shared hook if this service installed it.
+        UpdateHookSubscription(false);
 
         // Clear all flash items from the compositor layer
         _flashLayer?.Clear();
         lock (_sync) { _clickData.Clear(); }
 
         _logger?.LogInformation("AvaloniaFlashService stopped");
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(AppSettings.FlashClickable)) return;
+        var wanted = IsRunning && _settings.Current?.FlashClickable == true;
+        if (Dispatcher.UIThread.CheckAccess())
+            UpdateHookSubscription(wanted);
+        else
+            Dispatcher.UIThread.Post(() => UpdateHookSubscription(wanted && IsRunning));
+    }
+
+    /// <summary>
+    /// Installs or releases this service's share of the global WH_MOUSE_LL hook. Strictly
+    /// paired: the hook itself is ref-counted across consumers (flash, bubbles, chaos ripple),
+    /// so an Uninstall without a prior Install would otherwise steal the hook from another
+    /// consumer. Runs on the UI thread (SetWindowsHookEx needs a pumping thread).
+    /// </summary>
+    private void UpdateHookSubscription(bool wanted)
+    {
+        if (_mouseHook == null || wanted == _hookSubscribed) return;
+        if (wanted)
+        {
+            _mouseHook.LeftButtonDown += OnMouseLeftDown;
+            try { _mouseHook.Install(); } catch { }
+            _hookSubscribed = true;
+        }
+        else
+        {
+            _mouseHook.LeftButtonDown -= OnMouseLeftDown;
+            try { _mouseHook.Uninstall(); } catch { }
+            _hookSubscribed = false;
+        }
     }
 
     public void TriggerFlash()
@@ -283,6 +321,11 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
                         return;
                     }
 
+                    // Guarantee the engine is awake for this item: Start() is idempotent and
+                    // cheap when running; if the engine was never started (e.g. remote
+                    // 'start_flash' with no session) it creates the compositor windows now.
+                    _compositor?.Start();
+
                     var id = _flashLayer.Spawn(set, geom.X, geom.Y, geom.Width, geom.Height,
                         maxOpacity, lifetimeMs, clickable);
                     lock (_sync)
@@ -336,10 +379,32 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
 
     private void OnMouseLeftDown(object? sender, HookPoint e)
     {
+        // WH_MOUSE_LL callback thread: keep this path near-empty (WPF GlobalMouseHook
+        // contract — heavy work in the callback serializes ALL mouse input system-wide and
+        // risks Windows silently removing the hook via LowLevelHooksTimeout). Everything —
+        // hit-test, item removal, event raise, hydra respawn (directory scan + image probe) —
+        // is marshalled to the UI thread, mirroring AvaloniaBubbleService.
+        //
+        // WS2 (known gap, documented): the popping click is NOT swallowed —
+        // AvaloniaMouseHook always calls CallNextHookEx, so a click that pops a flash also
+        // lands in the application underneath (button presses, focus, drag starts). WPF's
+        // clickable flashes absorb the click as real windows. The swallow path (return 1 for
+        // handled hits, with the hold-to-defuse pass-through exception) is the WS2
+        // mouse-hook work item; deferring the handling here costs nothing behaviorally
+        // because the click already propagates either way.
+        if (!IsRunning) return;
+        Dispatcher.UIThread.Post(() => HandleFlashClick(e));
+    }
+
+    private void HandleFlashClick(HookPoint e)
+    {
         if (!IsRunning) return;
         var settings = _settings.Current;
         if (settings == null || !settings.FlashClickable) return;
 
+        // Physical-px hit-test: the hook reports physical screen coordinates and FlashLayer
+        // geometry is physical virtual-desktop px (IAvaloniaLayer contract), so no DPI
+        // conversion — correct on mixed-DPI multi-monitor setups.
         var item = _flashLayer?.HitTest(e.X, e.Y);
         if (item == null)
         {
@@ -415,15 +480,10 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
 
     private bool IsOverlapping(double x, double y, double w, double h)
     {
-        lock (_sync)
-        {
-            foreach (var kvp in _clickData)
-            {
-                var item = _flashLayer?.HitTest(x + w / 2, y + h / 2);
-                if (item != null) return true;
-            }
-        }
-        return false;
+        // Single rect-vs-items test (physical px, all live flashes regardless of
+        // clickability). Replaces the old loop that repeated an identical center-point
+        // hit-test once per _clickData entry while holding both locks.
+        return _flashLayer?.IntersectsAny(x, y, w, h) == true;
     }
 
     private ImageData? PickImageData()
@@ -441,12 +501,12 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
                 return null;
             }
 
+            // Physical-px geometry (IAvaloniaLayer contract): the image displays at its
+            // native pixel size, shrunk to fit the chosen monitor's physical bounds.
             var monitor = GetRandomMonitor();
-            var scale = Math.Min(1.0, Math.Min(
-                monitor.Width / (pxW / monitor.Scaling),
-                monitor.Height / (pxH / monitor.Scaling)));
-            var w = (int)(pxW / monitor.Scaling * scale);
-            var h = (int)(pxH / monitor.Scaling * scale);
+            var scale = Math.Min(1.0, Math.Min(monitor.Width / pxW, monitor.Height / pxH));
+            var w = (int)(pxW * scale);
+            var h = (int)(pxH * scale);
             var x = (int)(monitor.X + _random.Next(0, Math.Max(1, (int)(monitor.Width - w))));
             var y = (int)(monitor.Y + _random.Next(0, Math.Max(1, (int)(monitor.Height - h))));
 
@@ -500,20 +560,22 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
 
     private ImageGeometry GetRandomMonitor()
     {
+        // Returns the chosen monitor's PHYSICAL bounds (IAvaloniaLayer coordinate contract).
+        // Honors DualMonitorEnabled: primary-only when off (WPF FlashService.PickMonitor
+        // parity, FlashService.cs:1632).
         try
         {
-            var all = _screens.GetAllScreens();
-            if (all.Count == 0)
+            var candidates = _screens.GetEffectScreens(_settings.Current?.DualMonitorEnabled != false);
+            if (candidates.Count == 0)
                 return new ImageGeometry { X = 0, Y = 0, Width = 1920, Height = 1080 };
 
-            var screen = all[_random.Next(all.Count)];
+            var screen = candidates[_random.Next(candidates.Count)];
             return new ImageGeometry
             {
-                X = screen.Bounds.X / screen.Scaling,
-                Y = screen.Bounds.Y / screen.Scaling,
-                Width = screen.Bounds.Width / screen.Scaling,
-                Height = screen.Bounds.Height / screen.Scaling,
-                Scaling = screen.Scaling
+                X = screen.Bounds.X,
+                Y = screen.Bounds.Y,
+                Width = screen.Bounds.Width,
+                Height = screen.Bounds.Height
             };
         }
         catch
@@ -592,12 +654,11 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
             return;
         }
 
+        // Physical-px geometry (same math as PickImageData).
         var monitor = GetRandomMonitor();
-        var scale = Math.Min(1.0, Math.Min(
-            monitor.Width / (pxW / monitor.Scaling),
-            monitor.Height / (pxH / monitor.Scaling)));
-        var w = (int)(pxW / monitor.Scaling * scale);
-        var h = (int)(pxH / monitor.Scaling * scale);
+        var scale = Math.Min(1.0, Math.Min(monitor.Width / pxW, monitor.Height / pxH));
+        var w = (int)(pxW * scale);
+        var h = (int)(pxH * scale);
         var x = (int)(monitor.X + _random.Next(0, Math.Max(1, (int)(monitor.Width - w))));
         var y = (int)(monitor.Y + _random.Next(0, Math.Max(1, (int)(monitor.Height - h))));
 
@@ -611,7 +672,17 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
     {
         if (!IsRunning) return false;
 
-        var item = _flashLayer?.HitTest(rect.X + rect.Width / 2.0, rect.Y + rect.Height / 2.0);
+        // Gate the gaze-pop path on FlashGazePopEnabled (WPF parity: GazeFocusService gates
+        // both the blink and dwell call sites on this setting; closes the lot-1 deferred row).
+        var settings = _settings.Current;
+        if (settings == null || !settings.FlashGazePopEnabled) return false;
+
+        // requireClickable:false — gaze targeting is deliberately DECOUPLED from
+        // FlashClickable (WPF FlashService.GetGazeTargets enumerates all live flashes;
+        // (FlashClickable=OFF, FlashGazePopEnabled=ON) is an explicitly supported config).
+        // rect is physical virtual-desktop px, same space as the flash items.
+        var item = _flashLayer?.HitTest(rect.X + rect.Width / 2.0, rect.Y + rect.Height / 2.0,
+            requireClickable: false);
         if (item == null) return false;
 
         lock (_sync)
@@ -640,13 +711,13 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         public bool OneShot { get; set; }
     }
 
+    // All geometry in PHYSICAL virtual-desktop pixels (IAvaloniaLayer coordinate contract).
     private sealed record ImageGeometry
     {
         public double X { get; set; }
         public double Y { get; set; }
         public double Width { get; set; }
         public double Height { get; set; }
-        public double Scaling { get; set; } = 1.0;
     }
 
     private sealed record FlashClickData(

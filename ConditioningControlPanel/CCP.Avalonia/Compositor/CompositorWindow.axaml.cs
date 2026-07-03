@@ -38,10 +38,10 @@ public partial class CompositorWindow : Window
 
         // Use the full monitor bounds (taskbar included) so overlays cover the
         // entire screen, matching the WPF head which positions on physical bounds,
-        // not the working area.
-        Position = new PixelPoint((int)screen.Bounds.X, (int)screen.Bounds.Y);
-        Width = screen.Bounds.Width;
-        Height = screen.Bounds.Height;
+        // not the working area. Position is physical pixels; Width/Height are DIPs
+        // (physical / scaling) — sizing straight from physical bounds oversized the
+        // window by the scale factor on >100% DPI monitors, spilling onto neighbors.
+        this.ConstrainToScreen(screen);
 
         _control = new CompositorControl(engine, screen, excludeFromCapture);
         Content = _control;
@@ -149,6 +149,38 @@ public partial class CompositorWindow : Window
         ApplyNativeTransparency();
     }
 
+    /// <summary>
+    /// Re-pins this window into the topmost band (WPF parity: OverlayService.ReassertZOrder,
+    /// which recovers overlays after fullscreen videos, OS notifications, or other topmost
+    /// windows reorder the band, or after something strips WS_EX_TOPMOST outright).
+    /// With <paramref name="force"/> false this is a cheap probe that only acts when the
+    /// WS_EX_TOPMOST bit has been stripped; with true it unconditionally re-stacks to the
+    /// front of the topmost band. Never activates the window (SWP_NOACTIVATE).
+    /// </summary>
+    public void ReassertTopmost(bool force)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        try
+        {
+            var hwnd = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+            if (hwnd == IntPtr.Zero) return;
+
+            if (!force)
+            {
+                var exStyle = (uint)GetWindowLong(hwnd, GWL_EXSTYLE).ToInt64();
+                if ((exStyle & WS_EX_TOPMOST) != 0) return;
+                _logger?.LogDebug("CompositorWindow on {Screen} lost WS_EX_TOPMOST; re-pinning", Screen.Name);
+            }
+
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "ReassertTopmost failed");
+        }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         Opened -= OnWindowOpened;
@@ -157,6 +189,8 @@ public partial class CompositorWindow : Window
     }
 
     private const int GWL_EXSTYLE = -20;
+    private const uint WS_EX_TOPMOST = 0x00000008;
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
     private const uint WS_EX_TRANSPARENT = 0x00000020;
     private const uint WS_EX_TOOLWINDOW = 0x00000080;
     private const uint WS_EX_NOACTIVATE = 0x08000000;

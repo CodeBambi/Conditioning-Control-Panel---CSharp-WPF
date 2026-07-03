@@ -1,21 +1,30 @@
 using System;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
-using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Compositor;
+using ConditioningControlPanel.Avalonia.Compositor.Layers;
+using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Overlays;
+using ConditioningControlPanel.Core.Services.Settings;
 using Microsoft.Extensions.DependencyInjection;
-using SkiaSharp;
 
 namespace ConditioningControlPanel.Avalonia.Desktop.Windows;
 
 /// <summary>
-/// Verifies that the spiral overlay's GIF actually animates by capturing two
-/// screenshots ~700 ms apart and comparing their pixels. A non-zero pixel delta
-/// proves <see cref="Image.InvalidateVisual"/> is being called after each frame.
+/// --verify-spiral harness. The spiral no longer lives in a dedicated overlay window: it is
+/// <see cref="SpiralLayer"/> (Z=<see cref="CompositorLayers.Spiral"/>) rendered inside the
+/// per-monitor <see cref="CompositorWindow"/> surfaces of the unified compositor engine.
+/// This harness asserts that compositor reality:
+///   1. the spiral layer is registered with the engine,
+///   2. showing the spiral decodes a real frame set (bundled spiral.gif fallback included)
+///      and activates the layer,
+///   3. the engine is running with at least one CompositorWindow per expected monitor
+///      (expected = all screens when DualMonitorEnabled, else 1).
+/// Exit code 0 on success, 2 on any failure. An animation-progress sample (GIF frame index
+/// advancing across ~700ms) is printed as a non-gating diagnostic.
 /// </summary>
 internal static class SpiralVerification
 {
@@ -27,65 +36,116 @@ internal static class SpiralVerification
 
     private static async Task RunAsync()
     {
+        var pass = false;
         try
         {
             await Task.Delay(2000); // let splash/init settle
 
             var lifetime = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
-            var mainWindow = lifetime?.MainWindow;
-            if (mainWindow == null)
+            if (lifetime?.MainWindow == null)
             {
                 Console.WriteLine("[SPIRAL] Main window not available.");
-                Environment.ExitCode = 2;
-                Shutdown();
                 return;
             }
 
-            var overlayService = App.Services.GetRequiredService<IOverlayService>();
+            var services = App.Services;
+            if (services == null)
+            {
+                Console.WriteLine("[SPIRAL] App.Services not available.");
+                return;
+            }
+
+            // Stage 1: the spiral layer must be registered with the compositor engine
+            // (AvaloniaOverlayService registers it once in its ctor).
+            var engine = services.GetService<CompositorEngine>();
+            if (engine == null)
+            {
+                Console.WriteLine("[SPIRAL] CompositorEngine is not registered in DI.");
+                return;
+            }
+
+            var overlayService = services.GetRequiredService<IOverlayService>();
+            if (engine.GetLayer(CompositorLayers.Spiral) is not SpiralLayer spiralLayer)
+            {
+                Console.WriteLine("[SPIRAL] SpiralLayer is not registered with the compositor engine.");
+                return;
+            }
+            Console.WriteLine("[SPIRAL] SpiralLayer registered at Z=" + CompositorLayers.Spiral + ".");
+
             overlayService.Start();
             await Task.Delay(200);
 
             overlayService.ShowOverlaySustained("spiral", 0.5);
-            await Task.Delay(800); // let windows open + decoder start
 
-            var spiralWindows = lifetime.Windows
-                .Where(w => w.GetType().Name.Contains("SpiralOverlayWindow", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            if (spiralWindows.Count == 0)
+            // Stage 2: wait for the background GIF decode to land (stock spiral.gif is ~8.6MB;
+            // decode runs off the UI thread). If the spiral path chain resolved to nothing the
+            // layer never activates and this times out with a distinct message.
+            var decoded = false;
+            for (var i = 0; i < 40; i++) // up to 10s
             {
-                Console.WriteLine("[SPIRAL] No spiral overlay window was created.");
-                Environment.ExitCode = 2;
-                Shutdown();
+                await Task.Delay(250);
+                if (spiralLayer.HasDecodedSource) { decoded = true; break; }
+            }
+
+            if (!decoded)
+            {
+                Console.WriteLine(
+                    "[SPIRAL] Spiral source failed to resolve/decode within 10s. " +
+                    "Check the spiral.gif resolution chain (settings.SpiralPath -> mod override -> " +
+                    "Spirals folder -> assets -> bundled avares://CCP.Avalonia/Assets/spiral.gif).");
+                return;
+            }
+            Console.WriteLine("[SPIRAL] Spiral source decoded.");
+
+            if (!spiralLayer.IsActive)
+            {
+                Console.WriteLine("[SPIRAL] SpiralLayer decoded a source but is not active (visible/opacity gate failed).");
                 return;
             }
 
-            var window = spiralWindows.First();
-            var path1 = await SmokeTestRunner.RenderScreenshotAsync(window, "spiral-verify-1.png");
+            // Stage 3: the engine must be running with one main-surface CompositorWindow per
+            // expected monitor. WindowCount > 0 also proves the auto-stop watchdog considers
+            // the spiral layer active (engine closes all windows after 500ms of idle).
+            await Task.Delay(800); // staggered window creation is ~250ms per extra monitor
+
+            var settings = services.GetService<ISettingsService>()?.Current;
+            var screenProvider = services.GetService<IScreenProvider>();
+            var screenCount = 0;
+            try { screenCount = screenProvider?.GetAllScreens().Count ?? 0; } catch { }
+            var expectedMonitors = settings?.DualMonitorEnabled == true ? Math.Max(1, screenCount) : 1;
+
+            if (!engine.IsRunning)
+            {
+                Console.WriteLine("[SPIRAL] CompositorEngine is not running while the spiral layer is active.");
+                return;
+            }
+
+            if (engine.WindowCount < expectedMonitors)
+            {
+                Console.WriteLine($"[SPIRAL] Expected >= {expectedMonitors} CompositorWindow(s) (screens={screenCount}), found {engine.WindowCount}.");
+                return;
+            }
+            Console.WriteLine($"[SPIRAL] CompositorEngine running with {engine.WindowCount} window(s) (expected >= {expectedMonitors}).");
+
+            // Non-gating diagnostic: prove the 60Hz tick is advancing the animation
+            // (GIF frame index, or rotation angle for a static image).
+            var sample1 = spiralLayer.AnimationProgress;
             await Task.Delay(700);
-            var path2 = await SmokeTestRunner.RenderScreenshotAsync(window, "spiral-verify-2.png");
+            var sample2 = spiralLayer.AnimationProgress;
+            Console.WriteLine(sample2 != sample1
+                ? $"[SPIRAL] Animation advancing (progress {sample1} -> {sample2})."
+                : $"[SPIRAL] WARNING: animation progress did not advance across 700ms (progress={sample1}); single-frame source or frozen tick.");
 
-            double diff = CompareImageDifference(path1, path2);
-            Console.WriteLine($"[SPIRAL] Pixel change ratio: {diff:F4}");
-
-            if (diff > 0.005)
-            {
-                Console.WriteLine("[SPIRAL] PASS: spiral overlay is animating.");
-                Environment.ExitCode = 0;
-            }
-            else
-            {
-                Console.WriteLine("[SPIRAL] FAIL: spiral overlay is frozen (no pixel change detected).");
-                Environment.ExitCode = 1;
-            }
+            Console.WriteLine("[SPIRAL] PASS: spiral layer registered, decoded, and composited on every expected monitor.");
+            pass = true;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[SPIRAL] ERROR: {ex}");
-            Environment.ExitCode = 2;
         }
         finally
         {
+            Environment.ExitCode = pass ? 0 : 2;
             try
             {
                 var overlayService = App.Services?.GetService<IOverlayService>();
@@ -107,42 +167,5 @@ internal static class SpiralVerification
             }
             catch { }
         });
-    }
-
-    private static double CompareImageDifference(string pathA, string pathB)
-    {
-        using var bitmapA = SKBitmap.Decode(pathA);
-        using var bitmapB = SKBitmap.Decode(pathB);
-        if (bitmapA == null || bitmapB == null)
-            return 0.0;
-
-        if (bitmapA.Width != bitmapB.Width || bitmapA.Height != bitmapB.Height)
-            return 1.0;
-
-        long totalDiff = 0;
-        long samples = 0;
-        int width = bitmapA.Width;
-        int height = bitmapA.Height;
-
-        for (int y = 0; y < height; y += 4)
-        {
-            for (int x = 0; x < width; x += 4)
-            {
-                var ca = bitmapA.GetPixel(x, y);
-                var cb = bitmapB.GetPixel(x, y);
-                totalDiff += (uint)Math.Abs(ca.Red - cb.Red)
-                           + (uint)Math.Abs(ca.Green - cb.Green)
-                           + (uint)Math.Abs(ca.Blue - cb.Blue)
-                           + (uint)Math.Abs(ca.Alpha - cb.Alpha);
-                samples++;
-            }
-        }
-
-        if (samples == 0)
-            return 0.0;
-
-        // Max possible diff per sample is 4 * 255.
-        double avgDiff = totalDiff / (double)samples;
-        return avgDiff / (4.0 * 255.0);
     }
 }

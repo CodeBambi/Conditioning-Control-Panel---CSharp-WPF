@@ -56,12 +56,16 @@ public static class AvaloniaChaosEnv
     }
 }
 
-/// <summary>Stubbed bubble service surface used by chaos overlays.</summary>
+/// <summary>
+/// Stubbed bubble service surface used by chaos overlays.
+/// Rects are PHYSICAL virtual-desktop pixels (the compositor bubble layer's coordinate
+/// contract — same space as WH_MOUSE_LL hook points and ScreenInfo.Bounds).
+/// </summary>
 public interface IAvaloniaBubbleService
 {
     double ChaosRabbitTrailSecNow { get; }
-    int PopBubblesInRect(global::Avalonia.Rect rectDips);
-    bool AnyDarterIntersects(global::Avalonia.Rect rectDips);
+    int PopBubblesInRect(global::Avalonia.Rect rectPx);
+    bool AnyDarterIntersects(global::Avalonia.Rect rectPx);
 }
 
 /// <summary>Static facade for ChaosModeService. Passes through to the DI-injected <see cref="IChaosModeState"/>.</summary>
@@ -87,7 +91,22 @@ public static class AvaloniaChaosMode
     }
 
     public static bool DesktopMode => Mode?.DesktopMode ?? (ActiveMode == ChaosPlayMode.FreeDesktop || !StoryModeEnabled);
-    public static bool BornTopmost => Mode?.BornTopmost ?? !DesktopMode;
+
+    /// <summary>
+    /// WPF parity (ChaosModeService.cs:320): the topmost pin follows AppSettings.ChaosPinOnTop
+    /// (snapshot at run start), independent of DesktopMode. Fallbacks default to pinned.
+    /// </summary>
+    public static bool PinTopmost
+    {
+        get => Mode?.PinTopmost ?? true;
+        set
+        {
+            var mode = Mode;
+            if (mode != null) mode.PinTopmost = value;
+        }
+    }
+
+    public static bool BornTopmost => Mode?.BornTopmost ?? true;
     public static bool NarrativeActive => Mode?.NarrativeActive ?? (
         StoryModeEnabled
         && App.Services?.GetService<global::ConditioningControlPanel.Core.Services.Settings.ISettingsService>()?.Current?.NarrativeModeEnabled == true

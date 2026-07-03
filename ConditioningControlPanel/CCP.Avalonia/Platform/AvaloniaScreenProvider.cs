@@ -50,6 +50,27 @@ public sealed class AvaloniaScreenProvider : IScreenProvider
         if (screens == null) return;
         _attachedScreens = screens;
         _attachedScreens.Changed += OnScreensChanged;
+        // Prime the layout signature so the first Screens.Changed after attach is compared
+        // against the real current layout, not the empty sentinel (avoids one spurious
+        // forwarded event when an effect window opening tickles Screens.Changed).
+        _lastLayoutSignature = ComputeLayoutSignature();
+    }
+
+    /// <summary>
+    /// Self-healing attach. The first ScreensChanged subscriber (historically
+    /// AvaloniaOverlayService) is constructed inside the MainWindow/ViewModel expression,
+    /// BEFORE desktop.MainWindow is assigned — at that moment GetScreens() returns null and
+    /// the one-shot attach in the event add-accessor silently did nothing, leaving
+    /// Screens.Changed dead for the whole process (no hotplug refresh, no
+    /// DisplayChangeCoordinator quiesce, ever). Retry on every screen query (the compositor
+    /// engine and every spawn path call these constantly) until a TopLevel exists.
+    /// Attach only from the UI thread: Screens belongs to the UI toolkit.
+    /// </summary>
+    private void EnsureAttached()
+    {
+        if (_attachedScreens != null || _screensChanged == null) return;
+        if (!global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) return;
+        AttachToScreens();
     }
 
     private void DetachFromScreens()
@@ -107,6 +128,7 @@ public sealed class AvaloniaScreenProvider : IScreenProvider
 
     public IReadOnlyList<ScreenInfo> GetAllScreens()
     {
+        EnsureAttached();
         var screens = GetScreens();
         if (screens is null) return Array.Empty<ScreenInfo>();
 
@@ -115,6 +137,7 @@ public sealed class AvaloniaScreenProvider : IScreenProvider
 
     public ScreenInfo? GetPrimaryScreen()
     {
+        EnsureAttached();
         var screens = GetScreens();
         if (screens?.Primary is not { } primary) return null;
         return MapScreen(primary);

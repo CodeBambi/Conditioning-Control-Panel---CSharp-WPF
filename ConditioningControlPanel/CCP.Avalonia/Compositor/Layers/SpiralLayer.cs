@@ -55,6 +55,26 @@ public sealed class SpiralLayer : BaseLayer, IDisposable
     }
 
     /// <summary>
+    /// True once a frame set has been decoded and cached (diagnostics / --verify-spiral
+    /// harness; IsActive alone cannot distinguish "decoded" from "decode still pending").
+    /// </summary>
+    public bool HasDecodedSource
+    {
+        get { lock (_sync) { return _frames != null; } }
+    }
+
+    /// <summary>
+    /// Monotonic animation progress sample for the --verify-spiral harness: the current GIF
+    /// frame index for animated sources, or the rotation angle (whole degrees) for static
+    /// images. Two samples ~700ms apart differing proves the 60Hz engine tick is advancing
+    /// the animation.
+    /// </summary>
+    public int AnimationProgress
+    {
+        get { lock (_sync) { return _frames?.IsAnimated == true ? _frameIndex : (int)_rotationAngle; } }
+    }
+
+    /// <summary>
     /// Show the spiral from <paramref name="path"/> at the given opacity (0..1, applied 1:1
     /// as paint alpha — the service owns the WPF 0.1 "very subtle" reduction). A repeat call
     /// with the cached path only updates opacity: no I/O, no decode, animation keeps running.

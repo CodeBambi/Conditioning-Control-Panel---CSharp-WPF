@@ -17,6 +17,12 @@ public sealed class BouncingTextLayer : BaseLayer
 {
     private readonly List<BouncingTextItem> _items = new();
     private readonly object _sync = new();
+    // Reused paint (UCE rule: no per-frame allocations). Only touched inside Render under _sync.
+    private readonly SKPaint _paint = new()
+    {
+        IsAntialias = true,
+        TextAlign = SKTextAlign.Left
+    };
 
     public override int ZIndex => CompositorLayers.BouncingText;
 
@@ -71,19 +77,16 @@ public sealed class BouncingTextLayer : BaseLayer
 
     public override void Render(SKCanvas canvas, ConditioningControlPanel.Core.Platform.PixelRect bounds, TimeSpan deltaTime)
     {
-        List<BouncingTextItem> snapshot;
-        lock (_sync) { snapshot = _items.ToList(); }
-
-        foreach (var item in snapshot)
+        // Render under _sync with a reused paint: no snapshot list, no per-frame allocations
+        // (UCE rule). The service mutates items on the UI thread under the same lock.
+        lock (_sync)
         {
-            using var paint = new SKPaint
+            foreach (var item in _items)
             {
-                Color = new SKColor(item.Color.R, item.Color.G, item.Color.B, (byte)(item.Opacity * 255)),
-                TextSize = item.FontSize,
-                IsAntialias = true,
-                TextAlign = SKTextAlign.Left
-            };
-            canvas.DrawText(item.Text, (float)item.X, (float)item.Y, paint);
+                _paint.Color = new SKColor(item.Color.R, item.Color.G, item.Color.B, (byte)(item.Opacity * 255));
+                _paint.TextSize = item.FontSize;
+                canvas.DrawText(item.Text, (float)item.X, (float)item.Y, _paint);
+            }
         }
     }
 

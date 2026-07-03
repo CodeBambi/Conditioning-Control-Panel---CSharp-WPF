@@ -204,11 +204,15 @@ public sealed class AvaloniaBouncingTextService : IBouncingTextService, IDisposa
 
     private void CalculateScreenBounds(bool dualMonitor)
     {
+        // PHYSICAL virtual-desktop pixels (IAvaloniaLayer contract): BouncingTextLayer items
+        // live in the compositor's physical coordinate space, so the bounce box uses raw
+        // screen bounds. The old divide-by-scaling produced a mixed-unit box that drifted
+        // off-position on any monitor scaled above 100%.
         var screens = GetScreens(dualMonitor);
-        _minX = screens.Min(s => s.Bounds.X / s.Scaling);
-        _minY = screens.Min(s => s.Bounds.Y / s.Scaling);
-        _maxX = screens.Max(s => (s.Bounds.X + s.Bounds.Width) / s.Scaling);
-        _maxY = screens.Max(s => (s.Bounds.Y + s.Bounds.Height) / s.Scaling);
+        _minX = screens.Min(s => s.Bounds.X);
+        _minY = screens.Min(s => s.Bounds.Y);
+        _maxX = screens.Max(s => s.Bounds.X + s.Bounds.Width);
+        _maxY = screens.Max(s => s.Bounds.Y + s.Bounds.Height);
     }
 
     private void Animate(object? sender, EventArgs e)

@@ -9,6 +9,7 @@ using Avalonia.Platform;
 using Avalonia.Threading;
 using ConditioningControlPanel.Core.Services.Compositor;
 using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Core.Services.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SkiaSharp;
@@ -20,11 +21,32 @@ namespace ConditioningControlPanel.Avalonia.Compositor;
 /// The unified compositor engine. Renders all registered <see cref="ILayer"/> instances
 /// directly into Avalonia's render thread via <see cref="CompositorDrawOp"/> at 60Hz.
 /// No WriteableBitmap, no Image control, no manual invalidation — Avalonia handles presentation.
+///
+/// LIFECYCLE (WS0 lot 3): the engine never tears its windows down on idle. When no layer is
+/// active it drops to a cheap ~4Hz watchdog tick that skips Update/InvalidateVisual entirely
+/// and demotes the windows from Topmost — matching WPF's "overlay windows are created once and
+/// hidden/shown, never churned mid-run" contract. The watchdog notices the first IsActive
+/// layer and restores the 60Hz loop, so any effect activation (flash, subliminal, bubbles,
+/// bouncing text, pink/spiral/brain-drain toggles) renders without its service having to
+/// call <see cref="Start"/> — though calling Start() is still the recommended wake for
+/// instant (same-tick) response and for the engine-never-started case.
+///
+/// COORDINATE CONTRACT (WS0 lot 3): layer geometry — item positions/sizes and the bounds
+/// passed to <see cref="IAvaloniaLayer.Render(SKCanvas, PixelRect, ScreenInfo?, TimeSpan)"/> —
+/// is in PHYSICAL virtual-desktop pixels (the space Win32, the WH_MOUSE_LL hook, and
+/// ScreenInfo.Bounds all share). Each per-monitor window's render pass pre-transforms the
+/// canvas by scale(1/screen.Scaling) · translate(-screen.Bounds.Origin), so physical
+/// coordinates land on the window's DIP surface, positioned items appear only on the monitor
+/// they occupy, and hook hit-tests compare physical-to-physical with no per-DPI conversion.
 /// </summary>
 public sealed class CompositorEngine : IDisposable
 {
+    private const double ActiveIntervalMs = 16;  // ~60 Hz render loop
+    private const double IdleIntervalMs = 250;   // ~4 Hz watchdog while no layer is active
+
     private readonly ILogger<CompositorEngine>? _logger;
     private readonly IScreenProvider? _screenProvider;
+    private readonly ISettingsService? _settings;
     private readonly List<CompositorWindow> _windows = new();
     // Second, capture-excluded surface (one window per monitor, WDA_EXCLUDEFROMCAPTURE).
     // Created lazily on the first tick where a layer with ExcludeFromCapture=true is active
@@ -37,7 +59,10 @@ public sealed class CompositorEngine : IDisposable
     private readonly SortedList<int, ILayer> _layers = new();
     private readonly DispatcherTimer _timer;
     private readonly object _layerLock = new();
-    private DateTime? _emptySince;
+    // Immutable snapshot of the registered IAvaloniaLayers, rebuilt only on Register/Unregister.
+    // Read lock-free from both the UI tick and the render thread (array reference swap is
+    // atomic), replacing the old per-tick/per-render OfType().Where().ToArray() LINQ churn.
+    private IAvaloniaLayer[] _layerSnapshot = Array.Empty<IAvaloniaLayer>();
     private DateTime? _excludedEmptySince;
     // Epochs cancel staggered window-creation timers that outlive their surface
     // (engine stopped, or the excluded surface torn down, before a 250ms timer fired).
@@ -47,53 +72,92 @@ public sealed class CompositorEngine : IDisposable
     // tick from re-scheduling (and duplicating) a staggered batch when the first window
     // creation failed but later staggered windows are still pending.
     private int _excludedScheduledEpoch = -1;
+    // Pending staggered-creation timers. Tracked so Stop()/Dispose() can cancel them —
+    // an untracked timer surviving Stop() used to resurrect a single secondary-monitor
+    // window and latch a corrupted window set (lot-3 stagger race). The epoch check in
+    // the timer callback is the second, independent guard.
+    private readonly List<DispatcherTimer> _staggerTimers = new();
+
+    // Display topology / single-display-setting reconciliation.
+    private bool _screensDirty;
+    private DateTime _lastReconcileCheck = DateTime.MinValue;
+
+    // Topmost watchdog (WPF OverlayService parity: 500ms conditional re-pin when
+    // WS_EX_TOPMOST was stripped externally + 5s unconditional force-kick).
+    private DateTime _lastTopmostProbe = DateTime.MinValue;
+    private DateTime _lastTopmostForce = DateTime.MinValue;
 
     private DateTime _lastFrame = DateTime.MinValue;
+    private bool _wasActive;
     private bool _disposed;
 
-    public CompositorEngine(ILogger<CompositorEngine>? logger = null, IScreenProvider? screenProvider = null)
+    public CompositorEngine(
+        ILogger<CompositorEngine>? logger = null,
+        IScreenProvider? screenProvider = null,
+        ISettingsService? settings = null)
     {
         _logger = logger;
         _screenProvider = screenProvider;
+        _settings = settings;
 
         _timer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(16) // ~60 Hz
+            Interval = TimeSpan.FromMilliseconds(ActiveIntervalMs)
         };
         _timer.Tick += OnFrameTick;
+
+        if (_screenProvider != null)
+            _screenProvider.ScreensChanged += OnScreensChanged;
+    }
+
+    private void OnScreensChanged(object? sender, EventArgs e)
+    {
+        // Raised on the UI thread (AvaloniaScreenProvider filters spurious events by layout
+        // signature and has already notified DisplayChangeCoordinator). The actual rebuild
+        // happens on the tick after the spawn-quiesce window clears.
+        _screensDirty = true;
+        _logger?.LogInformation("CompositorEngine: display topology changed; window reconcile scheduled");
     }
 
     /// <summary>
-    /// Starts the compositor: creates one <see cref="CompositorWindow"/> per monitor
-    /// and begins the 60Hz update loop. Safe to call multiple times.
+    /// Starts the compositor: creates one <see cref="CompositorWindow"/> per effect monitor
+    /// (honoring <c>DualMonitorEnabled</c>) and begins the update loop. Idempotent and cheap
+    /// when already running — services call this from layer-activation paths to guarantee
+    /// the engine is awake (same-tick wake instead of the ~250ms idle-watchdog latency).
     /// </summary>
     public void Start()
     {
         if (_disposed) return;
-        if (_windows.Count > 0)
+
+        if (_windows.Count == 0 && _staggerTimers.Count == 0)
         {
-            // Already started; just ensure the timer is running.
-            if (!_timer.IsEnabled)
-            {
-                _lastFrame = DateTime.UtcNow;
-                _emptySince = null;
-                _timer.Start();
-            }
-            return;
+            StaggeredCreateWindows(GetDesiredScreens(), excludeFromCapture: false);
+        }
+        else if (!_timer.IsEnabled)
+        {
+            _lastFrame = DateTime.UtcNow;
+            _timer.Start();
         }
 
-        var screens = _screenProvider?.GetAllScreens() ?? Array.Empty<ScreenInfo>();
+        // Wake to the active cadence immediately; the tick demotes back to the idle
+        // watchdog on its own when nothing is active.
+        SetTimerInterval(ActiveIntervalMs);
+    }
+
+    /// <summary>
+    /// Effect screens for both surfaces: all monitors, or primary-only when the user has
+    /// turned DualMonitorEnabled off (WPF parity: every effect surface confines to the
+    /// primary monitor when the setting is off).
+    /// </summary>
+    private IReadOnlyList<ScreenInfo> GetDesiredScreens()
+    {
+        var dual = _settings?.Current?.DualMonitorEnabled != false;
+        var screens = _screenProvider?.GetEffectScreens(dual) ?? Array.Empty<ScreenInfo>();
         if (screens.Count == 0)
         {
-            screens = new[] { new ScreenInfo("fallback", new ConditioningControlPanel.Core.Platform.PixelRect(0, 0, 1920, 1080), new ConditioningControlPanel.Core.Platform.PixelRect(0, 0, 1920, 1080), 1.0) };
+            screens = new[] { new ScreenInfo("fallback", new PixelRect(0, 0, 1920, 1080), new PixelRect(0, 0, 1920, 1080), 1.0) };
         }
-
-        // Create the compositor windows one per dispatcher tick. Creating several transparent
-        // topmost windows (each starting its own native Win32 surface + render thread) in the
-        // same frame races inside Avalonia v12's Win32 platform backend and intermittently
-        // faults with a native access violation (0xC0000005) before managed code runs. Giving
-        // each window a full message-pump cycle to finish its native init eliminates the race.
-        StaggeredCreateWindows(screens, excludeFromCapture: false);
+        return screens;
     }
 
     private void StaggeredCreateWindows(IReadOnlyList<ScreenInfo> screens, bool excludeFromCapture)
@@ -119,6 +183,7 @@ public sealed class CompositorEngine : IDisposable
             t.Tick += (_, _) =>
             {
                 t.Stop();
+                _staggerTimers.Remove(t);
                 // The surface this window was scheduled for may have been torn down while
                 // the timer was pending; creating it now would leak an orphaned window.
                 var currentEpoch = excludeFromCapture ? _excludedEpoch : _mainEpoch;
@@ -126,6 +191,7 @@ public sealed class CompositorEngine : IDisposable
                 CreateOneWindow(screen, excludeFromCapture);
                 MaybeStartTimer();
             };
+            _staggerTimers.Add(t);
             t.Start();
         }
     }
@@ -133,6 +199,13 @@ public sealed class CompositorEngine : IDisposable
     private void CreateOneWindow(ScreenInfo screen, bool excludeFromCapture)
     {
         if (_disposed) return;
+        var target = excludeFromCapture ? _excludedWindows : _windows;
+        // Defensive: a reconcile or double Start racing a stagger tick must not duplicate
+        // a monitor's window.
+        foreach (var existing in target)
+        {
+            if (Equals(existing.Screen, screen)) return;
+        }
         try
         {
             var window = new CompositorWindow(screen, this, excludeFromCapture);
@@ -141,7 +214,7 @@ public sealed class CompositorEngine : IDisposable
             // dispatcher tick). Calling SetWindowLong/SetWindowSubclass synchronously right
             // after Show() races with Avalonia's native window initialization + render thread
             // startup, causing an intermittent native access violation (0xC0000005).
-            (excludeFromCapture ? _excludedWindows : _windows).Add(window);
+            target.Add(window);
             _logger?.LogInformation("CompositorWindow created on {Screen} (excludeFromCapture={Excluded})", screen.Name, excludeFromCapture);
         }
         catch (Exception ex)
@@ -160,12 +233,25 @@ public sealed class CompositorEngine : IDisposable
         }
     }
 
-    /// <summary>Stops the update loop and closes all compositor windows (both surfaces).</summary>
+    private void SetTimerInterval(double milliseconds)
+    {
+        var interval = TimeSpan.FromMilliseconds(milliseconds);
+        if (_timer.Interval != interval)
+            _timer.Interval = interval; // note: assignment restarts the countdown
+    }
+
+    /// <summary>
+    /// Stops the update loop, cancels pending staggered creations, and closes all compositor
+    /// windows (both surfaces). NOT called on idle — idle is handled in-place by the watchdog
+    /// tick (windows stay alive, WPF churn contract). This is for explicit teardown
+    /// (<see cref="Dispose"/> or a deliberate shutdown).
+    /// </summary>
     public void Stop()
     {
-        _emptySince = null;
+        _wasActive = false;
         _timer.Stop();
-        _mainEpoch++; // cancel any pending staggered main-window creation
+        CancelStaggerTimers();
+        _mainEpoch++; // cancel any pending staggered main-window creation (second guard)
         foreach (var window in _windows.ToList())
         {
             try { window.Close(); } catch { /* ignore */ }
@@ -173,6 +259,15 @@ public sealed class CompositorEngine : IDisposable
         _windows.Clear();
         CloseExcludedWindows();
         _logger?.LogInformation("CompositorEngine stopped");
+    }
+
+    private void CancelStaggerTimers()
+    {
+        foreach (var t in _staggerTimers)
+        {
+            try { t.Stop(); } catch { /* ignore */ }
+        }
+        _staggerTimers.Clear();
     }
 
     /// <summary>Closes the capture-excluded surface windows (excluded layers went idle or engine stopped).</summary>
@@ -202,6 +297,7 @@ public sealed class CompositorEngine : IDisposable
             }
             _layers.Add(layer.ZIndex, layer);
             layer.OnActivated();
+            RebuildLayerSnapshot();
             _logger?.LogDebug("Layer registered: {Layer} at Z={ZIndex}", layer.GetType().Name, layer.ZIndex);
         }
     }
@@ -215,9 +311,16 @@ public sealed class CompositorEngine : IDisposable
             {
                 layer.OnDeactivated();
                 _layers.Remove(layer.ZIndex);
+                RebuildLayerSnapshot();
                 _logger?.LogDebug("Layer unregistered: {Layer}", layer.GetType().Name);
             }
         }
+    }
+
+    private void RebuildLayerSnapshot()
+    {
+        // Called under _layerLock. SortedList keeps z-order; snapshot preserves it.
+        _layerSnapshot = _layers.Values.OfType<IAvaloniaLayer>().ToArray();
     }
 
     /// <summary>Get the layer at the specified z-index, or null.</summary>
@@ -231,16 +334,7 @@ public sealed class CompositorEngine : IDisposable
     }
 
     /// <summary>All currently registered layers, ordered by z-index.</summary>
-    public IReadOnlyList<IAvaloniaLayer> Layers
-    {
-        get
-        {
-            lock (_layerLock)
-            {
-                return _layers.Values.OfType<IAvaloniaLayer>().ToList();
-            }
-        }
-    }
+    public IReadOnlyList<IAvaloniaLayer> Layers => _layerSnapshot;
 
     /// <summary>Number of main-surface compositor windows (one per monitor).</summary>
     public int WindowCount => _windows.Count;
@@ -275,12 +369,27 @@ public sealed class CompositorEngine : IDisposable
     }
 
     /// <summary>
+    /// Force every compositor window back to the front of the topmost band. WPF parity with
+    /// OverlayService.NotifyTopWindowClosed: call after a topmost window (fullscreen video,
+    /// lock card, OS dialog) closes so the overlays surface again without waiting for the
+    /// 5s force cadence.
+    /// </summary>
+    public void ReassertTopmostNow()
+    {
+        foreach (var window in _windows) window.ReassertTopmost(force: true);
+        foreach (var window in _excludedWindows) window.ReassertTopmost(force: true);
+    }
+
+    /// <summary>
     /// Render the active layers belonging to one surface into the given Skia canvas.
     /// Called from the render thread via <see cref="CompositorDrawOp"/>.
     /// Capture affinity split: the main surface renders only layers with
     /// <c>ExcludeFromCapture == false</c>; the excluded surface renders only layers with
     /// <c>ExcludeFromCapture == true</c>. <paramref name="screen"/> identifies the monitor
-    /// whose window is being drawn (used by screen-aware layers such as the brain-drain blur).
+    /// whose window is being drawn; when present the canvas is pre-transformed so layers
+    /// draw in PHYSICAL virtual-desktop pixels (see the class doc coordinate contract) and
+    /// <paramref name="bounds"/> is replaced by the screen's physical bounds. When null
+    /// (fallback/tests) layers draw in window-local units, untransformed.
     /// </summary>
     public void RenderToCanvas(SKCanvas canvas, PixelRect bounds, ScreenInfo? screen = null, bool excludedSurface = false)
     {
@@ -289,61 +398,107 @@ public sealed class CompositorEngine : IDisposable
         // runs, so we explicitly clear to transparent here.
         canvas.Clear(SKColors.Transparent);
 
-        IAvaloniaLayer[] activeLayers;
-        lock (_layerLock)
+        var layers = _layerSnapshot;
+        var save = canvas.Save();
+        var layerBounds = bounds;
+        if (screen != null)
         {
-            activeLayers = _layers.Values.OfType<IAvaloniaLayer>()
-                .Where(l => l.IsActive && l.ExcludeFromCapture == excludedSurface)
-                .ToArray();
+            // physical virtual-desktop px -> this window's DIP surface:
+            // local = (phys - screenOrigin) / scaling.
+            var scale = screen.Scaling > 0 ? screen.Scaling : 1.0;
+            canvas.Scale((float)(1.0 / scale));
+            canvas.Translate((float)-screen.Bounds.X, (float)-screen.Bounds.Y);
+            layerBounds = screen.Bounds;
         }
 
-        foreach (var layer in activeLayers)
+        foreach (var layer in layers)
         {
+            if (!layer.IsActive || layer.ExcludeFromCapture != excludedSurface) continue;
             try
             {
                 canvas.Save();
-                layer.Render(canvas, bounds, screen, TimeSpan.Zero);
+                layer.Render(canvas, layerBounds, screen, TimeSpan.Zero);
                 canvas.Restore();
             }
             catch (Exception ex) { _logger?.LogDebug(ex, "Layer {Layer} render failed", layer.GetType().Name); }
         }
+
+        canvas.RestoreToCount(save);
     }
 
     private void OnFrameTick(object? sender, EventArgs e)
     {
-        if (_disposed || _windows.Count == 0) return;
+        if (_disposed) return;
 
         var now = DateTime.UtcNow;
         var delta = now - _lastFrame;
         _lastFrame = now;
 
-        // Cap delta to avoid large time jumps after pauses (e.g. debugger break, window drag)
+        // Cap delta to avoid large time jumps after pauses (idle watchdog cadence,
+        // debugger break, window drag).
         var cappedDelta = delta.TotalMilliseconds > 100
             ? TimeSpan.FromMilliseconds(100)
             : delta;
 
-        IAvaloniaLayer[] activeLayers;
-        lock (_layerLock)
+        var layers = _layerSnapshot;
+        var activeCount = 0;
+        var anyExcludedActive = false;
+        foreach (var layer in layers)
         {
-            activeLayers = _layers.Values.OfType<IAvaloniaLayer>().Where(l => l.IsActive).ToArray();
+            if (!layer.IsActive) continue;
+            activeCount++;
+            if (layer.ExcludeFromCapture) anyExcludedActive = true;
         }
 
-        var anyExcludedActive = false;
-        foreach (var layer in activeLayers)
+        // Display hotplug / resolution / DualMonitorEnabled reconcile (both surfaces).
+        MaybeReconcileWindows(now);
+
+        // Self-heal: content appeared while the engine has no windows (explicit Stop() or a
+        // reconcile close raced an activation). Recreate through the staggered path.
+        if (_windows.Count == 0)
         {
-            if (layer.ExcludeFromCapture) { anyExcludedActive = true; break; }
+            if (activeCount > 0 && _staggerTimers.Count == 0
+                && !ConditioningControlPanel.Core.Services.DisplayChangeCoordinator.SpawnsSuppressed)
+            {
+                StaggeredCreateWindows(GetDesiredScreens(), excludeFromCapture: false);
+            }
+            if (_windows.Count == 0) return;
         }
 
         // Keep compositor topmost whenever active layers are present.
         // WS_EX_LAYERED | WS_EX_TRANSPARENT handles click-through natively,
         // so we no longer need to lower the compositor for dialogs.
-        var shouldBeTopmost = activeLayers.Length > 0;
+        var shouldBeTopmost = activeCount > 0;
         foreach (var window in _windows)
         {
             if (window.Topmost != shouldBeTopmost)
             {
                 try { window.Topmost = shouldBeTopmost; }
                 catch { }
+            }
+        }
+
+        // Native topmost recovery (WPF OverlayService parity, :424-464): the Avalonia
+        // Topmost bool is a steady-state no-op once true, so external topmost churn (OS
+        // notifications, other always-on-top apps, fullscreen transitions stripping
+        // WS_EX_TOPMOST) buried the compositor permanently. Probe every 500ms and re-pin
+        // any window whose WS_EX_TOPMOST bit was stripped; unconditionally force-kick to
+        // the front of the topmost band every 5s. Skipped during display transitions.
+        if (shouldBeTopmost
+            && !ConditioningControlPanel.Core.Services.DisplayChangeCoordinator.SpawnsSuppressed)
+        {
+            if ((now - _lastTopmostForce).TotalMilliseconds > 5000)
+            {
+                _lastTopmostForce = now;
+                _lastTopmostProbe = now;
+                foreach (var window in _windows) window.ReassertTopmost(force: true);
+                foreach (var window in _excludedWindows) window.ReassertTopmost(force: true);
+            }
+            else if ((now - _lastTopmostProbe).TotalMilliseconds > 500)
+            {
+                _lastTopmostProbe = now;
+                foreach (var window in _windows) window.ReassertTopmost(force: false);
+                foreach (var window in _excludedWindows) window.ReassertTopmost(force: false);
             }
         }
 
@@ -357,12 +512,7 @@ public sealed class CompositorEngine : IDisposable
             if (_excludedWindows.Count == 0 && _excludedScheduledEpoch != _excludedEpoch)
             {
                 _excludedScheduledEpoch = _excludedEpoch;
-                var screens = _screenProvider?.GetAllScreens() ?? Array.Empty<ScreenInfo>();
-                if (screens.Count == 0)
-                {
-                    screens = new[] { new ScreenInfo("fallback", new PixelRect(0, 0, 1920, 1080), new PixelRect(0, 0, 1920, 1080), 1.0) };
-                }
-                StaggeredCreateWindows(screens, excludeFromCapture: true);
+                StaggeredCreateWindows(GetDesiredScreens(), excludeFromCapture: true);
             }
         }
         else if (_excludedWindows.Count > 0)
@@ -374,30 +524,61 @@ public sealed class CompositorEngine : IDisposable
             }
         }
 
-        if (activeLayers.Length == 0)
+        if (activeCount == 0)
         {
-            // No active layers — start the auto-shutdown timer.
-            _emptySince ??= now;
-            if ((now - _emptySince.Value).TotalMilliseconds > 500)
+            // Idle: keep the windows (click-through, demoted from Topmost above, invisible —
+            // the final invalidate below presents one cleared transparent frame) and drop to
+            // the cheap watchdog cadence. The next tick that sees an active layer restores
+            // 60Hz — this is the wake path that makes the old destructive auto-stop safe to
+            // remove (flash/subliminal/bubble/bouncing-text activations render again).
+            if (_wasActive)
             {
-                Stop();
+                _wasActive = false;
+                InvalidateWindows(_windows);
+                InvalidateWindows(_excludedWindows);
             }
+            SetTimerInterval(IdleIntervalMs);
             return;
         }
 
-        _emptySince = null;
-
-        // Update all layer animations / state
-        foreach (var layer in activeLayers)
+        if (!_wasActive)
         {
-            try { layer.Update(cappedDelta); }
+            _wasActive = true;
+            _logger?.LogDebug("CompositorEngine: layer activity resumed ({Count} active)", activeCount);
+        }
+        SetTimerInterval(ActiveIntervalMs);
+
+        // Update all layer animations / state, collecting the dirty flags.
+        // A layer whose content did not change since the last presented frame returns false
+        // from ConsumeDirty() (default: true), letting a fully static frame skip the
+        // invalidate + full-screen re-render below (lot-3 static-frame overdraw fix).
+        var anyDirty = false;
+        foreach (var layer in layers)
+        {
+            if (!layer.IsActive) continue;
+            try
+            {
+                layer.Update(cappedDelta);
+                if (layer.ConsumeDirty()) anyDirty = true;
+            }
             catch (Exception ex) { _logger?.LogDebug(ex, "Layer {Layer} update failed", layer.GetType().Name); }
         }
 
         // Tell Avalonia to re-render each window's CompositorControl.
         // Invalidating the control directly (not the window) is required for
         // ICustomDrawOperation to re-run on the render thread.
-        foreach (var window in _windows)
+        if (anyDirty)
+            InvalidateWindows(_windows);
+
+        // The excluded surface is invalidated for as long as it exists — even when its
+        // layers just went inactive — so its last visible frame is cleared to transparent
+        // before the idle teardown closes it.
+        InvalidateWindows(_excludedWindows);
+    }
+
+    private void InvalidateWindows(List<CompositorWindow> windows)
+    {
+        foreach (var window in windows)
         {
             try
             {
@@ -405,24 +586,69 @@ public sealed class CompositorEngine : IDisposable
             }
             catch (Exception ex) { _logger?.LogDebug(ex, "Compositor control invalidation failed"); }
         }
+    }
 
-        // The excluded surface is invalidated for as long as it exists — even when its
-        // layers just went inactive — so its last visible frame is cleared to transparent
-        // before the idle teardown closes it.
-        foreach (var window in _excludedWindows)
+    /// <summary>
+    /// Rebuilds the window sets when the desired screen list (topology, resolution, DPI, or
+    /// the DualMonitorEnabled setting) no longer matches the live windows. Runs on a ~1s
+    /// cadence (immediately when ScreensChanged fired), waits out the DisplayChangeCoordinator
+    /// spawn-quiesce window, and never runs while a staggered batch is still pending.
+    /// </summary>
+    private void MaybeReconcileWindows(DateTime now)
+    {
+        if (_windows.Count == 0 && _excludedWindows.Count == 0) return; // next creation enumerates fresh
+        if (_staggerTimers.Count > 0) return;
+        if (!_screensDirty && (now - _lastReconcileCheck).TotalMilliseconds < 1000) return;
+        _lastReconcileCheck = now;
+        if (ConditioningControlPanel.Core.Services.DisplayChangeCoordinator.SpawnsSuppressed) return; // retry next tick
+
+        var desired = GetDesiredScreens();
+        if (WindowsMatch(desired))
         {
-            try
-            {
-                window.GetControl().InvalidateVisual();
-            }
-            catch (Exception ex) { _logger?.LogDebug(ex, "Excluded compositor control invalidation failed"); }
+            _screensDirty = false;
+            return;
         }
+        _screensDirty = false;
+
+        _logger?.LogInformation("CompositorEngine: reconciling windows to {Count} screen(s)", desired.Count);
+
+        // Rebuild the main surface through the staggered path (v12 native-race rule).
+        _mainEpoch++;
+        foreach (var window in _windows.ToList())
+        {
+            try { window.Close(); } catch { /* ignore */ }
+        }
+        _windows.Clear();
+        StaggeredCreateWindows(desired, excludeFromCapture: false);
+
+        // The excluded surface is torn down here and lazily recreated by the next tick while
+        // an excluded layer is active (CloseExcludedWindows bumps its epoch, which re-arms
+        // the scheduled-epoch check).
+        if (_excludedWindows.Count > 0)
+            CloseExcludedWindows();
+    }
+
+    private bool WindowsMatch(IReadOnlyList<ScreenInfo> desired)
+    {
+        if (_windows.Count != desired.Count) return false;
+        foreach (var screen in desired)
+        {
+            var found = false;
+            foreach (var window in _windows)
+            {
+                if (Equals(window.Screen, screen)) { found = true; break; }
+            }
+            if (!found) return false;
+        }
+        return true;
     }
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+        if (_screenProvider != null)
+            _screenProvider.ScreensChanged -= OnScreensChanged;
         Stop();
         _timer.Tick -= OnFrameTick;
 
@@ -430,6 +656,7 @@ public sealed class CompositorEngine : IDisposable
         {
             foreach (var layer in _layers.Values) layer.OnDeactivated();
             _layers.Clear();
+            RebuildLayerSnapshot();
         }
     }
 }

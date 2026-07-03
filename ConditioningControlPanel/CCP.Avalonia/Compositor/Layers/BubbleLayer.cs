@@ -14,6 +14,13 @@ namespace ConditioningControlPanel.Avalonia.Compositor.Layers;
 /// All bubbles — ambient (Bubble Pop dashboard game) and chaos (Down the Rabbit Hole) — render
 /// through this layer. No per-window bubble windows.
 ///
+/// Coordinate space (see <see cref="IAvaloniaLayer"/> contract): item geometry is PHYSICAL
+/// virtual-desktop pixels. The service converts the Core BubbleEngine's per-screen logical
+/// coordinates (physical / screen scaling) at the renderer seam, so <see cref="HitTest"/> and
+/// <see cref="HitTestInRect"/> take raw WH_MOUSE_LL hook coordinates directly and stay correct
+/// on mixed-DPI multi-monitor setups (WPF parity: BubbleService keeps its hit discs in
+/// physical px).
+///
 /// Visual contract:
 /// - Ambient bubbles (isChaos == false): uniform bubble image, no tint, no fuse ring.
 ///   Every ambient bubble looks identical.
@@ -24,7 +31,22 @@ namespace ConditioningControlPanel.Avalonia.Compositor.Layers;
 public sealed class BubbleLayer : BaseLayer, IDisposable
 {
     private readonly List<BubbleItem> _items = new();
+    private readonly Dictionary<Guid, BubbleItem> _itemsById = new();
     private readonly object _sync = new();
+    // Content changes only through the mutators below (the engine's 30Hz physics drives
+    // Move); the flag lets the compositor skip whole-frame re-renders between physics ticks.
+    private bool _dirty;
+
+    // Reused paints (UCE rule: no per-frame native churn). Only touched inside Render, which
+    // draws while holding _sync — same single-writer discipline as FlashLayer — so one
+    // instance per paint role is safe even with multiple per-monitor windows rendering.
+    // Never disposed (layer lives app-long).
+    private readonly SKPaint _imagePaint = new() { IsAntialias = true, FilterQuality = SKFilterQuality.Medium };
+    private readonly SKPaint _fillPaint = new() { IsAntialias = true };
+    private readonly SKPaint _tintPaint = new() { IsAntialias = true };
+    private readonly SKPaint _strokePaint = new() { IsAntialias = true, IsStroke = true, StrokeWidth = 2 };
+    private readonly SKPaint _fusePaint = new() { IsAntialias = true, IsStroke = true, StrokeWidth = 4 };
+    private readonly SKPaint _textPaint = new() { IsAntialias = true, TextAlign = SKTextAlign.Center };
 
     // The bubble image is decoded ONCE, lazily, on first render and cached for the app lifetime.
     // It is NEVER replaced or disposed while the app runs. This is critical: an SKImage is a
@@ -43,6 +65,20 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
     public override bool IsActive
     {
         get { lock (_sync) { return _items.Count > 0; } }
+    }
+
+    /// <summary>
+    /// Dirty gate for the engine's static-frame skip: bubbles repaint only when a mutator
+    /// ran since the last consumed tick (the Core engine's 30Hz physics, pops, fuse updates).
+    /// </summary>
+    public override bool ConsumeDirty()
+    {
+        lock (_sync)
+        {
+            var dirty = _dirty;
+            _dirty = false;
+            return dirty;
+        }
     }
 
     /// <summary>
@@ -74,9 +110,13 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
     {
         lock (_sync)
         {
-            _items.RemoveAll(i => i.Id == id);
-            _items.Add(new BubbleItem(id, x, y, size, opacity, scale, label, tint, isChaos,
-                Math.Clamp(fuseFraction, 0, 1), clickable));
+            if (_itemsById.Remove(id, out var stale))
+                _items.Remove(stale);
+            var item = new BubbleItem(id, x, y, size, opacity, scale, label, tint, isChaos,
+                Math.Clamp(fuseFraction, 0, 1), clickable);
+            _items.Add(item);
+            _itemsById[id] = item;
+            _dirty = true;
         }
     }
 
@@ -84,13 +124,13 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
     {
         lock (_sync)
         {
-            var item = _items.FirstOrDefault(i => i.Id == id);
-            if (item != null)
+            if (_itemsById.TryGetValue(id, out var item))
             {
                 item.X = x;
                 item.Y = y;
                 item.Opacity = opacity;
                 item.Scale = scale;
+                _dirty = true;
             }
         }
     }
@@ -99,8 +139,11 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
     {
         lock (_sync)
         {
-            var item = _items.FirstOrDefault(i => i.Id == id);
-            if (item != null) item.Label = label;
+            if (_itemsById.TryGetValue(id, out var item))
+            {
+                item.Label = label;
+                _dirty = true;
+            }
         }
     }
 
@@ -108,8 +151,11 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
     {
         lock (_sync)
         {
-            var item = _items.FirstOrDefault(i => i.Id == id);
-            if (item != null) item.FuseFraction = Math.Clamp(fraction, 0, 1);
+            if (_itemsById.TryGetValue(id, out var item))
+            {
+                item.FuseFraction = Math.Clamp(fraction, 0, 1);
+                _dirty = true;
+            }
         }
     }
 
@@ -117,16 +163,28 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
     {
         lock (_sync)
         {
-            _items.RemoveAll(i => i.Id == id);
+            if (_itemsById.Remove(id, out var item))
+            {
+                _items.Remove(item);
+                _dirty = true;
+            }
         }
     }
 
     public void Clear()
     {
-        lock (_sync) { _items.Clear(); }
+        lock (_sync)
+        {
+            _items.Clear();
+            _itemsById.Clear();
+            _dirty = true;
+        }
     }
 
-    /// <summary>Hit-test a single point in reverse z-order (topmost first). Returns the hit id or empty.</summary>
+    /// <summary>
+    /// Hit-test a single point (PHYSICAL virtual-desktop px — raw hook coordinates) in
+    /// reverse z-order (topmost first). Returns the hit id or empty.
+    /// </summary>
     public Guid HitTest(double x, double y)
     {
         lock (_sync)
@@ -145,7 +203,10 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
         return Guid.Empty;
     }
 
-    /// <summary>Return the ids of all clickable bubbles whose bounds intersect the given rect (DIPs).</summary>
+    /// <summary>
+    /// Return the ids of all clickable bubbles whose bounds intersect the given rect
+    /// (PHYSICAL virtual-desktop px).
+    /// </summary>
     public List<Guid> HitTestInRect(ConditioningControlPanel.Core.Platform.PixelRect rect)
     {
         lock (_sync)
@@ -176,20 +237,24 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
 
     public override void Render(SKCanvas canvas, ConditioningControlPanel.Core.Platform.PixelRect bounds, TimeSpan deltaTime)
     {
-        List<BubbleItem> snapshot;
-        lock (_sync) { snapshot = _items.ToList(); }
-        if (snapshot.Count == 0) return;
-
-        // Decode-once, immutable, never-freed: safe to read from the render thread.
-        var image = EnsureBubbleImage();
-        foreach (var item in snapshot)
+        // Draw while holding _sync (FlashLayer pattern): the UI thread only takes this lock
+        // for cheap item bookkeeping, drawing records into the Skia command stream rather
+        // than rasterizing inline, and holding the lock makes the reused paints single-writer.
+        lock (_sync)
         {
-            if (item.Opacity <= 0) continue;
-            RenderBubble(canvas, item, image);
+            if (_items.Count == 0) return;
+
+            // Decode-once, immutable, never-freed: safe to read from the render thread.
+            var image = EnsureBubbleImage();
+            foreach (var item in _items)
+            {
+                if (item.Opacity <= 0) continue;
+                RenderBubble(canvas, item, image);
+            }
         }
     }
 
-    private static void RenderBubble(SKCanvas canvas, BubbleItem item, SKImage? image)
+    private void RenderBubble(SKCanvas canvas, BubbleItem item, SKImage? image)
     {
         byte alpha = (byte)(item.Opacity * 255);
         var half = (float)(item.Size * item.Scale / 2.0);
@@ -202,13 +267,8 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
         //    fall back to a soft circle so the game is still playable.
         if (image != null)
         {
-            using var imgPaint = new SKPaint
-            {
-                Color = new SKColor(255, 255, 255, alpha),
-                IsAntialias = true,
-                FilterQuality = SKFilterQuality.Medium
-            };
-            canvas.DrawImage(image, dest, imgPaint);
+            _imagePaint.Color = new SKColor(255, 255, 255, alpha);
+            canvas.DrawImage(image, dest, _imagePaint);
         }
         else
         {
@@ -216,12 +276,8 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
             (byte r, byte g, byte b) fb = item.IsChaos
                 ? (item.Tint ?? ((byte)0xFF, (byte)0x69, (byte)0xB4))
                 : ((byte)0xE8, (byte)0xE8, (byte)0xF0);
-            using var fillPaint = new SKPaint
-            {
-                Color = new SKColor(fb.r, fb.g, fb.b, alpha),
-                IsAntialias = true
-            };
-            canvas.DrawCircle(cx, cy, radius, fillPaint);
+            _fillPaint.Color = new SKColor(fb.r, fb.g, fb.b, alpha);
+            canvas.DrawCircle(cx, cy, radius, _fillPaint);
         }
 
         // 2. Chaos variant tint overlay — only chaos bubbles get coloured. Ambient bubbles
@@ -229,50 +285,29 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
         //    outside the Down the Rabbit Hole game" contract.
         if (item.IsChaos && item.Tint is { } tint)
         {
-            using var tintPaint = new SKPaint
-            {
-                Color = new SKColor(tint.r, tint.g, tint.b, (byte)(alpha * 0.45)),
-                IsAntialias = true
-            };
-            canvas.DrawCircle(cx, cy, radius, tintPaint);
+            _tintPaint.Color = new SKColor(tint.r, tint.g, tint.b, (byte)(alpha * 0.45));
+            canvas.DrawCircle(cx, cy, radius, _tintPaint);
         }
 
         // 3. White border ring for definition.
-        using var strokePaint = new SKPaint
-        {
-            Color = new SKColor(255, 255, 255, (byte)(alpha * 0.8)),
-            IsStroke = true,
-            StrokeWidth = 2,
-            IsAntialias = true
-        };
-        canvas.DrawCircle(cx, cy, radius, strokePaint);
+        _strokePaint.Color = new SKColor(255, 255, 255, (byte)(alpha * 0.8));
+        canvas.DrawCircle(cx, cy, radius, _strokePaint);
 
         // 4. Fuse ring (shrinking countdown) — only live chaos bubbles. Ambient bubbles never show this.
         if (item.IsChaos && item.FuseFraction > 0 && item.FuseFraction < 1)
         {
-            using var fusePaint = new SKPaint
-            {
-                Color = new SKColor(0xFF, 0xFF, 0x00, alpha),
-                IsStroke = true,
-                StrokeWidth = 4,
-                IsAntialias = true
-            };
+            _fusePaint.Color = new SKColor(0xFF, 0xFF, 0x00, alpha);
             var fuseRadius = radius * (1 - (float)item.FuseFraction);
             if (fuseRadius > 0)
-                canvas.DrawCircle(cx, cy, fuseRadius, fusePaint);
+                canvas.DrawCircle(cx, cy, fuseRadius, _fusePaint);
         }
 
         // 5. Label (chaos treat bubbles carry a short word).
         if (!string.IsNullOrEmpty(item.Label))
         {
-            using var textPaint = new SKPaint
-            {
-                Color = new SKColor(255, 255, 255, alpha),
-                TextSize = Math.Min((float)item.Size * 0.4f, 18),
-                IsAntialias = true,
-                TextAlign = SKTextAlign.Center
-            };
-            canvas.DrawText(item.Label, cx, cy + textPaint.TextSize / 3, textPaint);
+            _textPaint.Color = new SKColor(255, 255, 255, alpha);
+            _textPaint.TextSize = Math.Min((float)item.Size * 0.4f, 18);
+            canvas.DrawText(item.Label, cx, cy + _textPaint.TextSize / 3, _textPaint);
         }
     }
 
@@ -288,6 +323,7 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
             // AvaloniaUI/Avalonia#13521). It leaks exactly one SKImage for the app lifetime, which
             // is acceptable and far safer than racing on its lifetime.
             _items.Clear();
+            _itemsById.Clear();
         }
     }
 
