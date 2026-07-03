@@ -32,10 +32,15 @@ public sealed class AvaloniaProgressionService : IProgressionService
     /// <inheritdoc />
     public event EventHandler<int>? LevelUp;
 
+    // WPF SkillTreeService.PointsPerLevel = 1 (verified: Services/Progression/SkillTreeService.cs).
+    private const int PointsPerLevel = 1;
+
     /// <inheritdoc />
     public void AddXP(int amount, XPSource source)
     {
-        if (amount <= 0) return;
+        // A10: a NEGATIVE amount is a penalty (e.g. attention-fail AddXP(-FailXpPenalty)) and
+        // must apply. Only a zero delta is a no-op. Signature stays int to match IProgressionService.
+        if (amount == 0) return;
 
         var settings = _settingsService.Current;
         if (settings == null) return;
@@ -44,29 +49,49 @@ public sealed class AvaloniaProgressionService : IProgressionService
         double adjusted = amount * multiplier;
         settings.PlayerXP += adjusted;
 
-        // Mirror WPF: track XP in achievements, companion, and quests.
+        // Clamp so a penalty never drives XP (and therefore the level curve) negative.
+        if (settings.PlayerXP < 0)
+            settings.PlayerXP = 0;
+
+        // Mirror WPF ProgressionService.AddXP: achievements track the skill-adjusted amount,
+        // while companion and quests track the pre-multiplier BASE amount.
         // Resolve lazily to avoid a DI cycle (QuestService also consumes IProgressionService).
         try { _services.GetService<IAchievementService>()?.TrackXPEarned(adjusted); }
-        catch (Exception ex) { /* swallow; stats must not break progression */ }
-        try { _services.GetService<ICompanionService>()?.AddCompanionXP(adjusted, source); }
-        catch (Exception ex) { /* swallow; companion must not break progression */ }
-        try { _services.GetService<IQuestService>()?.TrackXPEarned((int)adjusted); }
-        catch (Exception ex) { /* swallow; quests must not break progression */ }
+        catch (Exception) { /* stats must not break progression */ }
+        try { _services.GetService<ICompanionService>()?.AddCompanionXP(amount, source); }
+        catch (Exception) { /* companion must not break progression */ }
+        try { _services.GetService<IQuestService>()?.TrackXPEarned((int)amount); }
+        catch (Exception) { /* quests must not break progression */ }
 
-        double xpNeeded = GetXPForLevel(settings.PlayerLevel);
-        while (settings.PlayerXP >= xpNeeded)
+        // Only positive XP can trigger a level-up; a non-positive delta never loops.
+        if (amount > 0)
         {
-            settings.PlayerXP -= xpNeeded;
-            settings.PlayerLevel++;
-            settings.SkillPoints += 5;
+            double xpNeeded = GetXPForLevel(settings.PlayerLevel);
+            while (settings.PlayerXP >= xpNeeded)
+            {
+                settings.PlayerXP -= xpNeeded;
+                settings.PlayerLevel++;
 
-            if (settings.PlayerLevel > settings.HighestLevelEver)
-                settings.HighestLevelEver = settings.PlayerLevel;
+                // WPF SkillTreeService.OnLevelUp: +1 skill point per level gained (was 5x here).
+                settings.SkillPoints += PointsPerLevel;
 
-            try { _services.GetService<IAchievementService>()?.CheckLevelAchievements(settings.PlayerLevel); }
-            catch (Exception ex) { /* swallow */ }
-            LevelUp?.Invoke(this, settings.PlayerLevel);
-            xpNeeded = GetXPForLevel(settings.PlayerLevel);
+                if (settings.PlayerLevel > settings.HighestLevelEver)
+                    settings.HighestLevelEver = settings.PlayerLevel;
+
+                var achievements = _services.GetService<IAchievementService>();
+
+                // WPF SkillTreeService.OnLevelUp: track skill points earned for stats.
+                try { achievements?.TrackSkillPointsEarned(PointsPerLevel); }
+                catch (Exception) { /* stats must not break progression */ }
+
+                // WPF SkillTreeService.OnLevelUp: remember the season's peak level.
+                settings.SeasonPeakLevel = Math.Max(settings.SeasonPeakLevel, settings.PlayerLevel);
+
+                try { achievements?.CheckLevelAchievements(settings.PlayerLevel); }
+                catch (Exception) { /* stats must not break progression */ }
+                LevelUp?.Invoke(this, settings.PlayerLevel);
+                xpNeeded = GetXPForLevel(settings.PlayerLevel);
+            }
         }
 
         _settingsService.Save();
