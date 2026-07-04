@@ -319,7 +319,8 @@ public partial class App : Application
                 // harness runs (smoke/benchmark own the start/stop lifecycle themselves;
                 // an auto-started engine would skew their assertions and measurements).
                 var isHarnessRun = desktop.Args?.Any(a =>
-                    a is "--smoke-test" or "--benchmark" or "--max-benchmark") == true;
+                    a is "--smoke-test" or "--benchmark" or "--max-benchmark"
+                    or "--verify-spiral" or "--verify-video" or "--verify-layers") == true;
                 if (!isHarnessRun && desktop.MainWindow is MainWindow dashboardWindow)
                 {
                     EventHandler? applyLaunchBehaviors = null;

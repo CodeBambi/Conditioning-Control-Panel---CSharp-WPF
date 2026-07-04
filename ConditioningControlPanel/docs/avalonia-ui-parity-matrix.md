@@ -50,8 +50,38 @@ A Linux column/sweep section is added when WS4 starts (goal doc).
 - [ ] **START launches the mode** (session enters Running, effects start, stop returns to Idle)
 - [ ] **Avatar reacts** (click → speech bubble)
 - [ ] **Chaos run economy** end-to-end ("Down the Rabbit Hole": run lifecycle, boons, XP, narrative)
-- [ ] **Overlays are pure passive click-through layers** (pink fill, spiral, subliminal, flash, brain-drain)
+- 🚧 **Overlays are pure passive click-through layers** (pink fill, spiral, subliminal, flash, brain-drain) — RENDER PATH harness-verified 2026-07-04 via `--verify-layers` (UCE plan Phase C, table below): every migrated layer registers at its exact `CompositorLayers` z, activates through its owning service, produces (or, for brain-drain, correctly does NOT produce) a real screen-capture delta, and tears down cleanly. Still needs eyes: click-through input over each effect, and side-by-side WPF timing/opacity/multi-monitor parity.
 - [ ] **Multi-monitor (N screens)** incl. mixed landscape+portrait, per-monitor scale; single-display setting honored
+
+### UCE layer verification (plan Phase C, `--verify-layers` harness, 2026-07-04)
+
+Debug-only harness (`LayerVerification.cs`): one app run, each layer exercised through its
+OWNING service, asserted (a) registered at the exact z-constant via `engine.GetLayer`,
+(b) `IsActive` after the service call, (c) renders — GDI screen-capture MD5 (per-screen
+working-area + primary center-crop) before vs during, (d) deactivates after the service
+stops it. Run: `dotnet run --project .../CCP.Avalonia.Desktop.Windows.csproj -c Debug -- --verify-layers`
+(exit 0 = all pass). 3-screen machine, dashboard hidden during probes.
+
+| Layer | Z | Registered | Activated | Render delta | Teardown | Verdict |
+|---|---|---|---|---|---|---|
+| FlashLayer (`IFlashService.TriggerFlashOnce`, generated temp PNG) | 30 | ✅ exact | ✅ | ✅ DIFFER (full-screen) | ✅ clean on `Stop()` | **PASS** |
+| SubliminalLayer (`FlashSubliminalCustom`, opacity forced 100) | 40 | ✅ exact | ✅ | ✅ DIFFER center-crop — **P0 capture-VISIBLE guardrail held** (WPF WDA_NONE contract; a no-delta here = main surface wrongly excluded) | ✅ clean (duration expiry — the service-set lifetime IS the teardown path) | **PASS** |
+| BubbleLayer (`IBubbleService.Start`/`SpawnOnce` — ambient direct API, no session needed) | 45 | ✅ exact | ✅ | ✅ DIFFER (full-screen) | ✅ clean on `Stop()` | **PASS** |
+| BouncingTextLayer (`IBouncingTextService.Start(textPool)`) | 50 | ✅ exact | ✅ | ✅ DIFFER (full-screen) | ✅ clean on `Stop()` | **PASS** |
+| BrainDrainLayer (`ShowOverlaySustained("braindrain")`, sequenced ALONE) | 55 | ✅ exact | ✅ | ✅ **NO-DELTA on 2/3 ambient-stable screens — P0 capture-EXCLUSION guardrail held** (`WDA_EXCLUDEFROMCAPTURE`; blur on the physical screen, invisible to capture) + `ExcludedWindowCount` 0→1 while active | ✅ clean on `HideOverlaySustained` + excluded surface closed after ~500ms idle (0 windows) | **PASS** |
+| SpiralLayer (`ShowOverlaySustained("spiral")`) | 60 | ✅ exact | ✅ (decoded + active) | ✅ DIFFER (full-screen) | ✅ released to settings-held (profile `SpiralEnabled=true` re-applied — WPF-parity release, not a leak; `HideOverlaySustained` verified `clean` on the braindrain path which releases unconditionally) | **PASS** |
+| PinkTintLayer (`ShowOverlaySustained("pink")`) | 70 | ✅ exact | ✅ | ✅ DIFFER (full-screen) | ✅ released to settings-held (`PinkFilterEnabled=true` re-applied — WPF parity) | **PASS** |
+| LockCard | 20 (reserved) | n/a — **no LockCardLayer exists** (verified by grep; z=20 unoccupied as expected) | - | - | - | **SKIPPED** — lock card is still a window, nothing to verify until migrated |
+
+Harness-isolation fix that fell out of this run: `App.axaml.cs` `isHarnessRun` now also
+covers `--verify-spiral`/`--verify-video`/`--verify-layers` — before, the user's
+`AutoStartEngine`/`ForceVideoOnLaunch`/scheduler launch behaviors fired REAL sessions +
+startup videos into verify runs (observed live: an engine-only run + 3-monitor startup
+video contaminated the first harness attempt).
+
+NOT covered by the harness (needs human eyes): WPF side-by-side timing/opacity/easing
+parity, click-through input over each effect, per-monitor placement on mixed-DPI, and
+lock-card (not a layer yet). Layer bugs found: **none**.
 - [ ] **Per-mod theme re-skin** across all 5 (CCP Default, Bambi Sleep, Sissy Hypno, Dronification, Circe's Lock)
 - [ ] **Performance** — startup, working set, effect frame rates vs WPF and `benchmark-optimized.json`
 

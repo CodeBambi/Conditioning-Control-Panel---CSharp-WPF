@@ -34,6 +34,7 @@ class Program
         var benchmark = args.Contains("--benchmark");
         var maxBenchmark = args.Contains("--max-benchmark");
         var verifySpiral = args.Contains("--verify-spiral");
+        var verifyLayers = args.Contains("--verify-layers");
         var verifyVideoIndex = Array.IndexOf(args, "--verify-video");
         var verifyVideo = verifyVideoIndex >= 0;
         string? verifyVideoPath = null;
@@ -115,6 +116,10 @@ class Program
         else if (verifyVideo)
         {
             VideoVerification.Attach(builder, verifyVideoPath);
+        }
+        else if (verifyLayers)
+        {
+            LayerVerification.Attach(builder);
         }
 #endif
 
