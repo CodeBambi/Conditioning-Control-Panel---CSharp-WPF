@@ -467,7 +467,10 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
         // Stop() paths call InteractionQueue.Complete(), which would dequeue and async-post the
         // next interaction; resetting first makes those Complete() calls no-ops (mirrors WPF
         // remote panic, MainWindow.RemoteControl.cs:1423 / RemoteControlService.cs:822,923).
-        _interactionQueue?.ForceReset();
+        // Isolated so a throwing reset can never skip the audio/video/browser teardown below
+        // (#462 review hardening; orchestrator path already isolates via TryRun).
+        try { _interactionQueue?.ForceReset(); }
+        catch (Exception ex) { _logger?.LogWarning(ex, "Interaction queue reset failed during remote stop"); }
 
         _audioPlayer?.Stop();
         _video?.Stop();

@@ -156,8 +156,13 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
         // InteractionQueue.Complete(), which dequeues and async-posts a queued trigger —
         // re-arming a fullscreen overlay after teardown. Resetting first makes those
         // Complete() calls no-ops (mirrors WPF StopEngine ordering,
-        // MainWindow.StartStop.cs:328-337). Pause preserves the queue: WPF PauseSession
-        // never resets it (SessionEngine.PauseSession).
+        // MainWindow.StartStop.cs:328-337).
+        // NOTE (#462 review): the pause path currently calls the no-arg StopEffects(), so
+        // pausing DOES reset the queue in this head today — the !pausing branch is reachable
+        // only by a future caller. That is deliberate-safe here: paused services' Complete()
+        // calls would otherwise async-post a queued overlay while paused (the same race this
+        // fix closes). If WPF pause-preserves-queue parity is ever wanted, wire the
+        // SessionPaused handler to StopEffects(pausing: true) and re-verify that race first.
         if (!pausing)
         {
             TryRun("interaction queue reset", () => InteractionQueue?.ForceReset());
