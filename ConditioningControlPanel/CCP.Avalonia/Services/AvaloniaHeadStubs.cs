@@ -54,7 +54,10 @@ public sealed class AvaloniaChaosService : IChaosService
     private readonly ChaosCursorGlowLayer _cursorGlowLayer;
     // WS2/WP3 Phase F #2: chaos pop text is a compositor layer, not a pooled window set.
     private readonly ChaosPopTextLayer _popTextLayer;
+    // WS2/WP3 Phase F #3: the effect-banner strip is a compositor layer, not a keep-alive window.
+    private readonly ChaosEffectBannerLayer _effectBannerLayer;
     private readonly CompositorEngine? _compositor;
+    private readonly IScreenProvider? _screenProvider;
     private readonly Random _rng = new();
 
     private bool _active;
@@ -108,7 +111,8 @@ public sealed class AvaloniaChaosService : IChaosService
         global::ConditioningControlPanel.ISkillTreeService? skillTree = null,
         global::ConditioningControlPanel.Core.Services.Progression.IAchievementService? achievements = null,
         ChaosCrashSentinel? crashSentinel = null,
-        CompositorEngine? compositor = null)
+        CompositorEngine? compositor = null,
+        IScreenProvider? screenProvider = null)
     {
         _bubbles = bubbles;
         _settings = settings;
@@ -137,6 +141,9 @@ public sealed class AvaloniaChaosService : IChaosService
         compositor?.RegisterLayer(_cursorGlowLayer);
         _popTextLayer = new ChaosPopTextLayer();
         compositor?.RegisterLayer(_popTextLayer);
+        _effectBannerLayer = new ChaosEffectBannerLayer();
+        compositor?.RegisterLayer(_effectBannerLayer);
+        _screenProvider = screenProvider;
         AvaloniaChaosCatalogs.EnsureInitialized();
     }
 
@@ -228,7 +235,8 @@ public sealed class AvaloniaChaosService : IChaosService
                     _tunnel?.Preload(); // warm the WebView2/three.js init under the countdown
                     _overlay.ShowCountdown(BeginRun);
 
-                    ChaosEffectBannerOverlay.EnsureCreated();
+                    // Effect banner is a compositor layer now: registration is app-lifetime,
+                    // so the WPF-hang-motivated EnsureCreated pre-warm has no equivalent.
                     ChaosFieldFxOverlay.EnsureCreated();
                 }
                 catch (Exception ex)
@@ -895,6 +903,11 @@ public sealed class AvaloniaChaosService : IChaosService
             try { ChaosBoonBarOverlay.CloseActive(); } catch { }   // WPF ChaosModeService.cs:3239
             try { ChaosBackdropService.CloseActive(); } catch { }
         });
+        // WPF parity: run teardown closes the effect-banner strip instantly (the WPF
+        // CloseActive path — the legacy Avalonia head never called it only because banner
+        // Show was never wired). Pop text likewise dies with the run (WPF ShutdownPool).
+        CloseEffectBanners();
+        ClearChaosPopText();
         _state = null;
         _vibeRemainingSec = 0;
         _freezeRemainingSec = 0;
@@ -919,7 +932,7 @@ public sealed class AvaloniaChaosService : IChaosService
         {
             try { _hud?.RaiseToTopmost(); } catch { }
             try { ChaosBoonBarOverlay.RaiseActive(); } catch { }
-            try { ChaosEffectBannerOverlay.RaiseActive(); } catch { }
+            // Effect banner is a compositor layer: z comes from CompositorLayers (UCE rule 9).
         });
     }
 
@@ -929,9 +942,8 @@ public sealed class AvaloniaChaosService : IChaosService
         RunOnUi(() =>
         {
             try { ChaosFieldFxOverlay.RaiseActive(); } catch { }
-            // Pop text is a compositor layer: z comes from CompositorLayers (UCE rule 9),
-            // so no RaiseActive churn is needed for it.
-            try { ChaosEffectBannerOverlay.RaiseActive(); } catch { }
+            // Pop text and the effect banner are compositor layers: z comes from
+            // CompositorLayers (UCE rule 9), so no RaiseActive churn is needed for them.
             try { ChaosAnnouncerOverlay.RaiseActive(); } catch { }
             try { _hud?.RaiseToTopmost(); } catch { }
         });
@@ -1177,6 +1189,9 @@ public sealed class AvaloniaChaosService : IChaosService
                     splitBounces: _state.DvdSplitBounces);
                 toy.CooldownRemainingSec = toy.CooldownSec;
                 toy.IsEffectActive = true;
+                // WPF parity (ChaosModeService.cs:2657): the port kept the _dvdBannerOn flag
+                // but dropped the banner call — restored through the compositor seam.
+                ShowEffectBanner("dvd", "Porn DVD", global::Avalonia.Media.Color.FromRgb(0xFF, 0x69, 0xB4));
                 _dvdBannerOn = true;
                 _state.PushEvent("📀 now loading");
                 break;
@@ -1307,6 +1322,32 @@ public sealed class AvaloniaChaosService : IChaosService
     /// <summary>Drop every live pop-text floater (WPF ShutdownPool at chaos teardown).</summary>
     public void ClearChaosPopText() => _popTextLayer.Clear();
 
+    /// <summary>Show (or keep) the effect-banner strip entry for an effect (WS2: chaos on
+    /// the compositor; WPF ChaosEffectBannerOverlay.Show contract). Applies the
+    /// ChaosBoonColors payload color language and resolves the announce word-art here —
+    /// the service owns policy, the layer renders final inputs (UCE rule 7). NOT gated on
+    /// ChaosAnnouncerEnabled (WPF banner Show has no settings gate). Public because the
+    /// --verify-layers harness drives the layer through its OWNING service; production
+    /// callers arrive with the run-engine effect port (the WPF call sites live in
+    /// ChaosModeService paths not yet ported).</summary>
+    public void ShowEffectBanner(string id, string text, global::Avalonia.Media.Color accent, string? artKey = null)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return;
+        accent = ChaosBoonColors.ForOrDefault(id, accent);   // payload-based color language
+        var artPath = AvaloniaChaosArt.PathFor("announce", artKey ?? id);
+        var primary = _screenProvider?.GetPrimaryScreen();
+        if (primary == null) return; // no screen info — nowhere to anchor the strip
+        _compositor?.Start();
+        _effectBannerLayer.Show(id, text, accent, artPath,
+            primary.WorkingArea.IsEmpty ? primary.Bounds : primary.WorkingArea, primary.Scaling);
+    }
+
+    /// <summary>Fade out + remove the banner entry for an effect (WPF End).</summary>
+    public void EndEffectBanner(string id) => _effectBannerLayer.End(id);
+
+    /// <summary>Instant strip teardown (run end — WPF CloseActive).</summary>
+    public void CloseEffectBanners() => _effectBannerLayer.Clear();
+
     private void SpawnDarter(double? atPxX = null, double? atPxY = null)
     {
         if (_state == null) return;
@@ -1325,7 +1366,7 @@ public sealed class AvaloniaChaosService : IChaosService
                 _bubbles.SetVibePop(false);
             }
         }
-        if (_dvdBannerOn && !ChaosDvdOverlay.AnyToyActive) { _dvdBannerOn = false; }
+        if (_dvdBannerOn && !ChaosDvdOverlay.AnyToyActive) { EndEffectBanner("dvd"); _dvdBannerOn = false; }   // WPF ChaosModeService.cs:2953
         foreach (var t in _state.ActiveToys)
         {
             if (t.CooldownRemainingSec > 0)

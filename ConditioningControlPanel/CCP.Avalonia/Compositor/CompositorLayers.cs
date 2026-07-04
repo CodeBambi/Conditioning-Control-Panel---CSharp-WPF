@@ -59,6 +59,9 @@ public static class CompositorLayers
     // (the subtitle line — the most important messaging, and in WPF re-raised on every
     // ShowNext so a fresh announce sits above banner/pop-text windows raised earlier).
 
+    /// <summary>Chaos effect-banner strip (active-bonus labels at the top of the primary work area).</summary>
+    public const int ChaosEffectBanner = 140;
+
     /// <summary>Chaos floating combat text (score/effect words popped at a bubble).</summary>
     public const int ChaosPopText = 145;
 }

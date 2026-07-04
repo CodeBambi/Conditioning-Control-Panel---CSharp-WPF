@@ -172,6 +172,7 @@ internal static class LayerVerification
             var pinkTintLayer = ExpectLayer<PinkTintLayer>(engine, CompositorLayers.PinkTint, "PinkTintLayer", rows);
             var cursorGlowLayer = ExpectLayer<ChaosCursorGlowLayer>(engine, CompositorLayers.ChaosCursorGlow, "ChaosCursorGlowLayer", rows);
             var popTextLayer = ExpectLayer<ChaosPopTextLayer>(engine, CompositorLayers.ChaosPopText, "ChaosPopTextLayer", rows);
+            var effectBannerLayer = ExpectLayer<ChaosEffectBannerLayer>(engine, CompositorLayers.ChaosEffectBanner, "ChaosEffectBannerLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -190,12 +191,12 @@ internal static class LayerVerification
 
             if (flashLayer == null || subliminalLayer == null || bubbleLayer == null || bouncingLayer == null
                 || brainDrainLayer == null || spiralLayer == null || pinkTintLayer == null || cursorGlowLayer == null
-                || popTextLayer == null)
+                || popTextLayer == null || effectBannerLayer == null)
             {
                 Console.WriteLine("[LAYERS] Registration sweep failed; skipping activation stages.");
                 return;
             }
-            Console.WriteLine("[LAYERS] All 9 migrated layers registered at their exact z-constants.");
+            Console.WriteLine("[LAYERS] All 10 migrated layers registered at their exact z-constants.");
 
             // ---------------- Stage 1: FlashLayer (Z=30) via IFlashService ----------------
             {
@@ -378,6 +379,33 @@ internal static class LayerVerification
                     row.Teardown = deactivated ? "clean (490ms expiry)" : "TIMEOUT";
                     FinishRow(row, activated, deactivated, envStable);
                 }
+                await SettleIdle(engine);
+            }
+
+            // ---------------- Stage 4d: ChaosEffectBannerLayer (Z=140) via AvaloniaChaosService ----------------
+            // Phase F #3. Driven through the owning service's banner seams — the same calls the
+            // porn_dvd toy path makes — so no chaos run is needed. NOT settings-gated (WPF banner
+            // Show has no gate). The strip sits at the top of the primary WORK AREA, inside the
+            // per-screen working-area "Full" hash. End(id) fades 380ms then removes the entry.
+            {
+                Console.WriteLine("[LAYERS] Stage 4d: ChaosEffectBannerLayer via AvaloniaChaosService.ShowEffectBanner...");
+                var row = rows.First(r => r.Layer == "ChaosEffectBannerLayer");
+                var before = Capture(screens, primary);
+                // Unmapped id keeps the caller accent (ChaosBoonColors fallback path); no
+                // announce art named verify_banner exists, so the outlined-text look renders.
+                chaos.ShowEffectBanner("verify_banner", "VERIFY BANNER", global::Avalonia.Media.Color.FromRgb(0xFF, 0xC8, 0x3D));
+                var activated = await PollAsync(() => effectBannerLayer.IsActive, 2000, stepMs: 50);
+                row.Activated = activated ? "yes" : "TIMEOUT";
+                if (activated)
+                {
+                    await Task.Delay(500); // 200ms fade-in + a few throb frames + present
+                    var during = Capture(screens, primary);
+                    row.Delta = during.Full != before.Full ? "DIFFER (full-screen)" : "SAME (FAIL)";
+                }
+                chaos.EndEffectBanner("verify_banner");
+                var deactivated = await PollAsync(() => !effectBannerLayer.IsActive, 3000);
+                row.Teardown = deactivated ? "clean (380ms fade + removal)" : "TIMEOUT";
+                FinishRow(row, activated, deactivated, envStable);
                 await SettleIdle(engine);
             }
 
@@ -573,6 +601,7 @@ internal static class LayerVerification
             try { bubbles?.Stop(); } catch { }
             try { chaos?.DisarmCursorGlow(); } catch { }
             try { chaos?.ClearChaosPopText(); } catch { }
+            try { chaos?.CloseEffectBanners(); } catch { }
             try
             {
                 overlay?.HideOverlaySustained("pink");
