@@ -116,9 +116,13 @@ public sealed class ChaosFlashOverlay : Window
 
         if (path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
         {
-            AnimationBehavior.SetRepeatBehavior(_img, RepeatBehavior.Forever);
-            AnimationBehavior.SetAutoStart(_img, true);
-            AnimationBehavior.SetSourceUri(_img, new Uri(path, UriKind.Absolute));
+            // Was XamlAnimatedGif — which decodes at NATIVE resolution with no size cap, so a
+            // large GIF looped full-screen for the whole wash held ~100MB+ of resident BGRA
+            // and dominated the render thread (the glitch-pop frame drops / OOM crash, #476).
+            // SKCodec is format-agnostic, so GIFs ride the same capped/cached pipeline as
+            // animated webp (1280px / 40 frames, off-thread, capped-still fallback). A faint
+            // wash doesn't need native res; ClearImage's Detach already tears this down.
+            Services.AnimatedWebp.AttachAnimation(_img, path, maxDim: 1280, maxFrames: 40);
         }
         else if (path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase) && Services.AnimatedWebp.IsAnimated(path))
         {

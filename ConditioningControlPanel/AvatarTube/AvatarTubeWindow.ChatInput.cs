@@ -948,9 +948,20 @@ namespace ConditioningControlPanel
         {
             if (_parentWindow is MainWindow mainWindow)
             {
+                // Mirror BtnStart_Click's guards. This menu used to call StopEngine()
+                // directly, so a right-click on the avatar could kill the engine during
+                // lockdown or a strict-locked video — defeating the lock and crashing
+                // the app in the mid-playback LibVLC teardown (#479).
+                if (App.RemoteControl?.ControllerConnected == true) return;
+
                 // Use Flash.IsRunning as proxy for engine state
                 if (App.Flash?.IsRunning == true)
                 {
+                    if (IsEngineStopLocked())
+                    {
+                        Giggle("nuh-uh~ no stopping now, you're locked in~");
+                        return;
+                    }
                     mainWindow.StopEngine();
                     Giggle("Engine stopped~");
                 }
@@ -962,6 +973,15 @@ namespace ConditioningControlPanel
                 UpdateQuickMenuState();
             }
         }
+
+        /// <summary>
+        /// True when stopping the engine must be refused: lockdown mode, a strict-locked
+        /// mandatory video, or a strict-locked bubble-count game is in progress (#479).
+        /// </summary>
+        private static bool IsEngineStopLocked() =>
+            App.Lockdown?.IsActive == true ||
+            App.Video?.IsStrictActive == true ||
+            (App.BubbleCount?.IsBusy == true && App.Settings?.Current?.BubbleCountStrictLock == true);
 
         private void MenuItemTriggerMode_Click(object sender, RoutedEventArgs e)
         {
@@ -1360,7 +1380,10 @@ namespace ConditioningControlPanel
                 // Without this the items stay stuck un-clickable after exiting remote control, because
                 // the normal section above only refreshes their Header/Foreground, never IsEnabled.
                 // (Foreground is already restored above; Takeover stays gated on Patreon access.)
-                MenuItemEngine.IsEnabled = true;
+                // Engine item stays disabled while a stop would be refused anyway
+                // (lockdown / strict-locked video or bubble game, #479) — but only
+                // when the engine is running; starting is always allowed.
+                MenuItemEngine.IsEnabled = !(App.Flash?.IsRunning == true && IsEngineStopLocked());
                 MenuItemTriggerMode.IsEnabled = true;
                 MenuItemBambiTakeover.IsEnabled = takeoverAvailable;
                 MenuItemPersonality.IsEnabled = true;

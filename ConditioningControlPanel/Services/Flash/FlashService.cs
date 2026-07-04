@@ -85,17 +85,22 @@ namespace ConditioningControlPanel.Services
 
         // Image decode cache: avoids reloading/re-decoding the same images every flash
         // Key = file path, Value = (data, lastAccess)
-        private readonly Dictionary<string, (LoadedImageData data, DateTime lastAccess)> _imageDecodeCache = new();
+        // Keyed by file path ONLY (decodeMax stored alongside). Keying by path+dim let the
+        // performance tier's auto up/down-shifts cache the same file at 2-3 sizes at once,
+        // halving effective capacity and forcing extra decodes exactly when the system was
+        // already under load (#486). A hit at an equal-or-larger cached dim is served as-is;
+        // a larger request replaces the entry.
+        private readonly Dictionary<string, (LoadedImageData data, DateTime lastAccess, int decodeMax)> _imageDecodeCache = new();
         private const int MAX_IMAGE_CACHE_ENTRIES = 50;
         private const long MAX_IMAGE_CACHE_BYTES = 200L * 1024 * 1024; // 200 MB cap
         private long _imageCacheBytes;
 
         // Decode attribution (cumulative, app-lifetime) for the chaos OOM hunt. A cache MISS that
-        // runs an actual decode increments these; cache hits don't. The GIF path still uses
-        // System.Drawing/GDI+ (native-heap-retaining under churn) — if GifDecodes climbs run-over-run
-        // in lockstep with native~ in [CHAOSMEM], the GIF decode path is the residual leak.
-        public long GifDecodes;     // GDI+ (System.Drawing) decodes — the suspect path
-        public long StaticDecodes;  // WIC (BitmapImage) decodes — already off GDI+
+        // runs an actual decode increments these; cache hits don't. The GIF path was the last
+        // GDI+ consumer and was migrated to SKCodec (#486) — if native~ in [CHAOSMEM] still climbs
+        // in lockstep with GifDecodes after the migration, look beyond the decoder.
+        public long GifDecodes;     // SKCodec (SkiaSharp) animated decodes — was GDI+ until #486
+        public long StaticDecodes;  // WIC (BitmapImage) decodes — off GDI+ since the chaos OOM fix
 
         // Snapshot of file paths from the most recent FlashDisplayed batch.
         // Read by SessionLogService after FlashDisplayed fires.
@@ -590,17 +595,23 @@ namespace ConditioningControlPanel.Services
                 // resolution — a 4K image shown at ~300-1000px wastes memory + GPU fill-rate.
                 // Cap scales with the active performance tier and the user's ImageScale.
                 int decodeMax = ComputeDecodeMaxDim();
-                // Cache key includes the decode cap so the same file cached at one size isn't
-                // reused at another (only a handful of distinct caps ever occur).
-                string cacheKey = path + "|" + decodeMax;
 
-                // Check decode cache first (frozen BitmapSources are thread-safe)
+                // Check decode cache first (frozen BitmapSources are thread-safe). A cached
+                // decode serves any request at the same or smaller cap (WPF scales down for
+                // free at render). It also serves LARGER requests when the source image never
+                // hit the cap (decoded size strictly below the cached cap = native res kept).
+                // Only a genuinely capped decode being asked for more pixels re-decodes, and
+                // the store below then replaces the entry — one entry per file, always.
                 lock (_imageDecodeCache)
                 {
-                    if (_imageDecodeCache.TryGetValue(cacheKey, out var cached))
+                    if (_imageDecodeCache.TryGetValue(path, out var cached))
                     {
-                        _imageDecodeCache[cacheKey] = (cached.data, DateTime.UtcNow);
-                        return CloneImageData(cached.data);
+                        bool uncapped = Math.Max(cached.data.Width, cached.data.Height) < cached.decodeMax;
+                        if (cached.decodeMax >= decodeMax || uncapped)
+                        {
+                            _imageDecodeCache[path] = (cached.data, DateTime.UtcNow, cached.decodeMax);
+                            return CloneImageData(cached.data);
+                        }
                     }
                 }
 
@@ -671,6 +682,15 @@ namespace ConditioningControlPanel.Services
 
                     lock (_imageDecodeCache)
                     {
+                        // Replacing an existing entry for this file (re-decode at a larger
+                        // cap, or a concurrent miss that raced us)? Release its bytes first
+                        // so the accounting doesn't drift upward.
+                        if (_imageDecodeCache.TryGetValue(path, out var existing))
+                        {
+                            _imageDecodeCache.Remove(path);
+                            _imageCacheBytes -= (long)existing.data.Width * existing.data.Height * 4 * existing.data.Frames.Count;
+                        }
+
                         // Evict if over limits
                         while (_imageDecodeCache.Count >= MAX_IMAGE_CACHE_ENTRIES ||
                                _imageCacheBytes + entryBytes > MAX_IMAGE_CACHE_BYTES)
@@ -697,7 +717,7 @@ namespace ConditioningControlPanel.Services
                             else break;
                         }
 
-                        _imageDecodeCache[cacheKey] = (data, DateTime.UtcNow);
+                        _imageDecodeCache[path] = (data, DateTime.UtcNow, decodeMax);
                         _imageCacheBytes += entryBytes;
                     }
 
@@ -759,91 +779,64 @@ namespace ConditioningControlPanel.Services
 
         private void LoadGifFrames(string path, LoadedImageData data, int decodeMax)
         {
+            // SkiaSharp (SKCodec) decode — NOT System.Drawing/GDI+. This was the last
+            // GDI+ decoder in the flash pipeline: every cache-miss GIF ran each frame
+            // through Graphics.DrawImage on the native Win32 heap, which bloats and
+            // never returns pages under high-frequency decode churn — the same VMMap
+            // signature (managed heap flat, private bytes climbing to multi-GB, native
+            // OOM with an empty crash log) that got the static path migrated to WIC
+            // (#486). SKCodec composes delta frames (RequiredFrame handling) and shares
+            // the animated-webp budget: decodeMax edge, ≤60 frames, ≤30MB kept.
             try
             {
-                using var gif = System.Drawing.Image.FromFile(path);
-                var dimension = new FrameDimension(gif.FrameDimensionsList[0]);
-                var frameCount = gif.GetFrameCount(dimension);
-
-                // Target (possibly downscaled) frame size — decode once, never upscale.
-                var (frameW, frameH) = ScaledSize(gif.Width, gif.Height, decodeMax);
-
-                // Get frame delay from metadata
-                var frameDelay = 100; // Default 100ms
-                try
+                if (AnimatedWebp.DecodeFrames(path, decodeMax, maxFrames: 60, maxMemoryMb: 30.0) is { } d)
                 {
-                    var propertyItem = gif.GetPropertyItem(0x5100); // FrameDelay property
-                    if (propertyItem?.Value != null)
-                    {
-                        frameDelay = BitConverter.ToInt32(propertyItem.Value, 0) * 10;
-                        if (frameDelay < 20) frameDelay = 100;
-                    }
+                    data.Frames.AddRange(d.Frames);
+                    data.Width = d.Frames[0].PixelWidth;
+                    data.Height = d.Frames[0].PixelHeight;
+                    data.FrameDelay = d.FrameDelay;
+                    return;
                 }
-                catch { }
-
-                // Limit frames based on (decoded) image size to keep memory reasonable
-                var pixelsPerFrame = (long)frameW * frameH * 4L; // BGRA32
-                var estimatedMemoryMB = (pixelsPerFrame * frameCount) / (1024.0 * 1024.0);
-
-                const double MAX_MEMORY_MB = 30.0;
-                var maxFrames = frameCount;
-                if (estimatedMemoryMB > MAX_MEMORY_MB)
-                {
-                    maxFrames = (int)(frameCount * (MAX_MEMORY_MB / estimatedMemoryMB));
-                    maxFrames = Math.Max(10, maxFrames);
-                }
-                maxFrames = Math.Min(maxFrames, 60);
-
-                var step = frameCount > maxFrames ? frameCount / maxFrames : 1;
-
-                for (int i = 0; i < frameCount && data.Frames.Count < maxFrames; i += step)
-                {
-                    gif.SelectActiveFrame(dimension, i);
-
-                    using var frameBitmap = new System.Drawing.Bitmap(frameW, frameH);
-                    using (var g = Graphics.FromImage(frameBitmap))
-                    {
-                        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                        g.DrawImage(gif, 0, 0, frameW, frameH);
-                    }
-
-                    var bitmapSource = ConvertToBitmapSource(frameBitmap);
-                    bitmapSource.Freeze();
-                    data.Frames.Add(bitmapSource);
-                }
-
-                data.Width = frameW;
-                data.Height = frameH;
-                data.FrameDelay = TimeSpan.FromMilliseconds(step > 1 ? frameDelay * step : frameDelay);
             }
             catch (Exception ex)
             {
                 App.Logger.Debug("Could not load GIF frames: {Error}", ex.Message);
+            }
 
-                // Fallback: load as static image (still honoring the decode cap)
+            // Single-frame or undecodable GIF → static WIC decode, mirroring the static
+            // image branch (decode-time downscale, no full-size intermediate, no GDI+).
+            try
+            {
+                int srcW = 0, srcH = 0;
                 try
                 {
-                    using var bitmap = new System.Drawing.Bitmap(path);
-                    var (tw, th) = ScaledSize(bitmap.Width, bitmap.Height, decodeMax);
-                    BitmapSource bitmapSource;
-                    if (tw != bitmap.Width || th != bitmap.Height)
-                    {
-                        using var scaled = DownscaleBitmap(bitmap, tw, th);
-                        bitmapSource = ConvertToBitmapSource(scaled);
-                    }
-                    else
-                    {
-                        bitmapSource = ConvertToBitmapSource(bitmap);
-                    }
-                    bitmapSource.Freeze();
-
-                    data.Frames.Add(bitmapSource);
-                    data.Width = tw;
-                    data.Height = th;
-                    data.FrameDelay = TimeSpan.FromMilliseconds(100);
+                    var probe = BitmapFrame.Create(new Uri(path, UriKind.Absolute),
+                        BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+                    srcW = probe.PixelWidth; srcH = probe.PixelHeight;
                 }
                 catch { }
+
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                bmp.UriSource = new Uri(path, UriKind.Absolute);
+                if (srcW > decodeMax || srcH > decodeMax)
+                {
+                    if (srcW >= srcH) bmp.DecodePixelWidth = decodeMax;
+                    else bmp.DecodePixelHeight = decodeMax;
+                }
+                bmp.EndInit();
+                bmp.Freeze();
+
+                data.Frames.Add(bmp);
+                data.Width = bmp.PixelWidth;
+                data.Height = bmp.PixelHeight;
+                data.FrameDelay = TimeSpan.FromMilliseconds(100);
+            }
+            catch (Exception ex)
+            {
+                App.Logger.Debug("Could not load GIF as static image: {Error}", ex.Message);
             }
         }
 
@@ -861,85 +854,9 @@ namespace ConditioningControlPanel.Services
             return Math.Clamp(dim, 256, 2048);
         }
 
-        /// <summary>
-        /// Aspect-preserving target size so the longest edge is at most <paramref name="maxDim"/>.
-        /// Never upscales (returns the source size if already within the cap).
-        /// </summary>
-        private static (int w, int h) ScaledSize(int srcW, int srcH, int maxDim)
-        {
-            if (srcW <= 0 || srcH <= 0) return (srcW, srcH);
-            int longest = Math.Max(srcW, srcH);
-            if (longest <= maxDim) return (srcW, srcH);
-            double ratio = (double)maxDim / longest;
-            return (Math.Max(1, (int)Math.Round(srcW * ratio)),
-                    Math.Max(1, (int)Math.Round(srcH * ratio)));
-        }
-
-        /// <summary>
-        /// Produces a downscaled 32bpp copy of <paramref name="src"/> at the given size using
-        /// high-quality bicubic resampling. Caller owns (and must dispose) the returned bitmap.
-        /// </summary>
-        private static System.Drawing.Bitmap DownscaleBitmap(System.Drawing.Bitmap src, int w, int h)
-        {
-            var scaled = new System.Drawing.Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            using (var g = Graphics.FromImage(scaled))
-            {
-                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                g.PixelOffsetMode = PixelOffsetMode.Half;
-                g.DrawImage(src, 0, 0, w, h);
-            }
-            return scaled;
-        }
-
-        private BitmapSource ConvertToBitmapSource(System.Drawing.Bitmap bitmap)
-        {
-            // Convert to 32bpp ARGB to ensure consistent format for WPF
-            // This fixes issues with JPEGs (24-bit RGB) and other formats
-            System.Drawing.Bitmap convertedBitmap;
-            bool needsDispose = false;
-
-            if (bitmap.PixelFormat != System.Drawing.Imaging.PixelFormat.Format32bppArgb)
-            {
-                convertedBitmap = new System.Drawing.Bitmap(bitmap.Width, bitmap.Height,
-                    System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-                using (var g = System.Drawing.Graphics.FromImage(convertedBitmap))
-                {
-                    g.DrawImage(bitmap, 0, 0, bitmap.Width, bitmap.Height);
-                }
-                needsDispose = true;
-            }
-            else
-            {
-                convertedBitmap = bitmap;
-            }
-
-            try
-            {
-                var bitmapData = convertedBitmap.LockBits(
-                    new System.Drawing.Rectangle(0, 0, convertedBitmap.Width, convertedBitmap.Height),
-                    ImageLockMode.ReadOnly,
-                    System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-
-                var bitmapSource = BitmapSource.Create(
-                    convertedBitmap.Width, convertedBitmap.Height,
-                    96, 96,
-                    PixelFormats.Bgra32,
-                    null,
-                    bitmapData.Scan0,
-                    bitmapData.Stride * convertedBitmap.Height,
-                    bitmapData.Stride);
-
-                convertedBitmap.UnlockBits(bitmapData);
-                return bitmapSource;
-            }
-            finally
-            {
-                if (needsDispose)
-                {
-                    convertedBitmap.Dispose();
-                }
-            }
-        }
+        // ScaledSize / DownscaleBitmap / ConvertToBitmapSource (the GDI+ decode helpers)
+        // were removed with the LoadGifFrames SKCodec migration (#486) — no flash decode
+        // path touches System.Drawing anymore.
 
         #endregion
 

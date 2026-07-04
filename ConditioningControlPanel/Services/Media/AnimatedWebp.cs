@@ -20,6 +20,11 @@ namespace ConditioningControlPanel.Services;
 /// composition (per-frame required-frame/blend handling that raw WIC frames don't give you),
 /// with no dependency on the OS "WebP Image Extensions" codec being installed.
 ///
+/// Despite the name, SKCodec is format-agnostic: since the #486 native-OOM fix these same
+/// entry points also decode animated GIFs (FlashService.LoadGifFrames, chaos wash, tease
+/// bubbles), replacing GDI+/XamlAnimatedGif's uncapped native-resolution decodes. Note GIF's
+/// rare "restore previous" disposal isn't modeled (WebP has none) — acceptable for effects.
+///
 /// Two consumption shapes:
 ///  - <see cref="DecodeFrames"/> → frozen frame list + delay for FlashService's heartbeat
 ///    frame-stepper (mirrors its LoadGifFrames memory budget).

@@ -173,6 +173,14 @@ namespace ConditioningControlPanel.Services
         public bool IsPlaying => _videoPlaying;
 
         /// <summary>
+        /// True while a strict-locked video is actively playing. Escape hatches that
+        /// bypass the main Stop button's lockdown guard (e.g. the avatar's quick menu)
+        /// must respect this — stopping the engine mid-strict-video both defeats the
+        /// lock and races the LibVLC teardown (#479).
+        /// </summary>
+        public bool IsStrictActive => _videoPlaying && _strictActive;
+
+        /// <summary>
         /// Whether any video windows still exist. Stays true through teardown after
         /// <see cref="IsPlaying"/> has already flipped false — use this when something
         /// must not be shown until the fullscreen surfaces are really gone (#462).
@@ -566,13 +574,19 @@ namespace ConditioningControlPanel.Services
             try { Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged; }
             catch { }
 
-            // Force cleanup of any playing video - use synchronous disposal during stop
-            // because Stop is typically called during app shutdown
+            // Force cleanup of any playing video. Every caller of Stop() is a LIVE stop
+            // (engine stop, panic, remote control, feature toggle) — app shutdown never
+            // routes through here (OnExit ends in Environment.Exit). Use the async
+            // disposal path: synchronous disposal freed the native MediaPlayer while
+            // in-flight LibVLC callbacks could still touch it, a use-after-free that
+            // killed the whole process when the engine was stopped mid-video (#479).
+            // Windows still close immediately either way; only the player Dispose is
+            // deferred ~1s to a background task.
             _videoPlaying = false;
             _strictActive = false;
             try
             {
-                CloseAll(synchronous: true);
+                CloseAll(synchronous: false);
             }
             catch (FileNotFoundException)
             {

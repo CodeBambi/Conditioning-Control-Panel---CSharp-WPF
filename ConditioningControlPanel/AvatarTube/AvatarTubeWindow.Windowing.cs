@@ -331,12 +331,41 @@ namespace ConditioningControlPanel
             }
         }
 
+        private const int WM_DPICHANGED = 0x02E0;
+        private DispatcherTimer? _dpiQuiesceTimer;
+
         /// <summary>
-        /// Window procedure hook (minimal - no longer forcing z-order to allow normal window switching)
+        /// Window procedure hook. Only handles WM_DPICHANGED: when a drag crosses onto a
+        /// monitor with a different scale factor, PerMonitorV2 WPF resizes this layered
+        /// window, and that resize runs a SYNCHRONOUS CompleteRender that deadlocks when
+        /// the shared AllowsTransparency render thread is busy (the documented hang in
+        /// OnFirstContentRendered — #477). Quiesce the 60fps float/breath transform writes
+        /// for the transition so the blocking present can complete, then resume.
         /// </summary>
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            // No longer intercepting z-order changes - let Windows handle it normally
+            if (msg == WM_DPICHANGED)
+            {
+                try
+                {
+                    if (_floatTimer?.IsEnabled == true)
+                    {
+                        _floatTimer.Stop();
+                        if (_dpiQuiesceTimer == null)
+                        {
+                            _dpiQuiesceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+                            _dpiQuiesceTimer.Tick += (s, e) =>
+                            {
+                                _dpiQuiesceTimer?.Stop();
+                                try { _floatTimer?.Start(); } catch { /* window tearing down */ }
+                            };
+                        }
+                        _dpiQuiesceTimer.Stop(); // restart the debounce on rapid re-crossings
+                        _dpiQuiesceTimer.Start();
+                    }
+                }
+                catch { /* never let a hook throw */ }
+            }
             return IntPtr.Zero;
         }
 
@@ -1695,8 +1724,21 @@ namespace ConditioningControlPanel
                                 || IsDescendantOf(hit, ImgTubeFrame);
                 if (!onAvatar) return;
 
+                // PointToScreen throws InvalidOperationException while the window's
+                // presentation source is torn down/rebuilt — which happens exactly when
+                // a drag crosses onto a monitor with a different DPI (#477). Unhandled
+                // here it takes down the whole app (possibly from the avatar's own UI
+                // thread), so treat a failed conversion as "drag didn't start".
+                try
+                {
+                    _dragStartPoint = PointToScreen(e.GetPosition(this));
+                }
+                catch (InvalidOperationException ex)
+                {
+                    App.Logger?.Debug("Avatar drag start: PointToScreen failed ({Error})", ex.Message);
+                    return;
+                }
                 _isDragging = true;
-                _dragStartPoint = PointToScreen(e.GetPosition(this));
                 _dragStartLeft = Left;
                 _dragStartTop = Top;
                 CaptureMouse();
@@ -1708,9 +1750,18 @@ namespace ConditioningControlPanel
             base.OnMouseMove(e);
             if (_isDragging && !_isAttached)
             {
-                var currentPoint = PointToScreen(e.GetPosition(this));
-                Left = _dragStartLeft + (currentPoint.X - _dragStartPoint.X);
-                Top = _dragStartTop + (currentPoint.Y - _dragStartPoint.Y);
+                // Same DPI-transition guard as the drag start (#477): skip this move
+                // tick if the presentation source is mid-rebuild; the next tick lands.
+                try
+                {
+                    var currentPoint = PointToScreen(e.GetPosition(this));
+                    Left = _dragStartLeft + (currentPoint.X - _dragStartPoint.X);
+                    Top = _dragStartTop + (currentPoint.Y - _dragStartPoint.Y);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    App.Logger?.Debug("Avatar drag move: PointToScreen failed ({Error})", ex.Message);
+                }
             }
         }
 
