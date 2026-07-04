@@ -39,7 +39,7 @@ the unified audio mixer (skill Phase 5), Android.
 | Mandatory-video attention checks / duration / safety timer / segment mode | ❌ bypassed — tied to legacy `VideoOverlayWindow`, not the layer |
 | Legacy `AvaloniaMultiMonitorVideoService` | ⚠️ still the only *working* video path; **keep as fallback until UCE video is proven** |
 | Flash / subliminal / bouncing-text / bubbles / lock-card on UCE | ✅ harness-verified 2026-07-04 (`--verify-layers`, Phase C): flash/subliminal/bubbles/bouncing + pink/spiral/brain-drain all register/activate/render/tear down; dual-surface capture affinity asserted both directions. Lock-card is NOT a layer (still a window) — truthfully out of scope until migrated |
-| Chaos overlays | ❌ not migrated (skill Phase 4) |
+| Chaos overlays | ⚠️ migration STARTED (WS2/WP3): `ChaosCursorGlowLayer` (Z=130) is the template, harness-verified 2026-07-04; queue + recipe in Phase F below |
 
 ## Avalonia v12 idiomatic confirmation (researched, not from memory)
 
@@ -154,13 +154,107 @@ Deferred with evidence:**
 - [ ] Remove their DI registrations + dead `using`s.
 - [ ] **Acceptance:** `CCP.Desktop.slnf` builds 0 errors; every video/overlay feature works UCE-only; memory under heavy load is ≤ the legacy path.
 
+### Phase F — Chaos layer migration queue (WS2 / WP3)
+
+Passive chaos overlays become `IAvaloniaLayer`s on the existing engine, one class per commit
+(goal doc WP3). Interactive chaos surfaces (HUD, boon bar, toy button, unlock card, backdrop,
+bubble host) keep their windows/input model per `overlay-clickthrough` until the hook
+click-swallow gap is resolved.
+
+**Z-band decision (landed with the template):** chaos layers live in a dedicated band
+**100–199, ABOVE PinkTint (70)** — constants in `CompositorLayers.cs`. WPF evidence:
+`Chaos/ChaosWindowZ.cs` re-stacks every chaos window to the TOP of the topmost band on
+show/arm (`RaiseTopmost`/`RaiseAboveVideo` — a single `SetWindowPos(HWND_TOPMOST)`), and
+`ChaosModeService.RaiseGameLayerAboveVideo` lifts the whole game layer when a mandatory
+video lands — so in WPF a freshly-raised chaos overlay sits above the video AND above
+earlier-shown session-effect windows (spiral/pink tint). Within the band: ambient field FX
+100–119, cursor-attached telegraphs 120–139, informational text (banners/pop text/announcer/
+wave timer) 140+.
+
+**Capture-affinity finding (grep-verified 2026-07-04):** NO WPF chaos window calls
+`SetWindowDisplayAffinity` (only keyword-highlight, brain-drain and subliminal touch
+affinity in the WPF head). Chaos visuals are therefore **capture-VISIBLE**: every chaos
+layer stays on the MAIN surface (`ExcludeFromCapture` default false).
+
+#### Migration queue (inventory swept 2026-07-04; LOC = .axaml.cs/.cs line count)
+
+"Live" = reachable from the current Avalonia head. Several ported overlay classes are
+UNWIRED (0 callers) until the deferred **chaos run-engine faithful port** backlog row lands
+— they are ranked after the live ones because an unwired migration cannot be verified.
+
+| # | Class (`CCP.Avalonia/Chaos/`) | Class· | LOC | Live path | Order / notes |
+|---|---|---|---|---|---|
+| 1 | `ChaosCursorGlowOverlay` | PASSIVE | 174 | ✅ rabbit caller | ✅ **MIGRATED → `ChaosCursorGlowLayer` (Z=130), the template** — old window deleted; also fixed a 2x-too-fast breath (legacy port passed WPF's 620ms half-leg as ScalePulse's FULL cycle) |
+| 2 | `ChaosPopText` | PASSIVE | 182 | ✅ | next: one-shot floating pop text; needs Skia text (port `AvaloniaOutlinedText` look) |
+| 3 | `ChaosEffectBannerOverlay` | PASSIVE | 202 | ✅ | banner text, timed slide/fade |
+| 4 | `ChaosAnnouncerOverlay` | PASSIVE | 316 | ✅ (4 callers) | announcer lines; text + timing queue |
+| 5 | `ChaosFlashOverlay` | PASSIVE | 201 | ✅ via `AvaloniaEffectPayloads` | chaos flash washes |
+| 6 | `ChaosDvdOverlay` | PASSIVE | 349 | ✅ porn_dvd toy | bouncing DVD logo(s); its helper window `ChaosDvdHostOverlay` (146, 0 callers) dies with it |
+| 7 | `ChaosGifCascadeOverlay` | PASSIVE | 409 | ✅ via `AvaloniaEffectPayloads` | GIF decode + many sprites; heavier |
+| 8 | `ChaosFieldFxOverlay` | PASSIVE | 440 | ✅ (2 callers) | field particle FX |
+| 9 | `ChaosEStimGlowOverlay` | PASSIVE | 184 | ❌ unwired (estim visual chain has 0 callers) | trivial clone of the template once the run-engine port wires it |
+| 10 | `ChaosEStimOverlay` | PASSIVE | 267 | ❌ unwired | lightning bolts between bubbles |
+| 11 | `ChaosWaveTimerOverlay` | PASSIVE | 243 | ❌ unwired | wave clock |
+| 12 | `ChaosVibeTrailOverlay` | PASSIVE | 300 | ❌ unwired | cursor trail |
+| 13 | `ChaosFxWindow` | PASSIVE | 172 | ❌ unwired | vignette pulses (WPF run engine drives it) |
+| 14 | `ChaosSkiaFxOverlay` | PASSIVE | 632 | ❌ unwired | already Skia — near-mechanical port to a layer, and WPF's DEFAULT glow renderer (`ChaosSkiaFxEnabled ?? true` routes the cursor glow here with bloom+sparks); natural consolidation target when the run-engine port lands |
+| – | `ChaosBubbleHostOverlay` | INTERACTIVE | 172 | ✅ bubble host | stays window (hook swallow gap) |
+| – | `ChaosHudWindow` | INTERACTIVE | 728 | ✅ | HUD — stays window |
+| – | `ChaosBoonBarOverlay` | INTERACTIVE | 226 | ✅ | boon bar — stays window |
+| – | `ChaosToyButtonWindow` | INTERACTIVE | 237 | ✅ | toy button — stays window |
+| – | `ChaosOverlayWindow` | INTERACTIVE | 1103 | ✅ | run stage/boon draft (Pick buttons, click-through toggling) — stays window |
+| – | `ChaosUnlockCardOverlay` | INTERACTIVE | 270 | ❌ unwired | unlock card — stays window |
+| – | `AvaloniaBubbleWindow` | LEGACY-DEAD | 95 | ❌ 0 callers | bubbles are on `BubbleLayer`; deletion candidate (file a row) |
+| – | `ChaosHubWindow` | NON-CHAOS UI | 602+ | ✅ | dollhouse hub — normal window |
+| – | `ChaosIntroWindow` | NON-CHAOS UI | 182 | ✅ | modal intro card — normal dialog |
+
+#### How to migrate a chaos overlay (the template recipe — from the cursor-glow diff)
+
+1. **Extract the WPF contract** from the original under `ConditioningControlPanel/Chaos/`
+   (e.g. `Chaos/ChaosCursorGlowOverlay.cs`): geometry in DIPs, colors/stops, animation
+   min/max/period (WPF `DoubleAnimation` duration is PER LEG; `AutoReverse` doubles the
+   full cycle — the legacy Avalonia ScalePulse ports got this wrong at least once), and
+   check the WPF window for `SetWindowDisplayAffinity` (none found so far ⇒ main surface).
+2. **Add the z constant** to `CCP.Avalonia/Compositor/CompositorLayers.cs` inside the chaos
+   band (100–199, sub-ranges above), citing the WPF show-order evidence.
+3. **Write the layer** in `CCP.Avalonia/Compositor/Layers/` as a `BaseLayer` subclass
+   (`ChaosCursorGlowLayer.cs` is the reference): state fields under one `lock`; public
+   mutators the service calls; `IsActive` content-driven; animation clocked by
+   `Update(deltaTime)` accumulation (never a private `DispatcherTimer`); Skia objects
+   (shaders/paints/images) built ONCE, zero per-frame allocations; geometry in PHYSICAL px,
+   DIP→px via the screen-aware `Render(canvas, bounds, screen, dt)` overload's
+   `screen.Scaling`, with the 3-param abstract override forwarding to it (`BrainDrainLayer`
+   pattern); `ExcludeFromCapture` stays default false.
+4. **Register in the owning service** (`AvaloniaChaosService` in
+   `Services/AvaloniaHeadStubs.cs` for run-driven effects): add
+   `CompositorEngine? compositor = null` to the ctor, construct the layer, and
+   `compositor?.RegisterLayer(layer)` once for the service lifetime (the
+   `AvaloniaOverlayService` pattern — idle layers cost nothing; a null engine = layer
+   silently renders nothing, UCE rule 7 caveat).
+5. **Replace every old-window call site** with service methods that drive the layer
+   (`ArmCursorGlow`/`MoveCursorGlow`/`DisarmCursorGlow` replaced the
+   `ChaosCursorGlowOverlay.*` statics). Drop WPF z-churn calls (`RaiseAboveVideo`/
+   `RaiseTopmost`/`EnsureCreated`/`CloseActive`) — z comes from `CompositorLayers` (rule 9)
+   and registration is app-lifetime (no keep-alive churn).
+6. **Delete the old window files** (`.axaml` + `.axaml.cs`) once callers are gone; verify
+   with a repo-wide grep for the class name (no csproj edits needed — default globs).
+7. **Extend `--verify-layers`** (`tests/CCP.Avalonia.Desktop.Windows.Smoke/LayerVerification.cs`):
+   `ExpectLayer<T>` in the registration sweep + a stage driving the effect THROUGH the
+   owning service (public mutators; concrete-cast like `AvaloniaChaosService` if the seam
+   is head-specific), asserting activate / capture-delta / teardown; add the teardown call
+   to the `finally`. If the effect genuinely needs a live chaos run to trigger, say so in
+   the row honestly instead of faking a trigger path.
+8. **Gates + commit** (one class per commit): slnf 0 errors · WPF sln 0 errors · Core tests
+   (count never decreases) · `--verify-layers` exit 0 · `--verify-video` exit 0 ·
+   `--smoke-test` `Findings: 5` baseline; update this queue table.
+
 ## Risks / open questions
 - **Render-thread bitmap draw:** is drawing a UI-thread-allocated `SKBitmap` onto the leased GPU
   canvas the cause of the no-show? Phase A bisect answers this; Phase D's persistent-`SKImage` is the
   likely correct+faster shape regardless.
 - **Cross-platform click-through:** Windows is solved; Linux (XShape) / macOS / Wayland are
   open and out of scope until desktop-Windows parity holds.
-- **Chaos migration (skill Phase 4)** is a large separate effort; not blocking video/overlay parity.
+- **Chaos migration (skill Phase 4 / Phase F above)** is underway — template landed (cursor glow); the big unknown is the unwired half of the queue, blocked on the chaos run-engine faithful port backlog row.
 
 ## Verification commands
 ```bash

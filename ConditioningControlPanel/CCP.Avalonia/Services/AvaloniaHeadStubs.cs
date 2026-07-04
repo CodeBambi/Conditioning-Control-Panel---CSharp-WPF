@@ -7,6 +7,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Chaos;
+using ConditioningControlPanel.Avalonia.Compositor;
+using ConditioningControlPanel.Avalonia.Compositor.Layers;
 using ConditioningControlPanel.Avalonia.Services.Video;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Chaos;
@@ -47,6 +49,9 @@ public sealed class AvaloniaChaosService : IChaosService
     private readonly global::ConditioningControlPanel.ISkillTreeService? _skillTree;
     private readonly global::ConditioningControlPanel.Core.Services.Progression.IAchievementService? _achievements;
     private readonly ChaosCrashSentinel? _crashSentinel;
+    // WS2/WP3 template migration: the Rabbit Caller cursor-glow telegraph is a compositor
+    // layer, not a window. The service owns the state and drives it (UCE rule 7).
+    private readonly ChaosCursorGlowLayer _cursorGlowLayer;
     private readonly Random _rng = new();
 
     private bool _active;
@@ -99,7 +104,8 @@ public sealed class AvaloniaChaosService : IChaosService
         ConditioningControlPanel.Core.Services.Chaos.IChaosTunnelService? tunnel = null,
         global::ConditioningControlPanel.ISkillTreeService? skillTree = null,
         global::ConditioningControlPanel.Core.Services.Progression.IAchievementService? achievements = null,
-        ChaosCrashSentinel? crashSentinel = null)
+        ChaosCrashSentinel? crashSentinel = null,
+        CompositorEngine? compositor = null)
     {
         _bubbles = bubbles;
         _settings = settings;
@@ -119,6 +125,12 @@ public sealed class AvaloniaChaosService : IChaosService
         _skillTree = skillTree;
         _achievements = achievements;
         _crashSentinel = crashSentinel;
+        // Register once for the service lifetime (AvaloniaOverlayService pattern): IsActive is
+        // content-driven, so the idle layer renders nothing and costs nothing. Without a
+        // DI-provided engine the layer is never registered and the telegraph renders nothing
+        // (UCE rule 7 nullable-engine caveat).
+        _cursorGlowLayer = new ChaosCursorGlowLayer();
+        compositor?.RegisterLayer(_cursorGlowLayer);
         AvaloniaChaosCatalogs.EnsureInitialized();
     }
 
@@ -1208,7 +1220,7 @@ public sealed class AvaloniaChaosService : IChaosService
         _rabbitCallPending = rabbits;
         _rabbitCallMaxed = maxed;
         _rabbitAimPrevDown = true; // swallow the press that armed the toy
-        try { ChaosCursorGlowOverlay.Arm(); } catch { }
+        ArmCursorGlow();
         if (_rabbitAimTimer == null)
         {
             _rabbitAimTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
@@ -1221,7 +1233,7 @@ public sealed class AvaloniaChaosService : IChaosService
     {
         _rabbitCallPending = 0;
         _rabbitAimTimer?.Stop();
-        try { ChaosCursorGlowOverlay.Disarm(); } catch { }
+        DisarmCursorGlow();
     }
 
     private void RabbitAimTick(object? sender, EventArgs e)
@@ -1235,7 +1247,7 @@ public sealed class AvaloniaChaosService : IChaosService
             }
             var cur = _pointerState?.GetCursorPosition();
             if (!cur.HasValue) return;
-            try { ChaosCursorGlowOverlay.MoveToPx(cur.Value.X, cur.Value.Y); } catch { }
+            MoveCursorGlow(cur.Value.X, cur.Value.Y);
 
             bool down = _pointerState?.IsMouseButtonPressed(Core.Platform.MouseButton.Left) ?? false;
             bool pressed = down && !_rabbitAimPrevDown;
@@ -1256,6 +1268,19 @@ public sealed class AvaloniaChaosService : IChaosService
         }
         catch (Exception ex) { _logger?.LogWarning(ex, "RabbitAimTick failed"); }
     }
+
+    /// <summary>Cursor-glow telegraph mutators (WS2: chaos on the compositor). Public because
+    /// the --verify-layers harness drives the layer through its OWNING service (services own
+    /// state; layers only render) — the same calls the Rabbit Caller aim loop makes. The WPF
+    /// Arm-time RaiseAboveVideo has no layer equivalent: z-order comes from CompositorLayers
+    /// only (UCE rule 9; the chaos band sits above the video layers by constant).</summary>
+    public void ArmCursorGlow() => _cursorGlowLayer.Arm();
+
+    /// <summary>Hide the cursor-glow telegraph.</summary>
+    public void DisarmCursorGlow() => _cursorGlowLayer.Disarm();
+
+    /// <summary>Center the telegraph on raw PHYSICAL virtual-desktop px (IPointerState space).</summary>
+    public void MoveCursorGlow(double pxX, double pxY) => _cursorGlowLayer.MoveTo(pxX, pxY);
 
     private void SpawnDarter(double? atPxX = null, double? atPxY = null)
     {

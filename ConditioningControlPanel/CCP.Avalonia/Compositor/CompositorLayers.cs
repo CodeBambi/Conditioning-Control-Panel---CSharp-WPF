@@ -34,6 +34,23 @@ public static class CompositorLayers
     /// <summary>Spiral animation overlay.</summary>
     public const int Spiral = 60;
 
-    /// <summary>Full-screen pink color tint (top-most).</summary>
+    /// <summary>Full-screen pink color tint (top-most session effect).</summary>
     public const int PinkTint = 70;
+
+    // ---------------- Chaos band (100-199) ----------------
+    // WPF contract evidence (Chaos/ChaosWindowZ.cs + Services/Chaos/ChaosModeService.cs):
+    // chaos overlays live in the topmost band and are re-stacked to its TOP on every
+    // show/arm (ChaosWindowZ.RaiseTopmost / RaiseAboveVideo, and
+    // ChaosModeService.RaiseGameLayerAboveVideo lifts the whole game layer when a
+    // mandatory video lands). A freshly-raised chaos overlay therefore sits above the
+    // video AND above earlier-shown session-effect windows (spiral/pink tint) in WPF.
+    // The compositor mirrors that with a dedicated band ABOVE PinkTint (70). Within the
+    // band: ambient field FX lowest (100-119), cursor-attached telegraphs mid (120-139),
+    // informational text (banners / pop text / announcer / wave timer) highest (140+).
+    // Capture affinity: chaos visuals are capture-VISIBLE — no WPF chaos window calls
+    // SetWindowDisplayAffinity (grep-verified 2026-07-04) — so chaos layers stay on the
+    // MAIN surface (ExcludeFromCapture = false).
+
+    /// <summary>Rabbit Caller cursor-glow telegraph (first migrated chaos layer).</summary>
+    public const int ChaosCursorGlow = 130;
 }

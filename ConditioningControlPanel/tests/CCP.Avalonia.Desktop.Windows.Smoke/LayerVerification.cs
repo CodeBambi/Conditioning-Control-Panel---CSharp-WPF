@@ -75,6 +75,7 @@ internal static class LayerVerification
         IBubbleService? bubbles = null;
         IBouncingTextService? bouncing = null;
         IOverlayService? overlay = null;
+        ConditioningControlPanel.Avalonia.Services.AvaloniaChaosService? chaos = null;
         try
         {
             await Task.Delay(2000); // let splash/init settle
@@ -106,13 +107,18 @@ internal static class LayerVerification
             bouncing = services.GetService<IBouncingTextService>();
             bubbles = services.GetService<IBubbleService>();
             overlay = services.GetService<IOverlayService>();
+            // Concrete cast: the cursor-glow mutators are public on the concrete chaos service
+            // (not on Core's IChaosService — they are an Avalonia-compositor concern), same
+            // pattern as the AvaloniaSubliminalService cast in Stage 2.
+            chaos = services.GetService<IChaosService>() as ConditioningControlPanel.Avalonia.Services.AvaloniaChaosService;
             var settings = services.GetService<ISettingsService>()?.Current;
             var screenProvider = services.GetService<IScreenProvider>();
-            if (flash == null || subliminal == null || bouncing == null || bubbles == null || overlay == null || screenProvider == null)
+            if (flash == null || subliminal == null || bouncing == null || bubbles == null || overlay == null || screenProvider == null || chaos == null)
             {
                 Console.WriteLine("[LAYERS] A required service is missing from DI " +
                     $"(flash={flash != null}, subliminal={subliminal != null}, bouncing={bouncing != null}, " +
-                    $"bubbles={bubbles != null}, overlay={overlay != null}, screens={screenProvider != null}).");
+                    $"bubbles={bubbles != null}, overlay={overlay != null}, screens={screenProvider != null}, " +
+                    $"chaos(AvaloniaChaosService)={chaos != null}).");
                 return;
             }
 
@@ -164,6 +170,7 @@ internal static class LayerVerification
             var brainDrainLayer = ExpectLayer<BrainDrainLayer>(engine, CompositorLayers.BrainDrain, "BrainDrainLayer", rows);
             var spiralLayer = ExpectLayer<SpiralLayer>(engine, CompositorLayers.Spiral, "SpiralLayer", rows);
             var pinkTintLayer = ExpectLayer<PinkTintLayer>(engine, CompositorLayers.PinkTint, "PinkTintLayer", rows);
+            var cursorGlowLayer = ExpectLayer<ChaosCursorGlowLayer>(engine, CompositorLayers.ChaosCursorGlow, "ChaosCursorGlowLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -181,12 +188,12 @@ internal static class LayerVerification
             rows.Add(lockCardRow);
 
             if (flashLayer == null || subliminalLayer == null || bubbleLayer == null || bouncingLayer == null
-                || brainDrainLayer == null || spiralLayer == null || pinkTintLayer == null)
+                || brainDrainLayer == null || spiralLayer == null || pinkTintLayer == null || cursorGlowLayer == null)
             {
                 Console.WriteLine("[LAYERS] Registration sweep failed; skipping activation stages.");
                 return;
             }
-            Console.WriteLine("[LAYERS] All 7 migrated layers registered at their exact z-constants.");
+            Console.WriteLine("[LAYERS] All 8 migrated layers registered at their exact z-constants.");
 
             // ---------------- Stage 1: FlashLayer (Z=30) via IFlashService ----------------
             {
@@ -290,6 +297,39 @@ internal static class LayerVerification
                 }
                 bubbles.Stop(); // destroys all bubbles and clears the layer
                 var deactivated = await PollAsync(() => !bubbleLayer.IsActive, 3000);
+                row.Teardown = deactivated ? "clean" : "TIMEOUT";
+                FinishRow(row, activated, deactivated, envStable);
+                await SettleIdle(engine);
+            }
+
+            // ---------------- Stage 4b: ChaosCursorGlowLayer (Z=130) via AvaloniaChaosService ----------------
+            // First chaos overlay on the compositor (WS2/WP3 template migration). Driven through
+            // the owning service's public glow mutators — the exact calls the Rabbit Caller aim
+            // loop makes — so no chaos run is needed. Sequenced BEFORE brain drain (glow teardown
+            // is clean, keeping the excluded-surface no-delta probe unpoisoned) and before
+            // pink/spiral, whose settings-held release can leave animating content on screen.
+            {
+                Console.WriteLine("[LAYERS] Stage 4b: ChaosCursorGlowLayer via AvaloniaChaosService.ArmCursorGlow...");
+                var row = rows.First(r => r.Layer == "ChaosCursorGlowLayer");
+                var before = Capture(screens, primary);
+                chaos.ArmCursorGlow();
+                // Park the halo at the primary screen's center (PHYSICAL px — the layer's native
+                // coordinate space) so the delta lands inside the center-crop probe region.
+                chaos.MoveCursorGlow(
+                    primary.Bounds.X + primary.Bounds.Width / 2.0,
+                    primary.Bounds.Y + primary.Bounds.Height / 2.0);
+                var activated = await PollAsync(() => cursorGlowLayer.IsActive, 3000);
+                row.Activated = activated ? "yes" : "TIMEOUT";
+                if (activated)
+                {
+                    await Task.Delay(600); // a few breath frames + present
+                    var during = Capture(screens, primary);
+                    // The 76-DIP halo sits centered on the primary screen — well inside the
+                    // central-30% crop, and the crop is less ambient-noise-prone than Full.
+                    row.Delta = during.Center != before.Center ? "DIFFER (center-crop)" : "SAME (FAIL)";
+                }
+                chaos.DisarmCursorGlow();
+                var deactivated = await PollAsync(() => !cursorGlowLayer.IsActive, 3000);
                 row.Teardown = deactivated ? "clean" : "TIMEOUT";
                 FinishRow(row, activated, deactivated, envStable);
                 await SettleIdle(engine);
@@ -485,6 +525,7 @@ internal static class LayerVerification
             try { flash?.Stop(); } catch { }
             try { bouncing?.Stop(); } catch { }
             try { bubbles?.Stop(); } catch { }
+            try { chaos?.DisarmCursorGlow(); } catch { }
             try
             {
                 overlay?.HideOverlaySustained("pink");
