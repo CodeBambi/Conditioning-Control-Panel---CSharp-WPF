@@ -92,9 +92,12 @@ Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
   new Debug `--verify-video <path>` harness (layer registers → vmem frames decode → publish →
   engine composites, live 30fps, exit 0). Legacy `AvaloniaMultiMonitorVideoService` remains the
   runtime default + contract holder until Phase E; UCE video stays the `CCP_UCE_VIDEO=1` opt-in.
-  **Phase B is the WP2 frontier**: audio routing (`UpdateVolume`→layer), attention-check
-  rehoming, window-based `IsPlaying` decoupling (currently false on the UCE path — feeds the
-  interaction queue + #462 DIMs), dual-monitor/strict/segment modes, event timing. → WP2.
+  **Phase B substantially closed 2026-07-04** (`bbdb3077` B1 audio+IsPlaying, `99a50721` B2
+  attention/safety/segment/events — adversarially reviewed, 4 findings fixed pre-bank, failed-open
+  wedge closed). Remaining WP2: Phase B leftovers (dual-monitor side-by-side verification,
+  layer-path `PositionChanged` watch-credit; see plan's B2-residuals block), Phase C layer
+  verification, Phase D perf (VideoLayer per-frame alloc), Phase E flip+delete, then the
+  authorized libmpv spike. → WP2.
 - Chaos overlays (~23 window classes) are not on the compositor. → WP3.
 - Avalonia mouse hook cannot swallow clicks (WPF can): bubble/flash pops leak the click
   to the app underneath. Decide and fix in WP3, or explicitly accept and document.
