@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -1452,6 +1454,275 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
         if (parsed <= current) return false;
         value = parsed;
         return true;
+    }
+
+    #endregion
+
+    #region Settings Backup/Restore (slice 5)
+
+    /// <summary>Timestamp (UTC ticks) of the last cloud settings backup — drives the 5-minute debounce.</summary>
+    private long _lastSettingsBackupTicks;
+
+    /// <summary>Minimum interval between (non-forced) settings backups (WPF <c>SettingsBackupDebounceTicks</c>, :2379).</summary>
+    private static readonly long SettingsBackupDebounceTicks = TimeSpan.FromMinutes(5).Ticks;
+
+    /// <summary>
+    /// P0 PRIVACY GUARDRAIL — the exact set of settings properties that MUST be stripped before a
+    /// backup leaves the device. Ported VERBATIM from WPF <c>ExcludedBackupProperties</c>
+    /// (Services/Settings/ProfileSyncService.cs:2384-2404). These are server-authoritative,
+    /// identity, or secret fields; the strip runs BEFORE serialization/gzip/upload. Omitting even
+    /// one entry (especially <c>AuthToken</c>/<c>OpenRouterApiKey</c>) would leak it to the server.
+    ///
+    /// SECURITY (defense-in-depth): <c>AuthToken</c> and <c>OpenRouterApiKey</c> are additionally
+    /// <c>[JsonIgnore]</c> in Core <c>AppSettings</c> (DPAPI/secret-store backed), so they never
+    /// serialize into the JSON at all; this list is still ported verbatim so the guarantee does not
+    /// depend on that and stays byte-for-byte with WPF.
+    /// </summary>
+    private static readonly HashSet<string> ExcludedBackupProperties = new(StringComparer.OrdinalIgnoreCase)
+    {
+        nameof(AppSettings.UnifiedId),
+        nameof(AppSettings.OpenRouterApiKey),
+        nameof(AppSettings.PlayerLevel),
+        nameof(AppSettings.PlayerXP),
+        nameof(AppSettings.SkillPoints),
+        nameof(AppSettings.UnlockedSkills),
+        nameof(AppSettings.HighestLevelEver),
+        nameof(AppSettings.IsSeason0Og),
+        nameof(AppSettings.CurrentSeason),
+        nameof(AppSettings.PendingSkillsResetAck),
+        nameof(AppSettings.UserDisplayName),
+        nameof(AppSettings.PatreonTier),
+        nameof(AppSettings.PatreonPremiumValidUntil),
+        nameof(AppSettings.LastPatreonVerification),
+        nameof(AppSettings.AuthToken),
+        nameof(AppSettings.CustomAssetsPath),
+        nameof(AppSettings.DiscordWebhookUrl),
+        nameof(AppSettings.LastSeenUtc), // Local-only greeting timestamp — must never leave the device.
+    };
+
+    /// <summary>
+    /// Backs up the local settings to the cloud (<c>POST /v2/user/backup-settings</c>). The payload
+    /// <c>settings_data</c> = base64(gzip(cleaned-settings-JSON)) where the CLEANED JSON has every
+    /// <see cref="ExcludedBackupProperties"/> entry removed BEFORE compression/upload. Debounced to
+    /// 5 minutes via an <see cref="Interlocked"/> timestamp unless <paramref name="force"/> is set.
+    /// Skips when offline, missing a unified id, or missing an auth token. Ported from WPF
+    /// <c>BackupSettingsAsync</c> (ProfileSyncService.cs:2409).
+    ///
+    /// SECURITY: never logs the auth token, the <c>settings_data</c> payload, or any excluded value.
+    /// </summary>
+    public async Task<bool> BackupSettingsAsync(bool force = false)
+    {
+        if (_settings.Current?.OfflineMode == true) return false;
+
+        var unifiedId = _settings.Current?.UnifiedId;
+        if (string.IsNullOrEmpty(unifiedId)) return false;
+
+        // Debounce: skip if backed up recently (unless forced). Interlocked for thread safety —
+        // multiple async paths can call this concurrently (WPF :2417-2439).
+        var nowTicks = DateTime.UtcNow.Ticks;
+        if (force)
+        {
+            // Forced backup (user-initiated): skip debounce, just stamp the time.
+            Interlocked.Exchange(ref _lastSettingsBackupTicks, nowTicks);
+        }
+        else
+        {
+            var lastTicks = Interlocked.Read(ref _lastSettingsBackupTicks);
+            if ((nowTicks - lastTicks) < SettingsBackupDebounceTicks)
+            {
+                _logger.LogDebug("Settings backup skipped (debounce, last backup {Ago}s ago)",
+                    (nowTicks - lastTicks) / TimeSpan.TicksPerSecond);
+                return false;
+            }
+
+            // Atomically claim this backup slot — if another thread won the race, bail out.
+            // Set the timestamp BEFORE the HTTP call to prevent concurrent/retry storms.
+            if (Interlocked.CompareExchange(ref _lastSettingsBackupTicks, nowTicks, lastTicks) != lastTicks)
+            {
+                _logger.LogDebug("Settings backup skipped (another thread claimed the slot)");
+                return false;
+            }
+        }
+
+        try
+        {
+            var settings = _settings.Current;
+            if (settings == null) return false;
+
+            // Bail early if no auth token — the request would just 401.
+            var authToken = settings.AuthToken;
+            if (string.IsNullOrEmpty(authToken))
+            {
+                _logger.LogDebug("Settings backup skipped (no auth token)");
+                return false;
+            }
+
+            // Serialize settings, then STRIP the excluded properties BEFORE compression/upload.
+            var fullJson = JsonConvert.SerializeObject(settings, Formatting.None);
+            var obj = Newtonsoft.Json.Linq.JObject.Parse(fullJson);
+
+            foreach (var prop in ExcludedBackupProperties)
+            {
+                // Remove by JSON property name (case-insensitive vs the C# property name).
+                var key = obj.Properties()
+                    .FirstOrDefault(p => string.Equals(p.Name, prop, StringComparison.OrdinalIgnoreCase))?.Name;
+                if (key != null) obj.Remove(key);
+            }
+
+            var strippedJson = obj.ToString(Formatting.None);
+
+            // Gzip compress the CLEANED JSON.
+            byte[] compressedBytes;
+            using (var output = new MemoryStream())
+            {
+                using (var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true))
+                {
+                    var jsonBytes = Encoding.UTF8.GetBytes(strippedJson);
+                    await gzip.WriteAsync(jsonBytes, 0, jsonBytes.Length).ConfigureAwait(false);
+                }
+                compressedBytes = output.ToArray();
+            }
+
+            var base64Data = Convert.ToBase64String(compressedBytes);
+
+            var requestData = new
+            {
+                unified_id = unifiedId,
+                settings_data = base64Data,
+                // WPF sends UpdateService.AppVersion; Core has no UpdateService, so reuse the
+                // resolved client version (same value as the X-Client-Version header).
+                app_version = _version
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/backup-settings");
+            AddAuthHeader(request);
+            request.Content = new StringContent(
+                JsonConvert.SerializeObject(requestData), Encoding.UTF8, "application/json");
+
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                await HandleUnauthorizedAsync(response).ConfigureAwait(false);
+                var error = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                _logger.LogWarning("Settings backup failed: {Status} - {Error}", response.StatusCode, error);
+                return false;
+            }
+
+            _logger.LogInformation("Settings backed up to cloud ({Size} bytes compressed)", compressedBytes.Length);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Settings backup failed");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Probes the cloud for settings-backup metadata (<c>POST /v2/user/settings-backup</c>) and
+    /// returns a <see cref="SettingsBackupInfo"/>, or null when none exists / on failure. Ported
+    /// from WPF <c>GetSettingsBackupInfoAsync</c> (ProfileSyncService.cs:2524). SECURITY: never logs
+    /// the token or the backup payload.
+    /// </summary>
+    public async Task<SettingsBackupInfo?> GetSettingsBackupInfoAsync()
+    {
+        var unifiedId = _settings.Current?.UnifiedId;
+        if (string.IsNullOrEmpty(unifiedId)) return null;
+
+        try
+        {
+            var requestData = new { unified_id = unifiedId };
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/settings-backup");
+            AddAuthHeader(request);
+            request.Content = new StringContent(
+                JsonConvert.SerializeObject(requestData), Encoding.UTF8, "application/json");
+
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                await HandleUnauthorizedAsync(response).ConfigureAwait(false);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var result = JsonConvert.DeserializeObject<SettingsBackupResponse>(json);
+
+            if (result?.Backup == null) return null;
+
+            return new SettingsBackupInfo
+            {
+                AppVersion = result.Backup.AppVersion,
+                BackedUpAt = DateTime.TryParse(result.Backup.BackedUpAt, out var dt) ? dt : null,
+                SizeBytes = result.Backup.SizeBytes
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug("Settings backup info check failed: {Error}", ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Downloads and decompresses the cloud settings backup (<c>POST /v2/user/settings-backup</c>):
+    /// base64-decode -> gunzip -> deserialize <see cref="AppSettings"/>. Returns the deserialized
+    /// settings (excluded properties at their defaults), or null on failure. Does NOT apply the
+    /// result to the live settings — the caller (slice 7) decides. Ported from WPF
+    /// <c>RestoreSettingsFromCloudAsync</c> (ProfileSyncService.cs:2568). SECURITY: never logs the
+    /// token or the backup payload.
+    /// </summary>
+    public async Task<AppSettings?> RestoreSettingsFromCloudAsync()
+    {
+        var unifiedId = _settings.Current?.UnifiedId;
+        if (string.IsNullOrEmpty(unifiedId)) return null;
+
+        try
+        {
+            var requestData = new { unified_id = unifiedId };
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/settings-backup");
+            AddAuthHeader(request);
+            request.Content = new StringContent(
+                JsonConvert.SerializeObject(requestData), Encoding.UTF8, "application/json");
+
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                await HandleUnauthorizedAsync(response).ConfigureAwait(false);
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var result = JsonConvert.DeserializeObject<SettingsBackupResponse>(json);
+
+            if (result?.Backup?.SettingsData == null) return null;
+
+            // Decompress: base64 -> gzip -> JSON.
+            var compressedBytes = Convert.FromBase64String(result.Backup.SettingsData);
+            string settingsJson;
+            using (var input = new MemoryStream(compressedBytes))
+            using (var gzip = new GZipStream(input, CompressionMode.Decompress))
+            using (var reader = new StreamReader(gzip, Encoding.UTF8))
+            {
+                settingsJson = await reader.ReadToEndAsync().ConfigureAwait(false);
+            }
+
+            var serializerSettings = new JsonSerializerSettings
+            {
+                ObjectCreationHandling = ObjectCreationHandling.Replace
+            };
+            var restored = JsonConvert.DeserializeObject<AppSettings>(settingsJson, serializerSettings);
+
+            _logger.LogInformation("Settings restored from cloud (v{Version}, {Size} bytes)",
+                result.Backup.AppVersion, result.Backup.SizeBytes);
+
+            return restored;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Settings restore from cloud failed");
+            return null;
+        }
     }
 
     #endregion

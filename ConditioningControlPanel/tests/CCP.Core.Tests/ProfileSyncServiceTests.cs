@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -627,5 +628,204 @@ public class ProfileSyncServiceTests
         Assert.Equal(1, handler.CallCount);            // it DID post; the server rate-limited it
         Assert.True(svc.LastSyncTime.HasValue);        // 429 stamps LastSyncTime to defer the next attempt
         Assert.Equal(0, svc.ConsecutiveSyncFailures);  // a 429 is not counted as a sync failure
+    }
+
+    // ---- Slice 5: cloud settings backup/restore ------------------------------------------
+
+    /// <summary>gzip-compress + base64-encode a JSON string the way the server stores a backup.</summary>
+    private static string GzipToBase64(string json)
+    {
+        using var output = new MemoryStream();
+        using (var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true))
+        {
+            var bytes = Encoding.UTF8.GetBytes(json);
+            gzip.Write(bytes, 0, bytes.Length);
+        }
+        return Convert.ToBase64String(output.ToArray());
+    }
+
+    /// <summary>base64-decode + gunzip a captured <c>settings_data</c> payload back to JSON.</summary>
+    private static string GunzipBase64(string base64)
+    {
+        var bytes = Convert.FromBase64String(base64);
+        using var input = new MemoryStream(bytes);
+        using var gzip = new GZipStream(input, CompressionMode.Decompress);
+        using var reader = new StreamReader(gzip, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+
+    /// <summary>The 18 property NAMES that must never appear in an uploaded backup (WPF :2384-2404).</summary>
+    private static readonly string[] ExcludedNames =
+    {
+        "UnifiedId", "OpenRouterApiKey", "PlayerLevel", "PlayerXP", "SkillPoints", "UnlockedSkills",
+        "HighestLevelEver", "IsSeason0Og", "CurrentSeason", "PendingSkillsResetAck", "UserDisplayName",
+        "PatreonTier", "PatreonPremiumValidUntil", "LastPatreonVerification", "AuthToken",
+        "CustomAssetsPath", "DiscordWebhookUrl", "LastSeenUtc"
+    };
+
+    /// <summary>
+    /// P0 PRIVACY TEST — the mechanical guarantee that the auth token / API key / identity fields
+    /// never leave the device. Populates the secret + identity fields, forces a backup, captures the
+    /// ACTUAL uploaded <c>settings_data</c>, base64-decodes + gunzips it, and asserts NONE of the
+    /// excluded property names/values survive in the decompressed JSON.
+    /// </summary>
+    [Fact]
+    public async Task BackupSettingsAsync_StripsEveryExcludedProperty_FromTheActualUploadedBody()
+    {
+        var handler = new RecordingHandler();
+        var settings = new FakeSettingsService();
+        settings.Current.AuthToken = "SECRET-AUTH-TOKEN";                 // [JsonIgnore] + stripped
+        settings.Current.OpenRouterApiKey = "SECRET-OPENROUTER-KEY";     // [JsonIgnore] + stripped
+        settings.Current.UnifiedId = "unified-secret-1";                 // serializes -> must be stripped
+        settings.Current.PlayerLevel = 77;
+        settings.Current.SkillPoints = 55;
+        settings.Current.UserDisplayName = "SecretDisplayName";
+        settings.Current.DiscordWebhookUrl = "https://discord.example/secret-hook";
+        settings.Current.CustomAssetsPath = @"C:\secret\assets";
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        var result = await svc.BackupSettingsAsync(force: true);
+
+        Assert.True(result);
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal(HttpMethod.Post, handler.LastRequest!.Method);
+        Assert.Equal("https://codebambi-proxy.vercel.app/v2/user/backup-settings",
+            handler.LastRequest.RequestUri!.ToString());
+
+        // Decode the ACTUAL uploaded body: settings_data = base64(gzip(cleaned-settings-JSON)).
+        var outer = JObject.Parse(handler.LastBody!);
+        var settingsData = (string?)outer["settings_data"];
+        Assert.False(string.IsNullOrEmpty(settingsData));
+        var decompressed = GunzipBase64(settingsData!);
+        var uploaded = JObject.Parse(decompressed);
+
+        // NONE of the 18 excluded property NAMES survive in the decompressed backup JSON.
+        foreach (var excluded in ExcludedNames)
+        {
+            Assert.Null(uploaded.Properties()
+                .FirstOrDefault(p => string.Equals(p.Name, excluded, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        // Explicit P0 assertions: the two SECRETS are absent by name AND their raw values never
+        // appear anywhere in the decompressed payload (byte-for-byte scan).
+        Assert.Null(uploaded["AuthToken"]);
+        Assert.Null(uploaded["OpenRouterApiKey"]);
+        Assert.DoesNotContain("SECRET-AUTH-TOKEN", decompressed);
+        Assert.DoesNotContain("SECRET-OPENROUTER-KEY", decompressed);
+
+        // Identity/server-authoritative values are gone too.
+        Assert.DoesNotContain("SecretDisplayName", decompressed);
+        Assert.DoesNotContain("unified-secret-1", decompressed);
+        Assert.DoesNotContain("secret-hook", decompressed);
+        Assert.DoesNotContain(@"C:\\secret\\assets", decompressed);
+    }
+
+    /// <summary>
+    /// gzip round-trip: <see cref="ProfileSyncService.RestoreSettingsFromCloudAsync"/> over a canned
+    /// base64(gzip(json)) backup response decodes -> gunzips -> deserializes back to the expected
+    /// <see cref="AppSettings"/> fields.
+    /// </summary>
+    [Fact]
+    public async Task RestoreSettingsFromCloudAsync_DecodesGzipBackup_IntoExpectedAppSettings()
+    {
+        // A canned backup snapshot with distinctive restorable fields.
+        var snapshot = new AppSettings
+        {
+            PlayerLevel = 13,
+            DailyQuestStreak = 9,
+            TotalConditioningMinutes = 123.5
+        };
+        var backupJson = JsonConvert.SerializeObject(snapshot, Formatting.None);
+        var responseBody = JsonConvert.SerializeObject(new
+        {
+            success = true,
+            backup = new
+            {
+                settings_data = GzipToBase64(backupJson),
+                app_version = "6.2.2",
+                backed_up_at = "2026-07-04T00:00:00Z",
+                size_bytes = 123
+            }
+        });
+
+        var handler = new RecordingHandler { ResponseBody = responseBody };
+        var settings = new FakeSettingsService();
+        settings.Current.AuthToken = "auth-token-xyz";
+        settings.Current.UnifiedId = "unified-1";
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        var restored = await svc.RestoreSettingsFromCloudAsync();
+
+        Assert.NotNull(restored);
+        Assert.Equal(13, restored!.PlayerLevel);
+        Assert.Equal(9, restored.DailyQuestStreak);
+        Assert.Equal(123.5, restored.TotalConditioningMinutes);
+        Assert.Equal("https://codebambi-proxy.vercel.app/v2/user/settings-backup",
+            handler.LastRequest!.RequestUri!.ToString());
+    }
+
+    /// <summary>
+    /// 5-minute debounce: a second unforced backup inside the window does NOT POST again;
+    /// <c>force:true</c> bypasses the debounce.
+    /// </summary>
+    [Fact]
+    public async Task BackupSettingsAsync_DebouncesWithinFiveMinutes_ButForceBypasses()
+    {
+        var handler = new RecordingHandler();
+        var settings = new FakeSettingsService();
+        settings.Current.AuthToken = "auth-token-xyz";
+        settings.Current.UnifiedId = "unified-1";
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        // First unforced backup posts and stamps the debounce timestamp.
+        Assert.True(await svc.BackupSettingsAsync());
+        Assert.Equal(1, handler.CallCount);
+
+        // Second unforced call inside the 5-min window: debounced, no POST.
+        Assert.False(await svc.BackupSettingsAsync());
+        Assert.Equal(1, handler.CallCount);
+
+        // force:true bypasses the debounce and posts again.
+        Assert.True(await svc.BackupSettingsAsync(force: true));
+        Assert.Equal(2, handler.CallCount);
+    }
+
+    /// <summary>Offline / missing-token / missing-unified-id all skip the backup POST entirely.</summary>
+    [Fact]
+    public async Task BackupSettingsAsync_WhenOfflineOrNoTokenOrNoUnifiedId_DoesNotPost()
+    {
+        // Offline mode: skip (checked before the debounce/force branch).
+        var offlineHandler = new RecordingHandler();
+        var offline = new FakeSettingsService();
+        offline.Current.AuthToken = "auth-token-xyz";
+        offline.Current.UnifiedId = "unified-1";
+        offline.Current.OfflineMode = true;
+        using (var svc = new ProfileSyncService(offline, new DebugLogger<ProfileSyncService>(), offlineHandler))
+        {
+            Assert.False(await svc.BackupSettingsAsync(force: true));
+            Assert.Equal(0, offlineHandler.CallCount);
+        }
+
+        // No auth token: skip (the request would just 401). Set explicitly (secure store is static).
+        var noTokenHandler = new RecordingHandler();
+        var noToken = new FakeSettingsService();
+        noToken.Current.AuthToken = null;
+        noToken.Current.UnifiedId = "unified-1";
+        using (var svc = new ProfileSyncService(noToken, new DebugLogger<ProfileSyncService>(), noTokenHandler))
+        {
+            Assert.False(await svc.BackupSettingsAsync(force: true));
+            Assert.Equal(0, noTokenHandler.CallCount);
+        }
+
+        // No unified id: skip (checked before the token guard).
+        var noIdHandler = new RecordingHandler();
+        var noId = new FakeSettingsService();
+        noId.Current.AuthToken = "auth-token-xyz";
+        noId.Current.UnifiedId = null;
+        using (var svc = new ProfileSyncService(noId, new DebugLogger<ProfileSyncService>(), noIdHandler))
+        {
+            Assert.False(await svc.BackupSettingsAsync(force: true));
+            Assert.Equal(0, noIdHandler.CallCount);
+        }
     }
 }
