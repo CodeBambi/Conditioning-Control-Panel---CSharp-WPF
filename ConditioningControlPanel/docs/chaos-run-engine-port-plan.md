@@ -18,7 +18,10 @@ the exact line ranges each slice cites.
 - **S2 ✅** config/state parity, `ApplyTo`, sin ramp, computed mult stack + 38 tests (`b0aedbbd`)
 - **S3 ✅** exact scoring + focus economy + detonation branches + 35 tests (`fc7589b8`)
 - **S4 ✅** faithful spawn director + behavioral callbacks (THE HEART) + 51 tests (`071a8d7e`)
-- Core tests 205 → **392**; all gates green every slice; smoke baseline held (Findings: 5).
+- Core tests 205 → **406**; all gates green every slice; smoke baseline held (Findings: 5).
+- 2026-07-04: WPF 6.2.8 merged from main (`aba10210`) — verified ZERO impact on ported chaos
+  internals; port heads bumped to 6.2.8; #480/#483 parity fixes landed (see task board
+  "Sync-from-main 6.2.8" section). S4b WPF citations into BubbleService.cs drifted ~2 lines.
 - The hard/architecture/JUDGMENT slices (S1-S4) are DONE, and **S4b-1/2/3 are DONE too**
   (commit after `42580d84`): bound enrage (fuse-halve w/ 600ms floor + ×1.4 Vx/Vy, survivor
   LIVES — WPF BubbleService.cs:2321-2335), treat-rot (`IsRottingTreat` mirrors WPF `_isTreat`
@@ -59,7 +62,7 @@ the exact line ranges each slice cites.
   ```
   dotnet build ConditioningControlPanel/CCP.Desktop.slnf -clp:ErrorsOnly   # 0 errors
   dotnet build ConditioningControlPanel.sln -clp:ErrorsOnly                # 0 errors
-  dotnet test ConditioningControlPanel/tests/CCP.Core.Tests/CCP.Core.Tests.csproj   # ALL pass, count >= 392
+  dotnet test ConditioningControlPanel/tests/CCP.Core.Tests/CCP.Core.Tests.csproj   # ALL pass, count >= 406
   dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -c Debug -- --smoke-test   # 44 tabs / Findings: 5 (first-chance 21 = known benign OAuth-cancel noise)
   ```
 - **State-mutating slices (S5 OnBoonChosen, S7 EndRun/AwardRunRewards)** get an independent
