@@ -584,6 +584,81 @@ namespace ConditioningControlPanel.Services
                 request.Headers.Add("X-Auth-Token", token);
         }
 
+        /// <summary>Result of /v2/auth/device/authorize (mobile QR pairing).</summary>
+        public class MobileLinkResponse
+        {
+            public bool Success { get; set; }
+            public string? LinkCode { get; set; }
+            public DateTimeOffset ExpiresAt { get; set; }
+            public string? QrPayload { get; set; }
+            public string? Error { get; set; }
+        }
+
+        // Typed POCO for JsonConvert — same rationale as V2DeviceCodeService.InitiateRaw
+        // (clean ISO 8601 'Z' → DateTimeOffset handling).
+        private class MobileLinkRaw
+        {
+            [JsonProperty("success")] public bool Success { get; set; }
+            [JsonProperty("link_code")] public string? LinkCode { get; set; }
+            [JsonProperty("expires_at")] public DateTimeOffset ExpiresAt { get; set; }
+            [JsonProperty("qr_payload")] public string? QrPayload { get; set; }
+        }
+
+        /// <summary>
+        /// Request a short-lived one-time link code for pairing the mobile companion app.
+        /// The phone scans the code (rendered as a QR by LinkPhoneDialog) and redeems it
+        /// via /v2/auth/device/claim for its own device token — the desktop session is
+        /// never invalidated. Requires a logged-in account (UnifiedId + AuthToken).
+        /// </summary>
+        public async Task<MobileLinkResponse> AuthorizeMobileLinkAsync()
+        {
+            try
+            {
+                var unifiedId = App.Settings?.Current?.UnifiedId;
+                if (string.IsNullOrEmpty(unifiedId))
+                    return new MobileLinkResponse { Success = false, Error = "not_logged_in" };
+
+                var payload = new JObject
+                {
+                    ["unified_id"] = unifiedId,
+                    ["client"] = "ccp-desktop"
+                };
+                var request = new HttpRequestMessage(HttpMethod.Post, $"{SERVER_URL}/v2/auth/device/authorize")
+                {
+                    Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json")
+                };
+                AddAuthHeader(request);
+                var response = await _http.SendAsync(request);
+                var json = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error = ParseErrorMessage(json, response.StatusCode);
+                    Log.Warning("[V2Auth] Mobile link authorize failed: {Status} {Error}", (int)response.StatusCode, error);
+                    return new MobileLinkResponse { Success = false, Error = error };
+                }
+
+                var raw = JsonConvert.DeserializeObject<MobileLinkRaw>(json);
+                if (raw == null || !raw.Success || string.IsNullOrEmpty(raw.LinkCode))
+                    return new MobileLinkResponse { Success = false, Error = "invalid_response" };
+
+                // Never log the code itself — it is a live credential for ~3 minutes.
+                Log.Information("[V2Auth] Mobile link code issued (expires {ExpiresAt})", raw.ExpiresAt);
+                return new MobileLinkResponse
+                {
+                    Success = true,
+                    LinkCode = raw.LinkCode,
+                    ExpiresAt = raw.ExpiresAt,
+                    QrPayload = raw.QrPayload
+                };
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "[V2Auth] Mobile link authorize exception");
+                return new MobileLinkResponse { Success = false, Error = ex.Message };
+            }
+        }
+
         /// <summary>
         /// Apply v2 user data to local settings, optionally storing an auth token.
         /// </summary>

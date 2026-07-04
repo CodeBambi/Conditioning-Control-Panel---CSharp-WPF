@@ -1334,10 +1334,17 @@
                                     <TextBlock x:Name="TxtLoggedInName" x:FieldModifier="internal" Text="{loc:Str label_username}"
                                                Foreground="White" FontWeight="Bold" FontSize="12"/>
                                 </StackPanel>
-                                <Button x:Name="BtnQuickLogout" Grid.Column="1" Content="{loc:Str btn_logout}"
-                                        Click="BtnQuickLogout_Click"
-                                        Padding="10,5" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
-                                        BorderThickness="0" FontSize="10" Cursor="Hand"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button x:Name="BtnLinkPhone" Content="📱 Link phone"
+                                            Click="BtnLinkPhone_Click" Margin="0,0,6,0"
+                                            ToolTip="Sign in to the CCP mobile app by scanning a QR code"
+                                            Padding="10,5" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
+                                            BorderThickness="0" FontSize="10" Cursor="Hand"/>
+                                    <Button x:Name="BtnQuickLogout" Content="{loc:Str btn_logout}"
+                                            Click="BtnQuickLogout_Click"
+                                            Padding="10,5" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
+                                            BorderThickness="0" FontSize="10" Cursor="Hand"/>
+                                </StackPanel>
                             </Grid>
                         </Border>
     
