@@ -42,6 +42,14 @@ public class VideoLayer : BaseLayer, IDisposable
     private readonly object _frameLock = new();
     private bool _firstFrameLogged;
     private bool _loop;
+    private long _framesCopied;
+
+    /// <summary>Verification probe (--verify-video): a decoded frame is ready to draw.</summary>
+    public bool HasRenderedFrame { get { lock (_frameLock) return _currentBitmap != null; } }
+
+    /// <summary>Verification probe (--verify-video): frames copied from LibVLC since construction.
+    /// Monotonic; sample twice to prove live playback (delta &gt; 0).</summary>
+    public long FramesCopied => Interlocked.Read(ref _framesCopied);
 
     public override int ZIndex => CompositorLayers.Video;
     public override bool IsActive => _bufferValid && _frameBuffer != IntPtr.Zero;
@@ -250,6 +258,7 @@ public class VideoLayer : BaseLayer, IDisposable
                 _currentBitmap?.Dispose();
                 _currentBitmap = newBitmap;
             }
+            Interlocked.Increment(ref _framesCopied);
 
             if (!_firstFrameLogged)
             {

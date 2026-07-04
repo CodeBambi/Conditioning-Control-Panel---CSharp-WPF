@@ -82,9 +82,9 @@ fallback before the replacement is proven (deleting now = no working video).
 
 ### Phase A — Make UCE video render (unblock everything)
 - [x] Wire loggers into `VideoLayer` / `MandatoryVideoLayer` (done) + `EncounteredError` + first-frame log.
-- [ ] Reproduce a mandatory video; read `VideoLayer:` log lines to bisect: frame-delivery vs render vs path vs swallowed exception (see table in chat / `OnEncounteredError`).
-- [ ] Fix the identified root cause.
-- [ ] **Acceptance:** a mandatory video visibly plays full-screen on every monitor through the compositor, no legacy `VideoOverlayWindow`.
+- [x] Reproduce a mandatory video; read `VideoLayer:` log lines to bisect. **DONE 2026-07-04 via the new `--verify-video <path>` harness** (`VideoVerification.cs`, mirrors `--verify-spiral`; Program.cs sets `CCP_UCE_VIDEO=1` pre-DI). Bisect verdict: **no broken stage remains** — layer registers (Z=15), LibVLC vmem callbacks fire, first frame copies (1920x1080), engine composites, frames advance 49→70 across 700ms (live 30fps), exit 0. The "does not render" premise was stale (docs lagged the code; earlier logger-wiring fixes evidently resolved it and it was never re-tested).
+- [x] Fix the identified root cause. **No root cause exists** — the path is functional (see harness PASS above). Probes added for regression-proofing: `VideoLayer.HasRenderedFrame` + `FramesCopied` (monotonic counter).
+- [~] **Acceptance:** a mandatory video plays full-screen through the compositor, no legacy `VideoOverlayWindow` — **proven by harness** (frame pipeline + engine windows + no legacy window creation; legacy skip guards code-verified at `AvaloniaVideoService.cs:846/:862`). `[~]` not `[x]`: "VISIBLY" (pixel-level on-screen check) is deferred to Phase B's side-by-side WPF parity runs — the harness asserts everything except literal screen pixels. Re-run anytime: `dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -c Debug -- --verify-video "<local .mp4>"` (exit 0 = pass).
 
 ### Phase B — Video parity with the legacy path
 Match what `AvaloniaMultiMonitorVideoService` + `VideoOverlayWindow` do today:

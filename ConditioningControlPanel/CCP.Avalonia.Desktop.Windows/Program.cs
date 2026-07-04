@@ -34,6 +34,17 @@ class Program
         var benchmark = args.Contains("--benchmark");
         var maxBenchmark = args.Contains("--max-benchmark");
         var verifySpiral = args.Contains("--verify-spiral");
+        var verifyVideoIndex = Array.IndexOf(args, "--verify-video");
+        var verifyVideo = verifyVideoIndex >= 0;
+        string? verifyVideoPath = null;
+        if (verifyVideo)
+        {
+            if (verifyVideoIndex + 1 < args.Length && !args[verifyVideoIndex + 1].StartsWith("--", StringComparison.Ordinal))
+                verifyVideoPath = args[verifyVideoIndex + 1];
+            // The UCE video path is an env-var opt-in read in AvaloniaVideoService's ctor;
+            // set it BEFORE any DI construction so the harness verifies exactly that path.
+            Environment.SetEnvironmentVariable("CCP_UCE_VIDEO", "1");
+        }
         BenchmarkContext.IsEnabled = benchmark || maxBenchmark;
         BenchmarkContext.IsMaxBenchmark = maxBenchmark;
         BenchmarkContext.EntryTimeUtc = DateTime.UtcNow;
@@ -100,6 +111,10 @@ class Program
         else if (verifySpiral)
         {
             SpiralVerification.Attach(builder);
+        }
+        else if (verifyVideo)
+        {
+            VideoVerification.Attach(builder, verifyVideoPath);
         }
 #endif
 
