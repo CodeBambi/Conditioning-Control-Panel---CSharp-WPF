@@ -51,6 +51,12 @@ public sealed class AvaloniaSubliminalService : ISubliminalService, IDisposable
         _session = session;
         _logger = logger;
         _compositor = compositor;
+        // Avalonia always renders subliminals on the single shared compositor canvas (SubliminalLayer) —
+        // there is no per-screen keep-alive-window path. This is exactly what WPF's opt-in
+        // SubliminalSolidMode achieves (SubliminalService.cs:622 `useHost = SubliminalSolidMode && !stealsFocus`:
+        // one shared click-through host instead of many layered windows), so the feature is inherently
+        // always-on here. #461: AppSettings.SubliminalSolidMode has no per-window fallback to gate and is
+        // intentionally ignored, mirroring FlashSolidMode in AvaloniaFlashService.
         _subliminalLayer = compositor != null ? new SubliminalLayer() : null;
         if (_subliminalLayer != null)
             _compositor?.RegisterLayer(_subliminalLayer);
