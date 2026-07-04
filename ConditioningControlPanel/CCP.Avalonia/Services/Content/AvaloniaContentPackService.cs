@@ -106,21 +106,82 @@ public sealed class AvaloniaContentPackService : IContentPackService
         _logger?.LogInformation("ContentPackService: Packs path refreshed from {OldPath} to {NewPath}", oldPacksFolder, _packsFolder);
     }
 
+    /// <summary>
+    /// Create <see cref="_packsFolder"/> as a hidden directory, swallowing the failure modes
+    /// that can occur on a user-chosen custom assets path (denied ACL, read-only/offline drive).
+    /// Never throws: this runs from the DI-singleton constructor at startup, so a raw
+    /// <see cref="Directory.CreateDirectory"/> here would hard-crash the app before any window
+    /// shows. Callers must tolerate the folder being absent afterwards (scan/load paths already
+    /// guard on <see cref="Directory.Exists"/>; downloads/installs fail-soft later). Mirrors WPF
+    /// ContentPackService.TryCreateHiddenPacksFolder (crash reports #450/#451/#452).
+    /// </summary>
     private void EnsurePacksFolder()
     {
-        if (!Directory.Exists(_packsFolder))
+        try
         {
-            var di = Directory.CreateDirectory(_packsFolder);
-            di.Attributes |= FileAttributes.Hidden;
+            if (!Directory.Exists(_packsFolder))
+            {
+                var di = Directory.CreateDirectory(_packsFolder);
+                di.Attributes |= FileAttributes.Hidden;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "ContentPackService: could not create packs folder {Path} - content packs disabled this session", _packsFolder);
         }
     }
 
+    /// <summary>
+    /// Create the decrypted-media scratch directory. Never throws for the same reason as
+    /// <see cref="EnsurePacksFolder"/>: if the directory can't be made, pack media playback
+    /// fails-soft later (the write path in CreateTempFileForPack is already try/caught).
+    /// </summary>
     private void EnsureMediaTempPath()
     {
-        if (!Directory.Exists(_mediaTempPath))
+        try
         {
-            Directory.CreateDirectory(_mediaTempPath);
+            if (!Directory.Exists(_mediaTempPath))
+            {
+                Directory.CreateDirectory(_mediaTempPath);
+            }
         }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "ContentPackService: could not create media temp folder {Path} - pack media playback disabled this session", _mediaTempPath);
+        }
+    }
+
+    /// <summary>
+    /// Crash-recovery sweep of decrypted pack media (and haptic scratch videos) left behind by
+    /// a session that terminated abnormally. Per-session cleanup handles the happy path; this
+    /// covers crashes so decrypted plaintext adult content never lingers on disk. Targets the
+    /// same directory the decryptor writes to (<c>UserDataPath/media_tmp</c>, see
+    /// CreateTempFileForPack). Best-effort: swallows per-file and top-level failures so it can
+    /// safely run once at startup. Mirrors WPF App.CleanupStaleTempFiles.
+    /// </summary>
+    public static void CleanupStaleTempFiles(string userDataPath)
+    {
+        if (string.IsNullOrEmpty(userDataPath))
+            return;
+
+        try
+        {
+            var tempDir = Path.Combine(userDataPath, "media_tmp");
+            if (!Directory.Exists(tempDir))
+                return;
+
+            foreach (var file in Directory.GetFiles(tempDir, "ccp_temp_*"))
+            {
+                try { File.Delete(file); }
+                catch { /* best-effort: file may be locked or already gone */ }
+            }
+            foreach (var file in Directory.GetFiles(tempDir, "haptic_video_*"))
+            {
+                try { File.Delete(file); }
+                catch { /* best-effort */ }
+            }
+        }
+        catch { /* never throw at startup */ }
     }
 
     private void ScanAndRegisterOrphanedPacks()

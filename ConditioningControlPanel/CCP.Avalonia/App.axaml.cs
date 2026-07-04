@@ -8,6 +8,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using ConditioningControlPanel.Avalonia.Infrastructure;
+using ConditioningControlPanel.Avalonia.Services.Content;
 using ConditioningControlPanel.Avalonia.Services.Overlays;
 using ConditioningControlPanel.Avalonia.ViewModels;
 using ConditioningControlPanel.Avalonia.Views;
@@ -139,6 +140,21 @@ public partial class App : Application
             // Fix P0 data-path split: migrate any Avalonia data written to Roaming
             // into the legacy Local folder before Core services read/write it.
             AvaloniaAppEnvironment.MigrateFromLegacyRoamingPath();
+
+            // Privacy: crash-recovery sweep of decrypted pack media. Per-session cleanup
+            // handles the happy path, but a crash leaves plaintext adult content in the
+            // media temp dir; this removes it at startup (mirrors WPF App.CleanupStaleTempFiles).
+            // Runs after the data-path migration so it targets the same UserDataPath/media_tmp
+            // directory the decryptor writes to.
+            try
+            {
+                var tempEnv = Services.GetRequiredService<IAppEnvironment>();
+                AvaloniaContentPackService.CleanupStaleTempFiles(tempEnv.UserDataPath);
+            }
+            catch (Exception ex)
+            {
+                Log.Logger?.Warning(ex, "Stale temp-file sweep failed (non-fatal)");
+            }
 
             // Wire the static Core App stub so copied model code can reach settings.
             // Note: no launch-time SkillTree.Start() - WPF calls it per engine start only

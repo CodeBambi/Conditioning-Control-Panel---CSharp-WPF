@@ -14,27 +14,13 @@ using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Quiz;
 using ConditioningControlPanel.Core.Services.Settings;
+using ConditioningControlPanel.Core.Services.Moderation;
 using ConditioningControlPanel.Models.Quiz;
 
 using Microsoft.Extensions.DependencyInjection;
+using IModerationLog = ConditioningControlPanel.IModerationLog;
 
 namespace ConditioningControlPanel.Avalonia.Windows;
-
-public class PromptValidationResult
-{
-    public bool Clean { get; set; }
-    public List<string> MatchedPatterns { get; set; } = new();
-}
-
-public class PromptValidator
-{
-    public PromptValidationResult Validate(string text) => new() { Clean = true };
-}
-
-public class ModerationLog
-{
-    public void RecordEdit(string field, int count, string context) { }
-}
 
 /// <summary>
 /// Avalonia port of the custom quiz-category editor.
@@ -44,6 +30,8 @@ public partial class QuizCategoryEditorWindow : Window
     private readonly ILogger<QuizCategoryEditorWindow> _logger;
     private readonly IDialogService? _dialogService;
     private readonly IQuizService _quizService;
+    private readonly IPromptValidator _promptValidator;
+    private readonly IModerationLog _moderationLog;
 
     private QuizCategoryDefinition? _existing;
     private string _selectedColor = "#FF69B4";
@@ -77,6 +65,8 @@ public partial class QuizCategoryEditorWindow : Window
         _logger = App.Services.GetRequiredService<ILogger<QuizCategoryEditorWindow>>();
         _dialogService = App.Services?.GetService<IDialogService>();
         _quizService = App.Services.GetRequiredService<IQuizService>();
+        _promptValidator = App.Services.GetRequiredService<IPromptValidator>();
+        _moderationLog = App.Services.GetRequiredService<IModerationLog>();
         _selectedColor = GetThemeAccentHex();
         BuildColorPicker();
         BuildArchetypeRows();
@@ -439,8 +429,7 @@ public partial class QuizCategoryEditorWindow : Window
     {
         try
         {
-            var validator = new PromptValidator();
-            var result = validator.Validate(prompt);
+            var result = _promptValidator.Validate(prompt);
             if (result.Clean)
             {
                 TxtPrompt.BorderBrush = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF));
@@ -456,6 +445,17 @@ public partial class QuizCategoryEditorWindow : Window
                 Loc.Get("prompt_validator_banner") ?? "Prompt validation flagged {0} pattern(s).",
                 result.MatchedPatterns.Count);
             ValidatorBanner.IsVisible = true;
+
+            // Fail-closed like CompanionPromptEditorDialog: a non-clean result is written to the
+            // real moderation log (mirrors WPF QuizCategoryEditorWindow -> quiz_category source).
+            try
+            {
+                _moderationLog.RecordEdit("SystemPromptTemplate", result.MatchedPatterns.Count, "quiz_category");
+            }
+            catch (Exception logEx)
+            {
+                _logger?.LogWarning(logEx, "QuizCategoryEditorWindow: failed to record moderation edit");
+            }
 
             _logger?.LogInformation(
                 "PromptValidator flagged QuizCategoryEditorWindow system prompt ({Count} matches)",
