@@ -1,10 +1,12 @@
 # ProfileSyncService — Slice-by-Slice Port Plan
 
-> **Status:** IN PROGRESS — **Slices 1–2 landed unwired.** Slice 1 (`c4b2583a`): Core seam + 18
-> DTOs + HMAC `SignRequest` + 5 tests. Slice 2 (`a3215fc9`): injectable-`HttpMessageHandler` test
-> ctor + heartbeat (`System.Threading.Timer`, `SendHeartbeatAsync`, `in_session` via `ISessionService`
-> seam, `is_active` slice-7-deferred) + 4 tests. **Core 179/179, still NOT in DI (byte-identical app
-> behavior).** Slices 3–7 remain (fresh-context, security-sensitive). This is the sole remaining WS0 merge-`5ce70de6`
+> **Status:** IN PROGRESS — **Slices 1–3 landed unwired.** Slice 1 (`c4b2583a`): seam + 18 DTOs +
+> HMAC `SignRequest` + 5 tests. Slice 2 (`a3215fc9`): injectable-`HttpMessageHandler` test ctor +
+> heartbeat + 4 tests. Slice 3 (`fafd22b0`): pull + full merge — `LoadProfileAsync` +
+> `MergeCloudProfile`/`MergeV2CloudStatsIntoLocalProgress`/`MergeV2SyncResponse`/`ApplyForceStreakOverride`/
+> `ApplyForceSkillsReset` + 3 real `IQuestService` DIM methods + 5 tests, **independently adversarially
+> reviewed (SAFE TO BANK, all 5 never-lower invariants byte-faithful; one drift found+fixed).** **Core
+> 184/184, still NOT in DI (byte-identical app behavior).** Slices 4–7 remain (fresh-context). This is the sole remaining WS0 merge-`5ce70de6`
 > re-open (parity-matrix row 1). Execution is a **fresh-context task**: the surface is ~2,800 LOC
 > and **security-sensitive** (HMAC anti-cheat signing, GDPR delete/export, and the P0 privacy
 > `ExcludedBackupProperties` list — omitting it leaks the auth token to the server). It must be
@@ -296,11 +298,18 @@ note for full recovery. `in_session` via optional `ISessionService` seam (`State
 conservative default + `// slice 7` note (no clean Core idle seam). 4 tests, Core 179/179. **The app
 startup + dispose/exit wiring of `StartHeartbeat`/`StopHeartbeat` is deferred to slice 7** (kept unwired).
 
-**Slice 3 — Pull + merge (largest logic slice).** `LoadProfileAsync` + `MergeCloudProfile` +
-`MergeV2CloudStatsIntoLocalProgress` + `ApplyForceStreakOverride` + `ApplyForceSkillsReset` +
-`TryHealDefaultsFromServerAsync`; fire `ProfileLoaded`. Reuse `IAchievementService.
-ReconcileLifetimePointsSpent`, `SeasonRecapService.CurrentSeasonKey`. *Success:* take-higher/union
-merge unit tests pass against a fake settings.
+**Slice 3 — Pull + merge (largest logic slice). ✅ DONE (`fafd22b0`, landed UNWIRED, independently
+reviewed).** `LoadProfileAsync` (GET `/user/profile` w/ `X-Auth-Token`, double-parse `ProfileResponse`
++ `V2SyncResponse`, raise `ProfileLoaded`) + `MergeCloudProfile` + `MergeV2CloudStatsIntoLocalProgress`
++ `MergeV2SyncResponse` (extracted from WPF `SyncProfileAsync` V2 block :578-780 — shared home for the
+slice-4 push) + `ApplyForceStreakOverride` + `ApplyForceSkillsReset`. Reused `ReconcileLifetimePointsSpent`
++ `CurrentSeasonKey`. **Seam extension:** 3 real `IQuestService` methods added as DIM no-op defaults
+(WPF head + consumers still compile) with real `QuestService` overrides — `RecalculateStreak` promoted
+private→public (WPF `:1024-1026` tail restored per review), `ForceRegenerate{Daily,Weekly}Quest` wrap
+existing generators. All-optional ctor deps. **DEFERRED (additive/edge, don't affect never-lower):**
+`TryHealDefaultsFromServerAsync`, Patreon entitlement heal, background sync-up push (→slice 4),
+season-recap UI. 5 merge tests, Core 184/184. Adversarial reviewer confirmed all 5 corruption-critical
+never-lower invariants byte-faithful.
 
 **Slice 4 — Push.** `SyncProfileAsync` (`/v2/user/sync`), `SignRequest` on body, `_syncGate`, 30 s
 cooldown, 429 handling, full `V2SyncResponse` reconciliation. Wire event triggers
