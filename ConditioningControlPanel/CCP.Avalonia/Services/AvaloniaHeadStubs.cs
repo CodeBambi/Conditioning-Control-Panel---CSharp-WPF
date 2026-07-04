@@ -21,7 +21,8 @@ using ConditioningControlPanel.Core.Services.Overlays;
 using ConditioningControlPanel.Core.Services.Subliminal;
 using ConditioningControlPanel.Core.Services.Video;
 using Microsoft.Extensions.DependencyInjection;
-using AvaloniaChaosTuning = ConditioningControlPanel.Avalonia.Chaos.ChaosTuning;
+// S4: every tuning read in this file goes through the Core ChaosTuning now — the parallel
+// Avalonia.Chaos.ChaosTuning alias is retired here (port-plan rule: one tuning source).
 using CoreChaosTuning = ConditioningControlPanel.Core.Services.Chaos.ChaosTuning;
 using ChaosNarrativeContext = ConditioningControlPanel.Core.Services.Chaos.ChaosNarrativeContext;
 
@@ -111,6 +112,30 @@ public sealed class AvaloniaChaosService : IChaosService
     private DateTime _invulnUntilUtc = DateTime.MinValue;
     // Pendulum swing activation lands in S6/S7 (plan: chaos-run-engine-port-plan.md); false until then.
     private bool _pendulumSlowActive = false;
+
+    // ---- spawn-director run transients (S4; WPF ChaosModeService.cs SpawnTick/RunTick state) ----
+    // Heavy Drop: every Nth ordinary spawn swaps for the giant treat (WPF :1138-1141; reset :401).
+    private int _spawnSerial;
+    // Side-drift grace counter (WPF :1147-1148 / SIDE_DRIFT_GRACE_SPAWNS; reset :401).
+    private int _ordinarySpawns;
+    // Heavy-payload gate: expected end of a running heavy effect. The payload paths arm it in
+    // S6 (chaos-run-engine-port-plan.md); until then it stays MinValue and only the live
+    // video/cascade checks gate (WPF ChaosModeService.cs:2156 _heavyUntilUtc; reset :402).
+    private DateTime _heavyUntilUtc = DateTime.MinValue;
+    // Darter slow-mo runs on the real clock, like the freeze (WPF ChaosModeService.cs:2325).
+    private double _slowMoRemainingSec;
+    private bool _slowMoCueOn;   // an in-cue played; the matching out-cue is owed on end (WPF :2965)
+    // Pop-up Notification heart: once-per-loop arm + random fire beat (WPF ChaosModeService.cs:2899-2913).
+    private int _heartRolledWave;
+    private bool _heartArmedThisWave;
+    private double _heartFireAtProgress;
+    // The Tease denial streak (WPF ChaosModeService.cs:1331-1332).
+    private int _teaseDeniedThisRun;
+    private bool _teaseDeniedStreakBarked;
+
+    // Freeze power-up windows (WPF ChaosModeService.cs:2957-2959 service consts).
+    private const double FREEZE_DURATION_SEC = 3.5;
+    private const int FREEZE_VIBRATE_MS = 200;
 
     // ---- active toys ----
     private readonly List<ChaosToyButtonWindow> _toyButtons = new();
@@ -359,13 +384,36 @@ public sealed class AvaloniaChaosService : IChaosService
         if (runStartConvo != null)
             RunOnUi(() => _overlay?.ShowConversation(runStartConvo, null, () => { }));
 
+        // Full behavioral callback set — the WPF BeginChaosMode wiring (WPF ChaosModeService.cs:361-381)
+        // mapped onto the Core BubbleEngine surface. The WPF live-lambda knobs (chainReach,
+        // hitboxScale, bubbleOpacity, cursorPull, rabbitHoming, spankerOn/spankGrow, liveMagnet,
+        // rabbitTrailSec, electrifiedRabbits, wandShimmer, onEStimArc) have no engine seam yet —
+        // follow-up rows on the port plan, not faked here.
+        // onChaperoneShieldBroken: WPF has NO service-side handler — the escort pop is a normal
+        // treat pop and the shield release is engine-internal (WPF BubbleService.cs:1148-1184).
+        // onDarterSpanked: the Core engine never fires it (the Spanker is unported) — follow-up row.
         _bubbles.BeginChaosMode(
             OnBenignPopped,
             OnDefused,
             OnDetonated,
-            CanChannelDefuse,
-            OnChannelStarted,
-            OnChannelBroken);
+            onDarterCaught: OnDarterCaught,
+            onFreezeCaught: OnFreezeCaught,
+            onBoundEnraged: OnBoundEnraged,
+            onTeaseTouched: OnTeaseTouched,
+            onTeaseDenied: OnTeaseDenied,
+            onBrittleShattered: OnBrittleShattered,
+            onTreatExpired: OnTreatExpired,
+            canChannel: CanChannelDefuse,
+            onChannelStarted: OnChannelStarted,
+            onChannelBroken: OnChannelBroken);
+
+        // Fresh run-transient spawn-director state (WPF ChaosModeService.cs:395-403, 421-422).
+        EndSlowMo(); EndFreeze();   // clean power-up state for the new run (no leak across runs) (WPF :399)
+        _spawnSerial = 0; _ordinarySpawns = 0; _pendulumSlowActive = false;   // WPF :401
+        _heavyUntilUtc = DateTime.MinValue;                                    // WPF :402
+        _heartRolledWave = 0; _heartArmedThisWave = false;                     // WPF :400
+        _teaseDeniedThisRun = 0; _teaseDeniedStreakBarked = false;             // WPF :421-422
+
         _spawning = true;
         _state.PushEvent("🐇 the descent begins");
         AvaloniaChaosSfx.Play("fall_in", 0.28f);   // the falling whoosh as the descent opens (WPF ChaosModeService.cs:342)
@@ -396,6 +444,10 @@ public sealed class AvaloniaChaosService : IChaosService
             }
         }
         ChaosBoonBarOverlay.SetPicks(_state.RunPickTiles);
+
+        // Welcome Shower equipped as the start boon: the very first GO! gets its treat dump too
+        // (WPF ChaosModeService.cs:434-435).
+        if (_state.WelcomeShowerEnabled) SpawnWelcomeShower();
 
         // Apply lifetime boons (passive values + active toy power) and build HUD state.
         ChaosMeta.ApplyLifetimeBoons(_state);
@@ -436,7 +488,9 @@ public sealed class AvaloniaChaosService : IChaosService
     {
         StopTimers();
         _runTimer = StartPeriodicTimer(TimeSpan.FromMilliseconds(250), RunTick);
-        _spawnTimer = StartPeriodicTimer(TimeSpan.FromMilliseconds(900), SpawnTick);
+        // 800ms initial beat; SpawnTick re-arms its own interval every tick
+        // (WPF ChaosModeService.cs:507-509 / :1219-1228).
+        _spawnTimer = StartPeriodicTimer(TimeSpan.FromMilliseconds(800), SpawnTick);
     }
 
     private void StopTimers()
@@ -463,13 +517,27 @@ public sealed class AvaloniaChaosService : IChaosService
         _state.ElapsedSec += dt;
         _state.Heat = Math.Max(0, _state.Heat - 0.0015);
 
-        // Power-ups run on the real clock.
+        // Power-ups run on the real clock (so they don't extend the run length)
+        // (WPF ChaosModeService.cs:963-975).
+        if (_slowMoRemainingSec > 0)
+        {
+            _slowMoRemainingSec -= dt;
+            if (_slowMoRemainingSec <= 0) EndSlowMo();
+        }
         if (_freezeRemainingSec > 0)
         {
             _freezeRemainingSec -= dt;
             if (_freezeRemainingSec <= 0) EndFreeze();
         }
         if (_snapFlashRemainingSec > 0) _snapFlashRemainingSec -= dt;
+
+        // Empty-field rescue: a fast clear shouldn't leave dead air until the spawn timer's
+        // next beat (gaps run ~1.3s early and slow-mo stretches them ~8x). The moment the
+        // field is bare while spawning is live, pull the next spawn forward — SpawnTick
+        // re-arms its own interval, so the cadence resumes cleanly from here
+        // (WPF ChaosModeService.cs:974-980).
+        if (_spawning && _freezeRemainingSec <= 0 && _bubbles.ActiveBubbles == 0)
+            SpawnTick();
 
         // The Ripple recharges.
         if (_rippleCooldownSec > 0)
@@ -497,7 +565,7 @@ public sealed class AvaloniaChaosService : IChaosService
         if (!_focusLowBarkFired && _state.FocusLow && _bubbles.ActiveBubbles > 0)
         {
             _focusLowAccumSec += dt;
-            if (_focusLowAccumSec >= AvaloniaChaosTuning.FocusLowBarkSec)
+            if (_focusLowAccumSec >= CoreChaosTuning.FOCUS_LOW_BARK_SEC)
             {
                 _focusLowBarkFired = true;
                 _state.PushEvent("◌ low focus. pop treats before you grab a live one.");
@@ -505,6 +573,24 @@ public sealed class AvaloniaChaosService : IChaosService
             }
         }
         else _focusLowAccumSec = 0;
+
+        // Pop-up Notification habit: once per loop, sometimes (60%), a little heart drifts
+        // down at a random beat. Catch = +1 resistance; a miss just exits the bottom
+        // (WPF ChaosModeService.cs:2899-2913).
+        double heartWaveLen = _state.RunDurationSec / Math.Max(1, _waveCount);
+        double waveProgress = (_state.ElapsedSec % heartWaveLen) / heartWaveLen;   // WPF :1095
+        if (_state.Config.PopupHeartEnabled && _spawning && _waveIndex != _heartRolledWave)
+        {
+            _heartRolledWave = _waveIndex;
+            _heartArmedThisWave = _rng.NextDouble() < 0.60;
+            _heartFireAtProgress = 0.20 + _rng.NextDouble() * 0.60;
+        }
+        if (_heartArmedThisWave && _spawning && waveProgress >= _heartFireAtProgress)
+        {
+            _heartArmedThisWave = false;
+            _bubbles.SpawnChaosBubble(ChaosSpawnCatalog.BuildHeart(_rng));
+            _bubbles.PlayChime(0.22f);   // the soft ping — a notification, after all (WPF :2911)
+        }
 
         UpdateStateText();
 
@@ -530,46 +616,243 @@ public sealed class AvaloniaChaosService : IChaosService
         }
     }
 
+    /// <summary>True while a mandatory video or gif cascade is (still) running. The timer
+    /// floor (<see cref="_heavyUntilUtc"/>) covers window-open latency and the post-video
+    /// teardown quarantine once the S6 payload paths arm it
+    /// (WPF ChaosModeService.cs:2158-2162 HeavyEffectActive).</summary>
+    private bool HeavyEffectActive =>
+        AvaloniaChaosApp.Video?.IsPlaying == true || IsGifCascadeRaining || DateTime.UtcNow < _heavyUntilUtc;
+
+    /// <summary>The faithful WPF spawn director (WPF ChaosModeService.cs:1103-1230 SpawnTick):
+    /// behavioral roll first (replacing the ordinary slot), then the ordinary weighted pick with
+    /// the end-of-loop video strip / Heavy Drop swap / freeze cap re-pick, then the golden/prism/
+    /// brittle riders, then the cap-independent darter roll, then the self-retuning interval.</summary>
     private void SpawnTick()
     {
-        if (!_spawning || _state == null || _paused || _manualPaused || _ending) return;
-        SpawnRandomBubble();
+        if (!_spawning || _state == null || _paused || _manualPaused || _ending) return;   // WPF :1106
+        if (_freezeRemainingSec > 0) return;   // time is frozen: hold the field, spawn nothing new (WPF :1107)
+
+        var cfg = _state.Config;
+        double intensity = _state.RunIntensity;                                                  // WPF :1110 (raw: density + cadence)
+        double effIntensity = ChaosSpawnDirector.EffIntensity(intensity, cfg.DifficultyMult);    // WPF :1111 (picks + behavioral)
+        double diffFactor = cfg.DifficultyMult;
+
+        // Field density: 6 early → 16 late (×√difficulty) (WPF :1113-1117).
+        int maxConcurrent = ChaosSpawnDirector.MaxConcurrent(intensity, diffFactor);
+        // Behavioral bubbles (Echo/Chaperone/Tease/Bound): each rolls to REPLACE this ordinary
+        // spawn slot, so the field density stays the same. Darters still roll below either way
+        // (WPF :1118-1121).
+        bool behavioralSpawned = _bubbles.ActiveBubbles < maxConcurrent
+                                 && TrySpawnBehavioralBubble(cfg, effIntensity);
+        if (!behavioralSpawned && _bubbles.ActiveBubbles < maxConcurrent)                        // WPF :1122
+        {
+            // Be gentle with the tape: no video bubble while a heavy effect (video/cascade) is
+            // running, and none when the loop or run is too close to its end for the bubble's
+            // fuse plus the 15s video slice to fit (WPF :1124-1135).
+            IReadOnlyList<string>? enabled = cfg.EnabledVariants;
+            double waveLen = _state.RunDurationSec / Math.Max(1, _state.WaveCount);
+            double waveLeft = waveLen - (_state.ElapsedSec % waveLen);
+            double runLeft = _state.RunDurationSec - _state.ElapsedSec;
+            if (ChaosSpawnDirector.ShouldStripVideo(enabled, HeavyEffectActive, waveLeft, runLeft))
+                enabled = enabled!.Where(id => id != "video").ToList();
+
+            // Heavy Drop: every Nth ordinary spawn swaps for a giant, slow, triple-pay treat
+            // (WPF :1137-1141).
+            ChaosBubbleSpec spec;
+            if (_state.HeavyDropEvery > 0 && ++_spawnSerial % _state.HeavyDropEvery == 0)
+            {
+                spec = ChaosSpawnCatalog.BuildHeavy(effIntensity, cfg.EffectIntensity, _state.BubbleScale, _rng);
+            }
+            else
+            {
+                // Side entries arm only after the first few spawns (WPF :1145-1148).
+                double sideDrift = ChaosSpawnDirector.SideDriftChance(_ordinarySpawns);
+                spec = ChaosSpawnCatalog.Pick(effIntensity, _state.FuseTimeMult,
+                    cfg.MotionOverride, enabled, cfg.EffectIntensity, _state.BubbleScale, sideDrift, _rng);
+
+                // Freeze cap: at most FREEZE_MAX_ON_SCREEN freeze pickups live at once — re-pick
+                // with freeze excluded so the slot still spawns something (WPF :1151-1162).
+                if (spec.IsFreeze
+                    && _bubbles.ActiveFreezeBubbles >= CoreChaosTuning.FREEZE_MAX_ON_SCREEN)
+                {
+                    var noFreeze = (enabled ?? ChaosSpawnCatalog.AllIds())
+                        .Where(id => id != "bambifreeze").ToList();
+                    spec = ChaosSpawnCatalog.Pick(effIntensity, _state.FuseTimeMult,
+                        cfg.MotionOverride, noFreeze, cfg.EffectIntensity, _state.BubbleScale, sideDrift, _rng);
+                }
+            }
+            _ordinarySpawns++;
+            ChaosMeta.MarkDiscovered("bubble:" + spec.VariantId);
+            _bubbles.SpawnChaosBubble(spec);
+
+            // Lucky golden bubble: a rare bonus roll riding every ordinary spawn (base 0.5%;
+            // Rabbit's Foot raises it) (WPF :1168-1175).
+            if (_rng.NextDouble() < _state.GoldenChance)
+            {
+                ChaosMeta.MarkDiscovered("bubble:golden");
+                _bubbles.SpawnChaosBubble(ChaosSpawnCatalog.BuildGolden(_rng));
+                _bubbles.PlayChime(0.30f);   // a soft chime so a sharp ear catches the chance (WPF :1174)
+            }
+
+            // "Look at the bright colors..." sin: sometimes a mimic prism drifts in (WPF :1177-1183).
+            if (_state.PrismChance > 0 && _rng.NextDouble() < _state.PrismChance)
+            {
+                ChaosMeta.MarkDiscovered("bubble:prism");
+                _bubbles.SpawnChaosBubble(ChaosSpawnCatalog.BuildPrism(effIntensity, cfg.EffectIntensity,
+                    treatOnly: _state.PrismTreatOnly, _rng));
+            }
+
+            // The Brittle (Tempted+, half odds on Gentle — rank-not-difficulty rule): a glass
+            // mine rides in alongside the field (WPF :1185-1201).
+            if (ChaosMeta.AtLeast(ChaosRank.Tempted)
+                && _rng.NextDouble() < ChaosSpawnDirector.BehavioralChance(
+                    CoreChaosTuning.BRITTLE_SPAWN_CHANCE, cfg.Difficulty == "Easy"))
+            {
+                if (!ChaosMeta.State.SeenBrittle)
+                {
+                    ChaosMeta.State.SeenBrittle = true; ChaosMeta.Save();
+                    AnnounceChaos("◇ THE BRITTLE — don't even hover", ChaosAnnounceKind.Temptation,
+                        artKey: "brittle", subText: "don't even hover");
+                    _state.PushEvent("◇ thin glass drifts in. steer around it.");
+                }
+                ChaosMeta.MarkDiscovered("bubble:brittle");
+                _bubbles.SpawnChaosBubble(ChaosSpawnCatalog.BuildBrittle(effIntensity,
+                    cfg.EffectIntensity, _state.BubbleScale, _rng));
+            }
+        }
+
+        // Darters spawn on their own intensity-scaled roll, independent of the bubble cap
+        // (WPF :1204-1214 — NOTE: WPF passes effIntensity here, not raw intensity; the
+        // contract's §5.7 "intensity" is WPF's effIntensity argument). WPF keeps no darter
+        // Seen*/debut flag — only MarkDiscovered.
+        if (cfg.DartersEnabled)
+        {
+            var darter = ChaosSpawnCatalog.RollDarter(effIntensity, _state.RabbitRateMult, _rng, spotlight: false);
+            if (darter != null)
+            {
+                ChaosMeta.MarkDiscovered("bubble:darter");
+                _bubbles.SpawnChaosBubble(darter);
+            }
+        }
+
+        // Refill cadence: 1000ms early → 320ms late (÷difficulty, ÷SpawnRateMult, ÷slow-mo,
+        // floor 280ms), re-armed every tick (WPF :1217-1228). The WPF ×_perfBackoff factor is
+        // its frame-hitch governor — this head has no governor field, so none is invented.
+        double interval = ChaosSpawnDirector.SpawnIntervalMs(intensity, diffFactor,
+            cfg.SpawnRateMult, _slowMoRemainingSec > 0);
+        if (_spawnTimer != null) _spawnTimer.Interval = TimeSpan.FromMilliseconds(interval);
     }
 
-    private void SpawnRandomBubble()
+    /// <summary>
+    /// Roll the behavioral bubbles for this spawn slot (WPF ChaosModeService.cs:1244-1329).
+    /// A hit REPLACES the ordinary spawn (density stays sane; a debut also consumes the tick →
+    /// it spawns alone). Gating is by RANK, not difficulty: Echo + Chaperone from Tempted,
+    /// Tease from Slipping, Bound from Entranced (or any Hard+ descent). Gentle halves every
+    /// roll instead of forbidding the menagerie. Debuts get a gentler trance and announce.
+    /// </summary>
+    private bool TrySpawnBehavioralBubble(ChaosRunConfig cfg, double effIntensity)
     {
+        if (_state == null) return false;
+        if (cfg.ScriptedFirstRun) return false;   // run 1 is scripted: no behavioral bubbles at all (WPF :1246)
+        bool easy = cfg.Difficulty == "Easy";     // gentleMult (WPF :1247)
+
+        // The Echo (Tempted+): trigger it and it multiplies; only the held defuse is clean (WPF :1249-1265).
+        if (ChaosMeta.AtLeast(ChaosRank.Tempted)
+            && _rng.NextDouble() < ChaosSpawnDirector.BehavioralChance(CoreChaosTuning.ECHO_SPAWN_CHANCE, easy))
+        {
+            bool debut = !ChaosMeta.State.SeenEcho;
+            if (debut)
+            {
+                ChaosMeta.State.SeenEcho = true; ChaosMeta.Save();
+                AnnounceChaos("◌ THE ECHO — hold it down, or it multiplies", ChaosAnnounceKind.Item,
+                    artKey: "echo", subText: "hold it down, or it multiplies");
+                _state.PushEvent("◌ something doubled stirs below");
+            }
+            ChaosMeta.MarkDiscovered("bubble:echo");
+            _bubbles.SpawnChaosBubble(ChaosSpawnCatalog.BuildEcho(effIntensity, _state.FuseTimeMult,
+                _state.BubbleScale, debut ? CoreChaosTuning.DEBUT_FUSE_MULT : 1.0, _rng,
+                effectIntensity: cfg.EffectIntensity));
+            return true;
+        }
+
+        // The Chaperone (Tempted+): shielded while its escort circles — pop the escort first (WPF :1267-1284).
+        if (ChaosMeta.AtLeast(ChaosRank.Tempted)
+            && _rng.NextDouble() < ChaosSpawnDirector.BehavioralChance(CoreChaosTuning.CHAPERONE_SPAWN_CHANCE, easy))
+        {
+            bool debut = !ChaosMeta.State.SeenChaperone;
+            if (debut)
+            {
+                ChaosMeta.State.SeenChaperone = true; ChaosMeta.Save();
+                AnnounceChaos("💞 THE CHAPERONE — its little escort first", ChaosAnnounceKind.Item,
+                    artKey: "chaperone", subText: "its little escort first");
+                _state.PushEvent("💞 it brought company");
+            }
+            var (live, escort) = ChaosSpawnCatalog.BuildChaperonePair(effIntensity, _state.FuseTimeMult,
+                cfg.EffectIntensity, _state.BubbleScale, debut ? CoreChaosTuning.DEBUT_FUSE_MULT : 1.0, _rng);
+            ChaosMeta.MarkDiscovered("bubble:chaperone");
+            _bubbles.SpawnChaosChaperone(live, escort);
+            return true;
+        }
+
+        // The Bound (Hard+ descents, or the Entranced rank on any difficulty):
+        // two lives, one thread — both must come down quickly (WPF :1286-1303).
+        if ((cfg.Difficulty is "Hard" or "Extreme" || ChaosMeta.AtLeast(ChaosRank.Entranced))
+            && _rng.NextDouble() < ChaosSpawnDirector.BehavioralChance(CoreChaosTuning.BOUND_SPAWN_CHANCE, easy))
+        {
+            bool debut = !ChaosMeta.State.SeenBound;
+            if (debut)
+            {
+                ChaosMeta.State.SeenBound = true; ChaosMeta.Save();
+                AnnounceChaos("⛓ THE BOUND — both, and quickly", ChaosAnnounceKind.Item,
+                    artKey: "bound", subText: "both, and quickly");
+                _state.PushEvent("⛓ two of them, one thread");
+            }
+            var (a, b) = ChaosSpawnCatalog.BuildBoundPair(effIntensity, _state.FuseTimeMult,
+                cfg.EffectIntensity, _state.BubbleScale, debut ? CoreChaosTuning.DEBUT_FUSE_MULT : 1.0, _rng);
+            ChaosMeta.MarkDiscovered("bubble:bound");
+            _bubbles.SpawnChaosBoundPair(a, b);
+            return true;
+        }
+
+        // The Tease (Slipping rank): the one you beat by NOT touching it (WPF :1305-1326).
+        if (ChaosMeta.AtLeast(ChaosRank.Slipping)
+            && _rng.NextDouble() < ChaosSpawnDirector.BehavioralChance(CoreChaosTuning.TEASE_SPAWN_CHANCE, easy))
+        {
+            bool debut = !ChaosMeta.State.SeenTease;
+            if (debut)
+            {
+                ChaosMeta.State.SeenTease = true; ChaosMeta.Save();
+                AnnounceChaos("✖ THE TEASE — whatever you do, don't", ChaosAnnounceKind.Temptation,
+                    artKey: "tease", subText: "whatever you do, don't");
+                _state.PushEvent("✖ it wants your hand. don't.");
+                // WPF :1318 App.Bark?.NotifyChaosTeaseDebut() — IBarkService has no such member
+                // in this head yet (follow-up row; not faked).
+            }
+            ChaosMeta.MarkDiscovered("bubble:tease");
+            _bubbles.SpawnChaosBubble(ChaosSpawnCatalog.BuildTease(effIntensity,
+                cfg.EffectIntensity, _state.BubbleScale, _rng));
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Welcome Shower: dump a handful of treats (flash/subliminal) raining from the
+    /// top — at run start and each loop GO when the boon holds (WPF ChaosModeService.cs:1649-1665).</summary>
+    private void SpawnWelcomeShower()
+    {
+        if (_state == null) return;
         try
         {
-            var pool = _state?.Config.EnabledVariants?.Count > 0
-                ? _state.Config.EnabledVariants
-                : new List<string> { "flash", "pink", "subliminal" };
-            string variant = pool[_rng.Next(pool.Count)];
-            bool live = _rng.NextDouble() < 0.45;
-
-            var motion = (_state?.Config.MotionMode ?? "Mixed") switch
-            {
-                "FloatUp" => ChaosMotion.FloatUp,
-                "RainDown" => ChaosMotion.RainDown,
-                "RoamBounce" => ChaosMotion.RoamBounce,
-                _ => _rng.Next(3) switch { 0 => ChaosMotion.FloatUp, 1 => ChaosMotion.RainDown, _ => ChaosMotion.RoamBounce },
-            };
-
-            var spec = new ChaosBubbleSpec
-            {
-                VariantId = variant,
-                PayloadKind = variant,
-                SizePx = 80 + _rng.Next(80),
-                IsLive = live,
-                FuseMs = live ? (int)(4000 + _rng.NextDouble() * 4000) : 0,
-                Motion = motion,
-                SpeedMult = 1.0 + _rng.NextDouble(),
-            };
-            _bubbles.SpawnChaosBubble(spec);
+            const int count = 6;
+            for (int i = 0; i < count; i++)
+                _bubbles.SpawnChaosBubble(ChaosSpawnCatalog.BuildWelcomeShowerTreat(
+                    _state.RunIntensity, _state.FuseTimeMult, _state.Config.EffectIntensity,
+                    _state.BubbleScale, _rng));
+            _bubbles.PlayChime(0.25f);   // WPF :1663
+            _state.PushEvent("🚿 welcome shower — treats from above");
         }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "AvaloniaChaosService spawn failed");
-        }
+        catch (Exception ex) { _logger?.LogDebug("SpawnWelcomeShower: {E}", ex.Message); }
     }
 
     private void OnBenignPopped(ChaosBubbleSpec spec)
@@ -623,20 +906,11 @@ public sealed class AvaloniaChaosService : IChaosService
             return;
         }
 
-        // Freeze pickup: a GOOD catch — the engine routes freeze pops through this callback in
-        // the Avalonia head, so this branch mirrors WPF OnFreezeCaught verbatim
-        // (WPF ChaosModeService.cs:2305-2318): pays 140 x TotalMult (NO BoonPayMult), feeds the
-        // streak and heat, then holds the whole field.
+        // Freeze pickup: the engine's onFreezeCaught callback carries it now (S4); the
+        // delegation keeps any residual pop path faithful (WPF ChaosModeService.cs:2300-2318).
         if (spec.IsFreeze)
         {
-            _state.Score += ChaosScoring.FreezeScore(_state.TotalMult);
-            _state.Combo++;
-            _state.Heat = Math.Min(1.0, _state.Heat + 0.05);
-            try { _achievements?.TrackBubblePopped(); } catch { }
-            ChaosLessonHooks.OnFreezeCaught();
-            ActivateFreeze();
-            _state.PushEvent("❄ frozen. the field holds");
-            UpdateStateText();
+            OnFreezeCaught(spec);
             return;
         }
 
@@ -680,6 +954,18 @@ public sealed class AvaloniaChaosService : IChaosService
         // Achievement bubble-pop tracker: every benign/prism pop counts (WPF ChaosModeService.cs:1843,1869).
         try { _achievements?.TrackBubblePopped(); } catch { }
         if (spec.PayMult > 1) _state.PushEvent("🪨 heavy drop! x3");
+        // GG make more GG: sometimes a popped treat bursts into 3 wild sweeper rabbits at the
+        // pop point (WPF ChaosModeService.cs:1892-1900).
+        if (_state.GgRabbitChance > 0 && _rng.NextDouble() < _state.GgRabbitChance)
+        {
+            for (int i = 0; i < 3; i++)
+                _bubbles.SpawnChaosBubble(ChaosSpawnCatalog.BuildDarter(_state.RunIntensity, spotlight: false,
+                    sweeper: true, _rng,
+                    _bubbles.ChaosLastPopX + _rng.Next(-40, 41),
+                    _bubbles.ChaosLastPopY + _rng.Next(-40, 41)));
+            AvaloniaChaosSfx.Play("rabbit_spawn", 0.5f);   // WPF :1899
+            _state.PushEvent("🐇 GG! they multiply");
+        }
         _state.PushEvent($"○ popped {spec.VariantId}");
         UpdateStateText();
     }
@@ -737,6 +1023,12 @@ public sealed class AvaloniaChaosService : IChaosService
     private void OnDetonated(ChaosBubbleSpec spec)
     {
         if (_state == null || _paused || _manualPaused) return;
+
+        // The Tease and the Brittle carry their FULL consequences in their own handlers
+        // (WPF OnTeaseTouched :1330-1360 does Detonated++/payload/shield itself; the Brittle
+        // "never counts as a missed trance" :1365-1368). The Core engine fires the generic
+        // detonate callback alongside those handlers — swallow it here so nothing double-fires.
+        if (spec.IsTease || spec.IsBrittle) return;
 
         // The Echo fires NO conditioning payload — it SPLITS (WPF ChaosModeService.cs:2077-2084).
         // The engine raises EchoSplitRequested for the child spawns (AvaloniaBubbleService wires
@@ -898,6 +1190,199 @@ public sealed class AvaloniaChaosService : IChaosService
         UpdateStateText();
     }
 
+    // ============================ behavioral / pickup callbacks (S4) ============================
+
+    /// <summary>White-rabbit darter caught: score + focus + streak, then the slow-mo window —
+    /// a rabbit clicked while time is ALREADY slow tops the window up by +0.8s instead of
+    /// re-arming the full duration (WPF ChaosModeService.cs:2270-2295).</summary>
+    private void OnDarterCaught(ChaosBubbleSpec spec, bool quick)
+    {
+        if (_state == null || _paused || _manualPaused) return;
+        _state.Score += ChaosScoring.DarterScore(quick, _state.TotalMult);   // 120 + 90 quick, x TotalMult (WPF :2273-2274)
+        _state.Focus = Math.Min(_state.FocusMax, _state.Focus + CoreChaosTuning.FOCUS_PER_RABBIT);   // WPF :2275
+        _state.Combo++;
+        _state.Heat = Math.Min(1.0, _state.Heat + 0.05);
+        try { _achievements?.TrackBubblePopped(); } catch { }
+        ChaosLessonHooks.OnRabbitCaught();   // rabbit_caller lesson (WPF :2280)
+        // The darter is a utility pickup: catching it slows time (no conditioning jolt) (WPF :2285-2291).
+        bool extended = _slowMoRemainingSec > 0;
+        if (extended)
+        {
+            _slowMoRemainingSec += 0.8;
+            _pendulumSlowActive = false;
+        }
+        else ActivateSlowMo();
+        // WPF :2292 Pulse(120,200,255) — no full-screen pulse seam in this head yet (follow-up).
+        // WPF :2293 App.Bark?.NotifyChaosDarterCaught(...) — IBarkService lacks the member (follow-up).
+        _state.PushEvent(extended ? "🐇 caught in the slow! +0.8s"
+            : quick ? "⚡ quick catch! time slows" : "🐇 white rabbit caught! time slows");
+        UpdateStateText();
+    }
+
+    /// <summary>Freeze pickup: a GOOD catch — pays 140 x TotalMult (NO BoonPayMult), feeds the
+    /// streak and heat, then holds the whole field (WPF ChaosModeService.cs:2300-2318).</summary>
+    private void OnFreezeCaught(ChaosBubbleSpec spec)
+    {
+        if (_state == null || _paused || _manualPaused) return;
+        _state.Score += ChaosScoring.FreezeScore(_state.TotalMult);   // WPF :2311
+        _state.Combo++;
+        _state.Heat = Math.Min(1.0, _state.Heat + 0.05);
+        try { _achievements?.TrackBubblePopped(); } catch { }
+        ChaosLessonHooks.OnFreezeCaught();   // freeze_trigger lesson (pickups only) (WPF :2315)
+        ActivateFreeze();
+        // WPF :2317 App.Bark?.NotifyChaosFreezeCaught(...) — IBarkService lacks the member (follow-up).
+        _state.PushEvent("❄ frozen. the field holds");
+        UpdateStateText();
+    }
+
+    /// <summary>A mouse-down landed on a Tease: its payload fires (resistance can absorb THAT,
+    /// nothing else) and the streak HALVES no matter what — that's the price of touching
+    /// (WPF ChaosModeService.cs:1330-1360).</summary>
+    private void OnTeaseTouched(ChaosBubbleSpec spec)
+    {
+        if (_state == null || _paused || _manualPaused) return;
+        _state.Detonated++;   // WPF :1333
+        ChaosLessonHooks.OnDetonation();   // silk_touch: a touched Tease dirties the loop too (WPF :1336)
+
+        const int shieldCost = 1;
+        if (_state.Shields >= shieldCost)
+        {
+            // Resistance prevents only the payload — the streak still pays below (WPF :1340-1346).
+            _state.Shields -= shieldCost;
+            _state.Heat = Math.Max(0, _state.Heat - 0.2);
+            AvaloniaChaosSfx.Play(_state.Shields == 0 ? "resist_crumble" : "resist_absorb", 0.6f);
+            _state.PushEvent($"♥ resistance takes the sting ({spec.PayloadKind})");
+        }
+        else
+        {
+            FirePayload(spec);   // WPF FirePayloadForDetonation :1349
+            _state.EffectsFired++;
+            AvaloniaChaosSfx.Play("trigger", 0.55f);
+            // WPF :1352 Shake(0.3+s*0.4, 320) — no screen-shake seam in this head yet (follow-up).
+        }
+
+        _state.Combo = _state.Combo > 1 ? _state.Combo / 2 : 0;   // ALWAYS — the price of touching (WPF :1355)
+        _state.PushEvent($"✖ you touched it. it laughs — streak halves to x{_state.Combo}");
+        // WPF :1358 Pulse(FF3D5A, 0.38) — no pulse seam (follow-up).
+        // WPF :1359 App.Bark?.NotifyChaosTeaseClicked() — IBarkService lacks the member (follow-up).
+        UpdateStateText();
+    }
+
+    /// <summary>The Tease expired untouched: restraint pays — gold, score AND focus
+    /// (WPF ChaosModeService.cs:1405-1425).</summary>
+    private void OnTeaseDenied(ChaosBubbleSpec spec)
+    {
+        if (_state == null || _paused || _manualPaused) return;
+        int gold = GoldScaled(_rng.Next(CoreChaosTuning.TEASE_GOLD_MIN, CoreChaosTuning.TEASE_GOLD_MAX + 1));   // WPF :1408
+        ChaosMeta.AddGold(gold);   // WPF BankGold :1409
+        ChaosHappyPath.OnGoldFirstSeen();
+        _state.Score += ChaosScoring.TeaseDeniedScore(_state.TotalMult, _state.BlindfoldPayMult);   // 120 x mults (WPF :1410-1412)
+        _state.Focus = Math.Min(_state.FocusMax, _state.Focus + CoreChaosTuning.FOCUS_PER_DENIED);  // restraint feeds focus (WPF :1413)
+        _state.PushEvent($"{ChaosGlyphs.Gold} denied. it pays +{gold} gold");
+        AnnounceChaos($"DENIED. +{gold} {ChaosGlyphs.Gold} gold", ChaosAnnounceKind.PowerUp,
+            artKey: "denied", subText: $"+{gold} {ChaosGlyphs.Gold} gold");   // WPF :1416-1417
+        // WPF :1418 Pulse(FFD700, 0.25) — no pulse seam (follow-up).
+        // WPF :1420-1424 NotifyChaosTeaseDenied / the 5-streak NotifyChaosTeaseDeniedStreak —
+        // IBarkService lacks both members (follow-up); the counters stay live for that port.
+        _teaseDeniedThisRun++;
+        if (_teaseDeniedThisRun >= CoreChaosTuning.TEASE_DENIED_STREAK_COUNT && !_teaseDeniedStreakBarked)
+            _teaseDeniedStreakBarked = true;
+        UpdateStateText();
+    }
+
+    /// <summary>A Bound survivor's tether snapped — it enraged. The juice lives here; in WPF
+    /// the trance-halving/speed-up is engine-side (WPF ChaosModeService.cs:1395-1404). NOTE:
+    /// the Core BubbleEngine currently DETONATES the survivor at window lapse instead of
+    /// enraging it in place — an engine gap logged as a follow-up row, not papered over here.</summary>
+    private void OnBoundEnraged(ChaosBubbleSpec spec)
+    {
+        if (_state == null) return;
+        AvaloniaChaosSfx.Play("toy_denied", 0.5f);   // a sharp denial sting until a dedicated cue ships (WPF :1399)
+        // WPF :1400 Pulse(FF4A4A, 0.30) — no pulse seam (follow-up).
+        _state.PushEvent("⛓ the tether snaps — it enrages");
+    }
+
+    /// <summary>The Brittle shattered — the cursor brushed (or pressed) the glass. The mimic's
+    /// live effect fires; resistance can absorb the payload but unlike the Tease the streak is
+    /// spared — the effect itself is the whole price. Never counts as a missed trance
+    /// (WPF ChaosModeService.cs:1365-1392).</summary>
+    private void OnBrittleShattered(ChaosBubbleSpec spec)
+    {
+        if (_state == null || _paused || _manualPaused) return;
+        AvaloniaChaosSfx.Play(AvaloniaChaosSfx.ResolvePath("glass_shatter").Length > 0 ? "glass_shatter" : "trigger", 0.55f);   // WPF :1368
+
+        const int shieldCost = 1;
+        if (_state.Shields >= shieldCost)
+        {
+            _state.Shields -= shieldCost;
+            _state.Heat = Math.Max(0, _state.Heat - 0.2);
+            AvaloniaChaosSfx.Play(_state.Shields == 0 ? "resist_crumble" : "resist_absorb", 0.6f);
+            _state.PushEvent($"♥ resistance takes the shards ({spec.PayloadKind})");
+        }
+        else
+        {
+            FirePayload(spec);   // WPF FirePayloadForDetonation :1381
+            _state.EffectsFired++;
+            // WPF :1384 Shake(0.25+s*0.35, 300) — no screen-shake seam (follow-up).
+            _state.PushEvent($"◇ it shatters — {spec.PayloadKind} was inside");
+        }
+        // WPF :1389 Pulse(BFE6FF, 0.32) — no pulse seam (follow-up).
+        UpdateStateText();
+    }
+
+    /// <summary>A treat (flash/subliminal/golden) sat unpopped past its screen life: it
+    /// dissolved — no pop, no payload — and the streak HALVES (WPF ChaosModeService.cs:1901-1920).
+    /// The heart and gold droplets are exempt: a missed heart "just exits the bottom"
+    /// (WPF ChaosModeService.cs:2897-2898) — the Core engine fires this callback for them
+    /// too, so they are swallowed here.</summary>
+    private void OnTreatExpired(ChaosBubbleSpec spec)
+    {
+        if (_state == null || _paused || _manualPaused) return;
+        if (spec.IsHeart || spec.IsDroplet) return;   // kindness pickups never punish a miss
+        string name = spec.IsGolden ? "lucky bubble" : spec.VariantId;
+        if (_state.Combo > 1)
+        {
+            _state.Combo /= 2;
+            _state.PushEvent($"💨 {name} faded… streak halved to x{_state.Combo}");
+        }
+        else
+        {
+            _state.Combo = 0;
+            _state.PushEvent($"💨 {name} faded away");
+        }
+        UpdateStateText();
+    }
+
+    // ---- darter slow-mo power-up (WPF ChaosModeService.cs:2323-2394) ----
+
+    /// <summary>Catching a darter slows the whole field: bubbles drift slower, live fuses last
+    /// longer, spawns stretch out, and payloads linger. Refreshes on each catch
+    /// (WPF ChaosModeService.cs ActivateSlowMo :2966+).</summary>
+    private void ActivateSlowMo(double? durationSec = null, string bannerLabel = "Time Slow")
+    {
+        _slowMoRemainingSec = durationSec
+            ?? (ChaosSpawnDirector.SLOWMO_DURATION_SEC + (_state?.SlowMoBonusSec ?? 0));
+        // "Focus here...": triple pay rides ONLY the pendulum's own swing (WPF :2336-2338).
+        _pendulumSlowActive = bannerLabel == "Pendulum";
+        _bubbles.SetChaosTimeScale(ChaosSpawnDirector.SLOWMO_FACTOR);
+        ShowEffectBanner("slowmo", bannerLabel, global::Avalonia.Media.Color.FromRgb(0x7A, 0xE0, 0xFF),
+            artKey: bannerLabel == "Pendulum" ? "pendulum" : "slowmo");   // WPF :2340-2341
+        EffectPayload.GlobalDurationMult = 1.0 / ChaosSpawnDirector.SLOWMO_FACTOR;   // payloads linger (WPF :2342)
+        if (!_slowMoCueOn) AvaloniaChaosSfx.Play("time_slow_in", 0.5f);   // refreshes shouldn't re-warp (WPF :2343)
+        _slowMoCueOn = true;
+    }
+
+    private void EndSlowMo()
+    {
+        _slowMoRemainingSec = 0;   // WPF :2386-2394
+        _pendulumSlowActive = false;
+        _bubbles.SetChaosTimeScale(1.0);
+        EndEffectBanner("slowmo");
+        if (_slowMoCueOn) AvaloniaChaosSfx.Play("time_slow_out", 0.45f);
+        _slowMoCueOn = false;
+        if (_freezeRemainingSec <= 0) EffectPayload.GlobalDurationMult = 1.0;   // don't clobber an active freeze
+    }
+
     private void UpdateStateText()
     {
         if (_state == null) return;
@@ -913,7 +1398,9 @@ public sealed class AvaloniaChaosService : IChaosService
         _state.ChannelText = _state.IsChanneling
             ? $"channeling… {_state.ChannelHeldSec:0.0}s"
             : "";
-        _state.FocusLow = _state.Focus < AvaloniaChaosTuning.FocusLowThreshold;
+        // Focus reads low under one snap's price (WPF: FocusLow judges Focus against
+        // ChaosTuning.DEFUSE_COST — both 30).
+        _state.FocusLow = _state.Focus < CoreChaosTuning.DEFUSE_COST;
         _state.RaiseChanged(nameof(ChaosRunState.FocusText));
         _state.RaiseChanged(nameof(ChaosRunState.ChannelText));
         _state.RaiseChanged(nameof(ChaosRunState.FocusLow));
@@ -1000,6 +1487,10 @@ public sealed class AvaloniaChaosService : IChaosService
             _paused = false;
             _bubbles.SetChaosInputLocked(false);
             _bubbles.SetChaosFrozen(false);
+            // Welcome Shower: every resume-GO dumps a quick rain of treats from the top
+            // (WPF ResumeAfterDraft, ChaosModeService.cs:1621-1623 — the scripted draft
+            // resumes through the same path in WPF).
+            if (_state.WelcomeShowerEnabled) SpawnWelcomeShower();
             UpdateStateText();
             return;
         }
@@ -1011,6 +1502,9 @@ public sealed class AvaloniaChaosService : IChaosService
         _paused = false;
         _bubbles.SetChaosInputLocked(false);
         _bubbles.SetChaosFrozen(false);
+        // Welcome Shower: every loop's GO! dumps a quick rain of treats from the top
+        // (WPF ResumeAfterDraft, ChaosModeService.cs:1621-1623).
+        if (_state.WelcomeShowerEnabled) SpawnWelcomeShower();
         UpdateStateText();
     }
 
@@ -1125,6 +1619,14 @@ public sealed class AvaloniaChaosService : IChaosService
         _freezeRemainingSec = 0;
         _snapFlashRemainingSec = 0;
         _rippleCooldownSec = 0;
+        // Spawn-director transients die with the run (WPF ChaosModeService.cs:399-402 resets
+        // these at the NEXT BeginRun; clearing here too keeps a torn-down service inert).
+        _slowMoRemainingSec = 0;
+        _slowMoCueOn = false;
+        _pendulumSlowActive = false;
+        _heavyUntilUtc = DateTime.MinValue;
+        _heartArmedThisWave = false;
+        EffectPayload.GlobalDurationMult = 1.0;   // a mid-run teardown can't leave payloads stretched (WPF EndSlowMo :2393)
         AvaloniaChaosMode.ActiveMode = ChaosPlayMode.Story;
         // WPF parity (ChaosModeService.cs:3266-3270): reset the pin after the run so
         // dashboard trigger overlays never inherit a stale demote.
@@ -1335,7 +1837,7 @@ public sealed class AvaloniaChaosService : IChaosService
         {
             for (int i = 1; i <= 2; i++)
             {
-                var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(i * AvaloniaChaosTuning.RIPPLE_WAVE_GAP_MS) };
+                var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(i * CoreChaosTuning.RIPPLE_WAVE_GAP_MS) };
                 int local = i;
                 t.Tick += (_, _) => { t.Stop(); CastRippleWave(px); };
                 t.Start();
@@ -1436,9 +1938,9 @@ public sealed class AvaloniaChaosService : IChaosService
 
     private void ActivateFreeze()
     {
-        _freezeRemainingSec = AvaloniaChaosTuning.FREEZE_DURATION_SEC;
+        _freezeRemainingSec = FREEZE_DURATION_SEC;
         _bubbles.SetChaosFrozen(true);
-        _bubbles.VibrateAllForFreeze(AvaloniaChaosTuning.FREEZE_VIBRATE_MS);
+        _bubbles.VibrateAllForFreeze(FREEZE_VIBRATE_MS);
     }
 
     private void EndFreeze()
@@ -1829,10 +2331,15 @@ public sealed class AvaloniaChaosService : IChaosService
         _ => global::Avalonia.Media.Color.FromRgb(0xFF, 0xFF, 0xFF),
     };
 
+    /// <summary>Force-spawn one white rabbit right now (Rabbit Caller; storm ticks reuse it).
+    /// Optional point pins the spawn there — the summon-at-click
+    /// (WPF ChaosModeService.cs:2762-2769; the stand-in passed DifficultyMult where WPF
+    /// scales by RunIntensity — a drift, fixed with the S4 catalog switch).</summary>
     private void SpawnDarter(double? atPxX = null, double? atPxY = null)
     {
         if (_state == null) return;
-        var spec = ChaosBubbleVariants.BuildDarter(_state.DifficultyMult, spotlight: false, atPxX, atPxY);
+        var spec = ChaosSpawnCatalog.BuildDarter(_state.RunIntensity, spotlight: false, sweeper: false, _rng, atPxX, atPxY);
+        ChaosMeta.MarkDiscovered("bubble:darter");   // WPF :2767
         _bubbles.SpawnChaosBubble(spec);
     }
 

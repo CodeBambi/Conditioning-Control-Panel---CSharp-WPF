@@ -469,9 +469,13 @@ public static class ChaosSpawnCatalog
     /// defuse deflates it cleanly. Fuse
     /// <c>= max(1200, (3500 + rng.Next(1500)) * (1 - intensity*0.25) * fuseTimeMult * max(0.1, fuseMult))</c>;
     /// <paramref name="fuseMult"/> &gt; 1 = the gentler debut trance.
+    /// <para><paramref name="effectIntensity"/> is NOT read by the echo itself (its payload
+    /// never fires) — it rides on the spec so the split path can build children at the run's
+    /// configured intensity; WPF SpawnEchoChildren reads <c>Config.EffectIntensity</c>
+    /// directly in the service (WPF ChaosModeService.cs:1435-1438).</para>
     /// </summary>
     public static ChaosBubbleSpec BuildEcho(double intensity, double fuseTimeMult, double sizeScale,
-                                            double fuseMult, Random rng)
+                                            double fuseMult, Random rng, double effectIntensity = 1.0)
     {
         double t = Math.Clamp(rng.NextDouble() * 0.7 + intensity * 0.45, 0, 1);
         double size = ECHO_SIZE_MIN + (ECHO_SIZE_MAX - ECHO_SIZE_MIN) * t;
@@ -489,6 +493,7 @@ public static class ChaosSpawnCatalog
             FuseMs = fuse,
             Motion = ChaosMotion.FloatUp,
             IsEcho = true,
+            EffectIntensity = effectIntensity,
         };
     }
 

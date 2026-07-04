@@ -72,11 +72,69 @@ public interface IBubbleService
         Action<ChaosBubbleSpec>? onChannelStarted = null,
         Action<ChaosBubbleSpec, string>? onChannelBroken = null);
 
+    /// <summary>
+    /// Enters chaos mode with the FULL behavioral callback set the Core
+    /// <see cref="BubbleEngine"/> supports (darter/freeze catches, chaperone shield,
+    /// bound enrage, tease touch/denial, brittle shatter, treat expiry, spanker) — the
+    /// seam the WPF 26-argument <c>BubbleService.BeginChaosMode</c> maps onto
+    /// (WPF ChaosModeService.cs:361-381). Default implementation degrades to the
+    /// 6-callback overload, dropping the behavioral callbacks, so existing fakes keep
+    /// compiling and behaving.
+    /// </summary>
+    void BeginChaosMode(
+        Action<ChaosBubbleSpec> onBenignPop,
+        Action<ChaosBubbleSpec, double, bool> onDefuse,
+        Action<ChaosBubbleSpec> onDetonate,
+        Action<ChaosBubbleSpec, bool>? onDarterCaught = null,
+        Action<ChaosBubbleSpec>? onFreezeCaught = null,
+        Action<ChaosBubbleSpec, bool>? onChaperoneShieldBroken = null,
+        Action<ChaosBubbleSpec>? onBoundEnraged = null,
+        Action<ChaosBubbleSpec>? onTeaseTouched = null,
+        Action<ChaosBubbleSpec>? onTeaseDenied = null,
+        Action<ChaosBubbleSpec>? onBrittleShattered = null,
+        Action<ChaosBubbleSpec>? onTreatExpired = null,
+        Action<ChaosBubbleSpec, bool>? onDarterSpanked = null,
+        double chainReachDip = 120.0,
+        Func<ChaosBubbleSpec, bool>? canChannel = null,
+        Action<ChaosBubbleSpec>? onChannelStarted = null,
+        Action<ChaosBubbleSpec, string>? onChannelBroken = null)
+        => BeginChaosMode(onBenignPop, onDefuse, onDetonate, canChannel, onChannelStarted, onChannelBroken);
+
     /// <summary>Leaves chaos mode and destroys all chaos bubbles.</summary>
     void EndChaosMode();
 
     /// <summary>Queues a chaos bubble for materialization.</summary>
     void SpawnChaosBubble(ChaosBubbleSpec spec);
+
+    /// <summary>Spawns a Chaperone pair: the live is shielded while its escort orbits
+    /// (WPF BubbleService.cs:1150 <c>SpawnChaosChaperone</c>). Default implementation
+    /// degrades to two unlinked spawns so fakes keep compiling.</summary>
+    void SpawnChaosChaperone(ChaosBubbleSpec live, ChaosBubbleSpec escort)
+    {
+        SpawnChaosBubble(live);
+        SpawnChaosBubble(escort);
+    }
+
+    /// <summary>Spawns a tethered Bound pair — both halves must be defused quickly
+    /// (WPF BubbleService <c>SpawnChaosBoundPair</c>, consumed WPF ChaosModeService.cs:1299).
+    /// Default implementation degrades to two unlinked spawns.</summary>
+    void SpawnChaosBoundPair(ChaosBubbleSpec a, ChaosBubbleSpec b)
+    {
+        SpawnChaosBubble(a);
+        SpawnChaosBubble(b);
+    }
+
+    /// <summary>Freeze pickups currently on screen — the spawn director's
+    /// FREEZE_MAX_ON_SCREEN re-pick reads this (WPF ChaosModeService.cs:1155-1162).
+    /// Default 0 (fakes never hit the cap).</summary>
+    int ActiveFreezeBubbles => 0;
+
+    /// <summary>Engine-logical X of the last chaos pop — spawn-at-pop-point consumers pin here
+    /// (WPF BubbleService.cs:120-122 <c>ChaosLastPopXPx</c>). Default 0.</summary>
+    double ChaosLastPopX => 0;
+
+    /// <summary>Engine-logical Y of the last chaos pop (WPF BubbleService.cs:120-122). Default 0.</summary>
+    double ChaosLastPopY => 0;
 
     /// <summary>Pauses or resumes chaos bubble physics.</summary>
     void SetChaosFrozen(bool frozen);

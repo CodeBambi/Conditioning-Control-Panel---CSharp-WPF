@@ -80,6 +80,17 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
     public bool IsPaused => _ambientEngine.IsPaused;
     public int ActiveBubbles => _ambientEngine.ActiveBubbles + (_chaosEngine?.ActiveBubbles ?? 0);
 
+    /// <summary>Freeze pickups currently alive on the chaos field — the spawn director's
+    /// FREEZE_MAX_ON_SCREEN re-pick reads this (WPF ChaosModeService.cs:1155-1162).</summary>
+    public int ActiveFreezeBubbles => _chaosEngine?.ActiveFreezeBubbles ?? 0;
+
+    /// <summary>Engine-logical X of the last chaos pop (WPF BubbleService.cs:120-122
+    /// <c>ChaosLastPopXPx</c> equivalent — gg-rabbit sweepers/droplets pin here).</summary>
+    public double ChaosLastPopX => _chaosEngine?.ChaosLastPopX ?? 0;
+
+    /// <summary>Engine-logical Y of the last chaos pop (WPF BubbleService.cs:120-122).</summary>
+    public double ChaosLastPopY => _chaosEngine?.ChaosLastPopY ?? 0;
+
     public event Action? OnBubblePopped
     {
         add => _ambientEngine.OnBubblePopped += value;
@@ -444,15 +455,20 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
     {
         if (_chaosEngine == null) return;
 
+        // WPF SpawnEchoChildren (ChaosModeService.cs:1430-1443): 2 children via the faithful
+        // catalog builder, pinned at the pop point ±70/±50. The run's EffectIntensity rides on
+        // the parent spec (stamped by ChaosSpawnCatalog.BuildEcho) — WPF reads Config.EffectIntensity
+        // directly in the service; this engine's split event lands here instead.
         for (int i = 0; i < 2; i++)
         {
             try
             {
-                var child = ChaosBubbleVariants.BuildEchoChild(
+                var child = ChaosSpawnCatalog.BuildEchoChild(
                     parent.SizePx,
                     centerPxX + Random.Shared.Next(-70, 71),
                     centerPxY + Random.Shared.Next(-50, 51),
-                    parent.EffectIntensity);
+                    parent.EffectIntensity,
+                    Random.Shared);
                 _chaosEngine.SpawnChaosBubble(child);
             }
             catch (Exception ex)

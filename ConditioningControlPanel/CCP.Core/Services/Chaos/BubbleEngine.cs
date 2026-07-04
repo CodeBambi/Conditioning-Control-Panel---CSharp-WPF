@@ -13,6 +13,9 @@ public sealed class BubbleEngine
     private const double TickIntervalSec = 0.032; // ~30 FPS
     private const int MaxSpawnsPerFrame = 1;
     private const double DefaultDarterSpeed = 360.0;
+    /// <summary>WPF's fixed-step tick assumed a flat 32ms frame; per-frame WPF speeds convert
+    /// to this engine's per-second velocities through this factor.</summary>
+    private const double WpfFramesPerSecond = 1000.0 / 32.0;
     private const int DefaultDarterTelegraphMs = 500;
     private const double DefaultChainReachDip = 120.0;
 
@@ -101,6 +104,21 @@ public sealed class BubbleEngine
     public bool IsPaused => _isPaused;
     public int ActiveBubbles => _bubbles.Count;
     public bool ChaosActive => _chaosActive;
+
+    /// <summary>Freeze pickups currently alive — the spawn director's FREEZE_MAX_ON_SCREEN
+    /// cap re-pick reads this (WPF BubbleService.ActiveFreezeBubbles, consumed at
+    /// WPF ChaosModeService.cs:1155-1162).</summary>
+    public int ActiveFreezeBubbles => _bubbles.Count(b => b.Spec is { IsFreeze: true } && !b.IsPopping);
+
+    /// <summary>Engine-logical X of the last chaos bubble popped — spawn-at-pop-point
+    /// consumers (gg-rabbit sweepers, gold droplets) pin here. Mirrors the WPF
+    /// BubbleService.ChaosLastPopXPx/YPx statics stamped on every chaos pop path
+    /// (WPF BubbleService.cs:120-122, :3654-3860); this engine's spawn-pin space is
+    /// engine-logical units (see ComputeChaosSpawn), so the stamp is logical too.</summary>
+    public double ChaosLastPopX { get; private set; }
+
+    /// <summary>Engine-logical Y of the last chaos bubble popped (see <see cref="ChaosLastPopX"/>).</summary>
+    public double ChaosLastPopY { get; private set; }
 
     /// <summary>Seconds of rabbit/darter trail currently active (Tail-Plug boon).</summary>
     public double ChaosRabbitTrailSecNow => _rabbitTrailSec;
@@ -227,6 +245,11 @@ public sealed class BubbleEngine
             if (spec.IsChaperoneLive && bubble.IsShielded) return;
 
             bubble.IsPopping = true;
+            // Stamp the pop point BEFORE any callback so spawn-at-pop consumers read a live
+            // value inside their handlers (the WPF Bubble pop paths stamp the statics the
+            // same way, WPF BubbleService.cs:3654-3860).
+            ChaosLastPopX = bubble.X + bubble.Size / 2.0;
+            ChaosLastPopY = bubble.Y + bubble.Size / 2.0;
 
             if (spec.IsTease)
             {
@@ -834,7 +857,10 @@ public sealed class BubbleEngine
         if (spec.IsDarter)
         {
             var angle = _random.NextDouble() * Math.PI * 2.0;
-            var speed = spec.DarterSpeed > 0 ? spec.DarterSpeed : DefaultDarterSpeed;
+            // WPF DARTER_SPEED is DIPs PER 32ms FRAME (WPF ChaosBubbleVariants.cs:141 "9.0
+            // DIPs/frame"); this engine integrates velocities per SECOND (X += Vx*dt), so a
+            // catalog-built spec converts at materialize (9.0/frame ≈ 281 DIP/s).
+            var speed = spec.DarterSpeed > 0 ? spec.DarterSpeed * WpfFramesPerSecond : DefaultDarterSpeed;
             state.Vx = Math.Cos(angle) * speed;
             state.Vy = Math.Sin(angle) * speed;
             state.TelegraphRemainingMs = spec.TelegraphMs > 0 ? spec.TelegraphMs : DefaultDarterTelegraphMs;
@@ -1290,7 +1316,7 @@ public sealed class BubbleEngine
             len = 1;
         }
 
-        var speed = (darter.Spec.DarterSpeed > 0 ? darter.Spec.DarterSpeed : DefaultDarterSpeed) * 2.0;
+        var speed = (darter.Spec.DarterSpeed > 0 ? darter.Spec.DarterSpeed * WpfFramesPerSecond : DefaultDarterSpeed) * 2.0;
         darter.Vx = (dx / len) * speed;
         darter.Vy = (dy / len) * speed;
     }
