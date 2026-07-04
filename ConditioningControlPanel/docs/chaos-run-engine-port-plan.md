@@ -4,6 +4,67 @@ Created 2026-07-04. Claim: task-board ledger row `bac65e4a` (@fable). Goal:
 `docs/skia-rebuild-goal.md` WP3/WS2. This replaces the simplified `AvaloniaChaosService`
 stand-in with a faithful port of WPF `Services/Chaos/ChaosModeService.cs` (3275L).
 
+---
+
+## 🔖 HANDOFF NOTES (for a mechanical-tier model picking this up)
+
+**Read this whole section first.** It was written 2026-07-04 when the smart-model session
+handed the remaining work off. You do NOT need to redo archaeology — the 4 contract docs
+below + this plan are the source of truth; do NOT re-read the WPF files end-to-end except
+the exact line ranges each slice cites.
+
+### Status (2026-07-04, commit `071a8d7e`)
+- **S1 ✅** Core `ChaosSpawnCatalog` + 63 tests (`c11c23ce`)
+- **S2 ✅** config/state parity, `ApplyTo`, sin ramp, computed mult stack + 38 tests (`b0aedbbd`)
+- **S3 ✅** exact scoring + focus economy + detonation branches + 35 tests (`fc7589b8`)
+- **S4 ✅** faithful spawn director + behavioral callbacks (THE HEART) + 51 tests (`071a8d7e`)
+- Core tests 205 → **392**; all gates green every slice; smoke baseline held (Findings: 5).
+- The hard/architecture/JUDGMENT slices (S1-S4) are DONE. What remains (S4b, S5-S9) is
+  **MECHANICAL**: follow the steps literally, run every gate, STOP with a `BLOCKED:` note
+  if a precondition fails or a step is ambiguous. Do NOT improvise.
+
+### Remaining ladder, in order (one commit each)
+1. **S4b — engine seam gaps** (SMALL but touches `BubbleEngine`; do this FIRST, slices S5-S9
+   depend on the gap-free engine). See the dedicated S4b section below — it is split into 4
+   independent sub-steps, each auditable on its own.
+2. **S5 — draft system** (mechanical: port BeginWaveTransition + ChaosBoonPool.Draft +
+   OnBoonChosen; add Core tests).
+3. **S6 — payload dispatch + heavy gate + Ambient fix** (mechanical: collapse BuildPayload into
+   AvaloniaEffectPayloadFactory; port FireScaledPayload/FirePayloadForDetonation; close P3 row).
+4. **S7 — lifecycle completion** (mechanical: EndRun order, AwardRunRewards faithful,
+   sentinel cadence, SFX sweep; Core tests on the reward formula).
+5. **S8 — layer production callers + hints** (mechanical: wire PopText + FieldFx layers;
+   port ChaosBubbleHints).
+6. **S9 — full-run verification + trackers** (run side-by-side with WPF, update all trackers).
+
+### Hard rules for a mechanical executor (read before each slice)
+- **Trust the WPF source over the contract docs** when they disagree; cite the WPF file:line
+  in an XML doc or inline comment. Do NOT trust your memory of "how this usually works".
+- **Do NOT modify**: `ConditioningControlPanel/Services/**` (WPF head), `tests/.../SmokeTestRunner.cs`,
+  `CCP.Avalonia/Compositor/**` internals. New interface members = **DIMs** with safe no-op
+  bodies (fakes keep compiling).
+- **No `TODO` / `// ...` / placeholders.** If you cannot wire something, leave a
+  `// (plan: chaos-run-engine-port-plan.md Sx) <reason>` comment AND list it in your report
+  as a follow-up row. Never fake a seam.
+- **Pure logic → `CCP.Core/Services/Chaos/`** (new file per concern) + unit tests in
+  `tests/CCP.Core.Tests/`; the Avalonia service calls the Core function. This pattern is
+  already established (ChaosSpawnCatalog, ChaosRunRules, ChaosScoring, ChaosSpawnDirector).
+- **Gates before EVERY commit** (copy-paste; ALL must pass — if any fails, fix it or STOP):
+  ```
+  dotnet build ConditioningControlPanel/CCP.Desktop.slnf -clp:ErrorsOnly   # 0 errors
+  dotnet build ConditioningControlPanel.sln -clp:ErrorsOnly                # 0 errors
+  dotnet test ConditioningControlPanel/tests/CCP.Core.Tests/CCP.Core.Tests.csproj   # ALL pass, count >= 392
+  dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -c Debug -- --smoke-test   # 44 tabs / Findings: 5 (first-chance 21 = known benign OAuth-cancel noise)
+  ```
+- **State-mutating slices (S5 OnBoonChosen, S7 EndRun/AwardRunRewards)** get an independent
+  adversarial review (claim-verifier subagent or careful self-review line-by-line vs WPF)
+  before commit, per goal rule 7.
+- **One slice per commit** (`--no-verify`); update the slice's evidence row in this file in
+  the same commit; never leave a red tree.
+- **Record exact test counts** in each evidence row (floor is 392 now, not 205).
+
+---
+
 ## Source-of-truth contracts (read FIRST, do not re-derive from WPF)
 
 | Contract | Doc |
@@ -88,7 +149,49 @@ Handlers implement the contract semantics (echo split children, bound enrage, te
 touch/denied, brittle shatter w/ glass_shatter fallback cue, rabbit-spank lesson tick —
 verify BubbleEngine fires onDarterSpanked on first smack).
 
-### S5 — Draft system faithful port
+### S4b — Engine seam gaps surfaced by S4 [MECHANICAL, but touches BubbleEngine — do each sub-step as its own commit]
+
+S4 wired the spawn director but listed behaviors the Core `BubbleEngine` couldn't express.
+Each sub-step is independent and small; audit each against WPF `Services/Chaos/ChaosModeService.cs`
++ `Services/Bubbles/BubbleService.cs` before commit. Add a Core test for the semantics.
+
+- **S4b-1 Bound enrage = enrage, not detonate.** WPF `OnBoundEnraged` (ChaosModeService.cs:1395-1404)
+  + BubbleService: when the second half of a bound pair does NOT complete within
+  `BOUND_WINDOW_MS` (2500), the surviving half is ENRAGED (trance time halved, speed ×
+  `BOUND_ENRAGE_SPEED_MULT` 1.4) and left live — NOT detonated. The current Core engine
+  detonates the survivor. Fix `BubbleEngine`'s bound-pair-window-lapse path to enrage the
+  survivor instead (halve remaining fuse, apply speed mult) and fire `onBoundEnraged`.
+  Test: a bound pair where the second half times out → survivor stays alive, enraged.
+- **S4b-2 Treat-rot streak cost (ordinary treats).** WPF `onTreatExpired` (ChaosModeService.cs:1901-1920)
+  fires for rotting flash/subliminal treats too, halving combo (and swallowing heart/droplet
+  expiry silently). The Core engine only fires `onTreatExpired` for golden/heart/droplet.
+  Extend the engine to fire it for ordinary-treat rot as well, then ensure the service handler
+  halves combo (it already does) and swallows heart/droplet (it already does). Test: a
+  flash treat that expires un-popped halves combo.
+- **S4b-3 Darter spank lesson hook.** WPF `BubbleService.cs:3789` fires the lesson tick on a
+  darter's FIRST smack when The Spanker is equipped (rabbits can't be caught with Spanker on,
+  so the first smack is the only path). The Core engine declares `onDarterSpanked` but never
+  invokes it. Wire the engine to invoke `onDarterSpanked` exactly once per darter (first
+  pointer-down on a darter bubble), and have the service route it to
+  `ChaosLessonHooks.OnRabbitSpanked()` (add the hook if Avalonia's ChaosLessonHooks lacks it —
+  mirror WPF `ChaosLessonHooks.cs:134`). Test (Core, via a fake callback): first spank fires
+  the callback; subsequent spanks on the same darter do not.
+- **S4b-4 Live-lambda knobs (silk_touch / magnet / blindfold-opacity / cursor-pull).** WPF
+  BeginChaosMode takes live lambdas (ChaosModeService.cs:361-381) the engine reads per-frame:
+  `hitboxScale` (silk_touch 1.25), `liveMagnet` (silk_touch), `bubbleOpacity` (Blindfold),
+  `cursorPull`/`rabbitHoming`/`spankerOn`/`spankGrow`/`electrifiedRabbits`/`chainReach`/etc.
+  The Core engine takes static values at BeginChaosMode. Change the engine to accept
+  `Func<T>` (or read them off a small `ChaosRunKnobs` snapshot object the service updates) so
+  owned upgrades/boons actually take effect mid-run (X1-6 was only config-side until this).
+  This is the largest sub-step — if it's too big for one safe pass, do just `hitboxScale` +
+  `liveMagnet` (silk_touch) + `bubbleOpacity` (Blindfold) first and file the rest as a
+  follow-up row. Cite each knob's WPF source line.
+
+  S4b acceptance: each sub-step builds green, gates pass, WPF-cited comments, Core test pins
+  the new behavior. **Do not rewrite the engine** — extend it minimally at the specific
+  handler/materialize sites.
+
+### S5 — Draft system faithful port [MECHANICAL]
 `BeginWaveTransition` full choreography (pause/stop/wipe/PlayWaveClear/pulse/pending);
 no-draft inline path; `ChaosBoonPool.Draft` with duo/trio ReqMet gating, sin-slot
 (includeCurse roll + Surrender guarantee), Unique-taken exclusion (`TakenBoonIds`),
@@ -96,8 +199,15 @@ clamp 2-4; reroll (`RerollsLeft`); `OnBoonChosen` exact semantics (sin shielding
 first-times, lesson ticks, ApplyBoon, skip=+1 shield, announce, `ShowReadyGo`,
 auto-resume 15s auto-SKIP); scripted first-run draft; `ResumeAfterDraft` incl. deferred
 lesson cards + `ui_unlock` cue. **Unit tests** on Draft gating/sin ramp/unique exclusion.
+**Exact targets:** WPF ChaosModeService.cs BeginWaveTransition :1448-1487, OnBoonChosen :1531-1610,
+ResumeAfterDraft :1620-1660, TakenBoonIds :1510, RerollDraft :1519; ChaosBoonPool.Draft in
+WPF ChaosModels.cs (grep `static.*Draft`). Avalonia target: the stand-in's ShowDraft/
+OnBoonPicked/TriggerScriptedDraft in AvaloniaHeadStubs.cs (grep them). Extract the pure
+Draft logic (ReqMet, sin-slot fill, unique exclusion, clamp) into Core
+`ChaosDraftPool` (or extend ChaosRunRules) for testability. Contract ref:
+draft-payloads-lifecycle.md §1 (every value verbatim).
 
-### S6 — Payload dispatch + heavy gate + Ambient fix
+### S6 — Payload dispatch + heavy gate + Ambient fix [MECHANICAL]
 Collapse the stand-in's `BuildPayload` into `AvaloniaEffectPayloadFactory` (single map).
 Port `FireScaledPayload` (lesson hook + DetonationDurationMult wrap) and
 `FirePayloadForDetonation` (ambient remap: HtLink-only intrusive → cascade/text coin;
@@ -107,8 +217,13 @@ RunTick video 15s cap enforcement + `OnVideoEndured` lesson ticks. **Close the P
 builder; do NOT conflate with cfg.AmbientMode). ALSO port the WPF `Build(ambient:)` branch
 (WPF ChaosBubbleVariants.cs:714,767-773: forces IsLive=false/FuseMs=0/FloatUp/
 TreatLifeMs=7000/payload.Ambient=true) that S1 intentionally deferred — S1 audit EXTRA-1. Welcome-shower/heart/golden chimes.
+**Exact targets:** WPF ChaosModeService.cs FireScaledPayload :2196-2210,
+FirePayloadForDetonation :2205-2260, HeavyEffectActive :2192, video cap in RunTick :1050-1076,
+StingerForVariant :2247. Avalonia target: BuildPayload/FirePayload in AvaloniaHeadStubs.cs
++ AvaloniaEffectPayloads.cs + AvaloniaEffectPayloadFactory.cs. Contract ref:
+draft-payloads-lifecycle.md §2 (verbatim).
 
-### S7 — Lifecycle completion: EndRun/Cleanup/sentinel/SFX sweep
+### S7 — Lifecycle completion: EndRun/Cleanup/sentinel/SFX sweep [MECHANICAL, state-mutating → review before commit]
 EndRun exact order (loop tip on full course, lessons OnRunCompleted, teardown list,
 XP §3, `AwardRunRewards` faithful sparks §2 incl. TrickleDrops/drip capstone/first-fall,
 `RevealService.Sync("run_end")`, rank-up card, results w/ baseXp/skillMult/finalXp split);
@@ -118,12 +233,25 @@ funnel; sentinel Mark cadence (run-start + `_memSampleTick>=60` ~15s) + Clear bo
 cue sweep per contract §5 (glass_shatter fallback, ui_unlock, streak milestones,
 depth_change, time_slow in/out guards, freeze_shatter, …). **Unit tests**: AwardRunRewards
 formula (incl. first-fall once-ever, capstone), XP cap.
+**Exact targets:** WPF ChaosModeService.cs EndRun :3122-3200, CleanupAfterRun :3227-3274,
+AwardLoopTip + per-loop detonation (grep `AwardLoopTip`/`_waveDetonations`),
+LogMemSample/sentinel Mark :860 + RunTick 15s branch :1048, panic OnPanicKeyDuringRun :285,
+ForceShutdown :3085, ExtendOneLoop (S2 already ported on the state). Reward formula in
+WPF ChaosUpgrades.cs AwardRunRewards :495-521. Avalonia target: EndRun/CleanupAfterRun/
+BeginRun sentinel arming in AvaloniaHeadStubs.cs. Extract `AwardRunRewards` math into Core
+(`ChaosEconomy` or extend ChaosScoring) for the unit test. Contract ref: economy-scoring.md
+§2-3 + draft-payloads-lifecycle.md §3.4/3.6 (verbatim order).
 
-### S8 — Layer production callers + hints
+### S8 — Layer production callers + hints [MECHANICAL]
 Wire `ChaosPopTextLayer` (score/effect floaters at pop sites per WPF) and
 `ChaosFieldFxLayer` (player ripple/snap ripple/residue/trail dots/bound tethers from
 BubbleEngine field-hazard state + bound pairs). Port `ChaosBubbleHints` (KeyFor/TextFor/
 learned-set via ChaosMeta + HideChaosHints). Verify `--verify-layers` still 15/15.
+**Exact targets:** WPF ChaosBubbleHints.cs (KeyFor/TextFor/MarkLearned/IsLearned) +
+ChaosModeService pop-site `ShowPopScore`/pulse callers. Avalonia target: the existing
+`ShowChaosPopText` / `ChaosFieldRipple`/`SnapRipple`/`SetTether` seams on AvaloniaChaosService
+(proven by --verify-layers; just add production callers). ChaosMeta.State.BubbleHintsLearned
+for the learned set. Contract ref: spawn-system.md §6 (hints, verbatim key/text tables).
 
 ### S9 — Full-run verification + trackers
 Exercise a complete run on the Windows head side-by-side with WPF (spawn feel, draft,

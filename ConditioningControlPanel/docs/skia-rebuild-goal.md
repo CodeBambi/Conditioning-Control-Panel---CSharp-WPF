@@ -113,8 +113,15 @@ Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
   parity bugs found+fixed en route — per-leg animation durations, DPI px/DIP seams, streamed
   per-frame GIF decodes → decode-once with WPF memory caps, missing run-end teardowns; queue
   rows carry evidence + honest false-positive corrections). Remaining WS2: 6 unwired passives +
-  production callers arrive with the **chaos run-engine faithful port** (backlog row — next big
-  JUDGMENT item); interactive surfaces (HUD, toy button, boon stage, bubbles, unlock card) stay
+  production callers arrive with the **chaos run-engine faithful port**. **PROGRESS 2026-07-04
+  (commits `64c7f464`→`071a8d7e`): archaeology shipped 4 behavior-contract docs + a sliced
+  port plan (`docs/chaos-run-engine-port-plan.md`); the run-engine port's HARD/JUDGMENT slices
+  S1–S4 are DONE & adversarially audited (Core ChaosSpawnCatalog + ChaosRunRules + ChaosScoring
+  + ChaosSpawnDirector; spawn director, scoring, config/state parity, behavioral callbacks;
+  Core tests 205→392; all gates green every slice). REMAINING run-engine work is MECHANICAL
+  (S4b engine seam gaps, then S5 draft / S6 payloads / S7 lifecycle / S8 layer callers / S9
+  verify) — the port-plan HANDOFF section is written so a mechanical-tier model can finish it.
+  Next: S4b.** Interactive surfaces (HUD, toy button, boon stage, bubbles, unlock card) stay
   windows pending the hook decision; FPS-floor gate over a full chaos run once the run engine
   drives the layers. → WP3.
 - Avalonia mouse hook cannot swallow clicks (WPF can): bubble/flash pops leak the click
