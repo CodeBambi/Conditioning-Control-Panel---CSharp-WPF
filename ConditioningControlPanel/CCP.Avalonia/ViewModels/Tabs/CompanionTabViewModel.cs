@@ -255,7 +255,13 @@ public partial class CompanionTabViewModel : TabItemViewModel
     {
         _logger?.LogInformation("Customize companion prompt requested");
         var dialog = new ConditioningControlPanel.Avalonia.Dialogs.CompanionPromptEditorDialog();
-        await dialog.ShowDialog<bool?>((global::Avalonia.Controls.Window?)null);
+        // ShowDialog throws ArgumentNullException on a null owner (L3-04): resolve the main window.
+        var owner = (global::Avalonia.Application.Current?.ApplicationLifetime
+            as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (owner is not null)
+        {
+            await dialog.ShowDialog<bool?>(owner);
+        }
         SyncUi();
     }
 

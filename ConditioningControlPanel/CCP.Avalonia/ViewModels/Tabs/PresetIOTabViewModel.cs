@@ -425,9 +425,13 @@ public partial class PresetIOTabViewModel : TabItemViewModel
         _ = Task.Run(async () =>
         {
             await Task.Delay(TimeSpan.FromSeconds(3));
-            DropZoneStatus = "";
-            IsDropZoneError = false;
-            IsDropZoneActive = false;
+            // Bound properties must be mutated on the UI thread (L5-23: was throwing "invalid thread").
+            global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                DropZoneStatus = "";
+                IsDropZoneError = false;
+                IsDropZoneActive = false;
+            });
         });
     }
 }
