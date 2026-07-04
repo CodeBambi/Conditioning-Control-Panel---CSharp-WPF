@@ -105,7 +105,13 @@ Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
   0→1→0). **Remaining WP2**: side-by-side WPF eyes-verification (timing/opacity/z/multi-DPI —
   list in the plan doc), Phase E flip+delete (HARD GATE: only after side-by-side parity is
   proven by running), then the authorized libmpv spike. → WP2.
-- Chaos overlays (~23 window classes) are not on the compositor. → WP3.
+- **WP3 OPENED 2026-07-04 (`0624d639`)**: chaos z-band `100–199` established in `CompositorLayers`
+  (WPF `ChaosWindowZ` raise-above-everything evidence; chaos = capture-VISIBLE, main surface);
+  `ChaosCursorGlowOverlay` → `ChaosCursorGlowLayer` migrated as the template (+ fixed a real
+  parity bug: legacy halo pulsed 2× too fast vs WPF); ranked migration queue + 8-step recipe in
+  the UCE plan's **Phase F** — 7 more live passive overlays are now MECHANICAL any-model work,
+  6 unwired ones blocked on the chaos run-engine backlog row, interactive surfaces (HUD, toy
+  button, boon stage, bubbles, unlock card) stay windows pending the hook decision. → WP3.
 - Avalonia mouse hook cannot swallow clicks (WPF can): bubble/flash pops leak the click
   to the app underneath. Decide and fix in WP3, or explicitly accept and document.
 - Linux: head builds and launches in a VM, but there is ZERO click-through code
