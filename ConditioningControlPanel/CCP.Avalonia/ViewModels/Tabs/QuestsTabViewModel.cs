@@ -224,15 +224,23 @@ public partial class QuestsTabViewModel : TabItemViewModel, IDisposable
         if (stepDef == null) return;
 
         var progress = _roadmap.GetStepProgress(node.StepId);
+        var owner = GetMainWindow();
 
+        // Completed step -> themed diary dialog (full photo, stats, editable note).
+        // WPF parity: MainWindow.Roadmap.cs RoadmapNode_Click completed branch (replaces the
+        // former msg_roadmap_diary_not_yet_ported placeholder).
         if (progress?.IsCompleted == true)
         {
-            await (_dialogService?.ShowMessageAsync(
-                stepDef.Title,
-                Loc.Get("msg_roadmap_diary_not_yet_ported")) ?? Task.CompletedTask);
+            if (owner is not null)
+            {
+                var diary = new ConditioningControlPanel.Avalonia.Dialogs.RoadmapDiaryDialog(
+                    node.StepId, stepDef, progress);
+                await diary.ShowDialog(owner);
+            }
             return;
         }
 
+        // Locked step -> inform the user (unchanged; reuses existing loc keys).
         if (!_roadmap.IsStepActive(node.StepId))
         {
             await (_dialogService?.ShowMessageAsync(
@@ -241,21 +249,19 @@ public partial class QuestsTabViewModel : TabItemViewModel, IDisposable
             return;
         }
 
-        var confirm = await (_dialogService?.ShowConfirmationAsync(
-            stepDef.Title,
-            stepDef.PhotoRequirement) ?? Task.FromResult(false));
-        if (!confirm) return;
+        // Active step -> themed start dialog. The ported RoadmapStartDialog merges WPF's confirm
+        // dialog and the file picker into one step, returning the chosen PhotoPath directly.
+        // WPF parity: MainWindow.Roadmap.cs RoadmapNode_Click active branch. Timing nuance: the
+        // combined dialog means StartStep now runs after the photo is picked (WPF called StartStep
+        // between its confirm dialog and a separate file picker).
+        if (owner is null) return;
+
+        var startDialog = new ConditioningControlPanel.Avalonia.Dialogs.RoadmapStartDialog(stepDef);
+        var started = await startDialog.ShowDialog<bool>(owner);
+        if (!started || !startDialog.Confirmed || string.IsNullOrEmpty(startDialog.PhotoPath)) return;
 
         _roadmap.StartStep(node.StepId);
-
-        var filters = new[] { new FileFilter("Image files", new[] { "jpg", "jpeg", "png", "gif", "bmp" }) };
-        var files = await (_dialogService?.ShowOpenFileDialogAsync(
-            $"Select Photo for: {stepDef.Title}",
-            filters) ?? Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
-
-        if (files.Count == 0) return;
-
-        await SubmitPhotoAsync(node.StepId, files[0]);
+        await SubmitPhotoAsync(node.StepId, startDialog.PhotoPath);
     }
 
     private async Task SubmitPhotoAsync(string stepId, string photoPath)
@@ -265,26 +271,27 @@ public partial class QuestsTabViewModel : TabItemViewModel, IDisposable
         var stepDef = RoadmapStepDefinition.GetById(stepId);
         if (stepDef == null) return;
 
-        var confirm = await (_dialogService?.ShowConfirmationAsync(
-            stepDef.Title,
-            Loc.Get("msg_submit_photo_confirm")) ?? Task.FromResult(false));
-        if (!confirm) return;
+        var owner = GetMainWindow();
+        if (owner is null) return;
+
+        // Themed photo-submit confirmation. WPF parity: MainWindow.Roadmap.cs ShowPhotoConfirmation
+        // -> RoadmapConfirmDialog (shows the step title + photo requirement).
+        var confirmDialog = new ConditioningControlPanel.Avalonia.Dialogs.RoadmapConfirmDialog(
+            stepDef.Title, stepDef.PhotoRequirement);
+        var confirmed = await confirmDialog.ShowDialog<bool>(owner);
+        if (!confirmed || !confirmDialog.Confirmed) return;
 
         // L4-09: collect the optional note via the ported InputDialog (owner-resolved, modal).
         // Empty text or cancel leaves the note null, preserving the prior behavior. Mirrors the
         // WPF flow in MainWindow.Roadmap.cs (ShowPhotoConfirmation), reusing the same loc keys.
         string? note = null;
-        var owner = GetMainWindow();
-        if (owner is not null)
-        {
-            var noteDialog = new ConditioningControlPanel.Avalonia.Dialogs.InputDialog(
-                Loc.Get("title_add_note"),
-                Loc.Get("msg_add_note_prompt"),
-                "");
-            var accepted = await noteDialog.ShowDialog<bool>(owner);
-            if (accepted && !string.IsNullOrEmpty(noteDialog.ResultText))
-                note = noteDialog.ResultText;
-        }
+        var noteDialog = new ConditioningControlPanel.Avalonia.Dialogs.InputDialog(
+            Loc.Get("title_add_note"),
+            Loc.Get("msg_add_note_prompt"),
+            "");
+        var accepted = await noteDialog.ShowDialog<bool>(owner);
+        if (accepted && !string.IsNullOrEmpty(noteDialog.ResultText))
+            note = noteDialog.ResultText;
 
         _roadmap.SubmitPhoto(stepId, photoPath, note);
         RefreshRoadmap();
@@ -380,6 +387,22 @@ public partial class QuestsTabViewModel : TabItemViewModel, IDisposable
     {
         _logger?.LogInformation("Roadmap step completed: {Step}", e.StepDefinition.Title);
         RefreshRoadmap();
+
+        // WPF parity (MainWindow.Roadmap.cs OnRoadmapStepCompleted): celebrate the completion with
+        // the themed, self-closing achievement popup, shown non-modally in the bottom-right corner.
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                var popup = new ConditioningControlPanel.Avalonia.Dialogs.RoadmapStepPopup(
+                    e.StepDefinition, e.StepProgress);
+                popup.Show();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to show roadmap step completion popup");
+            }
+        });
     }
 
     private void OnRoadmapTrackUnlocked(object? sender, RoadmapTrack track)

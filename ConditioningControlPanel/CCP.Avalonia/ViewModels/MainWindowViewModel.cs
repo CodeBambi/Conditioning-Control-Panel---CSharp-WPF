@@ -850,17 +850,42 @@ public partial class MainWindowViewModel : ObservableObject
             if (result == true)
             {
                 UpdateButtonText = Loc.Get("btn_downloading");
-                var downloaded = await _updateService!.DownloadUpdateAsync();
-                if (downloaded)
+
+                // L4-05: present the ported progress dialog during the download and drive its
+                // percentage from IUpdateService.DownloadProgressChanged (EventHandler<int>).
+                // WPF parity: App.xaml.cs UpdateProgressDialog. Owner-resolved and null-guarded;
+                // progress callbacks are marshalled to the UI thread before touching the dialog.
+                var progressOwner = GetCurrentWindow();
+                UpdateProgressDialog? progressDialog = null;
+                EventHandler<int>? onProgress = null;
+                if (progressOwner != null)
                 {
-                    await _updateService.InstallUpdateAsync();
+                    progressDialog = new UpdateProgressDialog();
+                    onProgress = (_, pct) => Dispatcher.UIThread.Post(() => progressDialog!.SetProgress(pct));
+                    _updateService!.DownloadProgressChanged += onProgress;
+                    progressDialog.Show(progressOwner);
                 }
-                else
+
+                try
                 {
-                    UpdateButtonText = $"v{update.Version}";
-                    await (_dialogService?.ShowMessageAsync(
-                        Loc.Get("title_update_failed"),
-                        Loc.Get("msg_update_download_failed")) ?? Task.CompletedTask);
+                    var downloaded = await _updateService!.DownloadUpdateAsync();
+                    if (downloaded)
+                    {
+                        await _updateService.InstallUpdateAsync();
+                    }
+                    else
+                    {
+                        UpdateButtonText = $"v{update.Version}";
+                        await (_dialogService?.ShowMessageAsync(
+                            Loc.Get("title_update_failed"),
+                            Loc.Get("msg_update_download_failed")) ?? Task.CompletedTask);
+                    }
+                }
+                finally
+                {
+                    if (onProgress != null)
+                        _updateService!.DownloadProgressChanged -= onProgress;
+                    progressDialog?.Close();
                 }
             }
         }
@@ -1777,6 +1802,32 @@ public partial class MainWindowViewModel : ObservableObject
             settings.HasLinkedDiscord = string.Equals(result.Provider, "discord", StringComparison.OrdinalIgnoreCase)
                                         || string.Equals(result.LinkedProvider, "discord", StringComparison.OrdinalIgnoreCase);
             _settingsService?.Save();
+        }
+
+        // L4-06: Season 0 OG welcome + display-name confirmation. LoginDialog flags OG users who
+        // haven't yet seen the welcome; present the ported UsernamePickerDialog in its OG-welcome
+        // mode (OgWelcomePanel is visible by default - we intentionally do NOT call
+        // ConfigureForNewUser). A chosen name is persisted the same way the login flow persists
+        // names, and HasShownOgWelcome is set so it only appears once. WPF parity:
+        // MainWindow.Marquee.cs ShowOgWelcomePopup (marks HasShownOgWelcome) +
+        // Services/Account/AccountService.cs UsernamePickerDialog usage.
+        if (result.ShouldShowOgWelcome && settings != null)
+        {
+            try
+            {
+                var picker = new global::ConditioningControlPanel.Avalonia.Dialogs.UsernamePickerDialog();
+                var picked = await picker.ShowDialog<bool>(mainWindow);
+                if (picked && !string.IsNullOrWhiteSpace(picker.ChosenDisplayName))
+                {
+                    settings.UserDisplayName = picker.ChosenDisplayName;
+                }
+                settings.HasShownOgWelcome = true;
+                _settingsService?.Save();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to show OG welcome / username picker dialog");
+            }
         }
 
         UpdateHeaderFromSettings();
