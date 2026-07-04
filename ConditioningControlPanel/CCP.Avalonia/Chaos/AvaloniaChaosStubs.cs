@@ -110,6 +110,10 @@ public sealed class ChaosUpgrade
     public int Cost { get; set; }
     public string Glyph { get; set; } = "◈";
     public string? IconPath { get; set; }
+
+    /// <summary>Mutates a freshly-built <see cref="ChaosRunConfig"/> at run start — owning
+    /// the upgrade shapes every run (WPF ChaosUpgrades.cs:27 / effects :49-88).</summary>
+    public Action<ChaosRunConfig> Apply { get; set; } = _ => { };
 }
 
 public sealed class ChaosLifetimeBoon
@@ -248,7 +252,8 @@ public sealed class ChaosRunConfig
     public string MotionMode { get; set; } = "Mixed";
     public int RunDurationSec { get; set; } = 180;
     public int WaveCount { get; set; } = 5;
-    public List<string> EnabledVariants { get; set; } = new();
+    /// <summary>Enabled variant ids. Null = all enabled (WPF ChaosModels.cs:146-147).</summary>
+    public List<string>? EnabledVariants { get; set; }
     public bool BoonDraftEnabled { get; set; } = true;
     public bool AllowCurses { get; set; } = true;
     public bool DartersEnabled { get; set; } = true;
@@ -263,11 +268,13 @@ public sealed class ChaosRunConfig
     public double SpawnRateMult { get; set; } = 1.0;
     public double SinChance { get; set; } = 0.5;
     public double EffectIntensity { get; set; } = 1.0;
-    public int DraftAutoResumeSec { get; set; } = 12;
+    /// <summary>Untouched-draft auto-SKIP timeout (WPF ChaosModeService.cs:94 DraftAutoResumeSecDefault = 15).</summary>
+    public int DraftAutoResumeSec { get; set; } = 15;
     public bool AmbientMode { get; set; }
     public bool MagnetEnabled { get; set; }
     public double FuseTimeMult { get; set; } = 1.0;
-    public bool PopupHeartEnabled { get; set; } = true;
+    /// <summary>Default false — ONLY the popup_notification upgrade enables it (WPF ChaosModels.cs:174 / ChaosUpgrades.cs:64).</summary>
+    public bool PopupHeartEnabled { get; set; }
     public bool PendulumSwing { get; set; }
     public double HitboxScale { get; set; } = 1.0;
     public int DraftChoices { get; set; } = 3;
@@ -276,44 +283,77 @@ public sealed class ChaosRunConfig
     public double ShakeIntensity { get; set; } = 1.0;
     public ChaosMotion? MotionOverride { get; set; }
 
+    /// <summary>Faithful port of WPF ChaosRunConfig.FromSettings (WPF ChaosModels.cs:189-231):
+    /// sin-slot ramp first, the null-settings early path still applies owned upgrades, then
+    /// the reveal clamps (difficulty pills, video/htlink variants), the numeric clamps, and
+    /// ChaosMeta.ApplyTo at the end so every fresh run config carries owned upgrades.</summary>
     public static ChaosRunConfig FromSettings()
     {
+        var cfg = new ChaosRunConfig();
+        cfg.SinChance = ChaosRunRules.DefaultSinChance(ChaosMeta.State.RunsCompleted);   // WPF ChaosModels.cs:192
         var s = App.Services?.GetService<global::ConditioningControlPanel.Core.Services.Settings.ISettingsService>()?.Current;
-        if (s == null) return new ChaosRunConfig();
-        return new ChaosRunConfig
-        {
-            // Story mode is globally locked off until content ships; NarrativeModeEnabled is ignored.
-            PlayMode = (AvaloniaChaosMode.StoryModeEnabled && s.NarrativeModeEnabled)
-                ? ChaosPlayMode.Story
-                : ChaosPlayMode.FreeDesktop,
-            Difficulty = s.ChaosDifficulty,
-            MotionMode = s.ChaosMotionMode,
-            RunDurationSec = s.ChaosRunDurationSec,
-            WaveCount = s.ChaosWaveCount,
-            EnabledVariants = s.ChaosEnabledVariants?.ToList() ?? new List<string>(),
-            BoonDraftEnabled = s.ChaosBoonDraftEnabled,
-            AllowCurses = s.ChaosAllowCurses,
-            DartersEnabled = s.ChaosDartersEnabled,
-            DifficultyMult = DifficultyToMult(s.ChaosDifficulty),
-            SparkGainMult = 1.0,
-            BaseMult = 1.0,
-            StartingShields = 0,
-            StartingFocus = 50,
-            EffectIntensity = s.ChaosEffectIntensity,
-            ScreenShakeEnabled = s.ChaosScreenShakeEnabled,
-            ColorFlashesEnabled = s.ChaosColorFlashesEnabled,
-            ShakeIntensity = s.ChaosShakeIntensity,
-        };
+        if (s == null) { ChaosMeta.ApplyTo(cfg); return cfg; }                            // WPF ChaosModels.cs:193
+
+        // Story mode is globally locked off until content ships; NarrativeModeEnabled is ignored.
+        cfg.PlayMode = (AvaloniaChaosMode.StoryModeEnabled && s.NarrativeModeEnabled)
+            ? ChaosPlayMode.Story
+            : ChaosPlayMode.FreeDesktop;
+        var saved = Enum.TryParse<ChaosDifficulty>(s.ChaosDifficulty, out var d) ? d : ChaosDifficulty.Easy;   // WPF ChaosModels.cs:194
+        cfg.Difficulty = ClampDifficulty(saved).ToString();
+        cfg.DifficultyMult = ChaosRunRules.DifficultyMultFor(cfg.Difficulty);            // WPF ChaosModels.cs:267-274
+        cfg.RunDurationSec = ChaosRunRules.ClampDurationSec(s.ChaosRunDurationSec);      // WPF ChaosModels.cs:196
+        cfg.WaveCount = ChaosRunRules.ClampWaveCount(s.ChaosWaveCount);                  // WPF ChaosModels.cs:197
+        cfg.MotionMode = s.ChaosMotionMode;
+        // "Mixed" (or anything unrecognised) parses to null = per-variant default motion (WPF ChaosModels.cs:198).
+        cfg.MotionOverride = Enum.TryParse<ChaosMotion>(s.ChaosMotionMode, out var m) ? m : (ChaosMotion?)null;
+        cfg.EnabledVariants = ClampVariants(s.ChaosEnabledVariants);                     // null = all (WPF ChaosModels.cs:199)
+        cfg.ScreenShakeEnabled = s.ChaosScreenShakeEnabled;
+        cfg.ColorFlashesEnabled = s.ChaosColorFlashesEnabled;
+        cfg.ShakeIntensity = ChaosRunRules.ClampShakeIntensity(s.ChaosShakeIntensity);   // WPF ChaosModels.cs:200
+        cfg.EffectIntensity = ChaosRunRules.ClampEffectIntensity(s.ChaosEffectIntensity); // WPF ChaosModels.cs:201
+        cfg.BoonDraftEnabled = s.ChaosBoonDraftEnabled;
+        cfg.AllowCurses = s.ChaosAllowCurses;
+        cfg.DartersEnabled = s.ChaosDartersEnabled;
+        ChaosMeta.ApplyTo(cfg);   // owned permanent upgrades shape every run (WPF ChaosModels.cs:210)
+        return cfg;
     }
 
-    // WPF parity (ChaosModels.cs:267-273): Easy 1.0, Medium 1.3, Hard 1.7, Extreme 2.2.
-    private static double DifficultyToMult(string? diff) => (diff ?? "Easy") switch
+    /// <summary>
+    /// Rank clamp for the run's difficulty (WPF ChaosModels.cs:225-243): if the SAVED pill is
+    /// still locked, the run falls back to the highest unlocked one. The saved setting is never
+    /// written — unlocking restores the user's own choice untouched. Gentle is always open;
+    /// Teasing needs the PillTeasing reveal, Relentless PillRelentless, Inescapable PillInescapable.
+    /// </summary>
+    private static ChaosDifficulty ClampDifficulty(ChaosDifficulty saved)
     {
-        "Extreme" => 2.2,
-        "Hard" => 1.7,
-        "Medium" => 1.3,
-        _ => 1.0,
-    };
+        static bool Unlocked(ChaosDifficulty d) => d switch
+        {
+            ChaosDifficulty.Extreme => RevealService.IsUnlocked(RevealIds.PillInescapable),
+            ChaosDifficulty.Hard    => RevealService.IsUnlocked(RevealIds.PillRelentless),
+            ChaosDifficulty.Medium  => RevealService.IsUnlocked(RevealIds.PillTeasing),
+            _                       => true,
+        };
+        var d = saved;
+        while (d > ChaosDifficulty.Easy && !Unlocked(d)) d--;
+        return d;
+    }
+
+    /// <summary>
+    /// Rank clamp for the run's bubble pool (WPF ChaosModels.cs:245-260): the <c>video</c> /
+    /// <c>htlink</c> variants only enter a run once their reveals unlock. Returns the saved
+    /// list untouched when both are open (may stay null = all); otherwise a NEW narrowed list
+    /// — the saved setting is never mutated.
+    /// </summary>
+    private static List<string>? ClampVariants(List<string>? saved)
+    {
+        bool videoOk = RevealService.IsUnlocked(RevealIds.VariantVideo);
+        bool htOk = RevealService.IsUnlocked(RevealIds.VariantHtlink);
+        if (videoOk && htOk) return saved;
+        var list = new List<string>(saved ?? ChaosSpawnCatalog.AllIds());
+        if (!videoOk) list.Remove("video");
+        if (!htOk) list.Remove("htlink");
+        return list;
+    }
 }
 
 public sealed class ChaosRunState : INotifyPropertyChanged
@@ -321,11 +361,23 @@ public sealed class ChaosRunState : INotifyPropertyChanged
     public int Shields { get; set; }
     public bool FocusLow { get; set; }
     public int Combo { get; set; }
-    public double ComboMult { get; set; } = 1.0;
-    public double DifficultyMult { get; set; } = 1.0;
-    public double HeatMult { get; set; } = 1.0;
     public double BoonMult { get; set; } = 1.0;
     public double Heat { get; set; }
+
+    // ---- multiplier stack (WPF ChaosModels.cs:524-535): chaos-local, computed live;
+    //      skill/pink-rush applied once at payout ----
+    /// <summary>Base of the stack — Golden Touch writes <c>Config.BaseMult</c> at boon-apply time (WPF ChaosModels.cs:524).</summary>
+    public double BaseMult => Config.BaseMult;
+    /// <summary>Streak multiplier: +0.08 per combo step, capped at x6 (WPF ChaosModels.cs:525).</summary>
+    public double ComboMult => Math.Min(1.0 + Combo * 0.08, 6.0);
+    /// <summary>Per-difficulty payout scalar, read from the run config (WPF ChaosModels.cs:526).</summary>
+    public double DifficultyMult => Config.DifficultyMult;
+    /// <summary>Up to x2 at full heat (WPF ChaosModels.cs:527).</summary>
+    public double HeatMult => 1.0 + Heat;
+    /// <summary>The full chaos-local multiplier stack (WPF ChaosModels.cs:530).</summary>
+    public double TotalMult => BaseMult * ComboMult * DifficultyMult * HeatMult * BoonMult * UrgeMult;
+    /// <summary>Skill-tree multiplier (incl. Pink Rush) — informational; applied once at payout (WPF ChaosModels.cs:535).</summary>
+    public double SkillMult => App.Services?.GetService<ISkillTreeService>()?.GetTotalXpMultiplier() ?? 1.0;
     public bool RippleReady { get; set; }
     public string ClockText { get; set; } = "0:00";
     public string ScoreText { get; set; } = "0";
@@ -343,14 +395,26 @@ public sealed class ChaosRunState : INotifyPropertyChanged
     public double ChannelHeldSec { get; set; }
     public string ChannelText { get; set; } = "";
 
-    public double RunProgress { get; set; }
-    /// <summary>Mirrors WPF RunIntensity; currently tracks progress intensity 0..1.</summary>
+    /// <summary>Run completion 0..1, computed from the clock (WPF ChaosModels.cs:485).</summary>
+    public double RunProgress => Math.Clamp(ElapsedSec / Math.Max(1.0, RunDurationSec), 0, 1);
+    /// <summary>0..1 escalation curve used to scale spawn rate, fuse, strength, live-share (WPF ChaosModels.cs:487).</summary>
     public double RunIntensity => RunProgress;
     public string RunTimeText { get; set; } = "0:00";
     public string ActWaveText { get; set; } = "I · 1";
     public double RunDurationSec { get; set; } = 180;
     public int WaveCount { get; set; } = 5;
     public double ElapsedSec { get; set; }
+
+    /// <summary>Relapse sin: bolt one more loop onto the end of the run. That loop pays
+    /// double drops and gold (<see cref="RelapseLoopActive"/> read at every gold/drop bank).
+    /// Verbatim WPF ChaosModels.cs:494-502.</summary>
+    public void ExtendOneLoop()
+    {
+        int waveLen = (int)Math.Round((double)RunDurationSec / Math.Max(1, WaveCount));
+        WaveCount += 1;
+        RunDurationSec += waveLen;
+        RelapseLoopActive = true;
+    }
     public int ActIndex { get; set; } = 1;
     public int WaveIndex { get; set; } = 1;
     public int BestCombo { get; set; }
@@ -448,7 +512,8 @@ public sealed class ChaosRunState : INotifyPropertyChanged
         if (RecentEvents.Count > 40) RecentEvents.RemoveAt(0);
     }
 
-    /// <summary>Applies a drafted boon or start-boon effect to this run state (WPF parity).</summary>
+    /// <summary>Applies a drafted boon or start-boon effect to this run state, pushes the
+    /// HUD-strip pick tile and the feed line (verbatim WPF ChaosModels.cs:598-620).</summary>
     public void ApplyBoon(ChaosBoon boon, bool shieldDrawback = false)
     {
         if (boon == null) return;
@@ -456,6 +521,17 @@ public sealed class ChaosRunState : INotifyPropertyChanged
         else boon.Apply?.Invoke(this);
         BoonMult += boon.RunMultBonus;
         (boon.IsCurse ? ActiveCurses : ActiveBoons).Add(boon);
+        RunPickTiles.Add(new ChaosSidebarBoon
+        {
+            Id = boon.Id,   // carry the id so the ribbon tile colors by payload family (WPF ChaosModels.cs:610)
+            Icon = ChaosArt.Resolve("boons", boon.Id),
+            Glyph = boon.IsCurse ? "☠" : "◈",
+            Name = boon.Name,
+            Desc = boon.Desc,
+            Flavor = boon.Flavor ?? "",
+            IsCurse = boon.IsCurse,
+        });
+        PushEvent($"{(boon.IsCurse ? "☠" : "◈")} {boon.Name}");
     }
 }
 
@@ -486,7 +562,10 @@ public static class ChaosMeta
     public static string Rank => Service?.Rank ?? ChaosRanks.Name(ChaosRank.Curious);
     public static ChaosRank CurrentRank => Service?.CurrentRank ?? ChaosRank.Curious;
     public static int RankIndex => Service?.RankIndex ?? 0;
-    public const int FIRST_FALL_BONUS = 100;
+
+    /// <summary>One-time "first fall" bonus on the very first completed descent
+    /// (WPF ChaosUpgrades.cs:106 FIRST_FALL_BONUS = 25; named on the recap card).</summary>
+    public const int FIRST_FALL_BONUS = 25;
 
     public static void Init(IAppEnvironment env) => Service?.Init(env);
     public static void Save() => Service?.Save();
@@ -494,6 +573,9 @@ public static class ChaosMeta
     public static void AddGold(int amount) => Service?.AddGold(amount);
     public static bool TrySpendGold(int amount) => Service?.TrySpendGold(amount) ?? false;
     public static void EquipStartBoon(string? boonId) => Service?.EquipStartBoon(boonId);
+    /// <summary>Apply every owned-and-switched-on upgrade's effect to a freshly-built run config
+    /// (WPF ChaosUpgrades.cs:312-318).</summary>
+    public static void ApplyTo(ChaosRunConfig config) => Service?.ApplyTo(config);
     public static void ApplyLifetimeBoons(ChaosRunState run) => Service?.ApplyLifetimeBoons(run);
     public static void MarkDiscovered(string codexId) => Service?.MarkDiscovered(codexId);
     public static bool IsDiscovered(string codexId) => Service?.IsDiscovered(codexId) ?? false;

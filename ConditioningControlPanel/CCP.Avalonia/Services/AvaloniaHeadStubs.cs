@@ -231,11 +231,12 @@ public sealed class AvaloniaChaosService : IChaosService
                 Focus = Math.Clamp(config.StartingFocus, 0, 100),
                 FocusMax = 100,
                 Combo = 0,
-                ComboMult = 1.0,
                 Heat = 0,
-                HeatMult = 1.0,
                 BoonMult = 1.0,
-                DifficultyMult = config.DifficultyMult,
+                // ComboMult/HeatMult/DifficultyMult are computed on the state now (WPF ChaosModels.cs:524-527).
+                // Seed the upgrade-shaped knobs from the config like the WPF state ctor (WPF ChaosModels.cs:417-421).
+                FuseTimeMult = config.FuseTimeMult,
+                MagnetEnabled = config.MagnetEnabled,
                 Score = 0,
                 Defused = 0,
                 Detonated = 0,
@@ -385,9 +386,8 @@ public sealed class AvaloniaChaosService : IChaosService
             var boon = ChaosBoonPool.All.FirstOrDefault(b => b.Id == equipped);
             if (boon != null)
             {
+                // ApplyBoon pushes the pick tile + "◈ {Name}" feed line itself now (WPF ChaosModels.cs:604-620).
                 _state.ApplyBoon(boon);
-                _state.RunPickTiles.Add(new ChaosSidebarBoon { Id = boon.Id, Name = boon.Name, Glyph = "◈" });
-                _state.PushEvent($"◈ start: {boon.Name}");
             }
         }
         ChaosBoonBarOverlay.SetPicks(_state.RunPickTiles);
@@ -657,8 +657,7 @@ public sealed class AvaloniaChaosService : IChaosService
         }
         else
         {
-            _state.Combo = 0;
-            _state.ComboMult = 1.0;
+            _state.Combo = 0;   // ComboMult is computed from Combo now (WPF ChaosModels.cs:525)
             AvaloniaChaosSfx.Play("trigger", 0.55f);   // the muffled boom under the effect (WPF ChaosModeService.cs:1355)
         }
 
@@ -750,9 +749,9 @@ public sealed class AvaloniaChaosService : IChaosService
     {
         if (_state == null) return;
         _state.BestCombo = Math.Max(_state.BestCombo, _state.Combo);
-        _state.ComboMult = 1.0 + Math.Min(2.0, _state.Combo * 0.02) + _state.ComboMultBonus;
-        _state.HeatMult = 1.0 + _state.Heat;
-        _state.TotalMultText = $"x{_state.ComboMult * _state.BoonMult * _state.HeatMult * _state.UrgeMult:0.0}";
+        // ComboMult/HeatMult are computed on the state now (WPF ChaosModels.cs:525-527);
+        // the HUD strip shows the full WPF stack (WPF ChaosModels.cs:531 TotalMultText).
+        _state.TotalMultText = $"x{_state.TotalMult:0.0}";
         _state.ScoreText = ((int)_state.Score).ToString("N0");
         _state.ShieldText = $"{_state.Shields} ♥";
         _state.FocusText = _state.IsChanneling
@@ -770,7 +769,7 @@ public sealed class AvaloniaChaosService : IChaosService
         _state.ClockText = $"{(int)remaining / 60}:{(int)remaining % 60:00}";
         _state.RunTimeText = $"{(int)_state.ElapsedSec / 60}:{(int)_state.ElapsedSec % 60:00}";
         _state.ActWaveText = $"I · {_waveIndex}";
-        _state.RunProgress = _state.ElapsedSec / _state.RunDurationSec;
+        // RunProgress is computed from ElapsedSec/RunDurationSec on the state now (WPF ChaosModels.cs:485).
 
         // Fall speed tracks the pop streak (mirrors WPF ChaosModeService mid-run SetStreak).
         try { _tunnel?.SetStreak(_state.Combo, _state.ComboMult); } catch (Exception ex) { _logger?.LogDebug("ChaosTunnel SetStreak failed: {E}", ex.Message); }
@@ -830,10 +829,9 @@ public sealed class AvaloniaChaosService : IChaosService
         if (boon != null)
         {
             bool shielded = ChaosHappyPath.ShouldShieldSin(boon.Id);
+            // ApplyBoon pushes the pick tile + "☠/◈ {Name}" feed line itself now (WPF ChaosModels.cs:604-620).
             _state.ApplyBoon(boon, shielded);
-            _state.RunPickTiles.Add(new ChaosSidebarBoon { Id = boon.Id, Name = boon.Name, Glyph = boon.IsCurse ? "☠" : "◈" });
             ChaosBoonBarOverlay.SetPicks(_state.RunPickTiles);   // ribbon reflects the new pick (WPF ChaosModeService.cs:417)
-            _state.PushEvent($"{(boon.IsCurse ? (shielded ? "☠ shielded" : "☠ accepted") : "◈ chose")} {boon.Name}");
             ChaosLessonHooks.OnDraftCardTaken(boon.IsCurse);
             if (boon.IsCurse)
             {

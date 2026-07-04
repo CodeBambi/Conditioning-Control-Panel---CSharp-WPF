@@ -363,24 +363,31 @@ public static class AvaloniaChaosCatalogs
             ChaosUpgrades.All.Add(u);
         }
 
+        // Apply effects verbatim from the WPF catalogue (WPF ChaosUpgrades.cs:49-88);
+        // ChaosMeta.ApplyTo walks these for every owned-and-active habit at run start.
         Add(new ChaosUpgrade { Id = "slow_fuses", Branch = ChaosBranch.Control, Name = "Slower Trance", Cost = 120, Glyph = "⏳",
             Desc = "live bubbles hold their trance 15% longer before they trigger.",
-            Flavor = "a little more time to change your mind. you won't." });
+            Flavor = "a little more time to change your mind. you won't.",
+            Apply = c => c.FuseTimeMult *= 1.15 });   // WPF ChaosUpgrades.cs:53
         Add(new ChaosUpgrade { Id = "silk_touch", Branch = ChaosBranch.Control, Name = "Silk Touch", Cost = 180, Glyph = "🪶",
             Desc = "bubble hitboxes grow 25%, and a near-miss on a live one still counts as a touch.",
-            Flavor = "silk doesn't try. it just lands." });
+            Flavor = "silk doesn't try. it just lands.",
+            Apply = c => { c.HitboxScale = 1.25; c.MagnetEnabled = true; } });   // WPF ChaosUpgrades.cs:60
         Add(new ChaosUpgrade { Id = "popup_notification", Branch = ChaosBranch.Control, Name = "Pop-up Notification", Cost = 160, Glyph = "💖",
             Desc = "once per loop, 60% of the time, a heart drifts down mid-loop. catch it for +1 resistance and +10 focus.",
-            Flavor = "you opted in. you always opt in." });
+            Flavor = "you opted in. you always opt in.",
+            Apply = c => c.PopupHeartEnabled = true });   // WPF ChaosUpgrades.cs:64
         Add(new ChaosUpgrade { Id = "pendulum_swing", Branch = ChaosBranch.Control, Name = "Pendulum", Cost = 220, Glyph = "🕰",
             Desc = "once per loop, at a random beat, the pendulum swings: 2.5 seconds of slow motion.",
-            Flavor = "tick. tock. you looked." });
+            Flavor = "tick. tock. you looked.",
+            Apply = c => c.PendulumSwing = true });   // WPF ChaosUpgrades.cs:71
         Add(new ChaosUpgrade { Id = "draft4", Branch = ChaosBranch.Depth, Name = "4-Mantra Draft", Cost = 200, Glyph = "🃏",
             Desc = "mantra drafts offer four choices instead of three.",
-            Flavor = "more ways to say yes." });
+            Flavor = "more ways to say yes.",
+            Apply = c => c.DraftChoices = 4 });   // WPF ChaosUpgrades.cs:86
         Add(new ChaosUpgrade { Id = "extreme_tier", Branch = ChaosBranch.Depth, Name = "Inescapable Tier", Cost = 350, Glyph = "🌀",
             Desc = "opens the inescapable difficulty in the descent setup.",
-            Flavor = "the last door was never locked." });
+            Flavor = "the last door was never locked." });   // no-op Apply: flag stored at purchase time (WPF ChaosUpgrades.cs:88)
     }
 
     private static void SeedBoonPool()

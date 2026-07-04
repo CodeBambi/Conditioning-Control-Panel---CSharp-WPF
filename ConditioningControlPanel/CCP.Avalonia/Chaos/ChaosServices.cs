@@ -100,6 +100,7 @@ public interface IChaosMetaService
     void AddGold(int amount);
     bool TrySpendGold(int amount);
     void EquipStartBoon(string? boonId);
+    void ApplyTo(ChaosRunConfig config);
     void ApplyLifetimeBoons(ChaosRunState run);
     void MarkDiscovered(string codexId);
     bool IsDiscovered(string codexId);
@@ -240,6 +241,16 @@ public sealed class ChaosMetaService : IChaosMetaService
     {
         State.EquippedStartBoon = boonId;
         Save();
+    }
+
+    /// <summary>Apply every owned-and-switched-on upgrade's effect to a freshly-built run
+    /// config (verbatim WPF ChaosUpgrades.cs:312-318).</summary>
+    public void ApplyTo(ChaosRunConfig config)
+    {
+        if (config == null) return;
+        foreach (var id in State.PurchasedUpgrades)
+            if (IsUpgradeActive(id))
+                ChaosUpgrades.ById(id)?.Apply(config);
     }
 
     public void ApplyLifetimeBoons(ChaosRunState run)

@@ -145,7 +145,7 @@ Current state; UCE plan queue rows for the 6 unmigrated overlays (follow-up).
 | Slice | Commit | Gates | Review | Notes |
 |---|---|---|---|---|
 | S1 | (this commit) | slnf 0 · WPF sln 0 · Core **268/268** (+63, floor 205 held) · smoke 44 tabs / Findings: 5 baseline / exit 0 | claim-verifier adversarial audit: C1–C18 all Verified vs WPF source (C17 weakened only over a docs-file edit; EXTRA-1 = deferred ambient Build branch → folded into S6 scope) | `ChaosSpawnCatalog.cs` (new, faithful 8-row pool + Pick/Build + 14 special builders, injectable Random), `ChaosSpawnCatalogTests.cs` (new, 63 tests), `ChaosBubbleSpec.cs` +`Strength` (additive). Deviations documented in XML docs: tease lifetime + bound window stamped on spec; PayloadKind = variant-id strings (matches Avalonia consumers). |
-| S2 | — | — | — | — |
+| S2 | (this commit) | slnf 0 · WPF sln 0 · Core **306/306** (+38) · smoke 44 tabs / Findings: 5 baseline (21 first-chance = known benign OAuth-cancel harness noise, verified per-exception) | claim-verifier adversarial audit: C1–C15 ALL Verified (incl. no double/lost boon-tile push, no stale writers, null-variant safety) | New Core `ChaosRunRules` + tests; `ChaosRunConfig.FromSettings` WPF-shape (clamps, ClampDifficulty pills, ClampVariants null=all, MotionOverride parse, SinChance ramp, **ChaosMeta.ApplyTo both paths** = X1-6 fixed); computed mult stack + `ExtendOneLoop` + faithful `ApplyBoon`; 6 upgrade Apply effects; intended changes: SinChance ramp, DraftAutoResumeSec 15, PopupHeartEnabled default false, FIRST_FALL_BONUS 25. |
 | S3 | — | — | — | — |
 | S4 | — | — | — | — |
 | S5 | — | — | — | — |
