@@ -3,7 +3,9 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Services.Video;
 using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Models;
 using LibVLCSharp.Shared;
 using Microsoft.Extensions.Logging;
 using SkiaSharp;
@@ -42,7 +44,36 @@ public class VideoLayer : BaseLayer, IDisposable
     private readonly object _frameLock = new();
     private bool _firstFrameLogged;
     private bool _loop;
+    private bool _withAudio;
     private long _framesCopied;
+
+    /// <summary>True while the wrapped LibVLC player reports active playback (Phase B:
+    /// lets the service's <c>IsPlaying</c>/<c>HasOpenVideoWindows</c> reflect the UCE path).</summary>
+    public bool IsPlaying => _player?.IsPlaying ?? false;
+
+    /// <summary>Verification probe (--verify-video): current LibVLC player volume, null if no player.</summary>
+    public int? PlayerVolume { get { try { return _player?.Volume; } catch { return null; } } }
+
+    /// <summary>
+    /// Applies volume, mute, and preferred output device to the active player (Phase B audio
+    /// parity). Service-driven at playback start; the layer stores no settings (services own
+    /// state). For live volume-slider updates use <see cref="ApplyVolume"/> — it skips the
+    /// output-device re-bind per the WPF contract (WS0 lot 4 V1-22).
+    /// </summary>
+    public void ApplyAudioSettings(AppSettings? settings)
+    {
+        var player = _player;
+        if (player == null) return;
+        player.ApplyAudioSettings(settings, _withAudio, _logger);
+    }
+
+    /// <summary>Applies volume/mute only — no output-device re-bind (live slider updates).</summary>
+    public void ApplyVolume(AppSettings? settings)
+    {
+        var player = _player;
+        if (player == null) return;
+        player.ApplyVolume(settings, _withAudio);
+    }
 
     /// <summary>Verification probe (--verify-video): a decoded frame is ready to draw.</summary>
     public bool HasRenderedFrame { get { lock (_frameLock) return _currentBitmap != null; } }
@@ -94,6 +125,7 @@ public class VideoLayer : BaseLayer, IDisposable
             _videoHeight = DefaultVideoHeight;
             _videoPitch = _videoWidth * 4;
             _loop = loop;
+            _withAudio = withAudio;
             var size = _videoPitch * _videoHeight;
 
             lock (_bufferLock)

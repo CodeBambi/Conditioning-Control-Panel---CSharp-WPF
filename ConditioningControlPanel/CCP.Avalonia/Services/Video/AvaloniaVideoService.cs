@@ -211,12 +211,20 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     }
 
     public bool IsRunning { get; private set; }
-    public bool IsPlaying => _currentWindow?.IsPlaying ?? false;
+    // Phase B: IsPlaying/HasOpenVideoWindows must reflect the UCE layers too — the legacy
+    // expressions are window-based and read false while a compositor video plays, which
+    // starves every consumer (interaction queue, session-summary defer via the
+    // HasOpenVideoWindows DIM (#462), scheduler guards). Legacy-path behavior is unchanged.
+    public bool IsPlaying => (_currentWindow?.IsPlaying ?? false)
+        || _videoLayer?.IsPlaying == true
+        || _mandatoryVideoLayer?.IsPlaying == true;
     // Real teardown/open-window state for the #462 summary defer. HasOpenVideoWindows reports
     // any open primary/secondary window (even before playback starts or while closing); IsPlaying
     // alone would miss those and let the summary pop over a dying surface.
     public bool IsCleaningUp => _isCleaningUp;
-    public bool HasOpenVideoWindows => _currentWindow != null || _secondaryWindows.Count > 0;
+    public bool HasOpenVideoWindows => _currentWindow != null || _secondaryWindows.Count > 0
+        || _videoLayer?.IsPlaying == true
+        || _mandatoryVideoLayer?.IsPlaying == true;
     public string? LastVideoTitle => string.IsNullOrEmpty(_currentRetryPath) ? null : Path.GetFileNameWithoutExtension(_currentRetryPath);
     public string? LastVideoPath => _currentRetryPath;
     public int PlaythroughFailCount => _attentionPenalties;
@@ -769,6 +777,10 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         {
             _multiMonitor.SetVolume(LibVlcAudioHelper.GetEffectiveVolume(_settings.Current));
         }
+        // Phase B audio parity: live volume updates reach the UCE layers too (volume/mute
+        // only — no output-device re-bind, same WPF contract as above).
+        if (_videoLayer?.IsPlaying == true) _videoLayer.ApplyVolume(_settings.Current);
+        if (_mandatoryVideoLayer?.IsPlaying == true) _mandatoryVideoLayer.ApplyVolume(_settings.Current);
     }
 
     /// <summary>
@@ -839,6 +851,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
         _compositor?.Start();
         _mandatoryVideoLayer?.PlayVideo(filePath, withAudio: true, loop: false);
+        // Phase B audio parity: apply volume/mute/output device to the layer's player,
+        // mirroring the legacy path (SetVolume + SetAudioOutputDevice below).
+        _mandatoryVideoLayer?.ApplyAudioSettings(_settings.Current);
 
         // When the unified compositor is available it already renders the video layer
         // on every monitor, so the pink filter and other overlays sit on top. Skip the
@@ -889,6 +904,8 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
         _compositor?.Start();
         _videoLayer?.PlayVideo(url, withAudio: true, loop: false);
+        // Phase B audio parity: apply volume/mute/output device to the layer's player.
+        _videoLayer?.ApplyAudioSettings(_settings.Current);
 
         // When the unified compositor is available it already renders the video layer
         // on every monitor, so the pink filter and other overlays sit on top. Skip the

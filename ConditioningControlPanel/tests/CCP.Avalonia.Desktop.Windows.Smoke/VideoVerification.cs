@@ -153,6 +153,30 @@ internal static class VideoVerification
             }
             Console.WriteLine($"[VIDEO] Frames advancing ({sample1} -> {sample2} across ~700ms; {framesBefore} at start).");
 
+            // Stage 5 (gating, Phase B1): the service must report IsPlaying while the UCE layer
+            // plays — the legacy expression was window-based and read false on this path,
+            // starving the interaction queue and the #462 HasOpenVideoWindows DIM.
+            if (!videoService.IsPlaying)
+            {
+                Console.WriteLine("[VIDEO] IVideoService.IsPlaying is false while the UCE layer plays (Phase B1 decoupling broken).");
+                return;
+            }
+            Console.WriteLine("[VIDEO] IVideoService.IsPlaying reflects the UCE layer.");
+
+            // Stage 6 (Phase B1 audio): the layer's player must carry the effective volume
+            // (master*video/100). Gate only when the expected volume is > 0; at 0 the helper
+            // mutes without writing Volume, so the raw value is undefined.
+            var master = Math.Clamp(settings?.MasterVolume ?? 50, 0, 100);
+            var video = Math.Clamp(settings?.VideoVolume ?? 50, 0, 100);
+            var expectedVolume = (int)(master * video / 100.0);
+            var playerVolume = videoLayer.PlayerVolume;
+            if (expectedVolume > 0 && playerVolume != expectedVolume)
+            {
+                Console.WriteLine($"[VIDEO] Layer player volume {playerVolume?.ToString() ?? "null"} != effective volume {expectedVolume} (Phase B1 audio routing broken).");
+                return;
+            }
+            Console.WriteLine($"[VIDEO] Audio applied (player volume {playerVolume?.ToString() ?? "null"}, effective {expectedVolume}).");
+
             Console.WriteLine("[VIDEO] PASS: mandatory video decodes, publishes frames, and composites on every expected monitor.");
             pass = true;
         }
