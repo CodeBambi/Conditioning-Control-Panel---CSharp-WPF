@@ -46,16 +46,34 @@ touching code.
 ## Execution loop (per item)
 
 1. **Claim**: note the item as in-progress in the queue doc (single-line edit).
-2. **Read the spec** it links to, then the cited WPF lines (sliced reads).
-3. **Implement exactly what the spec says.** Match existing naming/logging patterns in
-   the file you're editing. Cite WPF `File.cs:line` at each ported decision point.
+2. **Read the spec** it links to, then the cited WPF lines (sliced reads). If the cites
+   are not enough to pin the behavior, dispatch the `wpf-archaeologist` agent with the
+   feature/symbol and use its contract instead of reading the giant WPF files yourself.
+3. **Implement**. Items rated XS/S: edit directly, exactly what the spec says. Items
+   rated M/L: dispatch the `port-slice-executor` agent with the full item spec (what to
+   change, WPF cites, required tests) and audit its report when it returns. Match
+   existing naming/logging patterns. Cite WPF `File.cs:line` at each decision point.
 4. **Add the tests the spec demands** (in `tests/CCP.Core.Tests/`, xUnit v3; look at a
    neighboring test file for conventions).
-5. **Run ALL gates** (below). All must pass. A gate failing twice on the same cause is
+5. **Audit before committing**: for state-mutating, economy, lifecycle, or engine-adjacent
+   items (anything the queue rates Medium risk or higher), dispatch the
+   `port-parity-auditor` agent on the uncommitted diff and act on its
+   SHIP / FIX-FIRST / STOP verdict. FIX-FIRST findings get fixed; STOP means the
+   blocker protocol below.
+6. **Run ALL gates** (below). All must pass. A gate failing twice on the same cause is
    a STOP condition.
-6. **Update trackers**: evidence row in the plan doc / task-board row / queue-doc
+7. **Update trackers**: evidence row in the plan doc / task-board row / queue-doc
    status, same commit.
-7. **Commit** with a message that states what, the WPF citations, and the gate results.
+8. **Commit** with a message that states what, the WPF citations, and the gate results.
+
+## Project agents (in .pi/agents/, dispatch via the subagent tool)
+
+- `wpf-archaeologist`: read-only WPF contract extraction with sliced reads. Input: a
+  feature or symbol. Output: cited behavioral contract.
+- `port-slice-executor`: implements one work item under the iron rules; runs fast gates;
+  never commits. Input: the full item spec. Output: files-changed report.
+- `port-parity-auditor`: adversarial audit of the uncommitted diff vs WPF ground truth.
+  Output: Verified/Deviation/Broken rows + SHIP / FIX-FIRST / STOP.
 
 ## Gates (run from repo root E:/Code/Conditioning-Control-Panel)
 
