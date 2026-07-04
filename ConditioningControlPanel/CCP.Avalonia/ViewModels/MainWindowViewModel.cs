@@ -60,6 +60,7 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly IAudioPlayer? _audioPlayer;
     private readonly ISfxPlayer? _sfxPlayer;
     private readonly IMultiMonitorVideoService? _multiMonitor;
+    private readonly IVideoService? _videoService;
     private readonly ISchedulerService? _schedulerService;
     private readonly IIntensityRampService? _intensityRamp;
 
@@ -122,6 +123,7 @@ public partial class MainWindowViewModel : ObservableObject
         _audioPlayer = services.GetService<IAudioPlayer>();
         _sfxPlayer = services.GetService<ISfxPlayer>();
         _multiMonitor = services.GetService<IMultiMonitorVideoService>();
+        _videoService = services.GetService<IVideoService>();
         _schedulerService = services.GetService<ISchedulerService>();
         _intensityRamp = services.GetService<IIntensityRampService>();
 
@@ -1158,19 +1160,54 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnSessionLogReady(object? sender, SessionLogReadyEventArgs e)
     {
         // WPF shows the post-session media review for BOTH completion and abort
-        // (MainWindow.xaml.cs:336-342 -> MainWindow.Presets.cs:1174-1192).
-        Dispatcher.UIThread.Post(() =>
+        // (MainWindow.xaml.cs:336-342 -> MainWindow.Presets.cs:1174-1192), but DEFERS it
+        // until any in-flight mandatory-video teardown has cleared. A bubble/bonus video can
+        // still be tearing down when the log arrives; its dying fullscreen surface would bury
+        // the modal summary (#462). Wait it out here rather than forcing a cleanup.
+        var log = e.Log;
+        Dispatcher.UIThread.Post(() => ShowSessionSummaryWhenClear(log, attempt: 0));
+    }
+
+    /// <summary>
+    /// Shows the session-complete window once any in-flight video teardown has finished (#462).
+    /// Mirrors WPF MainWindow.Presets.cs ShowSessionSummaryWhenClear: a bounded ~200ms-cadence
+    /// retry that keeps waiting while the video service is playing / cleaning up / has open
+    /// windows. Soft cap ~3s (15 attempts), extended to ~10s (50 attempts) only while the
+    /// service is actively cleaning up (its flag clears in a finally, so the wait always
+    /// terminates). After the cap it shows anyway so the summary can never be lost. The retry
+    /// timer is stopped inside its own tick and never re-created once the window shows, so it
+    /// can't leak.
+    /// </summary>
+    private void ShowSessionSummaryWhenClear(SessionLog log, int attempt)
+    {
+        if (_isDisposed) return;
+
+        var video = _videoService;
+        var cleaning = video?.IsCleaningUp == true;
+        var videoBusy = cleaning
+            || video?.IsPlaying == true
+            || video?.HasOpenVideoWindows == true;
+        if (videoBusy && (attempt < 15 || (cleaning && attempt < 50)))
         {
-            try
+            var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            retry.Tick += (_, _) =>
             {
-                var completeWindow = new Windows.SessionCompleteWindow(e.Log);
-                completeWindow.Show();
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Failed to show post-session log dialog");
-            }
-        });
+                retry.Stop();
+                ShowSessionSummaryWhenClear(log, attempt + 1);
+            };
+            retry.Start();
+            return;
+        }
+
+        try
+        {
+            var completeWindow = new Windows.SessionCompleteWindow(log);
+            completeWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to show post-session log dialog");
+        }
     }
 
     private void StartUiTimers()

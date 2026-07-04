@@ -14,6 +14,22 @@ public interface IVideoService
     /// <summary>Whether a video window is currently open and playing.</summary>
     bool IsPlaying { get; }
 
+    /// <summary>
+    /// Whether the service is in the middle of tearing down active video windows.
+    /// Default-implemented as <c>false</c> so existing implementations and test fakes keep
+    /// compiling; only heads with a real teardown phase override it. Used to defer the
+    /// post-session summary until a dying fullscreen video surface has cleared (#462).
+    /// </summary>
+    bool IsCleaningUp => false;
+
+    /// <summary>
+    /// Whether any video window (primary or secondary) is currently open, including a window
+    /// that is open-but-not-yet-playing or mid-close. Defaults to <see cref="IsPlaying"/> so
+    /// existing implementations keep compiling; native heads override with real window state
+    /// so the post-session summary defer can wait open windows out (#462).
+    /// </summary>
+    bool HasOpenVideoWindows => IsPlaying;
+
     /// <summary>Starts the mandatory video scheduler.</summary>
     void Start();
 

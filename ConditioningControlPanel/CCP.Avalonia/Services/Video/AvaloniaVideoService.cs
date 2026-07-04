@@ -94,6 +94,10 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     private DispatcherTimer? _attentionTimer;
     private bool _isDisposed;
     private bool _codecWarningShown;
+    // True while CleanupInternal tears down active video windows. Read by the post-session
+    // summary defer (#462) so the modal never opens over a still-closing fullscreen video.
+    // volatile: set on the UI thread, read from timer ticks; cleared in a finally.
+    private volatile bool _isCleaningUp;
 
     // ---- WPF-parity playback state (WS0 lot 4 wave 3) ----
     // Shuffled no-repeat queues (WPF GetNextVideo/RefillVideoQueues, VideoService.cs:2628-2810):
@@ -208,6 +212,11 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
     public bool IsRunning { get; private set; }
     public bool IsPlaying => _currentWindow?.IsPlaying ?? false;
+    // Real teardown/open-window state for the #462 summary defer. HasOpenVideoWindows reports
+    // any open primary/secondary window (even before playback starts or while closing); IsPlaying
+    // alone would miss those and let the summary pop over a dying surface.
+    public bool IsCleaningUp => _isCleaningUp;
+    public bool HasOpenVideoWindows => _currentWindow != null || _secondaryWindows.Count > 0;
     public string? LastVideoTitle => string.IsNullOrEmpty(_currentRetryPath) ? null : Path.GetFileNameWithoutExtension(_currentRetryPath);
     public string? LastVideoPath => _currentRetryPath;
     public int PlaythroughFailCount => _attentionPenalties;
@@ -1387,6 +1396,12 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
     private void CleanupInternal(bool notifyEnded)
     {
+        // Signal that a teardown is in flight so the post-session summary defers until the
+        // dying fullscreen video surface has fully cleared (#462). Cleared in the finally so a
+        // throw mid-teardown can never wedge the gate permanently.
+        _isCleaningUp = true;
+        try
+        {
         // Invalidate any pending 1.3s pre-announce start and credit the seconds actually
         // watched BEFORE stopping the players (their clocks die with Stop()).
         _playRequestVersion++;
@@ -1457,6 +1472,11 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             {
                 try { _flash?.Start(); } catch { /* best effort */ }
             }
+        }
+        }
+        finally
+        {
+            _isCleaningUp = false;
         }
     }
 
