@@ -94,10 +94,11 @@ Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
   runtime default + contract holder until Phase E; UCE video stays the `CCP_UCE_VIDEO=1` opt-in.
   **Phase B substantially closed 2026-07-04** (`bbdb3077` B1 audio+IsPlaying, `99a50721` B2
   attention/safety/segment/events — adversarially reviewed, 4 findings fixed pre-bank, failed-open
-  wedge closed). Remaining WP2: Phase B leftovers (dual-monitor side-by-side verification,
-  layer-path `PositionChanged` watch-credit; see plan's B2-residuals block), Phase C layer
-  verification, Phase D perf (VideoLayer per-frame alloc), Phase E flip+delete, then the
-  authorized libmpv spike. → WP2.
+  wedge closed; `2572535d` watch-credit wiring + penalties-reset parity; `37bd454a` Phase D.1/D.2
+  zero-alloc triple-buffered VideoLayer + timer fold, GPU-staleness empirically probed).
+  **Remaining WP2**: dual-monitor side-by-side verification vs WPF (needs eyes/second monitor),
+  Phase C layer verification sweep, Phase E flip+delete (HARD GATE: only after side-by-side
+  parity is proven by running), then the authorized libmpv spike. → WP2.
 - Chaos overlays (~23 window classes) are not on the compositor. → WP3.
 - Avalonia mouse hook cannot swallow clicks (WPF can): bubble/flash pops leak the click
   to the app underneath. Decide and fix in WP3, or explicitly accept and document.
