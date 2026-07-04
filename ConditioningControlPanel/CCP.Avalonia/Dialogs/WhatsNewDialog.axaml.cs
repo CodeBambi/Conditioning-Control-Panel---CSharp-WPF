@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Core.Services.Update;
 
@@ -43,7 +44,7 @@ public partial class WhatsNewDialog : Window
         var currentVersion = UpdateService.AppVersion;
         if (settings.LastSeenVersion == currentVersion) return false;
 
-        var dialog = new WhatsNewDialog($"What's New in v{currentVersion}", UpdateService.CurrentPatchNotes);
+        var dialog = new WhatsNewDialog(Loc.GetF("whats_new_title_fmt", currentVersion), UpdateService.CurrentPatchNotes);
         await dialog.ShowDialog<bool?>(owner);
 
         settings.LastSeenVersion = currentVersion;

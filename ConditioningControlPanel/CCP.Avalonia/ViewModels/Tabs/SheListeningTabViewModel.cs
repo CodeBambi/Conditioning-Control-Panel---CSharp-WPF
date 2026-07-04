@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Services.Autonomy;
 using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Core.Services.Speech;
@@ -41,7 +42,7 @@ public partial class SheListeningTabViewModel : TabItemViewModel
     [ObservableProperty] private bool _wakeEngineAvailable;
     [ObservableProperty] private string _wakeEngineStatusText = "";
     [ObservableProperty] private bool _isCalibrating;
-    [ObservableProperty] private string _calibrateCaption = "Calibrate to my voice";
+    [ObservableProperty] private string _calibrateCaption = Loc.Get("she_listening_calibrate");
     /// <summary>Mic sensitivity 0-100% (inverted loudness gate). Bound to SpeechLoudnessThreshold.</summary>
     [ObservableProperty] private int _micSensitivity;
 
@@ -50,9 +51,12 @@ public partial class SheListeningTabViewModel : TabItemViewModel
     /// <summary>A short, on-screen command cheat-sheet (a slice of the full grammar).</summary>
     public IReadOnlyList<string> CommandHints { get; } = new[]
     {
-        "“bubbles” / “stop bubbles”", "“show me a video”", "“flash me”", "“the spiral”",
-        "“make it pink”", "“deeper”", "“quiz me”", "“lock me”", "“mute” / “louder”",
-        "“take over”", "“red” (stops everything)", "“stop listening”",
+        Loc.Get("she_listening_hint_bubbles"), Loc.Get("she_listening_hint_video"),
+        Loc.Get("she_listening_hint_flash"), Loc.Get("she_listening_hint_spiral"),
+        Loc.Get("she_listening_hint_pink"), Loc.Get("she_listening_hint_deeper"),
+        Loc.Get("she_listening_hint_quiz"), Loc.Get("she_listening_hint_lock"),
+        Loc.Get("she_listening_hint_mute"), Loc.Get("she_listening_hint_takeover"),
+        Loc.Get("she_listening_hint_red"), Loc.Get("she_listening_hint_stop"),
     };
 
     public SheListeningTabViewModel() : base("shelistening", "She's Listening", "🎤")
@@ -96,8 +100,8 @@ public partial class SheListeningTabViewModel : TabItemViewModel
             MicSensitivity = ThresholdToSens(s.SpeechLoudnessThreshold);
             EngineAvailable = _speech?.IsAvailable ?? false;
             StatusText = EngineAvailable
-                ? "Offline voice engine ready."
-                : "Voice engine unavailable — drop a Vosk model into Resources/Models/vosk.";
+                ? Loc.Get("she_listening_engine_ready")
+                : Loc.Get("she_listening_engine_unavailable");
             RefreshWakeStatus();
         }
         finally { _syncing = false; }
@@ -110,11 +114,11 @@ public partial class SheListeningTabViewModel : TabItemViewModel
         if (_wakeWord == null)
             WakeEngineStatusText = "";
         else if (_wakeWord.IsAvailable)
-            WakeEngineStatusText = "Reliable wake ready (sherpa-onnx KWS).";
+            WakeEngineStatusText = Loc.Get("she_listening_wake_ready");
         else if (_wakeWord.IsConfigured)
-            WakeEngineStatusText = "Reliable wake model present but unavailable (no mic?).";
+            WakeEngineStatusText = Loc.Get("she_listening_wake_no_mic");
         else
-            WakeEngineStatusText = "Tip: drop a sherpa-kws model into Resources/Models for reliable wake.";
+            WakeEngineStatusText = Loc.Get("she_listening_wake_tip");
     }
 
     /// <summary>
@@ -142,20 +146,22 @@ public partial class SheListeningTabViewModel : TabItemViewModel
         try
         {
             IsCalibrating = true;
-            CalibrateCaption = "Say “Hey Bambi” 5×…";
+            CalibrateCaption = Loc.Get("she_listening_calibrate_prompt");
             // The recognizer is single-session — stop the wake loop first so calibration can open the mic.
             _autonomy?.StopVoiceInput();
             for (int i = 0; i < 20 && wake.IsListening; i++) await Task.Delay(25);
             var progress = new Progress<WakeCalibrationProgress>(p =>
-                CalibrateCaption = p.Phase == "analyze" ? "Analyzing…" : $"Say “Hey Bambi” ({p.Captured}/{p.Target})");
+                CalibrateCaption = p.Phase == "analyze"
+                    ? Loc.Get("she_listening_calibrate_analyzing")
+                    : Loc.GetF("she_listening_calibrate_progress_fmt", p.Captured, p.Target));
             var result = await wake.CalibrateAsync(5, progress);
             WakeEngineStatusText = result.Message;
         }
-        catch (Exception ex) { _logger?.LogDebug(ex, "SheListeningTab: wake calibration failed"); WakeEngineStatusText = "Calibration failed — try again."; }
+        catch (Exception ex) { _logger?.LogDebug(ex, "SheListeningTab: wake calibration failed"); WakeEngineStatusText = Loc.Get("she_listening_calibrate_failed"); }
         finally
         {
             IsCalibrating = false;
-            CalibrateCaption = "Calibrate to my voice";
+            CalibrateCaption = Loc.Get("she_listening_calibrate");
             _autonomy?.RefreshVoiceInputModes(); // re-arm the wake loop (with the new threshold if it changed)
         }
     }

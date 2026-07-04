@@ -511,7 +511,7 @@ public partial class EnhancementsTabViewModel : TabItemViewModel
                 IsUnlocked = true,
                 IconUri = "pack://application:,,,/Resources/skills/pink_hours.png",
                 Description = "Shows total conditioning time across all sessions",
-                FlavorText = "Like, how long have you been getting all pink and pretty?",
+                FlavorText = Loc.Get("enh_flavor_pink_hours"),
                 PositionX = 40,
                 PositionY = 130
             },
@@ -526,7 +526,7 @@ public partial class EnhancementsTabViewModel : TabItemViewModel
                 CanPurchase = true,
                 IconUri = "pack://application:,,,/Resources/skills/ditzy_data.png",
                 Description = "Unlocks statistics panel with session data",
-                FlavorText = "Numbers are like, SO hard... but these ones are pretty!",
+                FlavorText = Loc.Get("enh_flavor_ditzy_data"),
                 PositionX = 320,
                 PositionY = 60
             },
@@ -541,7 +541,7 @@ public partial class EnhancementsTabViewModel : TabItemViewModel
                 CanPurchase = true,
                 IconUri = "pack://application:,,,/Resources/skills/sparkle_boost_1.png",
                 Description = "+10% XP from all sources",
-                FlavorText = "Good girls deserve extra sparkles!",
+                FlavorText = Loc.Get("enh_flavor_sparkle_boost"),
                 PositionX = 320,
                 PositionY = 280
             },
@@ -556,7 +556,7 @@ public partial class EnhancementsTabViewModel : TabItemViewModel
                 IsLocked = true,
                 IconUri = "pack://application:,,,/Resources/skills/hive_mind.png",
                 Description = "Shows live online user count",
-                FlavorText = "See how many other bimbos are conditioning RIGHT NOW!",
+                FlavorText = Loc.Get("enh_flavor_hive_mind"),
                 PositionX = 600,
                 PositionY = 60
             }

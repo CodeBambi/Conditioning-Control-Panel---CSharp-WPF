@@ -84,7 +84,7 @@ _progression = App.Services.GetRequiredService<IProgressionService>();
         {
             TxtInput.IsReadOnly = true;
             TxtInput.Focusable = false;
-            TxtHint.Text = "Input synced from primary monitor";
+            TxtHint.Text = Loc.Get("lock_card_input_synced_secondary");
         }
 
         ApplyColors();

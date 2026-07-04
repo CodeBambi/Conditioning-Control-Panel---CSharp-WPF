@@ -650,10 +650,41 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
         {
             if (string.IsNullOrWhiteSpace(folder)) continue;
             var name = System.IO.Path.GetFileName(folder.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
-            var status = System.IO.Directory.Exists(folder)
-                ? Loc.Get("blink_trainer_folder_empty_or_invalid")
-                : Loc.Get("blink_trainer_folder_empty_or_invalid");
+            // L2-09: distinguish a valid folder (image count) from a missing/empty one. The previous
+            // ternary returned the same "empty or invalid" label on both branches, so a real folder
+            // was always mislabeled. A folder that exists but holds no images is still "empty".
+            string status;
+            if (System.IO.Directory.Exists(folder))
+            {
+                var imageCount = CountImageFiles(folder);
+                status = imageCount > 0
+                    ? Loc.GetF("blink_trainer_folder_image_count_fmt", imageCount)
+                    : Loc.Get("blink_trainer_folder_empty_or_invalid");
+            }
+            else
+            {
+                status = Loc.Get("blink_trainer_folder_empty_or_invalid");
+            }
             AssetFolders.Add(new AssetFolderItem(name, status));
+        }
+    }
+
+    /// <summary>
+    /// Count image files (jpg/png/gif/bmp/webp) directly inside a folder. Returns 0 on any I/O error
+    /// so a permission-denied or transient failure degrades to the "empty or invalid" label rather
+    /// than throwing during a UI refresh.
+    /// </summary>
+    private static int CountImageFiles(string folder)
+    {
+        try
+        {
+            var exts = new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp" };
+            return System.IO.Directory.EnumerateFiles(folder)
+                .Count(f => exts.Contains(System.IO.Path.GetExtension(f), StringComparer.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return 0;
         }
     }
 

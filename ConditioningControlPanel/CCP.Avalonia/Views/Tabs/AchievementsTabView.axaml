@@ -69,7 +69,7 @@
                        FontSize="22"
                        FontWeight="Bold"
                        Foreground="{DynamicResource PinkBrush}" />
-            <TextBlock Text="Free Achievements"
+            <TextBlock Text="{loc:Str section_free_achievements}"
                        FontSize="12"
                        Foreground="{DynamicResource TextMutedBrush}" />
           </StackPanel>
@@ -85,7 +85,7 @@
                        FontSize="22"
                        FontWeight="Bold"
                        Foreground="{DynamicResource PinkBrush}" />
-            <TextBlock Text="Patron Achievements"
+            <TextBlock Text="{loc:Str section_patron_achievements_title}"
                        FontSize="12"
                        Foreground="{DynamicResource TextMutedBrush}" />
           </StackPanel>

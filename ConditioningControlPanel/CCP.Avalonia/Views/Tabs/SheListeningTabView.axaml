@@ -3,6 +3,7 @@
              xmlns:vm="using:ConditioningControlPanel.Avalonia.ViewModels.Tabs"
              xmlns:sp="using:ConditioningControlPanel.Core.Services.Speech"
              xmlns:sys="using:System"
+             xmlns:loc="clr-namespace:ConditioningControlPanel.Avalonia.Localization;assembly=CCP.Avalonia"
              x:Class="ConditioningControlPanel.Avalonia.Views.Tabs.SheListeningTabView"
              x:DataType="vm:SheListeningTabViewModel">
   <ScrollViewer>
@@ -15,8 +16,8 @@
         <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap"/>
       </Border>
 
-      <CheckBox Content="I consent to microphone input (offline only)" IsChecked="{Binding MicConsentGiven}"/>
-      <CheckBox Content="Wake word — listen for &quot;Hey Bambi&quot;" IsChecked="{Binding WakeWordEnabled}"/>
+      <CheckBox Content="{loc:Str she_listening_consent_mic}" IsChecked="{Binding MicConsentGiven}"/>
+      <CheckBox Content="{loc:Str she_listening_wake_word}" IsChecked="{Binding WakeWordEnabled}"/>
 
       <StackPanel Orientation="Horizontal" Spacing="8">
         <TextBlock Text="Wake words" VerticalAlignment="Center" Width="90"/>
@@ -33,7 +34,7 @@
         </StackPanel>
       </Border>
 
-      <CheckBox Content="Push-to-talk (key binding coming soon)" IsChecked="{Binding PushToTalkEnabled}"/>
+      <CheckBox Content="{loc:Str she_listening_push_to_talk}" IsChecked="{Binding PushToTalkEnabled}"/>
 
       <StackPanel Orientation="Horizontal" Spacing="8">
         <TextBlock Text="Mic sensitivity" VerticalAlignment="Center" Width="90"/>
@@ -50,10 +51,10 @@
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
-        <Button Content="Refresh" Command="{Binding RefreshDevicesCommand}"/>
+        <Button Content="{loc:Str btn_refresh}" Command="{Binding RefreshDevicesCommand}"/>
       </StackPanel>
 
-      <Button Content="Stop the mic" Command="{Binding StopMicCommand}" HorizontalAlignment="Left" Margin="0,4,0,0"/>
+      <Button Content="{loc:Str she_listening_stop_mic}" Command="{Binding StopMicCommand}" HorizontalAlignment="Left" Margin="0,4,0,0"/>
 
       <TextBlock Text="Try saying:" FontWeight="Bold" Margin="0,10,0,0"/>
       <ItemsControl ItemsSource="{Binding CommandHints}">

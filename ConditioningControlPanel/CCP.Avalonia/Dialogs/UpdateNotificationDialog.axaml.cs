@@ -26,10 +26,9 @@ public partial class UpdateNotificationDialog : Window
     {
         if (updateInfo is null) return;
 
-        TxtVersionInfo.Text = $"Version {updateInfo.Version} is now available.\n" +
-                              $"You are currently on version {GetCurrentVersion()}.";
+        TxtVersionInfo.Text = Loc.GetF("update_version_available_fmt", updateInfo.Version, GetCurrentVersion());
 
-        TxtFileSize.Text = $"Download size: {updateInfo.FormattedFileSize}";
+        TxtFileSize.Text = Loc.GetF("update_download_size_fmt", updateInfo.FormattedFileSize);
 
         if (!string.IsNullOrWhiteSpace(updateInfo.ReleaseNotes))
         {
@@ -37,7 +36,7 @@ public partial class UpdateNotificationDialog : Window
         }
         else
         {
-            TxtReleaseNotes.Text = $"Version {updateInfo.Version} is available.\n\nRelease notes were not provided for this update.";
+            TxtReleaseNotes.Text = Loc.GetF("update_no_release_notes_fmt", updateInfo.Version);
         }
     }
 

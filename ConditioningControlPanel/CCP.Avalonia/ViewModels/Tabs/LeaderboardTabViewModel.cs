@@ -240,7 +240,7 @@ public partial class LeaderboardTabViewModel : TabItemViewModel
 
         await (_dialogService?.ShowMessageAsync(
             Loc.Get("title_not_implemented"),
-            "Profile search from leaderboard is not yet ported to Avalonia.") ?? Task.CompletedTask);
+            Loc.Get("leaderboard_profile_search_not_ported")) ?? Task.CompletedTask);
     }
 }
 
