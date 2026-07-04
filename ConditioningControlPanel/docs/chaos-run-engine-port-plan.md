@@ -19,14 +19,20 @@ the exact line ranges each slice cites.
 - **S3 ✅** exact scoring + focus economy + detonation branches + 35 tests (`fc7589b8`)
 - **S4 ✅** faithful spawn director + behavioral callbacks (THE HEART) + 51 tests (`071a8d7e`)
 - Core tests 205 → **392**; all gates green every slice; smoke baseline held (Findings: 5).
-- The hard/architecture/JUDGMENT slices (S1-S4) are DONE. What remains (S4b, S5-S9) is
+- The hard/architecture/JUDGMENT slices (S1-S4) are DONE, and **S4b-1/2/3 are DONE too**
+  (commit after `42580d84`): bound enrage (fuse-halve w/ 600ms floor + ×1.4 Vx/Vy, survivor
+  LIVES — WPF BubbleService.cs:2321-2335), treat-rot (`IsRottingTreat` mirrors WPF `_isTreat`
+  :2516 — ordinary+golden+prism fire OnTreatExpired; heart/droplet/escort/tease/brittle never
+  rot), darter spank (gated on `ChaosRunKnobs.SpankerOn` OR born-spanked sweepers — spank
+  REPLACES catch per WPF :3706-3708, no rabbit_caller double-tick). A `ChaosRunKnobs` live-knobs
+  seam now exists on the engine (`BubbleEngine.Knobs`, exposed via `IBubbleService.ChaosKnobs`
+  DIM) — **S4b-4 threads the remaining knobs through it**. What remains (S4b-4, S5-S9) is
   **MECHANICAL**: follow the steps literally, run every gate, STOP with a `BLOCKED:` note
   if a precondition fails or a step is ambiguous. Do NOT improvise.
 
 ### Remaining ladder, in order (one commit each)
-1. **S4b — engine seam gaps** (SMALL but touches `BubbleEngine`; do this FIRST, slices S5-S9
-   depend on the gap-free engine). See the dedicated S4b section below — it is split into 4
-   independent sub-steps, each auditable on its own.
+1. **S4b-4 — live-lambda knobs** (the last engine-touching work; the `ChaosRunKnobs` seam is
+   already built — extend the class + thread per-frame reads at the cited engine sites).
 2. **S5 — draft system** (mechanical: port BeginWaveTransition + ChaosBoonPool.Draft +
    OnBoonChosen; add Core tests).
 3. **S6 — payload dispatch + heavy gate + Ambient fix** (mechanical: collapse BuildPayload into
@@ -261,6 +267,15 @@ Update: task-board row → `✅ done` w/ evidence; parity matrix chaos rows; goa
 Current state; UCE plan queue rows for the 6 unmigrated overlays (follow-up).
 
 ### Follow-up rows (NOT this workstream; file/keep on the board)
+- **FLAKY head crash (seen once, 2026-07-04, during a smoke run):** unhandled
+  `InvalidOperationException: The calling thread cannot access this object` in
+  `SolidColorBrush.SerializeChanges` → `Compositor.CommitCore` — a background thread mutating
+  a brush while the compositor serializes. NOT caused by chaos-port changes (repro run after
+  was clean, 44 tabs / Findings: 5). Needs a hunt for off-UI-thread brush mutation (grep
+  timers/Tasks that set `Brush`/`Color` props without `Dispatcher.UIThread`).
+- Spanker toy port: when it lands, arm `ChaosKnobs.SpankerOn` per-run + add the spank
+  physical reaction (WPF Spank(): random-heading fling, one-time level-scaled swell
+  `_spankGrowth`, hot-pink glow, "SPANKED" label — BubbleService.cs:3770-3796).
 - Migrate + wire the 6 remaining passive overlays: EStimGlow, EStim (bolts), WaveTimer,
   VibeTrail, FxWindow (vignette), SkiaFxOverlay (default glow renderer) → compositor layers.
 - Hook click-swallow decision (WP3 JUDGMENT row).
@@ -276,6 +291,7 @@ Current state; UCE plan queue rows for the 6 unmigrated overlays (follow-up).
 | S2 | (this commit) | slnf 0 · WPF sln 0 · Core **306/306** (+38) · smoke 44 tabs / Findings: 5 baseline (21 first-chance = known benign OAuth-cancel harness noise, verified per-exception) | claim-verifier adversarial audit: C1–C15 ALL Verified (incl. no double/lost boon-tile push, no stale writers, null-variant safety) | New Core `ChaosRunRules` + tests; `ChaosRunConfig.FromSettings` WPF-shape (clamps, ClampDifficulty pills, ClampVariants null=all, MotionOverride parse, SinChance ramp, **ChaosMeta.ApplyTo both paths** = X1-6 fixed); computed mult stack + `ExtendOneLoop` + faithful `ApplyBoon`; 6 upgrade Apply effects; intended changes: SinChance ramp, DraftAutoResumeSec 15, PopupHeartEnabled default false, FIRST_FALL_BONUS 25. |
 | S3 | (this commit) | slnf 0 · WPF sln 0 · Core **341/341** (+35) · smoke 44 tabs / Findings: 5 baseline (first-chance 21 = same benign OAuth noise) | claim-verifier audit: C1–C14 ALL Verified (incl. hand-recomputing test arithmetic); no extra divergences | New Core `ChaosScoring` (pure formulas, WPF cites) + 35 tests; OnBenignPopped/OnDefused/OnDetonated rewired to exact WPF semantics — stand-in bugs fixed: detonation bare-hit now Combo=0+**Heat=0** (was Heat-=0.15), pickup paths now early-return (were firing payloads + generic scoring), golden pay via GoldenPayRange (was hardcoded 12-24), heart/droplet focus grants added, snap-chain invuln + collar branches ported, BankDripFeed + frozen-channel-free semantics. Deferred sub-items noted in agent report (pop floaters → S8, cam-girl tips/EStim rolls/barks → S6/S7). |
 | S4 | (this commit) | slnf 0 · WPF sln 0 · Core **392/392** (+51) · smoke 44 tabs / Findings: 5 baseline (first-chance 21 = same benign OAuth noise) | claim-verifier audit: C1,C3-C16 Verified; **C2 resolved** (golden/prism/brittle riders nest inside the cap-gated ordinary block — this is WPF-faithful, matching ChaosModeService.cs:1122/1168-1201; the contract's 'NOT capped' wording referred to darters, which ARE outside at :728). Out-of-scope could-not-wire gaps explicitly listed (follow-up rows). | THE HEART: new Core `ChaosSpawnDirector` (pure spawn math) + 51 tests; SpawnTick/TrySpawnBehavioralBubble/RunTick faithful (interval retune, density cap, effIntensity bias, video strip, freeze re-pick, heavy-drop serial, golden/prism/brittle/darter rolls, empty-field rescue, heart arming, welcome shower); full behavioral callback widening via IBubbleService DIMs → AvaloniaBubbleService 16-arg path; echo children via Core BuildEchoChild ±70/±50; darter-speed DIP/frame→DIP/sec ×31.25 fix; OnDetonated tease/brittle guard against double-fire. |
+| S4b-1/2/3 | (this commit) | slnf 0 · WPF sln 0 · Core **398/398** (+6) · smoke 44 tabs / Findings: 5 / first-chance 21 (one FLAKY unrelated cross-thread brush crash on a prior run — filed as follow-up row; repro run clean) | Agent-implemented, then smart-model reworked S4b-3 per WPF :3706-3708 (spank gated on SpankerOn/sweeper, REPLACES catch — kills the rabbit_caller double-tick the agent flagged); 3 parity tests pin spanker-on/spanker-off/sweeper | Bound enrage LIVES (fuse/2 floor 600ms, Vx/Vy ×1.4 — WPF BubbleService.cs:2321-2335); `IsRottingTreat` mirrors WPF `_isTreat` :2516 (ordinary+golden+prism rot → OnTreatExpired; heart/droplet/escort/tease/brittle never); darter first-smack hook + born-spanked sweepers (:3787); NEW `ChaosRunKnobs` live-knobs seam (`BubbleEngine.Knobs` / `IBubbleService.ChaosKnobs` DIM / AvaloniaBubbleService override) ready for S4b-4; `ChaosLessonHooks.OnRabbitSpanked` added. |
 | S5 | — | — | — | — |
 | S6 | — | — | — | — |
 | S7 | — | — | — | — |

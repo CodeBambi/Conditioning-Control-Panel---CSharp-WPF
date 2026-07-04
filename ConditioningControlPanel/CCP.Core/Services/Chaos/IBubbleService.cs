@@ -129,6 +129,11 @@ public interface IBubbleService
     /// Default 0 (fakes never hit the cap).</summary>
     int ActiveFreezeBubbles => 0;
 
+    /// <summary>Live run knobs the chaos engine reads at use sites (WPF live-lambda
+    /// equivalent, ChaosModeService.cs:361-381). The chaos service mutates these when
+    /// upgrades/boons change mid-run. Default null (fakes/heads without a chaos engine).</summary>
+    ChaosRunKnobs? ChaosKnobs => null;
+
     /// <summary>Engine-logical X of the last chaos pop — spawn-at-pop-point consumers pin here
     /// (WPF BubbleService.cs:120-122 <c>ChaosLastPopXPx</c>). Default 0.</summary>
     double ChaosLastPopX => 0;

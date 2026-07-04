@@ -262,6 +262,10 @@ public static class ChaosLessonHooks
 
     public static void OnPrismPopped() => Safe(() => ChaosLessons.Tick("taking_chances"));
     public static void OnRabbitCaught() => Safe(() => ChaosLessons.Tick("rabbit_caller"));
+    /// <summary>A rabbit took its FIRST smack (the Spanker equipped). Counts toward rabbit_caller:
+    /// with the Spanker on, rabbits can't be caught at all, so the first smack is the substitute
+    /// tick (WPF ChaosLessonHooks.OnRabbitSpanked, BubbleService.cs:3789).</summary>
+    public static void OnRabbitSpanked() => Safe(() => ChaosLessons.Tick("rabbit_caller"));
     public static void OnFreezeCaught() => Safe(() => ChaosLessons.Tick("freeze_trigger"));
 
     public static void OnChannelStarted() => Safe(() => _channelStartUtc = DateTime.UtcNow);

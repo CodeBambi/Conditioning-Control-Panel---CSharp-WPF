@@ -113,6 +113,11 @@ public sealed class BubbleState
     /// <summary>Age of the bubble in milliseconds, used for quick-action checks.</summary>
     public double AgeMs { get; set; }
 
+    /// <summary>True after a darter's first smack — the Spanker first-contact lesson tick
+    /// fires only on the first smack (WPF BubbleService.cs:3789 <c>if (!_isSpanked)</c>), so this
+    /// latch stops the callback re-firing on later smacks.</summary>
+    public bool IsSpanked { get; set; }
+
     // ---- Stage 2c field hazards ----
 
     /// <summary>Recent trail points in physical pixels for Tail-Plug rabbit trails.</summary>

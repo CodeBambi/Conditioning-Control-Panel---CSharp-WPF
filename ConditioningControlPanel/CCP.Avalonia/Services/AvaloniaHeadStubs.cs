@@ -391,7 +391,10 @@ public sealed class AvaloniaChaosService : IChaosService
         // follow-up rows on the port plan, not faked here.
         // onChaperoneShieldBroken: WPF has NO service-side handler — the escort pop is a normal
         // treat pop and the shield release is engine-internal (WPF BubbleService.cs:1148-1184).
-        // onDarterSpanked: the Core engine never fires it (the Spanker is unported) — follow-up row.
+        // onDarterSpanked: fired by the engine on a darter's first SMACK (S4b-3) — only when the
+        // Spanker is on (ChaosKnobs.SpankerOn, WPF BubbleService.cs:3706-3708; spank REPLACES the
+        // catch) or for born-spanked sweepers (never fires — latch pre-set). Until the Spanker toy
+        // is ported nothing sets SpankerOn, so darters are plain catches — no double lesson tick.
         _bubbles.BeginChaosMode(
             OnBenignPopped,
             OnDefused,
@@ -403,6 +406,7 @@ public sealed class AvaloniaChaosService : IChaosService
             onTeaseDenied: OnTeaseDenied,
             onBrittleShattered: OnBrittleShattered,
             onTreatExpired: OnTreatExpired,
+            onDarterSpanked: OnDarterSpanked,
             canChannel: CanChannelDefuse,
             onChannelStarted: OnChannelStarted,
             onChannelBroken: OnChannelBroken);
@@ -1219,6 +1223,17 @@ public sealed class AvaloniaChaosService : IChaosService
         UpdateStateText();
     }
 
+    /// <summary>The Spanker: a rabbit took its first smack. With the Spanker equipped rabbits
+    /// can't be caught at all, so the first smack is what counts toward the rabbit_caller lesson
+    /// (WPF ChaosLessonHooks.OnRabbitSpanked, fired from BubbleService.cs:3789 on the first smack).
+    /// The scoring/slow-mo for a catch lives in <see cref="OnDarterCaught"/>; this is the
+    /// lesson-only hook the engine fires on a darter's first pointer-down.</summary>
+    private void OnDarterSpanked(ChaosBubbleSpec spec, bool quick)
+    {
+        if (_state == null) return;
+        ChaosLessonHooks.OnRabbitSpanked();
+    }
+
     /// <summary>Freeze pickup: a GOOD catch — pays 140 x TotalMult (NO BoonPayMult), feeds the
     /// streak and heat, then holds the whole field (WPF ChaosModeService.cs:2300-2318).</summary>
     private void OnFreezeCaught(ChaosBubbleSpec spec)
@@ -1291,9 +1306,9 @@ public sealed class AvaloniaChaosService : IChaosService
     }
 
     /// <summary>A Bound survivor's tether snapped — it enraged. The juice lives here; in WPF
-    /// the trance-halving/speed-up is engine-side (WPF ChaosModeService.cs:1395-1404). NOTE:
-    /// the Core BubbleEngine currently DETONATES the survivor at window lapse instead of
-    /// enraging it in place — an engine gap logged as a follow-up row, not papered over here.</summary>
+    /// the trance-halving/speed-up is engine-side (WPF ChaosModeService.cs:1395-1404). The Core
+    /// BubbleEngine now ENRAGES the survivor in place (S4b-1: halves the fuse, scales drift by
+    /// BOUND_ENRAGE_SPEED_MULT, keeps it alive) instead of detonating it.</summary>
     private void OnBoundEnraged(ChaosBubbleSpec spec)
     {
         if (_state == null) return;

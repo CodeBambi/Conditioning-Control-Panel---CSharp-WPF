@@ -84,6 +84,10 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
     /// FREEZE_MAX_ON_SCREEN re-pick reads this (WPF ChaosModeService.cs:1155-1162).</summary>
     public int ActiveFreezeBubbles => _chaosEngine?.ActiveFreezeBubbles ?? 0;
 
+    /// <summary>Live run knobs of the ACTIVE chaos engine (null when no chaos run is up).
+    /// The chaos service mutates these mid-run; the engine reads them at use sites.</summary>
+    public ChaosRunKnobs? ChaosKnobs => _chaosEngine?.Knobs;
+
     /// <summary>Engine-logical X of the last chaos pop (WPF BubbleService.cs:120-122
     /// <c>ChaosLastPopXPx</c> equivalent — gg-rabbit sweepers/droplets pin here).</summary>
     public double ChaosLastPopX => _chaosEngine?.ChaosLastPopX ?? 0;

@@ -59,6 +59,10 @@ public sealed class BubbleEngine
     private Action<ChaosBubbleSpec>? _onTeaseDenied;
     private Action<ChaosBubbleSpec>? _onBrittleShattered;
     private Action<ChaosBubbleSpec>? _onTreatExpired;
+    /// <summary>Live run knobs the engine reads at use sites (WPF live-lambda equivalent —
+    /// see <see cref="ChaosRunKnobs"/>). The chaos service mutates these mid-run.</summary>
+    public ChaosRunKnobs Knobs { get; } = new();
+
     private Action<ChaosBubbleSpec, bool>? _onDarterSpanked;
 
     // ---- hold-to-defuse channel state (Avalonia port parity) ----
@@ -679,6 +683,23 @@ public sealed class BubbleEngine
                 BeginChaosChannel(bubble.Id);
                 return false;
             }
+
+            // S4b-3 (WPF BubbleService.cs:3706-3708): with the Spanker on — or ALWAYS for GG
+            // sweepers — a darter pointer-down SMACKS the rabbit instead of catching it; spank
+            // and catch are mutually exclusive ("No catch, no slow-mo: that's the trade").
+            // The rabbit_caller lesson hook fires on the FIRST smack only (WPF :3789
+            // `if (!_isSpanked)`); sweepers are born spanked and never reach it.
+            if (spec.IsDarter && (Knobs.SpankerOn || spec.IsSweeper))
+            {
+                if (!bubble.IsSpanked)
+                {
+                    bubble.IsSpanked = true;
+                    bool quick = spec.QuickWindowMs > 0 && bubble.AgeMs <= spec.QuickWindowMs;
+                    _onDarterSpanked?.Invoke(spec, quick);
+                }
+                return true; // click consumed; the darter survives (never caught)
+            }
+
             PopBubble(bubble.Id);
             return true;
         }
@@ -691,6 +712,11 @@ public sealed class BubbleEngine
     {
         return _bubbles.FirstOrDefault(b => b.Id == id);
     }
+
+    /// <summary>Testability seam: advances the simulation by one fixed-step tick (the body the
+    /// _animTimer fires). Production never calls this — it exists so engine-path unit tests can
+    /// step the spawn queue / physics / lifecycle deterministically without a live DispatcherTimer.</summary>
+    internal void TickOnceForTesting() => Tick();
 
     /// <summary>
     /// Returns ids of chaos bubbles whose bounds intersect the given rectangle in
@@ -856,6 +882,10 @@ public sealed class BubbleEngine
 
         if (spec.IsDarter)
         {
+            // GG sweepers are born spanked (WPF BubbleService.cs:3787 "sweepers are born spanked
+            // and never land here") — the first-smack lesson latch is pre-set so the
+            // rabbit_caller hook never fires for a sweeper.
+            state.IsSpanked = spec.IsSweeper;
             var angle = _random.NextDouble() * Math.PI * 2.0;
             // WPF DARTER_SPEED is DIPs PER 32ms FRAME (WPF ChaosBubbleVariants.cs:141 "9.0
             // DIPs/frame"); this engine integrates velocities per SECOND (X += Vx*dt), so a
@@ -942,12 +972,16 @@ public sealed class BubbleEngine
             bubble.BoundResolveTimeRemainingMs -= dt * 1000.0;
             if (bubble.BoundResolveTimeRemainingMs <= 0)
             {
+                // S4b-1: ENRAGE the survivor in place — do NOT detonate/pop it. WPF halves the
+                // remaining fuse (min 600ms) and scales drift by BOUND_ENRAGE_SPEED_MULT, then the
+                // bubble STAYS ALIVE as a normal defusable live (WPF BubbleService.cs:2321-2335
+                // Enrage()). The BoundEnraged latch + the !BoundEnraged guard above stop re-entry;
+                // fall through to the normal fuse/motion tick below so the survivor keeps burning.
                 bubble.BoundEnraged = true;
-                bubble.IsPopping = true;
+                bubble.FuseRemainingMs = Math.Max(600.0, bubble.FuseRemainingMs / 2.0);
+                bubble.Vx *= ChaosTuning.BOUND_ENRAGE_SPEED_MULT;
+                bubble.Vy *= ChaosTuning.BOUND_ENRAGE_SPEED_MULT;
                 _onBoundEnraged?.Invoke(spec);
-                _onDetonate?.Invoke(spec);
-                missed.Add(bubble);
-                return;
             }
         }
 
@@ -1076,7 +1110,7 @@ public sealed class BubbleEngine
         {
             if (spec.IsTease)
                 _onTeaseDenied?.Invoke(spec);
-            else if (spec.IsGolden || spec.IsHeart || spec.IsDroplet)
+            else if (IsRottingTreat(spec))
                 _onTreatExpired?.Invoke(spec);
 
             missed.Add(bubble);
@@ -1174,6 +1208,16 @@ public sealed class BubbleEngine
 
         moved.Add(bubble);
     }
+
+    /// <summary>WPF parity (BubbleService.cs:2516 <c>_isTreat</c> def, Dissolve() :3907): the treat
+    /// set that rots and fires the treat-expired callback when its screen life runs out. Ordinary
+    /// treats (flash/subliminal/...), goldens and prisms rot; hearts, droplets, escorts, tease and
+    /// brittle do NOT (kindness pickups never punish a miss; tease runs its own Denied expiry;
+    /// brittle just drifts off). Mirrors WPF's <c>_isTreat</c> definition exactly.</summary>
+    private static bool IsRottingTreat(ChaosBubbleSpec spec) =>
+        !spec.IsLive && !spec.IsDarter && !spec.IsFreeze
+        && !spec.IsHeart && !spec.IsDroplet && !spec.IsEscort
+        && !spec.IsTease && !spec.IsBrittle;
 
     private void ChainPop(BubbleState source)
     {
