@@ -12,6 +12,8 @@ using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Helpers;
+using ConditioningControlPanel.Avalonia.Services.Theme;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ConditioningControlPanel.Avalonia.Features;
 
@@ -202,6 +204,31 @@ public partial class FeatureCard : UserControl
         InitializeComponent();
         RootBorder.PointerPressed += OnPointerPressed;
         ApplyLockState();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+    }
+
+    private void OnLoaded(object? sender, RoutedEventArgs e)
+    {
+        // The active-state glow/border is applied imperatively over the XAML
+        // DynamicResource, so it must be re-applied on a live theme/mod switch or
+        // the outer border keeps the previous theme's accent. Subscribe on load and
+        // unsubscribe on unload to avoid leaking a handler on the singleton service.
+        var themeService = App.Services?.GetService<AvaloniaThemeService>();
+        if (themeService != null)
+            themeService.ThemeChanged += OnThemeChanged;
+    }
+
+    private void OnUnloaded(object? sender, RoutedEventArgs e)
+    {
+        var themeService = App.Services?.GetService<AvaloniaThemeService>();
+        if (themeService != null)
+            themeService.ThemeChanged -= OnThemeChanged;
+    }
+
+    private void OnThemeChanged(object? sender, EventArgs e)
+    {
+        ApplyActiveState();
     }
 
     private static void OnTitleChanged(FeatureCard c, AvaloniaPropertyChangedEventArgs e)

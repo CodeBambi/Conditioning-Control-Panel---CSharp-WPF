@@ -87,7 +87,10 @@ public sealed class AvaloniaThemeService : IDisposable
         var tintedBgHover = Blend(bgColor, accent, 0.20);
         var midGradient = Blend(bgColor, accent, 0.10);
 
-        // Background colors and brushes.
+        // Background colors. The matching *Brush resources in App.axaml bind their
+        // Color via {DynamicResource <key>}, so updating the color key alone recolors
+        // every consumer live without swapping the brush instance (which would strand
+        // StaticResource references created between theme switches).
         SetColor(res, "DarkerBg", bgColor);
         SetColor(res, "PanelBg", panelColor);
         SetColor(res, "SurfaceBg", surfaceColor);
@@ -95,14 +98,6 @@ public sealed class AvaloniaThemeService : IDisposable
         SetColor(res, "PanelAccentHover", panelAccentHoverColor);
         SetColor(res, "PreviewBg", previewBgColor);
         SetColor(res, "PanelBgTransparent", panelBgTransparent);
-
-        SetBrush(res, "DarkerBgBrush", bgColor);
-        SetBrush(res, "PanelBgBrush", panelColor);
-        SetBrush(res, "SurfaceBgBrush", surfaceColor);
-        SetBrush(res, "PanelAccentBrush", panelAccentColor);
-        SetBrush(res, "PanelAccentHoverBrush", panelAccentHoverColor);
-        SetBrush(res, "PreviewBgBrush", previewBgColor);
-        SetBrush(res, "PanelBgTransparentBrush", panelBgTransparent);
 
         // Semantic surface, border, and text colors derived from the active palette.
         var elevatedSurfaceColor = Lighten(panelColor, 0.10);
@@ -117,13 +112,14 @@ public sealed class AvaloniaThemeService : IDisposable
         SetColor(res, "TextMuted", textMutedColor);
         SetColor(res, "Danger", dangerColor);
 
-        SetBrush(res, "ElevatedSurfaceBrush", elevatedSurfaceColor);
-        SetBrush(res, "GlassBorderBrush", glassBorderColor);
-        SetBrush(res, "TextLightBrush", textLightColor);
-        SetBrush(res, "TextMutedBrush", textMutedColor);
-        SetBrush(res, "DangerBrush", dangerColor);
+        // TextLightBrush has no backing *Color key in App.axaml (it is hardcoded
+        // white), so recolor the existing brush instance in place rather than
+        // swapping the object, keeping any StaticResource consumers in sync.
+        SetBrushColorInPlace(res, "TextLightBrush", textLightColor);
 
-        // Accent colors and brushes.
+        // Accent colors. The matching *Brush resources (PinkBrush, SecondaryBrush,
+        // TransparentPink*Brush, etc.) all bind Color via {DynamicResource <key>} in
+        // App.axaml, so updating the color keys alone live-reskins every consumer.
         SetColor(res, "PinkColor", accent);
         SetColor(res, "DarkPink", dark);
         SetColor(res, "DarkPinkColor", dark);
@@ -138,21 +134,6 @@ public sealed class AvaloniaThemeService : IDisposable
         SetColor(res, "AccentTintedBg", tintedBg);
         SetColor(res, "AccentTintedBgHover", tintedBgHover);
         SetColor(res, "AccentMidGradient", midGradient);
-
-        SetBrush(res, "PinkBrush", accent);
-        SetBrush(res, "DarkPinkBrush", dark);
-        SetBrush(res, "PinkButtonHoveredBrush", light);
-        SetBrush(res, "TransparentPinkBrush", transparent30);
-        SetBrush(res, "TransparentPink20Brush", transparent20);
-        SetBrush(res, "TransparentPink40Brush", transparent40);
-        SetBrush(res, "TransparentPink50Brush", transparent50);
-        SetBrush(res, "TransparentPink60Brush", transparent60);
-        SetBrush(res, "AccentPressedBrush", accentPressed);
-        SetBrush(res, "PatreonPurpleBrush", secondary);
-        SetBrush(res, "SecondaryBrush", secondary);
-        SetBrush(res, "AccentTintedBgBrush", tintedBg);
-        SetBrush(res, "AccentTintedBgHoverBrush", tintedBgHover);
-        SetBrush(res, "AccentMidGradientBrush", midGradient);
 
         // Accent gradient: CCP Default keeps the brand gradient, other mods use solid accent.
         if (mod.Id == BuiltInMods.CCPDefaultId && res.TryGetResource("BrandGradient", ThemeVariant.Default, out var brandObj) && brandObj is Brush brandGradient)
@@ -211,8 +192,17 @@ public sealed class AvaloniaThemeService : IDisposable
         res[key] = color;
     }
 
-    private static void SetBrush(IResourceDictionary res, string key, Color color)
+    private static void SetBrushColorInPlace(IResourceDictionary res, string key, Color color)
     {
+        // Recolor the existing brush instance so StaticResource consumers created
+        // between theme switches update too; only allocate a new brush as a fallback
+        // when the resource is missing or is not a mutable SolidColorBrush.
+        if (res.TryGetResource(key, ThemeVariant.Default, out var existing) && existing is SolidColorBrush brush)
+        {
+            brush.Color = color;
+            return;
+        }
+
         res[key] = new SolidColorBrush(color);
     }
 
