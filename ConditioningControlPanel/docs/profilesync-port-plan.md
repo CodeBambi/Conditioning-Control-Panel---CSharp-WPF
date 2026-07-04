@@ -1,13 +1,14 @@
 # ProfileSyncService — Slice-by-Slice Port Plan
 
-> **Status:** IN PROGRESS — **Slices 1–4 landed unwired; the full sync round-trip (pull+merge+push)
-> + heartbeat + 401 recovery is done + tested.** S1 (`c4b2583a`) seam+18 DTOs+HMAC+5t. S2 (`a3215fc9`)
+> **Status:** IN PROGRESS — **Slices 1–5 landed unwired; sync round-trip + heartbeat + 401 recovery
+> + cloud backup/restore done + tested.** S1 (`c4b2583a`) seam+18 DTOs+HMAC+5t. S2 (`a3215fc9`)
 > injectable test ctor + heartbeat + 4t. S3 (`fafd22b0`) pull + full merge + 3 real `IQuestService` DIM
-> methods + 5t, **independently adversarially reviewed SAFE-TO-BANK** (5 never-lower invariants
-> byte-faithful; one drift fixed). S4 (`34fc5f16`) push/`SyncProfileAsync` (`/v2/user/sync`, leaderboard
-> SUBMIT) with **fresh-defaults cloud-wipe guard byte-identical to WPF**, `_syncGate`/cooldown/429, and
-> 401 `restore-session` recovery (secure-setter token adopt) + 5t. **Core 189/189, still NOT in DI
-> (byte-identical app behavior).** Slices 5–7 remain (fresh-context). This is the sole remaining WS0 merge-`5ce70de6`
+> methods + 5t, **independently adversarially reviewed SAFE-TO-BANK**. S4 (`34fc5f16`) push (leaderboard
+> SUBMIT) w/ **fresh-defaults cloud-wipe guard byte-identical to WPF** + 401 `restore-session` recovery
+> + 5t. S5 (`44ea16fa`) cloud backup/restore — **P0 `ExcludedBackupProperties` ported VERBATIM
+> (orchestrator grep-verified 18==18 set-equality), strip-before-upload confirmed, P0 test asserts the
+> actual decoded wire body carries no token** + 4t. **Core 193/193, still NOT in DI (byte-identical app
+> behavior).** Slices 6–7 remain (fresh-context). This is the sole remaining WS0 merge-`5ce70de6`
 > re-open (parity-matrix row 1). Execution is a **fresh-context task**: the surface is ~2,800 LOC
 > and **security-sensitive** (HMAC anti-cheat signing, GDPR delete/export, and the P0 privacy
 > `ExcludedBackupProperties` list — omitting it leaks the auth token to the server). It must be
@@ -320,11 +321,15 @@ to WPF:487** (`!_hasLoadedProfile && PlayerLevel<=1 && totalXp<100`). 401 `Handl
 never logged) ported here (were slice-2/3 breadcrumbs). 5 tests, Core 189/189. **Event-trigger wiring
 (progression/quests/exit) is deferred to slice 7** (kept unwired).
 
-**Slice 5 — Cloud settings backup/restore.** `BackupSettingsAsync` (+`ExcludedBackupProperties`,
-gzip+base64, 5-min `Interlocked` debounce), `GetSettingsBackupInfoAsync`,
-`RestoreSettingsFromCloudAsync`. Replace the local-file `AvaloniaSettingsBackupProvider` stopgap by
-making `ProfileSyncService` the real `ISettingsBackupProvider` cloud impl (or compose). *Success:*
-exclusion strip + compress/decompress round-trip test passes; `SaveImmediate` path still green.
+**Slice 5 — Cloud settings backup/restore. ✅ DONE (`44ea16fa`, landed UNWIRED, P0 verified).**
+`BackupSettingsAsync(force)` (P0 `ExcludedBackupProperties` VERBATIM from WPF 2384-2404 — grep-verified
+18==18 byte-for-byte set-equality; strip = `JObject.Parse`→`Remove`→`ToString`, CONFIRMED runs BEFORE
+gzip+base64+upload; 5-min `Interlocked` debounce), `GetSettingsBackupInfoAsync`,
+`RestoreSettingsFromCloudAsync` (base64→gunzip→`AppSettings`, not applied live). P0 strip test asserts
+the **actual captured+decoded upload body** contains none of the 18 excluded names + `AuthToken`/
+`OpenRouterApiKey` absent by name AND raw value. No token/`settings_data` logged. 4 tests, Core 193/193.
+**The `ISettingsBackupProvider` stopgap replacement + `SaveImmediate` wiring is deferred to slice 7**
+(kept unwired).
 
 **Slice 6 — Server-authoritative actions.** `PurchaseSkillAsync` (+ wire into
 `ISkillTreeService.PurchaseSkillAsync`, which delegates to `App.ProfileSync` in WPF
