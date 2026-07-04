@@ -10,8 +10,10 @@
 > actual decoded wire body carries no token** + 4t. S6 (`766d8322`) server actions
 > (purchase/oopsie/change-name) — **independently reviewed; economy bug (Math.Max on the
 > post-purchase balance) caught + fixed pre-commit, pinned by a discriminating test** + 6t.
-> **Core 199/199, still NOT in DI (byte-identical app behavior).** ONLY SLICE 7 REMAINS — GDPR +
-> live wiring, expanded below into a turnkey checklist (playbook WP1). This is the sole remaining WS0 merge-`5ce70de6`
+> **Core 205/205, still NOT in DI (byte-identical app behavior).** Slice 7a (`4f051ab0`) done:
+> GDPR export + easter-egg ported, DeleteAccount stays auth-owned (evidence in commit), breadcrumb
+> inventory delivered. **ONLY SLICE 7b REMAINS — the LIVE WIRING, checklist steps 3–11 below
+> (MECHANICAL, any model; owner-redirected 2026-07-04 to run after best-model WP2 work).** This is the sole remaining WS0 merge-`5ce70de6`
 > re-open (parity-matrix row 1). Execution is a **fresh-context task**: the surface is ~2,800 LOC
 > and **security-sensitive** (HMAC anti-cheat signing, GDPR delete/export, and the P0 privacy
 > `ExcludedBackupProperties` list — omitting it leaks the auth token to the server). It must be

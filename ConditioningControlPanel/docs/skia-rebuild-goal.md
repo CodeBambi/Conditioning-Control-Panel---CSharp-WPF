@@ -225,7 +225,10 @@ is reverted, not patched around.
 
 ## EXECUTION PLAYBOOK (ordered queue — written so ANY model can execute)
 
-Work strictly top-to-bottom unless the owner redirects. Each work package (WP) is
+Work strictly top-to-bottom unless the owner redirects. **OWNER REDIRECT 2026-07-04: spend
+best-model capacity on the HARDEST parts first — WP2 (UCE video) starts now; WP1's remaining
+piece (slice 7b live wiring, MECHANICAL, turnkey checklist) is parked for any-model execution
+and stays a WS0 DoD requirement.** Each work package (WP) is
 tagged with the model tier it needs: **MECHANICAL** = any model can execute by following
 the steps literally (the gates catch mistakes); **JUDGMENT** = use the best available
 model (owner has confirmed capacity). If you are a less capable executor: follow steps
