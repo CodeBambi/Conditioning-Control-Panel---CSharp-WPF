@@ -1,9 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using ConditioningControlPanel.Core.Services.Settings;
+using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -143,5 +148,126 @@ public class ProfileSyncServiceTests
         Assert.Equal("6.2.2", restored.AppVersion);
         Assert.Equal(backedUp, restored.BackedUpAt);
         Assert.Equal(4096, restored.SizeBytes);
+    }
+
+    // ---- Slice 2: heartbeat --------------------------------------------------------------
+
+    /// <summary>
+    /// Fake handler that records the outgoing request (method, URI, headers, body) and returns
+    /// a canned response. No live network is touched.
+    /// </summary>
+    private sealed class RecordingHandler : HttpMessageHandler
+    {
+        public int CallCount { get; private set; }
+        public HttpRequestMessage? LastRequest { get; private set; }
+        public string? LastBody { get; private set; }
+        public HttpStatusCode ResponseStatus { get; set; } = HttpStatusCode.OK;
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            CallCount++;
+            LastRequest = request;
+            if (request.Content != null)
+                LastBody = await request.Content.ReadAsStringAsync(cancellationToken);
+
+            return new HttpResponseMessage(ResponseStatus)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            };
+        }
+    }
+
+    private sealed class FakeSettingsService : ISettingsService
+    {
+        public AppSettings Current { get; } = new();
+        public bool WasSettingsFileMissing => true;
+        public List<string> PendingPresetReinstalls { get; } = new();
+        public void Save() { }
+        public void Save(bool suppressCloudBackup = false) { }
+        public void SaveImmediate(bool suppressCloudBackup = false) { }
+        public void RestoreFrom(AppSettings settings) { }
+        public void Reset() { }
+    }
+
+    private static ProfileSyncService CreateService(
+        RecordingHandler handler,
+        string? authToken,
+        string? unifiedId,
+        bool offlineMode = false)
+    {
+        var settings = new FakeSettingsService();
+        // AuthToken routes through the (unwired = in-memory) SecureAuthTokenStore.
+        settings.Current.AuthToken = authToken;
+        settings.Current.UnifiedId = unifiedId;
+        settings.Current.OfflineMode = offlineMode;
+        return new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+    }
+
+    [Fact]
+    public async Task SendHeartbeatAsync_WhenLoggedIn_PostsToHeartbeatEndpointWithAuthAndBody()
+    {
+        var handler = new RecordingHandler();
+        using var service = CreateService(handler, authToken: "auth-token-xyz", unifiedId: "unified-1");
+
+        await service.SendHeartbeatAsync();
+
+        Assert.Equal(1, handler.CallCount);
+        Assert.NotNull(handler.LastRequest);
+        Assert.Equal(HttpMethod.Post, handler.LastRequest!.Method);
+        Assert.Equal("https://codebambi-proxy.vercel.app/v2/user/heartbeat",
+            handler.LastRequest.RequestUri!.ToString());
+
+        // X-Auth-Token header carries the token (value asserted only in-test; never logged).
+        Assert.True(handler.LastRequest.Headers.TryGetValues("X-Auth-Token", out var tokenValues));
+        Assert.Equal("auth-token-xyz", tokenValues!.Single());
+
+        var body = JObject.Parse(handler.LastBody!);
+        Assert.Equal("unified-1", (string?)body["unified_id"]);
+        Assert.NotNull(body["is_active"]);
+        Assert.NotNull(body["in_session"]);
+        Assert.NotNull(body["app_version"]);
+    }
+
+    [Fact]
+    public async Task SendHeartbeatAsync_WhenNoAuthToken_DoesNotPost()
+    {
+        var handler = new RecordingHandler();
+        using var service = CreateService(handler, authToken: null, unifiedId: "unified-1");
+
+        await service.SendHeartbeatAsync();
+
+        Assert.Equal(0, handler.CallCount);
+        Assert.Null(handler.LastRequest);
+    }
+
+    [Fact]
+    public async Task SendHeartbeatAsync_WhenOfflineMode_DoesNotPost()
+    {
+        var handler = new RecordingHandler();
+        using var service = CreateService(
+            handler, authToken: "auth-token-xyz", unifiedId: "unified-1", offlineMode: true);
+
+        await service.SendHeartbeatAsync();
+
+        Assert.Equal(0, handler.CallCount);
+    }
+
+    [Fact]
+    public void StartHeartbeat_ThenStopHeartbeat_LeavesNoActiveTimer_AndStopIsIdempotent()
+    {
+        var handler = new RecordingHandler();
+        // No token: the immediate first tick is a no-op (IsSyncEnabled false), so no POST races.
+        using var service = CreateService(handler, authToken: null, unifiedId: null);
+
+        service.StartHeartbeat();
+        Assert.True(service.IsHeartbeatActive);
+
+        service.StopHeartbeat();
+        Assert.False(service.IsHeartbeatActive);
+
+        // Safe to call twice.
+        service.StopHeartbeat();
+        Assert.False(service.IsHeartbeatActive);
     }
 }
