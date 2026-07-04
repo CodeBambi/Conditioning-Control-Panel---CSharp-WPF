@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Settings;
 
@@ -9,23 +11,28 @@ namespace ConditioningControlPanel.Avalonia.Services.Auth;
 /// </summary>
 public sealed class AvaloniaUserIdentityProvider : IUserIdentityProvider
 {
-    private readonly IAuthProvider _authProvider;
+    private readonly IReadOnlyList<IAuthProvider> _authProviders;
     private readonly ISettingsService _settingsService;
 
-    public AvaloniaUserIdentityProvider(IAuthProvider authProvider, ISettingsService settingsService)
+    // R7: MS.DI resolves a single IAuthProvider to the LAST-registered one (SubscribeStar),
+    // which is almost never the provider the user actually logged in with. Inject them all and
+    // select the first that is logged in, falling back to persisted settings.
+    public AvaloniaUserIdentityProvider(IEnumerable<IAuthProvider> authProviders, ISettingsService settingsService)
     {
-        _authProvider = authProvider;
+        _authProviders = (authProviders ?? Enumerable.Empty<IAuthProvider>()).ToList();
         _settingsService = settingsService;
     }
 
+    private IAuthProvider? ActiveProvider => _authProviders.FirstOrDefault(p => p.IsLoggedIn);
+
     public string? UnifiedUserId =>
-        !string.IsNullOrEmpty(_authProvider.UnifiedUserId)
-            ? _authProvider.UnifiedUserId
+        !string.IsNullOrEmpty(ActiveProvider?.UnifiedUserId)
+            ? ActiveProvider!.UnifiedUserId
             : _settingsService.Current?.UnifiedId;
 
     public string? DisplayName =>
-        !string.IsNullOrEmpty(_authProvider.DisplayName)
-            ? _authProvider.DisplayName
+        !string.IsNullOrEmpty(ActiveProvider?.DisplayName)
+            ? ActiveProvider!.DisplayName
             : _settingsService.Current?.UserDisplayName;
 
     // Avalonia auth providers do not currently track a separate Discord ID;

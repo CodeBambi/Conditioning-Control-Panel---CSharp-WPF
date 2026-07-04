@@ -43,6 +43,7 @@ public sealed class AvaloniaV2AuthService : IV2AuthService
     private static string RedactSensitiveFields(string json)
     {
         json = Regex.Replace(json, @"""auth_token""\s*:\s*""[^""]+""", @"""auth_token"":""[REDACTED]""");
+        json = Regex.Replace(json, @"""access_token""\s*:\s*""[^""]+""", @"""access_token"":""[REDACTED]""");
         json = Regex.Replace(json, @"""password""\s*:\s*""[^""]+""", @"""password"":""[REDACTED]""");
         return json;
     }
@@ -253,7 +254,7 @@ public sealed class AvaloniaV2AuthService : IV2AuthService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("[V2Auth] Get profile failed: {Json}", json);
+                _logger.LogWarning("[V2Auth] Get profile failed: {Json}", RedactSensitiveFields(json));
                 return null;
             }
 
@@ -363,6 +364,18 @@ public sealed class AvaloniaV2AuthService : IV2AuthService
         settings.HasLinkedDiscord = !string.IsNullOrEmpty(user.DiscordId);
         settings.HasLinkedPatreon = !string.IsNullOrEmpty(user.PatreonId);
         settings.PatreonTier = user.PatreonTier;
+
+        // AC-3 (#465): Discord/unified-login users with a LINKED Patreon sub have no local
+        // Patreon tokens, so PatreonProvider.CurrentTier stays None and nothing else refreshes
+        // the cached-premium window for them. A server-confirmed linked tier must keep premium
+        // alive here, mirroring the 2-week grace that direct Patreon validation writes. Never
+        // shorten an existing longer window.
+        if (user.PatreonTier >= 1)
+        {
+            var until = DateTime.UtcNow.AddDays(14);
+            if (settings.PatreonPremiumValidUntil == null || settings.PatreonPremiumValidUntil < until)
+                settings.PatreonPremiumValidUntil = until;
+        }
 
         if (!string.IsNullOrEmpty(authToken))
             settings.AuthToken = authToken;

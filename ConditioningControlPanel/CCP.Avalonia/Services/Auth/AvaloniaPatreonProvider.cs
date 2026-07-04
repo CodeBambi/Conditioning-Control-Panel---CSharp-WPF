@@ -240,6 +240,7 @@ public sealed class AvaloniaPatreonProvider : IAuthProvider, INotifyPropertyChan
         finally
         {
             IsVerifying = false;
+            _oauthCts?.Cancel(); // R6: also cancel the OAuth timeout CTS on the success path
             StopCallbackListener();
         }
     }
@@ -415,7 +416,6 @@ public sealed class AvaloniaPatreonProvider : IAuthProvider, INotifyPropertyChan
         _isWhitelisted = whitelisted;
         if (whitelisted && CurrentTier < minTier)
         {
-            var oldTier = CurrentTier;
             UpdateTier(minTier, true);
         }
     }
@@ -474,6 +474,10 @@ public sealed class AvaloniaPatreonProvider : IAuthProvider, INotifyPropertyChan
         if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
             throw new Exception($"Token exchange failed: {tokenResponse?.ErrorDescription ?? "Unknown error"}");
 
+        // R12: a 200 with an empty/missing access token must never persist null tokens.
+        if (string.IsNullOrEmpty(tokenResponse.AccessToken))
+            throw new InvalidOperationException("Patreon token exchange returned an empty access token.");
+
         _tokenStorage.StoreTokens(new PatreonTokenData
         {
             AccessToken = tokenResponse.AccessToken,
@@ -504,6 +508,13 @@ public sealed class AvaloniaPatreonProvider : IAuthProvider, INotifyPropertyChan
             if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
             {
                 _logger?.LogWarning("Patreon token refresh error: {Error}", tokenResponse?.ErrorDescription);
+                return false;
+            }
+
+            // R12: reject a 200 with an empty/missing access token so we never persist null tokens.
+            if (string.IsNullOrEmpty(tokenResponse.AccessToken))
+            {
+                _logger?.LogWarning("Patreon token refresh returned an empty access token");
                 return false;
             }
 

@@ -14,6 +14,7 @@ using ConditioningControlPanel.Avalonia.Chaos;
 using ConditioningControlPanel.Avalonia.Dialogs;
 using ConditioningControlPanel.Avalonia.Models;
 using ConditioningControlPanel.Avalonia.Platform;
+using ConditioningControlPanel.Avalonia.Services.Auth;
 using ConditioningControlPanel.Avalonia.ViewModels.Tabs;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Models;
@@ -1798,7 +1799,10 @@ public partial class MainWindowViewModel : ObservableObject
         settings.SkillPoints = 0;
         settings.UnlockedSkills = new List<string>();
         settings.TotalConditioningMinutes = 0;
-        _settingsService?.Save();
+
+        // AC-1/AC-2: route through the shared helper so every provider's OAuth tokens and
+        // cached premium are revoked and settings.AuthToken is cleared, then persisted.
+        AuthLogoutHelper.LogoutAll(App.Services, _settingsService);
 
         IsLoggedIn = false;
         DisplayName = "";

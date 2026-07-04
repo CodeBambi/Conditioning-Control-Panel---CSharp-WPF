@@ -126,9 +126,14 @@ public sealed class AvaloniaDiscordProvider : IAuthProvider, INotifyPropertyChan
         set => CustomDisplayName = value;
     }
 
+    // D7: WPF DiscordService.IsFirstLogin gates on the PATREON display name, not the
+    // Discord-derived DisplayName (which is always non-empty once authed, so the old check was
+    // always false). Cross-check the unified/Patreon display name (settings.UserDisplayName,
+    // written by Patreon/unified validation) so genuinely new users are still prompted to pick
+    // a name while users who already have one are not re-prompted.
     public bool IsFirstLogin => IsAuthenticated
         && string.IsNullOrEmpty(CustomDisplayName)
-        && string.IsNullOrEmpty(DisplayName);
+        && string.IsNullOrEmpty(_settingsService.Current?.UserDisplayName);
 
     public AvaloniaDiscordProvider(
         ISecretStore secretStore,
@@ -255,6 +260,7 @@ public sealed class AvaloniaDiscordProvider : IAuthProvider, INotifyPropertyChan
         finally
         {
             IsVerifying = false;
+            _oauthCts?.Cancel(); // R6: also cancel the OAuth timeout CTS on the success path
             StopCallbackListener();
         }
     }
@@ -457,6 +463,10 @@ public sealed class AvaloniaDiscordProvider : IAuthProvider, INotifyPropertyChan
         if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
             throw new Exception($"Token exchange failed: {tokenResponse?.ErrorDescription ?? "Unknown error"}");
 
+        // R12: a 200 with an empty/missing access token must never persist null tokens.
+        if (string.IsNullOrEmpty(tokenResponse.AccessToken))
+            throw new InvalidOperationException("Discord token exchange returned an empty access token.");
+
         _tokenStorage.StoreTokens(new DiscordTokenData
         {
             AccessToken = tokenResponse.AccessToken,
@@ -487,6 +497,13 @@ public sealed class AvaloniaDiscordProvider : IAuthProvider, INotifyPropertyChan
             if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
             {
                 _logger?.LogWarning("Discord token refresh error: {Error}", tokenResponse?.ErrorDescription);
+                return false;
+            }
+
+            // R12: reject a 200 with an empty/missing access token so we never persist null tokens.
+            if (string.IsNullOrEmpty(tokenResponse.AccessToken))
+            {
+                _logger?.LogWarning("Discord token refresh returned an empty access token");
                 return false;
             }
 
@@ -587,19 +604,6 @@ public sealed class AvaloniaDiscordProvider : IAuthProvider, INotifyPropertyChan
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "Failed to load display name from server");
-        }
-    }
-
-    private void SetUnifiedIdIfEmpty(string? unifiedId)
-    {
-        if (string.IsNullOrEmpty(unifiedId)) return;
-
-        UnifiedUserId = unifiedId;
-        var settings = _settingsService.Current;
-        if (string.IsNullOrEmpty(settings.UnifiedId))
-        {
-            settings.UnifiedId = unifiedId;
-            _logger?.LogInformation("Set UnifiedUserId from Discord validate: {UnifiedId}", unifiedId);
         }
     }
 

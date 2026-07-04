@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using ConditioningControlPanel.Avalonia.Services.Auth;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Settings;
@@ -148,7 +149,10 @@ namespace ConditioningControlPanel.Avalonia.ViewModels.Tabs
             settings.SkillPoints = 0;
             settings.UnlockedSkills = new List<string>();
             settings.TotalConditioningMinutes = 0;
-            _settingsService?.Save();
+
+            // AC-1/AC-2: revoke every provider's OAuth tokens and cached premium and clear
+            // settings.AuthToken via the shared helper, then persist.
+            AuthLogoutHelper.LogoutAll(App.Services, _settingsService);
 
             _logger?.LogInformation("User logged out from profile tab.");
             RefreshState();

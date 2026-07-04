@@ -206,6 +206,7 @@ public sealed class AvaloniaSubscribeStarProvider : IAuthProvider, INotifyProper
         finally
         {
             IsVerifying = false;
+            _oauthCts?.Cancel(); // R6: also cancel the OAuth timeout CTS on the success path
             StopCallbackListener();
         }
     }
@@ -379,8 +380,17 @@ public sealed class AvaloniaSubscribeStarProvider : IAuthProvider, INotifyProper
         DisplayName = null;
         _isWhitelisted = false;
         UnifiedUserId = null;
+
+        // AC-5: SubscribeStar validation writes the shared cached-premium window and tier scale
+        // (see ValidateSubscriptionAsync). Clear them on logout so premium access does not
+        // survive, mirroring AvaloniaPatreonProvider.Logout.
+        var settings = _settingsService.Current;
+        settings.PatreonPremiumValidUntil = null;
+        settings.PatreonTier = 0;
+        _settingsService.SaveImmediate();
+
         UpdateTier(PatreonTier.None, false);
-        _logger?.LogInformation("SubscribeStar logout completed");
+        _logger?.LogInformation("SubscribeStar logout completed, cached premium cleared");
     }
 
     public void Dispose()
@@ -412,6 +422,10 @@ public sealed class AvaloniaSubscribeStarProvider : IAuthProvider, INotifyProper
         if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
             throw new Exception($"Token exchange failed: {tokenResponse?.ErrorDescription ?? "Unknown error"}");
 
+        // R12: a 200 with an empty/missing access token must never persist null tokens.
+        if (string.IsNullOrEmpty(tokenResponse.AccessToken))
+            throw new InvalidOperationException("SubscribeStar token exchange returned an empty access token.");
+
         _tokenStorage.StoreTokens(new PatreonTokenData
         {
             AccessToken = tokenResponse.AccessToken,
@@ -442,6 +456,13 @@ public sealed class AvaloniaSubscribeStarProvider : IAuthProvider, INotifyProper
             if (tokenResponse == null || !string.IsNullOrEmpty(tokenResponse.Error))
             {
                 _logger?.LogWarning("SubscribeStar token refresh error: {Error}", tokenResponse?.ErrorDescription);
+                return false;
+            }
+
+            // R12: reject a 200 with an empty/missing access token so we never persist null tokens.
+            if (string.IsNullOrEmpty(tokenResponse.AccessToken))
+            {
+                _logger?.LogWarning("SubscribeStar token refresh returned an empty access token");
                 return false;
             }
 

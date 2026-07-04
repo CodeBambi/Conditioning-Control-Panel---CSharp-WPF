@@ -10,6 +10,7 @@ using ConditioningControlPanel.Models;
 using Microsoft.Extensions.DependencyInjection;
 using CommunityToolkit.Mvvm.Input;
 using ConditioningControlPanel.Avalonia.Dialogs;
+using ConditioningControlPanel.Avalonia.Services.Auth;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Help;
@@ -559,17 +560,17 @@ public partial class SettingsTabViewModel : TabItemViewModel
     {
         try
         {
-            foreach (var provider in App.Services?.GetServices<IAuthProvider>() ?? System.Linq.Enumerable.Empty<IAuthProvider>())
-                provider.Logout();
-
             var settings = _settingsService?.Current;
             if (settings != null)
             {
                 settings.UnifiedId = null;
                 settings.UserDisplayName = "";
-                Save();
-                RefreshLoginState();
             }
+
+            // AC-1/AC-2: single shared logout path — revokes every provider's OAuth tokens
+            // and cached premium, clears settings.AuthToken, and persists immediately.
+            AuthLogoutHelper.LogoutAll(App.Services, _settingsService);
+            RefreshLoginState();
         }
         catch (Exception ex)
         {
