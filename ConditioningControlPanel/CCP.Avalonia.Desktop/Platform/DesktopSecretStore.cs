@@ -214,9 +214,18 @@ public sealed class DesktopSecretStore : ISecretStore
 
         var service = GetMacOsServiceName(key);
         var base64Value = Convert.ToBase64String(value);
-        var arguments = $"add-generic-password -s \"{service}\" -a \"CCP\" -w \"{base64Value}\" -U";
 
-        using var process = StartSecurityProcess(arguments);
+        // SECURITY: pass the password via stdin, never on the command line. A
+        // "-w <value>" argv would expose the secret to any local user via `ps`.
+        // Omitting the -w value makes `security` read the password from standard
+        // input (readpassphrase falls back to stdin when the spawned process has
+        // no controlling terminal). -U still updates an existing item in place.
+        var arguments = $"add-generic-password -s \"{service}\" -a \"CCP\" -U -w";
+
+        using var process = StartSecurityProcess(arguments, redirectStandardInput: true);
+        process.StandardInput.Write(base64Value);
+        process.StandardInput.Write('\n');
+        process.StandardInput.Close();
         process.WaitForExit();
 
         if (process.ExitCode != 0)
@@ -261,7 +270,7 @@ public sealed class DesktopSecretStore : ISecretStore
         // Intentionally ignore errors: the item may not exist.
     }
 
-    private static Process StartSecurityProcess(string arguments)
+    private static Process StartSecurityProcess(string arguments, bool redirectStandardInput = false)
     {
         var process = new Process
         {
@@ -269,6 +278,7 @@ public sealed class DesktopSecretStore : ISecretStore
             {
                 FileName = "security",
                 Arguments = arguments,
+                RedirectStandardInput = redirectStandardInput,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,

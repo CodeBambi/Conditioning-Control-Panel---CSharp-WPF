@@ -56,6 +56,12 @@ public partial class App : Application
     /// </summary>
     public static Action<IServiceCollection>? ConfigurePlatformServices { get; set; }
 
+    /// <summary>
+    /// Guards the global crash dialog so a repeating fault logs every occurrence
+    /// but only ever shows one message box (WPF App.xaml.cs:1155 errorDialogShown).
+    /// </summary>
+    private bool _errorDialogShown;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -69,7 +75,12 @@ public partial class App : Application
         Dispatcher.UIThread.UnhandledException += (s, e) =>
         {
             e.Handled = true;
+            // LOG every occurrence, but only surface the dialog once: a repeating
+            // exception would otherwise spawn a message box per fault (WPF parity,
+            // App.xaml.cs:1155 errorDialogShown).
             Log.Logger?.Error(e.Exception, "Unhandled UI thread exception");
+            if (_errorDialogShown) return;
+            _errorDialogShown = true;
             try
             {
                 var dialog = Services?.GetService<IDialogService>();
@@ -372,8 +383,18 @@ public partial class App : Application
                     // is heavy and is not needed in the first seconds after the window opens.
                     _ = Task.Run(async () =>
                     {
-                        await Task.Delay(TimeSpan.FromSeconds(10));
-                        Services.GetService<IScreenOcrService>()?.Start();
+                        // Inner guard: an unguarded throw here becomes an unobserved
+                        // task exception (the outer try/catch cannot see it because the
+                        // task is fire-and-forget).
+                        try
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(10));
+                            Services.GetService<IScreenOcrService>()?.Start();
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Logger?.Warning(ex, "Deferred screen-OCR start failed");
+                        }
                     });
                 }
             }
@@ -413,9 +434,34 @@ public partial class App : Application
         try { (Services?.GetService<IQuestService>() as IDisposable)?.Dispose(); }
         catch (Exception ex) { Log.Logger?.Warning(ex, "Quest flush on exit failed"); }
 
+        // Parity with WPF OnExit (App.xaml.cs:3035): release the hardware + trigger
+        // sources that hold OS handles or child windows so they don't linger past
+        // shutdown. Best-effort and null-guarded - GetService (not GetRequiredService)
+        // so a head that never registered a seam degrades to a no-op, and only
+        // IDisposable implementations are touched (IAsyncDisposable-only seams are
+        // released by their own finalization path).
+        DisposeServiceIfPossible(Services?.GetService<ConditioningControlPanel.Core.Services.Webcam.IWebcamService>(), "Webcam");
+        DisposeServiceIfPossible(Services?.GetService<IHapticsService>(), "Haptics");
+        DisposeServiceIfPossible(Services?.GetService<ConditioningControlPanel.Core.Services.Video.IVideoService>(), "Video");
+        DisposeServiceIfPossible(Services?.GetService<ConditioningControlPanel.Core.Services.Video.IMultiMonitorVideoService>(), "MultiMonitorVideo");
+        DisposeServiceIfPossible(Services?.GetService<IRemoteControlService>(), "RemoteControl");
+        DisposeServiceIfPossible(Services?.GetService<IScreenOcrService>(), "ScreenOcr");
+        DisposeServiceIfPossible(Services?.GetService<IKeywordTriggerService>(), "KeywordTrigger");
+
         // Parity with WPF OnExit: drop decrypted secrets from memory.
         ConditioningControlPanel.Core.Services.SecureAuthTokenStore.ClearMemoryCache();
         ConditioningControlPanel.Core.Services.SecureApiKeyStore.ClearMemoryCache();
+    }
+
+    /// <summary>
+    /// Best-effort synchronous disposal of a resolved service. No-op when the service
+    /// is null or not <see cref="IDisposable"/>; never throws.
+    /// </summary>
+    private static void DisposeServiceIfPossible(object? service, string name)
+    {
+        if (service is not IDisposable disposable) return;
+        try { disposable.Dispose(); }
+        catch (Exception ex) { Log.Logger?.Warning(ex, "{Service} dispose on exit failed", name); }
     }
 
     /// <summary>

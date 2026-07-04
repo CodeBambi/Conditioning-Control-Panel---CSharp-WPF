@@ -188,7 +188,11 @@ public static class SeasonRecapService
             percentile = CoreApp.Services?.GetService<ILeaderboardService>()?.GetPlayerPercentile() ?? 0;
 
         var lifetimePointsSpent = CoreApp.Services?.GetService<IAchievementService>()?.Progress?.LifetimeSkillPointsSpent ?? 0;
-        var isSupporter = CoreApp.Services?.GetService<IAuthProvider>()?.HasPremiumAccess ?? false;
+        // Resolve ALL registered auth providers (Patreon + Discord). Requesting a single
+        // IAuthProvider makes MS.DI hand back only the last-registered one, so a supporter
+        // whose entitlement lives on the other provider would be misread as non-supporter.
+        // Match AchievementService: supporter == any provider reports premium access.
+        var isSupporter = CoreApp.Services?.GetService<IEnumerable<IAuthProvider>>()?.Any(p => p.HasPremiumAccess) ?? false;
 
         return new SeasonRecapSnapshot
         {
