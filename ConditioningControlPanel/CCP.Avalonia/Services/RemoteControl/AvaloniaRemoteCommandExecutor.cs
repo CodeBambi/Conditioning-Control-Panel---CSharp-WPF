@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using ConditioningControlPanel.Core.Services.Autonomy;
 using ConditioningControlPanel.Core.Services.BouncingText;
 using ConditioningControlPanel.Core.Services.Chaos;
 using ConditioningControlPanel.Core.Services.Flash;
@@ -45,6 +46,7 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
     private readonly IBrowserHost? _browserHost;
     private readonly ISessionLogService? _sessionLog;
     private readonly IMultiMonitorVideoService? _multiMonitor;
+    private readonly IAutonomyService? _autonomy;
     private readonly ILogger<AvaloniaRemoteCommandExecutor>? _logger;
 
     private bool _remoteBrowserVideoActive;
@@ -68,6 +70,7 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
         IBrowserHost? browserHost = null,
         ISessionLogService? sessionLog = null,
         IMultiMonitorVideoService? multiMonitor = null,
+        IAutonomyService? autonomy = null,
         ILogger<AvaloniaRemoteCommandExecutor>? logger = null)
     {
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
@@ -88,6 +91,7 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
         _browserHost = browserHost;
         _sessionLog = sessionLog;
         _multiMonitor = multiMonitor;
+        _autonomy = autonomy;
         _logger = logger;
     }
 
@@ -152,7 +156,9 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
                 break;
 
             case "trigger_subliminal":
-                _subliminal?.FlashSubliminalCustom("");
+                // LOT9 L2-03: pool-random flash (WPF App.Subliminal?.FlashSubliminal()),
+                // not an empty custom string.
+                _subliminal?.FlashSubliminal();
                 break;
 
             case "start_flash":
@@ -224,6 +230,8 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
                 break;
 
             case "start_bubbles":
+                // LOT9 L2-05: needs IBubbleService.Start(bypassLevelCheck) overload;
+                // seam has no bypassLevelCheck param (WPF passes bypassLevelCheck: true). DEFERRED.
                 _bubbles?.Start();
                 break;
 
@@ -233,7 +241,9 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
 
             // Standard tier
             case "trigger_video":
-                _video?.Start();
+                // LOT9 L2-04: one-shot mandatory video (WPF App.Video?.TriggerVideo()),
+                // not the recurring scheduler (Start()).
+                _video?.TriggerVideo();
                 break;
 
             case "start_video":
@@ -286,11 +296,13 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
 
             // Full tier
             case "start_autonomy":
-                _logger?.LogInformation("[RemoteControl] start_autonomy not yet ported to Avalonia service stack");
+                // LOT9 L2-01: mirror WPF App.Autonomy?.Start().
+                _autonomy?.Start();
                 break;
 
             case "stop_autonomy":
-                _logger?.LogInformation("[RemoteControl] stop_autonomy not yet ported to Avalonia service stack");
+                // LOT9 L2-01: mirror WPF App.Autonomy?.Stop().
+                _autonomy?.Stop();
                 break;
 
             case "trigger_bubble_count":
@@ -312,7 +324,9 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
                 break;
 
             case "trigger_mind_wipe":
-                _mindWipe?.TriggerOnce();
+                // LOT9 L2-07: gate on available audio phrases (WPF AudioFileCount > 0).
+                if (_mindWipe?.AudioFileCount > 0)
+                    _mindWipe.TriggerOnce();
                 break;
 
             case "start_mind_wipe":
@@ -326,6 +340,8 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
                 break;
 
             case "start_bounce_text":
+                // LOT9 L2-02: needs IBouncingTextService.Start(bypassLevelCheck) support;
+                // seam only takes an optional textPool (WPF passes bypassLevelCheck: true). DEFERRED.
                 _bouncingText?.Start();
                 break;
 
@@ -370,7 +386,8 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
                 break;
 
             case "trigger_wallpaper":
-                // Shuffle not exposed on IWallpaperProvider; toggle on/off as parity.
+                // LOT9 L2-05: needs IWallpaperProvider activate/shuffle-from-pool method;
+                // seam only exposes SetWallpaper(path)/RestoreOriginalWallpaper(). DEFERRED.
                 _wallpaper?.RestoreOriginalWallpaper();
                 break;
 
