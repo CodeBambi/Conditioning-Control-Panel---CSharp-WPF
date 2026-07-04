@@ -128,6 +128,27 @@ public sealed class AvaloniaModService : IModService
             if (string.IsNullOrWhiteSpace(manifest.Name))
                 return ModInstallResult.Failure(ModInstallStatus.InvalidManifest, "Mod name is required.");
 
+            if (string.IsNullOrWhiteSpace(manifest.Version))
+                return ModInstallResult.Failure(ModInstallStatus.InvalidManifest, "Mod version is required.");
+
+            if (string.IsNullOrWhiteSpace(manifest.Author))
+                return ModInstallResult.Failure(ModInstallStatus.InvalidManifest, "Mod author is required.");
+
+            // Min app version compatibility gate — reject a mod that needs a newer app (mirrors WPF).
+            if (!string.IsNullOrEmpty(manifest.MinAppVersion)
+                && Version.TryParse(manifest.MinAppVersion, out var minVer)
+                && Version.TryParse(ConditioningControlPanel.Core.Services.Update.UpdateService.AppVersion, out var appVer)
+                && appVer < minVer)
+            {
+                return ModInstallResult.Failure(ModInstallStatus.InvalidManifest,
+                    $"This mod requires app version {manifest.MinAppVersion} or later.");
+            }
+
+            // === SECURITY TRUST BOUNDARY === validate + sanitize before persisting/registering.
+            var sanitizeError = SanitizeManifest(manifest);
+            if (sanitizeError != null)
+                return ModInstallResult.Failure(ModInstallStatus.InvalidManifest, sanitizeError);
+
             var modRoot = Path.GetDirectoryName(modJsonPath)!;
             var destDir = Path.Combine(GetModsDirectory(), manifest.Id);
 
@@ -292,14 +313,16 @@ public sealed class AvaloniaModService : IModService
             overrideLinks != null &&
             overrideLinks.Count > 0)
         {
-            return new Dictionary<string, string>(overrideLinks, StringComparer.OrdinalIgnoreCase);
+            // Defense-in-depth: drop any non-HTTPS entry (javascript:/file:/data:/http:).
+            return FilterHttpsVideoLinks(overrideLinks);
         }
 
         var defaults = ActiveManifest.Browser?.DefaultVideoLinks;
         if (defaults == null || defaults.Count == 0)
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        return new Dictionary<string, string>(defaults, StringComparer.OrdinalIgnoreCase);
+        // Defense-in-depth: drop any non-HTTPS entry (javascript:/file:/data:/http:).
+        return FilterHttpsVideoLinks(defaults);
     }
 
     public string GetAffirmation()
@@ -339,39 +362,16 @@ public sealed class AvaloniaModService : IModService
     {
         if (string.IsNullOrEmpty(text)) return text;
 
-        var identity = ActiveManifest.Identity;
+        // No replacements registered → return the text unchanged (mod-agnostic; matches WPF,
+        // which does NOT force "Bambi"→UserTerm under CCP Default).
         var replacements = ActiveManifest.TextReplacements;
+        if (replacements == null || replacements.Count == 0) return text;
 
         var result = text;
-        if (replacements != null)
-        {
-            foreach (var kv in replacements)
-            {
-                if (string.IsNullOrEmpty(kv.Key)) continue;
-                result = result.Replace(kv.Key, kv.Value, StringComparison.OrdinalIgnoreCase);
-            }
-        }
-
-        // Fallback identity replacements when the mod does not define explicit text replacements.
-        var userTerm = identity?.UserTerm;
-        if (!string.IsNullOrEmpty(userTerm))
-        {
-            result = result.Replace("{UserTerm}", userTerm, StringComparison.OrdinalIgnoreCase);
-            result = result.Replace("Bambi", userTerm, StringComparison.OrdinalIgnoreCase);
-        }
-
-        var companion = identity?.CompanionName;
-        if (!string.IsNullOrEmpty(companion))
-        {
-            result = result.Replace("{CompanionName}", companion, StringComparison.OrdinalIgnoreCase);
-        }
-
-        var affirmation = identity?.Affirmation;
-        if (!string.IsNullOrEmpty(affirmation))
-        {
-            result = result.Replace("{Affirmation}", affirmation, StringComparison.OrdinalIgnoreCase);
-        }
-
+        // Longest keys first so a shorter key can't clobber a longer one; ordinal
+        // (case-sensitive) Replace, exactly like the WPF ModService.
+        foreach (var kvp in replacements.OrderByDescending(r => r.Key.Length))
+            result = result.Replace(kvp.Key, kvp.Value);
         return result;
     }
 
@@ -554,6 +554,15 @@ public sealed class AvaloniaModService : IModService
                     continue;
                 }
 
+                // Sanitize shipped built-ins too (defense-in-depth even though we ship them).
+                // Mirrors WPF ExtractBundledBuiltInMods; runs before the ID force-stamp.
+                var sanitizeError = SanitizeManifest(manifest);
+                if (sanitizeError != null)
+                {
+                    _logger?.LogWarning("Bundled built-in mod {BuiltInId} failed sanitization: {Error}", builtInId, sanitizeError);
+                    continue;
+                }
+
                 manifest.Id = builtInId;
                 var idx = _installedMods.FindIndex(m => m.Id == builtInId);
                 var package = new ModPackage(manifest, extractDir, true);
@@ -651,6 +660,16 @@ public sealed class AvaloniaModService : IModService
                 var manifest = JsonConvert.DeserializeObject<ModManifest>(json);
                 if (manifest == null || string.IsNullOrWhiteSpace(manifest.Id)) continue;
 
+                // Defense-in-depth: re-validate every disk-loaded mod against the trust
+                // boundary (guards against a mod.json tampered after install). Mirrors WPF
+                // LoadInstalledMods.
+                var sanitizeError = SanitizeManifest(manifest);
+                if (sanitizeError != null)
+                {
+                    _logger?.LogWarning("Mod {ModId} failed re-validation on load: {Error}", manifest.Id, sanitizeError);
+                    continue;
+                }
+
                 var package = new ModPackage(manifest, dir, false);
                 var existingIdx = _installedMods.FindIndex(m => m.Id == package.Id);
                 if (existingIdx >= 0)
@@ -676,6 +695,293 @@ public sealed class AvaloniaModService : IModService
     {
         if (id.StartsWith("builtin-", StringComparison.OrdinalIgnoreCase)) return false;
         return Regex.IsMatch(id, "^[a-z0-9\\-]+$");
+    }
+
+    #endregion
+
+    #region Manifest sanitization (security trust boundary)
+
+    /// <summary>
+    /// Validates and sanitizes a mod manifest against the security trust boundary.
+    /// Mirrors WPF <c>ModService.SanitizeManifest</c>: caps field lengths, validates
+    /// <c>#RRGGBB</c> theme colors, enforces HTTPS-only browser/video URLs, strips
+    /// control + bidi-override characters from user-facing strings, applies per-collection
+    /// count caps, clamps numeric bounds with a finite-double guard, and validates
+    /// avatar-set ranges (1–7 / custom ≥8). Returns <c>null</c> when acceptable, or an
+    /// error message describing the first rejection (clamps mutate the manifest in place).
+    /// </summary>
+    private static string? SanitizeManifest(ModManifest manifest)
+    {
+        // --- Field length caps ---
+        if (manifest.Name.Length > 100) return "Mod name is too long (max 100 characters).";
+        if (manifest.Id.Length > 50) return "Mod ID is too long (max 50 characters).";
+        if (manifest.Author.Length > 100) return "Author name is too long (max 100 characters).";
+        if (manifest.Description?.Length > 1000) manifest.Description = manifest.Description[..1000];
+
+        // --- Theme color validation (#RRGGBB) ---
+        if (manifest.Theme != null)
+        {
+            var hexPattern = new Regex(@"^#[0-9A-Fa-f]{6}$");
+            if (manifest.Theme.AccentColor != null && !hexPattern.IsMatch(manifest.Theme.AccentColor))
+                return "Accent color must be a valid #RRGGBB hex code.";
+            if (manifest.Theme.AccentLightColor != null && !hexPattern.IsMatch(manifest.Theme.AccentLightColor))
+                return "Light accent color must be a valid #RRGGBB hex code.";
+            if (manifest.Theme.AccentDarkColor != null && !hexPattern.IsMatch(manifest.Theme.AccentDarkColor))
+                return "Dark accent color must be a valid #RRGGBB hex code.";
+            if (manifest.Theme.BackgroundColor != null && !hexPattern.IsMatch(manifest.Theme.BackgroundColor))
+                return "Background color must be a valid #RRGGBB hex code.";
+            if (manifest.Theme.PanelColor != null && !hexPattern.IsMatch(manifest.Theme.PanelColor))
+                return "Panel color must be a valid #RRGGBB hex code.";
+            if (manifest.Theme.SurfaceColor != null && !hexPattern.IsMatch(manifest.Theme.SurfaceColor))
+                return "Surface color must be a valid #RRGGBB hex code.";
+            if (manifest.Theme.FilterColor != null && !hexPattern.IsMatch(manifest.Theme.FilterColor))
+                return "Filter color must be a valid #RRGGBB hex code.";
+        }
+
+        // --- URL validation: only HTTPS allowed ---
+        if (!string.IsNullOrEmpty(manifest.Browser?.DefaultUrl))
+        {
+            if (!Uri.TryCreate(manifest.Browser.DefaultUrl, UriKind.Absolute, out var browserUri)
+                || browserUri.Scheme != "https")
+                return "Browser URL must be a valid HTTPS URL.";
+        }
+        if (manifest.Browser?.DefaultVideoLinks != null)
+        {
+            if (manifest.Browser.DefaultVideoLinks.Count > 100)
+                return "Too many video links (max 100).";
+            foreach (var kvp in manifest.Browser.DefaultVideoLinks)
+            {
+                if (kvp.Key.Length > 200) return "Video link name is too long (max 200).";
+                if (kvp.Value.Length > 500) return "Video link URL is too long (max 500).";
+                if (!Uri.TryCreate(kvp.Value, UriKind.Absolute, out var linkUri) || linkUri.Scheme != "https")
+                    return $"Video link URL must be HTTPS: '{kvp.Key}'";
+            }
+        }
+
+        // --- TextReplacements sanitization ---
+        if (manifest.TextReplacements != null)
+        {
+            if (manifest.TextReplacements.Count > 200)
+                return "Too many text replacements (max 200).";
+
+            var sanitized = new Dictionary<string, string>();
+            foreach (var kvp in manifest.TextReplacements)
+            {
+                var key = kvp.Key;
+                var val = kvp.Value;
+
+                if (string.IsNullOrWhiteSpace(key)) continue;
+
+                if (key.Length > 200) return $"Text replacement key is too long (max 200): '{key[..30]}...'";
+                if (val.Length > 500) return $"Text replacement value is too long (max 500): '{key}'";
+
+                val = StripControlChars(val);
+                key = StripControlChars(key);
+
+                sanitized[key] = val;
+            }
+            manifest.TextReplacements = sanitized;
+        }
+
+        // --- Phrase pool sanitization ---
+        if (manifest.SubliminalPool != null)
+        {
+            if (manifest.SubliminalPool.Count > 500) return "Too many subliminal phrases (max 500).";
+            if (manifest.SubliminalPool.Keys.Any(k => k.Length > 500))
+                return "Subliminal phrase too long (max 500 characters).";
+        }
+        if (manifest.LockCardPhrases != null)
+        {
+            if (manifest.LockCardPhrases.Count > 200) return "Too many lock card phrases (max 200).";
+            if (manifest.LockCardPhrases.Keys.Any(k => k.Length > 500))
+                return "Lock card phrase too long (max 500 characters).";
+        }
+        if (manifest.CustomTriggers != null)
+        {
+            if (manifest.CustomTriggers.Count > 50) return "Too many custom triggers (max 50).";
+            for (int i = 0; i < manifest.CustomTriggers.Count; i++)
+                if (manifest.CustomTriggers[i].Length > 200)
+                    manifest.CustomTriggers[i] = manifest.CustomTriggers[i][..200];
+        }
+
+        // --- Phrases dictionary sanitization ---
+        if (manifest.Phrases != null)
+        {
+            if (manifest.Phrases.Count > 50) return "Too many phrase categories (max 50).";
+            foreach (var (cat, arr) in manifest.Phrases)
+            {
+                if (cat.Length > 100) return "Phrase category name too long (max 100).";
+                if (arr.Length > 500) return $"Too many phrases in category '{cat}' (max 500).";
+                for (int i = 0; i < arr.Length; i++)
+                {
+                    if (arr[i].Length > 500) arr[i] = arr[i][..500];
+                    arr[i] = StripControlChars(arr[i]);
+                }
+            }
+        }
+
+        // --- Identity/Messages/Triggers string length caps ---
+        if (manifest.Identity != null)
+        {
+            if (manifest.Identity.CompanionName?.Length > 200) manifest.Identity.CompanionName = manifest.Identity.CompanionName[..200];
+            if (manifest.Identity.UserTerm?.Length > 200) manifest.Identity.UserTerm = manifest.Identity.UserTerm[..200];
+            if (manifest.Identity.ModeDisplayName?.Length > 200) manifest.Identity.ModeDisplayName = manifest.Identity.ModeDisplayName[..200];
+            if (manifest.Identity.TalkToLabel?.Length > 200) manifest.Identity.TalkToLabel = manifest.Identity.TalkToLabel[..200];
+            if (manifest.Identity.TakeoverLabel?.Length > 200) manifest.Identity.TakeoverLabel = manifest.Identity.TakeoverLabel[..200];
+            if (manifest.Identity.Affirmation?.Length > 200) manifest.Identity.Affirmation = manifest.Identity.Affirmation[..200];
+            if (manifest.Identity.RankSubject?.Length > 200) manifest.Identity.RankSubject = manifest.Identity.RankSubject[..200];
+        }
+        if (manifest.Messages != null)
+        {
+            if (manifest.Messages.AttentionCheckFail?.Length > 500) manifest.Messages.AttentionCheckFail = manifest.Messages.AttentionCheckFail[..500];
+            if (manifest.Messages.AttentionCheckMercy?.Length > 500) manifest.Messages.AttentionCheckMercy = manifest.Messages.AttentionCheckMercy[..500];
+            if (manifest.Messages.BubbleCountRetry?.Length > 500) manifest.Messages.BubbleCountRetry = manifest.Messages.BubbleCountRetry[..500];
+        }
+        if (manifest.Triggers != null)
+        {
+            if (manifest.Triggers.Freeze?.Length > 200) manifest.Triggers.Freeze = manifest.Triggers.Freeze[..200];
+            if (manifest.Triggers.Reset?.Length > 200) manifest.Triggers.Reset = manifest.Triggers.Reset[..200];
+            if (manifest.Triggers.CumAndCollapse?.Length > 200) manifest.Triggers.CumAndCollapse = manifest.Triggers.CumAndCollapse[..200];
+            if (manifest.Triggers.AutonomyOn?.Length > 200) manifest.Triggers.AutonomyOn = manifest.Triggers.AutonomyOn[..200];
+        }
+
+        // --- Tags sanitization ---
+        if (manifest.Tags != null)
+        {
+            if (manifest.Tags.Count > 20) return "Too many tags (max 20).";
+            for (int i = 0; i < manifest.Tags.Count; i++)
+                if (manifest.Tags[i].Length > 50) manifest.Tags[i] = manifest.Tags[i][..50];
+        }
+
+        if (manifest.Personalities != null && manifest.Personalities.Count > 20)
+            return "Too many personalities (max 20).";
+
+        // --- Personality prompt settings: cap sizes ---
+        if (manifest.Personalities != null)
+        {
+            foreach (var p in manifest.Personalities)
+            {
+                if (p.Name.Length > 100) return $"Personality name too long: '{p.Name[..30]}...'";
+                if (p.PromptSettings != null)
+                {
+                    foreach (var kvp in p.PromptSettings)
+                    {
+                        if (kvp.Value.Length > 5000)
+                            return $"Personality prompt setting value too long for '{p.Name}'.";
+                    }
+                }
+            }
+        }
+
+        // --- Supported avatar sets sanitization (only valid set numbers 1-7) ---
+        if (manifest.SupportedAvatarSets != null)
+        {
+            if (manifest.SupportedAvatarSets.Count > 20)
+                return "Too many supported avatar sets (max 20).";
+            manifest.SupportedAvatarSets = manifest.SupportedAvatarSets.Where(s => s >= 1 && s <= 7).Distinct().ToList();
+        }
+
+        // --- Custom avatar sets sanitization (set numbers >= 8) ---
+        if (manifest.CustomAvatarSets != null)
+        {
+            if (manifest.CustomAvatarSets.Count > 20)
+                return "Too many custom avatar sets (max 20).";
+            var seenSetNums = new HashSet<int>();
+            foreach (var cs in manifest.CustomAvatarSets)
+            {
+                if (cs.SetNumber < 8) return $"Custom avatar set number must be 8 or higher (got {cs.SetNumber}).";
+                if (!seenSetNums.Add(cs.SetNumber)) return $"Duplicate custom avatar set number: {cs.SetNumber}.";
+                if (cs.UnlockLevel < 1 || cs.UnlockLevel > 9999) return "Custom avatar set unlock level must be 1-9999.";
+                if (cs.Label.Length > 100) cs.Label = cs.Label[..100];
+            }
+        }
+
+        // --- Tube layout sanitization (finite-double guard + clamps) ---
+        if (manifest.TubeLayout != null)
+        {
+            manifest.TubeLayout.AvatarOffsetX = Math.Clamp(manifest.TubeLayout.AvatarOffsetX, -1000, 1000);
+            manifest.TubeLayout.AvatarDetachedOffsetX = Math.Clamp(manifest.TubeLayout.AvatarDetachedOffsetX, -1000, 1000);
+            manifest.TubeLayout.AvatarOffsetY = Math.Clamp(manifest.TubeLayout.AvatarOffsetY, -500, 500);
+            manifest.TubeLayout.AvatarDetachedOffsetY = Math.Clamp(manifest.TubeLayout.AvatarDetachedOffsetY, -500, 500);
+            if (manifest.TubeLayout.AvatarScale.HasValue)
+            {
+                var scale = manifest.TubeLayout.AvatarScale.Value;
+                if (double.IsNaN(scale) || double.IsInfinity(scale))
+                    return "Avatar scale must be a finite number.";
+                manifest.TubeLayout.AvatarScale = Math.Clamp(scale, 0.1, 3.0);
+            }
+        }
+
+        // --- Enhancement overrides sanitization ---
+        if (manifest.EnhancementOverrides != null)
+        {
+            var eo = manifest.EnhancementOverrides;
+            if (eo.TreeTitle?.Length > 200) eo.TreeTitle = eo.TreeTitle[..200];
+            if (eo.TreeSubtitle?.Length > 200) eo.TreeSubtitle = eo.TreeSubtitle[..200];
+            if (eo.TreeWarning?.Length > 200) eo.TreeWarning = eo.TreeWarning[..200];
+            if (eo.PointsLabel?.Length > 200) eo.PointsLabel = eo.PointsLabel[..200];
+            if (eo.StatsTitle?.Length > 200) eo.StatsTitle = eo.StatsTitle[..200];
+            if (eo.TabTooltip?.Length > 200) eo.TabTooltip = eo.TabTooltip[..200];
+            if (eo.PinkRushName?.Length > 200) eo.PinkRushName = eo.PinkRushName[..200];
+            if (eo.PinkRushDescription?.Length > 200) eo.PinkRushDescription = eo.PinkRushDescription[..200];
+            if (eo.LuckyFlashLabel?.Length > 200) eo.LuckyFlashLabel = eo.LuckyFlashLabel[..200];
+            if (eo.LuckyBubbleLabel?.Length > 200) eo.LuckyBubbleLabel = eo.LuckyBubbleLabel[..200];
+
+            if (eo.BoostTooltips != null)
+            {
+                if (eo.BoostTooltips.Count > 30) return "Too many boost tooltips (max 30).";
+                foreach (var kvp in eo.BoostTooltips)
+                    if (kvp.Value.Length > 500) return $"Boost tooltip too long for '{kvp.Key}' (max 500).";
+            }
+            if (eo.StatPillTooltips != null)
+            {
+                if (eo.StatPillTooltips.Count > 30) return "Too many stat pill tooltips (max 30).";
+                foreach (var kvp in eo.StatPillTooltips)
+                    if (kvp.Value.Length > 500) return $"Stat pill tooltip too long for '{kvp.Key}' (max 500).";
+            }
+        }
+
+        return null; // All good
+    }
+
+    /// <summary>
+    /// Strips control characters (except newline, carriage-return and tab) plus Unicode
+    /// bidirectional-override / directional-formatting characters (Trojan-Source vectors)
+    /// from a user-facing string. Mirrors the WPF <c>ModService.StripControlChars</c> strip
+    /// set, hardened with bidi-override removal.
+    /// </summary>
+    private static string StripControlChars(string input)
+    {
+        var sb = new System.Text.StringBuilder(input.Length);
+        foreach (var c in input)
+        {
+            if (char.IsControl(c) && c != '\n' && c != '\r' && c != '\t')
+                continue;
+            // Drop bidirectional override / directional-isolate formatting characters.
+            if (c is '\u202A' or '\u202B' or '\u202C' or '\u202D' or '\u202E'
+                or '\u2066' or '\u2067' or '\u2068' or '\u2069'
+                or '\u200E' or '\u200F')
+                continue;
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Use-time defense-in-depth: returns a copy of <paramref name="source"/> keeping only
+    /// entries whose URL is an absolute HTTPS link, dropping <c>javascript:</c>/<c>file:</c>/
+    /// <c>data:</c>/<c>http:</c> values that could slip past install-time validation.
+    /// </summary>
+    private static Dictionary<string, string> FilterHttpsVideoLinks(IReadOnlyDictionary<string, string> source)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in source)
+        {
+            if (string.IsNullOrEmpty(kv.Value)) continue;
+            if (Uri.TryCreate(kv.Value, UriKind.Absolute, out var uri) && uri.Scheme == "https")
+                result[kv.Key] = kv.Value;
+        }
+        return result;
     }
 
     #endregion
