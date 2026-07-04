@@ -238,6 +238,16 @@
                               Theme="{StaticResource SessionActionButtonTheme}"
                               Click="ExportSessionButton_Click"
                               Tag="{Binding}" />
+                      <Button Content="☁"
+                              ToolTip.Tip="{Binding [tooltip_share_to_catalogue], Source={x:Static loc:LocalizationManager.Instance}}"
+                              Theme="{StaticResource SessionActionButtonTheme}"
+                              Click="ShareSessionButton_Click"
+                              Tag="{Binding}" />
+                      <Button Content="🗑"
+                              ToolTip.Tip="{Binding [title_delete_session], Source={x:Static loc:LocalizationManager.Instance}}"
+                              Theme="{StaticResource SessionActionButtonTheme}"
+                              Click="DeleteSessionButton_Click"
+                              Tag="{Binding}" />
                     </StackPanel>
                   </Grid>
                 </Border>

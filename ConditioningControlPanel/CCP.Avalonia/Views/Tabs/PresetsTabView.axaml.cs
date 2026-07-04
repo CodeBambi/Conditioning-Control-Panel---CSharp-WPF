@@ -58,6 +58,22 @@ public partial class PresetsTabView : UserControl
         }
     }
 
+    private void ShareSessionButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: Session session })
+        {
+            ViewModel?.ShareSessionCommand.Execute(session);
+        }
+    }
+
+    private void DeleteSessionButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: Session session })
+        {
+            ViewModel?.DeleteSessionCommand.Execute(session);
+        }
+    }
+
     private void SessionDropZone_DragOver(object? sender, DragEventArgs e)
     {
         e.DragEffects = e.DataTransfer.Formats.Contains(DataFormat.File)

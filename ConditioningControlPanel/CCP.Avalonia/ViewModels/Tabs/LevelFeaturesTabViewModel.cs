@@ -1,7 +1,11 @@
 using System.ComponentModel;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.Dialogs;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.BouncingText;
@@ -322,9 +326,37 @@ public partial class LevelFeaturesTabViewModel : TabItemViewModel
     private async Task EditBouncingTextPhrasesAsync()
     {
         _logger?.LogInformation("Edit bouncing text phrases requested");
-        await (_dialogService?.ShowMessageAsync(
-            Loc.Get("title_not_implemented"),
-            Loc.GetF("msg_not_implemented_body_fmt", Loc.Get("feature_bouncing_text"))) ?? Task.CompletedTask);
+
+        if (_settingsService?.Current is not { } settings) return;
+
+        var owner = GetMainWindow();
+        if (owner == null)
+        {
+            _logger?.LogWarning("Cannot show bouncing text editor: no main window available.");
+            return;
+        }
+
+        var editor = new TextEditorDialog(Loc.Get("label_bouncing_text"), settings.BouncingTextPool);
+        var result = await editor.ShowDialog<bool?>(owner);
+        if (result == true && editor.ResultData != null)
+        {
+            settings.BouncingTextPool = editor.ResultData;
+            Save();
+            if (_bouncingTextService?.IsRunning == true)
+            {
+                _bouncingTextService.Refresh();
+            }
+            _logger?.LogInformation("Bouncing text phrases updated: {Count} items", editor.ResultData.Count);
+        }
+    }
+
+    private static Window? GetMainWindow()
+    {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            return desktop.MainWindow;
+        }
+        return null;
     }
 
     [RelayCommand]
@@ -558,13 +590,6 @@ public partial class LevelFeaturesTabViewModel : TabItemViewModel
     }
 
     #endregion
-
-    private async Task ShowNotImplementedAsync(string featureName)
-    {
-        await (_dialogService?.ShowMessageAsync(
-            Loc.Get("title_not_implemented"),
-            Loc.GetF("msg_not_implemented_body_fmt", featureName)) ?? Task.CompletedTask);
-    }
 
     private void Save()
     {

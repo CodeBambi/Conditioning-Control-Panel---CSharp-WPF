@@ -920,6 +920,91 @@ public partial class PresetsTabViewModel : TabItemViewModel
         }
     }
 
+    [RelayCommand]
+    private async Task ShareSessionAsync(Session? session)
+    {
+        session ??= SelectedSession;
+        if (session == null) return;
+        if (string.IsNullOrEmpty(_settingsService?.Current?.AuthToken))
+        {
+            await (_dialogService?.ShowMessageAsync(
+                Loc.Get("catalogue_toast_auth_failed"),
+                Loc.Get("msg_catalogue_auth_required"),
+                DialogSeverity.Warning) ?? Task.CompletedTask);
+            return;
+        }
+
+        // The served download must be the pristine .session.json. Prefer the
+        // on-disk file (custom sessions are file-backed); otherwise serialize.
+        JToken asset;
+        string key;
+        try
+        {
+            if (!string.IsNullOrEmpty(session.SourceFilePath) && File.Exists(session.SourceFilePath))
+            {
+                asset = JToken.Parse(File.ReadAllText(session.SourceFilePath));
+                key = session.SourceFilePath;
+            }
+            else if (_sessionManager != null)
+            {
+                var tmp = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".session.json");
+                _sessionManager.ExportSession(session, tmp);
+                asset = JToken.Parse(File.ReadAllText(tmp));
+                try { File.Delete(tmp); } catch { /* best effort cleanup */ }
+                key = session.Id;
+            }
+            else
+            {
+                asset = JToken.FromObject(session);
+                key = session.Id;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "[Catalogue] Session serialize failed");
+            await (_dialogService?.ShowMessageAsync(
+                Loc.Get("title_error"),
+                Loc.Get("catalogue_toast_unknown_error"),
+                DialogSeverity.Error) ?? Task.CompletedTask);
+            return;
+        }
+
+        var mainWindow = GetMainWindow();
+        if (mainWindow == null)
+        {
+            await (_dialogService?.ShowMessageAsync(
+                Loc.Get("title_error"),
+                Loc.Get("catalogue_toast_unknown_error"),
+                DialogSeverity.Error) ?? Task.CompletedTask);
+            return;
+        }
+
+        var dialog = new AssetSubmitDialog(session.Name, _settingsService.Current.UserDisplayName);
+        var confirmed = await dialog.ShowDialog<bool>(mainWindow);
+        if (!confirmed) return;
+
+        try
+        {
+            var result = await (_catalogueService?.SubmitCatalogueAssetAsync(
+                CatalogueSubmissionsTabViewModel.CatalogueKindSessions,
+                asset,
+                "ccp-session/v1",
+                dialog.Creator,
+                dialog.Tags,
+                default) ?? Task.FromResult<SubmissionResult>(new SubmissionResult.UnknownError(0, "service_unavailable")));
+            RecordCatalogueSubmission(CatalogueSubmissionsTabViewModel.CatalogueKindSessions, key, result);
+            await ShowCatalogueSubmissionResultAsync(result);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "[Catalogue] Session share threw unexpectedly");
+            await (_dialogService?.ShowMessageAsync(
+                Loc.Get("title_error"),
+                Loc.Get("catalogue_toast_unknown_error"),
+                DialogSeverity.Error) ?? Task.CompletedTask);
+        }
+    }
+
     private void RecordCatalogueSubmission(string kind, string key, SubmissionResult result)
     {
         try
@@ -941,7 +1026,9 @@ public partial class PresetsTabViewModel : TabItemViewModel
             }
 
             if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(key)) return;
-            var dict = _settingsService?.Current?.CataloguePresetSubmissions;
+            var dict = kind == CatalogueSubmissionsTabViewModel.CatalogueKindSessions
+                ? _settingsService?.Current?.CatalogueSessionSubmissions
+                : _settingsService?.Current?.CataloguePresetSubmissions;
             if (dict == null) return;
 
             dict.TryGetValue(key, out var existing);
@@ -1092,11 +1179,4 @@ public partial class PresetsTabViewModel : TabItemViewModel
     }
 
     #endregion
-
-    private async Task ShowNotImplementedAsync(string featureName)
-    {
-        await (_dialogService?.ShowMessageAsync(
-            Loc.Get("title_not_implemented"),
-            Loc.GetF("msg_not_implemented_body_fmt", featureName)) ?? Task.CompletedTask);
-    }
 }
