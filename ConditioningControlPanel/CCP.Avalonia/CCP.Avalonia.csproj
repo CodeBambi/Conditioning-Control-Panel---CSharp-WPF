@@ -89,13 +89,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.0.4" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.4" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.4" />
-    <PackageReference Include="Avalonia.Skia" Version="12.0.4" />
-    <PackageReference Include="Avalonia.HarfBuzz" Version="12.0.4" />
-    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.0.0" />
-    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.0.4" />
+    <PackageReference Include="Avalonia" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Skia" Version="12.0.5" />
+    <PackageReference Include="Avalonia.HarfBuzz" Version="12.0.5" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.0.1" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.0.5" />
     <PackageReference Include="LibVLCSharp.Avalonia" Version="3.9.7.1" />
     <PackageReference Include="MessageBox.Avalonia" Version="12.0.0" />
     <!-- Pin WindowsAppSDK (transitive from LibVLCSharp) to prevent WebView2 downgrade errors. -->

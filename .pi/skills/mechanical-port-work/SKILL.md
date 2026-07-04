@@ -57,7 +57,14 @@ touching code.
    status, same commit.
 7. **Commit** with a message that states what, the WPF citations, and the gate results.
 
-## Gates (copy-paste; run from repo root E:/Code/Conditioning-Control-Panel)
+## Gates (run from repo root E:/Code/Conditioning-Control-Panel)
+
+THE tool: `bash ConditioningControlPanel/tools/run-gates.sh` (all 4 gates, prints PASS/FAIL per gate, exit 0 = safe
+to commit). `bash ConditioningControlPanel/tools/run-gates.sh --fast` skips the smoke test for quick iteration; the
+FULL script must pass before every commit. Floors (test count 426, smoke 44 tabs /
+Findings 5) live at the top of that script, ONE place; raise them when adding tests,
+never lower. The script also detects the known smoke flake and tells you what to do.
+Manual equivalents if the script is unavailable:
 
 ```bash
 dotnet build ConditioningControlPanel/CCP.Desktop.slnf -clp:ErrorsOnly   # 0 errors
@@ -71,6 +78,33 @@ Smoke pass = `Tabs visited: 44`, `Findings: 5`, no `Unhandled exception` in outp
 `InvalidOperationException` in `SolidColorBrush.SerializeChanges` (cross-thread brush
 race, filed on the board), if you hit it, re-run the smoke test ONCE; a clean re-run
 passes the gate. Two crashes in a row = STOP condition.
+
+## Codebase conventions (follow these; do not copy the exceptions)
+
+- **Service resolution**: new code uses CONSTRUCTOR DI (registrations in
+  `CCP.Avalonia/ServiceCollectionExtensions.cs`). The codebase also contains
+  `App.Services?.GetService<T>()` locator calls, `CoreApp` statics (some typed
+  `object?`), and static chaos facades (`ChaosMeta`, `RevealService`,
+  `AvaloniaChaosApp`), those exist ONLY for WPF-parity chaos code. Never add new
+  `CoreApp` object-typed properties. Never use `dynamic`.
+- **Naming trap**: `CCP.Avalonia/Services/AvaloniaHeadStubs.cs` and
+  `CCP.Avalonia/Chaos/AvaloniaChaosStubs.cs` contain ZERO stubs, they hold the REAL
+  chaos service, avatar/bark services, and the chaos model/data layer (queue items
+  split them; until then do not treat them as disposable scaffolding).
+  `Localization/LocExtension.cs` contains class `StrExtension` (used as `{loc:Str}` in
+  87 axaml files), not dead code.
+- **Tests**: default `[Fact]`; use `[AvaloniaFact]` ONLY when the code under test needs
+  the Avalonia dispatcher/UI thread. New tests prefer public/internal seams (see
+  `ChaosScoringTests.cs` pattern); do not rewrite existing reflection-based tests.
+- **Version guardrails (verified 2026-07-04)**: this repo pins the Avalonia matrix at
+  **12.0.5** (all heads + `Avalonia.Headless.XUnit`) and `Avalonia.Controls.DataGrid`
+  **12.0.1** (which requires >= 12.0.5; they pair). `MessageBox.Avalonia` 12.0.0 is
+  third-party with its own cadence, leave it. DISTRUST any Avalonia advice not
+  explicitly v12: v11 answers are actively wrong (renamed APIs, changed
+  windowing/compositor). Do not adopt 12.1/13 guidance. Any version change: bump the
+  WHOLE Avalonia matrix together, run all gates, and only with a named changelog fix.
+  The rare `SolidColorBrush.SerializeChanges` crash is an app-side off-UI-thread brush
+  mutation (no matching upstream issue exists), never "fix" it by upgrading Avalonia.
 
 ## When to STOP (file a blocker instead of improvising)
 
