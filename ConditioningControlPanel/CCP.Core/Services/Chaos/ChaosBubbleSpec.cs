@@ -127,4 +127,12 @@ public sealed class ChaosBubbleSpec
 
     /// <summary>Chance this bubble drifts sideways during motion. WPF parity.</summary>
     public double SideDriftChance { get; init; }
+
+    /// <summary>Payload strength 0..100, computed at build time from the CLASSIC (pre-scale)
+    /// size and already scaled by effect intensity — WPF parity: <c>payload.Strength =
+    /// (int)clamp(round(clamp((classicSize-150)/170, 0, 1)*100) * effectIntensity, 0, 100)</c>
+    /// (WPF ChaosBubbleVariants.cs Build/EffectBubbleSpec.Strength). Consumers should read
+    /// this instead of re-deriving strength from <see cref="SizePx"/> (the visual size is
+    /// shrunk by the global field scale, so a SizePx-derived value would be wrong).</summary>
+    public int Strength { get; init; }
 }

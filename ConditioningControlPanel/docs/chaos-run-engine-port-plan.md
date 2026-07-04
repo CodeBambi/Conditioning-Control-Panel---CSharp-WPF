@@ -38,9 +38,12 @@ weights/MinIntensity/fuse bands/tints/labels), `Pick` (intensity gate + fallback
 `Build` (size t-bias, strength-pre-scale, GLOBAL/GIANT scale, motion resolution incl.
 side-drift + freeze FloatUp remap, fuse formula), `BuildGolden/Prism/Heavy/Echo/EchoChild/
 ChaperonePair/BoundPair/Tease/Brittle/Heart/GoldDroplet/Darter + RollDarter`, all §7
-constants. Collapse the parallel `Avalonia.Chaos.ChaosTuning` into Core `ChaosTuning`
-(single source). **Unit tests** pin: pool table rows, Pick gating/fallback, Build size/
+constants. **Unit tests** pin: pool table rows, Pick gating/fallback, Build size/
 strength/fuse formulas, golden/prism/heavy/darter spec numbers.
+SCOPE NOTE 2026-07-04: S1 is PURELY ADDITIVE (new `ChaosSpawnCatalog` + tests; at most one
+additive `Strength` property on `ChaosBubbleSpec`). The parallel-`ChaosTuning` collapse and
+the Avalonia `ChaosBubbleVariants` stub retirement move to S4, where the service internals
+are rewritten to consume the Core catalog anyway (avoids touching the stand-in twice).
 Acceptance: Core tests green with new coverage; no behavior change in the running app yet.
 
 ### S2 — Run state + config faithful port (models)
@@ -101,7 +104,9 @@ Port `FireScaledPayload` (lesson hook + DetonationDurationMult wrap) and
 heavy gate Video/GifCascade + `_heavyUntilUtc`/`_chaosVideoCapUtc`; stingers by variant).
 RunTick video 15s cap enforcement + `OnVideoEndured` lesson ticks. **Close the P3 row**:
 `VideoPayload.Fire` gates `ArmRandomSegment` on `!Ambient` (per-instance flag from the
-builder; do NOT conflate with cfg.AmbientMode). Welcome-shower/heart/golden chimes.
+builder; do NOT conflate with cfg.AmbientMode). ALSO port the WPF `Build(ambient:)` branch
+(WPF ChaosBubbleVariants.cs:714,767-773: forces IsLive=false/FuseMs=0/FloatUp/
+TreatLifeMs=7000/payload.Ambient=true) that S1 intentionally deferred — S1 audit EXTRA-1. Welcome-shower/heart/golden chimes.
 
 ### S7 — Lifecycle completion: EndRun/Cleanup/sentinel/SFX sweep
 EndRun exact order (loop tip on full course, lessons OnRunCompleted, teardown list,
@@ -139,7 +144,7 @@ Current state; UCE plan queue rows for the 6 unmigrated overlays (follow-up).
 
 | Slice | Commit | Gates | Review | Notes |
 |---|---|---|---|---|
-| S1 | — | — | — | — |
+| S1 | (this commit) | slnf 0 · WPF sln 0 · Core **268/268** (+63, floor 205 held) · smoke 44 tabs / Findings: 5 baseline / exit 0 | claim-verifier adversarial audit: C1–C18 all Verified vs WPF source (C17 weakened only over a docs-file edit; EXTRA-1 = deferred ambient Build branch → folded into S6 scope) | `ChaosSpawnCatalog.cs` (new, faithful 8-row pool + Pick/Build + 14 special builders, injectable Random), `ChaosSpawnCatalogTests.cs` (new, 63 tests), `ChaosBubbleSpec.cs` +`Strength` (additive). Deviations documented in XML docs: tease lifetime + bound window stamped on spec; PayloadKind = variant-id strings (matches Avalonia consumers). |
 | S2 | — | — | — | — |
 | S3 | — | — | — | — |
 | S4 | — | — | — | — |
