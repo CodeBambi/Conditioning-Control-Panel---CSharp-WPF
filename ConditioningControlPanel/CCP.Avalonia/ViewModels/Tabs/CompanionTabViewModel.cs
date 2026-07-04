@@ -197,6 +197,10 @@ public partial class CompanionTabViewModel : TabItemViewModel
             return;
         }
 
+        // L3-12: gate assigning an explicit prompt (ships a SlutMode variant + SlutMode on)
+        // before it becomes the companion's active personality. Abort the assignment on cancel.
+        if (!await EnsureExplicitContentAcknowledgedAsync(imported.PromptSettings)) return;
+
         _settingsService?.Current?.SetCompanionPromptId(companionIndex, imported.Id);
         _settingsService?.Save();
         _companionService?.SwitchCompanion((CompanionId)companionIndex);
@@ -212,6 +216,11 @@ public partial class CompanionTabViewModel : TabItemViewModel
     {
         if (string.IsNullOrWhiteSpace(promptId)) return;
         _logger?.LogInformation("Activate community prompt: {PromptId}", promptId);
+
+        // L3-12: gate explicit community prompts (ship a SlutMode variant + SlutMode on) before
+        // activation. Abort on cancel so the explicit prompt is never activated unacknowledged.
+        var probePrompt = _promptService?.GetInstalledPrompt(promptId);
+        if (!await EnsureExplicitContentAcknowledgedAsync(probePrompt?.PromptSettings)) return;
 
         if (_promptService?.ActivatePrompt(promptId) == true)
         {
@@ -250,14 +259,79 @@ public partial class CompanionTabViewModel : TabItemViewModel
         await Task.CompletedTask;
     }
 
+    /// <summary>
+    /// L3-12: CCBill AI Content Merchant Addendum gate. Before activating or assigning a prompt
+    /// that ships a SlutMode variant while SlutMode is on, the user must clear the
+    /// explicit-content acknowledgement dialog. Mirrors the WPF gate in
+    /// MainWindow.CompanionTab.cs. The gate rules are inlined here because
+    /// <c>ConditioningControlPanel.Services.ExplicitContentGate</c> lives in the WPF head and is
+    /// not part of CCP.Core. Returns true when the gated action may proceed (not gated, already
+    /// acknowledged, or the user accepted the dialog); false only when the user cancels.
+    /// </summary>
+    private async Task<bool> EnsureExplicitContentAcknowledgedAsync(CompanionPromptSettings? promptSettings)
+    {
+        var settings = _settingsService?.Current;
+        if (settings == null) return true;
+
+        // Synthesize the same probe preset the WPF gate uses, then apply RequiresAcknowledgement.
+        var probe = new PersonalityPreset { PromptSettings = promptSettings };
+        if (!GateRequiresAcknowledgement(probe, settings.SlutModeEnabled)) return true;
+
+        var prevSettings = settings.CompanionPrompt;
+        if (GateIsAlreadyAcknowledged(prevSettings)) return true;
+
+        var owner = GetMainWindow();
+        if (owner is null)
+        {
+            // No owner to host the modal gate — refuse the gated action rather than bypassing
+            // the compliance acknowledgement.
+            _logger?.LogWarning("Explicit-content gate skipped: no owner window available");
+            return false;
+        }
+
+        var dialog = new ConditioningControlPanel.Avalonia.Dialogs.ExplicitContentAcknowledgementDialog();
+        var accepted = await dialog.ShowDialog<bool?>(owner);
+        if (accepted != true) return false;
+
+        if (prevSettings != null)
+        {
+            GateMarkAcknowledged(prevSettings);
+            _settingsService?.Save();
+        }
+        return true;
+    }
+
+    // Inlined mirror of ConditioningControlPanel.Services.ExplicitContentGate (WPF-only).
+    private static bool GateRequiresAcknowledgement(PersonalityPreset? preset, bool slutModeOn)
+    {
+        if (preset == null) return false;
+        if (preset.RequiresExplicitAcknowledgement) return true;
+        if (slutModeOn && !string.IsNullOrWhiteSpace(preset.PromptSettings?.SlutModePersonality)) return true;
+        return false;
+    }
+
+    private static bool GateIsAlreadyAcknowledged(CompanionPromptSettings? settings)
+        => settings != null
+           && settings.ExplicitContentAcknowledged
+           && settings.ExplicitAcknowledgedVersion == CompanionPromptSettings.ExplicitAcknowledgementVersion;
+
+    private static void GateMarkAcknowledged(CompanionPromptSettings settings)
+    {
+        settings.ExplicitContentAcknowledged = true;
+        settings.ExplicitAcknowledgedVersion = CompanionPromptSettings.ExplicitAcknowledgementVersion;
+    }
+
+    private static global::Avalonia.Controls.Window? GetMainWindow()
+        => (global::Avalonia.Application.Current?.ApplicationLifetime
+            as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+
     [RelayCommand]
     private async Task CustomizePromptAsync()
     {
         _logger?.LogInformation("Customize companion prompt requested");
         var dialog = new ConditioningControlPanel.Avalonia.Dialogs.CompanionPromptEditorDialog();
         // ShowDialog throws ArgumentNullException on a null owner (L3-04): resolve the main window.
-        var owner = (global::Avalonia.Application.Current?.ApplicationLifetime
-            as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        var owner = GetMainWindow();
         if (owner is not null)
         {
             await dialog.ShowDialog<bool?>(owner);

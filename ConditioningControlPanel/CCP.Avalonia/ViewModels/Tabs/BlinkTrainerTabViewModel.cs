@@ -363,12 +363,28 @@ public partial class BlinkTrainerTabViewModel : TabItemViewModel
     /// </summary>
     private async Task<bool> ShowConsentDialogAsync()
     {
+        // L5-04: the webcam consent gate must be a modal, owner-owned dialog — not an
+        // ownerless, non-modal Show(). Resolve the desktop main window as owner; if there is no
+        // owner we cannot host the modal gate, so treat consent as NOT granted rather than
+        // proceeding as though it were given.
+        var owner = GetMainWindow();
+        if (owner is null)
+        {
+            _logger?.LogWarning("Webcam consent dialog skipped: no owner window available");
+            return false;
+        }
+
         var dialog = new WebcamConsentDialog();
-        var tcs = new TaskCompletionSource<bool>();
-        dialog.Closed += (_, _) => tcs.TrySetResult(dialog.ConsentGiven);
-        dialog.Show();
-        return await tcs.Task;
+        await dialog.ShowDialog(owner);
+        // The dialog remains the sole writer of WebcamConsentGiven / WebcamConsentVersion /
+        // WebcamConsentDate; we only read its result flag so the consent-result handling stays
+        // identical to before.
+        return dialog.ConsentGiven;
     }
+
+    private static global::Avalonia.Controls.Window? GetMainWindow()
+        => (global::Avalonia.Application.Current?.ApplicationLifetime
+            as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
 
     [RelayCommand]
     private async Task ToggleSessionAsync()

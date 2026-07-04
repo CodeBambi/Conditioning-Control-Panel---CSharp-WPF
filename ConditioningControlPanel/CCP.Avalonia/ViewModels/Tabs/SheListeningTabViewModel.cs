@@ -233,12 +233,26 @@ public partial class SheListeningTabViewModel : TabItemViewModel
     /// </summary>
     private async Task<bool> ShowMicConsentDialogAsync()
     {
+        // L5-04: show the mic consent gate as a modal, owner-owned dialog instead of an
+        // ownerless, non-modal Show(). If no owner window is available we cannot host the modal
+        // gate, so treat consent as NOT granted rather than proceeding as though it were given.
+        var owner = GetMainWindow();
+        if (owner is null)
+        {
+            _logger?.LogWarning("Mic consent dialog skipped: no owner window available");
+            return false;
+        }
+
         var dialog = new MicConsentDialog();
-        var tcs = new System.Threading.Tasks.TaskCompletionSource<bool>();
-        dialog.Closed += (_, _) => tcs.TrySetResult(dialog.ConsentGiven);
-        dialog.Show();
-        return await tcs.Task;
+        await dialog.ShowDialog(owner);
+        // The dialog is the sole writer of MicConsentGiven; we only read its result flag so the
+        // consent-result handling stays identical to before.
+        return dialog.ConsentGiven;
     }
+
+    private static global::Avalonia.Controls.Window? GetMainWindow()
+        => (global::Avalonia.Application.Current?.ApplicationLifetime
+            as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
     partial void OnWakeWordEnabledChanged(bool value) => Apply(s => s.SpeechWakeWordEnabled = value);
     partial void OnPushToTalkEnabledChanged(bool value) => Apply(s => s.SpeechPushToTalkEnabled = value);
     partial void OnWakeWordsChanged(string value) => Apply(s => s.SpeechWakeWords = value?.Trim() ?? "");

@@ -228,12 +228,13 @@ public partial class LeaderboardTabViewModel : TabItemViewModel
         if (SelectedEntry == null) return;
         _logger?.LogInformation("Leaderboard: view profile for {Name}", SelectedEntry.DisplayName);
 
-        // Switch to the Profile tab. Full user lookup by leaderboard entry is not yet
-        // supported, so we navigate to the local profile view.
+        // Switch to the Profile tab. L4-03: the ProfileTab is registered under the key
+        // "discord" (ProfileTabViewModel ctor) and MainWindowViewModel.SelectTab matches on
+        // Key, so we must request "discord" — "profile" matches no tab and silently no-ops.
         var handlers = RequestSelectTab;
         if (handlers != null)
         {
-            handlers("profile");
+            handlers("discord");
             return;
         }
 

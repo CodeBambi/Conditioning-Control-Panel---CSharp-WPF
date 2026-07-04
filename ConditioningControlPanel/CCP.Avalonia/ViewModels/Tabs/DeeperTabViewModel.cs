@@ -106,6 +106,9 @@ public partial class DeeperTabViewModel : TabItemViewModel
         WebcamConsentStatusText = Loc.Get("deeper_webcam_consent_missing");
 
         WelcomeCardVisible = !(_settingsService.Current?.HasSeenDeeperWelcome ?? true);
+        // L3-05: reflect the real persisted webcam-consent flag so the section is truthful on
+        // open instead of always reporting "consent missing".
+        IsWebcamConsentGranted = _settingsService.Current?.WebcamConsentGiven == true;
         RefreshWebcamUi();
     }
 
@@ -562,16 +565,35 @@ public partial class DeeperTabViewModel : TabItemViewModel
     }
 
     [RelayCommand]
-    private void ManageWebcamConsent()
+    private async Task ManageWebcamConsentAsync()
     {
         _logger?.LogInformation("Manage Deeper webcam consent requested");
-        IsWebcamConsentGranted = true;
+
+        // L3-05: route through the real multi-gate WebcamConsentDialog (owner-owned, modal)
+        // instead of silently flipping the flag. The dialog is the sole writer of
+        // WebcamConsentGiven / WebcamConsentVersion / WebcamConsentDate (same contract as the
+        // Blink Trainer tab); we only mirror its result so the on-screen consent state is
+        // truthful. No camera frames are ever accessed here.
+        var owner = GetMainWindow();
+        if (owner is null)
+        {
+            _logger?.LogWarning("Webcam consent dialog skipped: no owner window available");
+            return;
+        }
+
+        var dialog = new WebcamConsentDialog();
+        await dialog.ShowDialog(owner);
+        IsWebcamConsentGranted = dialog.ConsentGiven;
     }
 
     [RelayCommand]
     private void RevokeWebcamConsent()
     {
         _logger?.LogInformation("Revoke Deeper webcam consent requested");
+        // L3-05: actually clear the persisted consent (flag + version + date) via the webcam
+        // service, mirroring the Blink Trainer revoke, so the revoke is truthful rather than a
+        // UI-only flag flip.
+        _webcamService?.RevokeConsent();
         IsWebcamConsentGranted = false;
         IsTrackerRunning = false;
     }
@@ -659,8 +681,12 @@ public partial class DeeperTabViewModel : TabItemViewModel
                 Loc.Get("deeper_webcam_consent_missing")) ?? Task.CompletedTask);
             return;
         }
-        IsTrackerRunning = !IsTrackerRunning;
-        await Task.CompletedTask;
+
+        // L3-05: there is no ported gaze-tracker start path in the Deeper tab — the real tracker
+        // lives in the Blink Trainer tab. Rather than faking IsTrackerRunning (which would
+        // misrepresent that the camera is active), surface an honest "not implemented" notice
+        // and leave the toggle state untouched.
+        await ShowNotImplementedAsync(Loc.Get("deeper_webcam_start_tracker"));
     }
 
     #endregion

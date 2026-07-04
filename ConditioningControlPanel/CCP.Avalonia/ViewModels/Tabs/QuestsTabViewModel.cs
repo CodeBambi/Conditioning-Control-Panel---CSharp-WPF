@@ -270,11 +270,29 @@ public partial class QuestsTabViewModel : TabItemViewModel, IDisposable
             Loc.Get("msg_submit_photo_confirm")) ?? Task.FromResult(false));
         if (!confirm) return;
 
+        // L4-09: collect the optional note via the ported InputDialog (owner-resolved, modal).
+        // Empty text or cancel leaves the note null, preserving the prior behavior. Mirrors the
+        // WPF flow in MainWindow.Roadmap.cs (ShowPhotoConfirmation), reusing the same loc keys.
         string? note = null;
-        // Avalonia has no input dialog in core; skip optional note until a dialog is ported.
+        var owner = GetMainWindow();
+        if (owner is not null)
+        {
+            var noteDialog = new ConditioningControlPanel.Avalonia.Dialogs.InputDialog(
+                Loc.Get("title_add_note"),
+                Loc.Get("msg_add_note_prompt"),
+                "");
+            var accepted = await noteDialog.ShowDialog<bool>(owner);
+            if (accepted && !string.IsNullOrEmpty(noteDialog.ResultText))
+                note = noteDialog.ResultText;
+        }
+
         _roadmap.SubmitPhoto(stepId, photoPath, note);
         RefreshRoadmap();
     }
+
+    private static global::Avalonia.Controls.Window? GetMainWindow()
+        => (global::Avalonia.Application.Current?.ApplicationLifetime
+            as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.MainWindow;
 
     private void RefreshRoadmap()
     {
