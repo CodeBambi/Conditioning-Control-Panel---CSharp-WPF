@@ -28,6 +28,10 @@ public sealed class BubbleEngine
     private const double TRAIL_GAP_PX = 40.0;
     private const int TRAIL_MAX_POINTS = 60;
     private const double RESIDUE_FUSE_MULT = 2.0;
+    // Electrified Rabbits free discharge (WPF BubbleService.cs:297 ESTIM_ARCS_PER_POP,
+    // :402 ESTIM_BURST_RANGE_PX).
+    private const int ESTIM_ARCS_PER_POP = 3;
+    private const double ESTIM_BURST_RANGE_PX = 620.0;
 
     private readonly List<BubbleState> _bubbles = new();
     private readonly Random _random = new();
@@ -47,7 +51,6 @@ public sealed class BubbleEngine
     private bool _chaosFrozen;
     private double _chaosTimeScale = 1.0;
     private bool _chaosInputLocked;
-    private double _chainReachDip = DefaultChainReachDip;
     private Action<ChaosBubbleSpec>? _onBenignPop;
     private Action<ChaosBubbleSpec, double, bool>? _onDefuse;
     private Action<ChaosBubbleSpec>? _onDetonate;
@@ -82,7 +85,6 @@ public sealed class BubbleEngine
     private readonly List<(Point CenterPx, double AgeMs)> _ripples = new();
     private readonly List<(Point CenterPx, DateTime Until)> _residues = new();
     private readonly List<PlayerRipple> _playerRipples = new();
-    private double _rabbitTrailSec;
 
     // Trigger Bubbles: head-supplied factory mapping an effect-variant id → a firable payload.
     // Null = feature unavailable (the roll in SpawnBubble then no-ops).
@@ -124,8 +126,9 @@ public sealed class BubbleEngine
     /// <summary>Engine-logical Y of the last chaos bubble popped (see <see cref="ChaosLastPopX"/>).</summary>
     public double ChaosLastPopY { get; private set; }
 
-    /// <summary>Seconds of rabbit/darter trail currently active (Tail-Plug boon).</summary>
-    public double ChaosRabbitTrailSecNow => _rabbitTrailSec;
+    /// <summary>Seconds of rabbit/darter trail currently active (Tail-Plug boon) — thin
+    /// wrapper over <see cref="ChaosRunKnobs.RabbitTrailSec"/> (S4b-4 knob migration).</summary>
+    public double ChaosRabbitTrailSecNow => Knobs.RabbitTrailSec;
 
     /// <summary>Active Size Queen ripples for optional overlay rendering.</summary>
     public IReadOnlyList<(Point CenterPx, double AgeMs, double LifeMs)> ActiveRipples =>
@@ -184,7 +187,7 @@ public sealed class BubbleEngine
         _ripples.Clear();
         _residues.Clear();
         _playerRipples.Clear();
-        _rabbitTrailSec = 0.0;
+        Knobs.Reset();
         _chaosActive = false;
     }
 
@@ -338,7 +341,10 @@ public sealed class BubbleEngine
             {
                 _onBenignPop?.Invoke(spec);
 
-                if (!spec.IsDarter && !spec.IsFreeze && _chainReachDip > 0)
+                // Live knob read at the use site (S4b-4): a mid-run Chain Reaction level-up
+                // widens the very next pop (WPF re-invokes the chainReach lambda per pop,
+                // BubbleService.cs:1610).
+                if (!spec.IsDarter && !spec.IsFreeze && Knobs.ChainReachDip > 0)
                 {
                     ChainPop(bubble);
                 }
@@ -397,7 +403,12 @@ public sealed class BubbleEngine
         _onBrittleShattered = onBrittleShattered;
         _onTreatExpired = onTreatExpired;
         _onDarterSpanked = onDarterSpanked;
-        _chainReachDip = chainReachDip > 0 ? chainReachDip : DefaultChainReachDip;
+        // WPF BeginChaosMode resets every live-knob sample at run start (WPF BubbleService.cs:
+        // 1092-1093, :1106); the chainReachDip parameter is only the SEED written into Knobs so
+        // existing callers/fakes keep the pre-S4b-4 default reach — the chaos service overwrites
+        // all knobs via SyncKnobsFromState right after this call.
+        Knobs.Reset();
+        Knobs.ChainReachDip = chainReachDip > 0 ? chainReachDip : DefaultChainReachDip;
         _canChannel = canChannel;
         _onChannelStarted = onChannelStarted;
         _onChannelBroken = onChannelBroken;
@@ -443,7 +454,8 @@ public sealed class BubbleEngine
         _ripples.Clear();
         _residues.Clear();
         _playerRipples.Clear();
-        _rabbitTrailSec = 0.0;
+        // WPF ClearChaos resets every live-knob static on teardown (WPF BubbleService.cs:1674-1687).
+        Knobs.Reset();
 
         foreach (var bubble in _bubbles.Where(b => b.Spec != null).ToList())
         {
@@ -616,8 +628,10 @@ public sealed class BubbleEngine
         _renderer.Pop(bubble, () => _bubbles.Remove(bubble));
     }
 
-    /// <summary>Sets the Tail-Plug rabbit/darter trail duration in seconds.</summary>
-    public void SetRabbitTrailSec(double seconds) => _rabbitTrailSec = Math.Max(0.0, seconds);
+    /// <summary>Sets the Tail-Plug rabbit/darter trail duration in seconds — thin wrapper over
+    /// <see cref="ChaosRunKnobs.RabbitTrailSec"/> with the WPF per-tick clamp
+    /// (WPF BubbleService.cs:490 <c>Max(0, …)</c>). Kept so existing callers don't break.</summary>
+    public void SetRabbitTrailSec(double seconds) => Knobs.RabbitTrailSec = Math.Max(0.0, seconds);
 
     /// <summary>Size Queen: add an expanding chaos ripple from the given physical pixel center.</summary>
     public void TriggerChaosRipple(Point centerPx)
@@ -671,7 +685,9 @@ public sealed class BubbleEngine
 
             var cx = (bubble.X + bubble.Size / 2.0) * bubble.Scaling;
             var cy = (bubble.Y + bubble.Size / 2.0) * bubble.Scaling;
-            var r = (bubble.Size / 2.0) * bubble.Scaling;
+            // Hit disc radius is the spawn-stamped HIT size, not the visual size — the Wand/
+            // Mesmer/Silk Touch enlargement (WPF BubbleService.cs:2423 HitDiscPx = _hitSize/2 × dpi).
+            var r = (bubble.HitSize / 2.0) * bubble.Scaling;
             var dx = cx - centerPx.X;
             var dy = cy - centerPx.Y;
             if (dx * dx + dy * dy > r * r) continue;
@@ -691,9 +707,32 @@ public sealed class BubbleEngine
             // `if (!_isSpanked)`); sweepers are born spanked and never reach it.
             if (spec.IsDarter && (Knobs.SpankerOn || spec.IsSweeper))
             {
+                // WPF Spank() (BubbleService.cs:3773-3801): cooldown-gated; EVERY smack redirects
+                // to a random heading at +18% pace (capped 2.2× natural) and resets its bounces;
+                // the swell + latch + lesson hook happen ONCE on the first smack only.
+                if (bubble.SpankCooldownMs > 0)
+                    return true; // click consumed, smack ignored (WPF :3775 early-return)
+                bubble.SpankCooldownMs = 250.0;   // WPF :3776
+                var naturalSpeed = spec.DarterSpeed > 0
+                    ? spec.DarterSpeed * WpfFramesPerSecond
+                    : DefaultDarterSpeed;
+                var spd = Math.Sqrt(bubble.Vx * bubble.Vx + bubble.Vy * bubble.Vy);
+                if (spd < 0.01 * WpfFramesPerSecond) spd = naturalSpeed;      // WPF :3778 (per-frame 0.01 floor)
+                spd = Math.Min(spd * 1.18, naturalSpeed * 2.2);               // WPF :3780
+                var heading = _random.NextDouble() * Math.PI * 2.0;           // WPF :3781
+                bubble.Vx = Math.Cos(heading) * spd;
+                bubble.Vy = Math.Sin(heading) * spd;
+                bubble.BounceCount = 0;                                       // WPF :3785 fresh bounces
                 if (!bubble.IsSpanked)
                 {
                     bubble.IsSpanked = true;
+                    // The swell happens ONCE, on the first smack; re-smacks only steer and hurry
+                    // it — no compounding (WPF :3794-3796 _spankGrowth = Max(1.0, ChaosSpankGrowNow)).
+                    bubble.SpankGrowth = Math.Max(1.0, Knobs.SpankGrow);
+                    // WPF renders the swell through the darter's per-frame scale
+                    // (_scale = _spankGrowth + throb, WPF :3001); the engine has no throb wobble,
+                    // so the stamped growth IS the render scale.
+                    bubble.Scale = bubble.SpankGrowth;
                     bool quick = spec.QuickWindowMs > 0 && bubble.AgeMs <= spec.QuickWindowMs;
                     _onDarterSpanked?.Invoke(spec, quick);
                 }
@@ -734,7 +773,10 @@ public sealed class BubbleEngine
         {
             if (bubble.Spec == null || bubble.IsPopping) continue;
             var s = bubble.Scaling > 0 ? bubble.Scaling : 1.0;
-            var r = new PixelRect(bubble.X * s, bubble.Y * s, bubble.Size * s, bubble.Size * s);
+            // The gaze/rect target is the HIT box centred on the bubble, not the visual box —
+            // WPF GetGazeBounds builds the same _hitSize-centred rect (WPF BubbleService.cs:4383).
+            var pad = (bubble.HitSize - bubble.Size) / 2.0;
+            var r = new PixelRect((bubble.X - pad) * s, (bubble.Y - pad) * s, bubble.HitSize * s, bubble.HitSize * s);
             if (r.X < rectPx.Right && r.Right > rectPx.X && r.Y < rectPx.Bottom && r.Bottom > rectPx.Y)
                 result.Add(bubble.Id);
         }
@@ -791,6 +833,10 @@ public sealed class BubbleEngine
                 moved.Add(bubble);
         }
 
+        // Spanked-rabbit body mows (runs on a snapshot — pops mutate _bubbles) BEFORE the field
+        // hazards, mirroring WPF where sweeps fire inside each darter's AnimateFrame and
+        // TickFieldHazards runs after the animate pass (WPF BubbleService.cs:3075-3076, :505ff).
+        TickSpankSweeps();
         TickFieldHazards(dt);
 
         foreach (var bubble in missed)
@@ -861,6 +907,17 @@ public sealed class BubbleEngine
         var lifeMs = spec.TreatLifeMs > 0 ? spec.TreatLifeMs : spec.LifetimeMs;
         if (lifeMs <= 0) lifeMs = 5000;
 
+        // Hit-disc enlargement + Blindfold opacity are sampled AT SPAWN, exactly like the WPF
+        // Bubble ctor (WPF BubbleService.cs:2532-2542) — a mid-run silk_touch/Blindfold change
+        // affects new spawns only, never bubbles already on screen. "Plain" effect bubbles are
+        // lives + ordinary treats; darters/freeze keep precision hitboxes and pickups/prism/
+        // escort/tease/brittle stay fully visible with natural hitboxes (WPF :2532-2538).
+        bool plainEffectBubble = !spec.IsDarter && !spec.IsFreeze && !spec.IsGolden && !spec.IsHeart
+                                 && !spec.IsDroplet && !spec.IsPrism && !spec.IsEscort
+                                 && !spec.IsTease && !spec.IsBrittle;
+        double hitMult = Math.Clamp(Knobs.HitboxScale, 1.0, 2.0);                       // WPF :2539
+        if (Knobs.LiveMagnet && spec.IsLive) hitMult = Math.Clamp(hitMult * 1.4, 1.0, 2.0); // WPF :2540
+
         var state = new BubbleState
         {
             Id = spec.Id,
@@ -877,7 +934,9 @@ public sealed class BubbleEngine
             Clickable = true,
             Spec = spec,
             FuseRemainingMs = spec.IsLive ? spec.FuseMs : 0.0,
-            AgeMs = 0.0
+            AgeMs = 0.0,
+            HitSize = plainEffectBubble ? Math.Max(size, Math.Round(size * hitMult)) : size, // WPF :2541
+            Opacity = plainEffectBubble ? Math.Clamp(Knobs.BubbleOpacity, 0.2, 1.0) : 1.0    // WPF :2542
         };
 
         if (spec.IsDarter)
@@ -967,6 +1026,11 @@ public sealed class BubbleEngine
     {
         bubble.AgeMs += dt * 1000.0;
 
+        // Spank cooldown burns in real time, unscaled by slow-mo/freeze (WPF BubbleService.cs:3073
+        // decrements a flat -32 per frame regardless of ts).
+        if (bubble.SpankCooldownMs > 0)
+            bubble.SpankCooldownMs -= TickIntervalSec * 1000.0;
+
         if (bubble.BoundHalfResolved && bubble.BoundResolveTimeRemainingMs > 0 && !bubble.BoundEnraged)
         {
             bubble.BoundResolveTimeRemainingMs -= dt * 1000.0;
@@ -1023,6 +1087,37 @@ public sealed class BubbleEngine
         }
         else if (!bubble.IsChanneling)
         {
+            // The Pull: rabbits fly AT you — steer the darter's velocity toward the cursor with a
+            // capped turn rate (WPF BubbleService.cs:3023-3039: maxTurn = 0.065 × Max(ts, 0.4)
+            // rad/frame; one engine tick == one WPF 32ms frame, ts == dt/TickIntervalSec since
+            // WPF's TimeScale folds FIELD_PACE too, WPF :2169). The engine has no darter-escape
+            // phase (max bounces despawn instead), so WPF's !_darterEscaping gate has no analogue.
+            if (spec.IsDarter && bubble.TelegraphComplete && Knobs.RabbitHoming && dt > 0)
+            {
+                var homeCursor = _pointerState.GetCursorPosition();
+                if (homeCursor.HasValue)
+                {
+                    double hcx = homeCursor.Value.X / bubble.Scaling;
+                    double hcy = homeCursor.Value.Y / bubble.Scaling;
+                    double hdx = hcx - (bubble.X + bubble.Size / 2.0);
+                    double hdy = hcy - (bubble.Y + bubble.Size / 2.0);
+                    if (hdx * hdx + hdy * hdy > 1)
+                    {
+                        double want = Math.Atan2(hdy, hdx);
+                        double cur = Math.Atan2(bubble.Vy, bubble.Vx);
+                        double diff = want - cur;
+                        while (diff > Math.PI) diff -= 2 * Math.PI;
+                        while (diff < -Math.PI) diff += 2 * Math.PI;
+                        double ts = dt / TickIntervalSec;
+                        double maxTurn = 0.065 * Math.Max(ts, 0.4);   // WPF :3037 (~3.7°/frame)
+                        double na = cur + Math.Clamp(diff, -maxTurn, maxTurn);
+                        double spd = Math.Sqrt(bubble.Vx * bubble.Vx + bubble.Vy * bubble.Vy);
+                        bubble.Vx = Math.Cos(na) * spd;
+                        bubble.Vy = Math.Sin(na) * spd;
+                    }
+                }
+            }
+
             // WPF parity (BubbleService.cs:2971): a channeling bubble is PINNED in place so it
             // cannot drift out of its own hit circle mid-hold "for free". Motion resumes if the
             // channel breaks.
@@ -1082,10 +1177,60 @@ public sealed class BubbleEngine
                     return;
                 }
             }
+
+            // The Pull / Cam Girl: the whole field leans toward (or squirms away from) the cursor
+            // (WPF BubbleService.cs:3213-3247). Ordinary chaos bubbles only — darters have their
+            // own homing above, escorts orbit their live and the tease wiggles in place (both
+            // skip the pull via `goto Visuals` in WPF, :3117-3166). CursorPull is in WPF DIPs per
+            // 32ms frame; × WpfFramesPerSecond × dt reproduces WPF's `step = pull * ts` exactly.
+            if (Knobs.CursorPull != 0 && dt > 0 && !spec.IsDarter && !spec.IsEscort && !spec.IsTease)
+            {
+                var pullCursor = _pointerState.GetCursorPosition();
+                if (pullCursor.HasValue)
+                {
+                    double pull = Knobs.CursorPull;
+                    double pcx = pullCursor.Value.X / bubble.Scaling;
+                    double pcy = pullCursor.Value.Y / bubble.Scaling;
+                    double bcx = bubble.X + bubble.Size / 2.0;
+                    double bcy = bubble.Y + bubble.Size / 2.0;
+                    if (pull > 0)
+                    {
+                        double pdx = pcx - bcx, pdy = pcy - bcy;
+                        double pd = Math.Sqrt(pdx * pdx + pdy * pdy);
+                        if (pd > 30)   // dead zone — no jitter right under the cursor (WPF :3221)
+                        {
+                            double step = pull * WpfFramesPerSecond * dt;   // WPF :3223 step = pull * ts
+                            bubble.X += pdx / pd * step;
+                            bubble.Y += pdy / pd * step;
+                        }
+                    }
+                    else
+                    {
+                        // Cam Girl: repulsion only bites when the cursor closes in, fades with
+                        // distance, and is clamped on-screen so the flee can't shove a bubble out
+                        // of reach for good (WPF :3230-3245, FLEE_RADIUS = 260).
+                        const double FleeRadiusDip = 260.0;
+                        double fdx = bcx - pcx, fdy = bcy - pcy;
+                        double fd = Math.Sqrt(fdx * fdx + fdy * fdy);
+                        if (fd < FleeRadiusDip && fd > 1)
+                        {
+                            double step = -pull * WpfFramesPerSecond * dt * (1.0 - fd / FleeRadiusDip);   // WPF :3240
+                            double maxX = Math.Max(bubble.ScreenBounds.X, bubble.ScreenBounds.Right - bubble.Size);
+                            double maxY = Math.Max(bubble.ScreenBounds.Y, bubble.ScreenBounds.Bottom - bubble.Size);
+                            bubble.X = Math.Clamp(bubble.X + fdx / fd * step, bubble.ScreenBounds.X, maxX);
+                            bubble.Y = Math.Clamp(bubble.Y + fdy / fd * step, bubble.ScreenBounds.Y, maxY);
+                        }
+                    }
+                }
+            }
         }
 
-        // Tail-Plug: record trail points for darter/rabbit bubbles while the boon holds.
-        if (_rabbitTrailSec > 0 && spec.IsDarter && bubble.TelegraphComplete && !bubble.IsPopping)
+        // Tail-Plug: record trail points for darter/rabbit bubbles while the boon holds. GG
+        // sweepers ALWAYS drag a trail — an amber flair streak, min 0.5s — boon or not (WPF
+        // BubbleService.cs:3078-3082); without the boon that trail never POPS anything
+        // (the trail-pop sweep gates on the knob, WPF :1427).
+        double trailSec = spec.IsSweeper ? Math.Max(0.5, Knobs.RabbitTrailSec) : Knobs.RabbitTrailSec;
+        if (trailSec > 0 && spec.IsDarter && bubble.TelegraphComplete && !bubble.IsPopping)
         {
             var nowPx = CenterPx(bubble);
             var tdx = nowPx.X - bubble.LastTrailEmitPx.X;
@@ -1095,13 +1240,13 @@ public sealed class BubbleEngine
                 bubble.LastTrailEmitPx = nowPx;
                 bubble.TrailPoints.Add((nowPx, DateTime.UtcNow));
             }
-            var cutoff = DateTime.UtcNow.AddSeconds(-_rabbitTrailSec);
+            var cutoff = DateTime.UtcNow.AddSeconds(-trailSec);
             while (bubble.TrailPoints.Count > 0 && bubble.TrailPoints[0].T < cutoff)
                 bubble.TrailPoints.RemoveAt(0);
             if (bubble.TrailPoints.Count > TRAIL_MAX_POINTS)
                 bubble.TrailPoints.RemoveAt(0);
         }
-        else if (!spec.IsDarter || _rabbitTrailSec <= 0)
+        else if (!spec.IsDarter || trailSec <= 0)
         {
             bubble.TrailPoints.Clear();
         }
@@ -1133,7 +1278,9 @@ public sealed class BubbleEngine
                 {
                     var discCx = (bubble.X + bubble.Size / 2.0) * bubble.Scaling;
                     var discCy = (bubble.Y + bubble.Size / 2.0) * bubble.Scaling;
-                    var discR = (bubble.Size / 2.0) * bubble.Scaling;
+                    // Stray reach is the spawn-stamped HIT size — WPF TickChannel measures against
+                    // _hitSize/2, the enlarged disc (WPF BubbleService.cs:3623).
+                    var discR = (bubble.HitSize / 2.0) * bubble.Scaling;
                     var strayDx = strayCursor.Value.X - discCx;
                     var strayDy = strayCursor.Value.Y - discCy;
                     if (strayDx * strayDx + strayDy * strayDy > discR * discR)
@@ -1221,11 +1368,13 @@ public sealed class BubbleEngine
 
     private void ChainPop(BubbleState source)
     {
-        if (source.Spec == null || _chainReachDip <= 0) return;
+        if (source.Spec == null || Knobs.ChainReachDip <= 0) return;
 
         var cx = source.X + source.Size / 2.0;
         var cy = source.Y + source.Size / 2.0;
-        var reachSq = _chainReachDip * _chainReachDip;
+        // Live knob read (S4b-4): WPF re-invokes the chainReach lambda on every pop
+        // (BubbleService.cs:1610), so a mid-run boon level-up widens the next burst.
+        var reachSq = Knobs.ChainReachDip * Knobs.ChainReachDip;
 
         foreach (var other in _bubbles.ToList())
         {
@@ -1250,7 +1399,7 @@ public sealed class BubbleEngine
     {
         if (!_chaosActive || _chaosFrozen) return;
         if (_ripples.Count == 0 && _residues.Count == 0 && _playerRipples.Count == 0
-            && _rabbitTrailSec <= 0) return;
+            && Knobs.RabbitTrailSec <= 0) return;
 
         static double DistSq(Point a, Point b)
         {
@@ -1323,7 +1472,9 @@ public sealed class BubbleEngine
         }
 
         // Tail-Plug: every rabbit's recorded trail brushes treats and live bubbles open.
-        if (_rabbitTrailSec > 0)
+        // Live knob gate (WPF BubbleService.cs:1427): with the boon off, even a sweeper's
+        // always-on flair trail pops nothing.
+        if (Knobs.RabbitTrailSec > 0)
         {
             foreach (var darter in snapshot)
             {
@@ -1343,6 +1494,90 @@ public sealed class BubbleEngine
                 }
             }
         }
+    }
+
+    /// <summary>A spanked rabbit's body mows plain bubbles — live ones snap, treats pop; other
+    /// darters and freeze pickups are immune (WPF BubbleService.cs:1564-1579 SpankSweepFromDarter,
+    /// invoked per-frame from the darter's AnimateFrame :3075-3076). The swath is the darter's
+    /// body box grown by its one-time spank swell (WPF :2443 <c>SpankReach = ChainReach(Max(1.0,
+    /// _spankGrowth))</c>, :2433 grown about the centre). Electrified Rabbits: each victim also
+    /// discharges free E-Stim arcs into its neighbours (WPF :1576). Boxes compare in PHYSICAL px
+    /// (engine bubbles live in per-screen logical units; WPF compares DIP boxes on one plane).
+    /// The tease and the Brittle stay cursor-only like every other auto-sweep (WPF :1387-1389
+    /// states the auto-sweep rule; this engine's PopBubble would route a tease as a TOUCH — a
+    /// detonation — where WPF's raw Pop() paid it as a plain pop, so sweeping them would punish
+    /// where WPF rewards).</summary>
+    private void TickSpankSweeps()
+    {
+        if (!_chaosActive || _chaosFrozen) return;
+
+        var snapshot = _bubbles.ToArray();
+        foreach (var darter in snapshot)
+        {
+            if (darter.Spec?.IsDarter != true || !darter.IsSpanked || darter.IsPopping) continue;
+
+            var ds = darter.Scaling > 0 ? darter.Scaling : 1.0;
+            var grow = darter.Size * (Math.Max(1.0, darter.SpankGrowth) - 1.0);
+            var reachX = (darter.X - grow / 2.0) * ds;
+            var reachY = (darter.Y - grow / 2.0) * ds;
+            var reachW = (darter.Size + grow) * ds;
+
+            foreach (var b in snapshot)
+            {
+                if (b.IsPopping || b.Spec == null || ReferenceEquals(b, darter)) continue;
+                if (b.Spec.IsDarter || b.Spec.IsFreeze) continue;           // WPF :1571
+                if (b.Spec.IsTease || b.Spec.IsBrittle) continue;           // cursor-only (see doc)
+
+                var bs = b.Scaling > 0 ? b.Scaling : 1.0;
+                var bx = b.X * bs;
+                var by = b.Y * bs;
+                var bsz = b.Size * bs;
+                bool intersects = reachX < bx + bsz && reachX + reachW > bx
+                                  && reachY < by + bsz && reachY + reachW > by;   // WPF :1572 IntersectsWith
+                if (!intersects) continue;
+
+                var victimPx = CenterPx(b);
+                PopBubble(b.Id);
+                // Live knob read (S4b-4): Electrified Rabbits fires free arcs per mowed victim
+                // (WPF :1576). FX/audio (Strike overlay, estim_zap cue) are head-side follow-ups.
+                if (Knobs.ElectrifiedRabbits)
+                    EStimBurstAt(victimPx, ESTIM_ARCS_PER_POP);
+            }
+        }
+    }
+
+    /// <summary>Free E-Stim discharge: pops up to <paramref name="maxArcs"/> nearest suitable
+    /// bubbles within <see cref="ESTIM_BURST_RANGE_PX"/> of <paramref name="fromPx"/> — treats
+    /// pop, live ones snap; rabbits and freeze pickups don't conduct, nor do the tease/brittle/
+    /// shielded chaperones (WPF BubbleService.cs:407-441 EStimBurstAt + the IsChainable filter
+    /// :2386). No charge is consumed and the arcs never chain onward; WPF's per-arc hop timers
+    /// (ESTIM_HOP_MS stagger) are collapsed to immediate pops, matching this engine's
+    /// pre-existing ChainPop simplification. Strike/zap FX are head-side follow-ups.</summary>
+    private void EStimBurstAt(Point fromPx, int maxArcs)
+    {
+        if (!_chaosActive || maxArcs <= 0) return;
+
+        static double DistSq(Point a, Point b)
+        {
+            var dx = a.X - b.X;
+            var dy = a.Y - b.Y;
+            return dx * dx + dy * dy;
+        }
+
+        var pool = new List<BubbleState>();
+        var rangeSq = ESTIM_BURST_RANGE_PX * ESTIM_BURST_RANGE_PX;
+        foreach (var b in _bubbles.ToArray())
+        {
+            if (b.IsPopping || b.Spec == null) continue;
+            if (b.Spec.IsDarter || b.Spec.IsFreeze || b.Spec.IsTease || b.Spec.IsBrittle) continue;
+            if (b.IsShielded) continue;   // chains and arcs route around a shielded live (WPF :2386)
+            if (DistSq(CenterPx(b), fromPx) <= rangeSq) pool.Add(b);
+        }
+        if (pool.Count == 0) return;
+
+        pool.Sort((x, y) => DistSq(CenterPx(x), fromPx).CompareTo(DistSq(CenterPx(y), fromPx)));
+        for (int i = 0; i < pool.Count && i < maxArcs; i++)
+            PopBubble(pool[i].Id);
     }
 
     private void FlingDarter(BubbleState darter, Point originPx)

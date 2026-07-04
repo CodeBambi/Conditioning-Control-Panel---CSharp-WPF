@@ -34,6 +34,18 @@ public sealed class BubbleState
     /// <summary>Bubble visual size in DIPs.</summary>
     public double Size { get; init; }
 
+    private double _hitSize;
+
+    /// <summary>Enlarged click-target size in DIPs (&gt;= <see cref="Size"/>) — the Wand/Mesmer
+    /// hitbox multiple and the Silk Touch live magnet, sampled AT SPAWN like the WPF Bubble ctor
+    /// (WPF BubbleService.cs:2539-2541 <c>_hitSize</c>). Unset (0) falls back to <see cref="Size"/>
+    /// so ambient bubbles and existing fakes keep the natural hitbox.</summary>
+    public double HitSize
+    {
+        get => _hitSize > 0 ? _hitSize : Size;
+        set => _hitSize = value;
+    }
+
     /// <summary>Seconds of life remaining.</summary>
     public double LifeRemainingSec { get; set; }
 
@@ -117,6 +129,15 @@ public sealed class BubbleState
     /// fires only on the first smack (WPF BubbleService.cs:3789 <c>if (!_isSpanked)</c>), so this
     /// latch stops the callback re-firing on later smacks.</summary>
     public bool IsSpanked { get; set; }
+
+    /// <summary>The Spanker's ONE-TIME swell factor, stamped on the first smack only —
+    /// <c>Max(1.0, spankGrow)</c>, re-smacks never compound it (WPF BubbleService.cs:3794-3796
+    /// <c>_spankGrowth</c>). Also grows the spank-sweep mow swath (WPF :2443 SpankReach).</summary>
+    public double SpankGrowth { get; set; } = 1.0;
+
+    /// <summary>Per-smack cooldown so one press can't machine-gun redirects
+    /// (WPF BubbleService.cs:3775-3776: 250ms, ticked down flat -32/frame at :3073).</summary>
+    public double SpankCooldownMs { get; set; }
 
     // ---- Stage 2c field hazards ----
 

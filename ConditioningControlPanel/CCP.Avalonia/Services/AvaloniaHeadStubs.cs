@@ -387,14 +387,14 @@ public sealed class AvaloniaChaosService : IChaosService
         // Full behavioral callback set — the WPF BeginChaosMode wiring (WPF ChaosModeService.cs:361-381)
         // mapped onto the Core BubbleEngine surface. The WPF live-lambda knobs (chainReach,
         // hitboxScale, bubbleOpacity, cursorPull, rabbitHoming, spankerOn/spankGrow, liveMagnet,
-        // rabbitTrailSec, electrifiedRabbits, wandShimmer, onEStimArc) have no engine seam yet —
-        // follow-up rows on the port plan, not faked here.
+        // rabbitTrailSec, electrifiedRabbits) live on the engine's ChaosRunKnobs, pushed by
+        // SyncKnobsFromState below (S4b-4). wandShimmer is retired (WPF :370 hard-codes false);
+        // onEStimArc has no engine seam until the charged E-Stim chain is ported — follow-up row.
         // onChaperoneShieldBroken: WPF has NO service-side handler — the escort pop is a normal
         // treat pop and the shield release is engine-internal (WPF BubbleService.cs:1148-1184).
         // onDarterSpanked: fired by the engine on a darter's first SMACK (S4b-3) — only when the
         // Spanker is on (ChaosKnobs.SpankerOn, WPF BubbleService.cs:3706-3708; spank REPLACES the
-        // catch) or for born-spanked sweepers (never fires — latch pre-set). Until the Spanker toy
-        // is ported nothing sets SpankerOn, so darters are plain catches — no double lesson tick.
+        // catch) or for born-spanked sweepers (never fires — latch pre-set).
         _bubbles.BeginChaosMode(
             OnBenignPopped,
             OnDefused,
@@ -410,6 +410,11 @@ public sealed class AvaloniaChaosService : IChaosService
             canChannel: CanChannelDefuse,
             onChannelStarted: OnChannelStarted,
             onChannelBroken: OnChannelBroken);
+
+        // Seed the live knobs immediately after BeginChaosMode (which Reset() them) so the
+        // config-shaped values — silk_touch HitboxScale/MagnetEnabled — hold from the first
+        // spawn, exactly like WPF's lambdas being live from wiring (WPF ChaosModeService.cs:363-386).
+        SyncKnobsFromState();
 
         // Fresh run-transient spawn-director state (WPF ChaosModeService.cs:395-403, 421-422).
         EndSlowMo(); EndFreeze();   // clean power-up state for the new run (no leak across runs) (WPF :399)
@@ -465,6 +470,10 @@ public sealed class AvaloniaChaosService : IChaosService
         // Active skills: build state, listen for keybinds, spawn one hero button per toy.
         BuildActiveToys();
         _state.RaiseChanged(nameof(ChaosRunState.ActiveToys));
+
+        // Re-push the knobs now that the equipped start boon, lifetime boons and toys have
+        // mutated the run state (each was a live-lambda read in WPF, ChaosModeService.cs:363-386).
+        SyncKnobsFromState();
         StartKeyHook();
         StartRippleHook();
         RunOnUi(() =>
@@ -1430,6 +1439,37 @@ public sealed class AvaloniaChaosService : IChaosService
         try { _tunnel?.SetStreak(_state.Combo, _state.ComboMult); } catch (Exception ex) { _logger?.LogDebug("ChaosTunnel SetStreak failed: {E}", ex.Message); }
     }
 
+    /// <summary>Writes every live-knob value from the run state into the engine's
+    /// <see cref="ChaosRunKnobs"/> — the port's equivalent of the live lambdas WPF passes into
+    /// BeginChaosMode (WPF ChaosModeService.cs:363-386, formulas verbatim). Called at run start
+    /// and after every state mutation any lambda read (boon picks, lifetime boons, toys), so
+    /// owned upgrades and drafted boons take effect mid-run.</summary>
+    private void SyncKnobsFromState()
+    {
+        var knobs = _bubbles.ChaosKnobs;
+        var s = _state;
+        if (knobs == null || s == null) return;
+
+        // chainReach: () => _state?.ChainReactionReach ?? 0 (WPF :367) — a box-MULTIPLE, <=1 = off
+        // (WPF BubbleService.cs:1610-1611 `if (reachMult <= 1.0) return`). The engine's chain knob
+        // is a centre-distance DIP radius, so the multiple maps onto the engine's 120-DIP base
+        // reach; <=1 turns chaining OFF, matching WPF's no-boon default.
+        // (plan: chaos-run-engine-port-plan.md S4b-4) the engine's ChainPop still differs from
+        // WPF ChainPopNeighbors (pickup-only targets, no 80ms hop stagger, benign-pop trigger
+        // only) — reported as a follow-up row; this sync only makes the reach LIVE.
+        knobs.ChainReachDip = s.ChainReactionReach <= 1.0 ? 0.0 : 120.0 * s.ChainReactionReach;
+        knobs.HitboxScale = s.Config?.HitboxScale ?? 1.0;                     // WPF :368
+        knobs.BubbleOpacity = s.BlindfoldActive ? s.BlindfoldOpacity : 1.0;   // WPF :369
+        // wandShimmer: () => false — magic_wand retired 2026-06-10, not ported (WPF :370).
+        knobs.CursorPull = s.CursorPullStrength - s.CamGirlFlee;              // WPF :371 (Cam Girl flees; The Pull fights back)
+        knobs.RabbitHoming = s.CursorPullStrength > 0;                        // WPF :372
+        knobs.SpankerOn = s.SpankerActive;                                    // WPF :373
+        knobs.SpankGrow = Math.Max(1.0, s.SpankGrowFactor);                   // WPF :374, per-tick clamp WPF BubbleService.cs:489
+        knobs.LiveMagnet = s.MagnetEnabled;                                   // WPF :375
+        knobs.RabbitTrailSec = Math.Max(0.0, s.RabbitTrailSec);               // WPF :378, per-tick clamp WPF BubbleService.cs:490
+        knobs.ElectrifiedRabbits = s.ElectrifiedRabbits;                      // WPF :379
+    }
+
     private void ShowDraft()
     {
         if (_overlay == null || _state == null || _ending) return;
@@ -1486,6 +1526,10 @@ public sealed class AvaloniaChaosService : IChaosService
             bool shielded = ChaosHappyPath.ShouldShieldSin(boon.Id);
             // ApplyBoon pushes the pick tile + "☠/◈ {Name}" feed line itself now (WPF ChaosModels.cs:604-620).
             _state.ApplyBoon(boon, shielded);
+            // Push the pick's state mutations into the engine's live knobs — the WPF lambdas saw
+            // them on the next frame automatically (WPF ChaosModeService.cs:363-386); the port
+            // syncs explicitly after every mutation (S4b-4).
+            SyncKnobsFromState();
             ChaosBoonBarOverlay.SetPicks(_state.RunPickTiles);   // ribbon reflects the new pick (WPF ChaosModeService.cs:417)
             ChaosLessonHooks.OnDraftCardTaken(boon.IsCurse);
             if (boon.IsCurse)
