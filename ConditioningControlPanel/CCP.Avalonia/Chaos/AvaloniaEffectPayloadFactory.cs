@@ -22,7 +22,10 @@ public static class AvaloniaEffectPayloadFactory
             "braindrain"        => new OverlayPayload("braindrain"),
             "bambifreeze"       => new BambiFreezePayload(),
             "video"             => new VideoPayload(),
-            "htlink"            => new HtLinkPayload(),
+            // "htlink" displays as "Gif Rain": the HypnoTube-link payload is long gone — the
+            // variant carries the GifCascade payload now (WPF ChaosBubbleVariants.cs:674-675,
+            // EffectBubblePayloadKind.GifCascade). The id stays "htlink" for save/discovery.
+            "htlink"            => new GifCascadePayload(),
             "whisper"           => new AudioPayload(),
             "audio"             => new AudioPayload(),
             "bouncing"          => new BouncingTextPayload(),

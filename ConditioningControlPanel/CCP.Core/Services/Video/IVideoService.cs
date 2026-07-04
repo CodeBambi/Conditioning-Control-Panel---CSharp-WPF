@@ -51,6 +51,15 @@ public interface IVideoService
     /// <summary>Immediately triggers a random video, with optional stuck-state force cleanup.</summary>
     void TriggerVideo();
 
+    /// <summary>
+    /// Chaos: arm the NEXT video to start at a random position with at least
+    /// <paramref name="segmentSec"/> seconds left to play, so a chaos-capped video reads as a
+    /// random slice (WPF VideoService.ArmRandomSegment; EffectPayload.cs:154-166). Default no-op
+    /// so heads and test fakes without segment support keep compiling; only the segment-aware
+    /// head (AvaloniaVideoService) implements it.
+    /// </summary>
+    void ArmRandomSegment(double segmentSec) { }
+
     /// <summary>Forcibly cleans up any stuck video windows and resets the interaction queue.</summary>
     void ForceCleanup();
 

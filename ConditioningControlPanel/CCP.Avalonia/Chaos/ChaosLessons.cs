@@ -308,6 +308,29 @@ public static class ChaosLessonHooks
         if (until > _busyUntilUtc) _busyUntilUtc = until;
     }
 
+    /// <summary>Screen-busy by payload KIND (the FireScaledPayload path). Mirrors WPF
+    /// ChaosLessonHooks.RegisterScreenBusy(EffectBubblePayloadKind) per-family durations
+    /// (WPF ChaosLessonHooks.cs:239-257).</summary>
+    private static void RegisterScreenBusy(EffectBubblePayloadKind kind)
+    {
+        if (ChaosLessons.IsComplete("blindfold")) return;
+        double sec = kind switch
+        {
+            EffectBubblePayloadKind.Flash        => 1.5,
+            EffectBubblePayloadKind.Subliminal   => 1.2,
+            EffectBubblePayloadKind.Overlay      => 3.0,
+            EffectBubblePayloadKind.BambiFreeze  => 3.0,
+            EffectBubblePayloadKind.BouncingText => 3.0,
+            EffectBubblePayloadKind.Video        => 15.0,
+            EffectBubblePayloadKind.GifCascade   => 8.0,
+            EffectBubblePayloadKind.HtLink       => 8.0,
+            _ => 0,   // Audio: not a SCREEN effect
+        };
+        if (sec <= 0) return;
+        var until = DateTime.UtcNow.AddSeconds(sec);
+        if (until > _busyUntilUtc) _busyUntilUtc = until;
+    }
+
     /// <summary>Derived "the screen is busy" flag: a recent payload window or a video still playing.</summary>
     private static bool IsScreenBusy() =>
         DateTime.UtcNow < _busyUntilUtc || AvaloniaChaosApp.Video?.IsPlaying == true;
@@ -378,6 +401,11 @@ public static class ChaosLessonHooks
     public static void OnRippleCast() => Safe(() => { });
 
     public static void OnVideoEndured() => Safe(() => ChaosLessons.Tick("porn_dvd"));
+
+    /// <summary>A payload fired via FireScaledPayload (detonations + prisms). Registers the
+    /// blindfold screen-busy window by payload family (WPF ChaosModeService.cs:2198 →
+    /// ChaosLessonHooks.OnPayloadFired :237).</summary>
+    public static void OnPayloadFired(EffectBubblePayloadKind kind) => Safe(() => RegisterScreenBusy(kind));
 
     private static void Safe(Action a)
     {

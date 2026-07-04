@@ -241,13 +241,19 @@ public static class ChaosSpawnCatalog
     /// <paramref name="sideDriftChance"/> &gt; 0. Live fuse:
     /// <c>baseFuse = FuseMinMs + rng.Next(max(1, FuseMaxMs-FuseMinMs))</c>, then
     /// <c>fuse = (int)max(1200, baseFuse * (1 - intensity*0.25) * fuseTimeMult)</c>.
-    /// <para>DEVIATION: the WPF <c>ambient</c> parameter (dashboard "Trigger Bubbles" reuse,
-    /// WPF ChaosBubbleVariants.cs:711-718) is not ported in this slice — it flips a
-    /// payload-level <c>Ambient</c> flag the Core spec does not carry.</para>
+    /// <para>The optional <paramref name="ambient"/> parameter ports the WPF dashboard "Trigger
+    /// Bubbles" reuse (WPF ChaosBubbleVariants.cs:759-775): it forces the spec benign
+    /// (<c>IsLive=false</c>, <c>FuseMs=0</c>), remaps motion to FloatUp and gives it a 7s treat
+    /// life, and stamps <see cref="ChaosBubbleSpec.Ambient"/> so the head payload skips the video
+    /// random-segment arm (#456/#458). Ported in S6 (deferred by S1 EXTRA-1).</para>
     /// </summary>
+    /// <param name="ambient">Dashboard "Trigger Bubbles" reuse: force the spec benign (no fuse,
+    /// fires on pop) and FloatUp with a longer treat life, so any live variant behaves like a calm
+    /// ambient bubble (WPF ChaosBubbleVariants.cs:711-718 doc). Leaves the chaos look intact.</param>
     public static ChaosBubbleSpec Build(VariantDef variant, double intensity, double fuseTimeMult,
                                         ChaosMotion? motionOverride, double effectIntensity,
-                                        double sizeScale, double sideDriftChance, Random rng)
+                                        double sizeScale, double sideDriftChance, Random rng,
+                                        bool ambient = false)
     {
         double t = Math.Clamp(rng.NextDouble() * 0.7 + intensity * 0.45, 0, 1);
         double size = variant.MinSize + (variant.MaxSize - variant.MinSize) * t;
@@ -275,6 +281,16 @@ public static class ChaosSpawnCatalog
             fuse = (int)Math.Max(1200, baseFuse * (1.0 - intensity * 0.25) * fuseTimeMult);
         }
 
+        if (ambient)
+        {
+            // Trigger-bubble use (dashboard "Trigger Bubbles"): strip the fuse/defuse so it fires
+            // on pop, and float up gently. Payloads may tone themselves down on the calm dashboard
+            // (e.g. video skips the chaos random-segment arm — no 15s cap outside a run, #456/#458).
+            // The Ambient flag rides on the spec and the head stamps it onto the payload at build
+            // time (WPF ChaosBubbleVariants.cs:759-766 forces FloatUp + payload.Ambient=true).
+            motion = ChaosMotion.FloatUp;
+        }
+
         return new ChaosBubbleSpec
         {
             VariantId = variant.Id,
@@ -284,10 +300,12 @@ public static class ChaosSpawnCatalog
             SizePx = size,
             TintR = variant.TintR, TintG = variant.TintG, TintB = variant.TintB,
             Label = variant.Label,
-            IsLive = variant.IsLive,
+            IsLive = ambient ? false : variant.IsLive,   // WPF ChaosBubbleVariants.cs:772
             IsFreeze = isFreezeVariant,
-            FuseMs = fuse,
+            FuseMs = ambient ? 0 : fuse,                 // WPF ChaosBubbleVariants.cs:773
             Motion = motion,
+            TreatLifeMs = ambient ? 7000 : 0,            // WPF ChaosBubbleVariants.cs:775
+            Ambient = ambient,                           // WPF ChaosBubbleVariants.cs:764 payload.Ambient=true
             EffectIntensity = effectIntensity,
             SideDriftChance = sideDriftChance,
         };

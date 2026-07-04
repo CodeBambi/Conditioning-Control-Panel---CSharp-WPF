@@ -135,4 +135,11 @@ public sealed class ChaosBubbleSpec
     /// this instead of re-deriving strength from <see cref="SizePx"/> (the visual size is
     /// shrunk by the global field scale, so a SizePx-derived value would be wrong).</summary>
     public int Strength { get; init; }
+
+    /// <summary>Per-instance ambient flag: true only for dashboard "Trigger Bubbles" built via
+    /// <c>ChaosSpawnCatalog.Build(ambient: true)</c> (WPF ChaosBubbleVariants.cs:759-766 sets
+    /// <c>payload.Ambient = true</c>). The head stamps it onto the firable payload so a video
+    /// bubble skips the chaos random-segment arm outside a run (#456/#458). Run bubbles are
+    /// <c>false</c>.</summary>
+    public bool Ambient { get; init; }
 }

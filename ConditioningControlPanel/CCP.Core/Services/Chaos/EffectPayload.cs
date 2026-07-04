@@ -36,6 +36,15 @@ public abstract class EffectPayload
     /// <summary>0..100, scaled from bubble size at spawn. Drives effect intensity.</summary>
     public int Strength { get; set; }
 
+    /// <summary>True when this payload was built for a dashboard "Trigger Bubble" rather than a
+    /// chaos-run bubble (stamped by the head from <see cref="ChaosBubbleSpec.Ambient"/>, itself set
+    /// by the <c>ChaosSpawnCatalog.Build</c> ambient branch). Some payloads behave differently on
+    /// the calm dashboard — e.g. video must not arm a random start segment there (#456/#458). A
+    /// PER-INSTANCE flag, NOT a run-active check at fire time: ambient bubbles can pop while a chaos
+    /// run happens to be active, and a run can end between spawn and pop
+    /// (WPF EffectPayload.cs:48-54).</summary>
+    public bool Ambient { get; set; }
+
     /// <summary>
     /// Global multiplier on time-based payload durations (flashes/overlays linger). 1.0 = normal.
     /// </summary>

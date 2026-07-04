@@ -94,11 +94,22 @@ public sealed class VideoPayload : EffectPayload
     public override string DisplayName => "video";
     public override EffectBubblePayloadKind Kind => EffectBubblePayloadKind.Video;
 
+    /// <summary>Seconds of video a chaos tape shows — a random slice, ended by the chaos hard cap
+    /// (WPF EffectPayload.cs:154 VideoPayload.SEGMENT_SEC; = ChaosModeService VIDEO_HARD_CAP_SEC).</summary>
+    public const double SEGMENT_SEC = 15;
+
     public override void Fire()
     {
         try
         {
-            App.Services?.GetService<IVideoService>()?.TriggerVideo();
+            var video = App.Services?.GetService<IVideoService>();
+            // Only chaos caps playback (~15s via _chaosVideoCapUtc in RunTick), making a random
+            // start a "random slice". Dashboard trigger bubbles reuse this payload uncapped, so
+            // arming there would start the full mandatory video midway (#456/#458) — gate on the
+            // PER-INSTANCE Ambient flag, NOT cfg.AmbientMode (WPF EffectPayload.cs:158-166).
+            if (!Ambient)
+                video?.ArmRandomSegment(SEGMENT_SEC);
+            video?.TriggerVideo();
         }
         catch (Exception ex)
         {

@@ -144,10 +144,16 @@ public sealed class AvaloniaChaosService : IChaosService
     private int _spawnSerial;
     // Side-drift grace counter (WPF :1147-1148 / SIDE_DRIFT_GRACE_SPAWNS; reset :401).
     private int _ordinarySpawns;
-    // Heavy-payload gate: expected end of a running heavy effect. The payload paths arm it in
-    // S6 (chaos-run-engine-port-plan.md); until then it stays MinValue and only the live
-    // video/cascade checks gate (WPF ChaosModeService.cs:2156 _heavyUntilUtc; reset :402).
-    private DateTime _heavyUntilUtc = DateTime.MinValue;
+    // Heavy-payload gate (video + gif cascade): ONE at a time, never queued. While a heavy effect
+    // runs, any further heavy detonation is dropped — stacked LibVLC players + cascade windows is
+    // what crashed the app. Armed by the S6 detonation paths (WPF ChaosModeService.cs:2154 :402).
+    private DateTime _heavyUntilUtc = DateTime.MinValue;    // expected end of the running heavy effect
+    // Hard stop for a chaos-fired video: RunTick force-ends playback at this instant so a chaos
+    // tape never runs past its 15s slice (WPF ChaosModeService.cs:2155 _chaosVideoCapUtc; reset :402).
+    private DateTime _chaosVideoCapUtc = DateTime.MinValue;
+    private const double VIDEO_HARD_CAP_SEC = 15;           // = VideoPayload.SEGMENT_SEC (WPF ChaosModeService.cs:2156)
+    private const double VIDEO_TEARDOWN_QUARANTINE_SEC = 3; // heavy gate stays shut after a video ends (WPF :2168)
+    private static readonly Random _ambientRng = new();     // ambient soft-remap coin (WPF ChaosModeService.cs:2270)
     // Darter slow-mo runs on the real clock, like the freeze (WPF ChaosModeService.cs:2325).
     private double _slowMoRemainingSec;
     private bool _slowMoCueOn;   // an in-cue played; the matching out-cue is owed on end (WPF :2965)
@@ -448,7 +454,7 @@ public sealed class AvaloniaChaosService : IChaosService
         // Fresh run-transient spawn-director state (WPF ChaosModeService.cs:395-403, 421-422).
         EndSlowMo(); EndFreeze();   // clean power-up state for the new run (no leak across runs) (WPF :399)
         _spawnSerial = 0; _ordinarySpawns = 0; _pendulumSlowActive = false;   // WPF :401
-        _heavyUntilUtc = DateTime.MinValue;                                    // WPF :402
+        _heavyUntilUtc = DateTime.MinValue; _chaosVideoCapUtc = DateTime.MinValue;   // WPF :402
         _heartRolledWave = 0; _heartArmedThisWave = false;                     // WPF :400
         _teaseDeniedThisRun = 0; _teaseDeniedStreakBarked = false;             // WPF :421-422
         // Draft/act lifecycle per-run resets (WPF ChaosModeService.cs:390-394).
@@ -531,7 +537,31 @@ public sealed class AvaloniaChaosService : IChaosService
             }
         });
 
+        // A video ending mid-run (natural end, attention-check retry, cap) opens the teardown
+        // quarantine so no cascade rises into the LibVLC disposal churn (WPF ChaosModeService.cs:501).
+        if (_video != null)
+        {
+            _video.VideoEnded -= OnVideoEndedDuringRun;   // idempotent: never double-subscribe across runs
+            _video.VideoEnded += OnVideoEndedDuringRun;
+        }
+
         StartTimers();
+    }
+
+    /// <summary>Any video ending during a run starts the teardown quarantine so no cascade rises
+    /// into the LibVLC disposal churn (WPF ChaosModeService.cs:2131-2137 OnVideoEndedDuringRun).</summary>
+    private void OnVideoEndedDuringRun(object? sender, EventArgs e)
+    {
+        ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);
+    }
+
+    /// <summary>Push the heavy-gate floor out by <paramref name="sec"/> after a video ends — closing
+    /// LibVLC players runs async for seconds; a cascade rising into that churn wedged the render
+    /// thread (WPF ChaosModeService.cs:2170-2174 ExtendHeavyQuarantine).</summary>
+    private void ExtendHeavyQuarantine(double sec)
+    {
+        var until = DateTime.UtcNow.AddSeconds(sec);
+        if (until > _heavyUntilUtc) _heavyUntilUtc = until;
     }
 
     private void StartTimers()
@@ -643,6 +673,31 @@ public sealed class AvaloniaChaosService : IChaosService
         }
 
         UpdateStateText();
+
+        // Mandatory-video hard caps: a chaos-fired video never runs past its 15s slice, and never
+        // into the run's final 3s (the recap should never land on top of a playing tape). The cap
+        // makes the random-armed start read as a "random slice" (WPF ChaosModeService.cs:1043-1064).
+        if (_chaosVideoCapUtc != DateTime.MinValue)
+        {
+            bool capHit = DateTime.UtcNow >= _chaosVideoCapUtc;
+            bool runClosing = _state.RunDurationSec - _state.ElapsedSec <= 3;
+            if (_video?.IsPlaying == true && (capHit || runClosing))
+            {
+                _chaosVideoCapUtc = DateTime.MinValue;
+                try { _video?.ForceCleanup(); } catch (Exception ex) { _logger?.LogDebug("Chaos video cap: {E}", ex.Message); }
+                ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);   // ForceCleanup may not raise VideoEnded (WPF :1052)
+                _state.PushEvent("▶ the tape snaps off");
+                // porn_dvd lesson: the full slice ran (the 15s cap IS the slice length); a
+                // run-closing cut before the cap is an abort and doesn't count (WPF :1056-1058).
+                if (capHit) ChaosLessonHooks.OnVideoEndured();
+            }
+            else if (_video?.IsPlaying != true && capHit)
+            {
+                _chaosVideoCapUtc = DateTime.MinValue;   // ended on its own — clear the cap (WPF :1060)
+                ExtendHeavyQuarantine(VIDEO_TEARDOWN_QUARANTINE_SEC);
+                ChaosLessonHooks.OnVideoEndured();       // porn_dvd: endured to its natural end (WPF :1062)
+            }
+        }
 
         // Run end first (WPF ChaosModeService.cs:1078-1090; the Relapse loop extension is S7).
         if (_state.ElapsedSec >= _state.RunDurationSec)
@@ -969,7 +1024,8 @@ public sealed class AvaloniaChaosService : IChaosService
         {
             ChaosLessonHooks.OnPrismPopped();   // taking_chances lesson (WPF :1831)
             _state.Focus = Math.Min(_state.FocusMax, _state.Focus + CoreChaosTuning.FOCUS_PER_PRISM);
-            FirePayload(spec);                  // the mimicked payload fires (WPF FireScaledPayload :1833)
+            var prismPayload = BuildPayload(spec);
+            if (prismPayload != null) FireScaledPayload(prismPayload);   // the mimicked payload fires, duration-scaled (WPF FireScaledPayload :1833)
             _state.EffectsFired++;
             _state.Combo++;
             _state.Heat = Math.Min(1.0, _state.Heat + 0.05);
@@ -1083,7 +1139,7 @@ public sealed class AvaloniaChaosService : IChaosService
         // it); the detonation consequences below still apply to the parent.
         if (!spec.IsEcho)
         {
-            FirePayload(spec);   // the threat goes off (WPF FirePayloadForDetonation :2082)
+            FirePayloadForDetonation(spec);   // the threat goes off, through the heavy gate (WPF FirePayloadForDetonation :2082)
             _state.EffectsFired++;
         }
         _state.Detonated++;
@@ -1138,39 +1194,121 @@ public sealed class AvaloniaChaosService : IChaosService
         UpdateStateText();
     }
 
-    /// <summary>Build an effect payload from a bubble spec's PayloadKind.</summary>
+    /// <summary>Build the firable payload for a run bubble from its variant id, stamped with the
+    /// spec's build-time Strength and per-instance Ambient flag. SINGLE MAP: delegates to
+    /// <see cref="AvaloniaEffectPayloadFactory.ForVariant"/> — the WPF equivalent is
+    /// <c>EffectPayloadFactory.Build(variant.PayloadKind)</c> off the one variant-›-payload binding
+    /// (WPF ChaosBubbleVariants.cs:296 / :649-676). Prism/Brittle mimics already carry the copied
+    /// variant's PayloadKind (Core ChaosSpawnCatalog.BuildPrism/BuildBrittle set
+    /// <c>PayloadKind = mimic.PayloadKind</c>), so the variant id alone selects the right payload.</summary>
     private static EffectPayload? BuildPayload(ChaosBubbleSpec spec)
     {
         try
         {
-            EffectPayload payload;
-            switch (spec.PayloadKind)
-            {
-                case "flash": payload = new FlashPayload(); break;
-                case "subliminal": payload = new SubliminalPayload(); break;
-                case "pink": payload = new OverlayPayload("pink_filter"); break;
-                case "spiral": payload = new OverlayPayload("spiral"); break;
-                case "braindrain": payload = new OverlayPayload("braindrain"); break;
-                case "bambifreeze": payload = new BambiFreezePayload(); break;
-                case "video": payload = new VideoPayload(); break;
-                case "htlink": payload = new GifCascadePayload(); break;
-                default: payload = new FlashPayload(); break;
-            }
-
-            double size = spec.SizePx;
-            const double sizeMin = 150;
-            const double sizeMax = 320;
-            int strength = (int)Math.Round(Math.Clamp((size - sizeMin) / (sizeMax - sizeMin), 0, 1) * 100);
-            payload.Strength = strength;
+            var payload = AvaloniaEffectPayloadFactory.ForVariant(spec.PayloadKind);
+            if (payload == null) return null;
+            // Strength is the WPF classic-size value stamped at build (ChaosBubbleSpec.Strength) —
+            // NOT re-derived from the field-shrunk visual SizePx, which would read wrong.
+            payload.Strength = spec.Strength;
+            // Per-instance ambient flag (#456/#458): dashboard trigger bubbles skip the video
+            // random-segment arm; run bubbles (Ambient=false) keep it (WPF EffectPayload.Ambient).
+            payload.Ambient = spec.Ambient;
             return payload;
         }
         catch { return null; }
     }
 
+    /// <summary>Benign treat pop: fire the payload DIRECTLY — no scaling wrapper, no OnPayloadFired
+    /// hook (the treat's screen-busy is registered by OnTreatPopped) (WPF ChaosModeService.cs:1854
+    /// path 1: <c>spec.Payload.Fire()</c>).</summary>
     private static void FirePayload(ChaosBubbleSpec spec)
     {
         var payload = BuildPayload(spec);
         payload?.Fire();
+    }
+
+    /// <summary>Fire a payload under "Playing with fire": detonation durations scale by the sin's
+    /// knob for exactly this call (GlobalDurationMult is shared with slow-mo/freeze — scope it).
+    /// Also registers the blindfold screen-busy window (WPF ChaosModeService.cs:2196-2210).</summary>
+    private void FireScaledPayload(EffectPayload payload)
+    {
+        ChaosLessonHooks.OnPayloadFired(payload.Kind);   // blindfold: the screen turns busy (WPF :2198)
+        double m = _state?.DetonationDurationMult ?? 1.0;
+        if (m == 1.0) { payload.Fire(); return; }
+        EffectPayload.GlobalDurationMult *= m;
+        try { payload.Fire(); }
+        finally { EffectPayload.GlobalDurationMult /= m; }
+    }
+
+    /// <summary>Fire a bubble's payload as a DETONATION (fuse expired / tease touched / brittle
+    /// shattered): the ambient soft-remap, the one-heavy-at-a-time gate, then the flavor stinger,
+    /// then the duration-scaled fire (WPF ChaosModeService.cs:2205-2261 FirePayloadForDetonation).</summary>
+    private void FirePayloadForDetonation(ChaosBubbleSpec spec)
+    {
+        var payload = BuildPayload(spec);
+        if (payload == null) return;
+        try
+        {
+            // Soft remap. While a heavy effect runs the coin always lands on text — never a second
+            // cascade on top of a running one (WPF ChaosModeService.cs:2207-2224).
+            if (_state?.Config?.AmbientMode == true && IsIntrusivePayload(payload.Kind))
+            {
+                bool cascade = !HeavyEffectActive && _ambientRng.NextDouble() < 0.5;
+                EffectPayload soft = cascade ? new GifCascadePayload() : new BouncingTextPayload();
+                soft.Strength = payload.Strength;
+                if (cascade)
+                    _heavyUntilUtc = DateTime.UtcNow.AddSeconds(GifCascadePayload.DURATION_SEC + 5);
+                PlayPayloadStinger(cascade ? "fx_rain_start" : "fx_text");   // WPF :2220
+                FireScaledPayload(soft);
+                return;
+            }
+        }
+        catch (Exception ex) { _logger?.LogDebug("Chaos ambient remap: {E}", ex.Message); }
+
+        // ONE heavy effect at a time: a video/cascade detonating while another heavy effect is up
+        // gets dropped on the floor — no queue, no stack (the shield/streak consequences upstream
+        // still applied) (WPF ChaosModeService.cs:2229-2246).
+        var kind = payload.Kind;
+        bool heavy = kind == EffectBubblePayloadKind.Video || kind == EffectBubblePayloadKind.GifCascade;
+        if (heavy && HeavyEffectActive)
+        {
+            _logger?.LogInformation("Chaos: dropped {Kind} detonation — a heavy effect is already running", kind);
+            _state?.PushEvent($"▶ the deep is busy — {payload.DisplayName} fizzles");
+            return;
+        }
+        if (kind == EffectBubblePayloadKind.Video)
+        {
+            _chaosVideoCapUtc = DateTime.UtcNow.AddSeconds(VIDEO_HARD_CAP_SEC);
+            _heavyUntilUtc = DateTime.UtcNow.AddSeconds(VIDEO_HARD_CAP_SEC + 3);   // cap + open/close slack (WPF :2239)
+        }
+        else if (kind == EffectBubblePayloadKind.GifCascade)
+        {
+            // Spawn window + the last clips' ride to the bottom of the screen (WPF :2244-2245).
+            _heavyUntilUtc = DateTime.UtcNow.AddSeconds(GifCascadePayload.DURATION_SEC + 5);
+        }
+        PlayPayloadStinger(StingerForVariant(spec.VariantId));   // WPF :2247
+        FireScaledPayload(payload);   // Playing with fire: detonations linger 50% longer (WPF :2248)
+    }
+
+    /// <summary>What ambient mode soft-remaps: HT links ONLY. Video is intentionally NOT here —
+    /// every run is forced FreeDesktop (AmbientMode=true), so remapping Video would make video
+    /// bubbles never play a video. NOTE: run htlink bubbles carry the GifCascade payload (not
+    /// HtLink), so this branch is dormant in a run, exactly like WPF (WPF ChaosModeService.cs:2263-2267).</summary>
+    private static bool IsIntrusivePayload(EffectBubblePayloadKind k) => k == EffectBubblePayloadKind.HtLink;
+
+    /// <summary>Flavor stinger over the detonation boom — one per payload family. Video, flash and
+    /// subliminal payloads carry their own audio, so they get no stinger (WPF ChaosModeService.cs:2251-2257).</summary>
+    private static string StingerForVariant(string variantId) => variantId switch
+    {
+        "braindrain" => "fx_drain",
+        "bambifreeze" => "fx_freeze",
+        "htlink" => "fx_rain_start",
+        _ => "",
+    };
+
+    private static void PlayPayloadStinger(string name)
+    {
+        if (name.Length > 0) AvaloniaChaosSfx.Play(name, 0.45f);   // WPF ChaosModeService.cs:2259-2262
     }
 
     /// <summary>Focus cost for one channel (Bound halves pay half each) — the formula lives in
@@ -1314,7 +1452,7 @@ public sealed class AvaloniaChaosService : IChaosService
         }
         else
         {
-            FirePayload(spec);   // WPF FirePayloadForDetonation :1349
+            FirePayloadForDetonation(spec);   // WPF FirePayloadForDetonation :1349
             _state.EffectsFired++;
             AvaloniaChaosSfx.Play("trigger", 0.55f);
             // WPF :1352 Shake(0.3+s*0.4, 320) — no screen-shake seam in this head yet (follow-up).
@@ -1380,7 +1518,7 @@ public sealed class AvaloniaChaosService : IChaosService
         }
         else
         {
-            FirePayload(spec);   // WPF FirePayloadForDetonation :1381
+            FirePayloadForDetonation(spec);   // WPF FirePayloadForDetonation :1381
             _state.EffectsFired++;
             // WPF :1384 Shake(0.25+s*0.35, 300) — no screen-shake seam (follow-up).
             _state.PushEvent($"◇ it shatters — {spec.PayloadKind} was inside");
@@ -1868,6 +2006,7 @@ public sealed class AvaloniaChaosService : IChaosService
         if (!_active || _ending) return;
         _ending = true;
         _spawning = false;
+        if (_video != null) _video.VideoEnded -= OnVideoEndedDuringRun;   // stop extending the heavy quarantine (WPF ChaosModeService.cs:3138)
         try { _crashSentinel?.Clear(); } catch { }               // the field is coming down (WPF ChaosModeService.cs:3126)
         try { ChaosBoonBarOverlay.CloseActive(); } catch { }     // WPF ChaosModeService.cs:3153
         try { ChaosWaveTimerOverlay.CloseActive(); } catch { }   // the pocket watch dies with the run (WPF ChaosModeService.cs:3149)
@@ -1935,6 +2074,7 @@ public sealed class AvaloniaChaosService : IChaosService
     private void CleanupAfterRun()
     {
         _logger?.LogDebug("CleanupAfterRun called");
+        if (_video != null) _video.VideoEnded -= OnVideoEndedDuringRun;   // hard-teardown paths unsubscribe too (WPF ChaosModeService.cs:3229 funnel)
         try { _crashSentinel?.Clear(); } catch { }   // every run teardown funnels here (WPF ChaosModeService.cs:3229)
         try { _tunnel?.CloseActive(); } catch { }
         ChaosHappyPath.OnRunEnded();

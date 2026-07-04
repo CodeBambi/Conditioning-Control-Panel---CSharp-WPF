@@ -263,6 +263,44 @@ public class ChaosSpawnCatalogTests
     }
 
     // ================================================================
+    // (3b) Ambient Build branch: dashboard "Trigger Bubbles" reuse
+    //      (WPF ChaosBubbleVariants.cs:759-775 — S6, deferred by S1 EXTRA-1)
+    // ================================================================
+
+    [Fact]
+    public void Build_Ambient_ForcesBenignFloatUpTreat()
+    {
+        // The video variant is a live, RainDown threat; the ambient branch strips its fuse and
+        // floats it up as a 7s treat, stamping the per-instance Ambient flag (WPF :759-775).
+        var video = ChaosSpawnCatalog.All[6];
+        Assert.True(video.IsLive);
+        Assert.Equal(ChaosMotion.RainDown, video.Motion);
+
+        var spec = ChaosSpawnCatalog.Build(video, 0.0, 1.0, null, 1.0, 1.0, 0.0,
+            new ScriptedRandom(doubles: new[] { 0.0 }, ints: new[] { 0 }), ambient: true);
+
+        Assert.False(spec.IsLive);                        // WPF :772
+        Assert.Equal(0, spec.FuseMs);                     // WPF :773
+        Assert.Equal(ChaosMotion.FloatUp, spec.Motion);   // WPF :764
+        Assert.Equal(7000, spec.TreatLifeMs);             // WPF :775
+        Assert.True(spec.Ambient);                        // WPF :764 payload.Ambient=true
+    }
+
+    [Fact]
+    public void Build_NonAmbient_KeepsLiveFuseAndFlagOff()
+    {
+        // The run path (ambient:false, the default) is unchanged: video stays a live threat with
+        // its fuse, no treat life, Ambient off (regression guard for the new branch).
+        var spec = ChaosSpawnCatalog.Build(ChaosSpawnCatalog.All[6], 0.0, 1.0, null, 1.0, 1.0, 0.0,
+            new ScriptedRandom(doubles: new[] { 0.0 }, ints: new[] { 0 }));
+
+        Assert.True(spec.IsLive);
+        Assert.Equal(5000, spec.FuseMs);
+        Assert.Equal(0, spec.TreatLifeMs);
+        Assert.False(spec.Ambient);
+    }
+
+    // ================================================================
     // (4) Fuse formula: floor 1200 + intensity shortening (WPF ChaosBubbleVariants.cs:747-752)
     // ================================================================
 
