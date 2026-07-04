@@ -63,6 +63,9 @@ public sealed class AvaloniaChaosService : IChaosService
     private readonly ChaosAnnouncerLayer _announcerLayer;
     // WS2/WP3 Phase F #5: the chaos "braindrain" full-screen image wash is a compositor layer.
     private readonly ChaosFlashWashLayer _flashWashLayer;
+    // WS2/WP3 Phase F #6: the bouncing DVD logos are compositor render items; their side
+    // effects (bubble pops, darter queries, sfx) stay HERE via the layer's delegates.
+    private readonly ChaosDvdLayer _dvdLayer;
     /// <summary>Orphans a superseded in-flight wash decode (WPF ChaosFlashOverlay._displayGen).</summary>
     private int _washGen;
     private readonly object _announceSync = new();
@@ -168,6 +171,15 @@ public sealed class AvaloniaChaosService : IChaosService
         compositor?.RegisterLayer(_announcerLayer);
         _flashWashLayer = new ChaosFlashWashLayer();
         compositor?.RegisterLayer(_flashWashLayer);
+        _dvdLayer = new ChaosDvdLayer
+        {
+            // Policy hooks (services own side effects; the layer owns flight physics).
+            // The bubble seams take PHYSICAL px rects (IAvaloniaLayer coordinate contract).
+            PopBubblesInRect = rect => { try { _bubbles.PopBubblesInRect(rect); } catch { } },
+            DarterIntersects = rect => { try { return _bubbles.AnyDarterIntersects(rect); } catch { return false; } },
+            PlaySfx = (name, vol) => { try { AvaloniaChaosSfx.Play(name, vol); } catch { } },
+        };
+        compositor?.RegisterLayer(_dvdLayer);
         _screenProvider = screenProvider;
         AvaloniaChaosCatalogs.EnsureInitialized();
     }
@@ -939,6 +951,9 @@ public sealed class AvaloniaChaosService : IChaosService
         // WPF parity (ChaosModeService.cs:3097/3146): the braindrain wash dies with the run.
         // The legacy Avalonia head never tore it down (its window just outlived the run) — a drift.
         ClearChaosFlashWash();
+        // WPF parity (ChaosModeService.cs:3101/3150/3236): every DVD logo dies with the run.
+        // The legacy Avalonia head never called the DVD CloseActive either — same drift class.
+        ClearChaosDvdLogos();
         _state = null;
         _vibeRemainingSec = 0;
         _freezeRemainingSec = 0;
@@ -1215,7 +1230,7 @@ public sealed class AvaloniaChaosService : IChaosService
                 int lvl = ChaosMeta.BoonLevel(toy.Id);
                 double speed = lvl switch { 1 => 0.7, 2 => 0.85, _ => 1.0 };
                 double scale = lvl switch { 1 => 0.8, 2 => 0.9, _ => 1.0 };
-                ChaosDvdOverlay.Launch(Math.Max(5, power), speed, scale, count: maxed ? 2 : 1,
+                LaunchChaosDvd(Math.Max(5, power), speed, scale, count: maxed ? 2 : 1,
                     splitBounces: _state.DvdSplitBounces);
                 toy.CooldownRemainingSec = toy.CooldownSec;
                 toy.IsEffectActive = true;
@@ -1415,6 +1430,36 @@ public sealed class AvaloniaChaosService : IChaosService
         _flashWashLayer.Clear();
     }
 
+    /// <summary>Launch bouncing DVD logos (WS2: chaos on the compositor; WPF
+    /// ChaosDvdOverlay.Launch contract — the porn_dvd toy and the Intrusive Thoughts
+    /// accessory share it). The service owns policy: the primary work-area anchor + DPI
+    /// scale are captured per launch (the flight is confined to the primary work area,
+    /// WPF SystemParameters.WorkArea); physics/splits live in the layer's Update, side
+    /// effects come back through the delegates wired in the ctor. Public because the
+    /// --verify-layers harness drives the layer through its OWNING service. NO settings
+    /// gate (WPF Launch has none). The WPF Spanker smack-to-turn path is dead in this head
+    /// (SpankerRedirect never assigned) — the layer is purely passive until that port.</summary>
+    public void LaunchChaosDvd(double durationSec, double speedMult, double scale, int count = 1,
+        string? text = null, bool splitOnRabbit = false, int splitBounces = 0)
+    {
+        try
+        {
+            var primary = _screenProvider?.GetPrimaryScreen();
+            if (primary == null) return;   // no screen info — nowhere to fly
+            _compositor?.Start();   // wake same-tick so the 180ms fade-in loses no frames
+            _dvdLayer.Launch(durationSec, speedMult, scale, count, text, splitOnRabbit, splitBounces,
+                primary.WorkingArea.IsEmpty ? primary.Bounds : primary.WorkingArea, primary.Scaling);
+        }
+        catch (Exception ex) { _logger?.LogDebug("ChaosDvd.Launch: {E}", ex.Message); }
+    }
+
+    /// <summary>True while a TOY-launched logo flies (WPF ChaosDvdOverlay.AnyToyActive —
+    /// the porn_dvd banner interplay and the toy active flag read this).</summary>
+    public bool ChaosDvdToyActive => _dvdLayer.AnyToyActive;
+
+    /// <summary>Instant DVD teardown (run end — WPF ChaosDvdOverlay.CloseActive).</summary>
+    public void ClearChaosDvdLogos() => _dvdLayer.Clear();
+
     /// <summary>Show (or keep) the effect-banner strip entry for an effect (WS2: chaos on
     /// the compositor; WPF ChaosEffectBannerOverlay.Show contract). Applies the
     /// ChaosBoonColors payload color language and resolves the announce word-art here —
@@ -1566,7 +1611,7 @@ public sealed class AvaloniaChaosService : IChaosService
                 _bubbles.SetVibePop(false);
             }
         }
-        if (_dvdBannerOn && !ChaosDvdOverlay.AnyToyActive) { EndEffectBanner("dvd"); _dvdBannerOn = false; }   // WPF ChaosModeService.cs:2953
+        if (_dvdBannerOn && !ChaosDvdToyActive) { EndEffectBanner("dvd"); _dvdBannerOn = false; }   // WPF ChaosModeService.cs:2953
         foreach (var t in _state.ActiveToys)
         {
             if (t.CooldownRemainingSec > 0)
@@ -1577,7 +1622,7 @@ public sealed class AvaloniaChaosService : IChaosService
             {
                 "vibe_popping" => _vibeRemainingSec > 0,
                 "freeze_trigger" => _freezeRemainingSec > 0,
-                "porn_dvd" => ChaosDvdOverlay.AnyToyActive,
+                "porn_dvd" => ChaosDvdToyActive,
                 "snap_field" => _snapFlashRemainingSec > 0,
                 "rabbit_caller" => _rabbitCallPending > 0,
                 "e_stim" => _bubbles.EStimChargesLeft > 0,

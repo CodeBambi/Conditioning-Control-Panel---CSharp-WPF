@@ -175,6 +175,7 @@ internal static class LayerVerification
             var effectBannerLayer = ExpectLayer<ChaosEffectBannerLayer>(engine, CompositorLayers.ChaosEffectBanner, "ChaosEffectBannerLayer", rows);
             var announcerLayer = ExpectLayer<ChaosAnnouncerLayer>(engine, CompositorLayers.ChaosAnnouncer, "ChaosAnnouncerLayer", rows);
             var flashWashLayer = ExpectLayer<ChaosFlashWashLayer>(engine, CompositorLayers.ChaosFlashWash, "ChaosFlashWashLayer", rows);
+            var dvdLayer = ExpectLayer<ChaosDvdLayer>(engine, CompositorLayers.ChaosDvd, "ChaosDvdLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -193,12 +194,13 @@ internal static class LayerVerification
 
             if (flashLayer == null || subliminalLayer == null || bubbleLayer == null || bouncingLayer == null
                 || brainDrainLayer == null || spiralLayer == null || pinkTintLayer == null || cursorGlowLayer == null
-                || popTextLayer == null || effectBannerLayer == null || announcerLayer == null || flashWashLayer == null)
+                || popTextLayer == null || effectBannerLayer == null || announcerLayer == null || flashWashLayer == null
+                || dvdLayer == null)
             {
                 Console.WriteLine("[LAYERS] Registration sweep failed; skipping activation stages.");
                 return;
             }
-            Console.WriteLine("[LAYERS] All 12 migrated layers registered at their exact z-constants.");
+            Console.WriteLine("[LAYERS] All 13 migrated layers registered at their exact z-constants.");
 
             // ---------------- Stage 1: FlashLayer (Z=30) via IFlashService ----------------
             {
@@ -493,6 +495,36 @@ internal static class LayerVerification
                 await SettleIdle(engine);
             }
 
+            // ---------------- Stage 4g: ChaosDvdLayer (Z=105) via AvaloniaChaosService ----------------
+            // Phase F #6. Driven through the owning service's LaunchChaosDvd — the same call the
+            // porn_dvd toy makes — so no chaos run is needed. NOT settings-gated (WPF Launch has
+            // no gate). Natural expiry IS the teardown path (2s life + 240ms retire fade); the
+            // bubble-pop/darter delegates no-op harmlessly with no chaos bubbles alive.
+            {
+                Console.WriteLine("[LAYERS] Stage 4g: ChaosDvdLayer via AvaloniaChaosService.LaunchChaosDvd...");
+                var row = rows.First(r => r.Layer == "ChaosDvdLayer");
+                var before = Capture(screens, primary);
+                chaos.LaunchChaosDvd(durationSec: 2, speedMult: 1.0, scale: 1.0);
+                var activated = await PollAsync(() => dvdLayer.IsActive, 2000, stepMs: 50);
+                row.Activated = activated ? "yes" : "TIMEOUT";
+                var toyFlag = dvdLayer.AnyToyActive;
+                if (activated)
+                {
+                    await Task.Delay(500); // 180ms fade-in done, logo at peak 0.85 mid-flight
+                    var during = Capture(screens, primary);
+                    row.Delta = during.Full != before.Full ? "DIFFER (full-screen)" : "SAME (FAIL)";
+                }
+                var deactivated = await PollAsync(() => !dvdLayer.IsActive, 5000);
+                row.Teardown = deactivated ? "clean (2s life + 240ms retire fade)" : "TIMEOUT";
+                FinishRow(row, activated, deactivated, envStable);
+                if (activated && !toyFlag)
+                {
+                    row.Verdict = "FAIL";
+                    row.Note = AppendNote(row.Note, "AnyToyActive was FALSE while a toy logo flew — the porn_dvd banner interplay would break");
+                }
+                await SettleIdle(engine);
+            }
+
             // ---------------- Stage 5: BrainDrainLayer (Z=55) — P0 capture-EXCLUDED, ALONE ----------------
             // Runs BEFORE the pink/spiral stages: releasing those re-applies the user's
             // persistent PinkFilterEnabled/SpiralEnabled overlays (WPF-parity settings-held
@@ -688,6 +720,7 @@ internal static class LayerVerification
             try { chaos?.CloseEffectBanners(); } catch { }
             try { chaos?.ClearAnnouncements(); } catch { }
             try { chaos?.ClearChaosFlashWash(); } catch { }
+            try { chaos?.ClearChaosDvdLogos(); } catch { }
             try
             {
                 overlay?.HideOverlaySustained("pink");

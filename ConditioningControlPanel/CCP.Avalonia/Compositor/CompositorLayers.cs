@@ -51,6 +51,11 @@ public static class CompositorLayers
     // SetWindowDisplayAffinity (grep-verified 2026-07-04) — so chaos layers stay on the
     // MAIN surface (ExcludeFromCapture = false).
 
+    /// <summary>Bouncing DVD-screensaver logos (Porn DVD toy / Intrusive Thoughts): field
+    /// objects above the field-FX floor — WPF RaiseGameLayerAboveVideo raises the DVD logos
+    /// after the ambient field FX, below the attention assets (gif cascade / flash wash).</summary>
+    public const int ChaosDvd = 105;
+
     /// <summary>Chaos "braindrain" full-screen image wash (top of the field-FX sub-band:
     /// WPF RaiseGameLayerAboveVideo raises the flash wash LAST of the passive set — above the
     /// gif cascade — as an "attention asset", so it caps the 100–119 field band).</summary>
