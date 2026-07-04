@@ -989,7 +989,11 @@ public class BubbleService : IDisposable
                 return new EffectBubbleSpec
                 {
                     VariantId = "glitch",   // loads assets/Chaos/bubbles/glitch.png
-                    Payload = new OverlayPayload("braindrain", braindrainOpacity: 0.30) { Strength = 60, DurationMult = LINGER },
+                    // Glitch is exempt from LINGER: its payload is a FULL-SCREEN layered wash,
+                    // and at 2.5x (~8s) the whole desktop stayed alpha-composited every frame —
+                    // the frame drops / crashes reported when popping glitch bubbles under load
+                    // (#476). 1.2x (~4s) still reads as a lingering wash on the calm dashboard.
+                    Payload = new OverlayPayload("braindrain", braindrainOpacity: 0.30) { Strength = 60, DurationMult = 1.2 },
                     SizePx = 200,
                     Tint = System.Windows.Media.Color.FromRgb(0x9A, 0x40, 0xFF),
                     Label = "GLITCH",
@@ -4270,20 +4274,15 @@ internal class Bubble
             {
                 _teaseAnimated = true;
                 _teaseAnimatedAlive++;
-                if (isGif)
-                {
-                    XamlAnimatedGif.AnimationBehavior.SetRepeatBehavior(img, System.Windows.Media.Animation.RepeatBehavior.Forever);
-                    XamlAnimatedGif.AnimationBehavior.SetAutoStart(img, true);
-                    XamlAnimatedGif.AnimationBehavior.SetSourceUri(img, new Uri(path, UriKind.Absolute));
-                }
-                else
-                {
-                    // XamlAnimatedGif is GIF-only — webp loops via a pre-decoded (off-thread,
-                    // display-size) frame animation. Held in _teaseImg so Destroy can Detach it:
-                    // the Forever clock pins the Image until cleared.
-                    _teaseImg = img;
-                    AnimatedWebp.AttachAnimation(img, path, Math.Max(64, (int)inner));
-                }
+                // Both formats loop via a pre-decoded (off-thread, display-size) frame
+                // animation — SKCodec is format-agnostic, so GIFs ride the webp pipeline.
+                // GIFs used to go through XamlAnimatedGif, which decoded at native res AND
+                // was never torn down on Destroy (only _teaseImg gets Detached): every dead
+                // GIF tease leaked its animator + full frame buffer and stayed subscribed to
+                // CompositionTarget.Rendering (#486). Held in _teaseImg so Destroy can
+                // Detach it: the Forever clock pins the Image until cleared.
+                _teaseImg = img;
+                AnimatedWebp.AttachAnimation(img, path, Math.Max(64, (int)inner));
             }
             else
             {
