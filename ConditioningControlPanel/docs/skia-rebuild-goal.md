@@ -99,9 +99,12 @@ Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
   attention/safety/segment/events — adversarially reviewed, 4 findings fixed pre-bank, failed-open
   wedge closed; `2572535d` watch-credit wiring + penalties-reset parity; `37bd454a` Phase D.1/D.2
   zero-alloc triple-buffered VideoLayer + timer fold, GPU-staleness empirically probed).
-  **Remaining WP2**: dual-monitor side-by-side verification vs WPF (needs eyes/second monitor),
-  Phase C layer verification sweep, Phase E flip+delete (HARD GATE: only after side-by-side
-  parity is proven by running), then the authorized libmpv spike. → WP2.
+  Phase C swept 2026-07-04 (`07c094e1` `--verify-layers` harness): all 7 migrated layers PASS
+  (registration z, activation, render-delta, teardown) and the dual-surface P0 held BOTH ways
+  (subliminal capture-VISIBLE delta; brain-drain active with NO capture delta + excluded window
+  0→1→0). **Remaining WP2**: side-by-side WPF eyes-verification (timing/opacity/z/multi-DPI —
+  list in the plan doc), Phase E flip+delete (HARD GATE: only after side-by-side parity is
+  proven by running), then the authorized libmpv spike. → WP2.
 - Chaos overlays (~23 window classes) are not on the compositor. → WP3.
 - Avalonia mouse hook cannot swallow clicks (WPF can): bubble/flash pops leak the click
   to the app underneath. Decide and fix in WP3, or explicitly accept and document.
