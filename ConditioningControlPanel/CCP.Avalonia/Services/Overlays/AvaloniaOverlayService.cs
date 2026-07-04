@@ -19,6 +19,7 @@ using ConditioningControlPanel.Core.Platform;
 using Microsoft.Extensions.DependencyInjection;
 using ConditioningControlPanel.Core.Services.Overlays;
 using ConditioningControlPanel.Core.Services.Settings;
+using SkiaSharp;
 using LibVLCSharp.Shared;
 
 namespace ConditioningControlPanel.Avalonia.Services.Overlays;
@@ -71,6 +72,11 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         _logger = logger;
         _compositor = compositor;
         _mods = mods;
+        // Live-reactive themed color: a mid-session mod/theme switch must recolor the tint
+        // overlay AND the spiral immediately (OnModChanged). Layers stay dumb — only the
+        // service re-resolves the active mod's FilterColor and re-pushes it.
+        if (_mods != null)
+            _mods.ActiveModChanged += OnModChanged;
         _pinkTintLayer = new PinkTintLayer();
         _spiralLayer = new SpiralLayer();
         _brainDrainLayer = new BrainDrainLayer();
@@ -585,6 +591,51 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         return (255, 105, 180);
     }
 
+    /// <summary>
+    /// The active mod's tint color as an Avalonia color (FilterColor, falling back to the
+    /// mod accent, then hot pink). Drives BOTH the tint overlay (PinkTintLayer) and the
+    /// spiral tint (SpiralLayer) so the whole overlay stack re-skins per theme — green under
+    /// Dronification, pink under CCP Default, etc. WPF keys the filter off FilterColor
+    /// (OverlayService.cs:469-472 GetFilterRgb); the spiral tint is an Avalonia enhancement
+    /// (WPF draws the spiral at its native image colors) for per-theme overlay+spiral color.
+    /// </summary>
+    private Color ThemedColor
+    {
+        get
+        {
+            try
+            {
+                var hex = _mods?.GetFilterColorHex();
+                if (!string.IsNullOrWhiteSpace(hex)) return Color.Parse(hex);
+            }
+            catch { /* malformed mod color — fall through to hot pink */ }
+            return Color.FromRgb(255, 105, 180);
+        }
+    }
+
+    private static SKColor ToSk(Color c) => new SKColor(c.R, c.G, c.B);
+
+    /// <summary>
+    /// Live-reactive themed recolor: a mid-session mod/theme switch re-resolves the tint
+    /// color and re-pushes it to the tint overlay and spiral immediately. The 500ms
+    /// settings-sync tick also catches the running case, but this covers ad-hoc overlays
+    /// shown while the service is stopped (Deeper ramps) and removes the tick latency.
+    /// </summary>
+    private void OnModChanged(object? sender, ModPackage _)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var themed = ToSk(ThemedColor);
+            if (_pinkTintLayer.IsActive)
+            {
+                _lastAppliedPinkColor = Colors.Transparent; // force past the (opacity,color) dedupe
+                UpdatePinkFilterOpacity();
+            }
+            if (_spiralLayer.IsActive)
+                _spiralLayer.SetColor(themed);
+        });
+    }
+
     private string GetSpiralPath()
     {
         var settings = _settings.Current;
@@ -654,6 +705,7 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         // stopped and the engine may have auto-stopped; Start() is idempotent.
         _compositor?.Start();
         _spiralLayer.SetSource(path, SpiralLayerOpacity(opacityPercent));
+        _spiralLayer.SetColor(ToSk(ThemedColor)); // theme-driven spiral tint (drone => green)
         _lastAppliedSpiralOpacity = opacityPercent;
         _lastSpiralCacheKey = path;
     }
@@ -675,6 +727,7 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
         if (opacity > 0) _compositor?.Start(); // OFF->ON transition may follow an engine auto-stop
         _spiralLayer.SetSource(_lastSpiralCacheKey, SpiralLayerOpacity(opacity));
+        _spiralLayer.SetColor(ToSk(ThemedColor)); // keep the spiral tint on-theme across reloads
         _lastAppliedSpiralOpacity = opacity;
     }
 
@@ -763,6 +816,8 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         _isDisposed = true;
         Stop();
         _updateTimer.Tick -= UpdateOverlays;
+        if (_mods != null)
+            _mods.ActiveModChanged -= OnModChanged;
         _brainDrainLayer.Dispose(); // frees cached screen-capture frames
     }
 

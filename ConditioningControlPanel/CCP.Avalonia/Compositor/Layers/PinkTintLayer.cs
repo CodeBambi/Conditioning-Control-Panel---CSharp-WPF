@@ -8,8 +8,10 @@ using SkiaSharp;
 namespace ConditioningControlPanel.Avalonia.Compositor.Layers;
 
 /// <summary>
-/// Renders a full-screen pink tint overlay. The service controls the color and opacity;
-/// this layer only renders what the service tells it to.
+/// Renders a full-screen themed tint overlay. The service owns all state: it resolves the
+/// active mod's <c>FilterColor</c> (green under Dronification, pink under CCP Default, etc.)
+/// and pushes both color and opacity here. This layer only renders what the service tells
+/// it to. The class name is historical — the tint is not literally pink.
 /// </summary>
 public sealed class PinkTintLayer : BaseLayer
 {
@@ -22,6 +24,9 @@ public sealed class PinkTintLayer : BaseLayer
     public override int ZIndex => CompositorLayers.PinkTint;
 
     public override bool IsActive => _opacity > 0;
+
+    /// <summary>Current tint color (read-only; test/diagnostic only — the service owns all state).</summary>
+    public Color CurrentColor => _color;
 
     public void SetColor(Color color, double opacity)
     {

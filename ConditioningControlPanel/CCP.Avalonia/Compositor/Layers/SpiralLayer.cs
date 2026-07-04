@@ -43,6 +43,7 @@ public sealed class SpiralLayer : BaseLayer, IDisposable
     private bool _visible;
     private double _opacity;
     private int _frameIndex;
+    private SKColor _tintColor = new SKColor(255, 255, 255); // white = identity; the service pushes the active mod's themed color
     private double _frameClock;         // seconds accumulated toward the current frame's delay
     private double _rotationAngle;      // degrees (static-image fallback only)
     private bool _disposed;
@@ -120,6 +121,20 @@ public sealed class SpiralLayer : BaseLayer, IDisposable
             BeginDecode(path);
         }
     }
+
+    /// <summary>
+    /// Set the spiral tint color (theme-driven: the service resolves the active mod's
+    /// FilterColor and pushes it here; drone => green #00FF41, CCP Default => pink, etc.).
+    /// White (the default) is identity — the image renders at its native colors. The tint
+    /// is applied as a per-channel multiply during Render.
+    /// </summary>
+    public void SetColor(SKColor color)
+    {
+        lock (_sync) { _tintColor = color; }
+    }
+
+    /// <summary>Current spiral tint color (read-only; test/diagnostic only).</summary>
+    public SKColor CurrentColor { get { lock (_sync) { return _tintColor; } } }
 
     /// <summary>Hide the spiral. The decoded frames stay cached for instant re-show.</summary>
     public void ClearSource()
@@ -214,7 +229,7 @@ public sealed class SpiralLayer : BaseLayer, IDisposable
 
             var boundsW = (float)bounds.Width;
             var boundsH = (float)bounds.Height;
-            _paint.Color = new SKColor(255, 255, 255, (byte)(_opacity * 255));
+            _paint.Color = new SKColor(_tintColor.Red, _tintColor.Green, _tintColor.Blue, (byte)(_opacity * 255));
 
             if (_frames.IsAnimated)
             {

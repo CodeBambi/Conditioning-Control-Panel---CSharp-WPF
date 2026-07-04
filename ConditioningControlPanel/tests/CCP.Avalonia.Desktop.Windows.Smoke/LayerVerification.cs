@@ -722,6 +722,27 @@ internal static class LayerVerification
                     await Task.Delay(600);
                     var during = Capture(screens, primary);
                     row.Delta = during.Full != before.Full ? "DIFFER (full-screen)" : "SAME (FAIL)";
+
+                    // Themed-color regression guard: the tint must track the active mod's
+                    // FilterColor (drone => green #00FF41), not a hardcoded pink. Compares the
+                    // layer's actual color to the mod's FilterColor for whatever mod is active
+                    // (mod-agnostic + deterministic; no pixel sampling). Catches a future
+                    // regression that re-hardcodes pink or breaks the IModService wiring.
+                    var mods6 = services.GetService<IModService>();
+                    var hex6 = mods6?.GetFilterColorHex();
+                    if (!string.IsNullOrEmpty(hex6))
+                    {
+                        try
+                        {
+                            var exp6 = global::Avalonia.Media.Color.Parse(hex6);
+                            var act6 = pinkTintLayer.CurrentColor;
+                            if (act6.R != exp6.R || act6.G != exp6.G || act6.B != exp6.B)
+                                row.Delta += $" + THEMED-COLOR FAIL (layer=#{act6.R:X2}{act6.G:X2}{act6.B:X2} vs mod FilterColor={hex6})";
+                            else
+                                row.Note = AppendNote(row.Note, $"themed color OK (#{act6.R:X2}{act6.G:X2}{act6.B:X2} == {hex6})");
+                        }
+                        catch { /* unparseable mod color - don't fail the row on a malformed theme */ }
+                    }
                 }
                 overlay.HideOverlaySustained("pink");
                 var settingsHeld = settings?.PinkFilterEnabled == true;
@@ -761,6 +782,25 @@ internal static class LayerVerification
                     await Task.Delay(800);
                     var during = Capture(screens, primary);
                     row.Delta = during.Full != before.Full ? "DIFFER (full-screen)" : "SAME (FAIL)";
+
+                    // Themed-color regression guard: the spiral tint must track the active
+                    // mod's FilterColor (Avalonia enhancement - WPF draws the spiral at its
+                    // native image colors). Same mod-agnostic, deterministic comparison.
+                    var mods7 = services.GetService<IModService>();
+                    var hex7 = mods7?.GetFilterColorHex();
+                    if (!string.IsNullOrEmpty(hex7))
+                    {
+                        try
+                        {
+                            var exp7 = global::Avalonia.Media.Color.Parse(hex7);
+                            var act7 = spiralLayer.CurrentColor; // SKColor
+                            if (act7.Red != exp7.R || act7.Green != exp7.G || act7.Blue != exp7.B)
+                                row.Delta += $" + THEMED-COLOR FAIL (spiral=#{act7.Red:X2}{act7.Green:X2}{act7.Blue:X2} vs mod FilterColor={hex7})";
+                            else
+                                row.Note = AppendNote(row.Note, $"spiral themed color OK (#{act7.Red:X2}{act7.Green:X2}{act7.Blue:X2} == {hex7})");
+                        }
+                        catch { /* unparseable mod color - skip */ }
+                    }
                 }
                 overlay.HideOverlaySustained("spiral");
                 var settingsHeld = settings?.SpiralEnabled == true;
