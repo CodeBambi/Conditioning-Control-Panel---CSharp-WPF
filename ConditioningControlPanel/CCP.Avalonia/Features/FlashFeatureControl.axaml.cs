@@ -59,6 +59,8 @@ public partial class FlashFeatureControl : UserControl
             TxtMaxOnScreen.Text = s.HydraLimit.ToString();
             ChkClickable.IsChecked = s.FlashClickable;
             ChkCorruption.IsChecked = s.CorruptionMode;
+            SliderHydraMultiply.Value = s.HydraMultiplyCount;
+            TxtHydraMultiply.Text = s.HydraMultiplyCount.ToString();
             ChkHydraLinked.IsChecked = s.HydraLinkedTiming;
             ChkGlow.IsChecked = s.FlashGlowEnabled;
             ChkFlashGazePop.IsChecked = s.FlashGazePopEnabled;
@@ -78,6 +80,7 @@ public partial class FlashFeatureControl : UserControl
             e.PropertyName == nameof(AppSettings.HydraLimit) ||
             e.PropertyName == nameof(AppSettings.FlashClickable) ||
             e.PropertyName == nameof(AppSettings.CorruptionMode) ||
+            e.PropertyName == nameof(AppSettings.HydraMultiplyCount) ||
             e.PropertyName == nameof(AppSettings.HydraLinkedTiming) ||
             e.PropertyName == nameof(AppSettings.FlashGlowEnabled) ||
             e.PropertyName == nameof(AppSettings.FlashGazePopEnabled) ||
@@ -181,6 +184,15 @@ public partial class FlashFeatureControl : UserControl
         _settings.Current.CorruptionMode = newValue;
         _settings.Save();
         _logger?.LogDebug("ChkCorruption_Changed: settings saved, CorruptionMode is now {Value}", _settings.Current.CorruptionMode);
+    }
+
+    private void SliderHydraMultiply_Changed(object? sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_isLoading || _settings.Current == null) return;
+        var v = (int)e.NewValue;
+        TxtHydraMultiply.Text = v.ToString();
+        _settings.Current.HydraMultiplyCount = v;
+        _settings.Save();
     }
 
     private void ChkHydraLinked_Changed(object? sender, RoutedEventArgs e)

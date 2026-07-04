@@ -29,8 +29,8 @@ namespace ConditioningControlPanel.Avalonia.Services.Flash;
 /// images STAGGERED 300ms apart (hydra children 100ms, :1046), each at an independent
 /// RANDOM position sized to a 40%-of-monitor box * ImageScale with a 50 DIP edge pad
 /// (:1770-1801), fading in at the spawn position. Click OR gaze pops run the same
-/// close + hydra pipeline (:196, :1415): CorruptionMode spawns 2 children per pop on
-/// the parent's monitor, capped by HydraLimit and MAX_CONCURRENT_FLASH.
+/// close + hydra pipeline (:196, :1415): CorruptionMode spawns HydraMultiplyCount (2-5)
+/// children per pop on the parent's monitor, capped by HydraLimit and MAX_CONCURRENT_FLASH.
 /// </summary>
 public sealed class AvaloniaFlashService : IFlashService, IDisposable
 {
@@ -505,11 +505,10 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
             return;
         }
 
-        // WPF TriggerMultiplication (FlashService.cs:1446-1448): each pop spawns 2
-        // children (hardcoded in WPF — there is no per-click factor setting), capped by
-        // the remaining hydra space.
+        // Each pop spawns HydraMultiplyCount children (user setting, 2-5; legacy WPF
+        // hardcoded 2 — FlashService.cs:1446-1448), capped by the remaining hydra space.
         var spaceAvailable = maxHydra - currentCount;
-        var numToSpawn = Math.Min(2, spaceAvailable);
+        var numToSpawn = Math.Min(Math.Clamp(settings.HydraMultiplyCount, 2, 5), spaceAvailable);
         if (numToSpawn <= 0) return;
 
         // WPF FlashService.cs:1459-1461: Linked timing inherits the parent's remaining

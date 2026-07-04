@@ -161,6 +161,32 @@
                         VerticalAlignment="Center"
                         IsCheckedChanged="ChkCorruption_Changed" />
         </Grid>
+        <StackPanel Margin="0,2,0,8">
+          <Grid Margin="0,0,0,2">
+            <TextBlock Text="{loc:Str label_hydra_multiply}"
+                       Foreground="{DynamicResource TextLightBrush}"
+                       FontSize="13"
+                       FontWeight="SemiBold" />
+            <TextBlock x:Name="TxtHydraMultiply"
+                       Text="2"
+                       HorizontalAlignment="Right"
+                       Foreground="{DynamicResource PinkBrush}"
+                       FontSize="13"
+                       FontWeight="SemiBold" />
+          </Grid>
+          <TextBlock Text="{loc:Str tooltip_hydra_multiply}"
+                     Foreground="{DynamicResource TextDimBrush}"
+                     FontSize="11"
+                     TextWrapping="Wrap"
+                     Margin="0,0,0,4" />
+          <Slider x:Name="SliderHydraMultiply"
+                  Minimum="2"
+                  Maximum="5"
+                  Value="2"
+                  TickFrequency="1"
+                  IsSnapToTickEnabled="True"
+                  ValueChanged="SliderHydraMultiply_Changed" />
+        </StackPanel>
         <Grid Margin="0,2" ColumnDefinitions="*,Auto">
           <StackPanel Grid.Column="0"
                       VerticalAlignment="Center">

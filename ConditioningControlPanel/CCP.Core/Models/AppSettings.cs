@@ -657,6 +657,17 @@ namespace ConditioningControlPanel.Models
             set { _hydraLinkedTiming = value; OnPropertyChanged(); }
         }
 
+        private int _hydraMultiplyCount = 2; // Hydra children spawned per pop (2-5)
+        /// <summary>
+        /// How many new images spawn when a flash is popped in Hydra mode~ 🐙
+        /// Range 2-5. Default 2 preserves the legacy hardcoded behavior.
+        /// </summary>
+        public int HydraMultiplyCount
+        {
+            get => _hydraMultiplyCount;
+            set { _hydraMultiplyCount = Math.Clamp(value, 2, 5); OnPropertyChanged(); }
+        }
+
         private int _hydraLimit = 20; // Max images on screen (hard cap: 20)
         public int HydraLimit
         {

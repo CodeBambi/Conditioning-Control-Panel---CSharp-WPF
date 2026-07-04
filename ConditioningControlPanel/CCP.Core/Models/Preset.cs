@@ -69,6 +69,7 @@ namespace ConditioningControlPanel.Models
         public bool FlashClickable { get; set; } = true;
         public bool CorruptionMode { get; set; } = false;
         public bool HydraLinkedTiming { get; set; } = true;
+        public int HydraMultiplyCount { get; set; } = 2;
 
         // Video Settings
         public bool MandatoryVideosEnabled { get; set; } = false;
@@ -323,6 +324,7 @@ namespace ConditioningControlPanel.Models
             settings.FlashClickable = FlashClickable;
             settings.CorruptionMode = CorruptionMode;
             settings.HydraLinkedTiming = HydraLinkedTiming;
+            settings.HydraMultiplyCount = HydraMultiplyCount;
 
             // Video
             settings.MandatoryVideosEnabled = MandatoryVideosEnabled;
@@ -431,6 +433,7 @@ namespace ConditioningControlPanel.Models
                 FlashClickable = settings.FlashClickable,
                 CorruptionMode = settings.CorruptionMode,
                 HydraLinkedTiming = settings.HydraLinkedTiming,
+                HydraMultiplyCount = settings.HydraMultiplyCount,
 
                 // Video
                 MandatoryVideosEnabled = settings.MandatoryVideosEnabled,
