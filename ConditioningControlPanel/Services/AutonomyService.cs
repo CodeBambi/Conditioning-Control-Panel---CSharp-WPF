@@ -1482,12 +1482,62 @@ namespace ConditioningControlPanel.Services
             // Also bump the watchdog generation - if a stale watchdog is still pending,
             // we don't want it firing later and overwriting state for a new video.
             _webVideoWatchdogGeneration++;
+            _webVideoDurationGeneration++;   // cancel the pending duration hard stop too
 
             if (_webVideoActive)
             {
                 _webVideoActive = false;
                 App.Logger?.Information("AutonomyService: Web video ended, autonomy actions resumed");
             }
+        }
+
+        // Generation counter for the duration-based hard stop. Separate from the load
+        // watchdog generation: OnWebVideoStarted bumps that one (and started/duration
+        // messages can arrive in either order), while only OnWebVideoEnded should cancel
+        // a scheduled hard stop.
+        private int _webVideoDurationGeneration;
+
+        /// <summary>
+        /// Called by MainWindow when the injected JS reports the video's real length.
+        /// Schedules a hard stop at duration + grace: relying on the JS 'ended' event
+        /// alone let the takeover run past the video — sites auto-advance to the next
+        /// clip after 'ended' consumes the once-only handlers (#484). The 'ended' path
+        /// is still the normal, earlier terminator.
+        /// </summary>
+        public void OnWebVideoDuration(double seconds)
+        {
+            if (!_webVideoActive) return;
+            if (double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds <= 0) return; // live streams etc.
+
+            var gen = ++_webVideoDurationGeneration;
+            var cap = TimeSpan.FromSeconds(Math.Min(seconds + 15, 3600)); // +15s grace, 1h sanity ceiling
+            App.Logger?.Information("AutonomyService: Web video reports {Seconds:F0}s - hard stop scheduled at +{Cap:F0}s",
+                seconds, cap.TotalSeconds);
+
+            Task.Delay(cap).ContinueWith(_ =>
+            {
+                if (!_webVideoActive || _webVideoDurationGeneration != gen) return;
+                if (Application.Current?.Dispatcher == null) return;
+                Application.Current.Dispatcher.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        if (!_webVideoActive || _webVideoDurationGeneration != gen) return;
+                        App.Logger?.Information("AutonomyService: Web video ran past its reported length - force-ending takeover");
+                        var mainWindow = Application.Current?.MainWindow as MainWindow
+                            ?? Application.Current?.Windows.OfType<MainWindow>().FirstOrDefault();
+                        mainWindow?.EndWebVideoTakeover();
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Warning(ex, "AutonomyService: web video hard stop failed");
+                    }
+                    finally
+                    {
+                        OnWebVideoEnded();
+                    }
+                });
+            });
         }
 
         /// <summary>

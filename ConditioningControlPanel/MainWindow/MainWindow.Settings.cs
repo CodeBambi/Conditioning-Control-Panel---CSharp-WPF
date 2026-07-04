@@ -179,6 +179,18 @@ namespace ConditioningControlPanel
             // Autonomy Mode
             BambiTakeoverTab.ChkAutonomyEnabled.IsChecked = s.AutonomyModeEnabled;
             UpdateAutonomyButtonState(s.AutonomyModeEnabled);
+            // Clamp persisted values into the sliders' ranges BEFORE assigning: an
+            // out-of-range stored value (old-version scale, cloud-restored settings)
+            // silently clamps the slider to full while the label below keeps its XAML
+            // default — "intensity = 5 shows a full bar" (#485). Write the clamped
+            // value back so the setting and the UI agree.
+            s.AutonomyIntensity = Math.Clamp(s.AutonomyIntensity,
+                (int)BambiTakeoverTab.SliderAutonomyIntensity.Minimum, (int)BambiTakeoverTab.SliderAutonomyIntensity.Maximum);
+            s.AutonomyCooldownSeconds = Math.Clamp(s.AutonomyCooldownSeconds,
+                (int)BambiTakeoverTab.SliderAutonomyCooldown.Minimum, (int)BambiTakeoverTab.SliderAutonomyCooldown.Maximum);
+            s.AutonomyRandomIntervalSeconds = Math.Clamp(s.AutonomyRandomIntervalSeconds,
+                (int)BambiTakeoverTab.SliderAutonomyInterval.Minimum, (int)BambiTakeoverTab.SliderAutonomyInterval.Maximum);
+            s.AutonomyAnnouncementChance = Math.Clamp(s.AutonomyAnnouncementChance, 0, 100);
             BambiTakeoverTab.SliderAutonomyIntensity.Value = s.AutonomyIntensity;
             BambiTakeoverTab.SliderAutonomyCooldown.Value = s.AutonomyCooldownSeconds;
             BambiTakeoverTab.SliderAutonomyInterval.Value = s.AutonomyRandomIntervalSeconds;
@@ -205,6 +217,14 @@ namespace ConditioningControlPanel
             BambiTakeoverTab.ChkSpeechPushToTalk.IsChecked = s.SpeechPushToTalkEnabled && s.MicConsentGiven;
             BambiTakeoverTab.TxtPttKey.Text = string.IsNullOrWhiteSpace(s.SpeechPushToTalkKey) ? "F8" : s.SpeechPushToTalkKey;
             BambiTakeoverTab.SliderAutonomyAnnounce.Value = s.AutonomyAnnouncementChance;
+            // The Slider_Changed handlers bail out while _isLoading, so the value labels
+            // next to these four bars kept their XAML defaults ("5", "60s", "30s", "50%")
+            // regardless of the loaded values — bars and numbers disagreed on startup
+            // (#485). Sync the labels explicitly, matching each handler's format.
+            BambiTakeoverTab.TxtAutonomyIntensity.Text = $"{s.AutonomyIntensity}";
+            BambiTakeoverTab.TxtAutonomyCooldown.Text = $"{s.AutonomyCooldownSeconds}s";
+            BambiTakeoverTab.TxtAutonomyInterval.Text = $"{s.AutonomyRandomIntervalSeconds}s";
+            BambiTakeoverTab.TxtAutonomyAnnounce.Text = $"{s.AutonomyAnnouncementChance}%";
             RefreshAutonomyVoiceHint(); // reflect any wake/PTT suppression in the surprise-mantras hint
 
             // Bouncing Text Size (add if not already loaded above)

@@ -513,13 +513,13 @@
                                             <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
                                         <RadioButton x:Name="RbCornerTL" x:FieldModifier="internal" Content="{loc:Str btn_top_left}" Foreground="White"
-                                                     GroupName="CornerPos" Margin="0,2" FontSize="10"/>
+                                                     GroupName="CornerPos" Margin="0,2" FontSize="10" Checked="RbCornerPos_Checked"/>
                                         <RadioButton x:Name="RbCornerTR" x:FieldModifier="internal" Grid.Column="1" Content="{loc:Str btn_top_right}"
-                                                     Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10"/>
+                                                     Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10" Checked="RbCornerPos_Checked"/>
                                         <RadioButton x:Name="RbCornerBL" Grid.Row="1" Content="{loc:Str btn_bottom_left}"
-                                                     Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10" IsChecked="True"/>
+                                                     Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10" IsChecked="True" Checked="RbCornerPos_Checked"/>
                                         <RadioButton x:Name="RbCornerBR" x:FieldModifier="internal" Grid.Row="1" Grid.Column="1" Content="{loc:Str btn_bottom_right}"
-                                                     Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10"/>
+                                                     Foreground="White" GroupName="CornerPos" Margin="0,2" FontSize="10" Checked="RbCornerPos_Checked"/>
                                     </Grid>
     
                                     <!-- Size Slider -->

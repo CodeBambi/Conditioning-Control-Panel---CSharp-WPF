@@ -526,6 +526,18 @@ namespace ConditioningControlPanel
                                 window.chrome.webview.postMessage({ type: 'videoStarted' });
                             };
 
+                            // Report the real video length so C# can enforce it. Relying on
+                            // the 'ended' event alone let the takeover outlive the video:
+                            // sites auto-advance to the next clip after 'ended' consumes our
+                            // once-handlers, so playback just kept going (#484).
+                            const notifyDuration = () => {
+                                if (isFinite(video.duration) && video.duration > 0) {
+                                    window.chrome.webview.postMessage({ type: 'videoDuration', seconds: video.duration });
+                                }
+                            };
+                            if (video.readyState >= 1) notifyDuration();
+                            else video.addEventListener('loadedmetadata', notifyDuration, { once: true });
+
                             // Start playing and go fullscreen
                             video.muted = false;
                             video.play().then(() => {
@@ -557,6 +569,27 @@ namespace ConditioningControlPanel
             {
                 App.Logger?.Warning(ex, "Failed to auto-play/fullscreen video");
             }
+        }
+
+        /// <summary>
+        /// Force-ends a web-video takeover: pauses any playing media in the browser and
+        /// exits both page and forced fullscreen. Called by AutonomyService when playback
+        /// runs past the video's reported length (#484) — typically because the site
+        /// auto-advanced to the next clip after our once-only 'ended' handlers fired.
+        /// </summary>
+        internal void EndWebVideoTakeover()
+        {
+            try
+            {
+                _ = _browser?.WebView?.CoreWebView2?.ExecuteScriptAsync(
+                    "document.querySelectorAll('video,audio').forEach(v => { try { v.pause(); } catch (e) {} });" +
+                    "if (document.exitFullscreen) document.exitFullscreen();");
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("EndWebVideoTakeover script failed: {Error}", ex.Message);
+            }
+            try { ExitBrowserFullscreen(); } catch { }
         }
 
         /// <summary>
@@ -682,6 +715,18 @@ namespace ConditioningControlPanel
                     App.Logger?.Information("Web video playback ended");
                     App.Autonomy?.OnWebVideoEnded();
                     ExitBrowserFullscreen();
+                }
+                else if (message.Contains("\"type\":\"videoDuration\""))
+                {
+                    // Real video length reported by the injected JS — lets autonomy
+                    // enforce the takeover actually ending when the video does (#484).
+                    var secMatch = System.Text.RegularExpressions.Regex.Match(message, "\"seconds\":([0-9.]+)");
+                    if (secMatch.Success && double.TryParse(secMatch.Groups[1].Value,
+                            System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out var seconds))
+                    {
+                        App.Autonomy?.OnWebVideoDuration(seconds);
+                    }
                 }
                 // Audio sync messages
                 else if (message.Contains("\"type\":\"audioSyncVideoDetected\""))
