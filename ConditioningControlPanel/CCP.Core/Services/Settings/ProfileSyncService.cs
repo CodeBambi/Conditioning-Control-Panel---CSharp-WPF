@@ -71,8 +71,15 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
     /// </summary>
     private Timer? _heartbeatTimer;
 
-    /// <summary>Gates concurrent sync attempts (WPF <c>_syncGate</c>). Used from slice 4.</summary>
+    /// <summary>Gates concurrent sync attempts (WPF <c>_syncGate</c>).</summary>
     private readonly SemaphoreSlim _syncGate = new(1, 1);
+
+    /// <summary>
+    /// Timestamp of the last <c>restore-session</c> recovery attempt (WPF
+    /// <c>_lastAuthRecoveryAttempt</c>, ProfileSyncService.cs:33). Enforces the 5-minute 401
+    /// recovery cooldown so concurrent 401s don't spam the recovery endpoint.
+    /// </summary>
+    private DateTime _lastAuthRecoveryAttempt = DateTime.MinValue;
 
     private bool _syncEnabled = true;
     private bool _disposed;
@@ -269,14 +276,14 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
 
             using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
 
-            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            // 401 recovery via restore-session (WPF SendHeartbeatAsync :160-168). The token is
+            // never cleared or logged; if recovery ultimately leaves no token, stop the heartbeat
+            // to avoid spamming 401s (defensive — the token is kept, so this rarely fires).
+            if (await HandleUnauthorizedAsync(response).ConfigureAwait(false)
+                && string.IsNullOrEmpty(_settings.Current?.AuthToken))
             {
-                // ProfileSync slice 4: full HandleUnauthorizedAsync / restore-session recovery.
-                // Minimal path for now: count the failure. The token is never cleared or logged.
-                ConsecutiveSyncFailures++;
-                SyncHealthChanged?.Invoke(this, ConsecutiveSyncFailures);
-                _logger.LogWarning("[Auth] Heartbeat unauthorized (401)");
-                return;
+                _logger.LogWarning("[Auth] Heartbeat: auth recovery failed, stopping heartbeat");
+                StopHeartbeat();
             }
 
             _logger.LogDebug("V2 Heartbeat: {Status}", response.StatusCode);
@@ -285,6 +292,320 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
         {
             // Heartbeat is best-effort; never surface. Message only, never the token.
             _logger.LogDebug("Heartbeat error: {Error}", ex.Message);
+        }
+    }
+
+    #endregion
+
+    #region Push (slice 4)
+
+    /// <summary>
+    /// Pushes local progression to the cloud (<c>POST /v2/user/sync</c>), HMAC-signs the body, and
+    /// reconciles the server's <see cref="V2SyncResponse"/> back into local state via the shared
+    /// <see cref="MergeV2SyncResponse"/> (slice 3). This push IS the leaderboard submit — the server
+    /// ranks on the <c>xp</c>/<c>level</c> fields. Ported from WPF <c>SyncProfileAsync</c>
+    /// (ProfileSyncService.cs:417).
+    ///
+    /// Guards (ported verbatim): offline / not-authenticated skips; a non-blocking
+    /// <see cref="SemaphoreSlim"/> gate (<c>WaitAsync(0)</c>) so a second call returns while one is
+    /// in flight; a 30 s client cooldown vs <see cref="LastSyncTime"/>; and the CORRECTNESS-CRITICAL
+    /// fresh-defaults guard that refuses to upload an empty local profile over a real cloud one.
+    /// A 429 stamps <see cref="LastSyncTime"/> to defer the next attempt; a 401 routes to
+    /// <see cref="HandleUnauthorizedAsync"/>. SECURITY: the auth token is never logged.
+    ///
+    /// PORT NOTE: Core has no V1 OAuth/Bearer legacy push path (plan §10.3), so the unified-id
+    /// (V2) path is the only one ported — an empty unified id returns false instead of falling back.
+    /// </summary>
+    public async Task<bool> SyncProfileAsync()
+    {
+        // Skip if offline mode is enabled (WPF :419).
+        if (_settings.Current?.OfflineMode == true)
+        {
+            _logger.LogDebug("Profile sync skipped - offline mode enabled");
+            return false;
+        }
+
+        if (!IsSyncEnabled)
+        {
+            _logger.LogDebug("Profile sync skipped - not authenticated");
+            return false;
+        }
+
+        // Prevent concurrent sync calls from racing past the cooldown check (WPF _syncGate, :432).
+        if (!await _syncGate.WaitAsync(0).ConfigureAwait(false))
+        {
+            _logger.LogDebug("Profile sync skipped - another sync in progress");
+            return false;
+        }
+
+        var syncSucceeded = false;
+        try
+        {
+            // Client-side sync cooldown to match server-side enforcement (WPF :443-449).
+            if (LastSyncTime.HasValue && DateTime.Now - LastSyncTime.Value < SyncCooldown)
+            {
+                _logger.LogDebug("Profile sync skipped - cooldown active ({Remaining}s remaining)",
+                    Math.Ceiling((SyncCooldown - (DateTime.Now - LastSyncTime.Value)).TotalSeconds));
+                return false;
+            }
+
+            try
+            {
+                var settings = _settings.Current;
+                if (settings == null)
+                {
+                    _logger.LogWarning("Settings not available for profile sync");
+                    return false;
+                }
+
+                var achievementProgress = _achievements?.Progress;
+
+                // Total accumulated XP (sum of all levels + current progress). Cloud stores TOTAL
+                // XP; local stores current-level XP (WPF :481).
+                var totalXp = _progression?.GetTotalXP(settings.PlayerLevel, settings.PlayerXP) ?? settings.PlayerXP;
+
+                // FRESH-DEFAULTS GUARD (WPF :485-495) — CORRECTNESS-CRITICAL. If local looks like
+                // fresh defaults (Level <= 1, near-zero XP) and no round-trip load has completed this
+                // session, refuse to send XP/level. This prevents a settings reset (update crash,
+                // corruption) from zeroing the server profile. Ported condition is byte-identical:
+                //   !_hasLoadedProfile && settings.PlayerLevel <= 1 && totalXp < 100
+                if (!_hasLoadedProfile && settings.PlayerLevel <= 1 && totalXp < 100)
+                {
+                    _logger.LogWarning("Sync blocked - local looks like defaults (Level {Level}, XP {Xp}) and profile not yet loaded. Waiting for LoadProfileAsync.",
+                        settings.PlayerLevel, (int)totalXp);
+                    return false;
+                }
+
+                _logger.LogInformation("Syncing profile - Level: {Level}, TotalXP: {Xp}, VideoMinutes: {VideoMin:F1}, LockCards: {LockCards}",
+                    settings.PlayerLevel,
+                    (int)totalXp,
+                    achievementProgress?.TotalVideoMinutes ?? 0,
+                    achievementProgress?.TotalLockCardsCompleted ?? 0);
+
+                // V2 sync requires a unified id (WPF :503). Core has no legacy OAuth push fallback.
+                var unifiedId = settings.UnifiedId;
+                if (string.IsNullOrEmpty(unifiedId))
+                {
+                    _logger.LogWarning("Profile sync skipped - no unified id (V1 OAuth fallback not ported)");
+                    return false;
+                }
+
+                var questProgress = _quests?.Progress;
+                var v2SyncData = new
+                {
+                    unified_id = unifiedId,
+                    xp = (int)totalXp,
+                    level = settings.PlayerLevel,
+                    achievements = achievementProgress?.UnlockedAchievements?.ToList() ?? new List<string>(),
+                    stats = new Dictionary<string, object>
+                    {
+                        ["completed_sessions"] = achievementProgress?.CompletedSessions?.Count ?? 0,
+                        ["longest_session_minutes"] = achievementProgress?.LongestSessionMinutes ?? 0,
+                        ["highest_streak"] = settings.HighestStreak,
+                        ["total_flashes"] = achievementProgress?.TotalFlashImages ?? 0,
+                        ["consecutive_days"] = achievementProgress?.ConsecutiveDays ?? 0,
+                        ["total_bubbles_popped"] = achievementProgress?.TotalBubblesPopped ?? 0,
+                        ["total_video_minutes"] = Math.Round(achievementProgress?.TotalVideoMinutes ?? 0, 1),
+                        ["total_lock_cards_completed"] = achievementProgress?.TotalLockCardsCompleted ?? 0,
+                        // Prestige (advisory — server value is authoritative and monotonic).
+                        ["lifetime_points_spent"] = achievementProgress?.LifetimeSkillPointsSpent ?? 0,
+                        // Quest streak data.
+                        ["daily_quest_streak"] = settings.DailyQuestStreak,
+                        ["last_daily_quest_date"] = settings.LastDailyQuestDate?.ToString("o") ?? "",
+                        ["quest_completion_dates"] = questProgress?.DailyQuestCompletionDates?
+                            .Select(d => d.ToString("yyyy-MM-dd")).ToList() ?? new List<string>(),
+                        ["total_daily_quests_completed"] = questProgress?.TotalDailyQuestsCompleted ?? 0,
+                        ["total_weekly_quests_completed"] = questProgress?.TotalWeeklyQuestsCompleted ?? 0,
+                        ["total_xp_from_quests"] = questProgress?.TotalXPFromQuests ?? 0,
+                        ["daily_quests_completed_today"] = questProgress?.GetDailyQuestsCompletedToday() ?? 0,
+                        ["daily_completion_reset_date"] = questProgress?.DailyCompletionResetDate?.ToString("yyyy-MM-dd") ?? ""
+                    },
+                    unlocked_skills = settings.UnlockedSkills?.ToList() ?? new List<string>(),
+                    skill_points = settings.SkillPoints,
+                    total_conditioning_minutes = settings.TotalConditioningMinutes,
+                    companion_progress = settings.CompanionProgressData,
+                    allow_discord_dm = settings.AllowDiscordDm,
+                    show_online_status = settings.ShowOnlineStatus,
+                    share_profile_picture = settings.ShareProfilePicture,
+                    // Send false to clear server-side reset flags only when acknowledging.
+                    reset_weekly_quest = false,
+                    reset_daily_quest = false,
+                    force_streak_override = false,
+                    force_skills_reset = settings.PendingSkillsResetAck ? (bool?)false : null
+                };
+
+                using var v2Request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/sync");
+                AddAuthHeader(v2Request);
+                var v2Body = JsonConvert.SerializeObject(v2SyncData);
+                v2Request.Content = new StringContent(v2Body, Encoding.UTF8, "application/json");
+                SignRequest(v2Request, v2Body, unifiedId);
+
+                using var v2Response = await _httpClient.SendAsync(v2Request).ConfigureAwait(false);
+
+                if (!v2Response.IsSuccessStatusCode)
+                {
+                    // 429 (cooldown): stamp LastSyncTime to defer the next attempt (WPF :562-568).
+                    // Not counted as a failure (LastSyncError untouched).
+                    if (v2Response.StatusCode == (HttpStatusCode)429)
+                    {
+                        LastSyncTime = DateTime.Now;
+                        _logger.LogDebug("V2 Profile sync rate-limited by server, will retry later");
+                        return false;
+                    }
+
+                    // 401 → restore-session recovery (no-op for other statuses). Token kept, never logged.
+                    await HandleUnauthorizedAsync(v2Response).ConfigureAwait(false);
+                    _logger.LogWarning("V2 Profile sync failed: {Status}", v2Response.StatusCode);
+                    LastSyncError = $"Sync failed: {v2Response.StatusCode}";
+                    return false;
+                }
+
+                LastSyncTime = DateTime.Now;
+                LastSyncError = null;
+
+                var v2Json = await v2Response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                _logger.LogInformation("V2 Profile synced successfully");
+
+                // Reconcile the server response into local state. The merge is the SAME method the
+                // pull path uses (slice 3) — do not re-port. Guard the parse like WPF (:917-920).
+                try
+                {
+                    var v2Result = SafeDeserialize<V2SyncResponse>(v2Json);
+                    if (v2Result != null)
+                        MergeV2SyncResponse(v2Result);
+                }
+                catch (Exception parseEx)
+                {
+                    _logger.LogDebug("V2 Sync: could not parse server flags: {Error}", parseEx.Message);
+                }
+
+                syncSucceeded = true;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to sync profile to cloud");
+                LastSyncError = ex.Message;
+                return false;
+            }
+        }
+        finally
+        {
+            // Sync health — only count real failures, not skips (cooldown/gate/offline) (WPF :1043-1060).
+            if (syncSucceeded)
+            {
+                if (ConsecutiveSyncFailures > 0)
+                {
+                    ConsecutiveSyncFailures = 0;
+                    SyncHealthChanged?.Invoke(this, 0);
+                }
+            }
+            else if (LastSyncError != null)
+            {
+                ConsecutiveSyncFailures++;
+                SyncHealthChanged?.Invoke(this, ConsecutiveSyncFailures);
+            }
+            _syncGate.Release();
+        }
+    }
+
+    #endregion
+
+    #region Auth recovery (slice 4)
+
+    /// <summary>
+    /// Handles a 401 Unauthorized response: attempts token recovery via
+    /// <c>/v2/auth/restore-session</c> with a 5-minute cooldown between attempts. The token is
+    /// PRESERVED on failure (it may still be valid for other endpoints or after a transient server
+    /// issue). Returns true if the response WAS a 401. Ported from WPF
+    /// <c>HandleUnauthorizedAsync</c> (ProfileSyncService.cs:2268). SECURITY: never logs the token.
+    /// </summary>
+    private async Task<bool> HandleUnauthorizedAsync(HttpResponseMessage response)
+    {
+        if (response.StatusCode != HttpStatusCode.Unauthorized)
+            return false;
+
+        // 5-minute cooldown so concurrent 401s don't spam recovery, while still allowing a retry
+        // once a transient server issue resolves.
+        if (DateTime.Now - _lastAuthRecoveryAttempt > TimeSpan.FromMinutes(5))
+        {
+            _lastAuthRecoveryAttempt = DateTime.Now;
+            _logger.LogInformation("[Auth] 401 received - attempting token recovery via restore-session");
+            var recovered = await TryRecoverAuthTokenAsync().ConfigureAwait(false);
+            if (recovered)
+            {
+                _logger.LogInformation("[Auth] Token recovered successfully");
+                StartHeartbeat();
+                return true;
+            }
+        }
+
+        // Do NOT clear the auth token — it may still be valid; the cooldown prevents recovery spam.
+        _logger.LogWarning("[Auth] 401 - recovery failed or on cooldown, token kept for retry");
+        return true;
+    }
+
+    /// <summary>
+    /// Attempts to recover the auth token via <c>POST /v2/auth/restore-session</c>
+    /// (<c>{unified_id, client_version}</c>). Returns true when the server confirms the token is
+    /// still valid; if the response carries a rotated <c>auth_token</c> it is adopted through the
+    /// SECURE setter (<c>AppSettings.AuthToken</c> → <c>SecureAuthTokenStore</c>), never persisted as
+    /// plaintext. The token is KEPT, never cleared, on failure. Must NOT call
+    /// <see cref="HandleUnauthorizedAsync"/> (would recurse). Ported from WPF
+    /// <c>TryRecoverAuthTokenAsync</c> (ProfileSyncService.cs:2300). SECURITY: the stored / restored
+    /// token value is never logged.
+    /// </summary>
+    private async Task<bool> TryRecoverAuthTokenAsync()
+    {
+        try
+        {
+            var unifiedId = _settings.Current?.UnifiedId;
+            var storedToken = _settings.Current?.AuthToken;
+            if (string.IsNullOrEmpty(unifiedId) || string.IsNullOrEmpty(storedToken))
+                return false;
+
+            var body = JsonConvert.SerializeObject(new
+            {
+                unified_id = unifiedId,
+                // WPF sends UpdateService.AppVersion; Core has no UpdateService, so reuse the
+                // resolved client version (same value as the X-Client-Version header).
+                client_version = _version
+            });
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/auth/restore-session");
+            request.Headers.Add("X-Auth-Token", storedToken);
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("[Auth] restore-session failed: {Status}", response.StatusCode);
+                return false;
+            }
+
+            // Server usually does NOT rotate the token (rotation races). Keep the existing one
+            // unless the response includes a new auth_token, in which case adopt it via the secure
+            // setter. The token value is never logged.
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var obj = Newtonsoft.Json.Linq.JObject.Parse(json);
+            var newToken = obj["auth_token"]?.ToString();
+            if (!string.IsNullOrEmpty(newToken) && _settings.Current != null)
+            {
+                _settings.Current.AuthToken = newToken; // secure setter → SecureAuthTokenStore
+                _settings.Save(suppressCloudBackup: true);
+                _logger.LogInformation("[Auth] Auth token refreshed from restore-session");
+            }
+            else
+            {
+                _logger.LogInformation("[Auth] restore-session confirmed token is still valid (transient 401)");
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[Auth] restore-session recovery failed: {Error}", ex.Message);
+            return false;
         }
     }
 
@@ -341,9 +662,8 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
 
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                // ProfileSync slice 4: full 401 recovery (restore-session). Token never cleared/logged.
-                ConsecutiveSyncFailures++;
-                SyncHealthChanged?.Invoke(this, ConsecutiveSyncFailures);
+                // 401 recovery via restore-session (slice 4). The token is never cleared or logged.
+                await HandleUnauthorizedAsync(response).ConfigureAwait(false);
                 _logger.LogWarning("[Auth] Profile load unauthorized (401)");
                 return false;
             }

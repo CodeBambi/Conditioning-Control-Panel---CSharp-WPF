@@ -470,4 +470,162 @@ public class ProfileSyncServiceTests
             env.Cleanup();
         }
     }
+
+    // ---- Slice 4: push (SyncProfileAsync) ------------------------------------------------
+
+    /// <summary>
+    /// A logged-in settings fake carrying a NON-default profile (Level &gt; 1) so
+    /// <see cref="ProfileSyncService.SyncProfileAsync"/> passes the fresh-defaults guard and posts.
+    /// </summary>
+    private static FakeSettingsService LoadedProfileSettings()
+    {
+        var settings = new FakeSettingsService();
+        settings.Current.PlayerLevel = 42;   // > 1 => fresh-defaults guard passes
+        settings.Current.PlayerXP = 500;     // totalXp (no progression seam) = PlayerXP
+        settings.Current.SkillPoints = 7;
+        return settings;
+    }
+
+    /// <summary>
+    /// Handler that blocks inside <c>SendAsync</c> until released, so a test can hold one sync
+    /// in-flight (gate held) while starting a second concurrent call.
+    /// </summary>
+    private sealed class BlockingHandler : HttpMessageHandler
+    {
+        private int _callCount;
+        public int CallCount => Volatile.Read(ref _callCount);
+
+        /// <summary>Released once <c>SendAsync</c> has been entered (i.e. the gate is held).</summary>
+        public SemaphoreSlim Entered { get; } = new(0, 1);
+
+        private readonly TaskCompletionSource<bool> _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void ReleaseResponse() => _release.TrySetResult(true);
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _callCount);
+            Entered.Release();
+            await _release.Task.ConfigureAwait(false);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+            };
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) Entered.Dispose();
+            base.Dispose(disposing);
+        }
+    }
+
+    [Fact]
+    public async Task SyncProfileAsync_FreshDefaultProfile_DoesNotPost()
+    {
+        // Default settings look like fresh defaults (Level 1, XP 0) and no round-trip load has
+        // completed => the correctness-critical guard blocks the push (would otherwise zero the
+        // server profile). Still "logged in" (auth token + unified id set by CreateMergeService).
+        var handler = new RecordingHandler();
+        var settings = new FakeSettingsService();
+        using var svc = CreateMergeService(handler, settings);
+
+        var result = await svc.SyncProfileAsync();
+
+        Assert.False(result);
+        Assert.Equal(0, handler.CallCount);
+        Assert.Null(handler.LastRequest);
+    }
+
+    [Fact]
+    public async Task SyncProfileAsync_LoadedNonDefaultProfile_PostsSignedRequestWithBody()
+    {
+        var handler = new RecordingHandler();
+        var settings = LoadedProfileSettings();
+        using var svc = CreateMergeService(handler, settings);
+
+        var result = await svc.SyncProfileAsync();
+
+        Assert.True(result);
+        Assert.Equal(1, handler.CallCount);
+        Assert.NotNull(handler.LastRequest);
+        Assert.Equal(HttpMethod.Post, handler.LastRequest!.Method);
+        Assert.Equal("https://codebambi-proxy.vercel.app/v2/user/sync",
+            handler.LastRequest.RequestUri!.ToString());
+
+        // Auth + HMAC signing headers all present (token value asserted only in-test, never logged).
+        Assert.True(handler.LastRequest.Headers.TryGetValues("X-Auth-Token", out var tokenValues));
+        Assert.Equal("auth-token-xyz", tokenValues!.Single());
+        Assert.True(handler.LastRequest.Headers.Contains("X-CCP-Timestamp"));
+        Assert.True(handler.LastRequest.Headers.Contains("X-CCP-Signature"));
+
+        // The signature is deterministic over the exact (unifiedId, timestamp, body) triple.
+        var timestamp = handler.LastRequest.Headers.GetValues("X-CCP-Timestamp").Single();
+        var signature = handler.LastRequest.Headers.GetValues("X-CCP-Signature").Single();
+        Assert.Equal(ExpectedSignature("unified-1", timestamp, handler.LastBody!), signature);
+
+        // Body carries the leaderboard-submit + progression fields.
+        var body = JObject.Parse(handler.LastBody!);
+        Assert.Equal("unified-1", (string?)body["unified_id"]);
+        Assert.Equal(500, (int?)body["xp"]);
+        Assert.Equal(42, (int?)body["level"]);
+        Assert.Equal(7, (int?)body["skill_points"]);
+    }
+
+    [Fact]
+    public async Task SyncProfileAsync_SecondCallWithinCooldown_DoesNotPostAgain()
+    {
+        var handler = new RecordingHandler();
+        var settings = LoadedProfileSettings();
+        using var svc = CreateMergeService(handler, settings);
+
+        Assert.True(await svc.SyncProfileAsync());
+        Assert.Equal(1, handler.CallCount);
+
+        // A second call immediately after is inside the 30 s cooldown window => no second POST.
+        var second = await svc.SyncProfileAsync();
+        Assert.False(second);
+        Assert.Equal(1, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task SyncProfileAsync_ConcurrentCallWhileInFlight_ReturnsWithoutSecondPost()
+    {
+        using var handler = new BlockingHandler();
+        var settings = LoadedProfileSettings();
+        settings.Current.AuthToken = "auth-token-xyz";
+        settings.Current.UnifiedId = "unified-1";
+        using var svc = new ProfileSyncService(
+            settings, new DebugLogger<ProfileSyncService>(), handler, sessionService: null);
+
+        // Start the first sync: it acquires the gate, POSTs, and blocks inside the handler.
+        var first = svc.SyncProfileAsync();
+        await handler.Entered.WaitAsync(TestContext.Current.CancellationToken);   // guarantee the first call is in-flight (gate held)
+
+        // Second call while the gate is held: WaitAsync(0) fails => returns false, no second POST.
+        var second = await svc.SyncProfileAsync();
+        Assert.False(second);
+        Assert.Equal(1, handler.CallCount);
+
+        handler.ReleaseResponse();
+        Assert.True(await first);
+        Assert.Equal(1, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task SyncProfileAsync_429_StampsLastSyncTime_WithoutThrowing()
+    {
+        var handler = new RecordingHandler { ResponseStatus = (HttpStatusCode)429 };
+        var settings = LoadedProfileSettings();
+        using var svc = CreateMergeService(handler, settings);
+
+        var result = await svc.SyncProfileAsync();
+
+        Assert.False(result);
+        Assert.Equal(1, handler.CallCount);            // it DID post; the server rate-limited it
+        Assert.True(svc.LastSyncTime.HasValue);        // 429 stamps LastSyncTime to defer the next attempt
+        Assert.Equal(0, svc.ConsecutiveSyncFailures);  // a 429 is not counted as a sync failure
+    }
 }
