@@ -1,8 +1,10 @@
 # ProfileSyncService — Slice-by-Slice Port Plan
 
-> **Status:** IN PROGRESS — **Slice 1 landed unwired (`c4b2583a`, 2026-07-04): Core seam +
-> 18 DTOs + HMAC `SignRequest` foundation + 5 tests, Core 175/175, NOT in DI (byte-identical app
-> behavior).** Slices 2–7 remain (fresh-context). This is the sole remaining WS0 merge-`5ce70de6`
+> **Status:** IN PROGRESS — **Slices 1–2 landed unwired.** Slice 1 (`c4b2583a`): Core seam + 18
+> DTOs + HMAC `SignRequest` + 5 tests. Slice 2 (`a3215fc9`): injectable-`HttpMessageHandler` test
+> ctor + heartbeat (`System.Threading.Timer`, `SendHeartbeatAsync`, `in_session` via `ISessionService`
+> seam, `is_active` slice-7-deferred) + 4 tests. **Core 179/179, still NOT in DI (byte-identical app
+> behavior).** Slices 3–7 remain (fresh-context, security-sensitive). This is the sole remaining WS0 merge-`5ce70de6`
 > re-open (parity-matrix row 1). Execution is a **fresh-context task**: the surface is ~2,800 LOC
 > and **security-sensitive** (HMAC anti-cheat signing, GDPR delete/export, and the P0 privacy
 > `ExcludedBackupProperties` list — omitting it leaks the auth token to the server). It must be
@@ -286,10 +288,13 @@ no-op stub (the earlier "do not end a session on slice 1 alone" hazard is avoide
 slice 1 landed unwired). `HandleUnauthorizedAsync`/`TryRecoverAuthTokenAsync` deferred to slice 4
 (they need the sync flow). Core 175/175. **Remaining slices 2–7 wire + implement real behavior.**
 
-**Slice 2 — Heartbeat.** `StartHeartbeat`/`StopHeartbeat`/`SendHeartbeatAsync` → `/v2/user/heartbeat`.
-Replace `DispatcherTimer` with `System.Threading.Timer` (portable). Wire startup + `StopHeartbeat` on
-dispose/exit in the Avalonia head. *Success:* heartbeat POSTs against a stubbed handler; timer
-start/stop clean.
+**Slice 2 — Heartbeat. ✅ DONE (`a3215fc9`, landed UNWIRED).** Added the injectable-`HttpMessageHandler`
+internal test ctor (unblocks all later slice tests). `StartHeartbeat`/`StopHeartbeat`/`SendHeartbeatAsync`
+→ `/v2/user/heartbeat` with `System.Threading.Timer` (120s + immediate tick, idempotent, disposed).
+Guards mirrored (disposed/OfflineMode/!IsSyncEnabled/empty unifiedId); 401 minimal path + `// slice 4`
+note for full recovery. `in_session` via optional `ISessionService` seam (`State != Idle`); `is_active`
+conservative default + `// slice 7` note (no clean Core idle seam). 4 tests, Core 179/179. **The app
+startup + dispose/exit wiring of `StartHeartbeat`/`StopHeartbeat` is deferred to slice 7** (kept unwired).
 
 **Slice 3 — Pull + merge (largest logic slice).** `LoadProfileAsync` + `MergeCloudProfile` +
 `MergeV2CloudStatsIntoLocalProgress` + `ApplyForceStreakOverride` + `ApplyForceSkillsReset` +
