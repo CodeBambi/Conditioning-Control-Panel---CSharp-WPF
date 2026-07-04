@@ -1,6 +1,8 @@
 # ProfileSyncService — Slice-by-Slice Port Plan
 
-> **Status:** APPROVED PLAN, not yet executed. This is the sole remaining WS0 merge-`5ce70de6`
+> **Status:** IN PROGRESS — **Slice 1 landed unwired (`c4b2583a`, 2026-07-04): Core seam +
+> 18 DTOs + HMAC `SignRequest` foundation + 5 tests, Core 175/175, NOT in DI (byte-identical app
+> behavior).** Slices 2–7 remain (fresh-context). This is the sole remaining WS0 merge-`5ce70de6`
 > re-open (parity-matrix row 1). Execution is a **fresh-context task**: the surface is ~2,800 LOC
 > and **security-sensitive** (HMAC anti-cheat signing, GDPR delete/export, and the P0 privacy
 > `ExcludedBackupProperties` list — omitting it leaks the auth token to the server). It must be
@@ -273,13 +275,16 @@ in `Core/App.cs` (:76-98) so route through typed seams. Register in Avalonia
 
 ## 8. Slice Breakdown (each build+test-gateable, dependency-ordered)
 
-**Slice 1 — Seam + DTOs + skeleton.** Files: `CCP.Core/Services/Settings/IProfileSyncService.cs`
-(new, DIM defaults), `.../ProfileSyncService.cs` (new: ctor `(ISettingsService,
-ILogger<ProfileSyncService>)`, own `HttpClient`, `AddAuthHeader`/`SignRequest`/
-`HandleUnauthorizedAsync`/`TryRecoverAuthTokenAsync`/`Dispose` helpers), `.../ProfileSyncDtos.cs`
-(all moved DTOs + public `SettingsBackupInfo`). DI: register in `CCP.Avalonia/
-ServiceCollectionExtensions.cs`. *Success:* solution builds; `SignRequest` unit-testable. **⚠ Do not
-end a session on slice 1 alone** (live no-op registration = stub).
+**Slice 1 — Seam + DTOs + skeleton. ✅ DONE (`c4b2583a`, landed UNWIRED).** Created
+`CCP.Core/Services/Settings/IProfileSyncService.cs` (DIM defaults, slice-N tags), `.../ProfileSyncDtos.cs`
+(18 DTOs verbatim + public `SettingsBackupInfo`), `.../ProfileSyncService.cs` (ctor `(ISettingsService,
+ILogger)`, own `HttpClient`, `AddAuthHeader` + static-internal `SignRequest` HMAC helper + `Dispose`;
+async members inherit DIM defaults tagged for later slices), `tests/CCP.Core.Tests/ProfileSyncServiceTests.cs`
+(5 tests: SignRequest determinism/known-triple/empty-noop + 2 DTO round-trips). **AMENDMENT applied:
+NOT registered in DI and no call site changed** — app behavior byte-identical, so there is NO live
+no-op stub (the earlier "do not end a session on slice 1 alone" hazard is avoided precisely because
+slice 1 landed unwired). `HandleUnauthorizedAsync`/`TryRecoverAuthTokenAsync` deferred to slice 4
+(they need the sync flow). Core 175/175. **Remaining slices 2–7 wire + implement real behavior.**
 
 **Slice 2 — Heartbeat.** `StartHeartbeat`/`StopHeartbeat`/`SendHeartbeatAsync` → `/v2/user/heartbeat`.
 Replace `DispatcherTimer` with `System.Threading.Timer` (portable). Wire startup + `StopHeartbeat` on
