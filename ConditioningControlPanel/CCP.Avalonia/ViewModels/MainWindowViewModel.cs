@@ -1077,8 +1077,12 @@ public partial class MainWindowViewModel : ObservableObject
                 // WPF SessionEngine.ResumeSession restarts services per session settings
                 // (SessionEngine.cs:424-437). StartEffects does not re-begin the media log
                 // (log lifecycle is owned by Core SessionService), so resume is log-safe.
+                // resuming:true skips one-time session-start work (burst re-scheduling,
+                // autonomy re-arming) and skips features whose deferred timeline start
+                // (#483) hasn't arrived yet — WPF resume gates on IsFeaturePending
+                // (SessionEngine.cs:434-452).
                 if (_sessionService.CurrentSession is { } session)
-                    _effectOrchestrator?.StartEffects(session);
+                    _effectOrchestrator?.StartEffects(session, resuming: true);
                 UpdatePauseButton();
                 UpdateSessionStatus();
             });

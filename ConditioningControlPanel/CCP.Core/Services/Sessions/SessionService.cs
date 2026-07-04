@@ -46,6 +46,15 @@ public sealed class SessionService : ISessionService, IDisposable
     private double _randomizedPinkStartMinute;
     private double _randomizedSpiralStartMinute;
 
+    // Deferred feature starts — the timeline editor's "start at minute X" events (#483).
+    // The editor serializes a StartMinute for every feature, but the port only honored
+    // pink filter, spiral and bubbles via their bespoke paths; flash, subliminal, whispers,
+    // bouncing text, videos, lock cards, bubble count and mind wipe all started at t=0
+    // regardless. The effect orchestrator queues one entry per delayed feature at session
+    // start; CheckDeferredFeatureStarts fires each when its minute arrives. Mirrors WPF
+    // SessionEngine._pendingFeatureStarts (SessionEngine.cs:857-875).
+    private readonly List<(string Name, int StartMinute, Action Fire)> _pendingFeatureStarts = new();
+
     public SessionState State => _state;
     public ConditioningControlPanel.Models.Session? CurrentSession => _currentSession;
 
@@ -153,6 +162,10 @@ public sealed class SessionService : ISessionService, IDisposable
         _sessionStartStrictLock = _settings.Current.StrictLockEnabled;
         _sessionStartPanicKey = _settings.Current.PanicKeyEnabled;
 
+        // Drop stale deferred starts before the scope gates flags for this session
+        // (WPF ApplySessionSettings clears the queue first, SessionEngine.cs:879-881).
+        _pendingFeatureStarts.Clear();
+
         // Randomize delayed start times, then overwrite live settings with the session preset
         // (snapshot is restored in StopSession before SessionStopped fires).
         RandomizeStartTimes(session);
@@ -192,6 +205,9 @@ public sealed class SessionService : ISessionService, IDisposable
         _wallClockStopwatch.Stop();
         _tickSubscription?.Stop();
         _tickSubscription = null;
+
+        // Drop any not-yet-fired deferred feature starts (#483, WPF SessionEngine.cs:277-279).
+        _pendingFeatureStarts.Clear();
 
         // Restore the user's pre-session settings BEFORE SessionStopped fires (WPF parity).
         _settingsScope.Restore(_settings.Current);
@@ -304,6 +320,7 @@ public sealed class SessionService : ISessionService, IDisposable
 
         CheckPhaseTransition(elapsedMinutes);
         UpdateRampingValues(elapsedMinutes, totalMinutes);
+        CheckDeferredFeatureStarts(elapsedMinutes);
 
         try
         {
@@ -312,6 +329,44 @@ public sealed class SessionService : ISessionService, IDisposable
         catch (Exception ex)
         {
             Log.Warning(ex, "Session effect tick failed");
+        }
+    }
+
+    /// <inheritdoc/>
+    public void DeferFeatureStart(string name, int startMinute, Action fire)
+    {
+        _pendingFeatureStarts.Add((name, startMinute, fire));
+        Log.Information("Session: {Feature} start deferred to minute {Minute}", name, startMinute);
+    }
+
+    /// <inheritdoc/>
+    public bool IsFeaturePending(string name) =>
+        _pendingFeatureStarts.Any(p => p.Name == name);
+
+    /// <summary>
+    /// Fires deferred feature starts whose session minute has arrived (#483). Runs after
+    /// the ramps and before the orchestrator's bespoke delayed paths, preserving the WPF
+    /// tick order (SessionEngine.CheckDelayedFeatures fires the pending queue first,
+    /// SessionEngine.cs:600-620, then pink/spiral/bubbles).
+    /// </summary>
+    private void CheckDeferredFeatureStarts(double elapsedMinutes)
+    {
+        // Reverse-iterate so firing removes in place (WPF SessionEngine.cs:603-605).
+        for (int i = _pendingFeatureStarts.Count - 1; i >= 0; i--)
+        {
+            var pending = _pendingFeatureStarts[i];
+            if (elapsedMinutes < pending.StartMinute) continue;
+            _pendingFeatureStarts.RemoveAt(i);
+            try
+            {
+                pending.Fire();
+                Log.Information("Session: {Feature} started at {Minutes:F1} minutes (target was {Target})",
+                    pending.Name, elapsedMinutes, pending.StartMinute);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Session: deferred start of {Feature} failed", pending.Name);
+            }
         }
     }
 

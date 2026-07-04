@@ -28,6 +28,9 @@ namespace ConditioningControlPanel.Avalonia.Services.Sessions;
 /// Starts/stops feature services according to the current session settings and drives
 /// per-tick feature scheduling (delayed pink/spiral/bubble starts, intermittent bubble
 /// bursts) mirroring WPF SessionEngine.CheckDelayedFeatures/HandleIntermittentBubbles.
+/// Timeline start events for the remaining features (#483) are queued on Core
+/// SessionService's pending-starts list and fired by its tick, mirroring WPF
+/// SessionEngine.DeferFeatureStart/CheckDelayedFeatures (SessionEngine.cs:600-620, 857-875).
 /// Services are resolved lazily on first use so heavy dependencies such as
 /// LibVLC are not created during cold startup.
 /// </summary>
@@ -104,31 +107,71 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
             ResetTickState(session);
         }
 
+        // Timeline start events (#483): features with StartMinute > 0 are queued on Core's
+        // pending-starts list and fired by the session tick instead of starting at t=0
+        // (WPF SessionEngine.ApplySessionSettings defer branches, SessionEngine.cs:892-1153;
+        // resume pending gates, SessionEngine.cs:434-452). Deferral needs the ticking Core
+        // session; effects driven outside one (benchmark, quick-start) have no tick to fire
+        // queued entries, so they keep starting immediately.
+        var deferral = ResolveDeferralTarget(session);
+
         TryRun("overlay", () => Overlay?.Start());
 
-        if (s.FlashEnabled) TryRun("flash", () => Flash?.Start());
-        if (s.MandatoryVideosEnabled) TryRun("video", () => Video?.Start());
-        if (s.SubliminalEnabled) TryRun("subliminal", () => Subliminal?.Start());
-        if (s.MindWipeEnabled)
-        {
-            TryRun("mindwipe", () => MindWipe?.Start(appSettings.MindWipeFrequency, appSettings.MindWipeVolume / 100.0));
-
-            // Loop mode rides the engine start when enabled in app settings
-            // (WPF MainWindow.StartStop.cs:211-215).
-            if (appSettings.MindWipeLoop)
+        StartOrDefer(deferral, resuming, "flash", s.FlashEnabled, s.FlashStartMinute,
+            start: () => Flash?.Start(),
+            enableLiveFlag: () => _settings.Current.FlashEnabled = true,
+            stopFirst: () => Flash?.Stop());
+        StartOrDefer(deferral, resuming, "video", s.MandatoryVideosEnabled, s.MandatoryVideosStartMinute,
+            start: () => Video?.Start(),
+            enableLiveFlag: () => _settings.Current.MandatoryVideosEnabled = true,
+            stopFirst: () => Video?.Stop());
+        StartOrDefer(deferral, resuming, "subliminal", s.SubliminalEnabled, s.SubliminalStartMinute,
+            start: () => Subliminal?.Start(),
+            enableLiveFlag: () => _settings.Current.SubliminalEnabled = true,
+            stopFirst: () => Subliminal?.Stop());
+        // Mind wipe has no live enable flag and WPF's defer branch has no Stop
+        // (SessionEngine.cs:186-200); frequency/volume are read at fire time, matching
+        // WPF's lazy read of the captured settings.
+        StartOrDefer(deferral, resuming, "mindwipe", s.MindWipeEnabled, s.MindWipeStartMinute,
+            start: () =>
             {
-                TryRun("mindwipe loop", () => MindWipe?.StartLoop(appSettings.MindWipeVolume / 100.0));
-            }
+                var app = _settings.Current;
+                MindWipe?.Start(app.MindWipeFrequency, app.MindWipeVolume / 100.0);
+
+                // Loop mode rides the engine start when enabled in app settings
+                // (WPF MainWindow.StartStop.cs:211-215).
+                if (app.MindWipeLoop)
+                {
+                    TryRun("mindwipe loop", () => MindWipe?.StartLoop(app.MindWipeVolume / 100.0));
+                }
+            });
+        // WPF stops bouncing text first to reset state (SessionEngine.cs:996-1013).
+        StartOrDefer(deferral, resuming, "bouncing text", s.BouncingTextEnabled, s.BouncingTextStartMinute,
+            start: () => BouncingText?.Start(s.BouncingTextPhrases),
+            enableLiveFlag: () => _settings.Current.BouncingTextEnabled = true,
+            stopFirst: () => BouncingText?.Stop());
+
+        // Audio whispers are flag-driven (no service Start); the scope held SubAudioEnabled
+        // off for a delayed start, so queue just the flag flip (WPF SessionEngine.cs:955-965).
+        if (!resuming && s.AudioWhispersEnabled && s.AudioWhispersStartMinute > 0)
+        {
+            deferral?.DeferFeatureStart("audio whispers", s.AudioWhispersStartMinute,
+                () => _settings.Current.SubAudioEnabled = true);
         }
-        if (s.BouncingTextEnabled) TryRun("bouncing text", () => BouncingText?.Start(s.BouncingTextPhrases));
 
         // Delayed (BubblesStartMinute > 0) and intermittent bubble sessions stay off until
         // the tick scheduler enables them (WPF SessionEngine.ApplySessionSettings:958-971).
         // SessionSettingsScope.Apply has already shaped the live BubblesEnabled flag for a
         // fresh start; on resume it reflects the live burst/delayed state at pause time.
         if (s.BubblesEnabled && appSettings.BubblesEnabled) TryRun("bubbles", () => Bubbles?.Start());
-        if (s.BubbleCountEnabled) TryRun("bubble count", () => BubbleCount?.Start());
-        if (s.LockCardEnabled) TryRun("lock card", () => LockCard?.Start());
+        StartOrDefer(deferral, resuming, "bubble count", s.BubbleCountEnabled, s.BubbleCountStartMinute,
+            start: () => BubbleCount?.Start(),
+            enableLiveFlag: () => _settings.Current.BubbleCountEnabled = true,
+            stopFirst: () => BubbleCount?.Stop());
+        StartOrDefer(deferral, resuming, "lock card", s.LockCardEnabled, s.LockCardStartMinute,
+            start: () => LockCard?.Start(),
+            enableLiveFlag: () => _settings.Current.LockCardEnabled = true,
+            stopFirst: () => LockCard?.Stop());
         if (s.PopQuizEnabled) TryRun("pop quiz", () => PopQuiz?.Start());
 
         // Arm autonomy on session start when the user's settings say it should be armed
@@ -212,6 +255,63 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
         // (SessionEngine.cs:469-475).
         CheckDelayedFeatures(session, elapsedMinutes);
         HandleIntermittentBubbles(session, elapsedMinutes);
+    }
+
+    /// <summary>
+    /// Starts a session feature immediately, or defers it to its timeline start minute.
+    /// Fresh start: a feature with <paramref name="startMinute"/> &gt; 0 is stopped first
+    /// (a session can subsume an engine-only run that already has the service running,
+    /// WPF SessionEngine.cs:900 "engine may already have it running") and queued on Core's
+    /// pending list; the fire action re-enables the live flag the scope held off, then
+    /// starts the service (WPF SessionEngine.ApplySessionSettings defer branches,
+    /// SessionEngine.cs:892-1153). Resume: features still pending are skipped — Core fires
+    /// them when due, elapsed session time survives the pause (WPF SessionEngine.cs:434-452).
+    /// </summary>
+    private void StartOrDefer(
+        ISessionService? deferral,
+        bool resuming,
+        string name,
+        bool enabled,
+        int startMinute,
+        Action start,
+        Action? enableLiveFlag = null,
+        Action? stopFirst = null)
+    {
+        if (!enabled) return;
+
+        if (resuming)
+        {
+            if (deferral?.IsFeaturePending(name) == true) return;
+            TryRun(name, start);
+            return;
+        }
+
+        if (startMinute > 0 && deferral != null)
+        {
+            if (stopFirst != null) TryRun($"{name} (deferred stop)", stopFirst);
+            deferral.DeferFeatureStart(name, startMinute, () => TryRun(name, () =>
+            {
+                enableLiveFlag?.Invoke();
+                start();
+            }));
+            return;
+        }
+
+        TryRun(name, start);
+    }
+
+    /// <summary>
+    /// The Core session service owning <paramref name="session"/>, if it is the session
+    /// currently ticking. Deferred starts are queued on Core's pending list (fired by its
+    /// tick, dropped on stop); with no ticking owner there is nothing to fire them, so
+    /// callers fall back to immediate starts (same fallback shape as ResetTickState).
+    /// </summary>
+    private ISessionService? ResolveDeferralTarget(Session session)
+    {
+        return _services.GetService<ISessionService>() is { } sessionService
+            && ReferenceEquals(sessionService.CurrentSession, session)
+            ? sessionService
+            : null;
     }
 
     /// <summary>

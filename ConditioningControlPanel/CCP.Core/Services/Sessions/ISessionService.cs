@@ -55,4 +55,20 @@ public interface ISessionService
     /// Resume a paused session.
     /// </summary>
     void ResumeSession();
+
+    /// <summary>
+    /// Queue a deferred feature start for the timeline editor's "start at minute X"
+    /// events (#483). <paramref name="fire"/> runs on the session tick once
+    /// <paramref name="startMinute"/> minutes of session time have elapsed; stopping the
+    /// session drops unfired entries. Mirrors WPF SessionEngine.DeferFeatureStart
+    /// (SessionEngine.cs:868-872). Default implementation is a no-op so fakes keep compiling.
+    /// </summary>
+    void DeferFeatureStart(string name, int startMinute, Action fire) { }
+
+    /// <summary>
+    /// True while a start queued via <see cref="DeferFeatureStart"/> has not fired yet.
+    /// Resume paths use this to avoid prematurely starting deferred features.
+    /// Mirrors WPF SessionEngine.IsFeaturePending (SessionEngine.cs:874-875).
+    /// </summary>
+    bool IsFeaturePending(string name) => false;
 }

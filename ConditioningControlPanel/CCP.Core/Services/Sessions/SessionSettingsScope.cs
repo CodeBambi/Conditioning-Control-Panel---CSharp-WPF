@@ -10,6 +10,12 @@ namespace ConditioningControlPanel.Core.Services.Sessions;
 /// Settings writes only; feature-service start/stop stays in the effect orchestrator.
 /// Field list mirrors WPF SessionEngine.SaveCurrentSettings/ApplySessionSettings/RestoreSettings
 /// exactly (including the WPF quirk that SubliminalDuration is applied but never restored).
+/// Timeline start events (#483): a feature with StartMinute &gt; 0 has its live enable flag
+/// held off here; the effect orchestrator queues the deferred start (flag flip + service
+/// start) on SessionService's pending list, fired by the session tick. WPF instead keeps
+/// most flags on and defers only the service Start (SessionEngine.cs:892-1153); the port
+/// holds the flag too — same pattern as pink/spiral/bubbles below — so nothing keyed off
+/// the live flag runs the feature early. The observable timeline is identical.
 /// </summary>
 public sealed class SessionSettingsScope
 {
@@ -28,8 +34,8 @@ public sealed class SessionSettingsScope
     {
         Snapshot(current);
 
-        // Flash Images
-        current.FlashEnabled = settings.FlashEnabled;
+        // Flash Images (delayed start defers Flash.Start, WPF SessionEngine.cs:892-908)
+        current.FlashEnabled = settings.FlashEnabled && settings.FlashStartMinute == 0;
         if (settings.FlashEnabled)
         {
             current.FlashFrequency = settings.FlashPerHour;
@@ -41,7 +47,8 @@ public sealed class SessionSettingsScope
         }
 
         // Subliminals - override phrases with session-specific ones
-        current.SubliminalEnabled = settings.SubliminalEnabled;
+        // (delayed start defers Subliminal.Start, WPF SessionEngine.cs:939-951)
+        current.SubliminalEnabled = settings.SubliminalEnabled && settings.SubliminalStartMinute == 0;
         if (settings.SubliminalEnabled)
         {
             current.SubliminalFrequency = settings.SubliminalPerMin;
@@ -56,8 +63,9 @@ public sealed class SessionSettingsScope
             }
         }
 
-        // Audio Whispers (Sub Audio)
-        current.SubAudioEnabled = settings.AudioWhispersEnabled;
+        // Audio Whispers (Sub Audio) — flag-driven (no service Start), so a delayed start
+        // just holds the flag off until the minute arrives (WPF SessionEngine.cs:955-965).
+        current.SubAudioEnabled = settings.AudioWhispersEnabled && settings.AudioWhispersStartMinute == 0;
         if (settings.AudioWhispersEnabled)
         {
             current.SubAudioVolume = settings.WhisperVolume;
@@ -71,7 +79,8 @@ public sealed class SessionSettingsScope
         }
 
         // Bouncing Text - override phrases with session-specific ones
-        current.BouncingTextEnabled = settings.BouncingTextEnabled;
+        // (delayed start defers BouncingText.Start, WPF SessionEngine.cs:996-1013)
+        current.BouncingTextEnabled = settings.BouncingTextEnabled && settings.BouncingTextStartMinute == 0;
         if (settings.BouncingTextEnabled)
         {
             current.BouncingTextSpeed = settings.BouncingTextSpeed;
@@ -118,14 +127,15 @@ public sealed class SessionSettingsScope
             current.BubblesEnabled = false;
         }
 
-        // Interactive Features
-        current.MandatoryVideosEnabled = settings.MandatoryVideosEnabled;
+        // Interactive Features (delayed start defers Video.Start, WPF SessionEngine.cs:1066-1079)
+        current.MandatoryVideosEnabled = settings.MandatoryVideosEnabled && settings.MandatoryVideosStartMinute == 0;
         if (settings.MandatoryVideosEnabled && settings.VideosPerHour.HasValue)
         {
             current.VideosPerHour = settings.VideosPerHour.Value;
         }
 
-        current.LockCardEnabled = settings.LockCardEnabled;
+        // (delayed start defers LockCard.Start, WPF SessionEngine.cs:1108-1121)
+        current.LockCardEnabled = settings.LockCardEnabled && settings.LockCardStartMinute == 0;
         if (settings.LockCardEnabled)
         {
             if (settings.LockCardFrequency.HasValue)
@@ -141,7 +151,8 @@ public sealed class SessionSettingsScope
             }
         }
 
-        current.BubbleCountEnabled = settings.BubbleCountEnabled;
+        // (delayed start defers BubbleCount.Start, WPF SessionEngine.cs:1140-1153)
+        current.BubbleCountEnabled = settings.BubbleCountEnabled && settings.BubbleCountStartMinute == 0;
         if (settings.BubbleCountEnabled && settings.BubbleCountFrequency.HasValue)
         {
             current.BubbleCountFrequency = settings.BubbleCountFrequency.Value;
