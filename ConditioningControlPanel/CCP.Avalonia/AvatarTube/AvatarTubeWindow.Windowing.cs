@@ -266,12 +266,24 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             if (_parentWindow.ClientSize.Height <= 0 || _parentWindow.ClientSize.Width <= 0) return;
             if (_parentWindow.Position.X == 0 && _parentWindow.Position.Y == 0 && _parentWindow.ClientSize.Height < 100) return;
 
-            double actualWidth = ClientSize.Width > 0 ? ClientSize.Width : DesignWidth * _scaleFactor;
-            double actualHeight = ClientSize.Height > 0 ? ClientSize.Height : DesignHeight * _scaleFactor;
+            // Anchor on the DETERMINISTIC design size (the same values ContentViewbox is
+            // sized with in CalculateScaleFactor) instead of the live ClientSize: the window
+            // opens with SizeToContent=WidthAndHeight and only freezes to Manual on first
+            // render, so ClientSize is timing-dependent - late-loading tube art or an open
+            // speech bubble inflating it made this centering math park the tube too HIGH,
+            // where it stayed ("avatar drifts up"). Design-based anchoring keeps the tube
+            // put no matter what transient content does to the window size.
+            double tubeWidth = DesignWidth * _scaleFactor;
+            double tubeHeight = DesignHeight * _scaleFactor;
             double scaledOffset = BaseOffsetFromParent * _scaleFactor;
 
-            double newLeft = _parentWindow.Position.X - actualWidth - scaledOffset;
-            double newTop = _parentWindow.Position.Y + (_parentWindow.ClientSize.Height - actualHeight) / 2 + (VerticalOffset * _scaleFactor);
+            // Window.Position is PHYSICAL pixels while ClientSize and the design constants
+            // are LOGICAL units - convert via the parent's scaling or the pair drifts apart
+            // on monitors above 100% DPI (attached tube shares the parent's monitor).
+            double s = _parentWindow.RenderScaling;
+
+            double newLeft = _parentWindow.Position.X - (tubeWidth + scaledOffset) * s;
+            double newTop = _parentWindow.Position.Y + ((_parentWindow.ClientSize.Height - tubeHeight) / 2 + VerticalOffset * _scaleFactor) * s;
             if (newTop < -500 || newTop > 5000 || newLeft < -2000 || newLeft > 5000) return;
 
             Position = new PixelPoint((int)newLeft, (int)newTop);

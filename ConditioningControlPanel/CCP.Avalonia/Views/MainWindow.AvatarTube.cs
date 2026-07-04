@@ -14,6 +14,18 @@ public partial class MainWindow
     /// can reuse it instead of creating a duplicate.</summary>
     public AvatarTubeWindow? AvatarTube => _avatarTubeWindow;
 
+    /// <summary>Single-owner accessor for the avatar tube: creates the window on demand
+    /// (respecting <c>AvatarEnabled</c>) and returns it. The shared
+    /// <see cref="IAvatarWindowService"/> MUST route through this instead of newing up its
+    /// own <see cref="AvatarTubeWindow"/> - two independent owners was the root cause of the
+    /// duplicate avatar seen on theme changes (both instances subscribe to
+    /// <c>ActiveModChanged</c> and repaint side by side).</summary>
+    public AvatarTubeWindow? GetOrCreateAvatarTube()
+    {
+        InitializeAvatarTube();
+        return _avatarTubeWindow;
+    }
+
     private void InitializeAvatarTube()
     {
         if (_avatarTubeWindow != null)
@@ -26,6 +38,15 @@ public partial class MainWindow
         {
             var win = new AvatarTubeWindow(this);
             _avatarTubeWindow = win;
+
+            // A closed window can never be shown again in Avalonia - drop the reference so
+            // the next Show/GetOrCreate call builds a fresh tube instead of throwing on a
+            // dead one (the shared IAvatarWindowService clears its reference the same way).
+            win.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_avatarTubeWindow, win))
+                    _avatarTubeWindow = null;
+            };
 
             if (_settingsService.Current.AvatarMuted)
                 win.SetMuted(true);

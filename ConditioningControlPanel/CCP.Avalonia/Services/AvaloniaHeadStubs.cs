@@ -2659,14 +2659,28 @@ public sealed class AvaloniaAvatarWindowService : IAvatarWindowService
     {
         if (_window != null) return;
 
-        // Reuse the avatar tube window that MainWindow already created so we never
-        // show two tubes side-by-side.
+        // SINGLE OWNER: MainWindow creates and owns the avatar tube; this service only
+        // borrows it. Creating our own window here while MainWindow later created its own
+        // was the duplicate-avatar bug (visible after theme changes, when both instances'
+        // ActiveModChanged handlers repainted side by side). GetOrCreateAvatarTube builds
+        // the window on demand and respects AvatarEnabled.
         if (global::Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
             && desktop.MainWindow is global::ConditioningControlPanel.Avalonia.Views.MainWindow main)
         {
-            _window = main.AvatarTube;
+            _window = main.GetOrCreateAvatarTube();
+            if (_window != null)
+            {
+                var adopted = _window;
+                adopted.Closed += (_, _) =>
+                {
+                    if (ReferenceEquals(_window, adopted))
+                        _window = null;
+                };
+            }
+            return;
         }
 
+        // Fallback for heads whose MainWindow is not the desktop MainWindow type.
         if (_window == null)
         {
             _window = new AvatarTube.AvatarTubeWindow(_parentWindow);
