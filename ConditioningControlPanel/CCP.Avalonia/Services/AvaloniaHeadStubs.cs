@@ -22,6 +22,7 @@ using ConditioningControlPanel.Core.Services.Subliminal;
 using ConditioningControlPanel.Core.Services.Video;
 using Microsoft.Extensions.DependencyInjection;
 using AvaloniaChaosTuning = ConditioningControlPanel.Avalonia.Chaos.ChaosTuning;
+using CoreChaosTuning = ConditioningControlPanel.Core.Services.Chaos.ChaosTuning;
 using ChaosNarrativeContext = ConditioningControlPanel.Core.Services.Chaos.ChaosNarrativeContext;
 
 namespace ConditioningControlPanel.Avalonia.Services;
@@ -106,6 +107,10 @@ public sealed class AvaloniaChaosService : IChaosService
     // ---- hold-to-defuse focus economy state ----
     private double _focusLowAccumSec;
     private bool _focusLowBarkFired;
+    // Snap Chain: triggers bounce off inside this window (WPF ChaosModeService.cs:1923).
+    private DateTime _invulnUntilUtc = DateTime.MinValue;
+    // Pendulum swing activation lands in S6/S7 (plan: chaos-run-engine-port-plan.md); false until then.
+    private bool _pendulumSlowActive = false;
 
     // ---- active toys ----
     private readonly List<ChaosToyButtonWindow> _toyButtons = new();
@@ -569,99 +574,227 @@ public sealed class AvaloniaChaosService : IChaosService
 
     private void OnBenignPopped(ChaosBubbleSpec spec)
     {
-        if (_state == null) return;
-        ChaosLessonHooks.OnTreatPopped(spec.VariantId);
+        if (_state == null || _paused || _manualPaused) return;
         ChaosNarrativeHooks.OnFirstPop(BuildNarrativeContext(depth: _waveIndex));
 
-        // Special pickups
-        if (spec.IsFreeze) { ActivateFreeze(); _state.PushEvent("❄ the field holds still"); }
-        if (spec.IsHeart) { _state.Shields++; _state.PushEvent("💖 +1 resistance"); }
+        // ---- pickup early-returns: OUTSIDE the score/combo economy — they bank gold or
+        //      resistance; never touch Score/Combo, no mults/flips (WPF ChaosModeService.cs:1780-1828) ----
+
+        // Pop-up Notification heart: pure kindness — +1 resistance + focus; no points, no
+        // streak, no payload (WPF ChaosModeService.cs:1780-1791).
+        if (spec.IsHeart)
+        {
+            _state.Shields++;
+            _state.Focus = Math.Min(_state.FocusMax, _state.Focus + CoreChaosTuning.FOCUS_PER_HEART);
+            _state.PushEvent("💖 pop-up notification! +1 resistance");
+            AvaloniaChaosSfx.Play("resist_absorb", 0.55f);   // WPF ChaosModeService.cs:1790
+            UpdateStateText();
+            return;
+        }
+
+        // Gold Digger droplet: a little gold per bead, outside the score economy like its
+        // parent (WPF ChaosModeService.cs:1794-1802). Gold doubles in the Relapse loop.
         if (spec.IsDroplet)
         {
-            int gold = 3 + _rng.Next(5);
-            ChaosMeta.AddGold(gold);
-            _state.PushEvent($"✧ +{gold} gold");
-            AvaloniaChaosSfx.Play("golden_pop", 0.35f);   // WPF ChaosModeService.cs:1799
+            _state.Focus = Math.Min(_state.FocusMax, _state.Focus + CoreChaosTuning.FOCUS_PER_DROPLET);
+            int dGold = GoldScaled(_rng.Next(3, 8));
+            ChaosMeta.AddGold(dGold);
+            ChaosHappyPath.OnGoldFirstSeen();   // WPF BankGold's first-gold beat (ChaosModeService.cs:1713-1726)
+            _state.PushEvent($"{ChaosGlyphs.Gold} droplet +{dGold} gold");
+            AvaloniaChaosSfx.Play("golden_pop", 0.35f);   // WPF ChaosModeService.cs:1801
+            UpdateStateText();
+            return;
         }
 
+        // Lucky golden bubble: pure treasure — real gold banked instantly, outside the
+        // score/combo economy entirely (WPF ChaosModeService.cs:1804-1828). Rabbit's Foot
+        // scales the gold per level (10-20 unworn … 20-40 at the capstone).
         if (spec.IsGolden)
         {
-            int gold = 12 + _rng.Next(13);
+            _state.Focus = Math.Min(_state.FocusMax, _state.Focus + CoreChaosTuning.FOCUS_PER_GOLDEN);
+            int lvl = ChaosMeta.IsBoonActive("rabbits_foot") ? ChaosMeta.BoonLevel("rabbits_foot") : 0;
+            var (gMin, gMax) = ChaosLifetimeBoons.GoldenPayRange(lvl);
+            int gold = GoldScaled(_rng.Next(gMin, gMax + 1));
             ChaosMeta.AddGold(gold);
-            _state.PushEvent($"{ChaosGlyphs.Gold} +{gold} gold");
-            AvaloniaChaosSfx.Play("golden_pop", 0.6f);   // coins spill (WPF ChaosModeService.cs:1814)
             ChaosHappyPath.OnGoldFirstSeen();
+            _state.PushEvent($"{ChaosGlyphs.Gold} lucky bubble! +{gold} gold");
+            AvaloniaChaosSfx.Play("golden_pop", 0.6f);   // coins spill (WPF ChaosModeService.cs:1814)
+            UpdateStateText();
+            return;
         }
 
-        // Fire the bubble's payload (flash, subliminal, overlay, etc.)
-        FirePayload(spec);
+        // Freeze pickup: a GOOD catch — the engine routes freeze pops through this callback in
+        // the Avalonia head, so this branch mirrors WPF OnFreezeCaught verbatim
+        // (WPF ChaosModeService.cs:2305-2318): pays 140 x TotalMult (NO BoonPayMult), feeds the
+        // streak and heat, then holds the whole field.
+        if (spec.IsFreeze)
+        {
+            _state.Score += ChaosScoring.FreezeScore(_state.TotalMult);
+            _state.Combo++;
+            _state.Heat = Math.Min(1.0, _state.Heat + 0.05);
+            try { _achievements?.TrackBubblePopped(); } catch { }
+            ChaosLessonHooks.OnFreezeCaught();
+            ActivateFreeze();
+            _state.PushEvent("❄ frozen. the field holds");
+            UpdateStateText();
+            return;
+        }
+
+        // Mimic prism ("Look at the bright colors..."): 10x pay — and the copied effect fires
+        // (WPF ChaosModeService.cs:1829-1852). Side effects BEFORE scoring so the new combo
+        // step and heat feed the multiplier stack, exactly like WPF.
+        if (spec.IsPrism)
+        {
+            ChaosLessonHooks.OnPrismPopped();   // taking_chances lesson (WPF :1831)
+            _state.Focus = Math.Min(_state.FocusMax, _state.Focus + CoreChaosTuning.FOCUS_PER_PRISM);
+            FirePayload(spec);                  // the mimicked payload fires (WPF FireScaledPayload :1833)
+            _state.EffectsFired++;
+            _state.Combo++;
+            _state.Heat = Math.Min(1.0, _state.Heat + 0.05);
+            double prismPts = ChaosScoring.PrismScore(spec.Strength, _state.TotalMult, _state.BlindfoldPayMult);
+            _state.Score += prismPts;
+            try { _achievements?.TrackBubblePopped(); } catch { }
+            _state.PushEvent($"🔮 prism! 10x · {(string.IsNullOrEmpty(spec.MimicVariantId) ? spec.PayloadKind : spec.MimicVariantId)} fires");
+            UpdateStateText();
+            return;
+        }
+
+        // ---- treat pop (WPF ChaosModeService.cs:1854-1900): the payload fires FIRST, then
+        //      the exact WPF side-effect order — EffectsFired, Combo, Focus, Heat — THEN the
+        //      score, THEN the Drip Feed trickle. ----
+        FirePayload(spec);   // benign pop = a treat (WPF spec.Payload.Fire() :1854)
+        ChaosLessonHooks.OnTreatPopped(spec.VariantId);   // vibe_popping / chain_reaction / … (WPF :1856)
+        _state.EffectsFired++;
+        _state.Combo++;
+        // Focus economy: every treat-class pop refuels the hand; heavies refuel a little extra
+        // (WPF :1858-1861).
+        double focusGain = ChaosScoring.FocusForTreatPop(spec.PayMult);
+        _state.Focus = Math.Min(_state.FocusMax, _state.Focus + focusGain);
+        _state.Heat = Math.Min(1.0, _state.Heat + 0.04);
+        double pts = ChaosScoring.TreatPopScore(spec.Strength, _state.BenignBaseline, spec.PayMult,
+            ChaosScoring.PendulumFactor(_pendulumSlowActive, _state.PendulumPayMult),
+            ChaosScoring.ChanceFlip(_state.ChanceDoubleOdds, _rng),
+            _state.TotalMult, _state.BlindfoldPayMult);
+        _state.Score += pts;
+        BankDripFeed();   // Drip Feed (x2 in the relapse loop, clamped to the per-descent cap) (WPF :1870)
         // Achievement bubble-pop tracker: every benign/prism pop counts (WPF ChaosModeService.cs:1843,1869).
         try { _achievements?.TrackBubblePopped(); } catch { }
-
-        double focusGain = spec.IsGolden ? AvaloniaChaosTuning.FocusPerGolden : AvaloniaChaosTuning.FocusPerPop;
-        double basePay = 100 * (_state.DifficultyMult) * (1 + _state.Heat);
-        double pay = basePay * _state.ComboMult * _state.BoonMult * _state.UrgeMult;
-        _state.Score += pay;
-        _state.Combo++;
-        _state.EffectsFired++;
-        _state.Focus = Math.Min(_state.FocusMax, _state.Focus + focusGain);
-        _state.Heat = Math.Min(1.0, _state.Heat + 0.02);
+        if (spec.PayMult > 1) _state.PushEvent("🪨 heavy drop! x3");
+        _state.PushEvent($"○ popped {spec.VariantId}");
         UpdateStateText();
     }
 
-    private void OnDefused(ChaosBubbleSpec spec, double fuseSec, bool viaChannel)
+    private void OnDefused(ChaosBubbleSpec spec, double fuseSecLeft, bool viaChannel)
     {
-        if (_state == null) return;
+        if (_state == null || _paused || _manualPaused) return;
 
-        // The player's hand pays for completed channels; toys/chains/ripples defuse for free.
+        // The player's hand pays for its defuses; toys, chains and zones never do. A channel
+        // completed during a freeze is FREE — that's the freeze's reward
+        // (WPF ChaosModeService.cs:2003-2005).
         if (viaChannel)
         {
-            _state.Focus = Math.Max(0, _state.Focus - DefuseCostFor(spec));
+            if (_freezeRemainingSec <= 0)
+                _state.Focus = Math.Max(0, _state.Focus - ChaosScoring.DefuseCostFor(spec.IsBoundHalf));
             ChaosMeta.State.TotalChannelSeconds += _state.ChannelHeldSec;
             _state.IsChanneling = false;
             _state.ChannelHeldSec = 0;
             _state.ChannelTargetBubbleId = null;
         }
 
-        ChaosLessonHooks.OnDefuseCompleted(fuseSec, viaChannel);
+        // Snap Chain mantra: every completed defuse opens a brief invulnerability window
+        // (WPF ChaosModeService.cs:2012-2013).
+        if (_state.DefuseInvulnMs > 0)
+            _invulnUntilUtc = DateTime.UtcNow.AddMilliseconds(_state.DefuseInvulnMs);
+
+        ChaosLessonHooks.OnDefuseCompleted(fuseSecLeft, viaChannel);
         ChaosNarrativeHooks.OnFirstDefuse(BuildNarrativeContext(depth: _waveIndex));
         ChaosHappyPath.OnDefuseCompleted();
 
-        double basePay = 250 * _state.DifficultyMult * (1 + _state.Heat);
-        double pay = basePay * _state.ComboMult * _state.BoonMult * _state.UrgeMult;
-        _state.Score += pay;
-        _state.Combo++;
+        // Side effects BEFORE scoring — Defused/Combo/Heat feed the multiplier stack for THIS
+        // snap, exactly like WPF (ChaosModeService.cs:2009-2011). BestCombo tracks in
+        // UpdateStateText (WPF: the Combo setter, ChaosModels.cs:490).
         _state.Defused++;
-        _state.Heat = Math.Min(1.0, _state.Heat + 0.03);
+        _state.Combo++;
+        _state.Heat = Math.Min(1.0, _state.Heat + 0.07);
+        double pts = ChaosScoring.DefuseScore(spec.Strength, fuseSecLeft,
+            _state.LastBreathWindowSec, _state.LastBreathPayMult,
+            _state.MaxedBoons.Contains("slowburner"),
+            ChaosScoring.PendulumFactor(_pendulumSlowActive, _state.PendulumPayMult),
+            ChaosScoring.ChanceFlip(_state.ChanceDoubleOdds, _rng),
+            _state.TotalMult, _state.BlindfoldPayMult);
+        _state.Score += pts;
+        BankDripFeed();   // Drip Feed (x2 in the relapse loop, clamped to the per-descent cap) (WPF :2023)
+        try { _achievements?.TrackBubblePopped(); } catch { }
+        // Last Breath / Slowburner feed lines so score spikes explain themselves (WPF :2044-2052).
+        if (_state.LastBreathWindowSec > 0 && fuseSecLeft <= _state.LastBreathWindowSec && _state.LastBreathPayMult > 1)
+            _state.PushEvent($"⏱ last breath! x{_state.LastBreathPayMult:0}");
+        if (fuseSecLeft <= 1.5 && _state.MaxedBoons.Contains("slowburner"))
+            _state.PushEvent("🐌 slow burn! x3");
+        _state.PushEvent($"✔ snapped {spec.VariantId}");
         UpdateStateText();
     }
 
     private void OnDetonated(ChaosBubbleSpec spec)
     {
-        if (_state == null) return;
+        if (_state == null || _paused || _manualPaused) return;
+
+        // The Echo fires NO conditioning payload — it SPLITS (WPF ChaosModeService.cs:2077-2084).
+        // The engine raises EchoSplitRequested for the child spawns (AvaloniaBubbleService wires
+        // it); the detonation consequences below still apply to the parent.
+        if (!spec.IsEcho)
+        {
+            FirePayload(spec);   // the threat goes off (WPF FirePayloadForDetonation :2082)
+            _state.EffectsFired++;
+        }
         _state.Detonated++;
-
-        // Fire the bubble's payload (the punishment for letting the fuse expire)
-        FirePayload(spec);
-
         ChaosLessonHooks.OnDetonation();
         ChaosNarrativeHooks.OnFirstDetonation(BuildNarrativeContext(depth: _waveIndex));
 
-        // A shield absorbs the detonation and preserves the streak.
-        bool shieldAbsorbed = _state.Shields > 0;
-        if (shieldAbsorbed)
+        // Snap Chain mantra: inside the post-snap invulnerability window a trigger can't take
+        // anything — the payload already fired above, but streak, heat and resistance all hold,
+        // and no shield is spent (WPF ChaosModeService.cs:2094-2101).
+        if (DateTime.UtcNow < _invulnUntilUtc)
         {
-            _state.Shields--;
-            _state.PushEvent("♥ shield absorbed the snap");
-            AvaloniaChaosSfx.Play(_state.Shields == 0 ? "resist_crumble" : "resist_absorb", 0.6f);   // WPF ChaosModeService.cs:1348
+            _state.PushEvent($"⛓ snap chain holds ({spec.VariantId})");
+            UpdateStateText();
+            return;
+        }
+
+        const int shieldCost = 1;
+        if (_state.Shields >= shieldCost)
+        {
+            // Resistance absorbs the hit: combo PRESERVED, heat cools by 0.2
+            // (WPF ChaosModeService.cs:2103-2115).
+            _state.Shields -= shieldCost;
+            _state.Heat = Math.Max(0, _state.Heat - 0.2);
+            _state.PushEvent($"♥ resistance crumbles ({spec.VariantId})");
+            // The last point of resistance going has its own, sadder cue (WPF :2109).
+            AvaloniaChaosSfx.Play(_state.Shields == 0 ? "resist_crumble" : "resist_absorb", 0.6f);
+        }
+        else if (_state.CollarSaves > 0)
+        {
+            // Collar: out of resistance, but the streak is held — combo, heat and lust survive
+            // the hit. The payload still fired above; the collar protects the chain, not the
+            // screen (WPF ChaosModeService.cs:2117-2136).
+            _state.CollarSaves--;
+            _state.PushEvent($"📿 the collar holds ({_state.CollarSaves} left)");
+            AvaloniaChaosSfx.Play("collar_save", 0.6f);
+            // Unleashed: the save ITSELF strikes back — a golden shockwave snaps every live bubble.
+            if (_state.UnleashedEnabled)
+            {
+                _bubbles.DefuseAllLive();
+                _state.PushEvent("📿 unleashed — the field lets go");
+            }
         }
         else
         {
-            _state.Combo = 0;   // ComboMult is computed from Combo now (WPF ChaosModels.cs:525)
-            AvaloniaChaosSfx.Play("trigger", 0.55f);   // the muffled boom under the effect (WPF ChaosModeService.cs:1355)
+            // Bare hit: streak breaks and the heat GUTTERS to zero — WPF zeroes Heat here, it
+            // does NOT nibble it by 0.15 (WPF ChaosModeService.cs:2138-2151).
+            _state.Combo = 0;
+            _state.Heat = 0;
+            _state.PushEvent($"💥 {spec.VariantId} triggered!");
+            AvaloniaChaosSfx.Play("trigger", 0.55f);   // the muffled boom under the payload stinger (WPF :2145)
         }
-
-        _state.Heat = Math.Max(0, _state.Heat - 0.15);
         UpdateStateText();
     }
 
@@ -700,15 +833,35 @@ public sealed class AvaloniaChaosService : IChaosService
         payload?.Fire();
     }
 
-    /// <summary>Focus cost for one channel (Bound halves pay half each).</summary>
-    private double DefuseCostFor(ChaosBubbleSpec spec) =>
-        spec.IsBoundHalf ? AvaloniaChaosTuning.DefuseCostBound : AvaloniaChaosTuning.DefuseCost;
+    /// <summary>Focus cost for one channel (Bound halves pay half each) — the formula lives in
+    /// <see cref="ChaosScoring.DefuseCostFor"/> (WPF ChaosModeService.cs:1927-1929).</summary>
+    private double DefuseCostFor(ChaosBubbleSpec spec) => ChaosScoring.DefuseCostFor(spec.IsBoundHalf);
 
-    /// <summary>May the player's press start a defuse channel?</summary>
+    /// <summary>May the player's press start a defuse channel? Frozen fields channel for FREE —
+    /// otherwise the focus must cover the bubble's cost (deducted on COMPLETION, not here)
+    /// (WPF ChaosModeService.cs:1933-1938).</summary>
     private bool CanChannelDefuse(ChaosBubbleSpec spec)
     {
         if (_state == null) return false;
-        return _state.Focus >= DefuseCostFor(spec);
+        return _freezeRemainingSec > 0 || _state.Focus >= DefuseCostFor(spec);
+    }
+
+    /// <summary>Relapse's bonus loop pays double gold — every gold bank routes through here
+    /// (WPF ChaosModeService.cs:1705).</summary>
+    private int GoldScaled(int gold) => _state?.RelapseLoopActive == true ? gold * 2 : gold;
+
+    /// <summary>Drip Feed drops per pop, doubled during the Relapse bonus loop
+    /// (WPF ChaosModeService.cs:1744).</summary>
+    private int DropsPerPopNow() => (_state?.DropPerPop ?? 0) * (_state?.RelapseLoopActive == true ? 2 : 1);
+
+    /// <summary>Drip Feed: bank the per-pop trickle, doubled during the Relapse bonus loop,
+    /// clamped to the level's per-descent ceiling (the cap bounds the doubling too)
+    /// (WPF ChaosModeService.cs:1746-1752; cap WPF ChaosLifetimeBoons.cs:412).</summary>
+    private void BankDripFeed()
+    {
+        if (_state == null || _state.DropPerPop <= 0) return;
+        long cap = ChaosLifetimeBoons.DripFeedCap(_state.DropPerPop);
+        _state.TrickleDrops = Math.Min(cap, _state.TrickleDrops + DropsPerPopNow());
     }
 
     private void OnChannelStarted(ChaosBubbleSpec spec)

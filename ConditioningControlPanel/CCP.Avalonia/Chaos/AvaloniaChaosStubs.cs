@@ -702,6 +702,23 @@ public static class ChaosLifetimeBoons
     public static List<ChaosLifetimeBoon> All { get; } = new();
     public static IEnumerable<ChaosLifetimeBoon> InCategory(ChaosBoonCategory cat) => All.Where(b => b.Category == cat);
     public static ChaosLifetimeBoon? ById(string id) => All.FirstOrDefault(x => x.Id == id);
+
+    /// <summary>Drip Feed's per-descent trickle ceiling by per-pop value (== level, 1..4):
+    /// 60/90/120/150✦. The cap bounds the Relapse-loop doubling too — the trickle is a
+    /// floor-raiser, never a second economy (verbatim WPF ChaosLifetimeBoons.cs:412).</summary>
+    public static int DripFeedCap(int dropPerPop) => 30 + 30 * Math.Clamp(dropPerPop, 1, 4);
+
+    /// <summary>Gold paid by a lucky golden bubble at a Rabbit's Foot level (0 = unworn).
+    /// Scales per level; the capstone is the doubled base range
+    /// (verbatim WPF ChaosLifetimeBoons.cs:416-424).</summary>
+    public static (int Min, int Max) GoldenPayRange(int level) => level switch
+    {
+        <= 0 => (10, 20),
+        1    => (12, 24),
+        2    => (14, 28),
+        3    => (16, 32),
+        _    => (20, 40),   // level 4: the gold doubles
+    };
 }
 
 public static class ChaosBoonPool
