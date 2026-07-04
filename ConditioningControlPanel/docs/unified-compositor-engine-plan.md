@@ -34,7 +34,7 @@ the unified audio mixer (skill Phase 5), Android.
 | Click-through (`WS_EX_TRANSPARENT` + `WM_NCHITTEST` subclass) | ✅ working; `WS_EX_LAYERED` correctly removed |
 | Spiral, pink tint, brain-drain layers | ✅ render (spiral full-screen fix landed) |
 | Full-screen coverage (window uses `screen.Bounds`, taskbar incl.) | ✅ landed |
-| **Mandatory / regular video layer** | ❌ **does not show** — under diagnosis (loggers just wired) |
+| **Mandatory / regular video layer** | ✅ renders + performs (Phase A harness-proven; Phase D.1/D.2 perf pass landed 2026-07-04: zero per-frame alloc, engine-driven tick) |
 | Video audio: volume / output-device / mute control | ❌ missing on UCE path (only `Mute` at start) |
 | Mandatory-video attention checks / duration / safety timer / segment mode | ❌ bypassed — tied to legacy `VideoOverlayWindow`, not the layer |
 | Legacy `AvaloniaMultiMonitorVideoService` | ⚠️ still the only *working* video path; **keep as fallback until UCE video is proven** |
@@ -67,7 +67,7 @@ Confirmed against the official docs + Avalonia repo (Avalonia 12.x):
    the old `DrawBitmap` was removed; Avalonia fixed the equivalent in
    [PR #18164](https://github.com/AvaloniaUI/Avalonia/pull/18164)). `VideoLayer.Render` currently
    does exactly this per frame → draw a **persistent `SKImage`** instead, and stop allocating a new
-   `SKBitmap` per frame in `OnRenderTick`.
+   `SKBitmap` per frame in `OnRenderTick`. **(Landed 2026-07-04, Phase D.1 — see below.)**
 
 5. **Click-through transparency has no built-in Avalonia support — native P/Invoke is required**, and
    `WS_EX_LAYERED` + `UpdateLayeredWindow` is **incompatible with GPU rendering on Windows**. This
@@ -118,8 +118,8 @@ Deferred with evidence:**
 - [ ] Exercise flash, subliminal, bouncing-text, bubbles, lock-card, pink/spiral/brain-drain end-to-end vs WPF (z-order, opacity, timing, multi-monitor). Mark rows in `avalonia-ui-parity-matrix.md`.
 
 ### Phase D — Performance pass (separate edits, after parity)
-- [ ] `VideoLayer`: reuse a persistent `SKBitmap`/`SKImage` (kill the ~480 MB/s per-frame alloc); draw a cached `SKImage`, not `DrawBitmap`.
-- [ ] Fold `VideoLayer._renderTimer` into the engine `Update()` pass (drop the second 60 Hz timer).
+- [x] `VideoLayer`: reuse a persistent `SKBitmap`/`SKImage` (kill the ~480 MB/s per-frame alloc); draw a cached `SKImage`, not `DrawBitmap`. **DONE 2026-07-04:** triple-buffered decoder boundary — LibVLC decodes straight into 3 pinned RV32 buffers (`Marshal.AllocHGlobal`, allocated once per `PlayVideo`); 3 long-lived zero-copy `SKImage.FromPixels` wrappers created once per `PlayVideo`; `Render` draws the FRONT wrapper via `DrawImage`. Zero per-frame allocation AND zero per-frame pixel copy (old path also memcpy'd ~8 MB/frame — one copy fewer). LibVLC only ever receives the DECODE buffer, DisplayCallback rotates DECODE↔READY under an outstanding-lock count, the UI tick swaps FRONT↔READY — protocol comment block in `VideoLayer.cs`. Verified: `--verify-video` exit 0 at 21 frames/700ms (same as before), on-screen screenshots show distinct advancing frames (no GPU raster-texture staleness with the long-lived wrappers on the leased canvas), smoke 5 findings, benchmark parity.
+- [x] Fold `VideoLayer._renderTimer` into the engine `Update()` pass (drop the second 60 Hz timer). **DONE 2026-07-04:** private `DispatcherTimer` deleted; the presentation swap lives in `Update(TimeSpan)` on the engine's single 16 ms tick. The engine only ticks `IsActive` layers — `IsActive` is true from `PlayVideo`'s buffer allocation and the service calls `_compositor?.Start()` first (first window created synchronously), so no first-frame loss vs the old timer.
 - [ ] Evaluate moving the engine loop to `CompositionCustomVisualHandler` (render-thread, self-driven) — research-backed; do as an isolated, benchmarked change.
 - [ ] Dirty-rect / opaque-cull (skill Phase 7) only if profiling shows a need.
 

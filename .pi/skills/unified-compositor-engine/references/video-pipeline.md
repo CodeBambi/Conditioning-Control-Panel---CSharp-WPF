@@ -34,9 +34,11 @@ if (_current != null) canvas.DrawImage(_current, bounds.ToSKRect(), _samplingLin
 ## Known traps (measured in this repo)
 
 1. **`SKCanvas.DrawBitmap(SKBitmap, ...)` allocates an `SKImage` per call.** Measured
-   ~480 MB/s of garbage in `VideoLayer`. The fix (persistent cached `SKImage`) is plan
-   Phase D and has NOT landed yet: `VideoLayer.cs` still allocates an `SKBitmap` per frame
-   and calls `DrawBitmap` per render. Do not copy the current code as a pattern.
+   ~480 MB/s of garbage in `VideoLayer`. The fix landed 2026-07-04 (plan Phase D.1/D.2):
+   `VideoLayer.cs` now triple-buffers at the decoder boundary (LibVLC writes pinned
+   buffers, long-lived zero-copy `SKImage.FromPixels` wrappers, FRONT drawn via
+   `DrawImage`, presentation tick folded into the engine `Update`). Its protocol comment
+   block is the reference pattern; keep the lock/rotation discipline intact.
 2. **Never wrap a live decoder buffer without copying**: the buffer may be overwritten
    mid-draw by the decoder. Copy on publish (`SKImage.FromPixelCopy`, or double-buffer
    and use `SKImage.FromPixels(pixmap, releaseProc)` which wraps zero-copy). Never share

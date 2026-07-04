@@ -16,36 +16,105 @@ namespace ConditioningControlPanel.Avalonia.Compositor.Layers;
 /// <summary>
 /// Video layer for the compositor. Receives decoded frames from LibVLC via memory
 /// callbacks and renders them into the shared Skia canvas at z=10.
-/// Uses a fixed-size RV32 buffer (matching the proven multi-monitor video service)
+/// Uses fixed-size RV32 buffers (matching the proven multi-monitor video service)
 /// so LibVLC always has a valid output surface.
+///
+/// FRAME PATH (plan Phase D): triple-buffered and allocation-free per frame. LibVLC
+/// decodes straight into pinned native buffers that long-lived <see cref="SKImage"/>
+/// wrappers present zero-copy; no <c>SKBitmap</c>, no <c>FromPixelCopy</c>, no
+/// <c>DrawBitmap</c>, and no per-frame pixel copy (the old copy tick moved ~8&#160;MB
+/// per frame, measured ~480&#160;MB/s of allocations). The presentation tick lives in
+/// <see cref="Update"/>, driven by the engine's single 16&#160;ms loop (Phase D.2 —
+/// the layer's private DispatcherTimer is gone).
 /// </summary>
 public class VideoLayer : BaseLayer, IDisposable
 {
     private const uint DefaultVideoWidth = 1920;
     private const uint DefaultVideoHeight = 1080;
 
+    // ------------------------------------------------------------------------------
+    // TRIPLE-BUFFER PROTOCOL (who owns which buffer when; how the races are excluded)
+    //
+    // Three pinned native buffers rotate through three roles, tracked as indices into
+    // _buffers/_images. Every role mutation happens under _bufferLock; the critical
+    // sections are index swaps and pointer reads (nanoseconds), so LibVLC threads, the
+    // UI tick, and the render thread never stall each other.
+    //
+    //   DECODE (_decodeIdx): owned by LibVLC. LockCallback ONLY ever hands out
+    //           _buffers[_decodeIdx]; this is the sole entry point through which LibVLC
+    //           gets a pointer, so LibVLC can never write FRONT by construction.
+    //   READY  (_readyIdx):  the newest COMPLETED frame awaiting presentation (when
+    //           _readyFresh), or a spare/cooldown slot (when !_readyFresh).
+    //   FRONT  (_frontIdx):  the presented frame. Read-only; Render() draws its
+    //           long-lived SKImage wrapper. Nobody writes it.
+    //
+    // Transitions (each one an index swap under _bufferLock):
+    //   LockCallback    -> _locksOutstanding++; return DECODE pointer.
+    //   DisplayCallback -> _locksOutstanding--; when it reaches 0 (frame complete, no
+    //                      other picture in flight): swap DECODE<->READY, _readyFresh=true.
+    //                      LibVLC vmem may lock the next picture before displaying the
+    //                      previous one; the outstanding-lock count guarantees a buffer
+    //                      is never rotated into READY while any decode write can still
+    //                      target it. If READY held an unpresented frame it becomes the
+    //                      next decode target (latest-wins; that frame is dropped, never
+    //                      torn).
+    //   Update (UI tick)-> if _readyFresh: swap FRONT<->READY, _readyFresh=false,
+    //                      FramesCopied++ (frames PRESENTED). No pixel copy — LibVLC
+    //                      already wrote the pixels.
+    //
+    // Race exclusion:
+    //   - Decoder vs canvas: {FRONT, READY, DECODE} is always a permutation of {0,1,2}
+    //     and LibVLC only receives DECODE, so the buffer Skia samples (FRONT) is never
+    //     the buffer LibVLC writes. A buffer leaving FRONT parks in READY (cooldown) and
+    //     only becomes DECODE after the *next* DisplayCallback rotation — by which time
+    //     the render pass that last sampled it has long flushed. This extra hop is why
+    //     three buffers instead of two: with two, the buffer displaced from FRONT would
+    //     be LibVLC's very next lock target while a just-recorded draw could still be
+    //     flushing, and a lock arriving before the UI tick would starve presentation.
+    //   - Lock-before-swap: a LockCallback that lands before the tick swapped simply
+    //     keeps writing DECODE; FRONT and READY are untouched, so no tear — at worst a
+    //     dropped frame.
+    //   - Teardown: Stop() invalidates state under the lock, then defers player/media
+    //     dispose, SKImage dispose, and FreeHGlobal by 400ms — the canvas may be
+    //     mid-draw on the last engine tick and LibVLC may briefly touch a buffer while
+    //     the player winds down (same deferred-free discipline the single-buffer code
+    //     used). Render grabs the FRONT wrapper reference under the lock, so it can
+    //     never observe a disposed image: images are only disposed 400ms after
+    //     _hasFrontFrame went false.
+    //   - Stale sessions: Stop() zeroes _locksOutstanding; a late DisplayCallback from
+    //     a dying player sees the count at 0 and never rotates the next session's
+    //     buffers.
+    //
+    // SKIA THREAD RULE: the SKImage wrappers are created once per PlayVideo (zero-copy
+    // SKImage.FromPixels over each pinned buffer) and only ever drawn on the render
+    // path; the buffers are only written by LibVLC threads between lock and display.
+    // ------------------------------------------------------------------------------
+    private const int BufferCount = 3;
+
     private readonly LibVLC _libVlc;
     private readonly ILogger? _logger;
     private readonly object _bufferLock = new();
-    private readonly DispatcherTimer _renderTimer;
 
     private VlcMediaPlayer? _player;
     private Media? _media;
-    private IntPtr _frameBuffer = IntPtr.Zero;
-    private uint _bufferSize;
-    private volatile bool _frameReady;
+    private IntPtr[]? _buffers;
+    private SKImage?[]? _images;
+    private int _frontIdx;
+    private int _readyIdx = 1;
+    private int _decodeIdx = 2;
+    private bool _readyFresh;
+    private bool _hasFrontFrame;
+    private int _locksOutstanding;
     private volatile bool _bufferValid;
     private uint _videoWidth = DefaultVideoWidth;
     private uint _videoHeight = DefaultVideoHeight;
     private uint _videoPitch = DefaultVideoWidth * 4;
     private bool _disposed;
 
-    private SKBitmap? _currentBitmap;
-    private readonly object _frameLock = new();
     private bool _firstFrameLogged;
     private bool _loop;
     private bool _withAudio;
-    private long _framesCopied;
+    private long _framesPresented;
 
     /// <summary>True while the wrapped LibVLC player reports active playback (Phase B:
     /// lets the service's <c>IsPlaying</c>/<c>HasOpenVideoWindows</c> reflect the UCE path).</summary>
@@ -99,15 +168,16 @@ public class VideoLayer : BaseLayer, IDisposable
         player.ApplyVolume(settings, _withAudio);
     }
 
-    /// <summary>Verification probe (--verify-video): a decoded frame is ready to draw.</summary>
-    public bool HasRenderedFrame { get { lock (_frameLock) return _currentBitmap != null; } }
+    /// <summary>Verification probe (--verify-video): the front buffer holds a presented frame.</summary>
+    public bool HasRenderedFrame { get { lock (_bufferLock) return _hasFrontFrame; } }
 
-    /// <summary>Verification probe (--verify-video): frames copied from LibVLC since construction.
-    /// Monotonic; sample twice to prove live playback (delta &gt; 0).</summary>
-    public long FramesCopied => Interlocked.Read(ref _framesCopied);
+    /// <summary>Verification probe (--verify-video): frames PRESENTED (front/ready swaps) since
+    /// construction. Monotonic; sample twice to prove live playback (delta &gt; 0). The name is
+    /// kept for the harness contract even though Phase D removed the per-frame copy.</summary>
+    public long FramesCopied => Interlocked.Read(ref _framesPresented);
 
     public override int ZIndex => CompositorLayers.Video;
-    public override bool IsActive => _bufferValid && _frameBuffer != IntPtr.Zero;
+    public override bool IsActive => _bufferValid;
 
     /// <summary>
     /// Opaque color used to fill the monitor around a letterboxed video so the desktop never
@@ -138,11 +208,6 @@ public class VideoLayer : BaseLayer, IDisposable
     {
         _libVlc = libVlc;
         _logger = logger;
-        _renderTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(16)
-        };
-        _renderTimer.Tick += OnRenderTick;
     }
 
     public void PlayVideo(string path, bool withAudio = true, bool loop = false)
@@ -167,9 +232,29 @@ public class VideoLayer : BaseLayer, IDisposable
 
             lock (_bufferLock)
             {
-                if (_frameBuffer != IntPtr.Zero) Marshal.FreeHGlobal(_frameBuffer);
-                _frameBuffer = Marshal.AllocHGlobal((int)size);
-                _bufferSize = size;
+                // Allocate the triple buffers and create their long-lived zero-copy
+                // SKImage wrappers ONCE per playback (see protocol block above). This is
+                // the only place images or buffers are created — the per-frame paths
+                // (LockCallback/DisplayCallback/Update/Render) allocate nothing.
+                var info = new SKImageInfo((int)_videoWidth, (int)_videoHeight, SKColorType.Bgra8888, SKAlphaType.Opaque);
+                var buffers = new IntPtr[BufferCount];
+                var images = new SKImage?[BufferCount];
+                for (var i = 0; i < BufferCount; i++)
+                {
+                    buffers[i] = Marshal.AllocHGlobal((int)size);
+                    using var pixmap = new SKPixmap(info, buffers[i], (int)_videoPitch);
+                    images[i] = SKImage.FromPixels(pixmap);
+                    if (images[i] == null)
+                        throw new InvalidOperationException("SKImage.FromPixels returned null for the video buffer wrap");
+                }
+                _buffers = buffers;
+                _images = images;
+                _frontIdx = 0;
+                _readyIdx = 1;
+                _decodeIdx = 2;
+                _readyFresh = false;
+                _hasFrontFrame = false;
+                _locksOutstanding = 0;
                 _bufferValid = true;
             }
 
@@ -185,7 +270,6 @@ public class VideoLayer : BaseLayer, IDisposable
             _player.Playing += OnPlaying;
             _player.LengthChanged += OnLengthChanged;
 
-            _renderTimer.Start();
             _player.Play(_media);
             _logger?.LogInformation("VideoLayer: started {Path}", path);
             // Phase B2: VideoStarted now fires from the LibVLC Playing event (OnPlaying)
@@ -205,10 +289,8 @@ public class VideoLayer : BaseLayer, IDisposable
     public void Stop()
     {
         _bufferValid = false;
-        _frameReady = false;
         _firstFrameLogged = false;
         _loop = false;
-        _renderTimer.Stop();
 
         var player = _player;
         _player = null;
@@ -223,28 +305,47 @@ public class VideoLayer : BaseLayer, IDisposable
         }
         try { player?.Stop(); } catch { }
 
-        IntPtr buf;
+        IntPtr[]? buffers;
+        SKImage?[]? images;
         lock (_bufferLock)
         {
-            buf = _frameBuffer;
-            _frameBuffer = IntPtr.Zero;
-            _bufferSize = 0;
+            buffers = _buffers;
+            images = _images;
+            _buffers = null;
+            _images = null;
             _bufferValid = false;
+            _readyFresh = false;
+            _hasFrontFrame = false;
+            _locksOutstanding = 0;
+            _frontIdx = 0;
+            _readyIdx = 1;
+            _decodeIdx = 2;
         }
 
+        // Deferred teardown (see protocol block): the player may still be winding down its
+        // vout and the render thread may be mid-draw of the front wrapper on the last engine
+        // tick. Dispose the player first (no more callbacks), then the SKImage wrappers, and
+        // only then free the pinned memory they wrap.
         Task.Run(async () =>
         {
             await Task.Delay(400);
             try { player?.Dispose(); } catch { }
             try { media?.Dispose(); } catch { }
-            if (buf != IntPtr.Zero) Marshal.FreeHGlobal(buf);
+            if (images != null)
+            {
+                foreach (var image in images)
+                {
+                    try { image?.Dispose(); } catch { }
+                }
+            }
+            if (buffers != null)
+            {
+                foreach (var buffer in buffers)
+                {
+                    if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
+                }
+            }
         });
-
-        lock (_frameLock)
-        {
-            _currentBitmap?.Dispose();
-            _currentBitmap = null;
-        }
     }
 
     private void OnEndReached(object? sender, EventArgs e)
@@ -254,8 +355,8 @@ public class VideoLayer : BaseLayer, IDisposable
             VideoEnded?.Invoke(this, EventArgs.Empty);
             // Auto-close: a one-shot clip must release the screen when it finishes. Otherwise
             // the layer lingers on its final frame — IsActive stays true while the last decoded
-            // bitmap is still set — and the desktop stays blocked. A looping clip is exempt: it
-            // is driven by input-repeat and replayed by LibVLC rather than reaching a real end.
+            // frame is still presented — and the desktop stays blocked. A looping clip is exempt:
+            // it is driven by input-repeat and replayed by LibVLC rather than reaching a real end.
             // Stop() clears the frame and deactivates the layer, so the compositor drops it next
             // frame and (if nothing else is active) tears its windows down, freeing the desktop.
             if (!_loop)
@@ -293,116 +394,99 @@ public class VideoLayer : BaseLayer, IDisposable
     {
         lock (_bufferLock)
         {
-            if (!_bufferValid || _frameBuffer == IntPtr.Zero)
+            var buffers = _buffers;
+            if (!_bufferValid || buffers == null)
             {
                 Marshal.WriteIntPtr(planes, IntPtr.Zero);
                 return IntPtr.Zero;
             }
-            Marshal.WriteIntPtr(planes, _frameBuffer);
+            // Only ever hand LibVLC the DECODE buffer (protocol block above). The
+            // outstanding-lock count keeps DisplayCallback from rotating a buffer that
+            // another in-flight picture could still be writing.
+            _locksOutstanding++;
+            Marshal.WriteIntPtr(planes, buffers[_decodeIdx]);
             return IntPtr.Zero;
         }
     }
 
-    private void DisplayCallback(IntPtr opaque, IntPtr picture) => _frameReady = true;
-
-    private unsafe void OnRenderTick(object? sender, EventArgs e)
+    private void DisplayCallback(IntPtr opaque, IntPtr picture)
     {
-        if (!_bufferValid || !_frameReady) return;
-        _frameReady = false;
-
-        bool got = false;
-        SKBitmap? newBitmap = null;
-        try
+        lock (_bufferLock)
         {
-            got = Monitor.TryEnter(_bufferLock, 16);
-            if (!got) return;
-            if (!_bufferValid || _frameBuffer == IntPtr.Zero) return;
+            // Unpaired display (failed lock, or a stale callback from a player being torn
+            // down — Stop() zeroed the count): never rotate on it.
+            if (_locksOutstanding == 0) return;
+            _locksOutstanding--;
+            if (_locksOutstanding != 0 || !_bufferValid) return;
 
-            var info = new SKImageInfo((int)_videoWidth, (int)_videoHeight, SKColorType.Bgra8888, SKAlphaType.Opaque);
-            newBitmap = new SKBitmap(info);
-            var dstPtr = newBitmap.GetPixels();
-            if (dstPtr == IntPtr.Zero)
-            {
-                newBitmap.Dispose();
-                newBitmap = null;
-                return;
-            }
-
-            var srcPtr = _frameBuffer.ToPointer();
-            var srcRowBytes = (int)_videoPitch;
-            var dstRowBytes = newBitmap.RowBytes;
-            var height = (int)_videoHeight;
-            var copyRowBytes = Math.Min(srcRowBytes, dstRowBytes);
-            var totalBytes = copyRowBytes * height;
-
-            if (srcRowBytes == dstRowBytes)
-            {
-                Buffer.MemoryCopy(srcPtr, dstPtr.ToPointer(), totalBytes, totalBytes);
-            }
-            else
-            {
-                for (var y = 0; y < height; y++)
-                {
-                    var srcRow = (byte*)srcPtr + (y * srcRowBytes);
-                    var dstRow = (byte*)dstPtr.ToPointer() + (y * dstRowBytes);
-                    Buffer.MemoryCopy(srcRow, dstRow, copyRowBytes, copyRowBytes);
-                }
-            }
-
-            lock (_frameLock)
-            {
-                _currentBitmap?.Dispose();
-                _currentBitmap = newBitmap;
-            }
-            Interlocked.Increment(ref _framesCopied);
-
-            if (!_firstFrameLogged)
-            {
-                _firstFrameLogged = true;
-                _logger?.LogInformation("VideoLayer: first frame copied {Width}x{Height} (Z={Z})", _videoWidth, _videoHeight, ZIndex);
-            }
-            _logger?.LogTrace("VideoLayer: frame copied {Width}x{Height}", _videoWidth, _videoHeight);
-        }
-        catch (Exception ex)
-        {
-            newBitmap?.Dispose();
-            _logger?.LogDebug("VideoLayer: frame copy error: {Error}", ex.Message);
-        }
-        finally
-        {
-            if (got) Monitor.Exit(_bufferLock);
+            // Frame complete and no other picture in flight: publish DECODE as READY.
+            // The old READY becomes the next decode target (latest-wins).
+            (_decodeIdx, _readyIdx) = (_readyIdx, _decodeIdx);
+            _readyFresh = true;
         }
     }
 
-    public override void Update(TimeSpan deltaTime) { }
+    public override void Update(TimeSpan deltaTime)
+    {
+        // Presentation tick (Phase D.2): runs on the UI thread from the engine's single
+        // ~16ms loop while IsActive (true from PlayVideo's buffer allocation onward, so
+        // the first frames are presented as soon as they decode — the service Start()s
+        // the engine before PlayVideo). Swap FRONT<->READY; no pixel copy.
+        var presented = false;
+        lock (_bufferLock)
+        {
+            if (_bufferValid && _readyFresh)
+            {
+                (_frontIdx, _readyIdx) = (_readyIdx, _frontIdx);
+                _readyFresh = false;
+                _hasFrontFrame = true;
+                presented = true;
+            }
+        }
+        if (!presented) return;
+
+        Interlocked.Increment(ref _framesPresented);
+        if (!_firstFrameLogged)
+        {
+            _firstFrameLogged = true;
+            _logger?.LogInformation("VideoLayer: first frame presented {Width}x{Height} (Z={Z})", _videoWidth, _videoHeight, ZIndex);
+        }
+    }
 
     public override void Render(SKCanvas canvas, PixelRect bounds, TimeSpan deltaTime)
     {
-        lock (_frameLock)
+        // Grab the FRONT wrapper reference under the lock, draw outside it: the draw
+        // records against a buffer nobody writes (protocol block above), and disposal is
+        // 400ms-deferred, so the reference stays valid even if Stop() lands mid-draw.
+        SKImage? front;
+        lock (_bufferLock)
         {
-            if (_currentBitmap == null) return;
-
-            // Fill the entire monitor with an opaque background before drawing the letterboxed
-            // video, so the desktop never shows through the bars. Essential when the monitor's
-            // aspect ratio differs from the clip (e.g. a landscape clip on a portrait screen).
-            using (var bg = new SKPaint { Color = BackgroundColor })
-                canvas.DrawRect(ToSkRect(bounds), bg);
-
-            // Preserve aspect ratio (Uniform stretch) inside the monitor bounds.
-            var frameW = (float)_videoWidth;
-            var frameH = (float)_videoHeight;
-            var boundsW = (float)bounds.Width;
-            var boundsH = (float)bounds.Height;
-
-            var scale = MathF.Min(boundsW / frameW, boundsH / frameH);
-            var destW = frameW * scale;
-            var destH = frameH * scale;
-            var destX = (float)bounds.X + (boundsW - destW) / 2f;
-            var destY = (float)bounds.Y + (boundsH - destH) / 2f;
-
-            var dest = new SKRect(destX, destY, destX + destW, destY + destH);
-            canvas.DrawBitmap(_currentBitmap, dest);
+            var images = _images;
+            if (!_hasFrontFrame || images == null) return;
+            front = images[_frontIdx];
         }
+        if (front == null) return;
+
+        // Fill the entire monitor with an opaque background before drawing the letterboxed
+        // video, so the desktop never shows through the bars. Essential when the monitor's
+        // aspect ratio differs from the clip (e.g. a landscape clip on a portrait screen).
+        using (var bg = new SKPaint { Color = BackgroundColor })
+            canvas.DrawRect(ToSkRect(bounds), bg);
+
+        // Preserve aspect ratio (Uniform stretch) inside the monitor bounds.
+        var frameW = (float)_videoWidth;
+        var frameH = (float)_videoHeight;
+        var boundsW = (float)bounds.Width;
+        var boundsH = (float)bounds.Height;
+
+        var scale = MathF.Min(boundsW / frameW, boundsH / frameH);
+        var destW = frameW * scale;
+        var destH = frameH * scale;
+        var destX = (float)bounds.X + (boundsW - destW) / 2f;
+        var destY = (float)bounds.Y + (boundsH - destH) / 2f;
+
+        var dest = new SKRect(destX, destY, destX + destW, destY + destH);
+        canvas.DrawImage(front, dest);
     }
 
     private void Cleanup()
