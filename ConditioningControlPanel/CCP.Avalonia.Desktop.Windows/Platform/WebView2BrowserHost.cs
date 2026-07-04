@@ -39,6 +39,13 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
     private WebView2NativeControlHost? _embeddedHost;
     private BrowserWindow? _popupWindow;
     private bool _disposed;
+    private bool _isAudioMuted;
+
+    /// <summary>WPF parity (BrowserService): the Deeper-player Chromium flags the dashboard browser needs —
+    /// autoplay-without-gesture (programmatic v.play()) and no DirectComposition MPO overlay plane
+    /// (the black-web-video regression #449/#439). The Chaos tunnel overrides this via object initializer.</summary>
+    private const string DefaultBrowserArguments =
+        "--autoplay-policy=no-user-gesture-required --disable-direct-composition-video-overlays";
 
     public WebView2BrowserHost()
     {
@@ -47,6 +54,26 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
             "ConditioningControlPanel",
             "avalonia_browser_data");
         Directory.CreateDirectory(_userDataFolder);
+
+        // B2: default the dashboard browser to WPF's video flags. Overridable via the
+        // object initializer (the Chaos tunnel sets its own anti-MPO args, which replaces this).
+        AdditionalBrowserArguments = DefaultBrowserArguments;
+    }
+
+    /// <summary>
+    /// Mutes/unmutes the embedded browser's audio (BambiCloud / HypnoTube video) via
+    /// CoreWebView2.IsMuted. Persistence is the caller's responsibility (AppSettings.BrowserVideoMuted);
+    /// the desired state is remembered and re-applied whenever a fresh CoreWebView2 initializes.
+    /// </summary>
+    public bool IsAudioMuted
+    {
+        get => _embeddedHost?.WebView?.CoreWebView2?.IsMuted ?? _isAudioMuted;
+        set
+        {
+            _isAudioMuted = value;
+            if (_embeddedHost?.WebView?.CoreWebView2 is { } core)
+                core.IsMuted = value;
+        }
     }
 
     public bool IsFullscreen { get; private set; }
@@ -115,12 +142,47 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
         if (_embeddedHost?.WebView?.CoreWebView2 is { } core)
         {
             ApplyVirtualHostAndMessaging(core);
-            core.Navigate(url.ToString());
+
+            // B4: reject dangerous schemes and force/upgrade https before navigating (WPF BrowserService.Navigate).
+            var safe = SanitizeNavigationUrl(url.ToString());
+            if (safe == null)
+            {
+                Debug.WriteLine($"Blocked unsafe navigation URL: {url}");
+                return;
+            }
+            core.Navigate(safe);
         }
         else
         {
             await PopOutAsync(url);
         }
+    }
+
+    /// <summary>
+    /// WPF parity (BrowserService.Navigate): blocks javascript:/file:/data:/vbscript: schemes and
+    /// forces/upgrades the URL to https. Returns the sanitized https URL, or null if it must be blocked.
+    /// </summary>
+    private static string? SanitizeNavigationUrl(string? url)
+    {
+        url = url?.Trim() ?? string.Empty;
+        if (url.Length == 0) return null;
+
+        var lower = url.ToLowerInvariant();
+        if (lower.StartsWith("javascript:") || lower.StartsWith("file:") ||
+            lower.StartsWith("data:") || lower.StartsWith("vbscript:"))
+        {
+            return null;
+        }
+
+        if (!lower.StartsWith("http://") && !lower.StartsWith("https://"))
+            url = "https://" + url;
+        else if (lower.StartsWith("http://"))
+            url = "https://" + url.Substring("http://".Length);
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+            return null;
+
+        return uri.ToString();
     }
 
     /// <summary>Serve a local folder under a virtual host name (WebView2 SetVirtualHostNameToFolderMapping).</summary>
@@ -160,6 +222,8 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
                 };
                 _messagingWired = true;
             }
+            // B5: re-apply the remembered mute preference on this fresh core.
+            core.IsMuted = _isAudioMuted;
         }
         catch { /* virtual host / messaging unsupported — degrade gracefully */ }
     }
@@ -270,6 +334,18 @@ public sealed class WebView2BrowserHost : IBrowserHost, IDisposable
                 core.Navigate(e.Uri);
             };
         };
+    }
+
+    /// <summary>
+    /// B1: OAuth / external links must open in the OS default browser, NOT the invisible embedded
+    /// WebView2. Overrides the <see cref="IBrowserHost.OpenExternalAsync"/> default (which delegates to
+    /// NavigateAsync) so the login page is actually shown. WPF parity: Helpers/BrowserLauncher shell-launch.
+    /// </summary>
+    public Task OpenExternalAsync(Uri url)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        OpenWithSystemBrowser(url);
+        return Task.CompletedTask;
     }
 
     private static void OpenWithSystemBrowser(Uri url)

@@ -45,6 +45,15 @@ public interface IBrowserHost
     object? CreateBrowserControl() => null;
 
     /// <summary>
+    /// Opens <paramref name="url"/> in the OS default/system browser (NOT the embedded control).
+    /// Used for OAuth and external links that must not render inside the app's embedded WebView.
+    /// Default delegates to <see cref="NavigateAsync"/>, which is correct for hosts that ARE the
+    /// system browser (Avalonia/WebKit shell hosts); embedded hosts (WebView2) MUST override this
+    /// to shell-launch instead of embedding. WPF parity: Helpers/BrowserLauncher system-browser flow.
+    /// </summary>
+    Task OpenExternalAsync(Uri url) => NavigateAsync(url);
+
+    /// <summary>
     /// Opens <paramref name="url"/> in a separate popup window, if the platform supports it.
     /// The default implementation delegates to <see cref="NavigateAsync"/>, which is sufficient
     /// for hosts that already open a separate window or shell browser.

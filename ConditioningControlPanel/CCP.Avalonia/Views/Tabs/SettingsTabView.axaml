@@ -271,7 +271,7 @@
                   Background="{DynamicResource ElevatedSurfaceBrush}"
                   BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
             <StackPanel>
-              <Grid Margin="0,0,0,4" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+              <Grid Margin="0,0,0,4" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                   <TextBlock Text="{loc:Str label_browser}"
                              Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
@@ -330,7 +330,13 @@
                         Padding="6,3" Margin="0,0,6,0" VerticalAlignment="Center"
                         ToolTip.Tip="{loc:Str tooltip_browser_webcam_tracking_off}" />
 
-                <Button Grid.Column="5" Content="{loc:Str btn_pop_out_plain}" Padding="6,3"
+                <!-- B5: mute the embedded browser's audio (persists to AppSettings.BrowserVideoMuted) -->
+                <Button Grid.Column="5" Content="{Binding BrowserMuteGlyph}" Padding="6,3" Margin="0,0,6,0"
+                        VerticalAlignment="Center"
+                        Command="{Binding ToggleBrowserMuteCommand}"
+                        ToolTip.Tip="Mute / unmute browser audio" />
+
+                <Button Grid.Column="6" Content="{loc:Str btn_pop_out_plain}" Padding="6,3"
                         Command="{Binding PopOutBrowserCommand}"
                         ToolTip.Tip="{loc:Str tooltip_pop_out_browser_to_resizable_window}" />
               </Grid>

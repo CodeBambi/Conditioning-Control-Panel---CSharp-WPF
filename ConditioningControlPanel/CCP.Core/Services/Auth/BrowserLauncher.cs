@@ -26,7 +26,10 @@ public static class BrowserLauncher
 
         try
         {
-            await browserHost.NavigateAsync(new Uri(url));
+            // OAuth and external links must open in the OS/system browser, NEVER the
+            // invisible embedded WebView2 (embedded hosts override OpenExternalAsync to
+            // shell-launch; system-browser hosts inherit the NavigateAsync default).
+            await browserHost.OpenExternalAsync(new Uri(url));
             return true;
         }
         catch

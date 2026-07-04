@@ -65,6 +65,7 @@ public partial class SettingsTabViewModel : TabItemViewModel
         _audioOutputDevices = new ObservableCollection<AudioDeviceInfo>();
         RefreshAudioOutputDevices();
         RefreshFromSettings();
+        SubscribeBrowserEvents();
 
         if (_settingsService?.Current is INotifyPropertyChanged inpc)
             inpc.PropertyChanged += OnSettingsPropertyChanged;
@@ -676,6 +677,51 @@ public partial class SettingsTabViewModel : TabItemViewModel
     [ObservableProperty]
     private bool _browserInitialized;
 
+    // B5: mute toggle glyph (🔊 on / 🔇 muted).
+    [ObservableProperty]
+    private string _browserMuteGlyph = "🔊";
+
+    // B6: the live browser URL, tracked via IBrowserHost.Navigated so pop-out detaches
+    // the page the user is actually viewing instead of the default site.
+    private string? _lastBrowserUrl;
+
+    /// <summary>Wires browser-host events and seeds the mute glyph from persisted settings.</summary>
+    private void SubscribeBrowserEvents()
+    {
+        if (_browserHost != null)
+            _browserHost.Navigated += (_, uri) => _lastBrowserUrl = uri.ToString();
+
+        BrowserMuteGlyph = (_settingsService?.Current?.BrowserVideoMuted ?? false) ? "🔇" : "🔊";
+    }
+
+    /// <summary>
+    /// B5: applies the mute state to the WebView2 host. IBrowserHost has no mute member (it is a
+    /// Windows-only WebView2 feature and the interface is frozen), so set it reflectively —
+    /// non-WebView2 heads simply no-op.
+    /// </summary>
+    private void ApplyBrowserMute(bool muted)
+    {
+        try
+        {
+            _browserHost?.GetType().GetProperty("IsAudioMuted")?.SetValue(_browserHost, muted);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to apply browser mute");
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleBrowserMute()
+    {
+        var muted = !(_settingsService?.Current?.BrowserVideoMuted ?? false);
+        if (_settingsService?.Current != null)
+            _settingsService.Current.BrowserVideoMuted = muted;
+        ApplyBrowserMute(muted);
+        BrowserMuteGlyph = muted ? "🔇" : "🔊";
+        Save();
+    }
+
     [ObservableProperty]
     private string _browserStatusText = Loc.Get("label_disconnected");
 
@@ -790,6 +836,9 @@ public partial class SettingsTabViewModel : TabItemViewModel
         {
             _logger?.LogInformation("Navigating browser to {Url}", targetUrl);
             await (_browserHost?.NavigateAsync(new Uri(targetUrl)) ?? Task.CompletedTask);
+            _lastBrowserUrl = targetUrl;
+            // B5: re-apply the saved mute preference now that the browser core exists.
+            ApplyBrowserMute(_settingsService?.Current?.BrowserVideoMuted ?? false);
             BrowserStatusText = Loc.Get("label_connected");
             BrowserInitialized = true;
         }
@@ -841,7 +890,10 @@ public partial class SettingsTabViewModel : TabItemViewModel
     {
         if (_settingsService?.Current?.OfflineMode == true) return;
 
-        var targetUrl = ResolveBrowserUrl(null);
+        // B6: pop out the live page the user is viewing, falling back to the default site.
+        var targetUrl = !string.IsNullOrWhiteSpace(_lastBrowserUrl)
+            ? _lastBrowserUrl!
+            : ResolveBrowserUrl(null);
         IsBambiCloudSelected = targetUrl.Contains("bambicloud.com", StringComparison.OrdinalIgnoreCase);
 
         try
