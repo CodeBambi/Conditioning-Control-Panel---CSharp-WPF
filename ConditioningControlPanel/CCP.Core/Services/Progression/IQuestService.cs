@@ -165,6 +165,28 @@ public interface IQuestService
     void FixStreakDay(System.DateTime date) { }
 
     /// <summary>
+    /// Recompute the daily-quest streak from the completion calendar, repairing it UPWARD only
+    /// (never lowers a stored streak). Called by ProfileSync after unioning cloud completion dates.
+    /// Default no-op so existing fakes compile; the real service overrides.
+    /// WPF parity: QuestService.RecalculateStreak.
+    /// </summary>
+    void RecalculateStreak() { }
+
+    /// <summary>
+    /// Force-regenerate the current daily quest (server-driven reset flag). Default no-op so
+    /// existing fakes compile; the real service overrides.
+    /// WPF parity: QuestService.ForceRegenerateDailyQuest.
+    /// </summary>
+    void ForceRegenerateDailyQuest() { }
+
+    /// <summary>
+    /// Force-regenerate the current weekly quest (server-driven reset flag); skips when the
+    /// current weekly quest is still within this week. Default no-op so existing fakes compile;
+    /// the real service overrides. WPF parity: QuestService.ForceRegenerateWeeklyQuest.
+    /// </summary>
+    void ForceRegenerateWeeklyQuest() { }
+
+    /// <summary>
     /// Gets the number of daily rerolls still available this period.
     /// </summary>
     int GetRemainingDailyRerolls();

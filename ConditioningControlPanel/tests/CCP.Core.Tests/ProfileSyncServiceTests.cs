@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -7,6 +8,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Headless.XUnit;
+using ConditioningControlPanel.Core.Platform;
+using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Models;
 using Newtonsoft.Json;
@@ -163,6 +167,9 @@ public class ProfileSyncServiceTests
         public string? LastBody { get; private set; }
         public HttpStatusCode ResponseStatus { get; set; } = HttpStatusCode.OK;
 
+        /// <summary>Canned response body returned to the caller (defaults to "{}").</summary>
+        public string? ResponseBody { get; set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -173,7 +180,7 @@ public class ProfileSyncServiceTests
 
             return new HttpResponseMessage(ResponseStatus)
             {
-                Content = new StringContent("{}", Encoding.UTF8, "application/json")
+                Content = new StringContent(ResponseBody ?? "{}", Encoding.UTF8, "application/json")
             };
         }
     }
@@ -269,5 +276,198 @@ public class ProfileSyncServiceTests
         // Safe to call twice.
         service.StopHeartbeat();
         Assert.False(service.IsHeartbeatActive);
+    }
+
+    // ---- Slice 3: pull + merge -----------------------------------------------------------
+
+    private sealed class TestAppEnvironment : IAppEnvironment
+    {
+        public string Root { get; }
+        public string BaseDirectory { get; } = AppContext.BaseDirectory;
+        public string UserDataPath { get; }
+        public string ApplicationDataPath { get; }
+        public string EffectiveAssetsPath { get; }
+
+        public TestAppEnvironment()
+        {
+            Root = Path.Combine(Path.GetTempPath(), $"ccp-profilesync-{Guid.NewGuid():N}");
+            UserDataPath = Path.Combine(Root, "local");
+            ApplicationDataPath = Path.Combine(Root, "roaming");
+            EffectiveAssetsPath = Path.Combine(Root, "assets");
+        }
+
+        public void Cleanup()
+        {
+            if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
+        }
+    }
+
+    private sealed class FakeProgressionService : IProgressionService
+    {
+        public void AddXP(int amount, XPSource source) { }
+        public double GetSessionXPMultiplier(int playerLevel) => 1.0;
+        public double GetXPForLevel(int level) => level * 1000.0;
+        public double GetTotalXP(int level, double currentXP) => level * 1000.0 + currentXP;
+        public double GetCurrentLevelXP(int level, double totalXP) => Math.Max(0, totalXP - level * 1000.0);
+        public event EventHandler<int>? LevelUp;
+    }
+
+    private sealed class FakeSkillTreeService : ISkillTreeService
+    {
+        public int OnSeasonResetCallCount { get; private set; }
+
+        public bool HasSkill(string skillId) => false;
+        public double GetTotalXpMultiplier() => 1.0;
+        public int TotalPointsSpent => 0;
+        public event EventHandler<string>? SkillUnlocked;
+        public event EventHandler? PinkRushStarted;
+        public Task<(bool Success, string? Error)> PurchaseSkillAsync(string skillId) => Task.FromResult((false, (string?)null));
+        public void Start() { }
+        public void Stop() { }
+        public void TriggerPinkRush() { }
+        public bool UseStreakShield() => false;
+        public bool UseOopsieInsurance() => false;
+        public int GetDailyStreakBonus(int consecutiveDays) => 0;
+        public int GetDailyFreeRerolls() => 0;
+        public void AddConditioningTime(double minutes) { }
+        public void OnSeasonReset() => OnSeasonResetCallCount++;
+    }
+
+    /// <summary>
+    /// Builds a ProfileSyncService wired with the injectable handler + fake seams and a logged-in
+    /// settings fake (auth token + unified id) so <see cref="ProfileSyncService.LoadProfileAsync"/>
+    /// passes its guards. The handler returns canned JSON, so no live server is touched.
+    /// </summary>
+    private static ProfileSyncService CreateMergeService(
+        RecordingHandler handler,
+        FakeSettingsService settings,
+        IAchievementService? achievements = null,
+        IQuestService? quests = null,
+        IProgressionService? progression = null,
+        ISkillTreeService? skillTree = null)
+    {
+        settings.Current.AuthToken = "auth-token-xyz";
+        settings.Current.UnifiedId = "unified-1";
+        return new ProfileSyncService(
+            settings, new DebugLogger<ProfileSyncService>(), handler,
+            sessionService: null, achievements, quests, progression, skillTree);
+    }
+
+    [Fact]
+    public async Task LoadProfileAsync_SkillPoints_TakeHigher_RaisesToServer_ButNeverLowersLocal()
+    {
+        // Server higher -> local raised to server.
+        var raise = new RecordingHandler { ResponseBody = "{\"skill_points\": 25}" };
+        var raiseSettings = new FakeSettingsService();
+        raiseSettings.Current.SkillPoints = 10;
+        using (var svc = CreateMergeService(raise, raiseSettings))
+        {
+            Assert.True(await svc.LoadProfileAsync());
+            Assert.Equal(25, raiseSettings.Current.SkillPoints);
+        }
+
+        // Server lower -> local KEPT (max-merge never lowers).
+        var keep = new RecordingHandler { ResponseBody = "{\"skill_points\": 5}" };
+        var keepSettings = new FakeSettingsService();
+        keepSettings.Current.SkillPoints = 25;
+        using (var svc = CreateMergeService(keep, keepSettings))
+        {
+            Assert.True(await svc.LoadProfileAsync());
+            Assert.Equal(25, keepSettings.Current.SkillPoints);
+        }
+    }
+
+    [Fact]
+    public async Task LoadProfileAsync_UnlockedSkills_UnionsServerAndLocal()
+    {
+        var handler = new RecordingHandler { ResponseBody = "{\"unlocked_skills\": [\"server_b\"]}" };
+        var settings = new FakeSettingsService();
+        settings.Current.UnlockedSkills = new List<string> { "local_a" };
+        using var svc = CreateMergeService(handler, settings);
+
+        Assert.True(await svc.LoadProfileAsync());
+
+        Assert.Contains("local_a", settings.Current.UnlockedSkills);
+        Assert.Contains("server_b", settings.Current.UnlockedSkills);
+    }
+
+    [Fact]
+    public async Task LoadProfileAsync_LevelReset_SkipsSkillUnion_AndRebuildsWithPermanentsOnly()
+    {
+        // pink_hours is a permanent (season-persistent) skill; local_only is mechanical.
+        var handler = new RecordingHandler
+        {
+            ResponseBody = "{\"unlocked_skills\": [\"server_skill\"], \"level_reset\": true, \"user\": {\"level\": 1, \"xp\": 0}}"
+        };
+        var settings = new FakeSettingsService();
+        settings.Current.UnlockedSkills = new List<string> { "local_only", "pink_hours" };
+        var skillTree = new FakeSkillTreeService();
+        using var svc = CreateMergeService(handler, settings,
+            progression: new FakeProgressionService(), skillTree: skillTree);
+
+        Assert.True(await svc.LoadProfileAsync());
+
+        // Union was SKIPPED on level_reset: the mechanical local_only was dropped (a plain union
+        // would have KEPT it). The rollover rebuild is server-list ∪ locally-owned permanents.
+        Assert.DoesNotContain("local_only", settings.Current.UnlockedSkills);
+        Assert.Contains("server_skill", settings.Current.UnlockedSkills);
+        Assert.Contains("pink_hours", settings.Current.UnlockedSkills);
+        Assert.True(settings.Current.SeasonResetPending);
+        Assert.Equal(1, skillTree.OnSeasonResetCallCount);
+    }
+
+    [Fact]
+    public async Task LoadProfileAsync_ForceStreakOverride_AdoptsLowerServerStreak()
+    {
+        var handler = new RecordingHandler
+        {
+            ResponseBody = "{\"force_streak_override\": true, \"streak_stats\": {\"daily_quest_streak\": 5}}"
+        };
+        var settings = new FakeSettingsService();
+        settings.Current.DailyQuestStreak = 30; // higher than the server value
+        using var svc = CreateMergeService(handler, settings);
+
+        Assert.True(await svc.LoadProfileAsync());
+
+        // force_streak_override ADOPTS the server streak even though it is LOWER than local.
+        Assert.Equal(5, settings.Current.DailyQuestStreak);
+    }
+
+    [AvaloniaFact]
+    public async Task LoadProfileAsync_LifetimePointsSpent_IsMonotonic_NeverLowersLocal()
+    {
+        var env = new TestAppEnvironment();
+        try
+        {
+            var achievements = new AchievementService(env, new DebugLogger<AchievementService>());
+            try
+            {
+                achievements.Progress.LifetimeSkillPointsSpent = 100;
+
+                // Server lower -> local KEPT (prestige is monotonic).
+                var lower = new RecordingHandler { ResponseBody = "{\"lifetime_points_spent\": 50}" };
+                using (var svc = CreateMergeService(lower, new FakeSettingsService(), achievements: achievements))
+                {
+                    Assert.True(await svc.LoadProfileAsync());
+                    Assert.Equal(100, achievements.Progress.LifetimeSkillPointsSpent);
+                }
+
+                // Server higher -> adopted.
+                var higher = new RecordingHandler { ResponseBody = "{\"lifetime_points_spent\": 200}" };
+                using (var svc = CreateMergeService(higher, new FakeSettingsService(), achievements: achievements))
+                {
+                    Assert.True(await svc.LoadProfileAsync());
+                    Assert.Equal(200, achievements.Progress.LifetimeSkillPointsSpent);
+                }
+            }
+            finally
+            {
+                achievements.Dispose();
+            }
+        }
+        finally
+        {
+            env.Cleanup();
+        }
     }
 }

@@ -336,6 +336,33 @@ public sealed class QuestService : IQuestService, IDisposable
         _logger?.LogInformation("Generated new weekly quest: {QuestId}", selected.Id);
     }
 
+    /// <inheritdoc />
+    public void ForceRegenerateDailyQuest()
+    {
+        var oldId = Progress.DailyQuest?.DefinitionId;
+        GenerateDailyQuest(excludeId: oldId);
+        SaveAndNotify();
+        _logger?.LogInformation("Force-regenerated daily quest (old: {OldId}, new: {NewId})",
+            oldId, Progress.DailyQuest?.DefinitionId);
+    }
+
+    /// <inheritdoc />
+    public void ForceRegenerateWeeklyQuest()
+    {
+        // Don't regenerate if the current weekly quest is still within this week (WPF parity).
+        if (Progress.WeeklyQuest != null && !Progress.IsWeeklyExpired())
+        {
+            _logger?.LogInformation("Skipping weekly quest force-regeneration - quest still within current week");
+            return;
+        }
+
+        var oldId = Progress.WeeklyQuest?.DefinitionId;
+        GenerateWeeklyQuest(excludeId: oldId);
+        SaveAndNotify();
+        _logger?.LogInformation("Force-regenerated weekly quest (old: {OldId}, new: {NewId})",
+            oldId, Progress.WeeklyQuest?.DefinitionId);
+    }
+
     private bool HasPremiumAccess => _settingsService.Current?.HasCachedPremiumAccess == true;
 
     private bool IsQuestAvailableForTier(QuestDefinition quest)
@@ -820,7 +847,8 @@ public sealed class QuestService : IQuestService, IDisposable
         _settingsService.Save();
     }
 
-    private void RecalculateStreak()
+    /// <inheritdoc />
+    public void RecalculateStreak()
     {
         var settings = _settingsService.Current;
         if (settings == null) return;
@@ -851,6 +879,11 @@ public sealed class QuestService : IQuestService, IDisposable
                 streak, settings.DailyQuestStreak);
             settings.DailyQuestStreak = streak;
         }
+
+        // Keep LastDailyQuestDate in sync with actual quest completions (not shield fills).
+        // WPF QuestService.cs:1024-1026 parity (restored per slice-3 adversarial review).
+        if (Progress.DailyQuestCompletionDates.Count > 0)
+            settings.LastDailyQuestDate = Progress.DailyQuestCompletionDates.Max();
     }
 
     #endregion
