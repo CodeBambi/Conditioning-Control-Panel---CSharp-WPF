@@ -133,9 +133,11 @@
 
                 <StackPanel x:Name="FocusStripBlock" Margin="0,14,0,0" HorizontalAlignment="Center">
                     <TextBlock Text="FOCUS" Foreground="#FF9CE8FF" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center"/>
-                    <Grid Width="86" Height="8" Margin="0,3,0,0">
+                    <!-- MinWidth=0: Avalonia Fluent gives ProgressBar:horizontal MinWidth=200 (WPF has none),
+                         which would overflow this 86px grid and stick out of the 116px strip. -->
+                    <Grid Width="86" Height="8" Margin="0,3,0,0" ClipToBounds="True">
                         <ProgressBar x:Name="FocusStripBar" Minimum="0" Maximum="{Binding FocusMax}"
-                                     Value="{Binding Focus}"
+                                     Value="{Binding Focus}" MinWidth="0"
                                      Foreground="#FF5AC8FA" Background="#33000000" BorderThickness="0"/>
                         <Grid IsHitTestVisible="False">
                             <Grid.ColumnDefinitions>
@@ -239,9 +241,9 @@
                                 <TextBlock Text="pops fill it · a hold spends it" Foreground="{DynamicResource TextDimBrush}" FontSize="12"/>
                                 <TextBlock Text="{Binding FocusText}" Foreground="#FF9CE8FF" FontWeight="Bold" FontSize="13" HorizontalAlignment="Right"/>
                             </Grid>
-                            <Grid Height="8" Margin="0,4,0,0">
+                            <Grid Height="8" Margin="0,4,0,0" ClipToBounds="True">
                                 <ProgressBar x:Name="FocusPanelBar" Minimum="0" Maximum="{Binding FocusMax}"
-                                             Value="{Binding Focus}"
+                                             Value="{Binding Focus}" MinWidth="0"
                                              Foreground="#FF5AC8FA" Background="#33000000" BorderThickness="0"/>
                                 <Grid IsHitTestVisible="False">
                                     <Grid.ColumnDefinitions>

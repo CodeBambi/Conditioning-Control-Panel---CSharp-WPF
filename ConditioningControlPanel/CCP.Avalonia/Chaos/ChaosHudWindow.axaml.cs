@@ -89,11 +89,16 @@ Panel.RenderTransform = _panelSlide;
         _lastCombo = state.Combo;
         OnComboChanged(state.Combo);
 
+        // WPF parity: top-anchored, ~60% of the primary work-area height. Avalonia's
+        // Screen.WorkingArea is PHYSICAL px while Window.Height is DIPs, so divide by the
+        // screen scaling first (same convention as AvaloniaChaosWindowZ.StageBoundsDip).
         var screens = AvaloniaChaosWindowZ.GetScreens();
         var primary = screens?.Primary;
         var wa = primary?.WorkingArea;
+        double scale = primary?.Scaling ?? 1.0;
+        if (scale <= 0) scale = 1.0;
         Position = new PixelPoint((int)(wa?.X ?? 0), (int)(wa?.Y ?? 0));
-        Height = (wa?.Height ?? 1080) * 0.6;
+        Height = (wa?.Height ?? 1080) / scale * 0.6;
         ApplySide(_settings?.Current?.ChaosHudOnRight ?? false);
         LoadPortrait();
         AttachHudTips();
@@ -237,7 +242,11 @@ Panel.RenderTransform = _panelSlide;
         var screens = AvaloniaChaosWindowZ.GetScreens();
         var primary = screens?.Primary;
         var wa = primary?.WorkingArea;
-        Position = new PixelPoint((int)((onRight ? (wa?.X ?? 0) + (wa?.Width ?? 1920) - Width : (wa?.X ?? 0))),
+        // WorkingArea is physical px, Width is DIPs: convert Width before anchoring to the
+        // right edge or the window drifts off-screen on scaled monitors.
+        double scale = primary?.Scaling ?? 1.0;
+        if (scale <= 0) scale = 1.0;
+        Position = new PixelPoint((int)((onRight ? (wa?.X ?? 0) + (wa?.Width ?? 1920) - Width * scale : (wa?.X ?? 0))),
                                   (int)(wa?.Y ?? 0));
 
         var align = onRight ? HorizontalAlignment.Right : HorizontalAlignment.Left;
