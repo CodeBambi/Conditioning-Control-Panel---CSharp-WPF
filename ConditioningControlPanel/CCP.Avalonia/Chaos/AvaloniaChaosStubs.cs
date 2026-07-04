@@ -76,7 +76,7 @@ public static class ChaosGlyphs
 
 #region models
 
-public sealed class ChaosBoon
+public sealed class ChaosBoon : IChaosDraftCard
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
@@ -724,6 +724,21 @@ public static class ChaosLifetimeBoons
 public static class ChaosBoonPool
 {
     public static List<ChaosBoon> All { get; } = new();
+
+    private static readonly Random _rng = new();   // WPF ChaosModels.cs:400
+
+    /// <summary>
+    /// Deal a draft from the seeded pool — thin head-side wrapper over the Core dealer
+    /// (<see cref="ChaosDraftPool"/>): the WPF <c>ChaosBoonPool.Draft</c> surface verbatim
+    /// (WPF ChaosModels.cs:404-431) with the head's ChaosMeta reads plugged into ReqMet.
+    /// </summary>
+    public static List<ChaosBoon> Draft(bool allowCurses = true, int choices = 3, bool guaranteeCurse = false,
+                                        IReadOnlyCollection<string>? takenIds = null, double sinChance = 0.5)
+        => ChaosDraftPool.Draft(All, ReqMet, _rng, allowCurses, choices, guaranteeCurse, takenIds, sinChance);
+
+    /// <summary>A requirement id may name a lifetime boon OR a trained habit/upgrade
+    /// (WPF ChaosModels.cs:407-409 verbatim).</summary>
+    private static bool ReqMet(string id) => ChaosMeta.IsBoonActive(id) || ChaosMeta.IsUpgradeActive(id);
 }
 
 public static class ChaosBubbleVariants

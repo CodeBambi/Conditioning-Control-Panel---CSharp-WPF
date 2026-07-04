@@ -467,6 +467,21 @@ public interface IBarkService
     void NotifyChaosGiftGiven();
     void NotifyChaosDraftAutopick();
     void NotifyChaosRunStarted(string difficulty);
+
+    // ---- S5 draft/wave choreography barks (WPF Services/Companion/BarkService.cs:247-290).
+    //      Default no-op bodies so existing implementers/fakes keep compiling. ----
+    /// <summary>The run escalated into a new wave. ctx: wave (WPF BarkService.cs:247).</summary>
+    void NotifyChaosWaveEscalated(int wave) { }
+    /// <summary>The field was cleared at a wave boundary. ctx: the wave just cleared (WPF BarkService.cs:290).</summary>
+    void NotifyChaosWaveCleared(int wave) { }
+    /// <summary>A boon was drafted. ctx: boon name (WPF BarkService.cs:268).</summary>
+    void NotifyChaosBoonPicked(string boon) { }
+    /// <summary>A curse was drafted (fired instead of BoonPicked for sins) (WPF BarkService.cs:270).</summary>
+    void NotifyChaosCursePicked(string boon, string rarity, double runMultBonus) { }
+    /// <summary>The boon draft was skipped (null pick, +1 shield) (WPF BarkService.cs:273).</summary>
+    void NotifyChaosBoonSkipped(int shieldsNow) { }
+    /// <summary>The act advanced (edge-detected) (WPF BarkService.cs:287).</summary>
+    void NotifyChaosActChanged(int act, int wave) { }
     void NotifyChaosFocusLow();
     void NotifyChaosGoldFirst();
     void NotifyChaosDuoDemo();
