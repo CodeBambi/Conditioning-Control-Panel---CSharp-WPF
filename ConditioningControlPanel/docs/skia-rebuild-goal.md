@@ -88,9 +88,13 @@ Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
   backup with the P0 exclusion strip, purchase/oopsie/change-name; Core 199/199; every
   merge-`5ce70de6` re-open except this one is re-closed). Turnkey checklist:
   `docs/profilesync-port-plan.md` §8-slice-7.
-- UCE video layer does not render; legacy `AvaloniaMultiMonitorVideoService` is the only
-  working video path (and the contract holder until WS1 Phase E). Audio controls and
-  attention checks bypass the UCE path. → WP2.
+- **UCE video RENDERS (WS1 Phase A closed 2026-07-04, `85fa6570`)** — proven end-to-end by the
+  new Debug `--verify-video <path>` harness (layer registers → vmem frames decode → publish →
+  engine composites, live 30fps, exit 0). Legacy `AvaloniaMultiMonitorVideoService` remains the
+  runtime default + contract holder until Phase E; UCE video stays the `CCP_UCE_VIDEO=1` opt-in.
+  **Phase B is the WP2 frontier**: audio routing (`UpdateVolume`→layer), attention-check
+  rehoming, window-based `IsPlaying` decoupling (currently false on the UCE path — feeds the
+  interaction queue + #462 DIMs), dual-monitor/strict/segment modes, event timing. → WP2.
 - Chaos overlays (~23 window classes) are not on the compositor. → WP3.
 - Avalonia mouse hook cannot swallow clicks (WPF can): bubble/flash pops leak the click
   to the app underneath. Decide and fix in WP3, or explicitly accept and document.
