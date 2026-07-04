@@ -437,6 +437,13 @@ public interface IAvatarWindowService
 {
     bool IsMuted { get; }
     bool IsVisible { get; }
+
+    /// <summary>True while the avatar is mid text-speech (queue/timers active). Default false;
+    /// the real window service overrides. Used by the #463 keyword-line busy-retry.</summary>
+    bool IsSpeaking => false;
+
+    /// <summary>True while the avatar is playing linked speech audio. Default false; overridden.</summary>
+    bool IsSpeakingAudio => false;
     void ShowTube();
     void HideTube();
     void SetMuteAvatar(bool muted);

@@ -51,6 +51,16 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private readonly ISessionService? _sessionService;
         private readonly global::ConditioningControlPanel.IModService? _modService;
 
+        // lot-8 C2: event sources for the previously-orphaned companion-reaction handlers
+        // (assigned in WireCompanionReactionEvents(), so not readonly).
+        private global::ConditioningControlPanel.Core.Services.Video.IVideoService? _videoService;
+        private global::ConditioningControlPanel.Core.Services.Flash.IFlashService? _flashService;
+        private global::ConditioningControlPanel.Core.Services.Chaos.IBubbleService? _bubbleService;
+        private global::ConditioningControlPanel.Core.Services.Companion.ICompanionService? _companionService;
+        private global::ConditioningControlPanel.Core.Services.Awareness.IAwarenessService? _awarenessService;
+        private global::ConditioningControlPanel.Avalonia.Services.Subliminal.AvaloniaSubliminalService? _subliminalSource;
+        private global::ConditioningControlPanel.Avalonia.Services.MindWipe.AvaloniaMindWipeService? _mindWipeSource;
+
         private readonly Window? _parentWindow;
         private bool _isAttached = true;
         private readonly Random _random = new();
@@ -161,6 +171,15 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         public ObservableCollection<ChatMessage> ChatHistory { get; } = new();
 
         public bool IsSpeaking => _isGiggling;
+
+        private volatile bool _isSpeakingAudio;
+        /// <summary>
+        /// True while a spoken companion voice clip is actively playing. Mirrors WPF
+        /// AvatarTubeWindow.IsSpeakingAudio so the awareness busy-retry (#463) holds until she is free.
+        /// Set when a phrase/bark voice line begins and cleared when audio stops or the bubble times out,
+        /// so it always self-heals and never sticks (the shared IAudioPlayer is fire-and-forget).
+        /// </summary>
+        public bool IsSpeakingAudio => _isSpeakingAudio;
         public int CurrentAvatarSet => _currentAvatarSet;
 
         public AvatarTubeWindow() : this(null) { }
@@ -255,12 +274,114 @@ _parentWindow = parentWindow;
                 abs.BarkRequested += OnBarkRequested;
             }
 
+            WireCompanionReactionEvents();
+
             StartIdleTimer();
             StartTriggerTimer();
             StartRandomBubbleTimer();
             WireModerationCounter();
 
             _logger?.LogInformation("AvatarTubeWindow initialized with avatar set {Set} for level {Level}", _currentAvatarSet, playerLevel);
+        }
+
+        /// <summary>
+        /// lot-8 C2: subscribe the previously-orphaned companion-reaction handlers to their event
+        /// sources, mirroring the WPF AvatarTubeWindow subscription block. Sources are resolved through
+        /// DI; each subscription is null-guarded so absent seams (e.g. awareness has no registered
+        /// implementation yet) are simply skipped. Field-backed so OnClosed can unsubscribe cleanly.
+        /// </summary>
+        private void WireCompanionReactionEvents()
+        {
+            var services = global::ConditioningControlPanel.Avalonia.App.Services;
+            if (services == null) return;
+
+            _videoService = services.GetService<global::ConditioningControlPanel.Core.Services.Video.IVideoService>();
+            if (_videoService != null)
+            {
+                _videoService.VideoAboutToStart += OnVideoAboutToStart;
+                _videoService.VideoEnded += OnVideoEnded;
+            }
+
+            _flashService = services.GetService<global::ConditioningControlPanel.Core.Services.Flash.IFlashService>();
+            if (_flashService != null)
+            {
+                _flashService.FlashAboutToDisplay += OnFlashAboutToDisplay;
+                _flashService.FlashClicked += OnFlashClicked;
+            }
+
+            _subliminalSource = services.GetService<global::ConditioningControlPanel.Core.Services.Subliminal.ISubliminalService>()
+                as global::ConditioningControlPanel.Avalonia.Services.Subliminal.AvaloniaSubliminalService;
+            if (_subliminalSource != null)
+                _subliminalSource.SubliminalDisplayed += OnSubliminalDisplayed;
+
+            _mindWipeSource = services.GetService<global::ConditioningControlPanel.Core.Services.MindWipe.IMindWipeService>()
+                as global::ConditioningControlPanel.Avalonia.Services.MindWipe.AvaloniaMindWipeService;
+            if (_mindWipeSource != null)
+                _mindWipeSource.MindWipeTriggered += OnMindWipeTriggered;
+
+            _bubbleService = services.GetService<global::ConditioningControlPanel.Core.Services.Chaos.IBubbleService>();
+            if (_bubbleService != null)
+            {
+                _bubbleService.OnBubblePopped += OnBubblePopped;
+                _bubbleService.OnBubbleMissed += OnBubbleMissed;
+            }
+
+            _companionService = services.GetService<global::ConditioningControlPanel.Core.Services.Companion.ICompanionService>();
+            if (_companionService != null)
+            {
+                // Avatar-line side of level-up (speech bubble). The toast lives in MainWindowViewModel
+                // (AddNotification), so this side never raises a toast — no double-fire.
+                _companionService.LevelUp += OnCompanionLevelUp;
+                _companionService.CompanionSwitched += OnCompanionSwitched;
+            }
+
+            if (_progression != null)
+                _progression.LevelUp += OnLevelUp;
+
+            // Awareness has no registered implementation in the port yet; guarded so this becomes
+            // live automatically once an IAwarenessService seam is registered.
+            _awarenessService = services.GetService<global::ConditioningControlPanel.Core.Services.Awareness.IAwarenessService>();
+            if (_awarenessService != null)
+            {
+                _awarenessService.ActivityChanged += OnActivityChanged;
+                _awarenessService.StillOnActivity += OnStillOnActivity;
+                _awarenessService.Start();
+            }
+        }
+
+        private void UnwireCompanionReactionEvents()
+        {
+            if (_videoService != null)
+            {
+                _videoService.VideoAboutToStart -= OnVideoAboutToStart;
+                _videoService.VideoEnded -= OnVideoEnded;
+            }
+            if (_flashService != null)
+            {
+                _flashService.FlashAboutToDisplay -= OnFlashAboutToDisplay;
+                _flashService.FlashClicked -= OnFlashClicked;
+            }
+            if (_subliminalSource != null)
+                _subliminalSource.SubliminalDisplayed -= OnSubliminalDisplayed;
+            if (_mindWipeSource != null)
+                _mindWipeSource.MindWipeTriggered -= OnMindWipeTriggered;
+            if (_bubbleService != null)
+            {
+                _bubbleService.OnBubblePopped -= OnBubblePopped;
+                _bubbleService.OnBubbleMissed -= OnBubbleMissed;
+            }
+            if (_companionService != null)
+            {
+                _companionService.LevelUp -= OnCompanionLevelUp;
+                _companionService.CompanionSwitched -= OnCompanionSwitched;
+            }
+            if (_progression != null)
+                _progression.LevelUp -= OnLevelUp;
+            if (_awarenessService != null)
+            {
+                _awarenessService.ActivityChanged -= OnActivityChanged;
+                _awarenessService.StillOnActivity -= OnStillOnActivity;
+            }
         }
 
         private void WireParentEvents()
@@ -888,6 +1009,7 @@ _parentWindow = parentWindow;
             if (_isMuted || !IsAvatarVisibleOnScreen)
             {
                 _isGiggling = false;
+                _isSpeakingAudio = false;
                 _lastSpeechEndTime = DateTime.Now;
                 _lastSpeechSource = source;
                 _lastSpeechLength = text?.Length ?? 0;
@@ -978,6 +1100,7 @@ _parentWindow = parentWindow;
                     _lastSpeechSource = capturedSource;
                     _lastSpeechLength = capturedLength;
                     _isGiggling = false;
+                    _isSpeakingAudio = false;
                     ProcessNextSpeech();
                 };
                 _speechTimer.Start();
@@ -1360,8 +1483,9 @@ _parentWindow = parentWindow;
 
         private void PlayFallbackBubbleSound() => PlayAudio(BubbleSoundPath(), 0.5);
         private void PlayGiggleSound() => PlayAudio(GiggleSoundPath(), 0.6);
-        private void PlayBarkVoice(string path) => PlayAudio(path, 0.9);
-        private void PlayPhraseAudio(string path) => PlayAudio(path, 0.8);
+        // Spoken voice lines drive IsSpeakingAudio (lot-8 C1) so the awareness busy-retry waits for them.
+        private void PlayBarkVoice(string path) { _isSpeakingAudio = true; PlayAudio(path, 0.9); }
+        private void PlayPhraseAudio(string path) { _isSpeakingAudio = true; PlayAudio(path, 0.8); }
         private void PlayAvatarPopSound() => PlayAudio(PopSoundPath(), 0.5);
 
         private void PlayAudio(string? path, double volume)
@@ -1381,6 +1505,7 @@ _parentWindow = parentWindow;
 
         private void StopSpokenAudio()
         {
+            _isSpeakingAudio = false;
             try { _audioPlayer?.Stop(); }
             catch { }
         }
@@ -1580,6 +1705,7 @@ _parentWindow = parentWindow;
             _randomBubbleTimer?.Stop();
             _zOrderRefreshTimer?.Stop();
             StopVoiceLineAudio();
+            UnwireCompanionReactionEvents();
             if (_parentWindow != null)
             {
                 _parentWindow.PositionChanged -= ParentWindow_PositionChanged;

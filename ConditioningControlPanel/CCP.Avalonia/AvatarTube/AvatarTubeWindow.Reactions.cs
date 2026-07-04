@@ -11,25 +11,12 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
     public class FlashAudioPlayingEventArgs : EventArgs
     {
         public string FilePath { get; }
-        public FlashAudioPlayingEventArgs(string filePath) => FilePath = filePath;
-    }
-
-    public class ActivityChangedEventArgs : EventArgs
-    {
-        public object Category { get; }
-        public object PreviousCategory { get; }
-        public string DetectedName { get; }
-        public string ServiceName { get; }
-        public string PageTitle { get; }
-
-        public ActivityChangedEventArgs(object category, object previousCategory, string detectedName,
-            string serviceName = "", string pageTitle = "")
+        /// <summary>Configured display text for the clip; falls back to the file name when null.</summary>
+        public string? Text { get; }
+        public FlashAudioPlayingEventArgs(string filePath, string? text = null)
         {
-            Category = category;
-            PreviousCategory = previousCategory;
-            DetectedName = detectedName;
-            ServiceName = serviceName;
-            PageTitle = pageTitle;
+            FilePath = filePath;
+            Text = text;
         }
     }
 
@@ -37,23 +24,59 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
     {
         private readonly DateTime _startupTime = DateTime.Now;
 
+        // Both awareness enums share identical members/order, so an int cast is a safe conversion
+        // from the Core seam type to the window's local category enum used by GetPhraseForCategory.
+        private static ActivityCategory ToLocalCategory(
+            global::ConditioningControlPanel.Core.Services.Awareness.ActivityCategory category)
+            => (ActivityCategory)(int)category;
+
         private void OnActivityChanged(object? sender, EventArgs e)
         {
-            if (e is not ActivityChangedEventArgs args) return;
+            if (e is not global::ConditioningControlPanel.Core.Services.Awareness.ActivityChangedEventArgs args) return;
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(() => OnActivityChanged(sender, e)); return; }
+
+            // Startup cooldown: let the greeting show first (WPF parity, lot-8 C5(d)).
+            if ((DateTime.Now - _startupTime).TotalSeconds < StartupCooldownSeconds) return;
+            // Wait for the current bubble to clear before reacting.
             if (!IsSpeechReady()) return;
-            Giggle(GetPhraseForCategory(args.Category, args.DetectedName));
+            // User-configured reaction cooldown.
+            if (_awarenessService != null && !_awarenessService.CanReact()) return;
+            _awarenessService?.MarkReaction();
+
+            var displayName = string.IsNullOrEmpty(args.ServiceName) ? args.DetectedName : args.ServiceName;
+            // Canned-phrase path only. WPF's AI reaction path (PlayDoubleBounce + GigglePriority) stays
+            // gated behind the AI seam, which is a stub in the port — no AI calls added here (lot-8 C5(d)).
+            Giggle(GetPhraseForCategory(ToLocalCategory(args.Category), displayName));
         }
 
         private void OnStillOnActivity(object? sender, EventArgs e)
         {
-            if (e is not ActivityChangedEventArgs args) return;
+            if (e is not global::ConditioningControlPanel.Core.Services.Awareness.ActivityChangedEventArgs args) return;
+            if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(() => OnStillOnActivity(sender, e)); return; }
+
+            if ((DateTime.Now - _startupTime).TotalSeconds < StartupCooldownSeconds) return;
             if (!IsSpeechReady()) return;
-            Giggle(GetPhraseForCategory(args.PreviousCategory, args.DetectedName));
+            if (_awarenessService != null && !_awarenessService.CanStillOnReact()) return;
+            _awarenessService?.MarkStillOnReaction();
+
+            var duration = _awarenessService?.CurrentActivityDuration ?? TimeSpan.Zero;
+            bool useServiceNameOnly = _random.Next(2) == 0;
+            var displayName = useServiceNameOnly || string.IsNullOrEmpty(args.PageTitle)
+                ? args.ServiceName
+                : args.PageTitle;
+
+            // Canned fallback with elapsed time (WPF's AI still-on path stays gated behind the AI stub).
+            var minutes = (int)duration.TotalMinutes;
+            var timeText = minutes < 1 ? "a bit" : $"{minutes} min";
+            Giggle($"Still on {displayName}? {timeText} already~ Do your nails instead!");
         }
 
         private void OnVideoAboutToStart(object? sender, EventArgs e)
         {
-            Giggle("Ooh! Pretty spir-rals...");
+            const string line = "Ooh! Pretty spir-rals...";
+            // WPF passes ResolveEventAudio(line) here for a matching voice clip. The port has no
+            // event-audio lookup wired yet, so this stays a text-only Giggle (lot-8 C6).
+            Giggle(line);
         }
 
         private async void OnVideoEnded(object? sender, EventArgs e)
@@ -109,8 +132,18 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private void OnFlashAudioPlaying(object? sender, EventArgs e)
         {
             if (e is not FlashAudioPlayingEventArgs args) return;
-            var fileName = Path.GetFileNameWithoutExtension(args.FilePath) ?? "?";
-            GigglePriority($"♫ {fileName}", aiGenerated: false);
+            // WPF parity (lot-8 C5(c)): FlashService already plays the audio, so show the configured
+            // text WITHOUT a second sound (playSound:false), and skip while muted or mid-bubble so the
+            // text and audio don't desync.
+            var text = string.IsNullOrWhiteSpace(args.Text)
+                ? Path.GetFileNameWithoutExtension(args.FilePath)
+                : args.Text;
+            if (_isMuted || string.IsNullOrWhiteSpace(text)) return;
+            if (_isGiggling) return;
+
+            _speechQueue.Clear();
+            _speechDelayTimer?.Stop();
+            ShowGiggle(text, playSound: false, source: SpeechSource.Preset);
         }
 
         private void OnSubliminalDisplayed(object? sender, EventArgs e)
@@ -132,11 +165,14 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private void OnCompanionLevelUp(object? sender, (CompanionId Companion, int NewLevel) args)
         {
             RefreshCompanionDisplay();
-            var def = CompanionDefinition.GetById(args.Companion);
+            // Route the roster name through the active mod's terminology map (#325) so a themed mod
+            // speaks its own name instead of the Bambi roster name (lot-8 C5(b)).
+            var rawName = CompanionDefinition.GetById(args.Companion).Name;
+            var companionName = _modService?.MakeModAware(rawName) ?? rawName;
             if (args.NewLevel == CompanionProgress.MaxLevel)
-                GigglePriority($"{def.Name} reached MAX LEVEL! *sparkles*", aiGenerated: false);
+                GigglePriority($"{companionName} reached MAX LEVEL! *sparkles*", aiGenerated: false);
             else if (args.NewLevel % 10 == 0)
-                GigglePriority($"{def.Name} is now level {args.NewLevel}! Keep going!", aiGenerated: false);
+                GigglePriority($"{companionName} is now level {args.NewLevel}! Keep going!", aiGenerated: false);
             else
                 GiggleFromCategory("LevelUp");
         }
@@ -153,8 +189,11 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
             _companionGreetingDebounce.Tick += (_, _) =>
             {
                 _companionGreetingDebounce.Stop();
-                var name = CompanionDefinition.GetById(newCompanion).Name;
-                Giggle($"Hi! {name} is here now~");
+                // Mod-aware greeting name + phrase (#325, lot-8 C5(b)).
+                var rawName = CompanionDefinition.GetById(newCompanion).Name;
+                var name = _modService?.MakeModAware(rawName) ?? rawName;
+                var greeting = $"Hi! {name} is here now~";
+                Giggle(_modService?.MakeModAware(greeting) ?? greeting);
             };
             _companionGreetingDebounce.Start();
         }

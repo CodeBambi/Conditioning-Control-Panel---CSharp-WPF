@@ -1216,13 +1216,37 @@ public sealed class AvaloniaKeywordTriggerService : IKeywordTriggerService, IDis
         }
     }
 
-    private void ShowAvatarLine(string line, bool aiGenerated)
+    private void ShowAvatarLine(string line, bool aiGenerated) => ShowAvatarLine(line, aiGenerated, attempt: 0);
+
+    private void ShowAvatarLine(string line, bool aiGenerated, int attempt)
     {
         Dispatcher.UIThread.Post(() =>
         {
             try
             {
-                _avatarWindowService.GigglePriority(line, playSound: true, aiGenerated: aiGenerated);
+                var avatar = _avatarWindowService;
+                // GigglePriority stops the speech timers and clears the queue, so an awareness comment
+                // fired mid-ramble cut the companion off (#463). While she's speaking (bubble OR voice
+                // clip), wait and retry rather than routing through the queued path that drops the
+                // AI badge/sound. Mirrors WPF KeywordTriggerService.ShowAvatarLine (lot-8 C1).
+                if (avatar.IsSpeaking || avatar.IsSpeakingAudio)
+                {
+                    if (attempt >= 16)   // 16 x 750ms = give up after ~12s of nonstop talking
+                    {
+                        _logger.LogDebug("Awareness comment dropped - companion busy: {Line}", line);
+                        return;
+                    }
+                    var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(750) };
+                    retry.Tick += (_, _) =>
+                    {
+                        retry.Stop();
+                        ShowAvatarLine(line, aiGenerated, attempt + 1);
+                    };
+                    retry.Start();
+                    return;
+                }
+
+                avatar.GigglePriority(line, playSound: true, aiGenerated: aiGenerated);
             }
             catch (Exception ex)
             {

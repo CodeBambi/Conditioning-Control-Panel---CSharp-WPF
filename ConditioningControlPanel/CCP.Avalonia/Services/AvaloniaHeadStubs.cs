@@ -1397,6 +1397,12 @@ public sealed class AvaloniaAvatarWindowService : IAvatarWindowService
 
     public bool IsVisible => _window?.IsVisible ?? false;
 
+    // lot-8 C1 (#463): proxy the tube's speaking flags so the keyword-trigger busy-retry can
+    // hold an awareness comment until she stops talking instead of cutting her off. These
+    // OVERRIDE the default-false members on IAvatarWindowService.
+    public bool IsSpeaking => _window?.IsSpeaking ?? false;
+    public bool IsSpeakingAudio => _window?.IsSpeakingAudio ?? false;
+
     public void ShowTube()
     {
         try
