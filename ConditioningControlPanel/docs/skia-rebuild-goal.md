@@ -76,18 +76,21 @@ Effect services (flash, subliminal, bouncing text, pink tint, spiral, brain drai
 bubbles) render as compositor layers; Avalonia measured faster than WPF on startup
 (~2.5s vs ~4.2s) and memory (~422MB vs ~1218MB).
 
-**Gates snapshot 2026-07-04:** slnf 0 errors · WPF sln 0 errors · Core tests **199/199**
-· smoke **44 tabs / 17 first-chance exceptions / 5 findings = baseline** (the
-`StartSession` blocker is a known baseline finding). Audit trail: ProfileSync slices
-1–6 each independently reviewed or grep-proven (economy bug caught+fixed pre-commit in
-slice 6, `766d8322`); #462 pair re-reviewed SOUND + hardened (`fb704a6d`).
+**Gates snapshot 2026-07-04 (post-WP1):** slnf 0 errors · WPF sln 0 errors · Core tests
+**205/205** · smoke **`[SMOKE] Findings: 5` = baseline, exit 0, no token material in the
+output** (the `StartSession` blocker is a known baseline finding) · `--verify-video` exit 0.
+Audit trail: ProfileSync slices 1–6 each independently reviewed or grep-proven (economy bug
+caught+fixed pre-commit in slice 6, `766d8322`); #462 pair re-reviewed SOUND + hardened
+(`fb704a6d`).
 
 Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
-- **WP1 — ProfileSync slice 7 (GDPR + live wiring): the ONLY remaining WS0 item.**
-  Slices 1–6 are DONE and UNWIRED (full sync round-trip, heartbeat, 401 recovery, cloud
-  backup with the P0 exclusion strip, purchase/oopsie/change-name; Core 199/199; every
-  merge-`5ce70de6` re-open except this one is re-closed). Turnkey checklist:
-  `docs/profilesync-port-plan.md` §8-slice-7.
+- **WP1 — ProfileSync slice 7 (GDPR + live wiring): ✅ DONE 2026-07-04 — WS0 is COMPLETE.**
+  s7a (`4f051ab0`) GDPR export + easter-egg; s7b (`80e1442`) live wiring: DI, login/logout/
+  startup, single heartbeat owner, §5 sync triggers + bounded exit sync, cloud backup/restore
+  UI, server-authoritative purchase, oopsie, season-recap nudge. P0s intact (token-log diff
+  audit clean; pinned tests untouched, Core 205/205). Evidence per checklist step:
+  `docs/profilesync-port-plan.md` §8. Follow-up (manual, small): first real logged-in
+  purchase/name-change exercise against the live server.
 - **UCE video RENDERS (WS1 Phase A closed 2026-07-04, `85fa6570`)** — proven end-to-end by the
   new Debug `--verify-video <path>` harness (layer registers → vmem frames decode → publish →
   engine composites, live 30fps, exit 0). Legacy `AvaloniaMultiMonitorVideoService` remains the
@@ -272,14 +275,14 @@ improvising whenever a precondition fails, a gate goes red, or a step is ambiguo
    and the slice-3 drift). If you cannot dispatch reviewers, self-review against the
    WPF source line-by-line and record the comparison in the commit message.
 
-### WP1 — ProfileSync slice 7: GDPR + LIVE WIRING — finishes WS0 [MECHANICAL, gates-guarded]
-Slices 1–6 are DONE and UNWIRED (service fully implemented + tested, invisible to the
-running app). Slice 7 turns it on. Follow `docs/profilesync-port-plan.md` §8-slice-7 —
-expanded into a literal step-by-step checklist (files, registration lines, call sites,
-per-step verification). P0s that MUST survive: auth token never logged;
-`ExcludedBackupProperties` strip stays byte-identical (test-pinned); fresh-defaults
-cloud-wipe guard stays; single heartbeat owner. Acceptance: all checklist boxes, gates
-green, smoke still baseline, WPF sln 0 errors, parity row 1 → `ported`.
+### WP1 — ProfileSync slice 7: GDPR + LIVE WIRING — ✅ DONE 2026-07-04, WS0 FINISHED
+Shipped as s7a `4f051ab0` (GDPR export + easter-egg, DeleteAccount stays auth-owned) +
+s7b `80e1442` (live wiring: DI, login/logout/startup, single heartbeat owner, §5 sync
+triggers + bounded exit sync, cloud backup/restore UI, server-authoritative purchase,
+oopsie, season-recap nudge). All P0s survived (token-log diff audit clean; pinned tests
+untouched). Acceptance met: checklist complete with per-step evidence
+(`docs/profilesync-port-plan.md` §8), gates green (slnf 0 · WPF sln 0 · Core 205/205 ·
+smoke `Findings: 5` baseline · `--verify-video` exit 0), parity row 1 re-closed.
 
 ### WP2 — WS1 video through the compositor [JUDGMENT — best model]
 Detail tracker: `unified-compositor-engine-plan.md` phases A–E, one phase per session.
@@ -378,8 +381,8 @@ without re-reading the claimed task-board row and this goal's relevant workstrea
 
 ## Definition of Done
 
-- [~] WS0 complete: the ENTIRE port reviewed lot by lot (contract + adversarial rubric + optimality), corrections merged, the parity matrix re-earned from a full reset with evidence per row, calibration-port blockage resolved or formally re-scoped. Any lot RE-OPENED by a later merge from main (see the task-board "Sync-from-main" backlogs; merge `5ce70de6` re-opened lots 1/2/3/4/6) must be re-closed before WS0 is done.
-  - **STATUS 2026-07-04 (post-audit): all 11 lots PASSED; every merge-`5ce70de6` re-open is RE-CLOSED except ONE — ProfileSync slice 7 (GDPR + live wiring), queued as playbook WP1.** Re-close trail: #462 session-summary (`410bef87`), #462 interaction-race (`4d65e564`, hardened `fb704a6d`), #461 resolved-by-documentation (`648d21ac`), EffectPayload.Ambient dormant (chaos backlog). ProfileSync slices 1–6 of 7 are DONE and UNWIRED (Core 199/199; full sync round-trip + heartbeat + 401 recovery + cloud backup w/ P0 exclusion strip + purchase/oopsie/change-name; each slice independently reviewed or grep-proven — the slice-3 merge got a fresh-context adversarial review, the slice-5 P0 exclusion list is grep-proven 18==18 vs WPF, the slice-6 economy bug was caught+fixed pre-commit). Full history + per-slice evidence: `docs/profilesync-port-plan.md`. Standing deferred workstreams (not re-opens; scheduled after WP1–2): Ditzy Data PRO analytics, Discord Rich Presence, companion AI + CompanionTab, chaos run-engine faithful port, calibration 16-point pipeline.
+- [x] WS0 complete: the ENTIRE port reviewed lot by lot (contract + adversarial rubric + optimality), corrections merged, the parity matrix re-earned from a full reset with evidence per row, calibration-port blockage resolved or formally re-scoped. Any lot RE-OPENED by a later merge from main (see the task-board "Sync-from-main" backlogs; merge `5ce70de6` re-opened lots 1/2/3/4/6) must be re-closed before WS0 is done.
+  - **STATUS 2026-07-04 (WP1 shipped): all 11 lots PASSED and EVERY merge-`5ce70de6` re-open is RE-CLOSED — the last one, ProfileSync slice 7 (GDPR + live wiring), landed as s7a `4f051ab0` + s7b `80e1442` (parity row 1 re-closed with evidence; gates slnf 0 · WPF 0 · Core 205/205 · smoke baseline · video canary exit 0). WS0 is DONE.** Re-close trail: #462 session-summary (`410bef87`), #462 interaction-race (`4d65e564`, hardened `fb704a6d`), #461 resolved-by-documentation (`648d21ac`), EffectPayload.Ambient dormant (chaos backlog). ProfileSync slices 1–6 of 7 are DONE and UNWIRED (Core 199/199; full sync round-trip + heartbeat + 401 recovery + cloud backup w/ P0 exclusion strip + purchase/oopsie/change-name; each slice independently reviewed or grep-proven — the slice-3 merge got a fresh-context adversarial review, the slice-5 P0 exclusion list is grep-proven 18==18 vs WPF, the slice-6 economy bug was caught+fixed pre-commit). Full history + per-slice evidence: `docs/profilesync-port-plan.md`. Standing deferred workstreams (not re-opens; scheduled after WP1–2): Ditzy Data PRO analytics, Discord Rich Presence, companion AI + CompanionTab, chaos run-engine faithful port, calibration 16-point pipeline.
 - [ ] Video, audio controls, and attention checks run through the compositor on Windows; legacy video windows deleted (WS1 Phase E complete).
 - [ ] All passive Chaos visuals are compositor layers; a full Chaos run holds the FPS floor; hook swallow gap resolved or explicitly accepted in the task board.
 - [ ] No passive effect window remains in `CCP.Avalonia` (audited); interactive windows are justified.

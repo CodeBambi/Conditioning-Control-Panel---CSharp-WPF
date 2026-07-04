@@ -1,6 +1,14 @@
 # ProfileSyncService — Slice-by-Slice Port Plan
 
-> **Status:** IN PROGRESS — **Slices 1–5 landed unwired; sync round-trip + heartbeat + 401 recovery
+> **Status: DONE 2026-07-04 — ALL SLICES (1–7) LANDED; slice 7b LIVE WIRING shipped (`80e1442`).**
+> The service is registered in the Avalonia DI graph and wired to login/logout/startup, the
+> heartbeat (single owner), the §5 sync triggers (incl. bounded 2s exit sync), cloud
+> backup/restore/status UI, server-authoritative skill purchase, oopsie insurance, GDPR export,
+> and the easter-egg counter. Gates at close: slnf 0 · WPF sln 0 · Core **205/205** · smoke
+> `[SMOKE] Findings: 5` baseline with no token material in output · `--verify-video` exit 0.
+> Per-step evidence in §8 Slice 7 below. Historical per-slice trail follows.
+>
+> **Slices 1–5 landed unwired; sync round-trip + heartbeat + 401 recovery
 > + cloud backup/restore done + tested.** S1 (`c4b2583a`) seam+18 DTOs+HMAC+5t. S2 (`a3215fc9`)
 > injectable test ctor + heartbeat + 4t. S3 (`fafd22b0`) pull + full merge + 3 real `IQuestService` DIM
 > methods + 5t, **independently adversarially reviewed SAFE-TO-BANK**. S4 (`34fc5f16`) push (leaderboard
@@ -12,8 +20,8 @@
 > post-purchase balance) caught + fixed pre-commit, pinned by a discriminating test** + 6t.
 > **Core 205/205, still NOT in DI (byte-identical app behavior).** Slice 7a (`4f051ab0`) done:
 > GDPR export + easter-egg ported, DeleteAccount stays auth-owned (evidence in commit), breadcrumb
-> inventory delivered. **ONLY SLICE 7b REMAINS — the LIVE WIRING, checklist steps 3–11 below
-> (MECHANICAL, any model; owner-redirected 2026-07-04 to run after best-model WP2 work).** This is the sole remaining WS0 merge-`5ce70de6`
+> inventory delivered. **Slice 7b (LIVE WIRING, checklist steps 3–11) COMPLETED 2026-07-04
+> (`80e1442` wiring + this docs commit).** This closed the sole remaining WS0 merge-`5ce70de6`
 > re-open (parity-matrix row 1). Execution is a **fresh-context task**: the surface is ~2,800 LOC
 > and **security-sensitive** (HMAC anti-cheat signing, GDPR delete/export, and the P0 privacy
 > `ExcludedBackupProperties` list — omitting it leaks the auth token to the server). It must be
@@ -396,6 +404,48 @@ top-to-bottom, verify after each step, STOP+note if a precondition fails:**
 **P0s that MUST survive slice 7 (all test-pinned — do not weaken the tests):** auth token never
 logged/plaintext; `ExcludedBackupProperties` strip byte-identical; fresh-defaults cloud-wipe guard;
 purchase direct-set (no Math.Max). *Success:* checklist complete, gates green, parity row 1 ported.
+
+**✅ SLICE 7b DONE 2026-07-04 (`80e1442`). Per-step evidence:**
+1. Preflight: breadcrumbs inventoried; `AvaloniaV2AuthService.SendHeartbeatAsync` grep-proven to
+   have NO timer and ZERO callers → nothing to disable; ProfileSync's 120s timer is the single
+   heartbeat owner by construction (decision comment added at the auth method).
+2. Done in 7a (`4f051ab0`): `ExportDataAsync` + `RecordEasterEggReadAsync` implemented;
+   `DeleteAccountAsync` stays auth-owned (DIM + evidence comment on the seam).
+3. DI: `ServiceCollectionExtensions.cs` singleton factory next to the LeaderboardService
+   precedent; all 5 sibling seams via `GetService` (all-optional ctor).
+4. Login: `MainWindowViewModel.OpenLoginDialogAsync` → `StartHeartbeat` + background
+   `LoadProfileAsync`→`SyncProfileAsync` w/ `SuppressPopups` (WPF Login.cs:113-141). Logout:
+   bounded 2s final push before local clear (`MainWindowViewModel.LogoutAsync`) +
+   `StopHeartbeat` centralized in `AuthLogoutHelper.LogoutAll` (all 3 logout paths). Startup
+   restored session (UnifiedId+AuthToken persisted): background pull + `StartHeartbeat`
+   (`App.axaml.cs`).
+5. Triggers: level-up + quest-complete (`App.axaml.cs`), leaderboard-open
+   (`LeaderboardTabViewModel.OnSelected`), post-purchase (`AvaloniaSkillTreeService`); exit sync
+   after `SaveImmediate` with 2s bounded wait + service dispose (`FlushPersistentState`).
+6. Backup: `AvaloniaSettingsBackupProvider` COMPOSES local snapshot + cloud (§10.2), lazily
+   resolved (no ctor cycle); "Back Up Now" → `force:true`; restore wired in AppInfo + Patreon
+   tabs w/ WPF identity-preserve block + `RestoreFrom`; status uses `GetSettingsBackupInfoAsync`.
+   GDPR export UI now exports SERVER data (the old local-settings stub serialized secret-bearing
+   fields into the file — removed).
+7. Purchase: `AvaloniaSkillTreeService.PurchaseSkillAsync` → local guards, then delegates;
+   login required (WPF parity, no offline path); NO local deduction / prestige tracking (the
+   sync service direct-sets the post-purchase balance and owns accrual).
+8. Oopsie: `QuestsTabViewModel.FixStreakDayAsync` ports WPF QuestsTab.cs:553-596 (server first,
+   then new_xp→level XP, `SeasonalStreakRecoveryUsed`, `FixStreakDay`; cloud account required).
+9. `is_active`: kept conservative `true` + decision comment (no Core idle seam; cosmetic flag).
+   Season-recap nudge: `MainWindow` subscribes `ProfileLoaded` → latch-guarded
+   `TryShowSeasonRecapAsync`; push-path `level_reset` is picked up at next pull/launch (noted in
+   Core).
+10. Gates: slnf 0 · WPF sln 0 · Core 205/205 (no Core behavior changed by wiring — comment-only;
+    no new tests needed, none removed) · smoke exit 0, `[SMOKE] Findings: 5`, output grepped:
+    no token material (only status codes/messages; heartbeat lifecycle clean) · `--verify-video`
+    exit 0. Diff token audit: only `IsNullOrEmpty(AuthToken)` presence checks; every added log
+    carries trigger names/dates/exception messages only.
+11. This close-out: breadcrumbs resolved/annotated in Core + Avalonia; parity row 1 updated;
+    goal-doc WS0 DoD flipped. Live-server exercise of purchase/name-change was NOT manually
+    performed in this pass (no interactive login available in-session); the smoke run exercised
+    startup wiring against the production server (401-recovery path observed, token kept, no
+    leak) — first real login run remains a follow-up manual check.
 
 *V1 OAuth/`Bearer` fallback endpoints #2/#3/#5 are intentionally out of scope — see §10.3.*
 
