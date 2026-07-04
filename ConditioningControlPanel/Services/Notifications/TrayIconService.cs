@@ -110,6 +110,13 @@ namespace ConditioningControlPanel.Services;
 
             _notifyIcon.ContextMenuStrip = contextMenu;
             _notifyIcon.DoubleClick += (s, e) => ShowWindow();
+            // Single left-click restores too — users expect it, and "clicking the tray
+            // icon does nothing" reads as the app being gone (#475). Right-click still
+            // opens the context menu; a double-click just calls ShowWindow twice (no-op).
+            _notifyIcon.MouseClick += (s, e) =>
+            {
+                if (e.Button == MouseButtons.Left) ShowWindow();
+            };
 
             App.Logger?.Debug("Tray icon initialized");
         }
@@ -146,7 +153,7 @@ namespace ConditioningControlPanel.Services;
         {
             _hasShownFirstMinimizeNotification = true;
             _notifyIcon?.ShowBalloonTip(2000, "Conditioning Control Panel",
-                "Running in background. Double-click to restore.", ToolTipIcon.Info);
+                "Running in background. Click the tray icon to restore.", ToolTipIcon.Info);
         }
     }
 
@@ -168,10 +175,50 @@ namespace ConditioningControlPanel.Services;
 
         _mainWindow.Show();
         _mainWindow.WindowState = WindowState.Normal;
+        EnsureOnScreen();
         var windowHandle = new System.Windows.Interop.WindowInteropHelper(_mainWindow).Handle;
         SetForegroundWindow(windowHandle);
+        _mainWindow.Activate();
         // Hide() is now redundant since we already set Visible = false above
         OnShowRequested?.Invoke();
+    }
+
+    /// <summary>
+    /// MinimizeToTray uses Hide(), so the window keeps its last Left/Top. If that spot
+    /// is no longer on any live screen (monitor unplugged / display change while hidden)
+    /// the restored window is invisible and the tray icon looks broken (#475).
+    /// </summary>
+    private void EnsureOnScreen()
+    {
+        try
+        {
+            var screens = Screen.AllScreens;
+            if (screens == null || screens.Length == 0) return;
+
+            var source = System.Windows.Interop.HwndSource.FromHwnd(
+                new System.Windows.Interop.WindowInteropHelper(_mainWindow).Handle);
+            var toDevice = source?.CompositionTarget?.TransformToDevice;
+            double sx = toDevice?.M11 ?? 1.0, sy = toDevice?.M22 ?? 1.0;
+
+            var rect = new Rectangle(
+                (int)(_mainWindow.Left * sx), (int)(_mainWindow.Top * sy),
+                (int)(_mainWindow.ActualWidth * sx), (int)(_mainWindow.ActualHeight * sy));
+
+            foreach (var screen in screens)
+            {
+                var visible = Rectangle.Intersect(screen.WorkingArea, rect);
+                if (visible.Width >= 60 && visible.Height >= 30) return; // enough to grab the title bar
+            }
+
+            var wa = (Screen.PrimaryScreen ?? screens[0]).WorkingArea;
+            _mainWindow.Left = wa.Left / sx + (wa.Width / sx - _mainWindow.ActualWidth) / 2.0;
+            _mainWindow.Top = wa.Top / sy + (wa.Height / sy - _mainWindow.ActualHeight) / 2.0;
+            App.Logger?.Information("Tray restore: window was off-screen, re-centered on primary");
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("TrayIconService.EnsureOnScreen failed: {Error}", ex.Message);
+        }
     }
 
     public void ShowNotification(string title, string message, ToolTipIcon icon = ToolTipIcon.Info)

@@ -466,7 +466,26 @@ namespace ConditioningControlPanel
                           : enhanceOff ? "Yes, enable enhancement"
                           : "Yes, turn on webcam";
 
-                var confirmed = ShowStyledDialog("✨ Enhanced videos detected", sb.ToString(), yes, "Not now");
+                // Never stack on top of the update popup: both are modal on the UI
+                // thread, and whichever ShowDialog nests second owns input while the
+                // Topmost update dialog covers it - neither can be dismissed (#481).
+                // Wait for the update dialog, then take the startup-dialog flag so
+                // the update path's own wait loop defers to us symmetrically.
+                for (int i = 0; i < 60 && App.IsUpdateDialogActive; i++)
+                    await Task.Delay(500);
+                if (App.IsUpdateDialogActive) return;
+                if (!IsLoaded || Dispatcher.HasShutdownStarted || !_isRunning) return;
+
+                bool confirmed;
+                IsStartupDialogShowing = true;
+                try
+                {
+                    confirmed = ShowStyledDialog("✨ Enhanced videos detected", sb.ToString(), yes, "Not now");
+                }
+                finally
+                {
+                    IsStartupDialogShowing = false;
+                }
                 if (!confirmed) return;
 
                 if (enhanceOff)
