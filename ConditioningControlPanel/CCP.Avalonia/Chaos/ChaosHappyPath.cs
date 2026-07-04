@@ -56,6 +56,13 @@ public static class ChaosHappyPath
 
     public static bool IsScripting => _state != null && _runsAtStart < SCRIPTED_DESCENTS;
 
+    /// <summary>The concrete chaos service that owns the announcer queue (WS2: the announcer
+    /// is a compositor layer driven through AvaloniaChaosService.AnnounceChaos). Beats fire
+    /// mid-run, when <c>_svc</c> is set by OnRunStarted; the DI fallback covers any beat
+    /// raised outside that window.</summary>
+    private static AvaloniaChaosService? AnnSvc =>
+        _svc ?? AvaloniaChaosApp.Chaos as AvaloniaChaosService;
+
     // ============================ entry points ============================
 
     /// <summary>The forced naked config for the very first descent (RunsCompleted == 0).</summary>
@@ -187,8 +194,8 @@ public static class ChaosHappyPath
             }
             _shieldRigBoonId = don.Id;
             _firstSinDraftPending = true;
-            ChaosAnnouncerOverlay.Announce("☠ a sin is on the table. the first taste is free. this once.",
-                ChaosAnnounceKind.Temptation, holdMs: ChaosAnnouncerOverlay.TEACH_HOLD_MS);
+            AnnSvc?.AnnounceChaos("☠ a sin is on the table. the first taste is free. this once.",
+                ChaosAnnounceKind.Temptation, holdMs: AvaloniaChaosService.TeachHoldMs);
         }
         catch (Exception ex) { LogDebug("ChaosHappyPath.OnFirstSinOffered: {E}", ex.Message); }
     }
@@ -205,7 +212,7 @@ public static class ChaosHappyPath
         {
             ChaosMeta.State.SeenSkipDebut = true;
             ChaosMeta.Save();
-            ChaosAnnouncerOverlay.Announce("you're allowed to refuse now.", ChaosAnnounceKind.Willpower);
+            AnnSvc?.AnnounceChaos("you're allowed to refuse now.", ChaosAnnounceKind.Willpower);
         }
         catch (Exception ex) { LogDebug("ChaosHappyPath.OnSkipDebutAvailable: {E}", ex.Message); }
     }
@@ -224,8 +231,8 @@ public static class ChaosHappyPath
                 options[options.Count - 1] = duo;
             ChaosMeta.State.SeenDuoDemo = true;
             ChaosMeta.Save();
-            ChaosAnnouncerOverlay.Announce("a gold card. your toys learned to work together.", ChaosAnnounceKind.Item,
-                holdMs: ChaosAnnouncerOverlay.TEACH_HOLD_MS);
+            AnnSvc?.AnnounceChaos("a gold card. your toys learned to work together.", ChaosAnnounceKind.Item,
+                holdMs: AvaloniaChaosService.TeachHoldMs);
             try { AvaloniaChaosApp.Bark?.NotifyChaosDuoDemo(); } catch { }
         }
         catch (Exception ex) { LogDebug("ChaosHappyPath.OnDuoDemoAvailable: {E}", ex.Message); }
@@ -238,8 +245,8 @@ public static class ChaosHappyPath
         if (!_streakTaught && s.Combo >= R1_STREAK_TEACH_COMBO)
         {
             _streakTaught = true;
-            ChaosAnnouncerOverlay.Announce("pops in a row build a streak. it pays more.", ChaosAnnounceKind.Streak,
-                holdMs: ChaosAnnouncerOverlay.TEACH_HOLD_MS);
+            AnnSvc?.AnnounceChaos("pops in a row build a streak. it pays more.", ChaosAnnounceKind.Streak,
+                holdMs: AvaloniaChaosService.TeachHoldMs);
             s.PushEvent("🔥 a streak. keep it alive.");
         }
 
@@ -260,8 +267,8 @@ public static class ChaosHappyPath
             _darterSpawned = true;
             try
             {
-                ChaosAnnouncerOverlay.Announce("🐇 a white rabbit. catch it.", ChaosAnnounceKind.Item,
-                    holdMs: ChaosAnnouncerOverlay.TEACH_HOLD_MS);
+                AnnSvc?.AnnounceChaos("🐇 a white rabbit. catch it.", ChaosAnnounceKind.Item,
+                    holdMs: AvaloniaChaosService.TeachHoldMs);
                 ChaosMeta.MarkDiscovered("bubble:darter");
                 global::ConditioningControlPanel.CoreApp.Bubbles?.SpawnChaosBubble(ChaosBubbleVariants.BuildDarter(s.RunIntensity, spotlight: false));
             }
@@ -277,8 +284,8 @@ public static class ChaosHappyPath
             {
                 ChaosMeta.State.SeenDefuseTutorial = true;
                 ChaosMeta.Save();
-                ChaosAnnouncerOverlay.Announce("press and HOLD a live one to snap it", ChaosAnnounceKind.Willpower,
-                    holdMs: ChaosAnnouncerOverlay.TEACH_HOLD_MS);
+                AnnSvc?.AnnounceChaos("press and HOLD a live one to snap it", ChaosAnnounceKind.Willpower,
+                    holdMs: AvaloniaChaosService.TeachHoldMs);
                 s.PushEvent("✋ hold to snap. let go and it triggers.");
             }
             var pink = ChaosBubbleVariants.All.FirstOrDefault(v => v.Id == "pink");
@@ -307,8 +314,8 @@ public static class ChaosHappyPath
                 if (!enabled.Contains("pink")) enabled.Add("pink");
                 if (!enabled.Contains("spiral")) enabled.Add("spiral");
             }
-            ChaosAnnouncerOverlay.Announce("pink and spiral drift in. hold them down too.", ChaosAnnounceKind.Item,
-                holdMs: ChaosAnnouncerOverlay.TEACH_HOLD_MS);
+            AnnSvc?.AnnounceChaos("pink and spiral drift in. hold them down too.", ChaosAnnounceKind.Item,
+                holdMs: AvaloniaChaosService.TeachHoldMs);
             s.PushEvent("◉ more of them live now.");
         }
         catch (Exception ex) { LogDebug("HappyPath defuse beat: {E}", ex.Message); }
@@ -347,8 +354,8 @@ public static class ChaosHappyPath
                     var v = ChaosBubbleVariants.All.FirstOrDefault(x => x.Id == "braindrain");
                     if (v != null)
                     {
-                        ChaosAnnouncerOverlay.Announce("◍ BRAINDRAIN. bigger. heavier. hold it down.", ChaosAnnounceKind.Item,
-                            holdMs: ChaosAnnouncerOverlay.TEACH_HOLD_MS);
+                        AnnSvc?.AnnounceChaos("◍ BRAINDRAIN. bigger. heavier. hold it down.", ChaosAnnounceKind.Item,
+                            holdMs: AvaloniaChaosService.TeachHoldMs);
                         s.PushEvent("◍ something heavy sinks in beside you");
                         var spec = ChaosBubbleVariants.Build(v, s.RunIntensity,
                             s.FuseTimeMult * ChaosTuning.DEBUT_FUSE_MULT, null,

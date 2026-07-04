@@ -64,4 +64,7 @@ public static class CompositorLayers
 
     /// <summary>Chaos floating combat text (score/effect words popped at a bubble).</summary>
     public const int ChaosPopText = 145;
+
+    /// <summary>Chaos announcer subtitle line (pickups/beats + the Madam's narrator lines).</summary>
+    public const int ChaosAnnouncer = 150;
 }

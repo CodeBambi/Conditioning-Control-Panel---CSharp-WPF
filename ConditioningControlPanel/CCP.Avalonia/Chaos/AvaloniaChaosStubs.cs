@@ -856,7 +856,8 @@ public static class ChaosNarrator
             if (cue == null) return;
             int durMs = EstimateDurationMs(cue.Text);
             IsPlaying = true;
-            ChaosAnnouncerOverlay.AnnounceNarrator(cue.Text, (int)cue.Band, interrupt, durMs);
+            (AvaloniaChaosApp.Chaos as global::ConditioningControlPanel.Avalonia.Services.AvaloniaChaosService)
+                ?.AnnounceChaosNarrator(cue.Text, (int)cue.Band, interrupt, durMs);
             PlayCardLine(cue.AudioKey, cue.Text);
             _ = ResetAfterAsync(durMs + 220);
         }
@@ -1068,11 +1069,6 @@ public static class ChaosNarrativeHooks
     {
         try { App.Services?.GetRequiredService<ILogger<object>>().LogDebug(message, args); } catch { }
     }
-}
-
-public partial class ChaosAnnouncerOverlay
-{
-    // Real Announce overloads are defined in ChaosAnnouncerOverlay.axaml.cs.
 }
 
 #endregion

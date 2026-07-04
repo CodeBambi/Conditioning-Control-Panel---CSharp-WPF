@@ -173,6 +173,7 @@ internal static class LayerVerification
             var cursorGlowLayer = ExpectLayer<ChaosCursorGlowLayer>(engine, CompositorLayers.ChaosCursorGlow, "ChaosCursorGlowLayer", rows);
             var popTextLayer = ExpectLayer<ChaosPopTextLayer>(engine, CompositorLayers.ChaosPopText, "ChaosPopTextLayer", rows);
             var effectBannerLayer = ExpectLayer<ChaosEffectBannerLayer>(engine, CompositorLayers.ChaosEffectBanner, "ChaosEffectBannerLayer", rows);
+            var announcerLayer = ExpectLayer<ChaosAnnouncerLayer>(engine, CompositorLayers.ChaosAnnouncer, "ChaosAnnouncerLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -191,12 +192,12 @@ internal static class LayerVerification
 
             if (flashLayer == null || subliminalLayer == null || bubbleLayer == null || bouncingLayer == null
                 || brainDrainLayer == null || spiralLayer == null || pinkTintLayer == null || cursorGlowLayer == null
-                || popTextLayer == null || effectBannerLayer == null)
+                || popTextLayer == null || effectBannerLayer == null || announcerLayer == null)
             {
                 Console.WriteLine("[LAYERS] Registration sweep failed; skipping activation stages.");
                 return;
             }
-            Console.WriteLine("[LAYERS] All 10 migrated layers registered at their exact z-constants.");
+            Console.WriteLine("[LAYERS] All 11 migrated layers registered at their exact z-constants.");
 
             // ---------------- Stage 1: FlashLayer (Z=30) via IFlashService ----------------
             {
@@ -409,6 +410,46 @@ internal static class LayerVerification
                 await SettleIdle(engine);
             }
 
+            // ---------------- Stage 4e: ChaosAnnouncerLayer (Z=150) via AvaloniaChaosService ----------------
+            // Phase F #4. Driven through the owning service's AnnounceChaos — the exact call the
+            // ChaosHappyPath teach beats make — so no chaos run is needed. The QUEUE lives in the
+            // service (WPF static-queue parity); this stage exercises enqueue → dequeue → line
+            // lifecycle → natural expiry (in 110ms + hold + out 240ms). Gated like WPF on
+            // ChaosAnnouncerEnabled — honest SKIP when the user profile disables it.
+            {
+                Console.WriteLine("[LAYERS] Stage 4e: ChaosAnnouncerLayer via AvaloniaChaosService.AnnounceChaos...");
+                var row = rows.First(r => r.Layer == "ChaosAnnouncerLayer");
+                if (settings?.ChaosAnnouncerEnabled != true)
+                {
+                    row.Activated = "-";
+                    row.Delta = "-";
+                    row.Teardown = "-";
+                    row.Verdict = "SKIP";
+                    row.Note = "ChaosAnnouncerEnabled=false in user settings; the service seam is gated (WPF contract) and the harness does not mutate user settings.";
+                }
+                else
+                {
+                    var before = Capture(screens, primary);
+                    chaos.AnnounceChaos("VERIFY ANNOUNCER", ConditioningControlPanel.Avalonia.Chaos.ChaosAnnounceKind.Depth, holdMs: 1500);
+                    var activated = await PollAsync(() => announcerLayer.IsActive, 2000, stepMs: 50);
+                    row.Activated = activated ? "yes" : "TIMEOUT";
+                    if (activated)
+                    {
+                        await Task.Delay(500); // fade-in 110ms + scale pop settled, inside the 1500ms hold
+                        var during = Capture(screens, primary);
+                        // The line draws centered over the primary WORK AREA at top+92 DIP —
+                        // inside the per-screen working-area Full hash.
+                        row.Delta = during.Full != before.Full ? "DIFFER (full-screen)" : "SAME (FAIL)";
+                    }
+                    // Natural expiry IS the teardown path (110 + 1500 + 240 ≈ 1.85s), and the
+                    // empty queue must leave the service idle (LineCompleted → dequeue-none).
+                    var deactivated = await PollAsync(() => !announcerLayer.IsActive, 5000);
+                    row.Teardown = deactivated ? "clean (hold expiry + empty-queue idle)" : "TIMEOUT";
+                    FinishRow(row, activated, deactivated, envStable);
+                }
+                await SettleIdle(engine);
+            }
+
             // ---------------- Stage 5: BrainDrainLayer (Z=55) — P0 capture-EXCLUDED, ALONE ----------------
             // Runs BEFORE the pink/spiral stages: releasing those re-applies the user's
             // persistent PinkFilterEnabled/SpiralEnabled overlays (WPF-parity settings-held
@@ -602,6 +643,7 @@ internal static class LayerVerification
             try { chaos?.DisarmCursorGlow(); } catch { }
             try { chaos?.ClearChaosPopText(); } catch { }
             try { chaos?.CloseEffectBanners(); } catch { }
+            try { chaos?.ClearAnnouncements(); } catch { }
             try
             {
                 overlay?.HideOverlaySustained("pink");

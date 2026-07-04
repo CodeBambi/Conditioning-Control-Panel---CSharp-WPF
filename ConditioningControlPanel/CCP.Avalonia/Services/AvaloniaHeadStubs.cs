@@ -56,8 +56,21 @@ public sealed class AvaloniaChaosService : IChaosService
     private readonly ChaosPopTextLayer _popTextLayer;
     // WS2/WP3 Phase F #3: the effect-banner strip is a compositor layer, not a keep-alive window.
     private readonly ChaosEffectBannerLayer _effectBannerLayer;
+    // WS2/WP3 Phase F #4: the announcer subtitle line is a compositor layer; the priority
+    // QUEUE lives here in the service, byte-equivalent to WPF's static queue (services own
+    // state, layers render the current line — UCE rule 7).
+    private readonly ChaosAnnouncerLayer _announcerLayer;
+    private readonly object _announceSync = new();
+    private readonly List<(string text, ChaosAnnounceKind kind, string? artKey, string? subText, int holdMs, int priority)> _announceQueue = new();
+    private bool _announceShowing;
     private readonly CompositorEngine? _compositor;
     private readonly IScreenProvider? _screenProvider;
+
+    /// <summary>WPF ChaosAnnouncerOverlay.TEACH_HOLD_MS — onboarding/help lines linger so
+    /// they can actually be read.</summary>
+    public const int TeachHoldMs = 3000;
+    /// <summary>WPF ChaosAnnouncerOverlay.HOLD_MS — default dwell for event beats.</summary>
+    private const int AnnounceDefaultHoldMs = 650;
     private readonly Random _rng = new();
 
     private bool _active;
@@ -143,6 +156,11 @@ public sealed class AvaloniaChaosService : IChaosService
         compositor?.RegisterLayer(_popTextLayer);
         _effectBannerLayer = new ChaosEffectBannerLayer();
         compositor?.RegisterLayer(_effectBannerLayer);
+        _announcerLayer = new ChaosAnnouncerLayer();
+        // Queue-advance hook: fires on the engine tick (UI thread) when a line's fade-out
+        // completes — the WPF fade.Completed → ShowNext() chain.
+        _announcerLayer.LineCompleted = () => { lock (_announceSync) { ShowNextAnnouncementLocked(); } };
+        compositor?.RegisterLayer(_announcerLayer);
         _screenProvider = screenProvider;
         AvaloniaChaosCatalogs.EnsureInitialized();
     }
@@ -905,9 +923,12 @@ public sealed class AvaloniaChaosService : IChaosService
         });
         // WPF parity: run teardown closes the effect-banner strip instantly (the WPF
         // CloseActive path — the legacy Avalonia head never called it only because banner
-        // Show was never wired). Pop text likewise dies with the run (WPF ShutdownPool).
+        // Show was never wired). Pop text likewise dies with the run (WPF ShutdownPool),
+        // and the announcer drops its queue + visible line (WPF ChaosModeService.cs:3099/
+        // 3148 CloseActive — the legacy head skipped this teardown entirely, a drift).
         CloseEffectBanners();
         ClearChaosPopText();
+        ClearAnnouncements();
         _state = null;
         _vibeRemainingSec = 0;
         _freezeRemainingSec = 0;
@@ -942,9 +963,8 @@ public sealed class AvaloniaChaosService : IChaosService
         RunOnUi(() =>
         {
             try { ChaosFieldFxOverlay.RaiseActive(); } catch { }
-            // Pop text and the effect banner are compositor layers: z comes from
+            // Pop text, effect banner and announcer are compositor layers: z comes from
             // CompositorLayers (UCE rule 9), so no RaiseActive churn is needed for them.
-            try { ChaosAnnouncerOverlay.RaiseActive(); } catch { }
             try { _hud?.RaiseToTopmost(); } catch { }
         });
     }
@@ -1347,6 +1367,113 @@ public sealed class AvaloniaChaosService : IChaosService
 
     /// <summary>Instant strip teardown (run end — WPF CloseActive).</summary>
     public void CloseEffectBanners() => _effectBannerLayer.Clear();
+
+    /// <summary>Queue a bordered fading announcement (WS2: chaos on the compositor; WPF
+    /// ChaosAnnouncerOverlay.Announce contract). Master-gated on ChaosAnnouncerEnabled.
+    /// Queue semantics are byte-equivalent to WPF: gameplay lines enqueue at priority 0,
+    /// stable max-priority dequeue, per-line dwell (default 650ms, teach 3000ms), one line
+    /// on screen at a time. Palette (WPF constant colors) and announce-art resolution are
+    /// applied here — the layer renders final inputs.</summary>
+    public void AnnounceChaos(string text, ChaosAnnounceKind kind,
+                              string? artKey = null, string? subText = null, int? holdMs = null)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            if (_settings.Current?.ChaosAnnouncerEnabled != true) return;
+            lock (_announceSync)
+            {
+                _announceQueue.Add((text, kind, artKey, subText, holdMs ?? AnnounceDefaultHoldMs, 0));
+                if (!_announceShowing) ShowNextAnnouncementLocked();
+            }
+        }
+        catch (Exception ex) { _logger?.LogDebug("ChaosAnnouncer.Announce: {E}", ex.Message); }
+    }
+
+    /// <summary>Queue a narrator (Madam) line (WPF AnnounceNarrator contract): gated on
+    /// NarrativeActive (NOT the gameplay announcer toggle), priority 100 + band so she sits
+    /// above gameplay announces with STORY &gt; REACTIVE; STORY passes interrupt=true, which
+    /// cuts the current line short so she lands next.</summary>
+    public void AnnounceChaosNarrator(string text, int bandPriority, bool interrupt, int holdMs)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            if (!AvaloniaChaosMode.NarrativeActive) return;
+            lock (_announceSync)
+            {
+                _announceQueue.Add((text, ChaosAnnounceKind.Narrator, null, null, holdMs, 100 + bandPriority));
+                if (!_announceShowing) ShowNextAnnouncementLocked();
+                else if (interrupt) _announcerLayer.CutShort();   // STORY: end the current line now
+            }
+        }
+        catch (Exception ex) { _logger?.LogDebug("ChaosAnnouncer.AnnounceNarrator: {E}", ex.Message); }
+    }
+
+    /// <summary>Drop any queued/visible announcement (run teardown — WPF CloseActive).</summary>
+    public void ClearAnnouncements()
+    {
+        lock (_announceSync)
+        {
+            _announceQueue.Clear();
+            _announceShowing = false;
+        }
+        _announcerLayer.HideNow();   // never fires LineCompleted (WPF CloseActive parity)
+    }
+
+    /// <summary>Dequeue-and-display under _announceSync. WPF ShowNext: stable max-priority
+    /// pick (first of the max wins), _showing false when the queue is empty; a failed
+    /// display drops the showing flag so the chain can restart (WPF catch parity).</summary>
+    private void ShowNextAnnouncementLocked()
+    {
+        if (!TryDequeueAnnouncement(out var item)) { _announceShowing = false; return; }
+        _announceShowing = true;
+        try
+        {
+            var artPath = item.artKey != null ? AvaloniaChaosArt.PathFor("announce", item.artKey) : null;
+            var primary = _screenProvider?.GetPrimaryScreen();
+            var wa = primary == null
+                ? ConditioningControlPanel.Core.Platform.PixelRect.Empty
+                : (primary.WorkingArea.IsEmpty ? primary.Bounds : primary.WorkingArea);
+            _compositor?.Start();
+            _announcerLayer.ShowLine(item.text, AnnouncePalette(item.kind), artPath, item.subText,
+                item.holdMs, wa, primary?.Scaling ?? 1.0);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug("ChaosAnnouncer.ShowNext: {E}", ex.Message);
+            _announceShowing = false;
+        }
+    }
+
+    private bool TryDequeueAnnouncement(out (string text, ChaosAnnounceKind kind, string? artKey, string? subText, int holdMs, int priority) item)
+    {
+        item = default;
+        if (_announceQueue.Count == 0) return false;
+        int best = 0;
+        for (int i = 1; i < _announceQueue.Count; i++)
+            if (_announceQueue[i].priority > _announceQueue[best].priority) best = i;   // stable: first of the max wins
+        item = _announceQueue[best];
+        _announceQueue.RemoveAt(best);
+        return true;
+    }
+
+    /// <summary>Accent per announcement kind — the WPF ChaosAnnouncerOverlay.Palette
+    /// CONSTANTS. The legacy Avalonia window substituted theme brushes for Mantra/
+    /// Temptation/Depth (PinkButtonHoveredBrush/DangerBrush/TextLightBrush) — a palette
+    /// drift; the WPF colors are the contract. Stroke stays near-black in the layer.</summary>
+    private static global::Avalonia.Media.Color AnnouncePalette(ChaosAnnounceKind kind) => kind switch
+    {
+        ChaosAnnounceKind.Mantra => global::Avalonia.Media.Color.FromRgb(0xFF, 0xD2, 0x7A), // warm gold
+        ChaosAnnounceKind.Temptation => global::Avalonia.Media.Color.FromRgb(0xFF, 0x6B, 0x6B), // risky red
+        ChaosAnnounceKind.Willpower => global::Avalonia.Media.Color.FromRgb(0x7A, 0xE0, 0xFF), // cyan
+        ChaosAnnounceKind.Depth => global::Avalonia.Media.Color.FromRgb(0xFF, 0xFF, 0xFF), // white
+        ChaosAnnounceKind.Streak => global::Avalonia.Media.Color.FromRgb(0xFF, 0xC8, 0x3C), // bright gold
+        ChaosAnnounceKind.Item => global::Avalonia.Media.Color.FromRgb(0x7A, 0xFF, 0xD2), // mint
+        ChaosAnnounceKind.PowerUp => global::Avalonia.Media.Color.FromRgb(0x9C, 0xE8, 0xA0), // green
+        ChaosAnnounceKind.Narrator => global::Avalonia.Media.Color.FromRgb(0xE6, 0x9A, 0xFF), // the Madam — soft violet
+        _ => global::Avalonia.Media.Color.FromRgb(0xFF, 0xFF, 0xFF),
+    };
 
     private void SpawnDarter(double? atPxX = null, double? atPxY = null)
     {

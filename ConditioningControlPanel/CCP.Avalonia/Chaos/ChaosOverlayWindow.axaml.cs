@@ -599,7 +599,8 @@ public partial class ChaosOverlayWindow : Window
             _rankBeatTimer?.Stop();
             _rankBeatTimer = null;
             if (!ResultsPanel.IsVisible) return;
-            ChaosAnnouncerOverlay.Announce("it noticed.", ChaosAnnounceKind.Temptation, artKey: "it_noticed");
+            (AvaloniaChaosApp.Chaos as global::ConditioningControlPanel.Avalonia.Services.AvaloniaChaosService)
+                ?.AnnounceChaos("it noticed.", ChaosAnnounceKind.Temptation, artKey: "it_noticed");
             _rankCardTimer?.Stop();
             _rankCardTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1100) };
             _rankCardTimer.Tick += (_, _) =>
