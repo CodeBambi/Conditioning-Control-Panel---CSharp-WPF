@@ -482,6 +482,24 @@ areas (the code literally says so). Each is P0/P1 — port the missing Core serv
 | N | ✅ **P0 runtime blockers from manual Chaos test — fixed.** (1) Circular `IProgressionService` DI cycle resolved by lazy service resolution in `AvaloniaProgressionService`. (2) Chaos run end crash when avatar tube was already closed fixed with `PlatformImpl != null` guard. (3) Surface/results popup buttons unresponsive / overlay staying open fixed: `ChaosOverlayWindow` now applies `WS_EX_TOOLWINDOW\|NOACTIVATE\|LAYERED` and toggles `WS_EX_TRANSPARENT` + Avalonia `IsHitTestVisible` so interactive cards receive input while ambient overlays stay click-through; `AvaloniaChaosService.EndRun` now reports `IsRunning=false` after showing results so dismissal can proceed; "fall deeper" now closes the old overlay before restarting. (4) Bubble/image/gif clickability improved by adding `WS_EX_LAYERED` to `AvaloniaBubbleWindow` and keeping the overlay click-through. Windows head smoke test passes (44 tabs, 0 findings). | Done |
 | O | ✅ **P1 Webcam tab "unavailable" badge on Windows — fixed.** `WebcamFeatureControl` set `Capabilities` after `InitializeComponent()`, so `{Binding Capabilities.SupportsScreenCapture, ElementName=Root}` evaluated against a null source and never updated, showing the degraded badge even though desktop supports capture. Moved `Capabilities` (and `WebcamViewModel`) assignment before `InitializeComponent()` in `WebcamFeatureControl`, and moved `Capabilities` before `InitializeComponent()` in `VisualsFeatureControl`, `SystemFeatureControl`, and `LockCardFeatureControl` for the same reason. Smoke-test screenshot now shows the live webcam engine UI. | Done |
 
+### Sync-from-main 6.2.8 "Tunnel Vision" (2026-07-04, merge `aba10210`) — parity deferrals
+
+Full per-file analysis: WPF fix batches #474-#486. PORT-NOW items were fixed on merge day:
+#480 season-title month guard (Core `QuestDefinitionService.SeasonTitle`) and #483 deferred
+timeline starts (Core session services). Chaos engine impact: **zero** (verified — no ported
+chaos internals changed). Remaining deferrals:
+
+| # | Severity | Gap | Fix target |
+|---|---|---|---|
+| S1 | P1 | **Flash decode-cache re-key (#486 second half).** WPF re-keyed its flash cache by path-only (decodeMax stored alongside; equal-or-smaller serves hit, capped-upscale replaces + releases). Port still keys `path\|decodeMaxDim` (`FlashImageCache.cs:42`). Benign today (no perf tier → decodeMax stable, LRU-bounded), but a **hard prerequisite of the performance-tier port** — tier flapping would halve cache capacity and re-decode under load. Mind the ref-count release-on-replace contract. | `CCP.Avalonia/Services/Flash/FlashImageCache.cs` |
+| S2 | P2 | **Glitch trigger-bubble linger (#476).** WPF exempts the glitch payload from the trigger-bubble `LINGER=2.5` (now `DurationMult=1.2`, ~4s) because the full-screen wash kept the desktop alpha-composited ~8s. Trigger bubbles are not yet ported — fold into that port. | future trigger-bubbles port (ref WPF `BubbleService.BuildTriggerSpec`) |
+| S3 | P2 | **Corner GIF incl. #474 live update.** Recreate window on size/path change, move-only on position, 400ms debounced slider. Fold into existing `TODO(corner-gif)`. | `AvaloniaSessionEffectOrchestrator.cs:309` + `PresetsTabViewModel` |
+| S4 | P1 | **Avatar quick-menu engine-stop guards + `IVideoService.IsStrictActive` (#479).** Avalonia's avatar "Engine" menu item toggles Awareness, not the conditioning engine (divergence). When wired to real engine stop, it must carry WPF's guards: lockdown / strict video (`IsStrictActive`) / strict bubble-count / remote-controller bail. | `CCP.Avalonia/AvatarTube/AvatarTubeWindow.axaml.cs:560`, `AvaloniaVideoService` |
+| S5 | P3 | **Tray restore off-screen re-center (#475 second half).** Single-click restore + `Activate()` already match; add an `EnsureOnScreen` (re-center on primary if <60×30px intersects any screen) using Avalonia `Screens`. | `CCP.Avalonia/App.axaml.cs:551` `RestoreMainWindow` |
+| S6 | P3 | **Enhanced-videos prompt modal ordering (#481).** When the Deeper startup prompt ports, it must wait out the update dialog (≤30s) and take a shared startup-dialog flag so modals can't nest/wedge input. | future Deeper startup-prompt port |
+| S7 | P3 | **Clamp persisted autonomy slider values on load (#485).** Labels can't desync (MVVM), but out-of-range persisted values load unclamped. Add `Math.Clamp` on load. | `CCP.Avalonia/ViewModels/Tabs/BambiTakeoverTabViewModel.cs:321` |
+| S8 | P3 | **Core loc mirror drift.** `CCP.Core/Localization/Languages/*.json` still ends at 6.2.7 keys. Runtime is unaffected — `CCP.Core.csproj:50` Content-links the WPF `Localization/Languages/*.json` (single source). Either delete the stale mirror folder or sync it; decide once. | `CCP.Core/Localization/Languages/` |
+
 ---
 
 ## Phase 0 — Cleanup (P0)

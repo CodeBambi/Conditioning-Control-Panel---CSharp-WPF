@@ -56,7 +56,17 @@ public sealed class QuestDefinitionService : IQuestDefinitionService, IDisposabl
     };
 
     /// <inheritdoc />
-    public string SeasonTitle => _cache?.SeasonTitle
+    /// <remarks>The cached server title is only trusted while it was fetched in the CURRENT
+    /// UTC month: the month-rollover refetch fires on startup, but when it fails — offline
+    /// launch, server hiccup — the old cache stays loaded and the Quests header kept showing
+    /// last month's season ("Juicy June" in July, WPF #480). Falling back to the local month
+    /// name self-corrects on the 1st even with no network; the next successful refetch
+    /// restores the server title. Mirrors WPF QuestDefinitionService.SeasonTitle (6.2.8).</remarks>
+    public string SeasonTitle =>
+        (_cache?.FetchedAt is { } fetched
+            && fetched.Year == DateTime.UtcNow.Year
+            && fetched.Month == DateTime.UtcNow.Month
+            ? _cache?.SeasonTitle : null)
         ?? DefaultMonthNames.GetValueOrDefault(DateTime.Now.Month, DateTime.Now.ToString("MMMM"));
 
     /// <inheritdoc />
