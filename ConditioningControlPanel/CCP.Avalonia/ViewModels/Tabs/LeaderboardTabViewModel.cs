@@ -7,6 +7,7 @@ using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.Settings;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ConditioningControlPanel.Avalonia.ViewModels.Tabs;
 
@@ -52,6 +53,23 @@ public partial class LeaderboardTabViewModel : TabItemViewModel
     /// Raised when the view should switch to another primary tab (e.g., Profile).
     /// </summary>
     public event Action<string>? RequestSelectTab;
+
+    /// <summary>
+    /// ProfileSync slice 7 (WPF MainWindow.Leaderboard.cs:303): opening the leaderboard pushes
+    /// the local profile first so the board reflects fresh data. Fire-and-forget — the sync
+    /// service's gate + 30s cooldown make repeat visits harmless.
+    /// </summary>
+    public override void OnSelected()
+    {
+        base.OnSelected();
+        var profileSync = App.Services?.GetService<IProfileSyncService>();
+        if (profileSync == null) return;
+        _ = Task.Run(async () =>
+        {
+            try { await profileSync.SyncProfileAsync(); }
+            catch (Exception ex) { _logger?.LogDebug("Leaderboard-open profile sync failed: {Error}", ex.Message); }
+        });
+    }
 
     [ObservableProperty]
     private ObservableCollection<LeaderboardModeViewModel> _modes;

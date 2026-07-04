@@ -327,8 +327,19 @@ public partial class SettingsTabView : UserControl
 
     private async Task ShowEasterEggAsync()
     {
-        // ProfileSync is not yet extracted to Core, so reader count stays at the default.
+        // ProfileSync slice 7: record the read server-side and show the live reader count
+        // (WPF SettingsTab easter egg parity). -1 = unavailable (offline / not logged in).
         int readerCount = -1;
+        try
+        {
+            var profileSync = App.Services?.GetService<Core.Services.Settings.IProfileSyncService>();
+            if (profileSync != null)
+                readerCount = await profileSync.RecordEasterEggReadAsync();
+        }
+        catch
+        {
+            // Best-effort: the easter egg must open even when the counter call fails.
+        }
 
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {

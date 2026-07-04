@@ -189,6 +189,22 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<ILogger<LeaderboardService>>(),
                 sp.GetService<ISeasonRecapService>());
         });
+        // Cloud profile sync (ProfileSync slice 7 live wiring; docs/profilesync-port-plan.md §8).
+        // Owns progression push/pull (/v2/user/sync IS the leaderboard submit), cloud settings
+        // backup/restore, server-authoritative actions (purchase/oopsie/display-name) and GDPR
+        // export. Auth stays in IV2AuthService (plan §6). SINGLE heartbeat owner: this service's
+        // 120s timer — AvaloniaV2AuthService.SendHeartbeatAsync has no timer and no callers.
+        // Sibling seams resolve via GetService (all-optional ctor) like the LeaderboardService
+        // precedent above; SettingsService reaches it only lazily through ISettingsBackupProvider,
+        // so no construction cycle exists.
+        services.AddSingleton<IProfileSyncService>(sp => new Core.Services.Settings.ProfileSyncService(
+            sp.GetRequiredService<ISettingsService>(),
+            sp.GetRequiredService<ILogger<Core.Services.Settings.ProfileSyncService>>(),
+            sp.GetService<ISessionService>(),
+            sp.GetService<IAchievementService>(),
+            sp.GetService<IQuestService>(),
+            sp.GetService<IProgressionService>(),
+            sp.GetService<ISkillTreeService>()));
         services.AddSingleton<ICatalogueService>(sp =>
         {
             var version = UpdateService.GetCurrentVersion().ToString();

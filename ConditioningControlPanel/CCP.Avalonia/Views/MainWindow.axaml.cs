@@ -79,6 +79,27 @@ public partial class MainWindow : Window
 
         WirePanicKey();
         WireAvatarEnabledChange();
+
+        // ProfileSync slice 7: WPF nudges MainWindow.TryPresentSeasonRecap() right after the
+        // sync merge sets SeasonResetPending (ProfileSyncService level_reset branch). Core has
+        // no window, so the Avalonia equivalent subscribes to ProfileLoaded and re-runs the
+        // latch-guarded recap check; a level_reset arriving via the push-merge path (no
+        // ProfileLoaded) is picked up by the same check on the next launch (OnOpened).
+        var profileSync = App.Services?.GetService<IProfileSyncService>();
+        if (profileSync != null)
+        {
+            profileSync.ProfileLoaded += OnProfileLoadedShowSeasonRecap;
+            Closed += (_, _) => profileSync.ProfileLoaded -= OnProfileLoadedShowSeasonRecap;
+        }
+    }
+
+    private void OnProfileLoadedShowSeasonRecap(object? sender, EventArgs e)
+    {
+        Dispatcher.UIThread.Post(async () =>
+        {
+            try { await TryShowSeasonRecapAsync(); }
+            catch (Exception ex) { _logger?.LogWarning(ex, "Season recap after profile load failed"); }
+        });
     }
 
     private void ApplyWindowChrome()

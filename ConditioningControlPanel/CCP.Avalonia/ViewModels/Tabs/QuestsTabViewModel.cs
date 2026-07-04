@@ -27,6 +27,8 @@ public partial class QuestsTabViewModel : TabItemViewModel, IDisposable
     private readonly IQuestDefinitionService? _questDefinitions;
     private readonly ISkillTreeService? _skillTreeService;
     private readonly IModService? _modService;
+    private readonly IProfileSyncService? _profileSync;
+    private readonly IProgressionService? _progressionService;
     private QuestProgress _questProgress;
     private DispatcherTimer? _fixStreakStatusTimer;
 
@@ -51,7 +53,9 @@ public partial class QuestsTabViewModel : TabItemViewModel, IDisposable
         IQuestService questService,
         ISkillTreeService skillTreeService,
         IModService modService,
-        IQuestDefinitionService? questDefinitions = null) : base("quests", "Quests", "📜")
+        IQuestDefinitionService? questDefinitions = null,
+        IProfileSyncService? profileSync = null,
+        IProgressionService? progressionService = null) : base("quests", "Quests", "📜")
     {
         _roadmap = roadmap;
         _settingsService = settingsService;
@@ -60,6 +64,8 @@ public partial class QuestsTabViewModel : TabItemViewModel, IDisposable
         _questService = questService;
         _questDefinitions = questDefinitions;
         _skillTreeService = skillTreeService;
+        _profileSync = profileSync;
+        _progressionService = progressionService;
         _roadmapTracks = new ObservableCollection<RoadmapTrackViewModel>();
         _roadmapNodes = new ObservableCollection<RoadmapNodeViewModel>();
         _calendarDays = new ObservableCollection<StreakDayViewModel>();
@@ -642,13 +648,46 @@ public partial class QuestsTabViewModel : TabItemViewModel, IDisposable
             Loc.GetF("msg_fix_streak_day_confirm", day.Date.ToString("MMMM d"))) ?? Task.FromResult(false));
         if (!confirm) return;
 
+        // ProfileSync slice 7 (WPF MainWindow.QuestsTab.cs:553-596): oopsie insurance is
+        // SERVER-validated — the server deducts 500 XP, marks the seasonal recovery used, and
+        // returns the new total XP. Requires a cloud account; there is no local-only path.
+        if (string.IsNullOrEmpty(settings.UnifiedId) || _profileSync == null)
+        {
+            FixStreakStatusText = Loc.Get("label_oopsie_insurance_requires_a_cloud_account_ple");
+            FixStreakStatusVisible = true;
+            return;
+        }
+
+        FixStreakStatusText = Loc.Get("label_processing");
+        FixStreakStatusVisible = true;
+
+        var fixDateStr = day.Date.ToString("yyyy-MM-dd");
+        var (success, error, newXp) = await _profileSync.UseOopsieInsuranceAsync(fixDateStr);
+        if (!success)
+        {
+            FixStreakStatusText = $"❌ {error ?? "Failed to use Oopsie Insurance"}";
+            FixStreakStatusVisible = true;
+            return;
+        }
+
         _logger?.LogInformation("Oopsie Insurance used to fix {Date} for 500 XP (server-validated)", day.Date);
 
-        // Persist the streak fix FIRST so a crash can't spend XP without recording the fix.
-        _questService?.FixStreakDay(day.Date);
-
-        settings.PlayerXP = Math.Max(0, settings.PlayerXP - 500);
+        // Server succeeded — apply the caller-side local effect (WPF QuestsTab.cs:570-596).
+        // The server returns TOTAL XP; convert back to current-level XP.
+        if (newXp.HasValue)
+        {
+            var newLevelXp = _progressionService?.GetCurrentLevelXP(settings.PlayerLevel, newXp.Value)
+                             ?? (settings.PlayerXP - 500);
+            settings.PlayerXP = Math.Max(0, newLevelXp);
+        }
+        else
+        {
+            settings.PlayerXP = Math.Max(0, settings.PlayerXP - 500);
+        }
         settings.SeasonalStreakRecoveryUsed = true;
+
+        // Record the fixed day + recalculate the streak (QuestService.FixStreakDay persists both).
+        _questService?.FixStreakDay(day.Date);
         _settingsService?.Save();
 
         IsStreakFixMode = false;

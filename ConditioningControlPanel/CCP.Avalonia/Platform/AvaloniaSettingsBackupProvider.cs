@@ -8,10 +8,19 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ConditioningControlPanel.Avalonia.Platform;
 
 /// <summary>
-/// Cross-platform local-file settings backup provider for the Avalonia head.
-/// Stores timestamped copies of <c>settings.json</c> under the user's data path
-/// so the App Info "Back Up Now" button actually persists a recovery copy.
-/// This is a stopgap until full cloud profile sync is ported from WPF.
+/// Settings backup provider for the Avalonia head. Composes two backup targets
+/// (ProfileSync slice 7, plan §10.2):
+/// <list type="number">
+/// <item>a local timestamped copy of <c>settings.json</c> under the user's data path
+/// (fast, offline-safe recovery — kept from the pre-cloud stopgap), and</item>
+/// <item>the WPF-parity cloud backup via <see cref="IProfileSyncService.BackupSettingsAsync"/>
+/// (gzip + base64 upload with the P0 <c>ExcludedBackupProperties</c> privacy strip and an
+/// internal 5-minute debounce).</item>
+/// </list>
+/// The sync service is resolved lazily at call time to avoid the construction cycle
+/// SettingsService → ISettingsBackupProvider → IProfileSyncService → ISettingsService.
+/// Explicit user "Back Up Now" actions bypass this provider and call the sync service
+/// with <c>force: true</c> directly.
 /// </summary>
 public sealed class AvaloniaSettingsBackupProvider : ISettingsBackupProvider
 {
@@ -40,8 +49,24 @@ public sealed class AvaloniaSettingsBackupProvider : ISettingsBackupProvider
     public bool HasCloudIdentity => !string.IsNullOrEmpty(SettingsService.Current?.UnifiedId);
 
     /// <inheritdoc />
-    public Task BackupSettingsAsync(CancellationToken cancellationToken = default)
-        => Task.Run(() => BackupCore(cancellationToken), cancellationToken);
+    public async Task BackupSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        await Task.Run(() => BackupCore(cancellationToken), cancellationToken).ConfigureAwait(false);
+
+        // Cloud copy (WPF parity). BackupSettingsAsync(force: false) applies its own 5-minute
+        // debounce and the P0 exclusion-list strip; it swallows transport failures and never
+        // logs auth material.
+        try
+        {
+            var profileSync = _services.GetService<IProfileSyncService>();
+            if (profileSync != null)
+                await profileSync.BackupSettingsAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug("Cloud settings backup failed: {Error}", ex.Message);
+        }
+    }
 
     private void BackupCore(CancellationToken cancellationToken)
     {

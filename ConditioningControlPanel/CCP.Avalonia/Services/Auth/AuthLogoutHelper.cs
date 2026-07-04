@@ -19,6 +19,12 @@ public static class AuthLogoutHelper
     /// </summary>
     public static void LogoutAll(IServiceProvider? services, ISettingsService? settings)
     {
+        // ProfileSync slice 7: logout stops the presence heartbeat (single heartbeat owner,
+        // plan §6). Clearing AuthToken below also flips IsSyncEnabled off, so no further
+        // sync traffic can fire either.
+        try { services?.GetService<IProfileSyncService>()?.StopHeartbeat(); }
+        catch { /* best-effort: logout must never be blocked by sync teardown */ }
+
         if (services != null)
         {
             foreach (var provider in services.GetServices<IAuthProvider>())

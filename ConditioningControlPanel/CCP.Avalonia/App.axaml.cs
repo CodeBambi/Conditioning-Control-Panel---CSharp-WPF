@@ -237,6 +237,29 @@ public partial class App : Application
             var skillTree = Services.GetRequiredService<ISkillTreeService>();
             skillTree.PinkRushStarted += OnPinkRushStarted;
 
+            // ProfileSync live wiring (slice 7, plan §5): event-driven sync triggers. WPF pushes
+            // on level-up (ProgressionService.cs:120) and quest completion (MainWindow.Quests.cs:78);
+            // the service's own sync gate + 30s cooldown make extra triggers harmless.
+            var profileSync = Services.GetRequiredService<IProfileSyncService>();
+            quests.QuestCompleted += (_, _) => FireAndForgetProfileSync(profileSync, "quest-complete");
+            Services.GetRequiredService<IProgressionService>().LevelUp +=
+                (_, _) => FireAndForgetProfileSync(profileSync, "level-up");
+
+            // Restored session (WPF App.xaml.cs:1860-1861 / :1953-1954 pulls the cloud profile and
+            // starts the heartbeat after auth init). Avalonia has no startup OAuth validation flow;
+            // a restored session is a persisted UnifiedId + AuthToken. The token value is only
+            // checked for presence — never logged.
+            var authSettings = Services.GetRequiredService<ISettingsService>().Current;
+            if (!string.IsNullOrEmpty(authSettings?.UnifiedId) && !string.IsNullOrEmpty(authSettings?.AuthToken))
+            {
+                _ = Task.Run(async () =>
+                {
+                    try { await profileSync.LoadProfileAsync(); }
+                    catch (Exception ex) { Log.Logger?.Warning(ex, "Startup cloud profile load failed"); }
+                });
+                profileSync.StartHeartbeat();
+            }
+
             // If another instance is launched, bring this one to the foreground.
             var singleInstance = Services.GetRequiredService<ISingleInstanceService>();
             singleInstance.ArgumentsReceived += (_, _) =>
@@ -428,6 +451,22 @@ public partial class App : Application
         try { Services?.GetService<ISettingsService>()?.SaveImmediate(); }
         catch (Exception ex) { Log.Logger?.Warning(ex, "Settings flush on exit failed"); }
 
+        // Exit sync (WPF App.xaml.cs:3071): settings are saved FIRST (above) so cloud sync cannot
+        // overwrite the final local state, then the profile is pushed with a bounded ~2s wait so
+        // shutdown is never blocked. Disposing the service also stops the 120s heartbeat timer
+        // and releases its HttpClient.
+        try
+        {
+            var profileSync = Services?.GetService<IProfileSyncService>();
+            if (profileSync?.IsSyncEnabled == true)
+            {
+                Log.Logger?.Information("Syncing profile to cloud before exit...");
+                profileSync.SyncProfileAsync().Wait(TimeSpan.FromSeconds(2));
+            }
+            (profileSync as IDisposable)?.Dispose();
+        }
+        catch (Exception ex) { Log.Logger?.Warning(ex, "Profile sync on exit failed"); }
+
         try { (Services?.GetService<IAchievementService>() as IDisposable)?.Dispose(); }
         catch (Exception ex) { Log.Logger?.Warning(ex, "Achievement flush on exit failed"); }
 
@@ -451,6 +490,20 @@ public partial class App : Application
         // Parity with WPF OnExit: drop decrypted secrets from memory.
         ConditioningControlPanel.Core.Services.SecureAuthTokenStore.ClearMemoryCache();
         ConditioningControlPanel.Core.Services.SecureApiKeyStore.ClearMemoryCache();
+    }
+
+    /// <summary>
+    /// Fire-and-forget profile sync trigger. The sync service already guards every failure
+    /// mode internally; this wrapper only ensures a fault can never surface as an unobserved
+    /// task exception. Never logs auth material.
+    /// </summary>
+    private static void FireAndForgetProfileSync(IProfileSyncService profileSync, string trigger)
+    {
+        _ = Task.Run(async () =>
+        {
+            try { await profileSync.SyncProfileAsync(); }
+            catch (Exception ex) { Log.Logger?.Debug("Profile sync trigger '{Trigger}' failed: {Error}", trigger, ex.Message); }
+        });
     }
 
     /// <summary>

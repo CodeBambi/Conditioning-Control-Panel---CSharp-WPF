@@ -1869,6 +1869,37 @@ public partial class MainWindowViewModel : ObservableObject
 
         UpdateHeaderFromSettings();
         _logger?.LogInformation("User logged in via {Provider}: {DisplayName} ({UnifiedId})", result.Provider, result.DisplayName, result.UnifiedId);
+
+        // ProfileSync slice 7 (WPF MainWindow.Login.cs:113-141): start the presence heartbeat,
+        // then pull + push the profile in the background. Achievement popups are suppressed
+        // during the post-login sync so cloud-restored achievements don't spam toasts.
+        var profileSync = App.Services?.GetService<IProfileSyncService>();
+        if (profileSync != null)
+        {
+            profileSync.StartHeartbeat();
+            var achievements = App.Services?.GetService<Core.Services.Progression.IAchievementService>();
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(500); // let auth tokens settle (WPF parity)
+                if (achievements != null) achievements.SuppressPopups = true;
+                try
+                {
+                    // WPF syncs whether or not the pull succeeded (Login.cs:128-139) — the push
+                    // returns authoritative server data either way.
+                    await profileSync.LoadProfileAsync();
+                    await profileSync.SyncProfileAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Post-login profile sync failed");
+                }
+                finally
+                {
+                    if (achievements != null) achievements.SuppressPopups = false;
+                }
+                Dispatcher.UIThread.Post(UpdateHeaderFromSettings);
+            });
+        }
     }
 
     [RelayCommand]
@@ -1877,7 +1908,24 @@ public partial class MainWindowViewModel : ObservableObject
         var settings = _settingsService?.Current;
         if (settings == null) return;
 
-        // TODO: Push final profile sync before clearing local data once ProfileSyncService is available in Core.
+        // Final bounded profile push BEFORE clearing local data (WPF exit-sync semantics,
+        // App.xaml.cs:3071: never block the UI beyond ~2s), then stop the heartbeat.
+        // AuthLogoutHelper.LogoutAll below also stops it for the other logout entry points.
+        var syncOnLogout = App.Services?.GetService<IProfileSyncService>();
+        if (syncOnLogout != null)
+        {
+            try
+            {
+                if (syncOnLogout.IsSyncEnabled)
+                    await Task.WhenAny(syncOnLogout.SyncProfileAsync(), Task.Delay(TimeSpan.FromSeconds(2)));
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Final profile sync on logout failed");
+            }
+            syncOnLogout.StopHeartbeat();
+        }
+
         settings.UnifiedId = null;
         settings.UserDisplayName = null;
         settings.HasLinkedDiscord = false;

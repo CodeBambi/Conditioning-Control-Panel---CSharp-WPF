@@ -82,48 +82,64 @@ public sealed class AvaloniaSkillTreeService : ISkillTreeService, IDisposable
     }
 
     /// <inheritdoc />
-    public Task<(bool Success, string? Error)> PurchaseSkillAsync(string skillId)
+    /// <remarks>
+    /// ProfileSync slice 7 (WPF SkillTreeService.cs:115-145): purchases are SERVER-authoritative
+    /// and require a cloud account — there is no local purchase path. Local guards run first
+    /// (WPF CanPurchaseSkill), then the purchase is delegated to
+    /// <see cref="IProfileSyncService.PurchaseSkillAsync"/>, which DIRECT-SETs the server's
+    /// returned post-purchase balance — that direct-set IS the local deduction. This service
+    /// deducts NOTHING (a second deduction here would double-charge; a Math.Max would make
+    /// skills free — the economy bug pinned by the slice-6 tests). The sync service also owns
+    /// the prestige accrual (TrackSkillPointsSpent + SeasonRecap + ReconcileLifetimePointsSpent),
+    /// so no tracking happens here either. Only local-only side effects (streak shields) and the
+    /// <see cref="SkillUnlocked"/> event remain this service's job.
+    /// </remarks>
+    public async Task<(bool Success, string? Error)> PurchaseSkillAsync(string skillId)
     {
         var settings = _settingsService.Current;
         if (settings == null)
-            return Task.FromResult<(bool, string?)>((false, "Settings are not available."));
+            return (false, "Settings are not available.");
 
         var skill = SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
         if (skill == null)
-            return Task.FromResult<(bool, string?)>((false, "Unknown skill."));
+            return (false, "Unknown skill.");
 
         if (settings.UnlockedSkills.Contains(skillId))
-            return Task.FromResult<(bool, string?)>((false, "Skill already unlocked."));
+            return (false, "Skill already unlocked.");
 
         if (!string.IsNullOrEmpty(skill.PrerequisiteId) && !settings.UnlockedSkills.Contains(skill.PrerequisiteId))
-            return Task.FromResult<(bool, string?)>((false, "Prerequisite skill is not unlocked."));
+            return (false, "Prerequisite skill is not unlocked.");
 
         if (settings.SkillPoints < skill.Cost)
-            return Task.FromResult<(bool, string?)>((false, "Not enough skill points."));
+            return (false, "Not enough skill points.");
 
         if (skill.IsSecret && !IsSecretSkillAvailable(skillId, settings))
-            return Task.FromResult<(bool, string?)>((false, "Secret skill requirement is not met."));
+            return (false, "Secret skill requirement is not met.");
 
-        settings.SkillPoints -= skill.Cost;
-        settings.UnlockedSkills.Add(skillId);
+        // Server-authoritative purchase requires a cloud account (WPF parity: no offline path).
+        var profileSync = _services?.GetService<IProfileSyncService>();
+        if (string.IsNullOrEmpty(settings.UnifiedId) || profileSync == null)
+            return (false, ConditioningControlPanel.Core.Localization.Loc.Get("skill_err_login_required"));
 
+        var (success, error) = await profileSync.PurchaseSkillAsync(skillId);
+        if (!success)
+            return (false, error);
+
+        // Server updated SkillPoints + UnlockedSkills (and saved). Apply local-only effects.
         ApplySkillEffects(skillId, settings);
         _settingsService.Save();
 
-        // S6/PS-4 prestige accrual: record the spend into lifetime (achievements -> prestige rank)
-        // and this-season (recap card) counters after the successful local purchase.
-        try
-        {
-            _services?.GetService<IAchievementService>()?.TrackSkillPointsSpent(skill.Cost);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Failed to accrue lifetime skill-points-spent for prestige");
-        }
-        SeasonRecapService.TrackPointsSpent(skill.Cost);
-
         SkillUnlocked?.Invoke(this, skillId);
-        return Task.FromResult<(bool, string?)>((true, null));
+
+        // §5 trigger: push the full profile after a successful purchase (WPF SkillTreeService.cs:130).
+        // Fire-and-forget; the sync service's gate + cooldown make this harmless.
+        _ = Task.Run(async () =>
+        {
+            try { await profileSync.SyncProfileAsync(); }
+            catch (Exception ex) { _logger?.LogDebug("Post-purchase profile sync failed: {Error}", ex.Message); }
+        });
+
+        return (true, null);
     }
 
     private static void ApplySkillEffects(string skillId, AppSettings settings)

@@ -24,9 +24,10 @@ namespace ConditioningControlPanel.Core.Services.Settings;
 /// per-user <c>X-Auth-Token</c> (plus HMAC anti-cheat signing on the sync push).
 ///
 /// Ported slice-by-slice from the WPF <c>ProfileSyncService</c>; see
-/// <c>docs/profilesync-port-plan.md</c>. This slice (1) lands only the seam, DTOs, and the
-/// pure plumbing helpers (auth header, request signing, disposal). The async members remain
-/// inherited default-interface no-ops until the slices noted on <see cref="IProfileSyncService"/>.
+/// <c>docs/profilesync-port-plan.md</c>. All slices (1-7) have landed and the service is LIVE:
+/// registered in the Avalonia DI graph (<c>ServiceCollectionExtensions.cs</c>) and wired to
+/// login/logout, startup restored-session, the sync triggers, cloud backup/restore, skill
+/// purchase, oopsie insurance, GDPR export, and the easter-egg counter.
 ///
 /// SECURITY: the auth token is never logged. It is read transparently (decrypted) from
 /// <c>ISettingsService.Current.AuthToken</c> and attached only as a request header.
@@ -53,9 +54,9 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
     private readonly ILogger<ProfileSyncService> _logger;
     private readonly ISessionService? _sessionService;
 
-    // Optional sibling seams (all-optional pattern): the service still constructs UNWIRED with
-    // every merge dependency null. WPF reaches these via App.* statics; here they are injected so
-    // the merge is unit-testable and stays out of the live app until slice 7 registers it.
+    // Optional sibling seams (all-optional pattern): the service constructs with any subset of
+    // merge dependencies null (unit tests). WPF reaches these via App.* statics; the Avalonia DI
+    // registration injects all of them (slice 7 live wiring).
     private readonly IAchievementService? _achievements;
     private readonly IQuestService? _quests;
     private readonly IProgressionService? _progression;
@@ -207,8 +208,8 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
     /// <summary>
     /// Whether a preset session is currently running (drives the heartbeat <c>in_session</c> flag).
     /// WPF sends <c>App.IsSessionRunning</c>; in Core <c>ISessionService.State != Idle</c> matches
-    /// that contract (session state stays non-Idle while paused). The seam is optional, so this is
-    /// <c>false</c> until the head wires <see cref="ISessionService"/> (slice 7).
+    /// that contract (session state stays non-Idle while paused). The Avalonia head injects
+    /// <see cref="ISessionService"/> via DI (slice 7); the seam stays optional for tests.
     /// </summary>
     private bool InSession =>
         (_sessionService?.State ?? SessionState.Idle) != SessionState.Idle;
@@ -267,9 +268,11 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
                 JsonConvert.SerializeObject(new
                 {
                     unified_id = unifiedId,
-                    // ProfileSync slice 7: wire real activity/idle state. WPF uses
-                    // App.ActivityTracker?.IsIdle != true; no idle seam exists in Core yet, so
-                    // default to active. The heartbeat presence flags are not security-critical.
+                    // DECISION (slice 7, 2026-07-04): stays conservatively `true`. WPF sends
+                    // App.ActivityTracker?.IsIdle != true; Core still has no idle/activity seam,
+                    // so parity for the idle=false case is intentionally deferred until one
+                    // exists. Presence flags are cosmetic (online indicator), not
+                    // security-critical, and `true` matches WPF for any non-idle user.
                     is_active = true,
                     in_session = InSession,
                     app_version = _version
@@ -771,7 +774,9 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
         else if (localTotalXp > cloudTotalXp)
         {
             _logger.LogInformation("Local has higher progress - keeping local (Level {LocalLevel})", settings.PlayerLevel);
-            // ProfileSync slice 4: background sync-UP push deferred to the push slice.
+            // WPF fires a background sync-UP push here. In the wired Avalonia head the covering
+            // triggers (post-login Load->Sync, level-up/quest-complete/exit pushes) deliver the
+            // higher local state; an inline push from the pull path is intentionally not added.
         }
         else
         {
@@ -964,7 +969,9 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
             _logger.LogInformation("Server requested weekly quest reset");
             _quests?.ForceRegenerateWeeklyQuest();
             needsSave = true;
-            // ProfileSync slice 4: background sync-back to clear the server flag deferred.
+            // WPF fires a background sync-back so the server clears the reset flag. The wired
+            // Avalonia triggers (post-login Load->Sync, event-driven + exit pushes) send the
+            // acknowledging sync; an inline push from the pull path is intentionally not added.
         }
         if (cloudProfile.ResetDailyQuest == true)
         {
@@ -1214,7 +1221,10 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
 
             settings.SeasonResetPending = true;
             _settings.Save();
-            // ProfileSync slice 7: WPF also nudges MainWindow.TryPresentSeasonRecap() here; Core has no window.
+            // WPF also nudges MainWindow.TryPresentSeasonRecap() here; Core has no window. The
+            // Avalonia head subscribes ProfileLoaded -> TryShowSeasonRecapAsync (latch-guarded,
+            // MainWindow.axaml.cs ctor), and the same check runs on every window Opened, so a
+            // level_reset arriving via this push-merge path is presented at the next pull/launch.
         }
         else if (v2Result.User != null)
         {
@@ -1891,8 +1901,8 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
     /// <c>settings.PlayerXP</c>, set <c>SeasonalStreakRecoveryUsed</c>, append the fixed date to
     /// <c>DailyQuestCompletionDates</c>) lives entirely in the WPF UI caller
     /// <c>MainWindow.QuestsTab.cs:570-583</c>. This port stays byte-faithful (no service-side
-    /// mutation); that UI caller has no Core home yet.
-    /// ProfileSync slice 7: wire the caller-side local effect when the quest tab is ported.
+    /// mutation); the Avalonia caller-side effect lives in
+    /// <c>QuestsTabViewModel.FixStreakDayAsync</c> (wired in slice 7).
     /// SECURITY: the auth token is never logged.
     /// </summary>
     public async Task<(bool, string?, int?)> UseOopsieInsuranceAsync(string fixDate)

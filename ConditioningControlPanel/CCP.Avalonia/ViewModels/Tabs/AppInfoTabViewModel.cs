@@ -20,6 +20,7 @@ public partial class AppInfoTabViewModel : TabItemViewModel
 {
     private readonly ISettingsService? _settingsService;
     private readonly ISettingsBackupProvider? _backupProvider;
+    private readonly IProfileSyncService? _profileSync;
     private readonly IDialogService? _dialogService;
     private readonly ILogger<AppInfoTabViewModel>? _logger;
     private readonly IAudioPlayer? _audioPlayer;
@@ -38,10 +39,12 @@ public partial class AppInfoTabViewModel : TabItemViewModel
         IDialogService dialogService,
         ILogger<AppInfoTabViewModel> logger,
         IAudioPlayer? audioPlayer = null,
-        IUpdateService? updateService = null) : base("appinfo", "App Info", "ℹ️")
+        IUpdateService? updateService = null,
+        IProfileSyncService? profileSync = null) : base("appinfo", "App Info", "ℹ️")
     {
         _settingsService = settingsService;
         _backupProvider = backupProvider;
+        _profileSync = profileSync;
         _dialogService = dialogService;
         _logger = logger;
         _audioPlayer = audioPlayer;
@@ -149,15 +152,37 @@ public partial class AppInfoTabViewModel : TabItemViewModel
     [RelayCommand]
     private async Task BackupSettingsAsync()
     {
-        if (_backupProvider == null) return;
         IsBusy = true;
         try
         {
-            await _backupProvider.BackupSettingsAsync();
+            // Explicit user action → force past the sync service's 5-minute debounce
+            // (WPF BtnBackupSettingsNow_Click, MainWindow.CloudBackup.cs:43). Falls back to the
+            // composed provider (local snapshot + debounced cloud) when sync is unavailable.
+            bool success;
+            if (_profileSync != null)
+            {
+                success = await _profileSync.BackupSettingsAsync(force: true);
+            }
+            else
+            {
+                await (_backupProvider?.BackupSettingsAsync() ?? Task.CompletedTask);
+                success = _backupProvider != null;
+            }
+
             await RefreshBackupStatusAsync();
-            await (_dialogService?.ShowMessageAsync(
-                Loc.Get("title_backup_complete"),
-                Loc.Get("msg_settings_backed_up_to_cloud_successfully")) ?? Task.CompletedTask);
+            if (success)
+            {
+                await (_dialogService?.ShowMessageAsync(
+                    Loc.Get("title_backup_complete"),
+                    Loc.Get("msg_settings_backed_up_to_cloud_successfully")) ?? Task.CompletedTask);
+            }
+            else
+            {
+                await (_dialogService?.ShowMessageAsync(
+                    Loc.Get("title_backup_failed"),
+                    Loc.Get("msg_failed_to_backup_settings"),
+                    DialogSeverity.Warning) ?? Task.CompletedTask);
+            }
         }
         catch (Exception ex)
         {
@@ -176,7 +201,7 @@ public partial class AppInfoTabViewModel : TabItemViewModel
     [RelayCommand]
     private async Task RestoreSettingsAsync()
     {
-        if (_backupProvider == null) return;
+        if (_settingsService == null) return;
 
         var confirm = await (_dialogService?.ShowConfirmationAsync(
             Loc.Get("title_restore_settings_from_cloud"),
@@ -186,12 +211,44 @@ public partial class AppInfoTabViewModel : TabItemViewModel
         IsBusy = true;
         try
         {
-            // Restore is provider-specific; the current no-op provider has no data to restore.
-            await _backupProvider.BackupSettingsAsync();
+            // WPF BtnRestoreSettings_Click (MainWindow.CloudBackup.cs:82): download + decompress,
+            // then preserve identity/progression fields from the CURRENT settings before applying —
+            // the cloud backup strips them (P0 exclusion list), so the restored object would
+            // otherwise zero them out.
+            var restored = _profileSync != null ? await _profileSync.RestoreSettingsFromCloudAsync() : null;
+            if (restored == null)
+            {
+                await (_dialogService?.ShowMessageAsync(
+                    Loc.Get("title_restore_failed"),
+                    Loc.Get("msg_no_cloud_backup_found_or_restore_failed"),
+                    DialogSeverity.Warning) ?? Task.CompletedTask);
+                return;
+            }
+
+            var current = _settingsService.Current;
+            if (current != null)
+            {
+                restored.UnifiedId = current.UnifiedId;
+                restored.PlayerLevel = current.PlayerLevel;
+                restored.PlayerXP = current.PlayerXP;
+                restored.SkillPoints = current.SkillPoints;
+                restored.UnlockedSkills = current.UnlockedSkills;
+                restored.HighestLevelEver = current.HighestLevelEver;
+                restored.IsSeason0Og = current.IsSeason0Og;
+                restored.CurrentSeason = current.CurrentSeason;
+                restored.PendingSkillsResetAck = current.PendingSkillsResetAck;
+                restored.UserDisplayName = current.UserDisplayName;
+                restored.PatreonTier = current.PatreonTier;
+                restored.PatreonPremiumValidUntil = current.PatreonPremiumValidUntil;
+                restored.LastPatreonVerification = current.LastPatreonVerification;
+                restored.OpenRouterApiKey = current.OpenRouterApiKey;
+            }
+
+            _settingsService.RestoreFrom(restored);
+
             await (_dialogService?.ShowMessageAsync(
-                Loc.Get("title_restore_failed"),
-                Loc.Get("msg_no_cloud_backup_found_or_restore_failed"),
-                DialogSeverity.Warning) ?? Task.CompletedTask);
+                Loc.Get("title_settings_restored"),
+                Loc.Get("msg_settings_restored_from_cloud")) ?? Task.CompletedTask);
         }
         catch (Exception ex)
         {
@@ -215,6 +272,22 @@ public partial class AppInfoTabViewModel : TabItemViewModel
         IsBusy = true;
         try
         {
+            // GDPR export (WPF BtnExportData_Click, MainWindow.CloudBackup.cs:160): all
+            // SERVER-held data as pretty JSON. The previous local-settings serialization stub is
+            // gone — it was not the user's server data and serialized secret-bearing fields.
+            var (success, error, jsonData) = _profileSync != null
+                ? await _profileSync.ExportDataAsync()
+                : (false, (string?)Loc.Get("msg_failed_to_export_data"), (string?)null);
+
+            if (!success || jsonData == null)
+            {
+                await (_dialogService?.ShowMessageAsync(
+                    Loc.Get("title_export_failed"),
+                    error ?? Loc.Get("msg_failed_to_export_data"),
+                    DialogSeverity.Warning) ?? Task.CompletedTask);
+                return;
+            }
+
             var path = await (_dialogService?.ShowSaveFileDialogAsync(
                 Loc.Get("title_save_data_export"),
                 new[] { new FileFilter("JSON files", new[] { "json" }) },
@@ -222,9 +295,7 @@ public partial class AppInfoTabViewModel : TabItemViewModel
 
             if (string.IsNullOrEmpty(path)) return;
 
-            // Minimal export: current settings serialized. Full export is provider-specific.
-            var json = Newtonsoft.Json.JsonConvert.SerializeObject(_settingsService.Current, Newtonsoft.Json.Formatting.Indented);
-            await File.WriteAllTextAsync(path, json);
+            await File.WriteAllTextAsync(path, jsonData);
 
             await (_dialogService?.ShowMessageAsync(
                 Loc.Get("title_export_complete"),
@@ -272,16 +343,24 @@ public partial class AppInfoTabViewModel : TabItemViewModel
                 return;
             }
 
-            // The no-op provider has no timestamp; real providers would expose this.
-            BackupStatusText = Loc.Get("label_cloud_backup_available");
+            // WPF UpdateBackupStatus (MainWindow.CloudBackup.cs:229): show the cloud backup's
+            // timestamp + app version when one exists.
+            var info = _profileSync != null ? await _profileSync.GetSettingsBackupInfoAsync() : null;
+            if (info?.BackedUpAt != null)
+            {
+                var dateStr = info.BackedUpAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
+                BackupStatusText = Loc.GetF("label_last_backup_0_v_1", dateStr, info.AppVersion);
+            }
+            else
+            {
+                BackupStatusText = Loc.Get("label_no_cloud_backup_found_back_up_your_settings_t");
+            }
         }
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "Failed to update backup status");
             BackupStatusText = Loc.Get("label_could_not_check_backup_status");
         }
-
-        await Task.CompletedTask;
     }
 
     private static void OpenUrl(string url)
