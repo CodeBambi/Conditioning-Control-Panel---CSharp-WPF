@@ -124,6 +124,23 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     private DateTime _segmentArmedAtUtc = DateTime.MinValue;
     private bool SegmentArmed => (DateTime.UtcNow - _segmentArmedAtUtc).TotalSeconds < 30;
 
+    // ---- Phase B2: UCE layer-path orchestration state ----
+    // True from the mandatory layer's first LibVLC Playing event (orchestration armed: safety
+    // timer + attention scheduling running) until CleanupInternal tears the playback down.
+    // Triple duty: double-run guard (LibVLC re-fires Playing after an unpause), stale-post
+    // rejection (a VideoEnded post landing after a Stop()/panic teardown must not re-enter the
+    // end pipeline — WPF OnEnded's !_videoPlaying guard), and the safety timer's layer-path
+    // liveness check.
+    private bool _layerOrchestrationActive;
+    // Real media length reported by the layer's LengthChanged, in ms; -1 while unknown.
+    private long _layerLengthMs = -1;
+    // One-shot chaos random-segment state captured at layer playback start (the window path
+    // captures the same values into the VideoOverlayWindow ctor in CreateWindow).
+    private bool _pendingSegmentArmed;
+    private double _pendingSegmentFraction;
+    private double _pendingSegmentSec;
+    private bool _pendingSegmentSeekApplied;
+
     public AvaloniaVideoService(
         ISettingsService settings,
         IAppEnvironment environment,
@@ -179,14 +196,23 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         if (_videoLayer != null)
         {
             _compositor?.RegisterLayer(_videoLayer);
-            _videoLayer.VideoStarted += (_, _) => VideoStarted?.Invoke(this, EventArgs.Empty);
+            _videoLayer.VideoStarted += (_, _) => OnCompositorVideoStarted(mandatory: false);
             _videoLayer.VideoEnded += (_, _) => OnCompositorVideoEnded();
+            // B2 review F1: a failed open/decode (corrupt file, missing codec) never fires
+            // Playing/EndReached — without this the slot wedges (_isVideoActive stays true)
+            // and the scheduler skips every later video. WPF routes EncounteredError → OnEnded
+            // (VideoService.cs:1498-1511); we stop the errored layer, then run the same end
+            // pipeline (evaluation when orchestrated, unwedge + VideoEnded otherwise).
+            _videoLayer.EncounteredError += (_, _) => { try { _videoLayer.Stop(); } catch { } OnCompositorVideoEnded(); };
         }
         if (_mandatoryVideoLayer != null)
         {
             _compositor?.RegisterLayer(_mandatoryVideoLayer);
-            _mandatoryVideoLayer.VideoStarted += (_, _) => VideoStarted?.Invoke(this, EventArgs.Empty);
+            _mandatoryVideoLayer.VideoStarted += (_, _) => OnCompositorVideoStarted(mandatory: true);
             _mandatoryVideoLayer.VideoEnded += (_, _) => OnCompositorVideoEnded();
+            _mandatoryVideoLayer.LengthKnown += (_, lengthMs) => OnCompositorVideoLengthKnown(lengthMs);
+            // B2 review F1: see the video-layer note above — same failed-open unwedge contract.
+            _mandatoryVideoLayer.EncounteredError += (_, _) => { try { _mandatoryVideoLayer.Stop(); } catch { } OnCompositorVideoEnded(); };
         }
 
         if (_multiMonitor != null)
@@ -228,6 +254,11 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     public string? LastVideoTitle => string.IsNullOrEmpty(_currentRetryPath) ? null : Path.GetFileNameWithoutExtension(_currentRetryPath);
     public string? LastVideoPath => _currentRetryPath;
     public int PlaythroughFailCount => _attentionPenalties;
+
+    /// <summary>Verification probe (--verify-video, non-gating): true while the Phase B2
+    /// layer-path orchestration (safety timer + attention scheduling) is armed for the
+    /// mandatory UCE video layer. Cleared by CleanupInternal.</summary>
+    public bool LayerOrchestrationArmed => _layerOrchestrationActive;
 
     /// <summary>
     /// Primary (audio-bearing) media player, or null if no video is playing.
@@ -375,7 +406,11 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
     public void Stop()
     {
-        if (!IsRunning && _currentWindow == null) return;
+        // Phase B2: the layer-path equivalent of "_currentWindow != null" — a video started via
+        // PlaySpecificVideo/remote command (IsRunning=false, no window) must still be torn down
+        // when it plays through the UCE layers. Legacy behavior unchanged: layers are null there.
+        if (!IsRunning && _currentWindow == null && !_layerOrchestrationActive
+            && _videoLayer?.IsPlaying != true && _mandatoryVideoLayer?.IsPlaying != true) return;
         IsRunning = false;
 
         _scheduledTimer?.Stop();
@@ -793,6 +828,26 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     /// </summary>
     private void OnCompositorVideoEnded()
     {
+        // Phase B2: when the mandatory layer ran the full orchestration, its natural end runs
+        // the same evaluation body as the window path — attention pass/fail (XP, penalties,
+        // retry loop, mercy) — and OnVideoEnded's CleanupInternal owns the teardown symmetry
+        // (attention/safety/max-duration timers, targets, unduck, bubbles, VideoEnded, flash
+        // restart, scheduler guard). _layerOrchestrationActive also rejects stale VideoEnded
+        // posts that land after a Stop()/panic teardown (WPF OnEnded's !_videoPlaying guard,
+        // VideoService.cs:2126) so the end pipeline can never run twice.
+        if (_layerOrchestrationActive)
+        {
+            OnVideoEnded();
+            return;
+        }
+
+        // B2 review F4: stale natural-end/error posts that land AFTER a teardown
+        // (CleanupInternal already ran and cleared the slot) must not re-emit VideoEnded
+        // to AvatarTube/Autonomy or re-resume bubbles — WPF OnEnded's guard returns with
+        // nothing (VideoService.cs:2120-2130). Also makes EncounteredError + EndReached
+        // double-delivery idempotent.
+        if (!_isVideoActive) return;
+
         _isVideoActive = false;
         _maxDurationTimer?.Stop();
         _maxDurationTimer = null;
@@ -808,6 +863,85 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         {
             try { _flash?.Start(); } catch { /* best effort */ }
         }
+    }
+
+    /// <summary>
+    /// Compositor-layer playback start (LibVLC Playing, marshaled to the UI thread by the
+    /// layer). Phase B2: the mandatory layer runs the same orchestration body the window path
+    /// runs in <see cref="OnVideoWindowStarted"/> — start timestamp, VideoStarted, duration
+    /// bookkeeping, interaction-queue timeout, safety timer, attention scheduling. The URL
+    /// layer only raises VideoStarted: WPF PlayUrl is "No attention checks, no strict mode -
+    /// just playback" (VideoService.cs:900-903).
+    /// </summary>
+    private void OnCompositorVideoStarted(bool mandatory)
+    {
+        if (!mandatory)
+        {
+            // URL layer: WPF PlayUrl is "no attention checks, no strict mode - just playback"
+            // (VideoService.cs:900-903); no orchestration, so no double-run bookkeeping.
+            _videoStartTime = DateTime.Now;
+            VideoStarted?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        // B2 review F2: guard BEFORE any side effect. LibVLC re-fires Playing after an
+        // unpause/seek bounce; the start timestamp, the public VideoStarted event (session
+        // log dedupe), and the attention-spawn clock must fire exactly once per video. The
+        // window path keeps sole ownership of the orchestration if it is ever active
+        // alongside a layer.
+        if (_layerOrchestrationActive || _currentWindow != null) return;
+        _layerOrchestrationActive = true;
+        _videoStartTime = DateTime.Now;
+        VideoStarted?.Invoke(this, EventArgs.Empty);
+
+        _overlay?.NotifyTopWindowOpened();
+
+        var settings = _settings.Current;
+        if (settings == null) return;
+
+        // LengthChanged usually precedes Playing; fall back to a live player read, then to the
+        // 600s safety default until OnCompositorVideoLengthKnown upgrades it (WPF fallback→
+        // accurate safety-timer contract, VideoService.cs:1211/1437).
+        var lengthMs = _layerLengthMs > 0 ? _layerLengthMs : (_mandatoryVideoLayer?.DurationMs ?? -1);
+        _currentDurationSeconds = lengthMs > 0 ? lengthMs / 1000.0 : 0;
+
+        BeginPlaybackOrchestration(settings);
+    }
+
+    /// <summary>
+    /// Real media length from the mandatory layer (ms, UI thread). Phase B2, WPF LengthChanged
+    /// parity (VideoService.cs:1387-1451): upgrade the fallback safety timeout to the accurate
+    /// duration, refresh the interaction-queue stuck timeout, and apply the one-shot chaos
+    /// random-segment seek — deferred ~700ms until the player is rolling, exactly like
+    /// VideoOverlayWindow.OnLengthChanged. SetupAttention runs 2s after start and reads the
+    /// upgraded _currentDurationSeconds when it fires, matching the WPF ordering.
+    /// </summary>
+    private void OnCompositorVideoLengthKnown(long lengthMs)
+    {
+        if (lengthMs <= 0) return;
+        _layerLengthMs = lengthMs;
+
+        if (_layerOrchestrationActive)
+        {
+            _currentDurationSeconds = lengthMs / 1000.0;
+            _interactionQueue.ExtendTimeout(TimeSpan.FromSeconds(Math.Max(60, _currentDurationSeconds + 30)));
+            StartSafetyTimer(_currentDurationSeconds + 30);
+        }
+
+        if (!_pendingSegmentArmed || _pendingSegmentSeekApplied || _pendingSegmentSec <= 0) return;
+        var segMs = (long)(_pendingSegmentSec * 1000);
+        if (lengthMs <= segMs) return;
+        var startMs = (long)((lengthMs - segMs) * _pendingSegmentFraction);
+        if (startMs <= 500) return;
+        _pendingSegmentSeekApplied = true;
+        StartOneShotTimer(TimeSpan.FromMilliseconds(700), () =>
+        {
+            var layer = _mandatoryVideoLayer;
+            if (layer == null || !layer.IsPlaying) return;
+            layer.SeekTo(startMs);
+            _logger?.LogInformation("AvaloniaVideoService: random segment — seeking to {Start}s of {Len}s (UCE layer)",
+                startMs / 1000, lengthMs / 1000);
+        });
     }
 
     private void PlayFile(string filePath, bool strictMode)
@@ -850,10 +984,57 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         StartMaxDurationTimer();
 
         _compositor?.Start();
-        _mandatoryVideoLayer?.PlayVideo(filePath, withAudio: true, loop: false);
-        // Phase B audio parity: apply volume/mute/output device to the layer's player,
-        // mirroring the legacy path (SetVolume + SetAudioOutputDevice below).
-        _mandatoryVideoLayer?.ApplyAudioSettings(_settings.Current);
+        if (_mandatoryVideoLayer != null)
+        {
+            // Phase B2: the UCE layer path runs the same interaction-queue + orchestration
+            // contract as the legacy branches below. TryStart marks the Video interaction
+            // in-flight (so queued interactions can't start mid-video and the orchestration's
+            // ExtendTimeout has an interaction to extend); the playback state CreateWindow
+            // seeds on the window path is seeded here for the layer.
+            _interactionQueue.TryStart("Video", () =>
+            {
+                _currentRetryPath = filePath;
+                // Phase B2: strict mode on the UCE path. The legacy paths use strictMode for
+                // window-level key handling (strict: block ESC/panic/Alt+F4 while playing;
+                // non-strict: ESC dismisses, panic force-stops). The compositor window is
+                // permanently click-through + no-activate and receives no keyboard input, so
+                // strict blocking is inherently satisfied (no key can dismiss the video);
+                // the non-strict ESC-dismiss/panic keys are a documented gap until a global
+                // key hook feeds this path (see unified-compositor-engine-plan.md Phase B).
+                // NOTE (B2 review F6a, truthful): _currentStrictMode is recorded for parity
+                // bookkeeping, but attention-fail retries do NOT currently inherit it —
+                // CleanupInternal resets it to false before the retry callback reads it (same
+                // pre-existing behavior as the Avalonia window path; WPF retries inherit
+                // _strictActive, VideoService.cs:2186). Deferred — see plan-doc B2 residuals.
+                _currentStrictMode = strictMode;
+                _currentDurationSeconds = 0;
+                _attentionHits = 0;
+                _attentionSpawned = 0;
+                _attentionTotal = 0;
+                _attentionSpawnTimes.Clear();
+                lock (_attentionTargets) { _attentionTargets.Clear(); }
+                _layerOrchestrationActive = false;
+                _layerLengthMs = -1;
+
+                // Chaos random segment: capture-and-disarm exactly like the window branch
+                // below (one-shot per video). The seek itself runs from
+                // OnCompositorVideoLengthKnown once the real duration is known.
+                _pendingSegmentArmed = SegmentArmed && _segmentSec > 0;
+                _pendingSegmentFraction = _pendingSegmentArmed ? _segmentFraction : 0;
+                _pendingSegmentSec = _pendingSegmentArmed ? _segmentSec : 0;
+                _pendingSegmentSeekApplied = false;
+                _segmentArmedAtUtc = DateTime.MinValue;
+
+                _mandatoryVideoLayer.PlayVideo(filePath, withAudio: true, loop: false);
+                // Phase B audio parity: apply volume/mute/output device to the layer's player,
+                // mirroring the legacy path (SetVolume + SetAudioOutputDevice below).
+                _mandatoryVideoLayer.ApplyAudioSettings(_settings.Current);
+                // Ambient bubbles pause + clear so they don't fight the video for clicks or
+                // z-order (WPF StartVideoPlayback, VideoService.cs:1270).
+                try { _bubbles?.PauseAndClear(); } catch { /* best effort */ }
+            });
+            return;
+        }
 
         // When the unified compositor is available it already renders the video layer
         // on every monitor, so the pink filter and other overlays sit on top. Skip the
@@ -874,23 +1055,16 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         }
 
         // Fallback per-window path only when neither compositor nor multi-monitor service is available.
-        if (_mandatoryVideoLayer == null)
+        _interactionQueue.TryStart("Video", () =>
         {
-            _interactionQueue.TryStart("Video", () =>
-            {
-                var screen = GetPrimaryScreen();
-                _currentWindow = CreateWindow(screen, filePath, fromUrl: false, strictMode);
-                _currentWindow.Show();
-                SpawnSecondaryWindows(filePath, fromUrl: false, strictMode);
-                try { _bubbles?.PauseAndClear(); } catch { /* best effort */ }
-                // Disarm random segment now that a video is playing
-                _segmentArmedAtUtc = DateTime.MinValue;
-            });
-        }
-        else
-        {
+            var screen = GetPrimaryScreen();
+            _currentWindow = CreateWindow(screen, filePath, fromUrl: false, strictMode);
+            _currentWindow.Show();
+            SpawnSecondaryWindows(filePath, fromUrl: false, strictMode);
             try { _bubbles?.PauseAndClear(); } catch { /* best effort */ }
-        }
+            // Disarm random segment now that a video is playing
+            _segmentArmedAtUtc = DateTime.MinValue;
+        });
     }
 
     private void PlayUrlCore(string url)
@@ -903,9 +1077,22 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _isVideoActive = true;
 
         _compositor?.Start();
-        _videoLayer?.PlayVideo(url, withAudio: true, loop: false);
-        // Phase B audio parity: apply volume/mute/output device to the layer's player.
-        _videoLayer?.ApplyAudioSettings(_settings.Current);
+        if (_videoLayer != null)
+        {
+            // Phase B2: WPF PlayUrl contract (VideoService.cs:900-903) — "No attention checks,
+            // no strict mode - just playback" — so the URL layer path deliberately skips the
+            // mandatory-video orchestration (safety timer / attention / segment / strict).
+            // Retry/strict state is reset exactly like CreateWindow(fromUrl: true) resets it
+            // on the window path, so a stale mandatory-video retry path can never leak in.
+            _currentRetryPath = null;
+            _currentStrictMode = false;
+            _layerOrchestrationActive = false;
+            _layerLengthMs = -1;
+            _videoLayer.PlayVideo(url, withAudio: true, loop: false);
+            // Phase B audio parity: apply volume/mute/output device to the layer's player.
+            _videoLayer.ApplyAudioSettings(_settings.Current);
+            return;
+        }
 
         // When the unified compositor is available it already renders the video layer
         // on every monitor, so the pink filter and other overlays sit on top. Skip the
@@ -1084,6 +1271,18 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _currentDurationSeconds = 0;
         }
 
+        BeginPlaybackOrchestration(settings);
+    }
+
+    /// <summary>
+    /// Shared start-of-playback orchestration body (window path and Phase B2 UCE layer path):
+    /// extends the interaction-queue stuck timeout past the video's runtime, arms the safety
+    /// timer, and schedules attention-check setup. Callers seed _currentDurationSeconds first
+    /// (0 = unknown → 600s safety fallback; the layer path upgrades it from
+    /// OnCompositorVideoLengthKnown once LibVLC reports the real length).
+    /// </summary>
+    private void BeginPlaybackOrchestration(AppSettings settings)
+    {
         var timeout = TimeSpan.FromSeconds(Math.Max(60, _currentDurationSeconds + 30));
         _interactionQueue.ExtendTimeout(timeout);
         StartSafetyTimer(_currentDurationSeconds > 0 ? _currentDurationSeconds + 30 : 600);
@@ -1105,7 +1304,10 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _safetyTimer?.Stop();
         _safetyTimer = StartOneShotTimer(TimeSpan.FromSeconds(Math.Max(30, timeoutSeconds)), () =>
         {
-            if (_currentWindow == null) return;
+            // Window path: no window left = nothing to clean. Layer path (Phase B2): the
+            // orchestration flag plays the same role — CleanupInternal clears it, so a timer
+            // that outlives its playback no-ops while a hung layer still gets force-cleaned.
+            if (_currentWindow == null && !_layerOrchestrationActive) return;
             _logger?.LogWarning("AvaloniaVideoService: safety timeout triggered, forcing cleanup");
             CleanupInternal(notifyEnded: true);
         });
@@ -1346,7 +1548,13 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
         // Watch credit is position-based and handled by FinalizeWatchCredit inside
         // CleanupInternal (WPF parity: crediting the full duration here over-counted
-        // dismissed/interrupted videos).
+        // dismissed/interrupted videos). Phase B2: the UCE layer path has no position source
+        // yet (no PositionChanged wiring), so a NATURAL end seeds the watermark with the full
+        // duration — the same seeding WPF's OnEnded does for its position-less MediaElement
+        // fallback (VideoService.cs:2196-2200). Interrupted layer playback (panic, Stop,
+        // max-duration cap) never reaches OnVideoEnded, so this cannot over-count.
+        if (_layerOrchestrationActive && _lastWatchPositionMs <= 0 && _layerLengthMs > 0)
+            _lastWatchPositionMs = _layerLengthMs;
         CleanupInternal(notifyEnded: true);
     }
 
@@ -1468,6 +1676,16 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
         _currentStrictMode = false;
         _currentDurationSeconds = 0;
+
+        // Phase B2: layer-path orchestration teardown symmetry — the flag gates the safety
+        // timer, stale VideoEnded posts, and the natural-end evaluation; segment state is
+        // one-shot per playback.
+        _layerOrchestrationActive = false;
+        _layerLengthMs = -1;
+        _pendingSegmentArmed = false;
+        _pendingSegmentFraction = 0;
+        _pendingSegmentSec = 0;
+        _pendingSegmentSeekApplied = false;
 
         if (_duckedForVideo)
         {

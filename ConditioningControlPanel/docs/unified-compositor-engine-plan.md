@@ -88,10 +88,31 @@ fallback before the replacement is proven (deleting now = no working video).
 
 ### Phase B — Video parity with the legacy path
 Match what `AvaloniaMultiMonitorVideoService` + `VideoOverlayWindow` do today:
-- [ ] **Audio:** volume (`LibVlcAudioHelper.GetEffectiveVolume`), output-device selection, mute — route `UpdateVolume()` to the layer, not just `_currentWindow` / `_multiMonitor`.
-- [ ] **Attention checks:** decouple `IsPlaying` / `SetupAttention` / `CheckSpawnTargets` / duration / safety timer / segment-arming from `VideoOverlayWindow` so they fire on the UCE layer (`OnVideoWindowStarted`'s body must run for the layer).
-- [ ] **Dual-monitor + strict mode + segment (random-slice) mode** behave as WPF.
-- [ ] `VideoAboutToStart` / `VideoStarted` / `VideoEnded` fire with correct timing.
+- [x] **Audio:** volume (`LibVlcAudioHelper.GetEffectiveVolume`), output-device selection, mute — route `UpdateVolume()` to the layer, not just `_currentWindow` / `_multiMonitor`. **DONE (B1):** `ApplyAudioSettings` at playback start, `ApplyVolume` on live slider updates; gated by `--verify-video` stage 6.
+- [x] **Attention checks:** decouple `IsPlaying` / `SetupAttention` / `CheckSpawnTargets` / duration / safety timer / segment-arming from `VideoOverlayWindow` so they fire on the UCE layer (`OnVideoWindowStarted`'s body must run for the layer). **DONE 2026-07-04 (B2):** `VideoLayer` now raises `VideoStarted` from LibVLC `Playing` (not at the `Play()` call) plus a narrow `LengthKnown` event / `DurationMs` / `SeekTo(ms)`; the service's `OnCompositorVideoStarted` runs the shared `BeginPlaybackOrchestration` body (ExtendTimeout + safety timer + 2s attention arm — same method the window path calls), `OnCompositorVideoLengthKnown` upgrades the fallback timeout to the accurate duration (WPF `LengthChanged`→`StartSafetyTimer` contract), and the mandatory layer's natural end runs the full `OnVideoEnded` evaluation (pass/fail XP, penalties, retry loop, mercy) with `CleanupInternal` teardown symmetry. Double-run/stale-post guard: `_layerOrchestrationActive`, cleared in `CleanupInternal`. Non-gating `--verify-video` diagnostic prints "layer orchestration armed".
+- [~] **Dual-monitor + strict mode + segment (random-slice) mode** behave as WPF. **Segment: DONE (B2)** — armed state is captured+disarmed one-shot in the layer branch of `StartVideoPlayback` and the deferred 700ms seek runs from `OnCompositorVideoLengthKnown` via `VideoLayer.SeekTo` (mirrors `VideoOverlayWindow.OnLengthChanged`). **Strict mode: key-blocking is N/A on the UCE path by construction** — the compositor window is permanently click-through + no-activate and receives no keyboard input, so strict blocking (ESC/panic/Alt+F4 suppression) is inherently satisfied; the flip side is that **non-strict ESC-dismiss and the panic key have no receiver on the pure layer path** (no global key hook feeds it yet) — documented gap, `// Phase B2` note in `StartVideoPlayback`. `_currentStrictMode` is recorded for bookkeeping, but attention-fail retries do NOT currently inherit it (CleanupInternal resets it before the retry callback reads it — pre-existing window-path behavior too; WPF inherits `_strictActive` :2186; see B2 residuals). **Dual-monitor:** the engine composites the layer on every monitor by design; explicit side-by-side WPF verification still open. **Also still open:** layer-path `PositionChanged` wiring (`PrimaryPlaybackTimeMsChanged` / Deeper time rules / live watch-position credit — natural end currently credits full duration via the WPF MediaElement-fallback seeding rule).
+- [x] `VideoAboutToStart` / `VideoStarted` / `VideoEnded` fire with correct timing. **DONE 2026-07-04 (B2):** `VideoAboutToStart` before the 1.3s pre-announce (unchanged); `VideoStarted` now anchors to actual LibVLC `Playing` (was: at the `Play()` call, i.e. before playback existed / even on failed opens); `VideoEnded` fires exactly once per natural end via `CleanupInternal(notifyEnded: true)` after the attention evaluation, and — window-path parity — not at all on an attention-fail retry teardown.
+
+**B2 residuals (adversarial review 2026-07-04 — verdict SAFE TO BANK, 0 blockers; fixed pre-bank:
+side-effects-before-guard, stale-post `VideoEnded` leak, failed-open wedge via layer
+`EncounteredError`→end-pipeline routing (WPF :1498-1511 parity), false strict-retry comment).
+Deferred with evidence:**
+- `_attentionPenalties` never resets (WPF resets in Cleanup :2620 / ForceCleanup :895) — after 3
+  cumulative fails EVER in a session, every later fail hits mercy and pass-XP inflates. Needs a
+  retry-vs-final-cleanup distinction before adding the reset (a naive CleanupInternal reset would
+  break mercy-at-3 across retries). Pre-existing on the window path too.
+- Layer-path `PositionChanged` wiring open: retry/troll-loop teardowns credit 0 watch-time (the
+  10% troll re-watch after a PASS loses the full watched duration); natural end credits full
+  duration (WPF position-less seeding :2196-2200). Under-credit only — never over-credits.
+- Strict-mode retries do not inherit strictness (CleanupInternal resets `_currentStrictMode`
+  before the retry callback reads it; WPF inherits `_strictActive` :2186). Pre-existing window-path
+  behavior; truthful NOTE at the recording site.
+- Safety margin is duration+30s vs WPF's +5s (pre-existing Avalonia convention, safe direction);
+  WPF's post-seek re-check `Time < startMs-1000` (:1417) not ported (also absent on the window path).
+- Non-strict ESC-dismiss/panic has no receiver on the pure layer path (compositor window receives
+  no keyboard) — needs the global key hook (WP3 territory).
+- Legacy multi-monitor path never had attention orchestration (`OnMultiMonitorPlaybackStarted`
+  raises only `VideoStarted`) — pre-existing, moot after Phase E.
 
 ### Phase C — Verify the other migrated layers (skill Phase 2)
 - [ ] Exercise flash, subliminal, bouncing-text, bubbles, lock-card, pink/spiral/brain-drain end-to-end vs WPF (z-order, opacity, timing, multi-monitor). Mark rows in `avalonia-ui-parity-matrix.md`.

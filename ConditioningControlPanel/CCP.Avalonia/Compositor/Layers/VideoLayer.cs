@@ -54,6 +54,30 @@ public class VideoLayer : BaseLayer, IDisposable
     /// <summary>Verification probe (--verify-video): current LibVLC player volume, null if no player.</summary>
     public int? PlayerVolume { get { try { return _player?.Volume; } catch { return null; } } }
 
+    /// <summary>Current media length in milliseconds, or -1 while unknown / no player (Phase B2:
+    /// duration source for the service's safety timer and attention scheduling).</summary>
+    public long DurationMs { get { try { return _player?.Length ?? -1; } catch { return -1; } } }
+
+    /// <summary>
+    /// Seek the wrapped player to an absolute time in milliseconds (Phase B2: chaos
+    /// random-segment jump). No-op when no player is active or the media is not seekable.
+    /// Narrow by design — the service owns all segment/orchestration state; the layer never
+    /// exposes its MediaPlayer.
+    /// </summary>
+    public void SeekTo(long ms)
+    {
+        try
+        {
+            var player = _player;
+            if (player == null || !player.IsSeekable) return;
+            player.Time = Math.Max(0, ms);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug("VideoLayer: SeekTo failed: {Error}", ex.Message);
+        }
+    }
+
     /// <summary>
     /// Applies volume, mute, and preferred output device to the active player (Phase B audio
     /// parity). Service-driven at playback start; the layer stores no settings (services own
@@ -96,6 +120,19 @@ public class VideoLayer : BaseLayer, IDisposable
 
     public event EventHandler? VideoStarted;
     public event EventHandler? VideoEnded;
+
+    /// <summary>
+    /// Raised (on the UI thread) when LibVLC reports the real media length, in milliseconds.
+    /// Phase B2: lets the service upgrade its fallback safety timeout to the accurate duration
+    /// and apply the chaos random-segment seek — the same LengthChanged contract the legacy
+    /// VideoOverlayWindow uses. The layer stays dumb: it only forwards the value.
+    /// </summary>
+    public event EventHandler<long>? LengthKnown;
+
+    /// <summary>LibVLC failed to open/decode the media — no Playing/EndReached will ever fire.
+    /// The service routes this into the end pipeline (B2 review F1; WPF EncounteredError→OnEnded).
+    /// Marshaled to the UI thread.</summary>
+    public event EventHandler? EncounteredError;
 
     public VideoLayer(LibVLC libVlc, ILogger? logger = null)
     {
@@ -145,11 +182,18 @@ public class VideoLayer : BaseLayer, IDisposable
             _player.SetVideoFormat("RV32", _videoWidth, _videoHeight, _videoPitch);
             _player.EndReached += OnEndReached;
             _player.EncounteredError += OnEncounteredError;
+            _player.Playing += OnPlaying;
+            _player.LengthChanged += OnLengthChanged;
 
             _renderTimer.Start();
             _player.Play(_media);
             _logger?.LogInformation("VideoLayer: started {Path}", path);
-            VideoStarted?.Invoke(this, EventArgs.Empty);
+            // Phase B2: VideoStarted now fires from the LibVLC Playing event (OnPlaying)
+            // rather than here. Play() only queues the open — raising at the call site
+            // reported "started" before playback existed (or even when the media failed to
+            // open), and the service's orchestration (safety timer, attention scheduling)
+            // must anchor to actual playback start, matching the legacy
+            // VideoOverlayWindow.OnPlaying contract.
         }
         catch (Exception ex)
         {
@@ -174,6 +218,8 @@ public class VideoLayer : BaseLayer, IDisposable
         {
             player.EndReached -= OnEndReached;
             player.EncounteredError -= OnEncounteredError;
+            player.Playing -= OnPlaying;
+            player.LengthChanged -= OnLengthChanged;
         }
         try { player?.Stop(); } catch { }
 
@@ -217,12 +263,30 @@ public class VideoLayer : BaseLayer, IDisposable
         });
     }
 
+    private void OnPlaying(object? sender, EventArgs e)
+    {
+        // Fires on LibVLC's thread — marshal so subscribers (service orchestration, timers)
+        // always run on the UI thread (VideoOverlayWindow.OnPlaying parity). LibVLC re-fires
+        // Playing after an unpause; the service guards double-run, not the layer.
+        Dispatcher.UIThread.Post(() => VideoStarted?.Invoke(this, EventArgs.Empty));
+    }
+
+    private void OnLengthChanged(object? sender, MediaPlayerLengthChangedEventArgs e)
+    {
+        var lengthMs = e.Length; // already milliseconds
+        Dispatcher.UIThread.Post(() => LengthKnown?.Invoke(this, lengthMs));
+    }
+
     private void OnEncounteredError(object? sender, EventArgs e)
     {
         // Surfaces the most common silent failure: LibVLC could not open/decode the
         // media (bad codec, missing plugins, unreadable path). Without this the layer
         // just never produces frames and the video appears to "not play".
         _logger?.LogWarning("VideoLayer: LibVLC EncounteredError — media failed to open/decode");
+        // B2 review F1: the service routes this into the same end pipeline WPF does
+        // (EncounteredError → OnEnded, VideoService.cs:1498-1511) so a failed open can
+        // never wedge the video slot. Marshaled like the other player events.
+        Dispatcher.UIThread.Post(() => EncounteredError?.Invoke(this, EventArgs.Empty));
     }
 
     private IntPtr LockCallback(IntPtr opaque, IntPtr planes)

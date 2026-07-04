@@ -177,6 +177,15 @@ internal static class VideoVerification
             }
             Console.WriteLine($"[VIDEO] Audio applied (player volume {playerVolume?.ToString() ?? "null"}, effective {expectedVolume}).");
 
+            // Non-gating Phase B2 diagnostic: report whether the layer-path orchestration
+            // (safety timer + attention scheduling) armed on the mandatory layer's Playing
+            // event. Attention targets themselves spawn only when the user's
+            // AttentionChecksEnabled setting is on; this probe reads state only — it never
+            // mutates settings and never gates the verdict.
+            var orchestrationArmed =
+                (videoService as ConditioningControlPanel.Avalonia.Services.Video.AvaloniaVideoService)?.LayerOrchestrationArmed;
+            Console.WriteLine($"[VIDEO] Diagnostic (non-gating): layer orchestration armed = {orchestrationArmed?.ToString() ?? "unknown (service type mismatch)"}.");
+
             Console.WriteLine("[VIDEO] PASS: mandatory video decodes, publishes frames, and composites on every expected monitor.");
             pass = true;
         }
