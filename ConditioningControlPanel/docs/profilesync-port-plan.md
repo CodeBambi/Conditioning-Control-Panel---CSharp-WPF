@@ -1,12 +1,13 @@
 # ProfileSyncService — Slice-by-Slice Port Plan
 
-> **Status:** IN PROGRESS — **Slices 1–3 landed unwired.** Slice 1 (`c4b2583a`): seam + 18 DTOs +
-> HMAC `SignRequest` + 5 tests. Slice 2 (`a3215fc9`): injectable-`HttpMessageHandler` test ctor +
-> heartbeat + 4 tests. Slice 3 (`fafd22b0`): pull + full merge — `LoadProfileAsync` +
-> `MergeCloudProfile`/`MergeV2CloudStatsIntoLocalProgress`/`MergeV2SyncResponse`/`ApplyForceStreakOverride`/
-> `ApplyForceSkillsReset` + 3 real `IQuestService` DIM methods + 5 tests, **independently adversarially
-> reviewed (SAFE TO BANK, all 5 never-lower invariants byte-faithful; one drift found+fixed).** **Core
-> 184/184, still NOT in DI (byte-identical app behavior).** Slices 4–7 remain (fresh-context). This is the sole remaining WS0 merge-`5ce70de6`
+> **Status:** IN PROGRESS — **Slices 1–4 landed unwired; the full sync round-trip (pull+merge+push)
+> + heartbeat + 401 recovery is done + tested.** S1 (`c4b2583a`) seam+18 DTOs+HMAC+5t. S2 (`a3215fc9`)
+> injectable test ctor + heartbeat + 4t. S3 (`fafd22b0`) pull + full merge + 3 real `IQuestService` DIM
+> methods + 5t, **independently adversarially reviewed SAFE-TO-BANK** (5 never-lower invariants
+> byte-faithful; one drift fixed). S4 (`34fc5f16`) push/`SyncProfileAsync` (`/v2/user/sync`, leaderboard
+> SUBMIT) with **fresh-defaults cloud-wipe guard byte-identical to WPF**, `_syncGate`/cooldown/429, and
+> 401 `restore-session` recovery (secure-setter token adopt) + 5t. **Core 189/189, still NOT in DI
+> (byte-identical app behavior).** Slices 5–7 remain (fresh-context). This is the sole remaining WS0 merge-`5ce70de6`
 > re-open (parity-matrix row 1). Execution is a **fresh-context task**: the surface is ~2,800 LOC
 > and **security-sensitive** (HMAC anti-cheat signing, GDPR delete/export, and the P0 privacy
 > `ExcludedBackupProperties` list — omitting it leaks the auth token to the server). It must be
@@ -311,10 +312,13 @@ existing generators. All-optional ctor deps. **DEFERRED (additive/edge, don't af
 season-recap UI. 5 merge tests, Core 184/184. Adversarial reviewer confirmed all 5 corruption-critical
 never-lower invariants byte-faithful.
 
-**Slice 4 — Push.** `SyncProfileAsync` (`/v2/user/sync`), `SignRequest` on body, `_syncGate`, 30 s
-cooldown, 429 handling, full `V2SyncResponse` reconciliation. Wire event triggers
-(progression/quests/exit) in the Avalonia head. *Success:* push guard blocks fresh-defaults (Level 1,
-<100 XP, `!_hasLoadedProfile`); signed request verified in test.
+**Slice 4 — Push. ✅ DONE (`34fc5f16`, landed UNWIRED).** `SyncProfileAsync` (`/v2/user/sync`, the
+leaderboard SUBMIT), `SignRequest` on body, `_syncGate.WaitAsync(0)`, 30 s cooldown, 429 stamp; response
+reuses the slice-3 `MergeV2SyncResponse` (not re-ported). **Fresh-defaults cloud-wipe guard byte-identical
+to WPF:487** (`!_hasLoadedProfile && PlayerLevel<=1 && totalXp<100`). 401 `HandleUnauthorizedAsync` +
+`TryRecoverAuthTokenAsync` (`/v2/auth/restore-session`, rotated token adopted only via the secure setter,
+never logged) ported here (were slice-2/3 breadcrumbs). 5 tests, Core 189/189. **Event-trigger wiring
+(progression/quests/exit) is deferred to slice 7** (kept unwired).
 
 **Slice 5 — Cloud settings backup/restore.** `BackupSettingsAsync` (+`ExcludedBackupProperties`,
 gzip+base64, 5-min `Interlocked` debounce), `GetSettingsBackupInfoAsync`,
