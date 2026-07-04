@@ -185,7 +185,7 @@ UNWIRED (0 callers) until the deferred **chaos run-engine faithful port** backlo
 | # | Class (`CCP.Avalonia/Chaos/`) | Class· | LOC | Live path | Order / notes |
 |---|---|---|---|---|---|
 | 1 | `ChaosCursorGlowOverlay` | PASSIVE | 174 | ✅ rabbit caller | ✅ **MIGRATED → `ChaosCursorGlowLayer` (Z=130), the template** — old window deleted; also fixed a 2x-too-fast breath (legacy port passed WPF's 620ms half-leg as ScalePulse's FULL cycle) |
-| 2 | `ChaosPopText` | PASSIVE | 182 | ✅ | next: one-shot floating pop text; needs Skia text (port `AvaloniaOutlinedText` look) |
+| 2 | `ChaosPopText` | PASSIVE | 182 | ⚠️ seam-only | ✅ **MIGRATED → `ChaosPopTextLayer` (Z=145)** — old window deleted; Skia outlined text (Segoe UI Bold 22, stroke-under-fill, SaveLayer group opacity = WPF window-opacity fade), 14-floater cap, WPF timings (60/230/200ms, rise +6→-22 DIP over the whole 490ms). HONEST wiring note: the ✅ in the old row was a false positive — `Show` had ZERO production callers in the Avalonia head (only `RaiseActive` z-churn; the WPF call sites live in the unported ChaosModeService/BubbleService bubble-effect paths). The `AvaloniaChaosService.ShowChaosPopText(px,py,text,tint)` seam (gated on `ChaosAnnouncerEnabled`, WPF contract) is live and proven by `--verify-layers` Stage 4c; the run-engine port wires production callers to it. Also fixes the legacy window's DIP-anchor-as-PixelPoint mixed-DPI bug by defining the seam in PHYSICAL px |
 | 3 | `ChaosEffectBannerOverlay` | PASSIVE | 202 | ✅ | banner text, timed slide/fade |
 | 4 | `ChaosAnnouncerOverlay` | PASSIVE | 316 | ✅ (4 callers) | announcer lines; text + timing queue |
 | 5 | `ChaosFlashOverlay` | PASSIVE | 201 | ✅ via `AvaloniaEffectPayloads` | chaos flash washes |

@@ -53,4 +53,12 @@ public static class CompositorLayers
 
     /// <summary>Rabbit Caller cursor-glow telegraph (first migrated chaos layer).</summary>
     public const int ChaosCursorGlow = 130;
+
+    // Info-text sub-band (140+) planned order: effect-banner strip 140 (persistent ambient
+    // label row, lowest), pop text 145 (positional floaters over the field), announcer 150
+    // (the subtitle line — the most important messaging, and in WPF re-raised on every
+    // ShowNext so a fresh announce sits above banner/pop-text windows raised earlier).
+
+    /// <summary>Chaos floating combat text (score/effect words popped at a bubble).</summary>
+    public const int ChaosPopText = 145;
 }

@@ -52,6 +52,9 @@ public sealed class AvaloniaChaosService : IChaosService
     // WS2/WP3 template migration: the Rabbit Caller cursor-glow telegraph is a compositor
     // layer, not a window. The service owns the state and drives it (UCE rule 7).
     private readonly ChaosCursorGlowLayer _cursorGlowLayer;
+    // WS2/WP3 Phase F #2: chaos pop text is a compositor layer, not a pooled window set.
+    private readonly ChaosPopTextLayer _popTextLayer;
+    private readonly CompositorEngine? _compositor;
     private readonly Random _rng = new();
 
     private bool _active;
@@ -129,8 +132,11 @@ public sealed class AvaloniaChaosService : IChaosService
         // content-driven, so the idle layer renders nothing and costs nothing. Without a
         // DI-provided engine the layer is never registered and the telegraph renders nothing
         // (UCE rule 7 nullable-engine caveat).
+        _compositor = compositor;
         _cursorGlowLayer = new ChaosCursorGlowLayer();
         compositor?.RegisterLayer(_cursorGlowLayer);
+        _popTextLayer = new ChaosPopTextLayer();
+        compositor?.RegisterLayer(_popTextLayer);
         AvaloniaChaosCatalogs.EnsureInitialized();
     }
 
@@ -923,7 +929,8 @@ public sealed class AvaloniaChaosService : IChaosService
         RunOnUi(() =>
         {
             try { ChaosFieldFxOverlay.RaiseActive(); } catch { }
-            try { ChaosPopText.RaiseActive(); } catch { }
+            // Pop text is a compositor layer: z comes from CompositorLayers (UCE rule 9),
+            // so no RaiseActive churn is needed for it.
             try { ChaosEffectBannerOverlay.RaiseActive(); } catch { }
             try { ChaosAnnouncerOverlay.RaiseActive(); } catch { }
             try { _hud?.RaiseToTopmost(); } catch { }
@@ -1281,6 +1288,24 @@ public sealed class AvaloniaChaosService : IChaosService
 
     /// <summary>Center the telegraph on raw PHYSICAL virtual-desktop px (IPointerState space).</summary>
     public void MoveCursorGlow(double pxX, double pxY) => _cursorGlowLayer.MoveTo(pxX, pxY);
+
+    /// <summary>Pop a floating chaos word at a PHYSICAL virtual-desktop px anchor (WS2:
+    /// chaos on the compositor). Master-gated on ChaosAnnouncerEnabled exactly like WPF
+    /// ChaosPopText.Show (one toggle for all on-screen Chaos text). Public because the
+    /// --verify-layers harness drives the layer through its OWNING service; production
+    /// callers arrive with the run-engine bubble-effect port (the WPF call sites live in
+    /// ChaosModeService/BubbleService paths not yet ported). Wakes the engine same-tick
+    /// (documented CompositorEngine.Start contract) so the 490ms one-shot never loses its
+    /// first frames to the idle watchdog.</summary>
+    public void ShowChaosPopText(double pxX, double pxY, string text, global::Avalonia.Media.Color tint)
+    {
+        if (_settings.Current?.ChaosAnnouncerEnabled != true) return;
+        _compositor?.Start();
+        _popTextLayer.Spawn(pxX, pxY, text, tint);
+    }
+
+    /// <summary>Drop every live pop-text floater (WPF ShutdownPool at chaos teardown).</summary>
+    public void ClearChaosPopText() => _popTextLayer.Clear();
 
     private void SpawnDarter(double? atPxX = null, double? atPxY = null)
     {

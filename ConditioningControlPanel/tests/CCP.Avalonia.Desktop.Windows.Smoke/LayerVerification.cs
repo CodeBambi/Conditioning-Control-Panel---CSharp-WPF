@@ -171,6 +171,7 @@ internal static class LayerVerification
             var spiralLayer = ExpectLayer<SpiralLayer>(engine, CompositorLayers.Spiral, "SpiralLayer", rows);
             var pinkTintLayer = ExpectLayer<PinkTintLayer>(engine, CompositorLayers.PinkTint, "PinkTintLayer", rows);
             var cursorGlowLayer = ExpectLayer<ChaosCursorGlowLayer>(engine, CompositorLayers.ChaosCursorGlow, "ChaosCursorGlowLayer", rows);
+            var popTextLayer = ExpectLayer<ChaosPopTextLayer>(engine, CompositorLayers.ChaosPopText, "ChaosPopTextLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -188,12 +189,13 @@ internal static class LayerVerification
             rows.Add(lockCardRow);
 
             if (flashLayer == null || subliminalLayer == null || bubbleLayer == null || bouncingLayer == null
-                || brainDrainLayer == null || spiralLayer == null || pinkTintLayer == null || cursorGlowLayer == null)
+                || brainDrainLayer == null || spiralLayer == null || pinkTintLayer == null || cursorGlowLayer == null
+                || popTextLayer == null)
             {
                 Console.WriteLine("[LAYERS] Registration sweep failed; skipping activation stages.");
                 return;
             }
-            Console.WriteLine("[LAYERS] All 8 migrated layers registered at their exact z-constants.");
+            Console.WriteLine("[LAYERS] All 9 migrated layers registered at their exact z-constants.");
 
             // ---------------- Stage 1: FlashLayer (Z=30) via IFlashService ----------------
             {
@@ -332,6 +334,50 @@ internal static class LayerVerification
                 var deactivated = await PollAsync(() => !cursorGlowLayer.IsActive, 3000);
                 row.Teardown = deactivated ? "clean" : "TIMEOUT";
                 FinishRow(row, activated, deactivated, envStable);
+                await SettleIdle(engine);
+            }
+
+            // ---------------- Stage 4c: ChaosPopTextLayer (Z=145) via AvaloniaChaosService ----------------
+            // Phase F #2. Driven through the owning service's public pop-text seam (the same
+            // call the run-engine bubble-effect port will make) — no chaos run needed. The
+            // service seam is master-gated on ChaosAnnouncerEnabled (WPF contract), so a
+            // user profile with the announcer off is reported as an honest SKIP, not forced.
+            // Sequenced before brain drain: the 490ms one-shot expires deterministically, so
+            // the excluded-surface no-delta probe stays unpoisoned.
+            {
+                Console.WriteLine("[LAYERS] Stage 4c: ChaosPopTextLayer via AvaloniaChaosService.ShowChaosPopText...");
+                var row = rows.First(r => r.Layer == "ChaosPopTextLayer");
+                if (settings?.ChaosAnnouncerEnabled != true)
+                {
+                    row.Activated = "-";
+                    row.Delta = "-";
+                    row.Teardown = "-";
+                    row.Verdict = "SKIP";
+                    row.Note = "ChaosAnnouncerEnabled=false in user settings; the service seam is gated (WPF contract) and the harness does not mutate user settings.";
+                }
+                else
+                {
+                    var before = Capture(screens, primary);
+                    // Anchor at the primary screen's center (PHYSICAL px — the layer's native
+                    // space) so the delta lands inside the center-crop probe region.
+                    chaos.ShowChaosPopText(
+                        primary.Bounds.X + primary.Bounds.Width / 2.0,
+                        primary.Bounds.Y + primary.Bounds.Height / 2.0,
+                        "VERIFY POP", global::Avalonia.Media.Color.FromRgb(0xFF, 0x4D, 0xC4));
+                    var activated = await PollAsync(() => popTextLayer.IsActive, 2000, stepMs: 50);
+                    row.Activated = activated ? "yes" : "TIMEOUT";
+                    if (activated)
+                    {
+                        await Task.Delay(120); // land inside the 60+230ms in/hold window at peak 0.58 opacity
+                        var during = Capture(screens, primary);
+                        row.Delta = during.Center != before.Center ? "DIFFER (center-crop)" : "SAME (FAIL)";
+                    }
+                    // One-shot: the 490ms life expiring IS the teardown path (Update disposes
+                    // the blob and removes the floater).
+                    var deactivated = await PollAsync(() => !popTextLayer.IsActive, 3000);
+                    row.Teardown = deactivated ? "clean (490ms expiry)" : "TIMEOUT";
+                    FinishRow(row, activated, deactivated, envStable);
+                }
                 await SettleIdle(engine);
             }
 
@@ -526,6 +572,7 @@ internal static class LayerVerification
             try { bouncing?.Stop(); } catch { }
             try { bubbles?.Stop(); } catch { }
             try { chaos?.DisarmCursorGlow(); } catch { }
+            try { chaos?.ClearChaosPopText(); } catch { }
             try
             {
                 overlay?.HideOverlaySustained("pink");
