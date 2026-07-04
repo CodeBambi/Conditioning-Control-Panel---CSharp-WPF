@@ -51,6 +51,11 @@ public static class CompositorLayers
     // SetWindowDisplayAffinity (grep-verified 2026-07-04) — so chaos layers stay on the
     // MAIN surface (ExcludeFromCapture = false).
 
+    /// <summary>Chaos "braindrain" full-screen image wash (top of the field-FX sub-band:
+    /// WPF RaiseGameLayerAboveVideo raises the flash wash LAST of the passive set — above the
+    /// gif cascade — as an "attention asset", so it caps the 100–119 field band).</summary>
+    public const int ChaosFlashWash = 115;
+
     /// <summary>Rabbit Caller cursor-glow telegraph (first migrated chaos layer).</summary>
     public const int ChaosCursorGlow = 130;
 

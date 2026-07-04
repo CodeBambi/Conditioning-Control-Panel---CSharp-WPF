@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -60,6 +61,10 @@ public sealed class AvaloniaChaosService : IChaosService
     // QUEUE lives here in the service, byte-equivalent to WPF's static queue (services own
     // state, layers render the current line — UCE rule 7).
     private readonly ChaosAnnouncerLayer _announcerLayer;
+    // WS2/WP3 Phase F #5: the chaos "braindrain" full-screen image wash is a compositor layer.
+    private readonly ChaosFlashWashLayer _flashWashLayer;
+    /// <summary>Orphans a superseded in-flight wash decode (WPF ChaosFlashOverlay._displayGen).</summary>
+    private int _washGen;
     private readonly object _announceSync = new();
     private readonly List<(string text, ChaosAnnounceKind kind, string? artKey, string? subText, int holdMs, int priority)> _announceQueue = new();
     private bool _announceShowing;
@@ -161,6 +166,8 @@ public sealed class AvaloniaChaosService : IChaosService
         // completes — the WPF fade.Completed → ShowNext() chain.
         _announcerLayer.LineCompleted = () => { lock (_announceSync) { ShowNextAnnouncementLocked(); } };
         compositor?.RegisterLayer(_announcerLayer);
+        _flashWashLayer = new ChaosFlashWashLayer();
+        compositor?.RegisterLayer(_flashWashLayer);
         _screenProvider = screenProvider;
         AvaloniaChaosCatalogs.EnsureInitialized();
     }
@@ -929,6 +936,9 @@ public sealed class AvaloniaChaosService : IChaosService
         CloseEffectBanners();
         ClearChaosPopText();
         ClearAnnouncements();
+        // WPF parity (ChaosModeService.cs:3097/3146): the braindrain wash dies with the run.
+        // The legacy Avalonia head never tore it down (its window just outlived the run) — a drift.
+        ClearChaosFlashWash();
         _state = null;
         _vibeRemainingSec = 0;
         _freezeRemainingSec = 0;
@@ -1341,6 +1351,69 @@ public sealed class AvaloniaChaosService : IChaosService
 
     /// <summary>Drop every live pop-text floater (WPF ShutdownPool at chaos teardown).</summary>
     public void ClearChaosPopText() => _popTextLayer.Clear();
+
+    /// <summary>Show the chaos "braindrain" wash: one random flash-pool image held over the
+    /// stage at a low opacity, fading in/out (WS2: chaos on the compositor; WPF
+    /// ChaosFlashOverlay.Show contract — defaults ~10%/10s, silent no-op on an empty pool,
+    /// NO settings gate). The service owns policy: image pick, stage rect (effect-screen
+    /// union — the WPF dual-aware StageBounds; the legacy Avalonia window forced primary,
+    /// a drift), and the off-thread decode-once (SkiaImageDecoder budgets in the layer doc);
+    /// the layer renders final inputs. Public because the --verify-layers harness drives the
+    /// layer through its OWNING service — the same call the braindrain effect payload makes.
+    /// The WPF Show-time RaiseAboveVideo/ForceTopmost churn has no layer equivalent (UCE rule 9).</summary>
+    public void ShowChaosFlashWash(int durationMs = 10000, double opacity = 0.10)
+    {
+        try
+        {
+            var files = ChaosImagePool.GetFiles(AvaloniaChaosEnv.EffectiveAssetsPath ?? "");
+            if (files.Count == 0) return;   // silent no-op (WPF PickImage)
+            var path = files[Random.Shared.Next(files.Count)];
+
+            // Stage = the same screen set the engine composites (primary unless dual).
+            var dual = _settings.Current?.DualMonitorEnabled != false;
+            var screens = _screenProvider?.GetEffectScreens(dual);
+            if (screens == null || screens.Count == 0) return;
+            double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
+            foreach (var s in screens)
+            {
+                x0 = Math.Min(x0, s.Bounds.X);
+                y0 = Math.Min(y0, s.Bounds.Y);
+                x1 = Math.Max(x1, s.Bounds.Right);
+                y1 = Math.Max(y1, s.Bounds.Bottom);
+            }
+            var stage = new ConditioningControlPanel.Core.Platform.PixelRect(x0, y0, x1 - x0, y1 - y0);
+            if (stage.IsEmpty) return;
+
+            _compositor?.Start();   // wake same-tick so the 500ms fade-in loses no frames
+            int gen = Interlocked.Increment(ref _washGen);
+            Task.Run(() =>
+            {
+                try
+                {
+                    // Budgets: see ChaosFlashWashLayer class doc (WPF still cap 2560; the WPF
+                    // animated-webp wash budget 1280/40 for all animated content + spiral 96MB cap).
+                    bool animated = path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)
+                                 || path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
+                    var set = animated
+                        ? SkiaImageDecoder.Decode(path, maxFrames: 40, decodeMaxDim: 1280, maxMemoryMb: 96.0, defaultFrameDelayMs: 100, maxFrameDelayMs: 0)
+                        : SkiaImageDecoder.Decode(path, maxFrames: 1, decodeMaxDim: 2560, maxMemoryMb: 0, defaultFrameDelayMs: 100, maxFrameDelayMs: 0);
+                    if (set == null) return;
+                    // A newer wash or a clear/teardown superseded this decode (WPF _displayGen).
+                    if (gen != Volatile.Read(ref _washGen)) { set.Release(); return; }
+                    _flashWashLayer.ShowWash(set, stage, durationMs, opacity);
+                }
+                catch (Exception ex) { _logger?.LogDebug("ChaosFlashWash decode: {E}", ex.Message); }
+            });
+        }
+        catch (Exception ex) { _logger?.LogDebug("ChaosFlashWash.Show: {E}", ex.Message); }
+    }
+
+    /// <summary>Instant wash teardown (run end — WPF ChaosFlashOverlay.CloseActive).</summary>
+    public void ClearChaosFlashWash()
+    {
+        Interlocked.Increment(ref _washGen);   // orphan any in-flight decode
+        _flashWashLayer.Clear();
+    }
 
     /// <summary>Show (or keep) the effect-banner strip entry for an effect (WS2: chaos on
     /// the compositor; WPF ChaosEffectBannerOverlay.Show contract). Applies the

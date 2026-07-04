@@ -70,7 +70,11 @@ public sealed class OverlayPayload : EffectPayload
             int duration = (int)(Scale(1500, 4500) * GlobalDurationMult);
             if (_kind == "braindrain")
             {
-                ChaosFlashOverlay.Show();
+                // braindrain = a full-screen wash of a random flash-pool image/gif — a compositor
+                // layer driven through the owning chaos service (WS2/WP3 Phase F #5). WPF parity:
+                // chaos keeps the faint ~10%/10s Show() defaults (EffectPayload.cs:135).
+                (AvaloniaChaosApp.Chaos
+                    as ConditioningControlPanel.Avalonia.Services.AvaloniaChaosService)?.ShowChaosFlashWash();
             }
             else
             {

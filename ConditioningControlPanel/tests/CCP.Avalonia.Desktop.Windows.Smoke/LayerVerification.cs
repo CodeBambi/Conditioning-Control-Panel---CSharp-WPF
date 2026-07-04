@@ -174,6 +174,7 @@ internal static class LayerVerification
             var popTextLayer = ExpectLayer<ChaosPopTextLayer>(engine, CompositorLayers.ChaosPopText, "ChaosPopTextLayer", rows);
             var effectBannerLayer = ExpectLayer<ChaosEffectBannerLayer>(engine, CompositorLayers.ChaosEffectBanner, "ChaosEffectBannerLayer", rows);
             var announcerLayer = ExpectLayer<ChaosAnnouncerLayer>(engine, CompositorLayers.ChaosAnnouncer, "ChaosAnnouncerLayer", rows);
+            var flashWashLayer = ExpectLayer<ChaosFlashWashLayer>(engine, CompositorLayers.ChaosFlashWash, "ChaosFlashWashLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -192,12 +193,12 @@ internal static class LayerVerification
 
             if (flashLayer == null || subliminalLayer == null || bubbleLayer == null || bouncingLayer == null
                 || brainDrainLayer == null || spiralLayer == null || pinkTintLayer == null || cursorGlowLayer == null
-                || popTextLayer == null || effectBannerLayer == null || announcerLayer == null)
+                || popTextLayer == null || effectBannerLayer == null || announcerLayer == null || flashWashLayer == null)
             {
                 Console.WriteLine("[LAYERS] Registration sweep failed; skipping activation stages.");
                 return;
             }
-            Console.WriteLine("[LAYERS] All 11 migrated layers registered at their exact z-constants.");
+            Console.WriteLine("[LAYERS] All 12 migrated layers registered at their exact z-constants.");
 
             // ---------------- Stage 1: FlashLayer (Z=30) via IFlashService ----------------
             {
@@ -450,6 +451,48 @@ internal static class LayerVerification
                 await SettleIdle(engine);
             }
 
+            // ---------------- Stage 4f: ChaosFlashWashLayer (Z=115) via AvaloniaChaosService ----------------
+            // Phase F #5. Driven through the owning service's wash seam — the same call the
+            // braindrain effect payload makes — so no chaos run is needed. NOT settings-gated
+            // (WPF ChaosFlashOverlay.Show has no gate), but it needs at least one image in the
+            // chaos image pool (WPF: silent no-op on an empty pool) — an empty pool on this
+            // machine is an honest SKIP, not a forced trigger. A short duration + a well-visible
+            // opacity are legitimate Show args (the WPF dashboard glitch path passes ~30%);
+            // teardown uses ClearChaosFlashWash (the WPF CloseActive run-teardown path).
+            {
+                Console.WriteLine("[LAYERS] Stage 4f: ChaosFlashWashLayer via AvaloniaChaosService.ShowChaosFlashWash...");
+                var row = rows.First(r => r.Layer == "ChaosFlashWashLayer");
+                var pool = ConditioningControlPanel.Core.Services.Chaos.ChaosImagePool.GetFiles(
+                    ConditioningControlPanel.Avalonia.Chaos.AvaloniaChaosEnv.EffectiveAssetsPath ?? "");
+                if (pool.Count == 0)
+                {
+                    row.Activated = "-";
+                    row.Delta = "-";
+                    row.Teardown = "-";
+                    row.Verdict = "SKIP";
+                    row.Note = "Chaos image pool is empty on this machine (WPF Show is a silent no-op); nothing to drive.";
+                }
+                else
+                {
+                    var before = Capture(screens, primary);
+                    chaos.ShowChaosFlashWash(durationMs: 1400, opacity: 0.35);
+                    // Activation includes the off-thread decode-once (SkiaImageDecoder).
+                    var activated = await PollAsync(() => flashWashLayer.IsActive, 6000);
+                    row.Activated = activated ? "yes" : "TIMEOUT";
+                    if (activated)
+                    {
+                        await Task.Delay(800); // land inside the hold at peak 0.35 (500ms fade-in done)
+                        var during = Capture(screens, primary);
+                        row.Delta = during.Full != before.Full ? "DIFFER (full-screen)" : "SAME (FAIL)";
+                    }
+                    chaos.ClearChaosFlashWash();
+                    var deactivated = await PollAsync(() => !flashWashLayer.IsActive, 3000);
+                    row.Teardown = deactivated ? "clean (ClearChaosFlashWash)" : "TIMEOUT";
+                    FinishRow(row, activated, deactivated, envStable);
+                }
+                await SettleIdle(engine);
+            }
+
             // ---------------- Stage 5: BrainDrainLayer (Z=55) — P0 capture-EXCLUDED, ALONE ----------------
             // Runs BEFORE the pink/spiral stages: releasing those re-applies the user's
             // persistent PinkFilterEnabled/SpiralEnabled overlays (WPF-parity settings-held
@@ -644,6 +687,7 @@ internal static class LayerVerification
             try { chaos?.ClearChaosPopText(); } catch { }
             try { chaos?.CloseEffectBanners(); } catch { }
             try { chaos?.ClearAnnouncements(); } catch { }
+            try { chaos?.ClearChaosFlashWash(); } catch { }
             try
             {
                 overlay?.HideOverlaySustained("pink");
