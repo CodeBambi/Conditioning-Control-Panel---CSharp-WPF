@@ -115,6 +115,13 @@ public class VideoLayer : BaseLayer, IDisposable
     private bool _loop;
     private bool _withAudio;
     private long _framesPresented;
+    // TimeChanged relay throttle (B2 residual). LibVLC fires TimeChanged ~4x/s per player;
+    // the service's watch-position watermark and the Deeper time-rule feed only need ~1 Hz
+    // granularity, so relays are coalesced to one per ~1000 ms. The exact position at
+    // teardown is recovered by the service via CurrentTimeMs (FinalizeWatchCredit live read),
+    // so the throttle never costs more than ~1 s of resolution mid-playback. Reset in
+    // PlayVideo/Stop. Read on LibVLC's thread; Environment.TickCount64 is thread-safe.
+    private long _lastTimeRelayTickMs;
 
     /// <summary>True while the wrapped LibVLC player reports active playback (Phase B:
     /// lets the service's <c>IsPlaying</c>/<c>HasOpenVideoWindows</c> reflect the UCE path).</summary>
@@ -126,6 +133,12 @@ public class VideoLayer : BaseLayer, IDisposable
     /// <summary>Current media length in milliseconds, or -1 while unknown / no player (Phase B2:
     /// duration source for the service's safety timer and attention scheduling).</summary>
     public long DurationMs { get { try { return _player?.Length ?? -1; } catch { return -1; } } }
+
+    /// <summary>Current playback time in milliseconds, or -1 when no player is active (B2
+    /// residual: live position source for the service's watch-credit watermark at teardown —
+    /// recovers the exact position the ~1 Hz <see cref="PlaybackTimeChanged"/> relay may not
+    /// have delivered yet). Mirrors <c>MediaPlayer.Time</c>; narrow by design.</summary>
+    public long CurrentTimeMs { get { try { return _player?.Time ?? -1; } catch { return -1; } } }
 
     /// <summary>
     /// Seek the wrapped player to an absolute time in milliseconds (Phase B2: chaos
@@ -204,6 +217,19 @@ public class VideoLayer : BaseLayer, IDisposable
     /// Marshaled to the UI thread.</summary>
     public event EventHandler? EncounteredError;
 
+    /// <summary>
+    /// Raised (on the UI thread) with the current playback time in milliseconds. B2 residual:
+    /// the service feeds this into its watch-position watermark (<c>_lastWatchPositionMs</c>)
+    /// and the <c>PrimaryPlaybackTimeMsChanged</c> Core seam (Deeper time rules) — the same
+    /// contract the legacy <c>VideoOverlayWindow</c> fulfills via LibVLC <c>PositionChanged</c>
+    /// (WPF <c>TimeChanged</c>, VideoService.cs:1380-1385 / :1004). The layer stays dumb: it
+    /// only forwards the value. THROTTLED to at most one relay per ~1000 ms (TimeChanged fires
+    /// ~4x/s; the watermark does not need more) — see <see cref="_lastTimeRelayTickMs"/>. The
+    /// service reads <see cref="CurrentTimeMs"/> directly at teardown so throttle resolution
+    /// never under-credits watch time.
+    /// </summary>
+    public event EventHandler<long>? PlaybackTimeChanged;
+
     public VideoLayer(LibVLC libVlc, ILogger? logger = null)
     {
         _libVlc = libVlc;
@@ -269,6 +295,8 @@ public class VideoLayer : BaseLayer, IDisposable
             _player.EncounteredError += OnEncounteredError;
             _player.Playing += OnPlaying;
             _player.LengthChanged += OnLengthChanged;
+            _player.TimeChanged += OnTimeChanged;
+            _lastTimeRelayTickMs = 0; // release the throttle for the new session
 
             _player.Play(_media);
             _logger?.LogInformation("VideoLayer: started {Path}", path);
@@ -291,6 +319,7 @@ public class VideoLayer : BaseLayer, IDisposable
         _bufferValid = false;
         _firstFrameLogged = false;
         _loop = false;
+        _lastTimeRelayTickMs = 0; // a queued TimeChanged from the dying player must not relay
 
         var player = _player;
         _player = null;
@@ -302,6 +331,7 @@ public class VideoLayer : BaseLayer, IDisposable
             player.EncounteredError -= OnEncounteredError;
             player.Playing -= OnPlaying;
             player.LengthChanged -= OnLengthChanged;
+            player.TimeChanged -= OnTimeChanged;
         }
         try { player?.Stop(); } catch { }
 
@@ -376,6 +406,29 @@ public class VideoLayer : BaseLayer, IDisposable
     {
         var lengthMs = e.Length; // already milliseconds
         Dispatcher.UIThread.Post(() => LengthKnown?.Invoke(this, lengthMs));
+    }
+
+    private void OnTimeChanged(object? sender, MediaPlayerTimeChangedEventArgs e)
+    {
+        // Fires on LibVLC's thread ~4x/s. THROTTLE to ~1 relay/s (the watch-position watermark
+        // and the Deeper time-rule feed do not need sub-second granularity); the service reads
+        // CurrentTimeMs directly at teardown, so this only bounds mid-playback event spam.
+        var now = Environment.TickCount64;
+        var last = _lastTimeRelayTickMs;
+        if (now - last < 1000) return;
+        // Non-interlocked CAS-style update is fine: worst case two LibVLC threads both pass the
+        // gate in the same ms and post twice — the service's watermark is a max(), so idempotent.
+        _lastTimeRelayTickMs = now;
+        var timeMs = e.Time; // already milliseconds
+        // Stale-session rejection: a TimeChanged queued by a player being torn down must not
+        // poison the next session's watermark. The sender is the firing LibVLC player; if it is
+        // no longer the current player (Stop nulled _player, or a new PlayVideo replaced it),
+        // the post is from a dead session and is dropped. Marshaled like the other player events.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!ReferenceEquals(sender, _player)) return;
+            PlaybackTimeChanged?.Invoke(this, timeMs);
+        });
     }
 
     private void OnEncounteredError(object? sender, EventArgs e)

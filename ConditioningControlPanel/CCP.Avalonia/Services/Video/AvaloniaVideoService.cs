@@ -91,6 +91,16 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     private int _attentionSpawned;
     private int _attentionTotal;
     private int _attentionPenalties;
+    // B2 parity (WPF Cleanup :2620 / ForceCleanup :895): true ONLY during an attention-fail →
+    // retry bridge — from the fail-message ShowMessage teardown until the retry callback's
+    // PlayFile has run its (penalty-preserving) CleanupInternal. CleanupInternal reads it to
+    // decide whether to reset _attentionPenalties: the SAME obligation retrying must keep its
+    // tally (mercy-at-3 across retries, WPF :2168-2170 — a naive reset in every teardown would
+    // break this), while every other teardown (natural end, mercy fired, user/system stop,
+    // max-duration cap, ForceCleanup, natural URL end) ends the obligation and resets. WPF's
+    // retry path calls CloseAll (NOT Cleanup), so its penalty tally survives the retry bridge;
+    // _retryPending is the Avalonia equivalent of that distinction.
+    private bool _retryPending;
     private DispatcherTimer? _attentionTimer;
     private bool _isDisposed;
     private bool _codecWarningShown;
@@ -204,6 +214,12 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             // (VideoService.cs:1498-1511); we stop the errored layer, then run the same end
             // pipeline (evaluation when orchestrated, unwedge + VideoEnded otherwise).
             _videoLayer.EncounteredError += (_, _) => { try { _videoLayer.Stop(); } catch { } OnCompositorVideoEnded(); };
+            // B2 residual (layer-path watch-position credit): feed the throttled layer relay
+            // into the live watermark + PrimaryPlaybackTimeMsChanged — the same contract the
+            // window path fulfills via VideoOverlayWindow's onPositionChanged (WPF mandatory
+            // AND URL players both wire TimeChanged, VideoService.cs:1004/:1383). The URL
+            // layer has no orchestration but still credits watch time and feeds Deeper.
+            _videoLayer.PlaybackTimeChanged += (_, ms) => OnCompositorVideoTimeChanged(ms);
         }
         if (_mandatoryVideoLayer != null)
         {
@@ -213,6 +229,8 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _mandatoryVideoLayer.LengthKnown += (_, lengthMs) => OnCompositorVideoLengthKnown(lengthMs);
             // B2 review F1: see the video-layer note above — same failed-open unwedge contract.
             _mandatoryVideoLayer.EncounteredError += (_, _) => { try { _mandatoryVideoLayer.Stop(); } catch { } OnCompositorVideoEnded(); };
+            // B2 residual: see the _videoLayer note above — identical watermark + seam feed.
+            _mandatoryVideoLayer.PlaybackTimeChanged += (_, ms) => OnCompositorVideoTimeChanged(ms);
         }
 
         if (_multiMonitor != null)
@@ -420,7 +438,14 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _cts?.Dispose();
         _cts = null;
 
-        Dispatcher.UIThread.Invoke(() => CleanupInternal(notifyEnded: false));
+        Dispatcher.UIThread.Invoke(() =>
+        {
+            // B2 parity: a user/app Stop ends the current obligation (WPF Stop→CloseAll is a
+            // final teardown; penalties is reset on the next Cleanup). Clear the retry bridge
+            // flag so CleanupInternal's penalty reset applies.
+            _retryPending = false;
+            CleanupInternal(notifyEnded: false);
+        });
 
         // WPF ForceCleanup parity (VideoService.cs:888): a hard stop resets the duck
         // refcount immediately instead of releasing a single reference.
@@ -490,6 +515,10 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         if (_isDisposed) return;
         Dispatcher.UIThread.Invoke(() =>
         {
+            // B2 parity (WPF ForceCleanup :895 resets _penalties): panic / session-lock /
+            // power-suspend end the obligation — clear the retry bridge flag so CleanupInternal
+            // resets the penalty tally.
+            _retryPending = false;
             CleanupInternal(notifyEnded: true);
             try { _interactionQueue.ForceReset(); } catch { /* best effort */ }
             // WPF ForceCleanup parity (VideoService.cs:888): reset the duck refcount.
@@ -852,6 +881,13 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _maxDurationTimer?.Stop();
         _maxDurationTimer = null;
         FinalizeWatchCredit();
+        // B2 parity: a natural URL-layer end is an obligation end — reset the penalty tally
+        // (mirrors the window/multi-monitor URL paths, which route through CleanupInternal).
+        // WPF's URL EndReached calls CloseAll only (VideoService.cs:1029-1032) and does NOT
+        // reset _penalties; resetting here is the deliberate parity FIX (the obligation-end
+        // contract), applied uniformly to both Avalonia paths.
+        if (!_retryPending)
+            _attentionPenalties = 0;
         if (_duckedForVideo)
         {
             _duckedForVideo = false;
@@ -906,6 +942,22 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _currentDurationSeconds = lengthMs > 0 ? lengthMs / 1000.0 : 0;
 
         BeginPlaybackOrchestration(settings);
+    }
+
+    /// <summary>
+    /// Live playback-time relay from a UCE video layer (B2 residual). Mirrors the window path's
+    /// <c>onPositionChanged</c> callback (CreateWindow): keep the furthest-reached position as
+    /// the watch-credit watermark (FinalizeWatchCredit credits <c>_lastWatchPositionMs</c>) and
+    /// fan out the Core seam <see cref="PrimaryPlaybackTimeMsChanged"/> for the Deeper
+    /// enhancement time rules (VideoServiceTimeSource). WPF mandatory AND URL players both wire
+    /// LibVLC <c>TimeChanged</c> this way (VideoService.cs:1004/:1383, #447). The layer
+    /// throttles to ~1/s; FinalizeWatchCredit reads CurrentTimeMs directly at teardown so the
+    /// throttle never under-credits. Runs on the UI thread (the layer marshals the relay).
+    /// </summary>
+    private void OnCompositorVideoTimeChanged(long ms)
+    {
+        if (ms > _lastWatchPositionMs) _lastWatchPositionMs = ms;
+        try { PrimaryPlaybackTimeMsChanged?.Invoke(ms); } catch { /* no-op if no subscribers */ }
     }
 
     /// <summary>
@@ -1531,6 +1583,12 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             }
             else
             {
+                // B2 parity: this ShowMessage teardown is a retry BRIDGE for the SAME obligation
+                // (WPF's fail path calls CloseAll, NOT Cleanup, so _penalties survives across
+                // retries — mercy-at-3 accumulates). _retryPending tells CleanupInternal to
+                // preserve _attentionPenalties through the bridge; it is cleared once the
+                // retry's PlayFile has run its preserving teardown.
+                _retryPending = true;
                 var message = troll
                     ? "GOOD GIRL!\nWATCH AGAIN 😜"
                     : (_mods?.GetAttentionCheckFailMessage() ?? "DUMB BAMBI!\nTRY AGAIN");
@@ -1540,7 +1598,12 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
                     _attentionSpawnTimes.Clear();
                     _interactionQueue.ExtendTimeout(TimeSpan.FromMinutes(5));
                     var retryVideo = GetNextVideo();
+                    // PlayFile's initial CleanupInternal runs while _retryPending is still true
+                    // → penalties preserved (the retry IS the same obligation continuing).
                     PlayFile(string.IsNullOrEmpty(retryVideo) ? _currentRetryPath! : retryVideo, _currentStrictMode);
+                    // Bridge done: subsequent teardowns belong to the retry video itself and
+                    // reset normally (natural end / next fail / stop / panic).
+                    _retryPending = false;
                 });
             }
             return;
@@ -1548,11 +1611,17 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
         // Watch credit is position-based and handled by FinalizeWatchCredit inside
         // CleanupInternal (WPF parity: crediting the full duration here over-counted
-        // dismissed/interrupted videos). Phase B2: the UCE layer path has no position source
-        // yet (no PositionChanged wiring), so a NATURAL end seeds the watermark with the full
-        // duration — the same seeding WPF's OnEnded does for its position-less MediaElement
-        // fallback (VideoService.cs:2196-2200). Interrupted layer playback (panic, Stop,
-        // max-duration cap) never reaches OnVideoEnded, so this cannot over-count.
+        // dismissed/interrupted videos). Phase B2 residual (now wired): the UCE layer path
+        // feeds _lastWatchPositionMs via the throttled PlaybackTimeChanged relay + the
+        // CurrentTimeMs live read in FinalizeWatchCredit, so interrupted layer playback
+        // (attention-fail retry, the 10% troll re-watch after a PASS, panic, Stop, max-duration
+        // cap) credits actual watched ms — the same live-watermark contract WPF's player
+        // TimeChanged gives (VideoService.cs:1380-1385). The natural-end seeding below is now
+        // a last-resort fallback for the rare case the relay never fired AND the live read at
+        // teardown returned -1 (e.g. a clip shorter than the ~1s throttle window that ended
+        // before FinalizeWatchCredit could read it); it is guarded by _lastWatchPositionMs <= 0,
+        // so with the watermark live it simply stops applying — the WPF MediaElement-fallback
+        // contract (VideoService.cs:2196-2200) preserved exactly.
         if (_layerOrchestrationActive && _lastWatchPositionMs <= 0 && _layerLengthMs > 0)
             _lastWatchPositionMs = _layerLengthMs;
         CleanupInternal(notifyEnded: true);
@@ -1675,6 +1744,15 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         }
 
         _currentStrictMode = false;
+        // B2 parity (WPF Cleanup :2620 / ForceCleanup :895 reset _penalties): end the
+        // attention-fail penalty tally when an obligation ends — EXCEPT an attention-fail retry
+        // bridge of the same obligation (_retryPending, set in OnVideoEnded's retry branch),
+        // which must keep its tally so mercy-at-3 accumulates across retries (WPF :2168-2170).
+        // Without this, 3 cumulative fails EVER in a session permanently force mercy and the
+        // pass-XP term (penalties+1)*50 inflates monotonically. ForceCleanup/Stop clear
+        // _retryPending before calling here, so they always reset.
+        if (!_retryPending)
+            _attentionPenalties = 0;
         _currentDurationSeconds = 0;
 
         // Phase B2: layer-path orchestration teardown symmetry — the flag gates the safety
@@ -1730,6 +1808,18 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             try { liveMs = _currentWindow?.MediaPlayer?.Time ?? -1; }
             catch { /* player may already be disposed */ }
             if (liveMs > _lastWatchPositionMs) _lastWatchPositionMs = liveMs;
+
+            // B2 residual: UCE layers relay TimeChanged at ~1 Hz (throttled); read the live
+            // position directly at teardown so the watermark is exact regardless of when the
+            // last relay landed (mirrors the window path's live MediaPlayer.Time read above).
+            // -1 (no player / post-Stop natural end) is a no-op. Only one layer is ever active.
+            try
+            {
+                var layerMs = _videoLayer?.CurrentTimeMs ?? -1;
+                if (layerMs < 0) layerMs = _mandatoryVideoLayer?.CurrentTimeMs ?? -1;
+                if (layerMs > _lastWatchPositionMs) _lastWatchPositionMs = layerMs;
+            }
+            catch { /* best effort */ }
 
             var multiMs = _multiMonitorImpl?.ConsumePlaybackTimeMs() ?? -1;
             if (multiMs > _lastWatchPositionMs) _lastWatchPositionMs = multiMs;

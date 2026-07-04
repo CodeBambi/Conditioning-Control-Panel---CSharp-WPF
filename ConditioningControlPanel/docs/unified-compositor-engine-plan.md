@@ -90,20 +90,44 @@ fallback before the replacement is proven (deleting now = no working video).
 Match what `AvaloniaMultiMonitorVideoService` + `VideoOverlayWindow` do today:
 - [x] **Audio:** volume (`LibVlcAudioHelper.GetEffectiveVolume`), output-device selection, mute — route `UpdateVolume()` to the layer, not just `_currentWindow` / `_multiMonitor`. **DONE (B1):** `ApplyAudioSettings` at playback start, `ApplyVolume` on live slider updates; gated by `--verify-video` stage 6.
 - [x] **Attention checks:** decouple `IsPlaying` / `SetupAttention` / `CheckSpawnTargets` / duration / safety timer / segment-arming from `VideoOverlayWindow` so they fire on the UCE layer (`OnVideoWindowStarted`'s body must run for the layer). **DONE 2026-07-04 (B2):** `VideoLayer` now raises `VideoStarted` from LibVLC `Playing` (not at the `Play()` call) plus a narrow `LengthKnown` event / `DurationMs` / `SeekTo(ms)`; the service's `OnCompositorVideoStarted` runs the shared `BeginPlaybackOrchestration` body (ExtendTimeout + safety timer + 2s attention arm — same method the window path calls), `OnCompositorVideoLengthKnown` upgrades the fallback timeout to the accurate duration (WPF `LengthChanged`→`StartSafetyTimer` contract), and the mandatory layer's natural end runs the full `OnVideoEnded` evaluation (pass/fail XP, penalties, retry loop, mercy) with `CleanupInternal` teardown symmetry. Double-run/stale-post guard: `_layerOrchestrationActive`, cleared in `CleanupInternal`. Non-gating `--verify-video` diagnostic prints "layer orchestration armed".
-- [~] **Dual-monitor + strict mode + segment (random-slice) mode** behave as WPF. **Segment: DONE (B2)** — armed state is captured+disarmed one-shot in the layer branch of `StartVideoPlayback` and the deferred 700ms seek runs from `OnCompositorVideoLengthKnown` via `VideoLayer.SeekTo` (mirrors `VideoOverlayWindow.OnLengthChanged`). **Strict mode: key-blocking is N/A on the UCE path by construction** — the compositor window is permanently click-through + no-activate and receives no keyboard input, so strict blocking (ESC/panic/Alt+F4 suppression) is inherently satisfied; the flip side is that **non-strict ESC-dismiss and the panic key have no receiver on the pure layer path** (no global key hook feeds it yet) — documented gap, `// Phase B2` note in `StartVideoPlayback`. `_currentStrictMode` is recorded for bookkeeping, but attention-fail retries do NOT currently inherit it (CleanupInternal resets it before the retry callback reads it — pre-existing window-path behavior too; WPF inherits `_strictActive` :2186; see B2 residuals). **Dual-monitor:** the engine composites the layer on every monitor by design; explicit side-by-side WPF verification still open. **Also still open:** layer-path `PositionChanged` wiring (`PrimaryPlaybackTimeMsChanged` / Deeper time rules / live watch-position credit — natural end currently credits full duration via the WPF MediaElement-fallback seeding rule).
+- [~] **Dual-monitor + strict mode + segment (random-slice) mode** behave as WPF. **Segment: DONE (B2)** — armed state is captured+disarmed one-shot in the layer branch of `StartVideoPlayback` and the deferred 700ms seek runs from `OnCompositorVideoLengthKnown` via `VideoLayer.SeekTo` (mirrors `VideoOverlayWindow.OnLengthChanged`). **Strict mode: key-blocking is N/A on the UCE path by construction** — the compositor window is permanently click-through + no-activate and receives no keyboard input, so strict blocking (ESC/panic/Alt+F4 suppression) is inherently satisfied; the flip side is that **non-strict ESC-dismiss and the panic key have no receiver on the pure layer path** (no global key hook feeds it yet) — documented gap, `// Phase B2` note in `StartVideoPlayback`. `_currentStrictMode` is recorded for bookkeeping, but attention-fail retries do NOT currently inherit it (CleanupInternal resets it before the retry callback reads it — pre-existing window-path behavior too; WPF inherits `_strictActive` :2186; see B2 residuals). **Dual-monitor:** the engine composites the layer on every monitor by design; explicit side-by-side WPF verification still open. **Also still open:** layer-path `PositionChanged` wiring (`PrimaryPlaybackTimeMsChanged` / Deeper time rules / live watch-position credit) — ✅ DONE 2026-07-04: `VideoLayer.PlaybackTimeChanged` (throttled ~1/s `TimeChanged` relay) feeds `_lastWatchPositionMs` + `PrimaryPlaybackTimeMsChanged`, and `FinalizeWatchCredit` live-reads `VideoLayer.CurrentTimeMs` at teardown; see B2 residuals for detail.
 - [x] `VideoAboutToStart` / `VideoStarted` / `VideoEnded` fire with correct timing. **DONE 2026-07-04 (B2):** `VideoAboutToStart` before the 1.3s pre-announce (unchanged); `VideoStarted` now anchors to actual LibVLC `Playing` (was: at the `Play()` call, i.e. before playback existed / even on failed opens); `VideoEnded` fires exactly once per natural end via `CleanupInternal(notifyEnded: true)` after the attention evaluation, and — window-path parity — not at all on an attention-fail retry teardown.
 
 **B2 residuals (adversarial review 2026-07-04 — verdict SAFE TO BANK, 0 blockers; fixed pre-bank:
 side-effects-before-guard, stale-post `VideoEnded` leak, failed-open wedge via layer
 `EncounteredError`→end-pipeline routing (WPF :1498-1511 parity), false strict-retry comment).
 Deferred with evidence:**
-- `_attentionPenalties` never resets (WPF resets in Cleanup :2620 / ForceCleanup :895) — after 3
-  cumulative fails EVER in a session, every later fail hits mercy and pass-XP inflates. Needs a
-  retry-vs-final-cleanup distinction before adding the reset (a naive CleanupInternal reset would
-  break mercy-at-3 across retries). Pre-existing on the window path too.
-- Layer-path `PositionChanged` wiring open: retry/troll-loop teardowns credit 0 watch-time (the
-  10% troll re-watch after a PASS loses the full watched duration); natural end credits full
-  duration (WPF position-less seeding :2196-2200). Under-credit only — never over-credits.
+- ✅ FIXED 2026-07-04 (commit below): `_attentionPenalties` now resets on obligation end
+  (WPF Cleanup :2620 / ForceCleanup :895) for BOTH Avalonia paths, but NOT between
+  attention-fail retries of the same obligation. Design: a private `_retryPending` flag is set
+  in `OnVideoEnded`'s retry branch (just before the fail-message `ShowMessage`) and cleared
+  once the retry callback's `PlayFile` has run its (penalty-preserving) initial
+  `CleanupInternal`. `CleanupInternal` resets `_attentionPenalties` iff `!_retryPending`; this
+  mirrors WPF's retry path calling `CloseAll` (no reset) vs final `Cleanup`/`ForceCleanup`
+  (reset). `Stop`/`ForceCleanup` clear `_retryPending` first so a user/system stop always
+  resets. The URL layer natural-end branch (`OnCompositorVideoEnded` non-orchestrated) resets
+  too — WPF's URL `EndReached` calls `CloseAll` only (:1029-1032) and does NOT reset; resetting
+  here is the deliberate obligation-end parity FIX, applied to both Avalonia URL paths. Per-path
+  table in the commit message. Verified: slnf 0 err, WPF sln 0 err, Core 205/205, verify-video
+  PASS exit 0, smoke Findings 5.
+- ✅ FIXED 2026-07-04 (commit below): layer-path watch-position credit wired. `VideoLayer`
+  raises a new throttled `PlaybackTimeChanged` event relaying LibVLC `TimeChanged` (marshaled
+  to the UI thread like Playing/LengthChanged). THROTTLE: ~1 relay/s max via
+  `_lastTimeRelayTickMs` (TimeChanged fires ~4x/s; the watermark needs no more), reset in
+  PlayVideo/Stop; a stale-session check (`ReferenceEquals(sender, _player)` inside the post)
+  drops queued posts from a dying/replaced player so they can't poison the next session's
+  watermark. The service subscribes BOTH layers (mandatory AND URL — WPF wires `TimeChanged` on
+  both its mandatory :1383 and URL :1004 players) into `OnCompositorVideoTimeChanged`, which
+  raises `_lastWatchPositionMs` (max) and fans out `PrimaryPlaybackTimeMsChanged` (the Core
+  seam the Deeper `VideoServiceTimeSource` consumes — wired exactly as the window path's
+  `onPositionChanged` does). A narrow `VideoLayer.CurrentTimeMs` live read in
+  `FinalizeWatchCredit` recovers the exact position at teardown regardless of the throttle lag
+  (natural end credits ~full duration: `VideoEnded` fires before `Stop()` in the layer's
+  EndReached post, so the synchronous OnVideoEnded→CleanupInternal→FinalizeWatchCredit chain
+  reads the still-alive player). Non-double-count preserved: watermark + `_creditedWatchSeconds`
+  are max/delta-based and zeroed in the finally; the natural-end full-duration seed
+  (`_lastWatchPositionMs <= 0`) is now a last-resort fallback that stops applying once the
+  watermark is live — the WPF MediaElement-fallback contract (:2196-2200) intact.
 - Strict-mode retries do not inherit strictness (CleanupInternal resets `_currentStrictMode`
   before the retry callback reads it; WPF inherits `_strictActive` :2186). Pre-existing window-path
   behavior; truthful NOTE at the recording site.
