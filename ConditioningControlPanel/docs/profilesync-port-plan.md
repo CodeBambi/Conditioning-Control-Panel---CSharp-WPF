@@ -7,8 +7,11 @@
 > SUBMIT) w/ **fresh-defaults cloud-wipe guard byte-identical to WPF** + 401 `restore-session` recovery
 > + 5t. S5 (`44ea16fa`) cloud backup/restore — **P0 `ExcludedBackupProperties` ported VERBATIM
 > (orchestrator grep-verified 18==18 set-equality), strip-before-upload confirmed, P0 test asserts the
-> actual decoded wire body carries no token** + 4t. **Core 193/193, still NOT in DI (byte-identical app
-> behavior).** Slices 6–7 remain (fresh-context). This is the sole remaining WS0 merge-`5ce70de6`
+> actual decoded wire body carries no token** + 4t. S6 (`766d8322`) server actions
+> (purchase/oopsie/change-name) — **independently reviewed; economy bug (Math.Max on the
+> post-purchase balance) caught + fixed pre-commit, pinned by a discriminating test** + 6t.
+> **Core 199/199, still NOT in DI (byte-identical app behavior).** ONLY SLICE 7 REMAINS — GDPR +
+> live wiring, expanded below into a turnkey checklist (playbook WP1). This is the sole remaining WS0 merge-`5ce70de6`
 > re-open (parity-matrix row 1). Execution is a **fresh-context task**: the surface is ~2,800 LOC
 > and **security-sensitive** (HMAC anti-cheat signing, GDPR delete/export, and the P0 privacy
 > `ExcludedBackupProperties` list — omitting it leaks the auth token to the server). It must be
@@ -331,16 +334,66 @@ the **actual captured+decoded upload body** contains none of the 18 excluded nam
 **The `ISettingsBackupProvider` stopgap replacement + `SaveImmediate` wiring is deferred to slice 7**
 (kept unwired).
 
-**Slice 6 — Server-authoritative actions.** `PurchaseSkillAsync` (+ wire into
-`ISkillTreeService.PurchaseSkillAsync`, which delegates to `App.ProfileSync` in WPF
-`SkillTreeService.cs:130`), `UseOopsieInsuranceAsync`, `ChangeDisplayNameAsync`. *Success:* purchase
-reconciles skill_points (max) + unlocked_skills (union) + `TrackSkillPointsSpent`/
-`ReconcileLifetimePointsSpent`; one-shot 401 retry works.
+**Slice 6 — Server-authoritative actions. ✅ DONE (`766d8322`, landed UNWIRED, independently
+reviewed SAFE-TO-BANK).** `PurchaseSkillAsync` (one-shot 401 retry w/ fresh request; failed-purchase
+branch does NOT overwrite local points), `UseOopsieInsuranceAsync` (NO service-side local mutation —
+WPF's local effect lives in the UI caller, ported in slice 7 step 8), `ChangeDisplayNameAsync`
+(consolidates the WPF caller-side write). **LESSON (pinned by test):** on purchase success the
+server's returned `skill_points` is the authoritative POST-PURCHASE **decremented** balance and is
+DIRECT-SET — it is the local deduction (`SkillTreeService` never deducts). A take-higher/Math.Max
+there makes skills free (economy bug — caught in review, fixed pre-commit). 6 tests, Core 199/199.
+The `ISkillTreeService` wiring moved to slice 7 step 7 (unwired rule).
 
-**Slice 7 — GDPR + misc + final wiring.** `DeleteAccountAsync`, `ExportDataAsync`,
-`RecordEasterEggReadAsync`; repoint remaining Avalonia head call sites to the seam; remove the
-stopgap; update the WPF-parity matrix row 1. *Success:* full-solution build + Windows smoke; parity
-matrix marks ProfileSync ported. *(Slices 6+7 may merge if diffs stay small.)*
+**Slice 7 — GDPR + LIVE WIRING (playbook WP1; the LAST WS0 item). TURNKEY CHECKLIST — execute
+top-to-bottom, verify after each step, STOP+note if a precondition fails:**
+1. **Preflight (read-only):** re-read §5 (sync triggers), §6 (seam split: auth stays in
+   `IV2AuthService`; ProfileSync owns progression sync/backup/purchase/GDPR-export; SINGLE heartbeat
+   owner), §7 (P0s). Grep `// ProfileSync slice` breadcrumbs in `CCP.Core` + `CCP.Avalonia` — they
+   mark every wiring point; resolve each as you go.
+2. **Implement the 3 remaining methods** on Core `ProfileSyncService` (override DIMs):
+   `ExportDataAsync` (WPF ~2600s, GDPR JSON export), `RecordEasterEggReadAsync` (WPF ~2200s),
+   and CHECK `DeleteAccountAsync` — `AvaloniaV2AuthService.DeleteAccountAsync` already exists (§6:
+   auth owns it); do NOT duplicate — ProfileSync only needs it if WPF routes extra profile-purge
+   steps through it (verify vs WPF, else leave the DIM + comment). Unit tests per slice pattern.
+3. **DI registration:** `CCP.Avalonia/ServiceCollectionExtensions.cs` — register
+   `IProfileSyncService` → `ProfileSyncService` as singleton next to the LeaderboardService
+   precedent (~:182-190). All ctor deps are already-registered seams (all-optional — it constructs
+   regardless).
+4. **Login/startup wiring:** where the app applies a successful login/restored session (follow
+   `AvaloniaV2AuthService` auth-state change), call `LoadProfileAsync()` then `StartHeartbeat()`;
+   on logout call `StopHeartbeat()`. **Single heartbeat owner:** disable/remove
+   `AvaloniaV2AuthService.SendHeartbeatAsync`'s own schedule and delegate to ProfileSync's (§6
+   decision) — grep for its timer/callers first.
+5. **Sync triggers (§5 inventory):** wire `SyncProfileAsync()` fire-and-forget on the WPF trigger
+   set — login (after LoadProfileAsync), app exit (bounded ~2s wait, WPF `App.xaml.cs:3071`
+   semantics; wire into the Avalonia shutdown path), and the progression-event triggers §5 lists
+   (level-up/quest-complete/etc.). The service's own `_syncGate`+30s cooldown make extra triggers
+   harmless.
+6. **Cloud backup live:** replace the local-file `AvaloniaSettingsBackupProvider` stopgap — the
+   `ISettingsBackupProvider` impl now calls `BackupSettingsAsync()` (5-min debounce is internal;
+   `force:true` only for explicit user action). Verify `SettingsService.SaveImmediate` path stays
+   green (existing tests). Wire `RestoreSettingsFromCloudAsync` to whatever UI the WPF head exposes
+   (check WPF settings tab restore button).
+7. **PurchaseSkill live:** `AvaloniaSkillTreeService.PurchaseSkillAsync` delegates to
+   `IProfileSyncService.PurchaseSkillAsync` (WPF `SkillTreeService.cs:130` pattern: guard
+   points>=cost first, apply effects after success).
+8. **Oopsie caller-side effect:** port WPF `MainWindow.QuestsTab.cs:570-596` into the Avalonia
+   quests VM: on success convert `new_xp`→current-level XP (`GetCurrentLevelXP`), set `PlayerXP`,
+   `SeasonalStreakRecoveryUsed = true`, append fixDate to `DailyQuestCompletionDates` + quests
+   Save; wire the button/command that calls `UseOopsieInsuranceAsync`.
+9. **Heartbeat `is_active`:** resolve the slice-2 `// slice 7` note — wire real idle detection if
+   a Core seam exists, else KEEP conservative `true` and update the comment to a decision (WPF
+   parity nuance recorded).
+10. **Gates + live verification:** full gate block (playbook rule 3) + manual run: log in, watch
+    logs for LoadProfile/heartbeat/sync (token NEVER in logs — grep the log output), exercise a
+    skill purchase + display-name change against the live server, verify settings backup fires.
+    Smoke must stay 44/17/5 baseline.
+11. **Close out:** remove resolved breadcrumbs; parity matrix row 1 → `ported` with evidence;
+    plan header → DONE; goal-doc WS0 DoD box `[~]`→`[x]` ONLY if every other WS0 item is truly
+    closed (it is — this is the last one); commit per one-task-per-commit.
+**P0s that MUST survive slice 7 (all test-pinned — do not weaken the tests):** auth token never
+logged/plaintext; `ExcludedBackupProperties` strip byte-identical; fresh-defaults cloud-wipe guard;
+purchase direct-set (no Math.Max). *Success:* checklist complete, gates green, parity row 1 ported.
 
 *V1 OAuth/`Bearer` fallback endpoints #2/#3/#5 are intentionally out of scope — see §10.3.*
 

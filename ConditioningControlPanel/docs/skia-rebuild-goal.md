@@ -66,49 +66,40 @@ The doctrine this goal adds:
 | `dashboard-design` | Any user-facing surface; 5-theme reskin is part of done |
 | `port-audit` | End of every workstream and after every merge from main |
 
-## Current state (verified 2026-07-02; re-verify with `port-audit` if this doc is old)
+## Current state (verified 2026-07-04 by full 10-hour audit; re-verify with `port-audit` if old)
 
-Exists (structurally): full project skeleton builds (`CCP.Desktop.slnf`, 0 errors when
-tree is clean); Core tests green; effect services (flash, subliminal, bouncing text,
-pink tint, spiral, brain drain, bubbles) render as compositor layers; Avalonia measured
-faster than WPF on startup (~2.5s vs ~4.2s) and memory (~422MB vs ~1218MB); CI-style
-Linux/macOS builds exist as a workflow file (not active on GitHub).
+Exists and TRUSTED (earned, not assumed): the **WS0 review sweep is COMPLETE** — all 11
+lots passed (contract + adversarial rubric + optimality), parity matrix rows 1–11
+`passed` with evidence per row. The 2026-07-02 "trust nothing" ruling is SATISFIED for
+everything a lot covered; new/changed code re-earns trust through the playbook gates.
+Effect services (flash, subliminal, bouncing text, pink tint, spiral, brain drain,
+bubbles) render as compositor layers; Avalonia measured faster than WPF on startup
+(~2.5s vs ~4.2s) and memory (~422MB vs ~1218MB).
 
-**Trust level: NONE. Owner's ruling (2026-07-02): the port was built largely by hand and
-no prior verification claim is trusted, including the 2026-06-23 parity-matrix sweep and
-every `[x]` in `avalonia-ui-parity-matrix.md`. Treat the ENTIRE port (CCP.Core,
-CCP.Avalonia, all heads) as unverified until it passes WS0.**
+**Gates snapshot 2026-07-04:** slnf 0 errors · WPF sln 0 errors · Core tests **199/199**
+· smoke **44 tabs / 17 first-chance exceptions / 5 findings = baseline** (the
+`StartSession` blocker is a known baseline finding). Audit trail: ProfileSync slices
+1–6 each independently reviewed or grep-proven (economy bug caught+fixed pre-commit in
+slice 6, `766d8322`); #462 pair re-reviewed SOUND + hardened (`fb704a6d`).
 
-Open (this goal's actual work):
-- The whole port needs review and re-verification (WS0). Known-shaky spots to hit early:
-  the calibration-overhaul port TRIAGE was resolved in WS0 lot 5 — the earlier BLOCKED STOP
-  (stack divergence) was disproven and the core data model + 13 algorithm hunks landed
-  (commit 837aaa1d, see docs/avalonia-calibration-overhaul-port.md); the `WebcamCalibrationData.cs`
-  "uncommitted WIP" was already committed. The REAL remaining gap is the 16-point calibration
-  WINDOW pipeline (sample collection + polynomial fit + persist), which was a fake-success
-  shell; lot 5 made it honest ("not available yet") and filed the ~1300-1500 LoC port as its
-  own row. Quick-recal and the tracker-test window are now real.
-- **Merge sync (main → feat/crossplatform, `5ce70de6`, 2026-07-03):** WPF shipped new
-  behavior the port must catch up to; full backlog in the task board under
-  "Sync-from-main: merge 5ce70de6". Two VERIFIED P0s re-open closed lots: (1) lot 2 — the
-  shared Core session ramp (`SessionService.cs:400,408`, `IntensityRampService.cs:122,128`)
-  writes ramped pink/spiral opacity into auto-saving `settings.Current` → data-loss on
-  crash (WPF #471/#476 direct-drive + `ReleaseOpacityRampHolds` fix unported); (2) lot 1 —
-  `ProfileSyncService` is entirely absent, so the prestige/season-reset policy is missing.
-  Remaining-lot scope now also includes: Ditzy Data PRO / Prestige skill-tree analytics
-  (lot 7), the #462 interaction-race fix cluster (lots 2/3), #463/#465/#455 companion +
-  account integration fixes (lot 8), `SubliminalSolidMode` #461 (lot 3), and animated `.webp`
-  (already ~70% covered by `SkiaImageDecoder`/SKCodec — extension-gate broadening only, NO
-  new dependency). Core-model deltas (skill nodes, schema-2 recap, prestige field) and the
-  new loc keys auto-flow to both heads; only the consuming services/UI need porting.
+Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
+- **WP1 — ProfileSync slice 7 (GDPR + live wiring): the ONLY remaining WS0 item.**
+  Slices 1–6 are DONE and UNWIRED (full sync round-trip, heartbeat, 401 recovery, cloud
+  backup with the P0 exclusion strip, purchase/oopsie/change-name; Core 199/199; every
+  merge-`5ce70de6` re-open except this one is re-closed). Turnkey checklist:
+  `docs/profilesync-port-plan.md` §8-slice-7.
 - UCE video layer does not render; legacy `AvaloniaMultiMonitorVideoService` is the only
-  working video path. Audio controls and attention checks bypass the UCE path.
-- Chaos overlays (~23 window classes) are not on the compositor.
+  working video path (and the contract holder until WS1 Phase E). Audio controls and
+  attention checks bypass the UCE path. → WP2.
+- Chaos overlays (~23 window classes) are not on the compositor. → WP3.
 - Avalonia mouse hook cannot swallow clicks (WPF can): bubble/flash pops leak the click
-  to the app underneath. Decide and fix, or explicitly accept and document.
+  to the app underneath. Decide and fix in WP3, or explicitly accept and document.
 - Linux: head builds and launches in a VM, but there is ZERO click-through code
-  (`SupportsClickThrough = IsWindows`), no input hooks, no verified feature sweep.
-- Doc drift: several trackers lag the code; fix as encountered.
+  (`SupportsClickThrough = IsWindows`), no input hooks, no verified feature sweep. → WP5.
+- Standing deferred rows from the WS0 sweep (each has a task-board/parity row): Ditzy
+  Data PRO analytics UI, Discord Rich Presence, companion AI + CompanionTab full port,
+  chaos run-engine faithful port (unblocks `EffectPayload.Ambient`), calibration
+  16-point window pipeline (~1300–1500 LoC), lots 7–11 DEFER rows.
 
 ## Workstreams, in order
 
@@ -169,9 +160,27 @@ Execute `unified-compositor-engine-plan.md` phases A-E, one unchecked task per
 iteration: prove `VideoLayer`/`MandatoryVideoLayer` render, wire audio
 (volume/device/mute), rehome attention checks, kill the per-frame `SKBitmap` alloc
 (Phase D), verify all layers over video, then flip the default and delete the legacy
-video windows (Phase E only after parity is proven by running). Freedom clause applies:
-if research shows a better decoder path than LibVLC callbacks (FFmpeg-based, GPU
-frames), it may replace LibVLC per-platform, behind the existing seams, with benchmarks.
+video windows (Phase E only after parity is proven by running).
+
+**Media-engine decision record (owner-authorized 2026-07-04):** the owner explicitly
+authorized a media-engine swap if it wins on merit. Judged sequencing (do NOT reorder):
+1. **WP2a — land UCE video on the CURRENT engine first** (LibVLCSharp 3.x vmem
+   callbacks → pooled `SKImage`). One variable at a time in a correctness-critical
+   subsystem; this proves the compositor architecture, keeps the Linux path, and
+   produces the baseline benchmark.
+2. **WP2b — engine-swap spike, benchmark-gated** (AFTER Phase E passes). Primary
+   candidate: **libmpv render API** (`HanumanInstitute.LibMpv.Avalonia` exists and is
+   maintained; render-API GL path is near-zero-copy; excellent low-end perf + frame
+   timing; cross-platform incl. Linux). Secondary: libvlc 4 D3D11 output callbacks —
+   REJECTED for now (LibVLCSharp 4 is still preview/nightly as of 2026-07; re-check
+   before the spike). Licensing (app is MIT): use mpv's **LGPL build** (`-Dgpl=false`)
+   — same posture as today's LibVLC (LGPL dynamic link); plain GPL libmpv would also be
+   workable for an MIT open-source app but LGPL-build is the clean choice.
+   Acceptance to adopt: ≥20% CPU reduction or measurably smoother frame pacing at 1080p
+   on the low-end target, zero behavior regressions (attention checks, multi-monitor,
+   loop, volume/device/mute, spikes, mini-player), behind the same `IVideoService`/
+   `VideoLayer` seams, one engine per commit, revert-not-patch on any Windows
+   regression. This spike is a JUDGMENT task: use the best available model.
 
 ### WS2: Game mode (Chaos) onto the compositor
 Migrate the passive Chaos overlays to layers (field FX, Skia FX, flash, cascades, DVD,
@@ -213,6 +222,83 @@ browser integration) if research shows a materially faster or more secure option
 research first, benchmark before/after, keep the seam, one replacement per commit,
 record rationale + pin versions in the task board. A replacement that regresses Windows
 is reverted, not patched around.
+
+## EXECUTION PLAYBOOK (ordered queue — written so ANY model can execute)
+
+Work strictly top-to-bottom unless the owner redirects. Each work package (WP) is
+tagged with the model tier it needs: **MECHANICAL** = any model can execute by following
+the steps literally (the gates catch mistakes); **JUDGMENT** = use the best available
+model (owner has confirmed capacity). If you are a less capable executor: follow steps
+literally, run every gate, and STOP with a `BLOCKED:` note in the task board instead of
+improvising whenever a precondition fails, a gate goes red, or a step is ambiguous.
+
+### Standing rules (every WP, every session)
+1. **Behavior contract**: WPF head behavior is the contract. Internals are free —
+   faster/lighter tech is encouraged — but user-visible behavior must survive or improve.
+2. **Performance doctrine (owner mandate)**: same behavior with higher frame rate,
+   smoother usage, fewer PC resources. Every WP leaves the app at least as fast; WS1/WS2
+   target MEASURABLE improvement. Run `--benchmark` before/after when touching render or
+   hot paths; a regression is reverted, not patched around. Tech choices are pre-decided
+   in each WP to remove judgment calls — deviating requires `avalonia-research` evidence
+   + benchmarks recorded in the commit.
+3. **Gates before EVERY commit** (copy-paste; ALL must pass):
+   ```bash
+   dotnet build ConditioningControlPanel/CCP.Desktop.slnf -clp:ErrorsOnly    # 0 errors
+   dotnet build ConditioningControlPanel.sln -clp:ErrorsOnly                 # 0 errors (WPF guardrail)
+   dotnet test ConditioningControlPanel/tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release   # ALL pass; count NEVER decreases (currently 199)
+   dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -c Debug -- --smoke-test   # 44 tabs / 17 first-chance / 5 findings = baseline (StartSession blocker IS baseline)
+   ```
+4. One task per commit (`--no-verify`); update the tracker row in the same session;
+   never leave a red tree; line-ending CRLF warnings are harmless.
+5. **Never touch**: WPF head behavior; `CCP.Avalonia/Compositor/*` internals unless the
+   WP says so; `tests/.../SmokeTestRunner.cs`; the Guardrails section below. New
+   interface members = C# default interface methods (DIMs) with safe no-op bodies so
+   fakes keep compiling; real impls override.
+6. If a needed seam/method does not exist: do NOT invent it inline — leave
+   `// TODO(WPnn): needs <X>` + file a task-board row, and report it.
+7. State-mutating or security-sensitive diffs get an independent fresh-context
+   adversarial review before commit (the pattern that caught the slice-6 economy bug
+   and the slice-3 drift). If you cannot dispatch reviewers, self-review against the
+   WPF source line-by-line and record the comparison in the commit message.
+
+### WP1 — ProfileSync slice 7: GDPR + LIVE WIRING — finishes WS0 [MECHANICAL, gates-guarded]
+Slices 1–6 are DONE and UNWIRED (service fully implemented + tested, invisible to the
+running app). Slice 7 turns it on. Follow `docs/profilesync-port-plan.md` §8-slice-7 —
+expanded into a literal step-by-step checklist (files, registration lines, call sites,
+per-step verification). P0s that MUST survive: auth token never logged;
+`ExcludedBackupProperties` strip stays byte-identical (test-pinned); fresh-defaults
+cloud-wipe guard stays; single heartbeat owner. Acceptance: all checklist boxes, gates
+green, smoke still baseline, WPF sln 0 errors, parity row 1 → `ported`.
+
+### WP2 — WS1 video through the compositor [JUDGMENT — best model]
+Detail tracker: `unified-compositor-engine-plan.md` phases A–E, one phase per session.
+Tech is pre-decided in the WS1 media-engine decision record above (WP2a current-engine
+first, WP2b libmpv spike after Phase E, benchmark-gated). Phase E deletes the legacy
+video windows ONLY after side-by-side parity vs WPF is proven by running.
+
+### WP3 — WS2 Chaos onto the compositor [JUDGMENT for the hook/input work; layer
+migrations MECHANICAL]
+Passive chaos overlays (~23 window classes) become `IAvaloniaLayer`s on the existing
+CompositorEngine — no new dependency needed (SkiaSharp already present). One overlay
+class per commit. Interactive surfaces keep their input model per `overlay-clickthrough`.
+Resolve the `AvaloniaMouseHook` click-swallow gap here (WPF semantics incl.
+hold-to-defuse no-swallow exception) or document acceptance. FPS gate: chaos run holds
+60fps target / 30fps floor on low-end hardware.
+
+### WP4 — WS3 Windows completion sweep [MECHANICAL]
+`port-audit` over the whole app; re-verify parity rows invalidated by WP2/WP3;
+benchmarks not worse than `docs/benchmark-optimized.json`; every remaining effect window
+converted, justified, or filed.
+
+### WP5 — WS4 Linux bring-up [JUDGMENT for click-through/input; sweep MECHANICAL]
+Per the WS4 section below. X11 click-through first (XShape/XFixes via
+`IOverlaySurface.SetClickThrough`), then the feature sweep per `docs/linux-vm-testing.md`.
+
+### Backlog (interleave after WP1–2 as owner directs; each has a tracker row)
+Ditzy Data PRO analytics UI (~832 LOC) · Discord Rich Presence · companion AI +
+CompanionTab full port · chaos run-engine faithful port (unblocks
+`EffectPayload.Ambient`) · calibration 16-point window pipeline (~1300–1500 LOC) ·
+lots 7–11 DEFER rows (see parity matrix / task board).
 
 ## Loop protocol (how an autonomous session runs this goal)
 
@@ -282,7 +368,7 @@ without re-reading the claimed task-board row and this goal's relevant workstrea
 ## Definition of Done
 
 - [~] WS0 complete: the ENTIRE port reviewed lot by lot (contract + adversarial rubric + optimality), corrections merged, the parity matrix re-earned from a full reset with evidence per row, calibration-port blockage resolved or formally re-scoped. Any lot RE-OPENED by a later merge from main (see the task-board "Sync-from-main" backlogs; merge `5ce70de6` re-opened lots 1/2/3/4/6) must be re-closed before WS0 is done.
-  - **STATUS 2026-07-04: all 11 review lots have PASSED first-pass** (parity matrix rows 1–11 all `passed`, evidence per row; calibration re-scoped in lot 5). This continuation closed lots 7–11 (progression, browser/integrations, tabs/dialogs, theming/mods, heads/DI/startup) + fixed the lot-2 ramp P0, with the merge `5ce70de6` backlog folded in. **REMAINING before this box can be checked (re-triaged + swept 2026-07-04):** the merge `5ce70de6` re-opens have now been driven down to a SINGLE genuine item. Re-closed this session: **row 4** #462 session-summary defer (`410bef87`); **row 2** #462 interaction-race cluster — ForceReset-before-teardown added to both stop paths + guards 2/3/4 confirmed parity (`4d65e564`); **row 3** animated-.webp gates DONE + `SubliminalSolidMode` #461 architecturally moot/always-on (`648d21ac`, mirrors `FlashSolidMode`); **row 6** `EffectPayload.Ambient` DORMANT — no live bug (`ArmRandomSegment` has zero call sites), folded into the chaos run-engine workstream. **THE SOLE REMAINING WS0 RE-OPEN is `ProfileSyncService` SERVER sync** (`row 1`, ~2800 LOC, server-contract/HMAC/leaderboard-SUBMIT bound; the local prestige/season-reset primitives already landed lot 7). An **evidence-based 7-slice PORT PLAN exists at `docs/profilesync-port-plan.md`** (full public surface, all 14 endpoints, HMAC anti-cheat scheme, xUnit strategy, HARD P0 privacy `ExcludedBackupProperties` verbatim-port requirement), and **slices 1–5 have now landed UNWIRED** (Core 193/193, byte-identical app behavior, NOT in DI — so no live stub); the **full sync round-trip + heartbeat + 401 recovery + cloud backup/restore is done + tested**: slice 1 (`c4b2583a`) seam + 18 DTOs + HMAC + 5t; slice 2 (`a3215fc9`) injectable-handler test ctor + heartbeat + 4t; slice 3 (`fafd22b0`) pull + full merge + 3 real `IQuestService` DIM methods + 5t, **independently adversarially reviewed SAFE-TO-BANK** (5 never-lower invariants byte-faithful; one drift fixed); slice 4 (`34fc5f16`) push (leaderboard SUBMIT) with **fresh-defaults cloud-wipe guard byte-identical to WPF** + 401 `restore-session` recovery (secure-setter token, never logged) + 5t; slice 5 (`44ea16fa`) cloud backup/restore — the MOST privacy-critical slice: **P0 `ExcludedBackupProperties` ported VERBATIM (orchestrator grep-verified 18==18 byte-for-byte set-equality vs WPF), strip-before-upload confirmed, and the P0 test asserts the actual base64-decoded+gunzipped upload body carries none of the excluded keys (no auth-token leak)** + 4t. Each slice was de-risked via delegated fresh-context agents (scout → implementer → adversarial reviewer) plus orchestrator grep-proof of the P0 exclusion set-equality. **Slices 6–7 remain (fresh-context): server-authoritative actions (purchase/oopsie/change-display-name), GDPR (delete/export + easter-egg), then final DI wiring + live smoke.** The plan (slices 1–5 checked off) makes that pass turnkey. **Standing deferred workstreams** (not merge re-opens; WS1+): Ditzy Data PRO analytics, Discord Rich Presence, companion AI, CompanionTab full port, chaos run-engine faithful port, calibration 16-point pipeline.
+  - **STATUS 2026-07-04 (post-audit): all 11 lots PASSED; every merge-`5ce70de6` re-open is RE-CLOSED except ONE — ProfileSync slice 7 (GDPR + live wiring), queued as playbook WP1.** Re-close trail: #462 session-summary (`410bef87`), #462 interaction-race (`4d65e564`, hardened `fb704a6d`), #461 resolved-by-documentation (`648d21ac`), EffectPayload.Ambient dormant (chaos backlog). ProfileSync slices 1–6 of 7 are DONE and UNWIRED (Core 199/199; full sync round-trip + heartbeat + 401 recovery + cloud backup w/ P0 exclusion strip + purchase/oopsie/change-name; each slice independently reviewed or grep-proven — the slice-3 merge got a fresh-context adversarial review, the slice-5 P0 exclusion list is grep-proven 18==18 vs WPF, the slice-6 economy bug was caught+fixed pre-commit). Full history + per-slice evidence: `docs/profilesync-port-plan.md`. Standing deferred workstreams (not re-opens; scheduled after WP1–2): Ditzy Data PRO analytics, Discord Rich Presence, companion AI + CompanionTab, chaos run-engine faithful port, calibration 16-point pipeline.
 - [ ] Video, audio controls, and attention checks run through the compositor on Windows; legacy video windows deleted (WS1 Phase E complete).
 - [ ] All passive Chaos visuals are compositor layers; a full Chaos run holds the FPS floor; hook swallow gap resolved or explicitly accepted in the task board.
 - [ ] No passive effect window remains in `CCP.Avalonia` (audited); interactive windows are justified.
