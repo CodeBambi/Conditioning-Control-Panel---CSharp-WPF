@@ -51,6 +51,12 @@ public static class CompositorLayers
     // SetWindowDisplayAffinity (grep-verified 2026-07-04) — so chaos layers stay on the
     // MAIN surface (ExcludeFromCapture = false).
 
+    /// <summary>Ambient field FX (Size Queen rings, snap-ripple casts, Aftermath residue,
+    /// rabbit sparkle trails, The Bound tethers) — the floor of the chaos band: WPF
+    /// RaiseGameLayerAboveVideo raises it FIRST ("bottom of the gameplay band: ambient FX
+    /// that read fine UNDER the bubbles").</summary>
+    public const int ChaosFieldFx = 100;
+
     /// <summary>Bouncing DVD-screensaver logos (Porn DVD toy / Intrusive Thoughts): field
     /// objects above the field-FX floor — WPF RaiseGameLayerAboveVideo raises the DVD logos
     /// after the ambient field FX, below the attention assets (gif cascade / flash wash).</summary>

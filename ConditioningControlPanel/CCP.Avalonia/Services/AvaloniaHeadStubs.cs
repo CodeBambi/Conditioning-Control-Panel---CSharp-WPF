@@ -68,6 +68,10 @@ public sealed class AvaloniaChaosService : IChaosService
     private readonly ChaosDvdLayer _dvdLayer;
     // WS2/WP3 Phase F #7: the falling gif cascade is a compositor layer (decode-once).
     private readonly ChaosGifCascadeLayer _gifCascadeLayer;
+    // WS2/WP3 Phase F #8: the ambient field FX (rings/residue/trails/tethers) are a
+    // compositor layer. NO production caller exists yet (the WPF call sites live in
+    // unported BubbleService paths); the seams below are live for that port + the harness.
+    private readonly ChaosFieldFxLayer _fieldFxLayer;
     /// <summary>Orphans a superseded in-flight wash decode (WPF ChaosFlashOverlay._displayGen).</summary>
     private int _washGen;
     private readonly object _announceSync = new();
@@ -184,6 +188,8 @@ public sealed class AvaloniaChaosService : IChaosService
         compositor?.RegisterLayer(_dvdLayer);
         _gifCascadeLayer = new ChaosGifCascadeLayer();
         compositor?.RegisterLayer(_gifCascadeLayer);
+        _fieldFxLayer = new ChaosFieldFxLayer();
+        compositor?.RegisterLayer(_fieldFxLayer);
         _screenProvider = screenProvider;
         AvaloniaChaosCatalogs.EnsureInitialized();
     }
@@ -276,9 +282,9 @@ public sealed class AvaloniaChaosService : IChaosService
                     _tunnel?.Preload(); // warm the WebView2/three.js init under the countdown
                     _overlay.ShowCountdown(BeginRun);
 
-                    // Effect banner is a compositor layer now: registration is app-lifetime,
-                    // so the WPF-hang-motivated EnsureCreated pre-warm has no equivalent.
-                    ChaosFieldFxOverlay.EnsureCreated();
+                    // Effect banner and field FX are compositor layers now: registration is
+                    // app-lifetime, so the WPF-hang-motivated EnsureCreated pre-warms have no
+                    // equivalent (the WPF ChaosFieldFxOverlay.EnsureCreated call dies here too).
                 }
                 catch (Exception ex)
                 {
@@ -961,6 +967,8 @@ public sealed class AvaloniaChaosService : IChaosService
         // WPF parity (ChaosModeService.cs:3098/3147): the gif cascade dies with the run too
         // (the legacy head also skipped this CloseActive — same drift class).
         ClearChaosGifCascade();
+        // WPF parity (ChaosModeService.cs:3108/3157/3243): field FX die with the run.
+        ClearChaosFieldFx();
         _state = null;
         _vibeRemainingSec = 0;
         _freezeRemainingSec = 0;
@@ -994,9 +1002,8 @@ public sealed class AvaloniaChaosService : IChaosService
         if (!_spawning) return;
         RunOnUi(() =>
         {
-            try { ChaosFieldFxOverlay.RaiseActive(); } catch { }
-            // Pop text, effect banner and announcer are compositor layers: z comes from
-            // CompositorLayers (UCE rule 9), so no RaiseActive churn is needed for them.
+            // Field FX, pop text, effect banner and announcer are compositor layers: z comes
+            // from CompositorLayers (UCE rule 9), so no RaiseActive churn is needed for them.
             try { _hud?.RaiseToTopmost(); } catch { }
         });
     }
@@ -1504,6 +1511,39 @@ public sealed class AvaloniaChaosService : IChaosService
 
     /// <summary>Instant cascade teardown (run end — WPF ChaosGifCascadeOverlay.CloseActive).</summary>
     public void ClearChaosGifCascade() => _gifCascadeLayer.Clear();
+
+    // ---- Field FX seams (WS2: chaos on the compositor; WPF ChaosFieldFxOverlay statics).
+    // All coordinates/radii in PHYSICAL virtual-desktop px (the layer's native space — the
+    // WPF seams were px too; its window converted px→DIP internally). Public because the
+    // --verify-layers harness drives the layer through its OWNING service; production
+    // callers arrive with the bubble-engine FX port (WPF BubbleService shockwaves / field
+    // hazards / rabbit trails / The Bound — none of those paths exist in this head yet).
+
+    /// <summary>Size Queen: one expanding pop-ring (WPF ChaosFieldFxOverlay.Ripple).</summary>
+    public void ChaosFieldRipple(double cxPx, double cyPx, double radiusPx, double lifeMs)
+    { _compositor?.Start(); _fieldFxLayer.Ripple(cxPx, cyPx, radiusPx, lifeMs); }
+
+    /// <summary>The Ripple cast: linear kill-front + echo + shards (WPF SnapRipple).</summary>
+    public void ChaosFieldSnapRipple(double cxPx, double cyPx, double radiusPx, double lifeMs)
+    { _compositor?.Start(); _fieldFxLayer.SnapRipple(cxPx, cyPx, radiusPx, lifeMs); }
+
+    /// <summary>Aftermath: one crackling residue zone (WPF Residue).</summary>
+    public void ChaosFieldResidue(double cxPx, double cyPx, double radiusPx, double lifeMs)
+    { _compositor?.Start(); _fieldFxLayer.Residue(cxPx, cyPx, radiusPx, lifeMs); }
+
+    /// <summary>Rabbit sparkle trail dot; warm = the amber GG-sweeper variant (WPF TrailDot).</summary>
+    public void ChaosFieldTrailDot(double cxPx, double cyPx, double lifeSec, bool warm = false)
+    { _compositor?.Start(); _fieldFxLayer.TrailDot(cxPx, cyPx, lifeSec, warm); }
+
+    /// <summary>The Bound: create/update a pair's elastic thread (WPF SetTether).</summary>
+    public void ChaosFieldSetTether(int key, double axPx, double ayPx, double bxPx, double byPx)
+    { _compositor?.Start(); _fieldFxLayer.SetTether(key, axPx, ayPx, bxPx, byPx); }
+
+    /// <summary>The Bound: drop a pair's thread (WPF ClearTether).</summary>
+    public void ChaosFieldClearTether(int key) => _fieldFxLayer.ClearTether(key);
+
+    /// <summary>Instant field-FX teardown (run end — WPF ChaosFieldFxOverlay.CloseActive).</summary>
+    public void ClearChaosFieldFx() => _fieldFxLayer.Clear();
 
     /// <summary>Show (or keep) the effect-banner strip entry for an effect (WS2: chaos on
     /// the compositor; WPF ChaosEffectBannerOverlay.Show contract). Applies the

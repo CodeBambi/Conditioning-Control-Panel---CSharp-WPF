@@ -177,6 +177,7 @@ internal static class LayerVerification
             var flashWashLayer = ExpectLayer<ChaosFlashWashLayer>(engine, CompositorLayers.ChaosFlashWash, "ChaosFlashWashLayer", rows);
             var dvdLayer = ExpectLayer<ChaosDvdLayer>(engine, CompositorLayers.ChaosDvd, "ChaosDvdLayer", rows);
             var gifCascadeLayer = ExpectLayer<ChaosGifCascadeLayer>(engine, CompositorLayers.ChaosGifCascade, "ChaosGifCascadeLayer", rows);
+            var fieldFxLayer = ExpectLayer<ChaosFieldFxLayer>(engine, CompositorLayers.ChaosFieldFx, "ChaosFieldFxLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -196,12 +197,12 @@ internal static class LayerVerification
             if (flashLayer == null || subliminalLayer == null || bubbleLayer == null || bouncingLayer == null
                 || brainDrainLayer == null || spiralLayer == null || pinkTintLayer == null || cursorGlowLayer == null
                 || popTextLayer == null || effectBannerLayer == null || announcerLayer == null || flashWashLayer == null
-                || dvdLayer == null || gifCascadeLayer == null)
+                || dvdLayer == null || gifCascadeLayer == null || fieldFxLayer == null)
             {
                 Console.WriteLine("[LAYERS] Registration sweep failed; skipping activation stages.");
                 return;
             }
-            Console.WriteLine("[LAYERS] All 14 migrated layers registered at their exact z-constants.");
+            Console.WriteLine("[LAYERS] All 15 migrated layers registered at their exact z-constants.");
 
             // ---------------- Stage 1: FlashLayer (Z=30) via IFlashService ----------------
             {
@@ -568,6 +569,40 @@ internal static class LayerVerification
                 await SettleIdle(engine);
             }
 
+            // ---------------- Stage 4i: ChaosFieldFxLayer (Z=100) via AvaloniaChaosService ----------------
+            // Phase F #8. HONESTY: this layer has NO production caller in the Avalonia head
+            // (the WPF call sites live in unported BubbleService paths; the old window's only
+            // "callers" were EnsureCreated/RaiseActive churn — the queue's old "live" tag was
+            // a false positive). The service seams ARE the future production surface, so the
+            // stage drives them directly: a Size Queen ripple + an Aftermath residue + one
+            // Bound tether at the primary center, then ClearChaosFieldFx (the WPF run-end
+            // CloseActive path). Ungated (the WPF statics have no settings gate).
+            {
+                Console.WriteLine("[LAYERS] Stage 4i: ChaosFieldFxLayer via AvaloniaChaosService.ChaosFieldRipple/Residue/SetTether...");
+                var row = rows.First(r => r.Layer == "ChaosFieldFxLayer");
+                var cx = primary.Bounds.X + primary.Bounds.Width / 2.0;
+                var cy = primary.Bounds.Y + primary.Bounds.Height / 2.0;
+                var before = Capture(screens, primary);
+                chaos.ChaosFieldRipple(cx, cy, radiusPx: 180, lifeMs: 1200);
+                chaos.ChaosFieldResidue(cx, cy, radiusPx: 140, lifeMs: 2500);
+                chaos.ChaosFieldSetTether(1, cx - 200, cy, cx + 200, cy);
+                var activated = await PollAsync(() => fieldFxLayer.IsActive, 2000, stepMs: 50);
+                row.Activated = activated ? "yes" : "TIMEOUT";
+                if (activated)
+                {
+                    await Task.Delay(500); // ring mid-growth + residue crackling + tether visible
+                    var during = Capture(screens, primary);
+                    row.Delta = during.Center != before.Center ? "DIFFER (center-crop)" : "SAME (FAIL)";
+                }
+                chaos.ChaosFieldClearTether(1);
+                chaos.ClearChaosFieldFx();
+                var deactivated = await PollAsync(() => !fieldFxLayer.IsActive, 3000);
+                row.Teardown = deactivated ? "clean (ClearChaosFieldFx)" : "TIMEOUT";
+                FinishRow(row, activated, deactivated, envStable);
+                row.Note = AppendNote(row.Note, "seam-only: no production caller in this head yet (bubble-engine FX port pending); the old queue row's live tag was a false positive");
+                await SettleIdle(engine);
+            }
+
             // ---------------- Stage 5: BrainDrainLayer (Z=55) — P0 capture-EXCLUDED, ALONE ----------------
             // Runs BEFORE the pink/spiral stages: releasing those re-applies the user's
             // persistent PinkFilterEnabled/SpiralEnabled overlays (WPF-parity settings-held
@@ -765,6 +800,7 @@ internal static class LayerVerification
             try { chaos?.ClearChaosFlashWash(); } catch { }
             try { chaos?.ClearChaosDvdLogos(); } catch { }
             try { chaos?.ClearChaosGifCascade(); } catch { }
+            try { chaos?.ClearChaosFieldFx(); } catch { }
             try
             {
                 overlay?.HideOverlaySustained("pink");
