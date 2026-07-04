@@ -552,47 +552,64 @@ public sealed class WindowsSystemAudioDucker : ISystemAudioDucker, IDisposable
     /// </summary>
     private void RecoverFromCrash()
     {
+        // Poison-pill discipline: read the recovery file, then DELETE IT IMMEDIATELY,
+        // BEFORE the risky WASAPI restore below. NAudio's CoreAudio session interop
+        // (CollectRenderSessions, GetProcessID, SimpleAudioVolume) can raise an
+        // AccessViolationException from the native layer when a device/session is torn
+        // down concurrently. An AVE is a corrupted-state exception that .NET 5+ does NOT
+        // deliver to managed catch blocks (the try/catch here and in CollectRenderSessions
+        // cannot stop it) - it terminates the process. Under the OLD order (delete only
+        // after a successful restore) such a fault left the file in place, so every
+        // subsequent launch re-entered this path from the constructor and crashed again:
+        // a self-perpetuating boot loop. Deleting first guarantees at most one bad launch
+        // and lets the app self-heal on the next start.
+        string json;
         try
         {
             if (!File.Exists(_recoveryFilePath)) return;
+            json = File.ReadAllText(_recoveryFilePath);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning("Failed to read ducking recovery file: {Error}", ex.Message);
+            try { File.Delete(_recoveryFilePath); } catch { }
+            return;
+        }
 
-            _logger?.LogInformation("Detected ducking recovery file - restoring audio from previous crash");
+        // Consume the poison pill up front - a fault in the restore below can no longer repeat.
+        try { File.Delete(_recoveryFilePath); } catch { /* best effort; retried on next unduck */ }
 
-            var json = File.ReadAllText(_recoveryFilePath);
+        _logger?.LogInformation("Detected ducking recovery file - restoring audio from previous crash");
+
+        try
+        {
             var savedVolumes = JsonConvert.DeserializeObject<Dictionary<int, float>>(json);
+            if (savedVolumes == null || savedVolumes.Count == 0 || _enumerator == null) return;
 
-            if (savedVolumes != null && savedVolumes.Count > 0 && _enumerator != null)
+            var sessions = CollectRenderSessions();
+
+            int restoredCount = 0;
+            for (int i = 0; i < sessions.Count; i++)
             {
-                var sessions = CollectRenderSessions();
-
-                int restoredCount = 0;
-                for (int i = 0; i < sessions.Count; i++)
+                try
                 {
-                    try
+                    var session = sessions[i];
+                    var processId = (int)session.GetProcessID;
+
+                    if (savedVolumes.TryGetValue(processId, out var originalVolume))
                     {
-                        var session = sessions[i];
-                        var processId = (int)session.GetProcessID;
-
-                        if (savedVolumes.TryGetValue(processId, out var originalVolume))
-                        {
-                            session.SimpleAudioVolume.Volume = originalVolume;
-                            restoredCount++;
-                        }
+                        session.SimpleAudioVolume.Volume = originalVolume;
+                        restoredCount++;
                     }
-                    catch { /* Session may have ended */ }
                 }
-
-                _logger?.LogInformation("Restored {Count} audio sessions from crash recovery", restoredCount);
+                catch { /* Session may have ended */ }
             }
 
-            // Delete the recovery file after restore.
-            File.Delete(_recoveryFilePath);
+            _logger?.LogInformation("Restored {Count} audio sessions from crash recovery", restoredCount);
         }
         catch (Exception ex)
         {
             _logger?.LogWarning("Failed to recover ducking state: {Error}", ex.Message);
-            // Try to delete the file anyway to avoid repeated failures.
-            try { File.Delete(_recoveryFilePath); } catch { }
         }
     }
 
