@@ -107,11 +107,16 @@ Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
   proven by running), then the authorized libmpv spike. → WP2.
 - **WP3 OPENED 2026-07-04 (`0624d639`)**: chaos z-band `100–199` established in `CompositorLayers`
   (WPF `ChaosWindowZ` raise-above-everything evidence; chaos = capture-VISIBLE, main surface);
-  `ChaosCursorGlowOverlay` → `ChaosCursorGlowLayer` migrated as the template (+ fixed a real
-  parity bug: legacy halo pulsed 2× too fast vs WPF); ranked migration queue + 8-step recipe in
-  the UCE plan's **Phase F** — 7 more live passive overlays are now MECHANICAL any-model work,
-  6 unwired ones blocked on the chaos run-engine backlog row, interactive surfaces (HUD, toy
-  button, boon stage, bubbles, unlock card) stay windows pending the hook decision. → WP3.
+  **ALL 8 live passive chaos overlays are now compositor layers** (cursor glow `0624d639`,
+  pop-text `a8bf6f10`, banner `798b6e64`, announcer `3df5cda7`, flash wash `0e64e4e5`, DVD
+  `35418baa`, gif cascade `4c6c5992`, field FX `9fc0b420`; `--verify-layers` 15/15; ~15 legacy
+  parity bugs found+fixed en route — per-leg animation durations, DPI px/DIP seams, streamed
+  per-frame GIF decodes → decode-once with WPF memory caps, missing run-end teardowns; queue
+  rows carry evidence + honest false-positive corrections). Remaining WS2: 6 unwired passives +
+  production callers arrive with the **chaos run-engine faithful port** (backlog row — next big
+  JUDGMENT item); interactive surfaces (HUD, toy button, boon stage, bubbles, unlock card) stay
+  windows pending the hook decision; FPS-floor gate over a full chaos run once the run engine
+  drives the layers. → WP3.
 - Avalonia mouse hook cannot swallow clicks (WPF can): bubble/flash pops leak the click
   to the app underneath. Decide and fix in WP3, or explicitly accept and document.
 - Linux: head builds and launches in a VM, but there is ZERO click-through code
