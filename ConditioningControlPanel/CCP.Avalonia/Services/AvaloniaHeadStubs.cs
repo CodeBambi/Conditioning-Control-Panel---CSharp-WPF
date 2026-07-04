@@ -66,6 +66,8 @@ public sealed class AvaloniaChaosService : IChaosService
     // WS2/WP3 Phase F #6: the bouncing DVD logos are compositor render items; their side
     // effects (bubble pops, darter queries, sfx) stay HERE via the layer's delegates.
     private readonly ChaosDvdLayer _dvdLayer;
+    // WS2/WP3 Phase F #7: the falling gif cascade is a compositor layer (decode-once).
+    private readonly ChaosGifCascadeLayer _gifCascadeLayer;
     /// <summary>Orphans a superseded in-flight wash decode (WPF ChaosFlashOverlay._displayGen).</summary>
     private int _washGen;
     private readonly object _announceSync = new();
@@ -180,6 +182,8 @@ public sealed class AvaloniaChaosService : IChaosService
             PlaySfx = (name, vol) => { try { AvaloniaChaosSfx.Play(name, vol); } catch { } },
         };
         compositor?.RegisterLayer(_dvdLayer);
+        _gifCascadeLayer = new ChaosGifCascadeLayer();
+        compositor?.RegisterLayer(_gifCascadeLayer);
         _screenProvider = screenProvider;
         AvaloniaChaosCatalogs.EnsureInitialized();
     }
@@ -954,6 +958,9 @@ public sealed class AvaloniaChaosService : IChaosService
         // WPF parity (ChaosModeService.cs:3101/3150/3236): every DVD logo dies with the run.
         // The legacy Avalonia head never called the DVD CloseActive either — same drift class.
         ClearChaosDvdLogos();
+        // WPF parity (ChaosModeService.cs:3098/3147): the gif cascade dies with the run too
+        // (the legacy head also skipped this CloseActive — same drift class).
+        ClearChaosGifCascade();
         _state = null;
         _vibeRemainingSec = 0;
         _freezeRemainingSec = 0;
@@ -1384,19 +1391,7 @@ public sealed class AvaloniaChaosService : IChaosService
             if (files.Count == 0) return;   // silent no-op (WPF PickImage)
             var path = files[Random.Shared.Next(files.Count)];
 
-            // Stage = the same screen set the engine composites (primary unless dual).
-            var dual = _settings.Current?.DualMonitorEnabled != false;
-            var screens = _screenProvider?.GetEffectScreens(dual);
-            if (screens == null || screens.Count == 0) return;
-            double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
-            foreach (var s in screens)
-            {
-                x0 = Math.Min(x0, s.Bounds.X);
-                y0 = Math.Min(y0, s.Bounds.Y);
-                x1 = Math.Max(x1, s.Bounds.Right);
-                y1 = Math.Max(y1, s.Bounds.Bottom);
-            }
-            var stage = new ConditioningControlPanel.Core.Platform.PixelRect(x0, y0, x1 - x0, y1 - y0);
+            var stage = ComputeEffectStagePx();
             if (stage.IsEmpty) return;
 
             _compositor?.Start();   // wake same-tick so the 500ms fade-in loses no frames
@@ -1421,6 +1416,24 @@ public sealed class AvaloniaChaosService : IChaosService
             });
         }
         catch (Exception ex) { _logger?.LogDebug("ChaosFlashWash.Show: {E}", ex.Message); }
+    }
+
+    /// <summary>The chaos stage in PHYSICAL px: the union of the same screen set the engine
+    /// composites (primary unless dual — the WPF dual-aware ChaosWindowZ.StageBounds).</summary>
+    private ConditioningControlPanel.Core.Platform.PixelRect ComputeEffectStagePx()
+    {
+        var dual = _settings.Current?.DualMonitorEnabled != false;
+        var screens = _screenProvider?.GetEffectScreens(dual);
+        if (screens == null || screens.Count == 0) return ConditioningControlPanel.Core.Platform.PixelRect.Empty;
+        double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
+        foreach (var s in screens)
+        {
+            x0 = Math.Min(x0, s.Bounds.X);
+            y0 = Math.Min(y0, s.Bounds.Y);
+            x1 = Math.Max(x1, s.Bounds.Right);
+            y1 = Math.Max(y1, s.Bounds.Bottom);
+        }
+        return new ConditioningControlPanel.Core.Platform.PixelRect(x0, y0, x1 - x0, y1 - y0);
     }
 
     /// <summary>Instant wash teardown (run end — WPF ChaosFlashOverlay.CloseActive).</summary>
@@ -1459,6 +1472,38 @@ public sealed class AvaloniaChaosService : IChaosService
 
     /// <summary>Instant DVD teardown (run end — WPF ChaosDvdOverlay.CloseActive).</summary>
     public void ClearChaosDvdLogos() => _dvdLayer.Clear();
+
+    /// <summary>Start (or restart) a falling gif cascade (WS2: chaos on the compositor; WPF
+    /// ChaosGifCascadeOverlay.Show contract — all knobs come from the payload's consts; a
+    /// re-Show replaces the in-flight clips; empty pool = silent no-op; NO settings gate).
+    /// The service owns policy: pool pick, dual-aware stage union (the legacy window forced
+    /// primary — a drift vs WPF StageBounds) and the primary DPI scale; the layer owns
+    /// spawn cadence, decode-once and fall physics. Public because the --verify-layers
+    /// harness drives the layer through its OWNING service — the same call the gif-cascade
+    /// effect payload makes.</summary>
+    public void ShowChaosGifCascade(double spawnRatePerSec, double durationSec, double gifSize,
+        double fallSpeed, double opacity, double startScale = 1.0)
+    {
+        try
+        {
+            var files = ChaosImagePool.GetFiles(AvaloniaChaosEnv.EffectiveAssetsPath ?? "");
+            if (files.Count == 0) return;   // silent no-op (WPF PickFiles)
+            var stage = ComputeEffectStagePx();
+            var primary = _screenProvider?.GetPrimaryScreen();
+            if (stage.IsEmpty || primary == null) return;
+            _compositor?.Start();   // wake same-tick so the first clip loses no frames
+            _gifCascadeLayer.Restart(files, spawnRatePerSec, durationSec, gifSize, fallSpeed,
+                opacity, startScale, stage, primary.Scaling);
+        }
+        catch (Exception ex) { _logger?.LogDebug("ChaosGifCascade.Show: {E}", ex.Message); }
+    }
+
+    /// <summary>True while a cascade is in flight (WPF IsRaining — the WPF chaos heavy gate
+    /// and VideoService read it; no Avalonia consumer exists yet, exposed for that port).</summary>
+    public bool IsGifCascadeRaining => _gifCascadeLayer.IsActive;
+
+    /// <summary>Instant cascade teardown (run end — WPF ChaosGifCascadeOverlay.CloseActive).</summary>
+    public void ClearChaosGifCascade() => _gifCascadeLayer.Clear();
 
     /// <summary>Show (or keep) the effect-banner strip entry for an effect (WS2: chaos on
     /// the compositor; WPF ChaosEffectBannerOverlay.Show contract). Applies the

@@ -238,13 +238,16 @@ public sealed class GifCascadePayload : EffectPayload
     {
         try
         {
-            ChaosGifCascadeOverlay.Show(
-                spawnRatePerSec: SPAWN_RATE_PER_SEC,
-                durationSec: DURATION_SEC * GlobalDurationMult,
-                gifSize: GIF_SIZE,
-                fallSpeed: FALL_SPEED,
-                opacity: OPACITY,
-                startScale: START_SCALE);
+            // The cascade is a compositor layer driven through the owning chaos service
+            // (WS2/WP3 Phase F #7); knobs unchanged (WPF GifCascadePayload consts).
+            (AvaloniaChaosApp.Chaos as ConditioningControlPanel.Avalonia.Services.AvaloniaChaosService)
+                ?.ShowChaosGifCascade(
+                    spawnRatePerSec: SPAWN_RATE_PER_SEC,
+                    durationSec: DURATION_SEC * GlobalDurationMult,
+                    gifSize: GIF_SIZE,
+                    fallSpeed: FALL_SPEED,
+                    opacity: OPACITY,
+                    startScale: START_SCALE);
         }
         catch (Exception ex)
         {

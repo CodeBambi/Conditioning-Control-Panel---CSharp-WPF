@@ -176,6 +176,7 @@ internal static class LayerVerification
             var announcerLayer = ExpectLayer<ChaosAnnouncerLayer>(engine, CompositorLayers.ChaosAnnouncer, "ChaosAnnouncerLayer", rows);
             var flashWashLayer = ExpectLayer<ChaosFlashWashLayer>(engine, CompositorLayers.ChaosFlashWash, "ChaosFlashWashLayer", rows);
             var dvdLayer = ExpectLayer<ChaosDvdLayer>(engine, CompositorLayers.ChaosDvd, "ChaosDvdLayer", rows);
+            var gifCascadeLayer = ExpectLayer<ChaosGifCascadeLayer>(engine, CompositorLayers.ChaosGifCascade, "ChaosGifCascadeLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -195,12 +196,12 @@ internal static class LayerVerification
             if (flashLayer == null || subliminalLayer == null || bubbleLayer == null || bouncingLayer == null
                 || brainDrainLayer == null || spiralLayer == null || pinkTintLayer == null || cursorGlowLayer == null
                 || popTextLayer == null || effectBannerLayer == null || announcerLayer == null || flashWashLayer == null
-                || dvdLayer == null)
+                || dvdLayer == null || gifCascadeLayer == null)
             {
                 Console.WriteLine("[LAYERS] Registration sweep failed; skipping activation stages.");
                 return;
             }
-            Console.WriteLine("[LAYERS] All 13 migrated layers registered at their exact z-constants.");
+            Console.WriteLine("[LAYERS] All 14 migrated layers registered at their exact z-constants.");
 
             // ---------------- Stage 1: FlashLayer (Z=30) via IFlashService ----------------
             {
@@ -525,6 +526,48 @@ internal static class LayerVerification
                 await SettleIdle(engine);
             }
 
+            // ---------------- Stage 4h: ChaosGifCascadeLayer (Z=110) via AvaloniaChaosService ----------------
+            // Phase F #7. Driven through the owning service's cascade seam — the same call the
+            // gif-cascade effect payload makes. NOT settings-gated (WPF Show has no gate), but
+            // like the wash it needs images in the chaos pool (WPF: silent no-op when empty) —
+            // an empty pool is an honest SKIP. Short spawn window; ClearChaosGifCascade is the
+            // deterministic teardown (the WPF run-end CloseActive path) so the brain-drain
+            // stage never waits on clips still falling.
+            {
+                Console.WriteLine("[LAYERS] Stage 4h: ChaosGifCascadeLayer via AvaloniaChaosService.ShowChaosGifCascade...");
+                var row = rows.First(r => r.Layer == "ChaosGifCascadeLayer");
+                var pool = ConditioningControlPanel.Core.Services.Chaos.ChaosImagePool.GetFiles(
+                    ConditioningControlPanel.Avalonia.Chaos.AvaloniaChaosEnv.EffectiveAssetsPath ?? "");
+                if (pool.Count == 0)
+                {
+                    row.Activated = "-";
+                    row.Delta = "-";
+                    row.Teardown = "-";
+                    row.Verdict = "SKIP";
+                    row.Note = "Chaos image pool is empty on this machine (WPF Show is a silent no-op); nothing to drive.";
+                }
+                else
+                {
+                    var before = Capture(screens, primary);
+                    // Payload-like knobs, shortened: fast spawns for a dense probe window.
+                    chaos.ShowChaosGifCascade(spawnRatePerSec: 4, durationSec: 2, gifSize: 400,
+                        fallSpeed: 3.6, opacity: 0.9, startScale: 0.45);
+                    var activated = await PollAsync(() => gifCascadeLayer.IsActive, 2000, stepMs: 50);
+                    row.Activated = activated ? "yes" : "TIMEOUT";
+                    if (activated)
+                    {
+                        await Task.Delay(900); // let the first decode land + clips enter the frame
+                        var during = Capture(screens, primary);
+                        row.Delta = during.Full != before.Full ? "DIFFER (full-screen)" : "SAME (FAIL)";
+                    }
+                    chaos.ClearChaosGifCascade();
+                    var deactivated = await PollAsync(() => !gifCascadeLayer.IsActive, 3000);
+                    row.Teardown = deactivated ? "clean (ClearChaosGifCascade)" : "TIMEOUT";
+                    FinishRow(row, activated, deactivated, envStable);
+                }
+                await SettleIdle(engine);
+            }
+
             // ---------------- Stage 5: BrainDrainLayer (Z=55) — P0 capture-EXCLUDED, ALONE ----------------
             // Runs BEFORE the pink/spiral stages: releasing those re-applies the user's
             // persistent PinkFilterEnabled/SpiralEnabled overlays (WPF-parity settings-held
@@ -721,6 +764,7 @@ internal static class LayerVerification
             try { chaos?.ClearAnnouncements(); } catch { }
             try { chaos?.ClearChaosFlashWash(); } catch { }
             try { chaos?.ClearChaosDvdLogos(); } catch { }
+            try { chaos?.ClearChaosGifCascade(); } catch { }
             try
             {
                 overlay?.HideOverlaySustained("pink");

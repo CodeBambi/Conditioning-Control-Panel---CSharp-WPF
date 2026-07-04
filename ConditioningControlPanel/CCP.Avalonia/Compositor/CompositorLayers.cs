@@ -56,6 +56,10 @@ public static class CompositorLayers
     /// after the ambient field FX, below the attention assets (gif cascade / flash wash).</summary>
     public const int ChaosDvd = 105;
 
+    /// <summary>Falling GIF-cascade clips ("attention assets" in WPF: raised ABOVE the
+    /// bubbles/chrome, second-highest of the passive set — under only the flash wash).</summary>
+    public const int ChaosGifCascade = 110;
+
     /// <summary>Chaos "braindrain" full-screen image wash (top of the field-FX sub-band:
     /// WPF RaiseGameLayerAboveVideo raises the flash wash LAST of the passive set — above the
     /// gif cascade — as an "attention asset", so it caps the 100–119 field band).</summary>
