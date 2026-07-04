@@ -8,6 +8,11 @@ stand-in with a faithful port of WPF `Services/Chaos/ChaosModeService.cs` (3275L
 
 ## 🔖 HANDOFF NOTES (for a mechanical-tier model picking this up)
 
+> **START HERE INSTEAD:** load the `mechanical-port-work` skill (`.pi/skills/mechanical-port-work/SKILL.md`)
+> and take the top item of `docs/model-handoff-queue.md`. That skill + queue supersede the
+> procedural parts of this section (gates, rules, escalation); this plan doc remains the
+> per-slice SPEC source (S5-S9 targets, WPF citations, evidence table).
+
 **Read this whole section first.** It was written 2026-07-04 when the smart-model session
 handed the remaining work off. You do NOT need to redo archaeology — the 4 contract docs
 below + this plan are the source of truth; do NOT re-read the WPF files end-to-end except
