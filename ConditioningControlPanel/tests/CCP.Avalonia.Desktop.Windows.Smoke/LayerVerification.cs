@@ -216,13 +216,36 @@ internal static class LayerVerification
                 row.Activated = activated ? "yes" : "TIMEOUT";
                 if (activated)
                 {
-                    await Task.Delay(700); // fade-in (~0.33s to full opacity) + present
+                    await Task.Delay(700); // fade-in (~0.42s to full opacity at 2.4/s) + present
                     var during = Capture(screens, primary);
                     var flashOpacity = settings?.FlashOpacity ?? 100;
                     if (flashOpacity <= 0)
                         row.Delta = $"SKIP (FlashOpacity={flashOpacity} in user settings; layer invisible by config)";
                     else
                         row.Delta = during.Full != before.Full ? "DIFFER (full-screen)" : "SAME (FAIL)";
+
+                    // Randomness probe (WPF parity: CalculateGeometry randomizes every
+                    // spawn position, FlashService.cs:1786-1791). Spawn two more one-shots
+                    // and require the live items NOT to share a single origin — guards the
+                    // "large image collapses the random range, everything pins to the
+                    // monitor top-left" regression class. Independent of FlashOpacity
+                    // (reads item geometry, not pixels).
+                    flash.TriggerFlashOnce(tempFlashImage, durationMs: 4000, playSound: false, suppressHaptic: true);
+                    flash.TriggerFlashOnce(tempFlashImage, durationMs: 4000, playSound: false, suppressHaptic: true);
+                    var multiSpawned = await PollAsync(() => flashLayer.ActiveCount >= 3, 4000);
+                    if (multiSpawned)
+                    {
+                        var positions = flashLayer.SnapshotPositions();
+                        var distinct = positions.Distinct().Count();
+                        if (distinct > 1)
+                            row.Note = AppendNote(row.Note, $"spawn randomness OK ({distinct}/{positions.Count} distinct origins)");
+                        else
+                            row.Delta += " + RANDOMNESS FAIL (all live flash items share one origin)";
+                    }
+                    else
+                    {
+                        row.Note = AppendNote(row.Note, "randomness probe inconclusive (extra one-shots did not all activate in time)");
+                    }
                 }
                 flash.Stop(); // clears the layer's items
                 var deactivated = await PollAsync(() => !flashLayer.IsActive, 3000);

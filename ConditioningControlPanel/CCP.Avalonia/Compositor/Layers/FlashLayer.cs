@@ -28,7 +28,9 @@ public sealed class FlashLayer : BaseLayer
     private readonly object _sync = new();
     // Reused paint: only touched inside Render under _sync. Never disposed (layer lives app-long).
     private readonly SKPaint _paint = new();
-    private const double FADE_PER_SEC = 3.0;
+    // WPF parity: FlashService.FADE_PER_SEC = 2.4 (FlashService.cs:1509) — "pop up" is a
+    // ~0.4s fade-in at the spawn position, never a slide.
+    private const double FADE_PER_SEC = 2.4;
 
     public override int ZIndex => CompositorLayers.Flash;
 
@@ -37,6 +39,35 @@ public sealed class FlashLayer : BaseLayer
         get
         {
             lock (_sync) { return _items.Count > 0; }
+        }
+    }
+
+    /// <summary>
+    /// Live item count. Service-side spawn logic reads this for the WPF concurrency cap
+    /// (FlashService.cs:1104 _activeWindows.Count >= MAX_CONCURRENT_FLASH) and for hydra
+    /// space checks (FlashService.cs:1426) — counting layer items instead of service
+    /// bookkeeping means expired flashes stop counting the moment the layer removes them.
+    /// </summary>
+    public int ActiveCount
+    {
+        get
+        {
+            lock (_sync) { return _items.Count; }
+        }
+    }
+
+    /// <summary>
+    /// Snapshot of live item origins (physical px). Harness/diagnostics only — allocates,
+    /// so it must never be called from the render path.
+    /// </summary>
+    public List<(double X, double Y)> SnapshotPositions()
+    {
+        lock (_sync)
+        {
+            var list = new List<(double X, double Y)>(_items.Count);
+            for (int i = 0; i < _items.Count; i++)
+                list.Add((_items[i].X, _items[i].Y));
+            return list;
         }
     }
 

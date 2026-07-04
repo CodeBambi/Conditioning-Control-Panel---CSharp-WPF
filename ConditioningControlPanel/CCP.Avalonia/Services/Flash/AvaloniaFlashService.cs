@@ -24,6 +24,13 @@ namespace ConditioningControlPanel.Avalonia.Services.Flash;
 /// Spawns images via the unified compositor layer at a configurable frequency,
 /// loads images from the user's assets folder, supports click-to-close, and
 /// implements the hydra multiplication mode.
+///
+/// WPF spawn contract (FlashService.cs): each flash event shows SimultaneousImages
+/// images STAGGERED 300ms apart (hydra children 100ms, :1046), each at an independent
+/// RANDOM position sized to a 40%-of-monitor box * ImageScale with a 50 DIP edge pad
+/// (:1770-1801), fading in at the spawn position. Click OR gaze pops run the same
+/// close + hydra pipeline (:196, :1415): CorruptionMode spawns 2 children per pop on
+/// the parent's monitor, capped by HydraLimit and MAX_CONCURRENT_FLASH.
 /// </summary>
 public sealed class AvaloniaFlashService : IFlashService, IDisposable
 {
@@ -221,22 +228,36 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
             }
 
             _noImagesWarningShown = false;
-            lock (_lastDisplayedImagePaths) { _lastDisplayedImagePaths.Add(data.FilePath); }
 
-            var hydraLimit = Math.Min(settings.HydraLimit, 20);
-            var count = Math.Min(settings.SimultaneousImages, hydraLimit);
+            // Bounded bookkeeping: expired flashes are removed layer-side, so their click
+            // entries would otherwise linger for the whole run.
+            PruneExpiredClickData();
 
-            if (count <= 1)
+            // WPF LoadAndShowImages (FlashService.cs:476): the initial spawn count is
+            // SimultaneousImages. HydraLimit caps hydra GROWTH only (click/gaze pops);
+            // the hard concurrency cap (MAX_CONCURRENT_FLASH) is enforced at spawn time.
+            var count = Math.Max(1, settings.SimultaneousImages);
+
+            // WPF ShowImages (FlashService.cs:1046): images of one flash event are
+            // STAGGERED 300ms apart (hydra children 100ms) — never all in one tick — and
+            // every image is generation 0 (the old code passed the loop index as the
+            // hydra generation).
+            var eventPaths = new List<string>(count) { data.FilePath };
+            SpawnFlash(data, settings, hydraGeneration: 0, overrideLifetimeMs: -1, spawnDelayMs: 0);
+            for (int i = 1; i < count; i++)
             {
-                SpawnFlash(data, settings, 0);
+                var copy = PickImageData();
+                if (copy == null) continue;
+                eventPaths.Add(copy.FilePath);
+                SpawnFlash(copy, settings, hydraGeneration: 0, overrideLifetimeMs: -1, spawnDelayMs: i * 300);
             }
-            else
+
+            // WPF snapshot semantics (FlashService.cs:1077-1085): the property is REPLACED
+            // with this event's paths so SessionLog attributes the event correctly.
+            lock (_lastDisplayedImagePaths)
             {
-                for (int i = 0; i < count; i++)
-                {
-                    var copy = i == 0 ? data : PickImageData();
-                    if (copy != null) SpawnFlash(copy, settings, i);
-                }
+                _lastDisplayedImagePaths.Clear();
+                _lastDisplayedImagePaths.AddRange(eventPaths);
             }
 
             FlashDisplayed?.Invoke(this, EventArgs.Empty);
@@ -262,31 +283,18 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         }
     }
 
-    private void SpawnFlash(ImageData data, AppSettings settings, int hydraGeneration, int remainingMs = -1)
+    private void SpawnFlash(ImageData data, AppSettings settings, int hydraGeneration, int overrideLifetimeMs = -1, int spawnDelayMs = 0)
     {
         if (!IsRunning && !data.OneShot) return;
         if (_flashLayer == null) return;
 
-        var geom = data.Geometry;
-        var monitor = data.Monitor;
-
-        // Avoid overlap with existing flashes
-        for (int attempt = 0; attempt < 10; attempt++)
-        {
-            if (!IsOverlapping(geom.X, geom.Y, geom.Width, geom.Height)) break;
-            geom = new ImageGeometry
-            {
-                X = (int)(monitor.X + _random.Next(0, Math.Max(1, (int)(monitor.Width - geom.Width)))),
-                Y = (int)(monitor.Y + _random.Next(0, Math.Max(1, (int)(monitor.Height - geom.Height)))),
-                Width = geom.Width,
-                Height = geom.Height
-            };
-        }
-
         var maxOpacity = settings.FlashOpacity / 100.0;
-        var lifetimeMs = remainingMs > 0 ? remainingMs : Math.Max(500, (int)(settings.FlashDuration * 1000));
-        SpawnDecoded(data.FilePath, geom, monitor, maxOpacity, lifetimeMs, settings.FlashClickable,
-            hydraGeneration, data.OneShot);
+        // WPF ShowImages (FlashService.cs:1006): lifetime = duration + 1s grace so the
+        // fade-out never truncates the configured display time. Hydra children override
+        // this with linked/independent timing (FlashService.cs:1459).
+        var lifetimeMs = overrideLifetimeMs > 0 ? overrideLifetimeMs : (int)(settings.FlashDuration * 1000) + 1000;
+        SpawnDecoded(data.FilePath, data.Geometry, data.Monitor, maxOpacity, lifetimeMs, settings.FlashClickable,
+            hydraGeneration, data.OneShot, spawnDelayMs);
     }
 
     /// <summary>
@@ -296,14 +304,25 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
     /// decode that hitched every overlay on each spawn.
     /// </summary>
     private void SpawnDecoded(string filePath, ImageGeometry geom, ImageGeometry monitor,
-        double maxOpacity, int lifetimeMs, bool clickable, int hydraGeneration, bool oneShot)
+        double maxOpacity, int lifetimeMs, bool clickable, int hydraGeneration, bool oneShot,
+        int spawnDelayMs = 0)
     {
         var decodeMax = ComputeDecodeMaxDim();
-        _ = Task.Run(() =>
+        var token = _cts?.Token ?? CancellationToken.None;
+        _ = Task.Run(async () =>
         {
             SkiaFrameSet? frames = null;
             try
             {
+                // Per-image stagger (WPF ShowImages, FlashService.cs:1046: i*300ms normal /
+                // i*100ms hydra). Delayed BEFORE decode so the LRU cache isn't hit for a
+                // spawn that Stop() already cancelled.
+                if (spawnDelayMs > 0)
+                {
+                    try { await Task.Delay(spawnDelayMs, token).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { return; }
+                }
+
                 frames = _frameCache.GetOrDecode(filePath, decodeMax);
                 if (frames == null)
                 {
@@ -321,12 +340,35 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
                         return;
                     }
 
+                    // Hard concurrency cap (WPF SpawnFlashWindow, FlashService.cs:1104).
+                    if (_flashLayer.ActiveCount >= MAX_CONCURRENT_FLASH)
+                    {
+                        set.Release();
+                        return;
+                    }
+
+                    // Overlap avoidance at SPAWN time (WPF SpawnFlashWindow,
+                    // FlashService.cs:1123-1130): staggered siblings re-roll against the
+                    // flashes actually on screen when they appear, not against the
+                    // pre-stagger snapshot. Re-rolls span the full monitor (no edge pad),
+                    // matching WPF's re-roll range.
+                    var g = geom;
+                    for (int attempt = 0; attempt < 10; attempt++)
+                    {
+                        if (!IsOverlapping(g.X, g.Y, g.Width, g.Height)) break;
+                        g = g with
+                        {
+                            X = (int)(monitor.X + _random.Next(0, Math.Max(1, (int)(monitor.Width - g.Width)))),
+                            Y = (int)(monitor.Y + _random.Next(0, Math.Max(1, (int)(monitor.Height - g.Height))))
+                        };
+                    }
+
                     // Guarantee the engine is awake for this item: Start() is idempotent and
                     // cheap when running; if the engine was never started (e.g. remote
                     // 'start_flash' with no session) it creates the compositor windows now.
                     _compositor?.Start();
 
-                    var id = _flashLayer.Spawn(set, geom.X, geom.Y, geom.Width, geom.Height,
+                    var id = _flashLayer.Spawn(set, g.X, g.Y, g.Width, g.Height,
                         maxOpacity, lifetimeMs, clickable);
                     lock (_sync)
                     {
@@ -339,7 +381,7 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
                 frames?.Release();
                 _logger?.LogDebug("AvaloniaFlashService: spawn decode failed for {Path}: {Error}", filePath, ex.Message);
             }
-        });
+        }, CancellationToken.None);
     }
 
     /// <summary>
@@ -412,40 +454,49 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
             return;
         }
 
+        PopItem(item, settings);
+    }
+
+    /// <summary>
+    /// Shared pop pipeline for mouse clicks AND gaze pops — WPF parity: GazePop is "the
+    /// programmatic equivalent of a mouse click" and runs the same close + hydra
+    /// multiplication + FlashClicked path (FlashService.cs:196, OnFlashClicked).
+    /// UI thread only.
+    /// </summary>
+    private void PopItem(FlashLayer.FlashItem item, AppSettings settings)
+    {
         FlashClickData? data;
         lock (_sync)
         {
-            if (!_clickData.TryGetValue(item.Id, out data))
-            {
-                _logger?.LogDebug("Flash click: item {Id} not found in _clickData", item.Id);
-                return;
-            }
+            _clickData.TryGetValue(item.Id, out data);
             _clickData.Remove(item.Id);
         }
 
         _flashLayer?.RemoveItem(item);
         FlashClicked?.Invoke(this, EventArgs.Empty);
-        _logger?.LogDebug("Flash clicked: item {Id} removed, CorruptionMode={Corruption}, HydraLimit={Limit}",
+        _logger?.LogDebug("Flash popped: item {Id} removed, CorruptionMode={Corruption}, HydraLimit={Limit}",
             item.Id, settings.CorruptionMode, settings.HydraLimit);
 
-        if (settings.CorruptionMode)
+        // Hydra mode (WPF OnFlashClicked, FlashService.cs:1415-1431): CorruptionMode read
+        // LIVE from settings at pop time; count is the LIVE on-screen count after removing
+        // the popped item (WPF counts _activeWindows — the old _clickData.Count here
+        // included long-expired entries and silently killed multiplication mid-run).
+        if (!settings.CorruptionMode || data == null) return;
+
+        var maxHydra = Math.Min(settings.HydraLimit, 20);
+        var currentCount = _flashLayer?.ActiveCount ?? 0;
+
+        _logger?.LogDebug("Flash hydra: currentCount={Current}, maxHydra={Max}, canMultiply={Can}",
+            currentCount, maxHydra, currentCount + 1 < maxHydra);
+
+        if (currentCount + 1 < maxHydra) // WPF gate, FlashService.cs:1426
         {
-            var maxHydra = Math.Min(settings.HydraLimit, 20);
-            int currentCount;
-            lock (_sync) { currentCount = _clickData.Count; }
-
-            _logger?.LogDebug("Flash hydra: currentCount={Current}, maxHydra={Max}, canMultiply={Can}",
-                currentCount, maxHydra, currentCount + 1 < maxHydra);
-
-            if (currentCount + 1 < maxHydra)
-            {
-                var remainingMs = Math.Max(1000, (int)(data.ExpiresAt - DateTime.Now).TotalMilliseconds);
-                TriggerMultiplication(maxHydra, currentCount, data.OriginalLifetimeMs, remainingMs, data.HydraGeneration, data.Monitor);
-            }
+            var remainingMs = Math.Max(1000, (int)(data.ExpiresAt - DateTime.Now).TotalMilliseconds);
+            TriggerMultiplication(maxHydra, currentCount, data.OriginalLifetimeMs, remainingMs, data.HydraGeneration, data.Monitor);
         }
     }
 
-    private void TriggerMultiplication(int maxHydra, int currentCount, int originalLifetimeMs, int remainingMs, int hydraGeneration, ImageGeometry monitor)
+    private void TriggerMultiplication(int maxHydra, int currentCount, int parentLifetimeMs, int parentRemainingMs, int parentGeneration, ImageGeometry parentMonitor)
     {
         var settings = _settings.Current;
         if (settings == null)
@@ -454,27 +505,34 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
             return;
         }
 
-        var multiplier = Math.Min(2, maxHydra - currentCount - 1);
-        _logger?.LogDebug("TriggerMultiplication: spawning {Multiplier} items (maxHydra={Max}, currentCount={Count})",
-            multiplier, maxHydra, currentCount);
+        // WPF TriggerMultiplication (FlashService.cs:1446-1448): each pop spawns 2
+        // children (hardcoded in WPF — there is no per-click factor setting), capped by
+        // the remaining hydra space.
+        var spaceAvailable = maxHydra - currentCount;
+        var numToSpawn = Math.Min(2, spaceAvailable);
+        if (numToSpawn <= 0) return;
 
-        for (int i = 0; i < multiplier; i++)
+        // WPF FlashService.cs:1459-1461: Linked timing inherits the parent's remaining
+        // time; Independent gives children a fresh full-duration lifetime.
+        var hydraLifetimeMs = settings.HydraLinkedTiming ? parentRemainingMs : parentLifetimeMs;
+        var childGeneration = parentGeneration + 1;
+
+        _logger?.LogDebug("TriggerMultiplication: spawning {Count} children (maxHydra={Max}, currentCount={Current}, linked={Linked}, lifetimeMs={Lifetime})",
+            numToSpawn, maxHydra, currentCount, settings.HydraLinkedTiming, hydraLifetimeMs);
+
+        for (int i = 0; i < numToSpawn; i++)
         {
-            var data = PickImageData();
+            // Children stay on the parent's screen (WPF PickMonitor preferred-monitor
+            // inheritance, FlashService.cs:1668) with full random-position geometry.
+            var data = PickImageData(parentMonitor);
             if (data == null)
             {
                 _logger?.LogDebug("TriggerMultiplication: PickImageData returned null");
                 continue;
             }
             data.OneShot = true;
-            data.Geometry = new ImageGeometry
-            {
-                X = (int)(monitor.X + _random.Next(0, Math.Max(1, (int)(monitor.Width - 200)))),
-                Y = (int)(monitor.Y + _random.Next(0, Math.Max(1, (int)(monitor.Height - 200)))),
-                Width = data.Geometry.Width,
-                Height = data.Geometry.Height
-            };
-            SpawnFlash(data, settings, hydraGeneration + 1, remainingMs);
+            // WPF ShowImages stagger for multiplication spawns: i * 100ms (FlashService.cs:1046).
+            SpawnFlash(data, settings, childGeneration, hydraLifetimeMs, spawnDelayMs: i * 100);
         }
     }
 
@@ -486,7 +544,7 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         return _flashLayer?.IntersectsAny(x, y, w, h) == true;
     }
 
-    private ImageData? PickImageData()
+    private ImageData? PickImageData(ImageGeometry? preferredMonitor = null)
     {
         var files = GetImageFiles();
         if (files.Count == 0) return null;
@@ -501,19 +559,15 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
                 return null;
             }
 
-            // Physical-px geometry (IAvaloniaLayer contract): the image displays at its
-            // native pixel size, shrunk to fit the chosen monitor's physical bounds.
-            var monitor = GetRandomMonitor();
-            var scale = Math.Min(1.0, Math.Min(monitor.Width / pxW, monitor.Height / pxH));
-            var w = (int)(pxW * scale);
-            var h = (int)(pxH * scale);
-            var x = (int)(monitor.X + _random.Next(0, Math.Max(1, (int)(monitor.Width - w))));
-            var y = (int)(monitor.Y + _random.Next(0, Math.Max(1, (int)(monitor.Height - h))));
+            // Monitor inheritance for hydra children (WPF PickMonitor preferred-monitor
+            // path, FlashService.cs:1668): children stay on the parent's screen.
+            var monitor = preferredMonitor ?? GetRandomMonitor();
+            var geometry = CalculateGeometry(pxW, pxH, monitor);
 
             return new ImageData
             {
                 FilePath = path,
-                Geometry = new ImageGeometry { X = x, Y = y, Width = w, Height = h },
+                Geometry = geometry,
                 Monitor = monitor
             };
         }
@@ -521,6 +575,65 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
         {
             _logger?.LogDebug("AvaloniaFlashService: failed to load image {Path}: {Error}", path, ex.Message);
             return null;
+        }
+    }
+
+    /// <summary>
+    /// WPF CalculateGeometry parity (FlashService.cs:1770-1801), transposed from DIPs to
+    /// the layer's physical-px space (DIP constants scaled by the monitor's DPI scaling —
+    /// the seam class fixed in the chaos migrations, commits a8bf6f10/4c6c5992):
+    ///   - base box is 40% of the monitor, scaled by ImageScale% (50-250),
+    ///   - aspect-fit into that box, floor 50 DIP per side,
+    ///   - RANDOM position inside the monitor with a 50 DIP edge padding so images are
+    ///     fully visible and clickable — this is what makes flashes "pop up randomly"
+    ///     instead of pinning to the monitor's top-left when a large image collapsed the
+    ///     old native-size random range to zero.
+    /// </summary>
+    private ImageGeometry CalculateGeometry(int pxW, int pxH, ImageGeometry monitor)
+    {
+        var scalePct = (_settings.Current?.ImageScale ?? 100) / 100.0;
+        var dpi = monitor.Scaling > 0 ? monitor.Scaling : 1.0;
+
+        var baseWidth = monitor.Width * 0.4;   // WPF FlashService.cs:1772
+        var baseHeight = monitor.Height * 0.4;
+        var ratio = Math.Min(baseWidth / pxW, baseHeight / pxH) * scalePct;
+
+        var minSide = (int)Math.Round(50 * dpi); // WPF: 50 DIP floor (FlashService.cs:1779)
+        var w = Math.Max(minSide, (int)(pxW * ratio));
+        var h = Math.Max(minSide, (int)(pxH * ratio));
+
+        var edgePadding = (int)Math.Round(50 * dpi); // WPF: const 50 DIP (FlashService.cs:1784)
+        var minX = edgePadding;
+        var minY = edgePadding;
+        var maxX = Math.Max(minX + 1, (int)(monitor.Width - w - edgePadding));
+        var maxY = Math.Max(minY + 1, (int)(monitor.Height - h - edgePadding));
+
+        var x = (int)monitor.X + _random.Next(minX, maxX);
+        var y = (int)monitor.Y + _random.Next(minY, maxY);
+
+        return new ImageGeometry { X = x, Y = y, Width = w, Height = h, Scaling = dpi };
+    }
+
+    /// <summary>
+    /// Removes click entries whose flash expired long ago (layer-side removal does not
+    /// notify the service). 30s grace comfortably covers the post-expiry fade-out.
+    /// </summary>
+    private void PruneExpiredClickData()
+    {
+        lock (_sync)
+        {
+            if (_clickData.Count == 0) return;
+            List<Guid>? stale = null;
+            var cutoff = DateTime.Now.AddSeconds(-30);
+            foreach (var kvp in _clickData)
+            {
+                if (kvp.Value.ExpiresAt < cutoff)
+                    (stale ??= new List<Guid>()).Add(kvp.Key);
+            }
+            if (stale != null)
+            {
+                foreach (var id in stale) _clickData.Remove(id);
+            }
         }
     }
 
@@ -575,7 +688,10 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
                 X = screen.Bounds.X,
                 Y = screen.Bounds.Y,
                 Width = screen.Bounds.Width,
-                Height = screen.Bounds.Height
+                Height = screen.Bounds.Height,
+                // Carried so DIP-defined WPF constants (50px floor/padding) can be scaled
+                // into this monitor's physical space in CalculateGeometry.
+                Scaling = screen.Scaling > 0 ? screen.Scaling : 1.0
             };
         }
         catch
@@ -654,16 +770,11 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
             return;
         }
 
-        // Physical-px geometry (same math as PickImageData).
+        // Same WPF sizing/positioning contract as scheduled flashes (CalculateGeometry).
         var monitor = GetRandomMonitor();
-        var scale = Math.Min(1.0, Math.Min(monitor.Width / pxW, monitor.Height / pxH));
-        var w = (int)(pxW * scale);
-        var h = (int)(pxH * scale);
-        var x = (int)(monitor.X + _random.Next(0, Math.Max(1, (int)(monitor.Width - w))));
-        var y = (int)(monitor.Y + _random.Next(0, Math.Max(1, (int)(monitor.Height - h))));
+        var geom = CalculateGeometry(pxW, pxH, monitor);
 
         var maxOpacity = settings.FlashOpacity / 100.0;
-        var geom = new ImageGeometry { X = x, Y = y, Width = w, Height = h };
         SpawnDecoded(path, geom, monitor, maxOpacity, durationMs, settings.FlashClickable,
             hydraGeneration: 0, oneShot: true);
     }
@@ -685,12 +796,10 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
             requireClickable: false);
         if (item == null) return false;
 
-        lock (_sync)
-        {
-            _clickData.Remove(item.Id);
-        }
-        _flashLayer?.RemoveItem(item);
-        FlashClicked?.Invoke(this, EventArgs.Empty);
+        // Shared pop pipeline: WPF GazePop runs the SAME close + hydra-multiplication +
+        // FlashClicked path as a mouse click (FlashService.cs:196-201), so gaze pops
+        // multiply in hydra (CorruptionMode) exactly like clicks.
+        PopItem(item, settings);
         return true;
     }
 
@@ -712,12 +821,15 @@ public sealed class AvaloniaFlashService : IFlashService, IDisposable
     }
 
     // All geometry in PHYSICAL virtual-desktop pixels (IAvaloniaLayer coordinate contract).
+    // Scaling carries the source monitor's DPI scale so WPF's DIP-defined constants can be
+    // transposed into physical px (0/unset means "assume 1.0").
     private sealed record ImageGeometry
     {
         public double X { get; set; }
         public double Y { get; set; }
         public double Width { get; set; }
         public double Height { get; set; }
+        public double Scaling { get; set; } = 1.0;
     }
 
     private sealed record FlashClickData(
