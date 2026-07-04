@@ -1993,6 +1993,119 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
 
     #endregion
 
+    #region GDPR + misc (slice 7)
+
+    // ProfileSync slice 7: DeleteAccountAsync is deliberately NOT overridden here — account
+    // deletion is owned by IV2AuthService (AvaloniaV2AuthService.DeleteAccountAsync already posts
+    // the identical {unified_id, confirmation:"DELETE"} body to /v2/user/delete-account; see plan
+    // §6 seam decision). WPF's ProfileSyncService.DeleteAccountAsync (ProfileSyncService.cs:2162)
+    // performs NO extra profile-purge steps beyond that same POST (it only adds richer error-string
+    // extraction + a 401 recovery attempt), so implementing it here would duplicate the auth-owned
+    // flow. The interface DIM default remains in place.
+
+    /// <summary>
+    /// Exports all server-held user data (GDPR data access request,
+    /// <c>POST /v2/user/export-data</c>) and returns it pretty-printed for saving to a file.
+    /// Returns (success, error?, prettyJson?). Ported from WPF <c>ExportDataAsync</c>
+    /// (ProfileSyncService.cs:2208): unified-id guard, <c>X-Auth-Token</c> header, 401 recovery via
+    /// <see cref="HandleUnauthorizedAsync"/>, error string from the shared
+    /// <see cref="DeleteAccountErrorResponse"/> shape (WPF reuses that DTO for this endpoint).
+    ///
+    /// SECURITY: the export payload contains the user's full server-side data — it is NEVER
+    /// logged (only the unified id and payload size are), and the auth token is never logged.
+    /// </summary>
+    public async Task<(bool, string?, string?)> ExportDataAsync()
+    {
+        var unifiedId = _settings.Current?.UnifiedId;
+        if (string.IsNullOrEmpty(unifiedId))
+            return (false, "You must be logged in to export your data", null);
+
+        try
+        {
+            var requestData = new { unified_id = unifiedId };
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/export-data");
+            AddAuthHeader(request);
+            request.Content = new StringContent(
+                JsonConvert.SerializeObject(requestData), Encoding.UTF8, "application/json");
+
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                await HandleUnauthorizedAsync(response).ConfigureAwait(false);
+                var errorResult = JsonConvert.DeserializeObject<DeleteAccountErrorResponse>(json);
+                var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
+                _logger.LogWarning("Export data failed: {Error}", errorMsg);
+                return (false, errorMsg, null);
+            }
+
+            // Pretty-print the JSON for readability (WPF parity).
+            var parsed = Newtonsoft.Json.Linq.JToken.Parse(json);
+            var prettyJson = parsed.ToString(Formatting.Indented);
+
+            // Payload contents are intentionally NOT logged — size only.
+            _logger.LogInformation("Data exported for user: {UnifiedId} ({SizeChars} chars)",
+                unifiedId, prettyJson.Length);
+            return (true, null, prettyJson);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Export data request failed");
+            return (false, "Data export requires an internet connection", null);
+        }
+    }
+
+    /// <summary>
+    /// Records that the current user found the easter egg and returns the total reader count
+    /// (<c>POST /v2/easter-egg</c>). Ported from WPF <c>RecordEasterEggReadAsync</c>
+    /// (ProfileSyncService.cs:2631). FIDELITY: WPF has NO login/offline guard here — a logged-in
+    /// user posts <c>{unified_id}</c> with the auth header (joins the unique-readers set); a
+    /// logged-out user still posts an empty <c>{}</c> body WITHOUT the auth header (read-only
+    /// count). Returns -1 on any failure.
+    /// </summary>
+    public async Task<int> RecordEasterEggReadAsync()
+    {
+        try
+        {
+            var unifiedId = _settings.Current?.UnifiedId;
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/easter-egg");
+
+            if (!string.IsNullOrEmpty(unifiedId))
+            {
+                AddAuthHeader(request);
+                request.Content = new StringContent(
+                    JsonConvert.SerializeObject(new { unified_id = unifiedId }),
+                    Encoding.UTF8,
+                    "application/json");
+            }
+            else
+            {
+                request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+            }
+
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Easter egg endpoint returned {Status}", response.StatusCode);
+                return -1;
+            }
+
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var result = JsonConvert.DeserializeObject<EasterEggResponse>(json);
+            return result?.Count ?? -1;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Easter egg request failed");
+            return -1;
+        }
+    }
+
+    #endregion
+
     /// <summary>
     /// Resolves the current client version string for the <c>X-Client-Version</c> / user-agent
     /// headers (mirrors <c>RemoteControlService.GetCurrentVersion</c>).

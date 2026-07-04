@@ -1093,4 +1093,138 @@ public class ProfileSyncServiceTests
         Assert.Null(newName);
         Assert.Equal("OldName", settings.Current.UserDisplayName);   // unchanged on failure
     }
+
+    // ---- Slice 7: GDPR export + easter egg ------------------------------------------------
+
+    /// <summary>
+    /// (a) Export happy path: POSTs {unified_id} to /v2/user/export-data with the X-Auth-Token
+    /// header and returns the canned export pretty-printed (semantically identical JSON).
+    /// </summary>
+    [Fact]
+    public async Task ExportDataAsync_Success_SendsAuthToken_AndReturnsPrettyPrintedExport()
+    {
+        // Compact (non-indented) canned export so pretty-printing is observable.
+        var handler = new RecordingHandler
+        {
+            ResponseBody = "{\"user\":{\"display_name\":\"Bambi\",\"level\":42},\"stats\":{\"xp\":9001}}"
+        };
+        var settings = LoggedInSettings();
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        var (success, error, jsonData) = await svc.ExportDataAsync();
+
+        Assert.True(success);
+        Assert.Null(error);
+        Assert.NotNull(jsonData);
+
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal(HttpMethod.Post, handler.LastRequest!.Method);
+        Assert.Equal("https://codebambi-proxy.vercel.app/v2/user/export-data",
+            handler.LastRequest.RequestUri!.ToString());
+        Assert.True(handler.LastRequest.Headers.TryGetValues("X-Auth-Token", out var tokenValues));
+        Assert.Equal("auth-token-xyz", tokenValues!.Single());
+        var body = JObject.Parse(handler.LastBody!);
+        Assert.Equal("unified-1", (string?)body["unified_id"]);
+
+        // Pretty-printed (Formatting.Indented => multi-line) but semantically identical JSON.
+        Assert.Contains('\n', jsonData!);
+        Assert.True(JToken.DeepEquals(JToken.Parse(handler.ResponseBody!), JToken.Parse(jsonData!)));
+    }
+
+    /// <summary>
+    /// (a) Export error path: server error returns (false, serverMessage, null) without throwing
+    /// (error string parsed from the shared delete-account error shape, WPF parity).
+    /// </summary>
+    [Fact]
+    public async Task ExportDataAsync_ServerError_ReturnsErrorMessage_AndNullData_WithoutThrowing()
+    {
+        var handler = new RecordingHandler
+        {
+            ResponseStatus = HttpStatusCode.BadRequest,
+            ResponseBody = "{\"error\": \"Export temporarily unavailable\"}"
+        };
+        var settings = LoggedInSettings();
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        var (success, error, jsonData) = await svc.ExportDataAsync();
+
+        Assert.False(success);
+        Assert.Equal("Export temporarily unavailable", error);
+        Assert.Null(jsonData);
+    }
+
+    /// <summary>
+    /// (c) Export guard: not logged in (no UnifiedId — the WPF guard, ProfileSyncService.cs:2210)
+    /// returns the login error without any POST. FIDELITY: WPF has no separate OfflineMode check
+    /// on this method (OfflineMode gates only heartbeat/sync/backup in WPF).
+    /// </summary>
+    [Fact]
+    public async Task ExportDataAsync_WhenNotLoggedIn_DoesNotPost()
+    {
+        var handler = new RecordingHandler();
+        using var svc = CreateService(handler, authToken: null, unifiedId: null);
+
+        var (success, error, jsonData) = await svc.ExportDataAsync();
+
+        Assert.False(success);
+        Assert.Equal("You must be logged in to export your data", error);
+        Assert.Null(jsonData);
+        Assert.Equal(0, handler.CallCount);   // guard fired before any network I/O
+    }
+
+    /// <summary>
+    /// (b) Easter egg, logged in: POSTs {unified_id} to /v2/easter-egg with the auth header and
+    /// returns the server count.
+    /// </summary>
+    [Fact]
+    public async Task RecordEasterEggReadAsync_LoggedIn_PostsUnifiedIdWithAuth_AndReturnsCount()
+    {
+        var handler = new RecordingHandler { ResponseBody = "{\"count\": 1234}" };
+        var settings = LoggedInSettings();
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        var count = await svc.RecordEasterEggReadAsync();
+
+        Assert.Equal(1234, count);
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal(HttpMethod.Post, handler.LastRequest!.Method);
+        Assert.Equal("https://codebambi-proxy.vercel.app/v2/easter-egg",
+            handler.LastRequest.RequestUri!.ToString());
+        Assert.True(handler.LastRequest.Headers.Contains("X-Auth-Token"));
+        var body = JObject.Parse(handler.LastBody!);
+        Assert.Equal("unified-1", (string?)body["unified_id"]);
+    }
+
+    /// <summary>
+    /// (b)/(c) Easter egg, logged out: WPF FIDELITY (ProfileSyncService.cs:2631) — there is NO
+    /// no-token guard; the method still POSTs a read-only empty {} body WITHOUT the X-Auth-Token
+    /// header so logged-out users get the count. Pins that no auth material leaks on the
+    /// anonymous path.
+    /// </summary>
+    [Fact]
+    public async Task RecordEasterEggReadAsync_LoggedOut_PostsEmptyBodyWithoutAuthHeader()
+    {
+        var handler = new RecordingHandler { ResponseBody = "{\"count\": 77}" };
+        using var svc = CreateService(handler, authToken: null, unifiedId: null);
+
+        var count = await svc.RecordEasterEggReadAsync();
+
+        Assert.Equal(77, count);
+        Assert.Equal(1, handler.CallCount);
+        Assert.False(handler.LastRequest!.Headers.Contains("X-Auth-Token"));
+        Assert.Equal("{}", handler.LastBody);
+    }
+
+    /// <summary>(b) Easter egg server error returns -1 without throwing.</summary>
+    [Fact]
+    public async Task RecordEasterEggReadAsync_ServerError_ReturnsMinusOne()
+    {
+        var handler = new RecordingHandler { ResponseStatus = HttpStatusCode.InternalServerError };
+        var settings = LoggedInSettings();
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        var count = await svc.RecordEasterEggReadAsync();
+
+        Assert.Equal(-1, count);
+    }
 }

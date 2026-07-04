@@ -98,7 +98,11 @@ public interface IProfileSyncService
     Task<(bool, string?, string?)> ChangeDisplayNameAsync(string newName)
         => Task.FromResult((false, (string?)null, (string?)null));
 
-    // ProfileSync slice 7: GDPR account deletion.
+    // ProfileSync slice 7: DeleteAccount owned by IV2AuthService (see plan §6) — WPF's
+    // ProfileSyncService.DeleteAccountAsync (:2162) posts the same {unified_id,
+    // confirmation:"DELETE"} body to /v2/user/delete-account that
+    // AvaloniaV2AuthService.DeleteAccountAsync already sends, with no extra profile-purge steps,
+    // so the Core service intentionally does NOT override this DIM.
     /// <summary>
     /// Deletes the account (GDPR). Returns (success, error?).
     /// </summary>
