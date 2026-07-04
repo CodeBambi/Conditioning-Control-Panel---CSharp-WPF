@@ -47,6 +47,7 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
     private readonly ISessionLogService? _sessionLog;
     private readonly IMultiMonitorVideoService? _multiMonitor;
     private readonly IAutonomyService? _autonomy;
+    private readonly IInteractionQueueService? _interactionQueue;
     private readonly ILogger<AvaloniaRemoteCommandExecutor>? _logger;
 
     private bool _remoteBrowserVideoActive;
@@ -71,6 +72,7 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
         ISessionLogService? sessionLog = null,
         IMultiMonitorVideoService? multiMonitor = null,
         IAutonomyService? autonomy = null,
+        IInteractionQueueService? interactionQueue = null,
         ILogger<AvaloniaRemoteCommandExecutor>? logger = null)
     {
         _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
@@ -92,6 +94,7 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
         _sessionLog = sessionLog;
         _multiMonitor = multiMonitor;
         _autonomy = autonomy;
+        _interactionQueue = interactionQueue;
         _logger = logger;
     }
 
@@ -458,6 +461,13 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
     {
         var settings = _settingsService.Current;
         _logger?.LogInformation("[RemoteControl] Stopping all remote effects");
+
+        // #462: Clear the interaction queue BEFORE tearing down fullscreen overlays so a
+        // queued trigger can't re-arm during teardown. The Avalonia Video/LockCard/BubbleCount
+        // Stop() paths call InteractionQueue.Complete(), which would dequeue and async-post the
+        // next interaction; resetting first makes those Complete() calls no-ops (mirrors WPF
+        // remote panic, MainWindow.RemoteControl.cs:1423 / RemoteControlService.cs:822,923).
+        _interactionQueue?.ForceReset();
 
         _audioPlayer?.Stop();
         _video?.Stop();

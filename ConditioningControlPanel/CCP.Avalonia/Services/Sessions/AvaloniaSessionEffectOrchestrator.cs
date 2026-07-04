@@ -48,6 +48,7 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
     private IBubbleService? _bubbles;
     private IBubbleCountService? _bubbleCount;
     private IPopQuizService? _popQuiz;
+    private IInteractionQueueService? _interactionQueue;
     private IAutonomyService? _autonomy;
     private ISystemAudioDucker? _ducker;
     private AvaloniaPatreonProvider? _patreon;
@@ -82,6 +83,7 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
     private IBubbleService? Bubbles => _bubbles ??= _services.GetService<IBubbleService>();
     private IBubbleCountService? BubbleCount => _bubbleCount ??= _services.GetService<IBubbleCountService>();
     private IPopQuizService? PopQuiz => _popQuiz ??= _services.GetService<IPopQuizService>();
+    private IInteractionQueueService? InteractionQueue => _interactionQueue ??= _services.GetService<IInteractionQueueService>();
     private IAutonomyService? Autonomy => _autonomy ??= _services.GetService<IAutonomyService>();
     private ISystemAudioDucker? Ducker => _ducker ??= _services.GetService<ISystemAudioDucker>();
     private AvaloniaPatreonProvider? Patreon => _patreon ??= _services.GetService<AvaloniaPatreonProvider>();
@@ -147,6 +149,19 @@ public sealed class AvaloniaSessionEffectOrchestrator : ISessionEffectOrchestrat
     public void StopEffects(bool pausing)
     {
         _logger?.LogInformation(pausing ? "Pausing all session effects" : "Stopping all session effects");
+
+        // #462: On a full stop, clear the interaction queue BEFORE tearing down the
+        // interactive overlays. Unlike WPF's Video CloseAll (which never Completes), the
+        // Avalonia Video/LockCard/BubbleCount/PopQuiz teardown paths call
+        // InteractionQueue.Complete(), which dequeues and async-posts a queued trigger —
+        // re-arming a fullscreen overlay after teardown. Resetting first makes those
+        // Complete() calls no-ops (mirrors WPF StopEngine ordering,
+        // MainWindow.StartStop.cs:328-337). Pause preserves the queue: WPF PauseSession
+        // never resets it (SessionEngine.PauseSession).
+        if (!pausing)
+        {
+            TryRun("interaction queue reset", () => InteractionQueue?.ForceReset());
+        }
 
         // Note: session log begin/end is owned by Core SessionService so the log gets the
         // real duration/XP/completed flag. Stopping effects alone does not end the log.
