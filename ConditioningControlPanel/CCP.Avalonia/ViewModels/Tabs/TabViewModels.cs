@@ -3,11 +3,6 @@ namespace ConditioningControlPanel.Avalonia.ViewModels.Tabs;
 // BlinkTrainerTabViewModel is defined in its own source file with ported WPF logic.
 // RemoteControlTabViewModel is defined in RemoteControlTabViewModel.cs.
 
-public sealed class AttentionCheckTabViewModel : TabItemViewModel
-{
-    public AttentionCheckTabViewModel() : base("attentioncheck", "Attention", "👁") { }
-}
-
 public sealed class BouncingTextTabViewModel : TabItemViewModel
 {
     public BouncingTextTabViewModel() : base("bouncingtext", "Bouncing Text", "📝") { }
