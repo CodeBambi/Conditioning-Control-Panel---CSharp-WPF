@@ -20,78 +20,41 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.2.7";
+        public const string AppVersion = "6.2.8";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.2.7 - Tunnel Vision
+        public const string CurrentPatchNotes = @"v6.2.8 - Tunnel Vision
 
-🚑 HOTFIX
-- Fixed the app freezing on the loading screen on a cold first launch
-  (the ""Still loading... the app is fine"" hang). The freeze detector
-  mistook a slow first start for a real hang and its crash-dump then
-  froze the app for real. No more relaunching a few times to get in.
-- Ramping sessions no longer permanently overwrite your saved pink
-  filter and spiral opacity when the app closes mid-session. If yours
-  got stuck at maximum pink, just set the sliders back once.
-- Updating from 6.0.x no longer fails to launch right after the
-  installer restarts the app.
-
-✨ NEW
-- Prestige: the enhancement tree now survives the seasons. Stat and
-  analytics enhancements stay yours forever, mechanical enhancements
-  reset each season, and every sparkle you ever spend raises your
-  permanent Prestige rank. Your sparkle point balance is never lost at
-  season reset anymore.
-- Ditzy Data PRO: five new analytics enhancements at the end of the
-  tree, for the data nerds. A lifetime dashboard with an activity
-  heatmap calendar, season-by-season charts, a personal bests timeline,
-  and a per-feature usage report. The capstone certifies you.
-- Endless rabbit-hole tunnel: an opt-in 3D tunnel background for Chaos
-  that speeds up as your streak climbs. Find the toggle in the Chaos
-  settings.
-- Eye tracking, rebuilt. Calibration is shorter and far more accurate,
-  the bubble test now fine-tunes itself from where you actually aimed,
-  and the gaze cursor glides smoothly and locks onto bubbles and
-  targets instead of jittering past them. Heads-up before calibrating:
-  dim-lit rooms make eye tracking inconsistent, so put some light on
-  your face for best results.
-- Animated .webp images now actually animate everywhere: flashes, the
-  glitch wash, the image cascade, and tease bubbles.
-- Solid mode for flashes and subliminals: opt-in renderers that draw on
-  one shared overlay instead of popping separate windows. If your
-  fullscreen game kicks to desktop when a flash fires, turn these on.
+⚡ STABILITY & MEMORY
+- Fixed the slow memory climb that could push the app past 3GB and crash
+  with an empty log. Flashes and glitch effects now decode with a hard
+  memory cap and stop leaking native memory as they cycle.
+- Popping a glitch bubble no longer crashes the app.
+- Dragging the avatar between two monitors that use different display
+  scaling no longer freezes the app.
+- The avatar quick-menu Stop Engine now respects lockdown and will not
+  kill the app while a mandatory video or bubble-count is finishing.
+- The ""Enhanced videos detected"" prompt no longer stacks behind the
+  update popup and locks up input on startup.
+- Minimize-to-tray restores on a single click now, and re-centers the
+  window if its saved spot is off-screen.
 
 🔧 BUG FIXES
-- The splash screen no longer goes ""Not Responding"" when you click it
-  while the app loads.
-- Premium features check your live subscription instead of a stale
-  cached tier, and Discord logins with a linked Patreon keep premium
-  access through the change.
-- Logging out fully clears your login token.
-- ""Hey Bambi"" now catches you even when you speak the moment the mic
-  opens.
-- Videos triggered by bubbles start from the beginning instead of
-  midway through.
-- The countdown bar stays glued to its spot instead of detaching.
-- Your end-of-session summary no longer hides behind a leftover video
-  window.
-- Companion awareness lines wait their turn instead of cutting off what
-  she is currently saying.
-- Overlays keep full screen coverage and bubbles pop correctly on
-  setups where monitors use different display scaling.
-- Turning voice off while a Voice Lock Card is open switches it to
-  typed solving instead of leaving it unsolvable.
-
-⚡ PERFORMANCE
-- Chaos stays smooth during heavy floods by shedding render work when
-  the bubble field stacks up.
-
-📦 SIZE
-- The install is roughly 280 MB lighter: voicelines re-encoded and UI
-  art optimized, with no audible or visible quality loss.
+- Timeline ""start at minute X"" now works for every feature (flashes,
+  subliminals, whispers, bouncing text, mandatory videos, lock cards,
+  bubble count and mind wipe), not just a handful. The rest used to
+  start right away.
+- The corner GIF can be changed mid-session now: swap the file, move it,
+  or resize it without restarting.
+- Web video takeover stops at the video's real length instead of running
+  on when a site auto-plays the next clip.
+- Takeover timing labels match the sliders on startup instead of showing
+  stale defaults.
+- The quests header no longer shows last month's season name after a
+  failed refresh.
 
 Season: Jelly July";
 
