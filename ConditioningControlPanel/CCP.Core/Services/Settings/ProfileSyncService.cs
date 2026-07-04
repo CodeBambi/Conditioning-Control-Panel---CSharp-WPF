@@ -1727,6 +1727,272 @@ public sealed class ProfileSyncService : IProfileSyncService, IDisposable
 
     #endregion
 
+    #region Server-authoritative actions (slice 6)
+
+    /// <summary>
+    /// Purchases a skill server-authoritatively (<c>POST /v2/user/purchase-skill</c>). The server
+    /// validates cost/prerequisites and deducts points; the response reconciles local state.
+    /// Ported from WPF <c>PurchaseSkillAsync</c> (ProfileSyncService.cs:1997).
+    ///
+    /// On success: <c>skill_points</c> is DIRECT-SET to the server's authoritative post-purchase
+    /// (decremented) balance — this IS the local deduction (see FIDELITY NOTE below),
+    /// <c>unlocked_skills</c> = UNION (never lose a skill), and the prestige lifetime spend is
+    /// counted locally then monotonically reconciled to the server total via
+    /// <see cref="IAchievementService.ReconcileLifetimePointsSpent"/>. A single 401 retry runs after
+    /// <see cref="HandleUnauthorizedAsync"/> recovers the token (WPF :2025-2031). Returns
+    /// (success, error?).
+    ///
+    /// FIDELITY NOTE: like WPF (ProfileSyncService.cs:2072-2073) this DIRECT-SETs
+    /// <c>settings.SkillPoints = result.SkillPoints.Value</c>. The server's returned balance is the
+    /// authoritative POST-PURCHASE (decremented) value, and WPF's SkillTreeService never deducts
+    /// locally — this direct-set IS the deduction. A Math.Max here would keep the higher
+    /// pre-purchase local value and let skills be bought for free (economy bug). The stale/low-server
+    /// protection lives in the FAILED-purchase branch above (no overwrite on rejection) and in the
+    /// sync-merge path, which uses take-higher — not here.
+    /// SECURITY: the auth token is never logged.
+    /// </summary>
+    public async Task<(bool, string?)> PurchaseSkillAsync(string skillId)
+    {
+        var settings = _settings.Current;
+        var unifiedId = settings?.UnifiedId;
+        if (settings == null || string.IsNullOrEmpty(unifiedId))
+            return (false, "Purchasing enhancements requires a cloud account. Please log in first.");
+
+        // Send local points so the server can reconcile (bubble-pop points may not be synced yet).
+        var requestBody = JsonConvert.SerializeObject(new
+        {
+            unified_id = unifiedId,
+            skill_id = skillId,
+            skill_points = settings.SkillPoints
+        });
+
+        // Builds a FRESH request each attempt (a sent HttpRequestMessage cannot be reused).
+        async Task<HttpResponseMessage> PostPurchaseAsync()
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/purchase-skill");
+            AddAuthHeader(req);
+            req.Content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+            return await _httpClient.SendAsync(req).ConfigureAwait(false);
+        }
+
+        try
+        {
+            var response = await PostPurchaseAsync().ConfigureAwait(false);
+            try
+            {
+                var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    // One-shot 401 retry after auth recovery (WPF :2025-2031). The token is kept
+                    // (never cleared) so the retry re-attaches it via AddAuthHeader; never logged.
+                    if (await HandleUnauthorizedAsync(response).ConfigureAwait(false)
+                        && !string.IsNullOrEmpty(_settings.Current?.AuthToken))
+                    {
+                        _logger.LogInformation("Skill purchase: retrying after auth token recovery");
+                        var retry = await PostPurchaseAsync().ConfigureAwait(false);
+                        response.Dispose();
+                        response = retry;
+                        json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    }
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    // User-friendly message for auth failures instead of the raw server error.
+                    if (response.StatusCode == HttpStatusCode.Unauthorized)
+                    {
+                        _logger.LogWarning("Skill purchase failed: auth token invalid/missing after recovery attempt");
+                        return (false, "Your session has expired. Please log in again from Settings to purchase enhancements.");
+                    }
+
+                    string errorMsg;
+                    try
+                    {
+                        var errorResult = JsonConvert.DeserializeObject<PurchaseSkillResponse>(json);
+                        errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
+                        // Do NOT overwrite local points from an error response — the server may
+                        // return 0 for un-backfilled users; sync reconciles later.
+                    }
+                    catch
+                    {
+                        errorMsg = $"Server error: {response.StatusCode}";
+                    }
+                    _logger.LogWarning("Skill purchase failed: {Error}", errorMsg);
+                    return (false, errorMsg);
+                }
+
+                var result = JsonConvert.DeserializeObject<PurchaseSkillResponse>(json);
+                if (result == null)
+                    return (false, "Invalid server response");
+
+                if (!result.Success)
+                {
+                    // Do NOT overwrite local points on a rejected purchase (stale/missing server
+                    // data for users who leveled before the server-authoritative system shipped).
+                    _logger.LogWarning("Skill purchase rejected: {Error}, server says {Points} points",
+                        result.Error, result.SkillPoints);
+                    return (false, result.Error ?? "Purchase failed");
+                }
+
+                // skill_points — DIRECT-SET the server's authoritative post-purchase balance
+                // (WPF :2072-2073). This IS the local deduction; see FIDELITY NOTE above.
+                if (result.SkillPoints.HasValue)
+                    settings.SkillPoints = result.SkillPoints.Value;
+
+                // unlocked_skills — UNION (never lose a skill).
+                if (result.UnlockedSkills != null)
+                {
+                    var merged = new HashSet<string>(settings.UnlockedSkills ?? new List<string>());
+                    foreach (var skill in result.UnlockedSkills)
+                        merged.Add(skill);
+                    settings.UnlockedSkills = merged.ToList();
+                }
+
+                // Prestige: count the spend locally, then adopt the server total when it's ahead
+                // (it already includes this purchase, so reconcile only raises — never
+                // double-counts). Also feed the season recap bucket. Fires only for a resolvable
+                // skill id (WPF parity, :2077-2083).
+                var purchasedSkill = SkillDefinition.All.FirstOrDefault(s => s.Id == skillId);
+                if (purchasedSkill != null)
+                {
+                    _achievements?.TrackSkillPointsSpent(purchasedSkill.Cost);
+                    SeasonRecapService.TrackPointsSpent(purchasedSkill.Cost);
+                }
+                if (result.LifetimePointsSpent.HasValue)
+                    _achievements?.ReconcileLifetimePointsSpent(result.LifetimePointsSpent.Value);
+
+                _settings.Save();
+
+                _logger.LogInformation("Skill purchased via server: {SkillId}, {Points} points remaining",
+                    skillId, settings.SkillPoints);
+                return (true, null);
+            }
+            finally
+            {
+                response.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Skill purchase request failed");
+            return (false, "Connection failed. Please check your internet connection.");
+        }
+    }
+
+    /// <summary>
+    /// Uses oopsie insurance via server-side validation (<c>POST /v2/user/use-oopsie</c>). The
+    /// server deducts 500 XP and marks the recovery used for the current season, returning the new
+    /// total XP. Returns (success, error?, newXp?). Ported from WPF <c>UseOopsieInsuranceAsync</c>
+    /// (ProfileSyncService.cs:1950).
+    ///
+    /// FIDELITY NOTE: WPF's SERVICE method applies NO local write — it returns <c>new_xp</c> for the
+    /// caller to apply. The local effect (convert new_xp -> current-level XP, set
+    /// <c>settings.PlayerXP</c>, set <c>SeasonalStreakRecoveryUsed</c>, append the fixed date to
+    /// <c>DailyQuestCompletionDates</c>) lives entirely in the WPF UI caller
+    /// <c>MainWindow.QuestsTab.cs:570-583</c>. This port stays byte-faithful (no service-side
+    /// mutation); that UI caller has no Core home yet.
+    /// ProfileSync slice 7: wire the caller-side local effect when the quest tab is ported.
+    /// SECURITY: the auth token is never logged.
+    /// </summary>
+    public async Task<(bool, string?, int?)> UseOopsieInsuranceAsync(string fixDate)
+    {
+        var unifiedId = _settings.Current?.UnifiedId;
+        if (string.IsNullOrEmpty(unifiedId))
+            return (false, "Oopsie Insurance requires a cloud account. Please log in first.", null);
+
+        try
+        {
+            var requestData = new { unified_id = unifiedId, fix_date = fixDate };
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/use-oopsie");
+            AddAuthHeader(request);
+            request.Content = new StringContent(
+                JsonConvert.SerializeObject(requestData), Encoding.UTF8, "application/json");
+
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                await HandleUnauthorizedAsync(response).ConfigureAwait(false);
+                var errorResult = JsonConvert.DeserializeObject<OopsieErrorResponse>(json);
+                var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
+                _logger.LogWarning("Oopsie insurance failed: {Error}", errorMsg);
+                return (false, errorMsg, null);
+            }
+
+            var result = JsonConvert.DeserializeObject<OopsieSuccessResponse>(json);
+            _logger.LogInformation("Oopsie insurance used via server: new XP = {NewXP}", result?.NewXp);
+            return (true, null, result?.NewXp);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Oopsie insurance request failed");
+            return (false, $"Connection failed: {ex.Message}", null);
+        }
+    }
+
+    /// <summary>
+    /// Changes the user's display name via server-side validation
+    /// (<c>POST /v2/user/change-display-name</c>). The name must be unique (case-insensitive;
+    /// case-only changes are allowed). On success the confirmed name is written to
+    /// <c>settings.UserDisplayName</c> and persisted. Returns (success, error?, newName?). Ported
+    /// from WPF <c>ChangeDisplayNameAsync</c> (ProfileSyncService.cs:2116).
+    ///
+    /// PORT NOTE: WPF's service returns the name and its UI caller
+    /// (<c>MainWindow.Browser.cs:1207-1213</c>) performs the <c>UserDisplayName</c> + Save write on
+    /// <c>success &amp;&amp; resultName != null</c>. Per the slice-6 spec that trivial, cleanly
+    /// seamable local write is consolidated INTO the service here (the Core UI caller does not exist
+    /// yet). SECURITY: the auth token is never logged.
+    /// </summary>
+    public async Task<(bool, string?, string?)> ChangeDisplayNameAsync(string newName)
+    {
+        var unifiedId = _settings.Current?.UnifiedId;
+        if (string.IsNullOrEmpty(unifiedId))
+            return (false, "You must be logged in to change your name", null);
+
+        try
+        {
+            var requestData = new { unified_id = unifiedId, new_display_name = newName };
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{ProxyBaseUrl}/v2/user/change-display-name");
+            AddAuthHeader(request);
+            request.Content = new StringContent(
+                JsonConvert.SerializeObject(requestData), Encoding.UTF8, "application/json");
+
+            using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                await HandleUnauthorizedAsync(response).ConfigureAwait(false);
+                var errorResult = JsonConvert.DeserializeObject<ChangeDisplayNameErrorResponse>(json);
+                var errorMsg = errorResult?.Error ?? $"Server error: {response.StatusCode}";
+                _logger.LogWarning("Change display name failed: {Error}", errorMsg);
+                return (false, errorMsg, null);
+            }
+
+            var result = JsonConvert.DeserializeObject<ChangeDisplayNameResponse>(json);
+            var confirmedName = result?.NewDisplayName;
+
+            // Apply the caller-side local write (guarded like WPF's caller: success && name != null).
+            if (!string.IsNullOrEmpty(confirmedName) && _settings.Current != null)
+            {
+                _settings.Current.UserDisplayName = confirmedName;
+                _settings.Save();
+            }
+
+            _logger.LogInformation("Display name changed to: {NewName}", confirmedName);
+            return (true, null, confirmedName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Change display name request failed");
+            return (false, "Name change requires an internet connection", null);
+        }
+    }
+
+    #endregion
+
     /// <summary>
     /// Resolves the current client version string for the <c>X-Client-Version</c> / user-agent
     /// headers (mirrors <c>RemoteControlService.GetCurrentVersion</c>).

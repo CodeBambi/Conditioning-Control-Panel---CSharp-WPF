@@ -828,4 +828,269 @@ public class ProfileSyncServiceTests
             Assert.Equal(0, noIdHandler.CallCount);
         }
     }
+
+    // ---- Slice 6: server-authoritative actions -------------------------------------------
+
+    /// <summary>
+    /// Thread-safe handler that routes canned responses per request path and counts calls per
+    /// path. Enqueue multiple responses for a path to script a sequence (e.g. 401 then 200); once
+    /// one response remains it is reused for further calls. Thread-safety matters because a
+    /// successful 401 recovery starts the heartbeat, whose immediate tick POSTs concurrently.
+    /// </summary>
+    private sealed class RoutingHandler : HttpMessageHandler
+    {
+        private readonly object _lock = new();
+        private readonly Dictionary<string, Queue<(HttpStatusCode Status, string Body)>> _responses = new();
+        private readonly Dictionary<string, int> _callCounts = new();
+
+        public RoutingHandler Enqueue(string path, HttpStatusCode status, string body)
+        {
+            lock (_lock)
+            {
+                if (!_responses.TryGetValue(path, out var q)) { q = new(); _responses[path] = q; }
+                q.Enqueue((status, body));
+            }
+            return this;
+        }
+
+        public int CallCountFor(string path)
+        {
+            lock (_lock) { return _callCounts.TryGetValue(path, out var n) ? n : 0; }
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var path = request.RequestUri!.AbsolutePath;
+            (HttpStatusCode Status, string Body) resp;
+            lock (_lock)
+            {
+                _callCounts[path] = (_callCounts.TryGetValue(path, out var n) ? n : 0) + 1;
+                resp = (HttpStatusCode.OK, "{}");
+                if (_responses.TryGetValue(path, out var q) && q.Count > 0)
+                    resp = q.Count > 1 ? q.Dequeue() : q.Peek();
+            }
+            return Task.FromResult(new HttpResponseMessage(resp.Status)
+            {
+                Content = new StringContent(resp.Body, Encoding.UTF8, "application/json")
+            });
+        }
+    }
+
+    private static FakeSettingsService LoggedInSettings()
+    {
+        var settings = new FakeSettingsService();
+        settings.Current.AuthToken = "auth-token-xyz";
+        settings.Current.UnifiedId = "unified-1";
+        return settings;
+    }
+
+    /// <summary>
+    /// (a) Purchase success DIRECT-SETs skill_points to the server's authoritative POST-PURCHASE
+    /// (decremented) balance — WPF-faithful (:2072-2073); this IS the local deduction, since
+    /// SkillTreeService never deducts locally. (A Math.Max here would keep the pre-purchase value
+    /// and make skills free — economy bug.) UNIONs unlocked_skills, and adopts the server's higher
+    /// lifetime_points_spent monotonically (prestige merge primitive).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task PurchaseSkillAsync_Success_AdoptsServerPostPurchaseBalance_UnionsSkills_AndAdoptsLifetimeSpent()
+    {
+        var env = new TestAppEnvironment();
+        try
+        {
+            var achievements = new AchievementService(env, new DebugLogger<AchievementService>());
+            try
+            {
+                achievements.Progress.LifetimeSkillPointsSpent = 100;
+
+                // Server returns the POST-PURCHASE balance 5 (local pre-purchase was 20; the
+                // purchase spent 15): direct-set adopts 5 — the deduction. lifetime 300 -> adopted.
+                var handler = new RecordingHandler
+                {
+                    ResponseBody = "{\"success\": true, \"skill_points\": 5, \"unlocked_skills\": [\"server_skill\"], \"lifetime_points_spent\": 300}"
+                };
+                var settings = LoggedInSettings();
+                settings.Current.SkillPoints = 20;
+                settings.Current.UnlockedSkills = new List<string> { "local_skill" };
+                using var svc = new ProfileSyncService(
+                    settings, new DebugLogger<ProfileSyncService>(), handler,
+                    sessionService: null, achievements);
+
+                var (success, error) = await svc.PurchaseSkillAsync("some_skill");
+
+                Assert.True(success);
+                Assert.Null(error);
+                Assert.Equal(1, handler.CallCount);
+                Assert.Equal("https://codebambi-proxy.vercel.app/v2/user/purchase-skill",
+                    handler.LastRequest!.RequestUri!.ToString());
+
+                // skill_points direct-set to the server's post-purchase balance (20 -> 5 = the
+                // deduction applied; WPF-faithful).
+                Assert.Equal(5, settings.Current.SkillPoints);
+                // unlocked_skills unioned (both survive).
+                Assert.Contains("local_skill", settings.Current.UnlockedSkills!);
+                Assert.Contains("server_skill", settings.Current.UnlockedSkills!);
+                // prestige lifetime_points_spent adopted monotonically (100 -> 300).
+                Assert.Equal(300, achievements.Progress.LifetimeSkillPointsSpent);
+
+                // request body carries the reconciliation inputs (X-Auth-Token asserted, never logged).
+                Assert.True(handler.LastRequest.Headers.TryGetValues("X-Auth-Token", out var tokenValues));
+                Assert.Equal("auth-token-xyz", tokenValues!.Single());
+                var body = JObject.Parse(handler.LastBody!);
+                Assert.Equal("unified-1", (string?)body["unified_id"]);
+                Assert.Equal("some_skill", (string?)body["skill_id"]);
+                Assert.Equal(20, (int?)body["skill_points"]);
+            }
+            finally
+            {
+                achievements.Dispose();
+            }
+        }
+        finally
+        {
+            env.Cleanup();
+        }
+    }
+
+    /// <summary>
+    /// (b) A 401 on the first purchase POST triggers restore-session recovery, then the request is
+    /// retried exactly once and succeeds: assert 2 purchase POSTs + 1 restore-session POST.
+    /// </summary>
+    [Fact]
+    public async Task PurchaseSkillAsync_On401_CallsRestoreSession_ThenRetriesOnce_AndSucceeds()
+    {
+        const string purchasePath = "/v2/user/purchase-skill";
+        const string restorePath = "/v2/auth/restore-session";
+
+        using var handler = new RoutingHandler()
+            // First purchase attempt -> 401; retry -> 200 success.
+            .Enqueue(purchasePath, HttpStatusCode.Unauthorized, "{}")
+            .Enqueue(purchasePath, HttpStatusCode.OK,
+                "{\"success\": true, \"skill_points\": 3, \"unlocked_skills\": [\"server_skill\"]}")
+            // restore-session confirms the token (no rotation) so recovery succeeds.
+            .Enqueue(restorePath, HttpStatusCode.OK, "{}");
+
+        var settings = LoggedInSettings();
+        settings.Current.SkillPoints = 1;
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        var (success, error) = await svc.PurchaseSkillAsync("some_skill");
+
+        // Stop the heartbeat that HandleUnauthorizedAsync starts on successful recovery.
+        svc.StopHeartbeat();
+
+        Assert.True(success);
+        Assert.Null(error);
+        // Purchase endpoint hit exactly twice: original (401) + one retry (200).
+        Assert.Equal(2, handler.CallCountFor(purchasePath));
+        // Auth recovery went through restore-session exactly once.
+        Assert.Equal(1, handler.CallCountFor(restorePath));
+        // Retry-success values applied: server post-purchase balance 3 direct-set, union restores server_skill.
+        Assert.Equal(3, settings.Current.SkillPoints);
+        Assert.Contains("server_skill", settings.Current.UnlockedSkills!);
+    }
+
+    /// <summary>
+    /// (c) Oopsie success returns (true, null, newXp). FIDELITY: WPF's service applies NO local
+    /// write (the -500 XP / streak repair lives in the UI caller, deferred to slice 7) — assert the
+    /// service does not mutate PlayerXP / SeasonalStreakRecoveryUsed.
+    /// </summary>
+    [Fact]
+    public async Task UseOopsieInsuranceAsync_Success_ReturnsNewBalance_AndAppliesNoServiceSideLocalWrite()
+    {
+        var handler = new RecordingHandler
+        {
+            ResponseBody = "{\"success\": true, \"new_xp\": 4200, \"oopsie_used_season\": \"2026-S1\"}"
+        };
+        var settings = LoggedInSettings();
+        settings.Current.PlayerXP = 999;                 // captured to prove no service-side mutation
+        settings.Current.SeasonalStreakRecoveryUsed = false;
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        var (success, error, newBalance) = await svc.UseOopsieInsuranceAsync("2026-07-01");
+
+        Assert.True(success);
+        Assert.Null(error);
+        Assert.Equal(4200, newBalance);
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal("https://codebambi-proxy.vercel.app/v2/user/use-oopsie",
+            handler.LastRequest!.RequestUri!.ToString());
+        var body = JObject.Parse(handler.LastBody!);
+        Assert.Equal("unified-1", (string?)body["unified_id"]);
+        Assert.Equal("2026-07-01", (string?)body["fix_date"]);
+
+        // FIDELITY: the -500 XP / SeasonalStreakRecoveryUsed / quest-date append all live in the WPF
+        // UI caller (MainWindow.QuestsTab.cs:570-583) — the service must NOT mutate local state.
+        Assert.Equal(999, settings.Current.PlayerXP);
+        Assert.False(settings.Current.SeasonalStreakRecoveryUsed);
+    }
+
+    /// <summary>(c) Oopsie server error returns (false, serverMessage, null).</summary>
+    [Fact]
+    public async Task UseOopsieInsuranceAsync_ServerError_ReturnsErrorMessage_AndNullBalance()
+    {
+        var handler = new RecordingHandler
+        {
+            ResponseStatus = HttpStatusCode.BadRequest,
+            ResponseBody = "{\"error\": \"Already used this season\"}"
+        };
+        var settings = LoggedInSettings();
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        var (success, error, newBalance) = await svc.UseOopsieInsuranceAsync("2026-07-01");
+
+        Assert.False(success);
+        Assert.Equal("Already used this season", error);
+        Assert.Null(newBalance);
+    }
+
+    /// <summary>
+    /// (d) Change-name success sets settings.UserDisplayName to the server-confirmed name and
+    /// returns it (the caller-side write consolidated into the service per the slice-6 spec).
+    /// </summary>
+    [Fact]
+    public async Task ChangeDisplayNameAsync_Success_SetsUserDisplayName_AndReturnsNewName()
+    {
+        var handler = new RecordingHandler
+        {
+            ResponseBody = "{\"success\": true, \"new_display_name\": \"BambiPrime\"}"
+        };
+        var settings = LoggedInSettings();
+        settings.Current.UserDisplayName = "OldName";
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        var (success, error, newName) = await svc.ChangeDisplayNameAsync("BambiPrime");
+
+        Assert.True(success);
+        Assert.Null(error);
+        Assert.Equal("BambiPrime", newName);
+        Assert.Equal("BambiPrime", settings.Current.UserDisplayName);   // service applied the local write
+        Assert.Equal(1, handler.CallCount);
+        Assert.Equal("https://codebambi-proxy.vercel.app/v2/user/change-display-name",
+            handler.LastRequest!.RequestUri!.ToString());
+        var body = JObject.Parse(handler.LastBody!);
+        Assert.Equal("unified-1", (string?)body["unified_id"]);
+        Assert.Equal("BambiPrime", (string?)body["new_display_name"]);
+    }
+
+    /// <summary>(d) Change-name server error returns (false, serverMessage, null) and leaves the name unchanged.</summary>
+    [Fact]
+    public async Task ChangeDisplayNameAsync_ServerError_ReturnsErrorMessage_AndDoesNotChangeName()
+    {
+        var handler = new RecordingHandler
+        {
+            ResponseStatus = HttpStatusCode.Conflict,
+            ResponseBody = "{\"error\": \"Name already taken\"}"
+        };
+        var settings = LoggedInSettings();
+        settings.Current.UserDisplayName = "OldName";
+        using var svc = new ProfileSyncService(settings, new DebugLogger<ProfileSyncService>(), handler);
+
+        var (success, error, newName) = await svc.ChangeDisplayNameAsync("TakenName");
+
+        Assert.False(success);
+        Assert.Equal("Name already taken", error);
+        Assert.Null(newName);
+        Assert.Equal("OldName", settings.Current.UserDisplayName);   // unchanged on failure
+    }
 }
