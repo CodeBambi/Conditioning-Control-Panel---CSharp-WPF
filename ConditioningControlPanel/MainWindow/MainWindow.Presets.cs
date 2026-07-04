@@ -440,8 +440,19 @@ namespace ConditioningControlPanel
             {
                 _selectedCornerGifPath = dialog.FileName;
                 PresetsTab.BtnSelectCornerGif.Content = $"📁 {System.IO.Path.GetFileName(dialog.FileName)}";
+
+                // Live update during session (#474) — the engine recreates the window
+                if (_sessionEngine != null && _sessionEngine.IsRunning)
+                {
+                    _sessionEngine.UpdateCornerGifPath(dialog.FileName);
+                }
             }
         }
+
+        // Debounce for the corner GIF size slider's live update: the engine recreates
+        // the layered window per change (in-place resize is the render-deadlock trigger
+        // that got the old live update disabled), so only apply once the slider rests.
+        private System.Windows.Threading.DispatcherTimer? _cornerGifSizeDebounce;
 
         internal void SliderCornerGifSize_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -450,8 +461,36 @@ namespace ConditioningControlPanel
                 PresetsTab.TxtCornerGifSize.Text = $"{(int)e.NewValue}px";
             }
 
-            // Don't live update during session - causes crashes with animated GIFs
-            // Size will be applied when session starts or restarts
+            // Live update during session (#474), debounced 400ms
+            if (_sessionEngine != null && _sessionEngine.IsRunning)
+            {
+                if (_cornerGifSizeDebounce == null)
+                {
+                    _cornerGifSizeDebounce = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(400)
+                    };
+                    _cornerGifSizeDebounce.Tick += (s, args) =>
+                    {
+                        _cornerGifSizeDebounce?.Stop();
+                        if (_sessionEngine != null && _sessionEngine.IsRunning)
+                        {
+                            _sessionEngine.UpdateCornerGifSize((int)PresetsTab.SliderCornerGifSize.Value);
+                        }
+                    };
+                }
+                _cornerGifSizeDebounce.Stop();
+                _cornerGifSizeDebounce.Start();
+            }
+        }
+
+        internal void RbCornerPos_Checked(object sender, RoutedEventArgs e)
+        {
+            // Live update during session (#474) — position-only move, no recreate
+            if (_sessionEngine != null && _sessionEngine.IsRunning)
+            {
+                _sessionEngine.UpdateCornerGifPosition(GetSelectedCornerPosition());
+            }
         }
 
         internal void SliderCornerGifOpacity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)

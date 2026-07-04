@@ -186,8 +186,20 @@ namespace ConditioningControlPanel.Services
             // Start Mind Wipe if enabled (escalating frequency)
             if (session.Settings.MindWipeEnabled)
             {
-                App.MindWipe.Volume = session.Settings.MindWipeVolume / 100.0;
-                App.MindWipe.StartSession(session.Settings.MindWipeBaseMultiplier);
+                if (session.Settings.MindWipeStartMinute == 0)
+                {
+                    App.MindWipe.Volume = session.Settings.MindWipeVolume / 100.0;
+                    App.MindWipe.StartSession(session.Settings.MindWipeBaseMultiplier);
+                }
+                else
+                {
+                    var mw = session.Settings;
+                    DeferFeatureStart("mind wipe", mw.MindWipeStartMinute, () =>
+                    {
+                        App.MindWipe.Volume = mw.MindWipeVolume / 100.0;
+                        App.MindWipe.StartSession(mw.MindWipeBaseMultiplier);
+                    });
+                }
             }
             
             // Start main timer (updates every second)
@@ -262,7 +274,10 @@ namespace ConditioningControlPanel.Services
             _mainTimer = null;
             _phaseTimer?.Stop();
             _phaseTimer = null;
-            
+
+            // Drop any not-yet-fired deferred feature starts (#483)
+            _pendingFeatureStarts.Clear();
+
             // Close corner GIF
             CloseCornerGif();
             
@@ -419,20 +434,22 @@ namespace ConditioningControlPanel.Services
             _mainTimer?.Start();
             _phaseTimer?.Start();
 
-            // Re-apply current session settings to restart services
+            // Re-apply current session settings to restart services. Skip features whose
+            // deferred timeline start (#483) hasn't arrived yet — CheckDelayedFeatures
+            // fires them when due; elapsed time survives the pause.
             var settings = _currentSession.Settings;
-            if (settings.FlashEnabled) App.Flash?.Start();
-            if (settings.SubliminalEnabled) App.Subliminal?.Start();
+            if (settings.FlashEnabled && !IsFeaturePending("flash")) App.Flash?.Start();
+            if (settings.SubliminalEnabled && !IsFeaturePending("subliminal")) App.Subliminal?.Start();
             if (settings.BubblesEnabled) App.Bubbles?.Start();
-            if (settings.LockCardEnabled) App.LockCard?.Start();
+            if (settings.LockCardEnabled && !IsFeaturePending("lock cards")) App.LockCard?.Start();
             if (App.Settings.Current.PopQuizEnabled) App.PopQuiz?.Start();
-            if (settings.BubbleCountEnabled) App.BubbleCount?.Start();
-            if (settings.BouncingTextEnabled) App.BouncingText?.Start();
-            if (settings.MindWipeEnabled)
+            if (settings.BubbleCountEnabled && !IsFeaturePending("bubble count")) App.BubbleCount?.Start();
+            if (settings.BouncingTextEnabled && !IsFeaturePending("bouncing text")) App.BouncingText?.Start();
+            if (settings.MindWipeEnabled && !IsFeaturePending("mind wipe"))
                 App.MindWipe?.Start(settings.MindWipeBaseMultiplier, settings.MindWipeVolume / 100.0);
             // DISABLED: Brain Drain is up for rework due to performance issues
             // if (_brainDrainActive && App.Settings.Current.IsLevelUnlocked(70)) App.BrainDrain?.Start();
-            if (settings.MandatoryVideosEnabled) App.Video?.Start();
+            if (settings.MandatoryVideosEnabled && !IsFeaturePending("mandatory videos")) App.Video?.Start();
             // Re-enable overlays via the overlay service
             App.Overlay?.Start();
 
@@ -583,7 +600,26 @@ namespace ConditioningControlPanel.Services
         {
             if (_currentSession == null) return;
             var settings = _currentSession.Settings;
-            
+
+            // Deferred feature starts queued by ApplySessionSettings (timeline start
+            // events, #483). Reverse-iterate so firing removes in place.
+            for (int i = _pendingFeatureStarts.Count - 1; i >= 0; i--)
+            {
+                var pending = _pendingFeatureStarts[i];
+                if (elapsedMinutes < pending.StartMinute) continue;
+                _pendingFeatureStarts.RemoveAt(i);
+                try
+                {
+                    pending.Start();
+                    App.Logger?.Information("Session: {Feature} started at {Minutes:F1} minutes (target was {Target})",
+                        pending.Name, elapsedMinutes, pending.StartMinute);
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning(ex, "Session: deferred start of {Feature} failed", pending.Name);
+                }
+            }
+
             // Pink filter delayed start (use randomized time)
             if (settings.PinkFilterEnabled && !App.Settings.Current.PinkFilterEnabled)
             {
@@ -821,10 +857,29 @@ namespace ConditioningControlPanel.Services
         private Dictionary<string, bool>? _savedBouncingTextPool;
         private Dictionary<string, bool>? _savedSubliminalPool;
         private Dictionary<string, bool>? _savedLockCardPool;
-        
+
+        // Deferred feature starts (the timeline editor's "start at minute X" events).
+        // The editor serializes a StartMinute for 13 features, but the engine only ever
+        // read four of them (pink filter, spiral, bubbles, corner GIF) — flash, subliminal,
+        // whispers, bouncing text, videos, lock cards, bubble count and mind wipe all
+        // started at t=0 regardless (#483). ApplySessionSettings queues one entry per
+        // delayed feature; CheckDelayedFeatures fires each when its minute arrives. The
+        // four original features keep their bespoke delay paths (randomized starts, ramps).
+        private readonly List<(string Name, int StartMinute, Action Start)> _pendingFeatureStarts = new();
+
+        private void DeferFeatureStart(string name, int startMinute, Action start)
+        {
+            _pendingFeatureStarts.Add((name, startMinute, start));
+            App.Logger?.Information("Session: {Feature} start deferred to minute {Minute}", name, startMinute);
+        }
+
+        private bool IsFeaturePending(string name) =>
+            _pendingFeatureStarts.Any(p => p.Name == name);
+
         private void ApplySessionSettings(SessionSettings settings)
         {
             var current = App.Settings.Current;
+            _pendingFeatureStarts.Clear();
             
             // Flash Images
             current.FlashEnabled = settings.FlashEnabled;
@@ -837,9 +892,17 @@ namespace ConditioningControlPanel.Services
                 current.CorruptionMode = settings.FlashHydra;
                 current.FlashAudioEnabled = settings.FlashAudioEnabled;
 
-                // Start flash service for session
-                App.Flash?.Start();
-                App.Logger?.Information("Session: Started flash images at {Freq}/hour", settings.FlashPerHour);
+                if (settings.FlashStartMinute == 0)
+                {
+                    // Start flash service for session
+                    App.Flash?.Start();
+                    App.Logger?.Information("Session: Started flash images at {Freq}/hour", settings.FlashPerHour);
+                }
+                else
+                {
+                    App.Flash?.Stop();   // engine may already have it running
+                    DeferFeatureStart("flash", settings.FlashStartMinute, () => App.Flash?.Start());
+                }
             }
             else
             {
@@ -876,19 +939,31 @@ namespace ConditioningControlPanel.Services
                         string.Join(", ", settings.SubliminalPhrases));
                 }
 
-                // Start subliminal service for session
-                App.Subliminal?.Start();
+                if (settings.SubliminalStartMinute == 0)
+                {
+                    // Start subliminal service for session
+                    App.Subliminal?.Start();
+                }
+                else
+                {
+                    App.Subliminal?.Stop();
+                    DeferFeatureStart("subliminal", settings.SubliminalStartMinute, () => App.Subliminal?.Start());
+                }
             }
             else
             {
                 App.Subliminal?.Stop();
             }
 
-            // Audio Whispers (Sub Audio)
-            current.SubAudioEnabled = settings.AudioWhispersEnabled;
+            // Audio Whispers (Sub Audio) — flag-driven (no service Start), so a delayed
+            // start just holds the flag off until the minute arrives.
+            current.SubAudioEnabled = settings.AudioWhispersEnabled && settings.AudioWhispersStartMinute == 0;
             if (settings.AudioWhispersEnabled)
             {
                 current.SubAudioVolume = settings.WhisperVolume;
+                if (settings.AudioWhispersStartMinute > 0)
+                    DeferFeatureStart("audio whispers", settings.AudioWhispersStartMinute,
+                        () => App.Settings.Current.SubAudioEnabled = true);
             }
             
             // Audio Ducking - apply session-specific duck level
@@ -923,11 +998,19 @@ namespace ConditioningControlPanel.Services
                     }
                 }
                 
-                // Start bouncing text (bypass level requirement during sessions)
                 App.BouncingText?.Stop(); // Stop first to reset state
-                App.BouncingText?.Start(bypassLevelCheck: true);
-                App.Logger?.Information("Session: Started bouncing text with phrases: {Phrases}",
-                    string.Join(", ", settings.BouncingTextPhrases));
+                if (settings.BouncingTextStartMinute == 0)
+                {
+                    // Start bouncing text (bypass level requirement during sessions)
+                    App.BouncingText?.Start(bypassLevelCheck: true);
+                    App.Logger?.Information("Session: Started bouncing text with phrases: {Phrases}",
+                        string.Join(", ", settings.BouncingTextPhrases));
+                }
+                else
+                {
+                    DeferFeatureStart("bouncing text", settings.BouncingTextStartMinute,
+                        () => App.BouncingText?.Start(bypassLevelCheck: true));
+                }
             }
             else
             {
@@ -985,7 +1068,15 @@ namespace ConditioningControlPanel.Services
                 {
                     current.VideosPerHour = settings.VideosPerHour.Value;
                 }
-                App.Video?.Start();
+                if (settings.MandatoryVideosStartMinute == 0)
+                {
+                    App.Video?.Start();
+                }
+                else
+                {
+                    App.Video?.Stop();
+                    DeferFeatureStart("mandatory videos", settings.MandatoryVideosStartMinute, () => App.Video?.Start());
+                }
             }
             else
             {
@@ -1019,7 +1110,15 @@ namespace ConditioningControlPanel.Services
                         string.Join(", ", settings.LockCardPhrases));
                 }
 
-                App.LockCard?.Start();
+                if (settings.LockCardStartMinute == 0)
+                {
+                    App.LockCard?.Start();
+                }
+                else
+                {
+                    App.LockCard?.Stop();
+                    DeferFeatureStart("lock cards", settings.LockCardStartMinute, () => App.LockCard?.Start());
+                }
             }
             else
             {
@@ -1043,7 +1142,15 @@ namespace ConditioningControlPanel.Services
                 {
                     current.BubbleCountFrequency = settings.BubbleCountFrequency.Value;
                 }
-                App.BubbleCount?.Start();
+                if (settings.BubbleCountStartMinute == 0)
+                {
+                    App.BubbleCount?.Start();
+                }
+                else
+                {
+                    App.BubbleCount?.Stop();
+                    DeferFeatureStart("bubble count", settings.BubbleCountStartMinute, () => App.BubbleCount?.Start());
+                }
             }
             else
             {
@@ -1321,28 +1428,66 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Updates the corner GIF size during an active session
+        /// Updates the corner GIF size during an active session (#474). The window is
+        /// RECREATED, not resized in place: resizing a realized AllowsTransparency window
+        /// while its GIF is animating runs a synchronous CompleteRender that can deadlock
+        /// the render thread — the crash that originally got the size slider's live
+        /// update disabled. Close+Show is the same path the CornerGifEndMinute timer
+        /// already exercises mid-session. Callers should debounce (the UI slider does).
         /// </summary>
         public void UpdateCornerGifSize(int newSize)
         {
-            if (_cornerGifWindow == null || _currentSession == null) return;
-            if (_cornerGifWidth <= 0 || _cornerGifHeight <= 0) return; // No cached dimensions
+            if (_currentSession == null) return;
 
             try
             {
-                // Update the session settings
                 _currentSession.Settings.CornerGifSize = newSize;
+                if (_cornerGifWindow == null) return; // not shown (yet) — start timer will pick the value up
+                CloseCornerGif();
+                ShowCornerGif(_currentSession.Settings);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to update corner GIF size");
+            }
+        }
 
-                // Use cached GIF dimensions instead of reloading the file
-                double gifWidth = _cornerGifWidth;
-                double gifHeight = _cornerGifHeight;
+        /// <summary>
+        /// Swaps the corner GIF file during an active session (#474). Recreates the
+        /// window (see UpdateCornerGifSize for why in-place changes are avoided; a new
+        /// file changes the window dimensions anyway).
+        /// </summary>
+        public void UpdateCornerGifPath(string path)
+        {
+            if (_currentSession == null) return;
 
-                // Calculate new window size
-                double scale = newSize / Math.Max(gifWidth, gifHeight);
-                double windowWidth = gifWidth * scale;
-                double windowHeight = gifHeight * scale;
+            try
+            {
+                _currentSession.Settings.CornerGifPath = path;
+                if (_cornerGifWindow == null) return;
+                CloseCornerGif();
+                ShowCornerGif(_currentSession.Settings);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Error(ex, "Failed to update corner GIF path");
+            }
+        }
 
-                // Get screen bounds
+        /// <summary>
+        /// Moves the corner GIF to another corner during an active session (#474).
+        /// Position-only change (Left/Top) — moving a layered window doesn't touch its
+        /// render surface, so no recreate is needed.
+        /// </summary>
+        public void UpdateCornerGifPosition(CornerPosition position)
+        {
+            if (_currentSession == null) return;
+
+            try
+            {
+                _currentSession.Settings.CornerGifPosition = position;
+                if (_cornerGifWindow == null) return;
+
                 var screen = System.Windows.Forms.Screen.PrimaryScreen;
                 if (screen == null) return;
 
@@ -1354,10 +1499,11 @@ namespace ConditioningControlPanel.Services
 
                 double screenWidth = screen.Bounds.Width / dpiScale;
                 double screenHeight = screen.Bounds.Height / dpiScale;
+                double windowWidth = _cornerGifWindow.Width;
+                double windowHeight = _cornerGifWindow.Height;
 
-                // Recalculate position
                 double left = 0, top = 0;
-                switch (_currentSession.Settings.CornerGifPosition)
+                switch (position)
                 {
                     case CornerPosition.TopLeft:
                         left = 0; top = 0;
@@ -1373,15 +1519,12 @@ namespace ConditioningControlPanel.Services
                         break;
                 }
 
-                // Update window
-                _cornerGifWindow.Width = windowWidth;
-                _cornerGifWindow.Height = windowHeight;
                 _cornerGifWindow.Left = left;
                 _cornerGifWindow.Top = top;
             }
             catch (Exception ex)
             {
-                App.Logger?.Error(ex, "Failed to update corner GIF size");
+                App.Logger?.Error(ex, "Failed to update corner GIF position");
             }
         }
 

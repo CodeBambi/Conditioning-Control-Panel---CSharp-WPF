@@ -97,6 +97,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.SessionBtn_Export(sender, e);
         }
+        private void RbCornerPos_Checked(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.RbCornerPos_Checked(sender, e);
+        }
         private void SessionCard_Click(object sender, MouseButtonEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

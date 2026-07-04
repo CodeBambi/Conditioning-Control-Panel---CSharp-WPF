@@ -64,9 +64,19 @@ public class QuestDefinitionService : IDisposable
     };
 
     /// <summary>
-    /// Current season title (from server or default month name)
+    /// Current season title (from server or default month name). The cached server
+    /// title is only trusted while it was fetched in the CURRENT UTC month: the
+    /// month-rollover refetch (IsCacheStale) fires on startup, but when it fails —
+    /// offline launch, server hiccup — RefreshFromServerAsync leaves the old cache
+    /// loaded, and the Quests header kept showing last month's season ("Juicy June"
+    /// in July, #480). Falling back to the local month name self-corrects on the 1st
+    /// even with no network; the next successful refetch restores the server title.
     /// </summary>
-    public string SeasonTitle => _cache?.SeasonTitle
+    public string SeasonTitle =>
+        (_cache?.FetchedAt is { } fetched
+            && fetched.Year == DateTime.UtcNow.Year
+            && fetched.Month == DateTime.UtcNow.Month
+            ? _cache?.SeasonTitle : null)
         ?? DefaultMonthNames.GetValueOrDefault(DateTime.Now.Month, DateTime.Now.ToString("MMMM"));
 
     public QuestDefinitionService()
