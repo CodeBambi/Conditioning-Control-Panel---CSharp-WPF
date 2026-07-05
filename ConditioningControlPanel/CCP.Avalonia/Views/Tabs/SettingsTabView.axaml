@@ -509,10 +509,11 @@
                       <TextBlock Text="{Binding LoggedInDisplayName}"
                                  Foreground="{DynamicResource TextLightBrush}" FontWeight="Bold" FontSize="12" />
                     </StackPanel>
+                    <!-- v6.2.9 #10: prominent, high-contrast Logout button (WPF SettingsTabView.xaml:1406) -->
                     <Button Grid.Column="1" Content="{loc:Str btn_logout}"
                             Command="{Binding LogoutCommand}"
-                            Padding="10,5" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
-                            BorderThickness="0" FontSize="10" />
+                            Padding="16,7" Background="{DynamicResource PinkBrush}" Foreground="White"
+                            BorderThickness="0" FontSize="12" FontWeight="Bold" />
                   </Grid>
                 </Border>
 
