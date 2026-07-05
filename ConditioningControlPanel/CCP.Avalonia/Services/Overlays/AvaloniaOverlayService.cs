@@ -207,7 +207,7 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
 
             if (hasPink)
             {
-                var boosted = Math.Min((_adHocPinkOpacity ?? settings.PinkFilterOpacity) * 2, 100);
+                var boosted = Math.Min((_adHocPinkOpacity ?? settings.PinkFilterOpacity) * 2, MaxOverlayOpacityPercent);
                 _pinkTintLayer.SetColor(GetFilterColor(boosted), boosted / 100.0);
                 _lastAppliedPinkOpacity = -1;
             }
@@ -528,12 +528,20 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         _adHocBrainDrainIntensity = null;
     }
 
+    // Hard cap (user rule): pink overlay never exceeds 50% opacity, so a tint can never fully
+    // obscure the screen - whatever the source (settings, session start/end ramp, IntensityRamp
+    // multiplier, keyword pulse, ad-hoc/AI command). Enforced at the apply point below so every
+    // path is bounded. (Spiral is already <=10% by SpiralLayerOpacity's 0.1 factor; IntensityRamp
+    // also self-caps pink/spiral at 50, but the session Lerp ramp and raw settings did not.)
+    private const int MaxOverlayOpacityPercent = 50;
+
     private void StartPinkFilter(int opacityPercent)
     {
         // Ad-hoc pink must work while the service is stopped (WPF parity), and the engine
         // may have auto-stopped in the meantime; Start() is idempotent and lazily recreates
         // the compositor windows.
         _compositor?.Start();
+        opacityPercent = Math.Min(opacityPercent, MaxOverlayOpacityPercent);
         var color = GetFilterColor(opacityPercent);
         _pinkTintLayer.SetColor(color, opacityPercent / 100.0);
         _lastAppliedPinkOpacity = opacityPercent;
@@ -552,7 +560,7 @@ public sealed class AvaloniaOverlayService : IOverlayService, IDisposable
         var settings = _settings.Current;
         if (settings == null) return;
 
-        var opacity = _adHocPinkOpacity ?? settings.PinkFilterOpacity;
+        var opacity = Math.Min(_adHocPinkOpacity ?? settings.PinkFilterOpacity, MaxOverlayOpacityPercent);
         var color = GetFilterColor(opacity);
         if (opacity == _lastAppliedPinkOpacity && color == _lastAppliedPinkColor) return;
 

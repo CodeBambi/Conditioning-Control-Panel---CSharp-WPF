@@ -142,10 +142,12 @@ public static class BenchmarkContext
                 BouncingTextOpacity = 100,
                 BouncingTextPhrases = new List<string> { "MAX", "LOAD", "BENCHMARK", "OVERLAY", "VIDEO", "CHAOS", "SPIRAL", "PINK", "TINT", "BUBBLE" },
                 PinkFilterEnabled = true,
-                PinkFilterStartOpacity = 25,
-                PinkFilterEndOpacity = 25,
+                // Overlays held at 10% for the benchmark: the point is to measure render load, not
+                // to obscure the screen (user request). The <=50% apply-cap also bounds these.
+                PinkFilterStartOpacity = 10,
+                PinkFilterEndOpacity = 10,
                 SpiralEnabled = true,
-                SpiralOpacity = 25,
+                SpiralOpacity = 10,
                 BrainDrainEnabled = true,
                 BrainDrainStartIntensity = 25,
                 BrainDrainEndIntensity = 25,
@@ -189,10 +191,14 @@ public static class BenchmarkContext
             orchestrator?.StartEffects(session);
             await sessionService.StartSessionAsync(session, cancellationToken);
 
-            // Force sustained overlays at MAX (100% — full opacity, fully visible)
-            overlay?.ShowOverlaySustained("braindrain", 1.0);
-            overlay?.ShowOverlaySustained("spiral", 0.25);
-            overlay?.ShowOverlaySustained("pink", 0.25);
+            // Overlays held at 10% for the benchmark: the point is to measure render load while
+            // keeping the screen WATCHABLE, not to obscure it (user request). braindrain was
+            // previously forced to 1.0 (100%) which blacked out the screen. The <=50% apply-cap
+            // also bounds pink. (MindWipe - a separate full-screen wipe, multiplier 5 in this
+            // session - still pulses independently; tone it down separately if it obscures.)
+            overlay?.ShowOverlaySustained("braindrain", 0.10);
+            overlay?.ShowOverlaySustained("spiral", 0.10);
+            overlay?.ShowOverlaySustained("pink", 0.10);
 
             // Start every individual service at max.
             TryRun("flash", () => flash?.Start());
