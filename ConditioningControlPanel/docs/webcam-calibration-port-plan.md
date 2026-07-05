@@ -276,3 +276,137 @@ variants are heavy own-data generation or own-data collection workstreams). Rout
 owner's own research converges on **Tier 1 (MediaPipe + better regressor) now**; a deep head-pose-invariant
 model later requires *building our own training set* (Omniverse generation OR opt-in collection) as a separate,
 scoped project. The per-user calibration regressor is ours in every scenario.
+
+### OWNER DECISION 2026-07-05: ship all three tiers for on-camera A/B/C; license deferred
+Owner: "don't care about the license — use the best HuggingFace ONNX model that says it's fine to use; build
+Tier 1 AND Tier 2 so we can check Current vs Tier 1 vs Tier 2; ONNX weights for the deep model; keep it fast
+and high-performance; I'll figure out licensing later; plausible deniability is enough." → Proceeding to build
+a 3-way A/B/C switch + Tier 1 (classical) + Tier 2 (deep ONNX).
+
+**CHOSEN DEEP MODEL — MobileGaze (`yakhyo/gaze-estimation`, MIT-licensed code, L2CS-Net-based).** Pre-built ONNX
+weights are GitHub-release downloads (no training needed). Trained on Gaze360 (weights research-only — owner
+accepts). Variants (MAE on Gaze360, lower=better):
+
+| ONNX file | Backbone | Size | MAE° | Note |
+|---|---|---|---|---|
+| `mobileone_s0_gaze.onnx` | MobileOne-S0 | **4.8 MB** | 12.58 | **DEFAULT — fastest (~1ms design), tiny asset** |
+| `resnet18_gaze.onnx` | ResNet-18 | 43 MB | 12.84 | |
+| `resnet34_gaze.onnx` | ResNet-34 | 81.6 MB | **11.33** | best accuracy, swappable |
+| `resnet50_gaze.onnx` | ResNet-50 | 91.3 MB | 11.34 | |
+| `mobilenetv2_gaze.onnx` | MobileNet-V2 | 9.59 MB | 13.07 | |
+
+(Gaze360 MAE is a hard ±wide-range benchmark; for a frontal seated webcam user + per-user calibration on top,
+effective accuracy is much better and systematic bias is absorbed by the calibration regressor.)
+
+**AUTHORITATIVE ONNX I/O CONTRACT** (from repo `onnx_inference.py::GazeEstimationONNX`, verified live):
+- **Input:** node name `"input"`, shape `[1,3,448,448]`, float32, **RGB**. Preprocess: BGR→RGB → resize 448×448
+  → `/255.0` → normalize ImageNet mean `[0.485,0.456,0.406]` std `[0.229,0.224,0.225]` → HWC→CHW → batch.
+- **Output:** exactly 2 nodes. `outputs[0]` = **yaw logits** `[1,90]`; `outputs[1]` = **pitch logits** `[1,90]`.
+- **Decode:** softmax each → `angle_deg = Σ(prob_i · i) · binwidth − offset` with **bins=90, binwidth=4, offset=180**
+  (range ±180°) → `radians()`. yaw = horizontal, pitch = vertical.
+- **3D vector** (if needed): `x=-cos(p)sin(y), y=-sin(p), z=-cos(p)cos(y)`.
+- **Face crop:** full-face bbox crop (RetinaFace upstream; CCP already has a face bbox in ProcessFrame — reuse
+  it, crop from the full BGR frame). Webcam demo mirrors the frame (`flip(...,1)`) before detect — CCP must
+  match whatever mirroring its own pipeline already uses; verify on camera.
+
+**SHARED-FRAMEWORK INSIGHT (drives the A/B/C design):** all three tiers share ONE calibrate→fit→project
+framework and differ only in (feature → regressor):
+- **Current:** eye-width-normalized iris−corner 2D vector → 2nd-order Cerrolaza polynomial + homography.
+- **Tier 1:** roll/scale-normalized iris 2D vector → cubic ridge / GP (+ smooth-pursuit capture + fixation snap).
+- **Tier 2:** deep gaze (yaw,pitch) from MobileGaze ONNX → per-user ridge (angles→screen).
+So `GazePipelineMode { Current, Tier1, Tier2 }` selects the feature+regressor in BOTH calibration capture/fit
+AND runtime `ProjectGazeToScreen`. Current path stays 100% intact as the A/B baseline.
+
+### IMPLEMENTATION PLAN 2026-07-05 (facts verified in-code; download verified; advisor unavailable — proceeding)
+Verified: `Microsoft.ML.OnnxRuntime` 1.20.1 already referenced (Windows head csproj); models auto-copy from
+`ConditioningControlPanel/Resources/Models/**` → output `Resources/Models/` via `<Content Include>`; loader
+pattern `new InferenceSession(path, SessionOptions{ORT_ENABLE_ALL, IntraOpNumThreads=2})` +
+`InputMetadata.Keys.First()` (see BlazeFace/FaceMesh/Iris detector classes). `mobileone_s0_gaze.onnx`
+download verified = 4,974,521 bytes. Solver `BuildCalibrationData` takes generic `(Dx,Dy)` samples and fits a
+2D→screen Cerrolaza polynomial + homography + axis-correction — **feature-agnostic**.
+
+**KEY ARCHITECTURE:** the whole calibrate→fit→project stack (`WebcamCalibrationSolver`,
+`EmitGazeEvents`→`ProjectGazeToScreen`→smoothing→lock→shaping) is reused UNCHANGED. Only the 2D feature
+computed at `ProcessFrame` and emitted via `OnRawIris` changes per mode:
+- **Current** = averaged normalized iris vector (`NormalizeIrisVectorSmoothed`).
+- **Tier 2** = deep gaze `(yaw,pitch)` radians from MobileGaze on the face-bbox crop.
+- **Tier 1** = roll/scale-normalized iris vector (later).
+The active mode is a tracker state (`_activeGazeMode`), set from the calibration window's selector before a
+calibrate run, persisted into `WebcamCalibrationData.FeatureMode`, and restored on load so runtime feeds the
+matching feature. Backward-compat: absent FeatureMode → Current.
+
+**SEQUENCING (Tier 2 first — smaller change + flagship the owner wants; supersedes prior Tier-1-first order but
+keeps its core rule: Current path 100% intact, gate each slice, one slice→green→owner camera A/B→next):**
+- **Commit 1 (T0 + Tier 2, atomic & complete):** `GazeFeatureMode` enum + setting + `CalibrationData.FeatureMode`
+  + seam `SetGazePipelineMode` + calibration-window mode selector (Current | Deep model) + `MobileGaze` ONNX
+  detector class (448×448 ImageNet-norm RGB face crop → softmax·idx·4−180 → yaw/pitch rad) + ProcessFrame branch
+  + ship `Resources/Models/*_gaze.onnx`. Owner can A/B Current vs Deep.
+- **OWNER ADD 2026-07-05: deep-model BACKBONE dropdown.** Within Tier 2, a dropdown selects the ONNX backbone:
+  MobileOne-S0 (4.8MB, fastest, default) | MobileNet-V2 (9.6MB) | ResNet-18 (43MB) | ResNet-34 (81.6MB, best MAE)
+  | ResNet-50 (91.3MB). ALL share the identical I/O contract + decode — the detector class is backbone-agnostic;
+  the dropdown only swaps the model file path. Backbone is a setting (`WebcamDeepGazeModel`) recorded into
+  `CalibrationData` (different backbones carry slightly different systematic bias → switching backbone should
+  prompt a re-calibrate; the per-user regressor absorbs the bias). **Installer-size note:** shipping all five =
+  ~230MB of model assets in the installer; flagged to owner (alt = ship MobileOne-S0 + lazy-fetch the ResNets on
+  first pick, but that breaks the "no internet at runtime" model rule). Proceeding to ship all as requested.
+- **Commit 2 (Tier 1 classical):** roll/scale-norm feature + cubic-ridge regressor (+ smooth pursuit + fixation
+  snap) as the third selectable option.
+**Known tuning knob:** feature-space One-Euro constants are iris-vector-tuned (~±0.5); deep angles are radians
+(~±0.3). IrisRange clamp self-scales from calibration min/max; One-Euro may need per-mode tuning — owner A/Bs,
+we tune.
+
+**ONNX I/O EMPIRICALLY VERIFIED 2026-07-05 (loaded all 5 with onnxruntime):** every backbone has input node
+`input` `[1,3,448,448]` float32 and TWO NAMED outputs `yaw` `[1,90]` + `pitch` `[1,90]`. So C# requests outputs
+by name (`"yaw"`,`"pitch"`) — zero order ambiguity. Models live gitignored in `Resources/Models/gaze/`
+(README + `.gitignore` + `fetch-gaze-models.sh` committed, matching vosk/silero precedent; binaries fetched
+locally + installer-bundled). Downloaded sizes: mobileone_s0 4,974,521 / mobilenetv2 9,790,767 / resnet18
+45,066,134 / resnet34 85,491,644 / resnet50 95,425,874 bytes.
+
+### TURN-KEY EDIT CHECKLIST — Commit 1 (T0 + Tier 2 deep model + backbone dropdown)
+Exact per-file changes (all facts verified in-code as of HEAD after d56b23c2):
+1. **`CCP.Core/Services/Webcam/IWebcamService.cs`**: add `enum GazeFeatureMode { Current, DeepModel }` and
+   `enum DeepGazeBackbone { MobileOneS0, MobileNetV2, ResNet18, ResNet34, ResNet50 }`. Add default-impl seam
+   members: `GazeFeatureMode GazePipelineMode => GazeFeatureMode.Current;`,
+   `void SetGazePipelineMode(GazeFeatureMode mode) { }`, `DeepGazeBackbone DeepGazeModel => DeepGazeBackbone.MobileOneS0;`,
+   `void SetDeepGazeModel(DeepGazeBackbone backbone) { }`, and `bool DeepGazeModelAvailable => false;` (window greys
+   out Deep option if false). (Tier1 enum value added later — keep values reachable.)
+2. **`CCP.Avalonia/Services/Webcam/AvaloniaWebcamService.cs`** (Linux/mac stub): no change needed (defaults
+   cover it) — confirm it compiles.
+3. **`CCP.Avalonia.Desktop.Windows/Services/Webcam/WebcamCalibrationData.cs`**: add
+   `[JsonProperty] public string FeatureMode { get; set; } = "Current";` and
+   `[JsonProperty] public string? DeepModel { get; set; }`. Thread BOTH through `WithRuntimeOffset` clone
+   (line ~192 object initializer). `WithGazeTrim` reuses WithRuntimeOffset — no change.
+4. **`WebcamCalibrationSolver.cs::BuildCalibrationData`**: add params `string featureMode, string? deepModel`
+   (or set on the returned object by the caller). Stamp `FeatureMode = featureMode, DeepModel = deepModel` into
+   the returned `WebcamCalibrationData` (line ~144). Feature-agnostic math UNCHANGED.
+5. **`AvaloniaWebcamTrackingService.cs`**:
+   a. Fields: `private volatile GazeFeatureMode _activeGazeMode = GazeFeatureMode.Current;`
+      `private volatile DeepGazeBackbone _deepBackbone = DeepGazeBackbone.MobileOneS0;` + `MobileGazeDetector? _deepGaze;`.
+   b. Seam impls: `SetGazePipelineMode` sets `_activeGazeMode` (+ lazily load/swap deep model on the capture
+      thread via a pending flag, NOT inline — InferenceSession ctor is heavy); `SetDeepGazeModel` sets
+      `_deepBackbone` + flags a reload. `GazePipelineMode`/`DeepGazeModel`/`DeepGazeModelAvailable` getters.
+   c. `ResolveModelPaths`: also resolve `Resources/Models/gaze/<backbone>_gaze.onnx`; `DeepGazeModelAvailable` =
+      the mobileone_s0 file exists (baseline).
+   d. `MobileGazeDetector` nested class (mirror IrisDetector ctor pattern): `new InferenceSession(path, so{ORT_ENABLE_ALL,IntraOpNumThreads=2})`.
+      `Estimate(Mat bgrFaceCrop) -> (double yaw, double pitch)`: cvtColor BGR->RGB, resize 448x448, /255,
+      ImageNet mean/std, HWC->CHW into float[1*3*448*448], Run requesting outputs "yaw","pitch"; softmax each
+      [1,90]; angleDeg = sum(prob_i * i)*4 - 180; return radians. Log InputMetadata/OutputMetadata on ctor.
+   e. `ProcessFrame` branch: after face+mesh, if `_activeGazeMode==DeepModel && _deepGaze!=null`: crop the face
+      bbox (`_lastFaceRect`/`faceRect`) from `bgr`, `var (y,p) = _deepGaze.Estimate(crop);` then
+      `EmitGazeEvents(yaw, pitch)` and `return;` (skip iris path). ELSE existing iris path. Keep two-eye gate
+      only on the iris path. NOTE `EmitGazeEvents` already emits `OnRawIris` for calibration capture — so deep
+      feature flows to the calibration window unchanged.
+   f. On calibration build (`BuildCalibrationPreview` seam impl): pass `_activeGazeMode.ToString()` + backbone to
+      the solver so the fit is stamped. On load/apply, set `_activeGazeMode` from `Calibration.FeatureMode` +
+      `_deepBackbone` from `Calibration.DeepModel` (flag deep reload). Uncalibrated live preview uses the
+      window-selected mode via SetGazePipelineMode.
+6. **`CCP.Avalonia/Windows/WebcamCalibrationWindow.axaml(.cs)`**: in `IntroPanel`, add a mode selector
+   (Current | Deep model) + a backbone `ComboBox` (visible only when Deep) listing the 5 backbones. On Start,
+   call `_webcam.SetGazePipelineMode(...)` + `SetDeepGazeModel(...)` BEFORE sampling. Grey out Deep when
+   `!DeepGazeModelAvailable`. New en.json loc keys for labels.
+7. **`Localization/Languages/en.json`**: keys e.g. `webcam_cal_pipeline_label`, `webcam_cal_pipeline_current`,
+   `webcam_cal_pipeline_deep`, `webcam_cal_backbone_label`, backbone names.
+8. **Assets**: DONE — `Resources/Models/gaze/` (gitignored binaries + committed README/.gitignore/fetch script).
+   `installer.iss` add for release (later).
+**GATES:** slnf 0 errors · WPF sln 0 · Core tests green · smoke exit 0 (baseline 5 findings). Current path 100%
+intact (default mode). Commit `feat(av): deep ONNX gaze pipeline (Tier 2) + backbone dropdown, A/B-selectable`.
