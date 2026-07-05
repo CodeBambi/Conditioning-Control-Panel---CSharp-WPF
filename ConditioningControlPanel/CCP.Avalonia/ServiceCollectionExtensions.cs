@@ -6,6 +6,7 @@ using ConditioningControlPanel.Avalonia.Services;
 using ConditioningControlPanel.Avalonia.Services.AttentionCheck;
 using ConditioningControlPanel.Avalonia.Services.BouncingText;
 using ConditioningControlPanel.Avalonia.Services.BubbleCount;
+using ConditioningControlPanel.Avalonia.Services.Commands;
 using ConditioningControlPanel.Avalonia.Services.Companion;
 using ConditioningControlPanel.Avalonia.Services.Flash;
 using ConditioningControlPanel.Avalonia.Services.Haptics;
@@ -50,6 +51,7 @@ using ConditioningControlPanel;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.AIService;
 using ConditioningControlPanel.Core.Services.AIService.Enrichment;
+using ConditioningControlPanel.Core.Services.Commands;
 using ConditioningControlPanel.Core.Services.Moderation;
 using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.Progression;
@@ -169,8 +171,9 @@ public static class ServiceCollectionExtensions
         //        OpenAI-compatible (OpenAiService) from CompanionPrompt.AiProvider. Cloud = codebambi-proxy
         //        V2; Local = Ollama + persistent history; OpenAI = OpenAI-compatible transport + ISecretStore
         //        key + the moderation sandwich the WPF provider omits. All 5 reactions on every provider.
-        //        AI command execution (AllowAiToControlEffects, needs AiCommandService port) + the OpenAI
-        //        key-entry UI are documented follow-ups.
+        //        AI command execution (AllowAiToControlEffects): the dispatcher (AiCommandService) is
+        //        registered below; enrichment+dispatch is WIRED for OpenAiService (Phase 3a) and PENDING
+        //        for Local/Cloud providers. The OpenAI key-entry UI is a documented follow-up.
         services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
         services.AddSingleton<IAiResponseParser>(sp =>
         {
@@ -182,6 +185,9 @@ public static class ServiceCollectionExtensions
                 return phrases is null || phrases.Length == 0 ? "Good girl~" : phrases[0];
             });
         });
+        // AI-triggers-effects dispatcher (AllowAiToControlEffects). Resolves LAZILY to IAiService via
+        // IServiceProvider (providers inject IAiCommandService? optional → no ctor cycle). Phase 3a.
+        services.AddSingleton<IAiCommandService, AiCommandService>();
         services.AddSingleton<CoreAiService>();
         services.AddSingleton<LocalAiService>();
         services.AddSingleton<OpenAiService>();

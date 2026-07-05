@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Commands;
+using ConditioningControlPanel.Core.Services.AIService.Enrichment;
 using ConditioningControlPanel.Core.Services.Moderation;
 using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Models;
@@ -76,6 +77,7 @@ public sealed class OpenAiService : IAiService, IDisposable
     private readonly ISystemPromptBuilder _promptBuilder;
     private readonly IAiResponseParser _parser;
     private readonly IAiCommandService? _commands;
+    private readonly IPromptService? _promptService;
     private readonly IModService? _mods;
     private readonly ILogger<OpenAiService>? _logger;
     private readonly Random _fallbackRandom = new();
@@ -93,7 +95,8 @@ public sealed class OpenAiService : IAiService, IDisposable
         ILogger<OpenAiService>? logger = null,
         IModerationCounter? counter = null,
         IModService? mods = null,
-        IAiCommandService? commands = null)
+        IAiCommandService? commands = null,
+        IPromptService? promptService = null)
     {
         _settings = settings;
         _secrets = secrets;
@@ -104,6 +107,7 @@ public sealed class OpenAiService : IAiService, IDisposable
         _counter = counter;
         _mods = mods;
         _commands = commands;
+        _promptService = promptService;
     }
 
     /// <summary>Gate: offline / no endpoint / no key / over the client daily limit (0 = unlimited).</summary>
@@ -304,8 +308,10 @@ public sealed class OpenAiService : IAiService, IDisposable
 
     // ---------- OpenAI transport ----------
 
-    /// <summary>Builds [system, (enrichment?), user]. Enrichment is deferred with command execution
-    /// (v1: no executor registered → no enrichment; the two are paired). System prompt via the builder.</summary>
+    /// <summary>Builds [system, (enrichment?), user]. The <c>[CONTEXT BLOCK]</c> enrichment is emitted
+    /// only when <c>AllowAiToControlEffects</c> AND a dispatcher is registered — it tells the model
+    /// the command-output schema and is paired with dispatch in <see cref="ProcessResponse"/>.
+    /// System prompt via the builder.</summary>
     private List<MessageDto> BuildMessages(string userInput)
     {
         var list = new List<MessageDto>
@@ -313,9 +319,13 @@ public sealed class OpenAiService : IAiService, IDisposable
             new("system", _promptBuilder.GetSystemPrompt()),
             new("user", userInput)
         };
-        // TODO(AiCommandService): when AllowAiToControlEffects && _commands != null, insert the
-        //   [CONTEXT BLOCK] enrichment at index 1 (IPromptService.BuildEnrichmentMessage). Paired
-        //   with command dispatch in ProcessResponse.
+        var cp = _settings.Current?.CompanionPrompt;
+        if (cp != null && cp.AllowAiToControlEffects && _commands != null && _promptService != null)
+        {
+            // WPF OpenAiCompatibleService:485-496 inserts the enrichment at index 1 (after system,
+            // before the real user turn). factsJson is "" (no KnowledgeService in Core yet — filed gap).
+            list.Insert(1, _promptService.BuildEnrichmentMessage(factsJson: "", timeStamp: DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")));
+        }
         return list;
     }
 
