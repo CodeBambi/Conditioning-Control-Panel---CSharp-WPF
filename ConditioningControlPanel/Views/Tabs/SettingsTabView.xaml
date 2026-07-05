@@ -801,6 +801,22 @@
                                     ToolTip="{loc:Str tooltip_clear_selection_use_random}"/>
                         </StackPanel>
     
+                        <!-- Phrase Backup (export/import all editable phrase pools) -->
+                        <Grid Margin="0,6,0,0"
+                              ToolTip="Save or restore your lock-card phrases, subliminals, mantras and other custom text. Use this to back up your phrases before an update or when moving to a new PC.">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="Phrase backup" Foreground="#B0B0B0" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="📤 Export" Style="{StaticResource OutlineButton}" Padding="8,3" Margin="0,0,6,0"
+                                        Click="BtnExportPhrases_Click"
+                                        ToolTip="Save all your custom phrases to a backup file."/>
+                                <Button Content="📥 Import" Style="{StaticResource OutlineButton}" Padding="8,3"
+                                        Click="BtnImportPhrases_Click"
+                                        ToolTip="Restore custom phrases from a backup file (replaces your current phrases)."/>
+                            </StackPanel>
+                        </Grid>
+
                         <!-- Gaming Tip -->
                         <Grid Margin="0,5,0,0">
                             <TextBlock Text="{loc:Str label_use_borderless_windowed_for_overlays}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"
