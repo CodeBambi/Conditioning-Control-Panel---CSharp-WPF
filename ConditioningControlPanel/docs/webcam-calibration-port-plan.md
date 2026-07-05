@@ -241,3 +241,38 @@ ours regardless** (trained on the user's own live samples at runtime — no data
 Iris features). The one pragmatic drop-in (OpenSeeFace, BSD-2) is a robustness/blink upgrade, not a gaze-
 accuracy leap, and carries a provenance gray area. So: Tier 1 now; if the owner wants the true head-pose-
 invariant ceiling, Tier 2 = train-our-own on synthetic/permissive data (scoped as a distinct ML workstream).
+
+### Route A/B/C training-data audit 2026-07-05 (VERIFIED with parent web tools — live-fetched licenses)
+Owner asked to evaluate three routes to a legally-clean deep-model training set. Verified verdict:
+
+**Route A — Synthetic data.** Ready-made synthetic *datasets* are almost all NON-commercial (academics slap
+CC-BY-NC on synthetic data too): Microsoft FaceSynthetics = **non-commercial research** (verified);
+GazeGene (CVPR'25, 1M imgs, HF `vigil1917/GazeGene`) = **CC-BY-NC-SA + gated** (verified); U2Eyes = **CC-BY-NC-SA**
+(verified). So "grab a synthetic dataset" fails the same way as human data. The ONLY clean synthetic path is a
+permissive **generator** (you own what you generate): **UnityEyes 2** (`alexanderdsmith/UnityEyes2`, UIUC 2025,
+open-source) — but it's a Unity project derived from Cambridge UnityEyes whose **explicit commercial license is
+unclear** (no license grant found; would need author confirmation) and needs commercially-licensed 3D face
+assets; **NVIDIA Omniverse Replicator** — powerful domain-randomization pipeline, you own the output, but needs
+commercially-licensed 3D head assets (MetaHuman is Epic-EULA/Unreal-locked — can't just reuse) + Omniverse
+licensing diligence. Net: Route A = a real content+ML pipeline (weeks), not a download.
+
+**Route B — Permissive public datasets.** Searched hard; found **no** CC-BY-4.0/CC0 commercial-use gaze dataset.
+EVE (the source's hope) = **CC-BY-NC-SA** (verified); ETH-XGaze = CC-BY-NC-SA; OpenEDS = research. **Essentially
+every notable gaze dataset — real OR synthetic — is non-commercial.** The one clean Route-B path is
+**self-collected opt-in** data — but for CCP this **collides with the privacy contract** (frames + per-frame
+derived data NEVER persisted/networked; only coefficients saved). A training-data collector = persist/upload
+eye images = MAJOR posture change: new explicit consent flow, ConsentVersion bump, secure storage/transport,
+and biometric-data compliance (GDPR/BIPA). Doable but a distinct policy+compliance workstream, not just code.
+
+**Route C — Permissively-trained model zoos.** "Filter HF by `license:mit/apache`" is **unreliable** — an
+arXiv audit (2502.04484) documents HF license tags are frequently wrong/incomplete; a model tagged apache-2.0
+can still have Gaze360-trained weights. Tags ≠ provenance; must read the card AND trace training data. Found no
+specific clean permissive pretrained *gaze* model. The safe Route-C endpoint IS **MediaPipe Iris/FaceMesh
+(Apache-2.0) → our own ridge regressor** — the source calls this "Tier 1.5," and **it is exactly what CCP
+already does and what our Tier 1 rework upgrades.** 100% clean out of the box, cross-platform, ships now.
+
+**Bottom line:** Routes A & B mostly collapse (no commercial-use gaze dataset exists off-the-shelf; the clean
+variants are heavy own-data generation or own-data collection workstreams). Route C ≡ our Tier 1. So the
+owner's own research converges on **Tier 1 (MediaPipe + better regressor) now**; a deep head-pose-invariant
+model later requires *building our own training set* (Omniverse generation OR opt-in collection) as a separate,
+scoped project. The per-user calibration regressor is ours in every scenario.
