@@ -111,6 +111,10 @@ internal static class LayerVerification
             // (not on Core's IChaosService — they are an Avalonia-compositor concern), same
             // pattern as the AvaloniaSubliminalService cast in Stage 2.
             chaos = services.GetService<IChaosService>() as ConditioningControlPanel.Avalonia.Services.AvaloniaChaosService;
+            // Force-construct the attention-check service so its AttentionCheckLayer registers
+            // with the engine (self-registered in the service ctor, like the chaos layers).
+            // Nothing is started — this only wires the layer for the ExpectLayer probe below.
+            _ = services.GetService<ConditioningControlPanel.IAttentionCheckService>();
             var settings = services.GetService<ISettingsService>()?.Current;
             var screenProvider = services.GetService<IScreenProvider>();
             if (flash == null || subliminal == null || bouncing == null || bubbles == null || overlay == null || screenProvider == null || chaos == null)
@@ -180,6 +184,7 @@ internal static class LayerVerification
             var fieldFxLayer = ExpectLayer<ChaosFieldFxLayer>(engine, CompositorLayers.ChaosFieldFx, "ChaosFieldFxLayer", rows);
             var fxLayer = ExpectLayer<ChaosFxLayer>(engine, CompositorLayers.ChaosFx, "ChaosFxLayer", rows);
             var waveTimerLayer = ExpectLayer<ChaosWaveTimerLayer>(engine, CompositorLayers.ChaosWaveTimer, "ChaosWaveTimerLayer", rows);
+            var attentionCheckLayer = ExpectLayer<AttentionCheckLayer>(engine, CompositorLayers.AttentionCheck, "AttentionCheckLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -684,6 +689,38 @@ internal static class LayerVerification
                 row.Teardown = deactivated ? "clean (Clear)" : "TIMEOUT";
                 FinishRow(row, activated, deactivated, envStable);
                 row.Note = AppendNote(row.Note, "driven directly; production caller is the run tick's SetValues; primary-monitor top-right pill");
+                await SettleIdle(engine);
+            }
+
+            // ---------------- Stage 4l: AttentionCheckLayer (Z=160) via AttentionCheckLayer.Show ----------------
+            // Migrated from the standalone click-through Window hosting AttentionCheckControl (the
+            // last window-based passive effect → UCE). The production caller is the gaze-dwell tick
+            // (private, webcam-gated), so the stage drives the layer's public Show/SetProgress/Hide
+            // directly. The 84-DIP pulsing ring sits at the primary screen centre — inside the
+            // centre-crop probe, less ambient-noise-prone than Full (the ChaosCursorGlow pattern).
+            if (attentionCheckLayer != null)
+            {
+                Console.WriteLine("[LAYERS] Stage 4l: AttentionCheckLayer via AttentionCheckLayer.Show (gaze target)...");
+                var row = rows.First(r => r.Layer == "AttentionCheckLayer");
+                var before = Capture(screens, primary);
+                var sz = (int)(84 * (primary.Scaling > 0 ? primary.Scaling : 1.0));
+                var tx = primary.Bounds.X + primary.Bounds.Width / 2 - sz / 2;
+                var ty = primary.Bounds.Y + primary.Bounds.Height / 2 - sz / 2;
+                attentionCheckLayer.Show(new ConditioningControlPanel.Core.Platform.PixelRect(tx, ty, sz, sz));
+                attentionCheckLayer.SetProgress(0.5);   // half-filled progress ring
+                var activated = await PollAsync(() => attentionCheckLayer.IsActive, 2000, stepMs: 50);
+                row.Activated = activated ? "yes" : "TIMEOUT";
+                if (activated)
+                {
+                    await Task.Delay(300); // a few pulse frames + present
+                    var during = Capture(screens, primary);
+                    row.Delta = during.Center != before.Center ? "DIFFER (center-crop)" : "SAME (FAIL)";
+                }
+                attentionCheckLayer.Hide(180);   // WPF 180ms opacity fade then deactivate
+                var deactivated = await PollAsync(() => !attentionCheckLayer.IsActive, 2000);
+                row.Teardown = deactivated ? "clean (Hide fade)" : "TIMEOUT";
+                FinishRow(row, activated, deactivated, envStable);
+                row.Note = AppendNote(row.Note, "driven directly; production caller is the gaze-dwell tick (webcam-gated); primary-monitor centre 84-DIP ring");
                 await SettleIdle(engine);
             }
 

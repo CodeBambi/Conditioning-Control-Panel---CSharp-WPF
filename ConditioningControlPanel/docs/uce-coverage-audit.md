@@ -1,6 +1,6 @@
 # UCE Coverage Audit — what does and does not render through the compositor
 
-Date: 2026-07-05. Author: Kimi Agent (session pursuing `docs/skia-rebuild-goal.md`).
+Date: 2026-07-05. Author: Fable 5 (session pursuing `docs/skia-rebuild-goal.md`).
 Method: read-only code sweep (no runtime), verified against `CompositorEngine.RegisterLayer`
 call sites, `Compositor/Layers/*`, `CompositorLayers.cs`, and every `: Window` subclass in
 `CCP.Avalonia`. Skills applied: `unified-compositor-engine`, `port-audit`.

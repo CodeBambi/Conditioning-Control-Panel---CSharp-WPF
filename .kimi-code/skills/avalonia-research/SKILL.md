@@ -1,67 +1,77 @@
 ---
 name: avalonia-research
-description: "Mandate up-to-date web research for any Avalonia UI work because the project uses Avalonia v12+, which is brand-new in 2026 and has breaking changes, new bugs, and workarounds not present in training data."
+description: "Mandatory research protocol for ALL Avalonia UI work in this repo. The project targets Avalonia v12+, which is brand-new in 2026: training data is stale, v11 answers are actively wrong, and real fixes live only in recent GitHub issues and the official docs. Use this skill every time you touch Avalonia code, AXAML, controls, styling, windowing, rendering, input, application lifetime, packaging, or third-party Avalonia packages, and whenever an Avalonia API behaves unexpectedly, throws, or seems to be missing. Also use it BEFORE adding any NuGet package to the port."
 ---
 
 # avalonia-research
 
-Use this skill **every time** you are asked to work on, investigate, or answer questions about Avalonia UI in this repository — including controls, views, viewmodels, styling, rendering, windowing, input, threading, application lifetime, packaging, dependencies, build issues, or third-party Avalonia libraries.
+Applies to all work in `ConditioningControlPanel/CCP.Core`, `CCP.Avalonia`, `CCP.Avalonia.Desktop*`, and `CCP.Avalonia.Android`.
 
 ## Why this skill exists
 
-- This project targets **Avalonia UI v12+**.
-- v12 is brand-new in 2026 and contains breaking changes, renamed APIs, new platform behavior, and unresolved bugs that are not reliably reflected in offline training data.
-- Avalonia v11 and older documentation, blog posts, Stack Overflow answers, GitHub issues, and NuGet packages may be **outdated or actively wrong** for v12.
-- Real fixes and workarounds are often only documented in recent GitHub issues, pull requests, release notes, or the official docs.
+- The project targets **Avalonia UI v12+** (currently 12.0.x). v12 shipped in 2026 with renamed APIs, new platform behavior, and unresolved bugs that are not in offline training data.
+- v11-and-earlier documentation, blog posts, Stack Overflow answers, and NuGet packages are frequently **actively wrong** for v12.
+- The project has already paid for a large amount of v12 research. That knowledge is written down in the repo. Re-deriving it wastes time; contradicting it introduces bugs that were already fixed once.
 
-## Mandatory research rule
+## The three-step protocol
 
-**Before using any Avalonia API, package, pattern, or workaround, you must verify it against current v12 sources.**
+### Step 1: Check what the project already knows (before searching the web)
 
-Always perform at least one of the following:
+The port maintains a curated v12 knowledge base. Consult it first; most day-to-day questions are already answered there:
 
-1. **Official docs** — search `https://docs.avaloniaui.net` for the topic and confirm the page applies to v12.
-2. **GitHub issues / PRs** — search `https://github.com/AvaloniaUI/Avalonia/issues` and pull requests for the exact bug, exception, or behavior.
-3. **Release notes** — check `https://github.com/AvaloniaUI/Avalonia/releases` for v12-specific breaking changes and fixes.
-4. **NuGet / package docs** — verify any third-party Avalonia package explicitly supports v12 before adding it.
+| Where | What |
+|---|---|
+| `ConditioningControlPanel/docs/crossplatform-rebuild-plan.md` section 21 | The canonical v12 gotcha list (compiled bindings / `x:DataType`, `WindowDecorations` rename, `TransparencyLevelHint` list type, LibVLC discovery, DI override pattern, click-through levels, theme accents, and more) |
+| Same file, section 23 | Official v12 documentation links. On conflict, official docs beat the plan doc |
+| `ConditioningControlPanel/docs/unified-compositor-engine-plan.md` | Researched v12 rendering facts with sources (custom draw ops, `ISkiaSharpApiLeaseFeature`, `CompositionCustomVisualHandler`, invalidation behavior) |
+| `ConditioningControlPanel/docs/EXECUTION_GOAL.md` | Condensed WPF-to-Avalonia conversion gotchas |
+| Code comments near P/Invoke and compositor code | Hard-won crash workarounds (for example the `SetWindowSubclass` ban and staggered window creation in `CCP.Avalonia/Compositor/`) |
 
-Use the `WebSearch` tool with queries that include `Avalonia 12` or `Avalonia v12` so results are time-biased toward current information.
+The plan doc is over 100KB: Grep for section headers first, then Read only the relevant slice.
 
-## What to reject
+### Step 2: Research the current v12 answer on the web
 
-Do **not** use or recommend any of the following without re-verifying against v12:
+For anything not already settled locally, verify against current sources before using it:
 
-- Avalonia v11, v10, or earlier documentation, samples, or migration guides as authoritative.
-- Stack Overflow answers, blog posts, or tutorials from 2025 or earlier unless they explicitly mention v12.
-- NuGet packages whose latest stable version only targets Avalonia v11 or lower.
-- Old WPF-isms, workarounds, or P/Invoke patterns copied from older Avalonia code without checking whether v12 has a built-in replacement.
+1. **Official docs** - search `https://docs.avaloniaui.net` and confirm the page applies to v12.
+2. **GitHub issues / PRs / discussions** - search `https://github.com/AvaloniaUI/Avalonia` for the exact exception, API name, or behavior. Recent issues are where real workarounds live.
+3. **Release notes** - `https://github.com/AvaloniaUI/Avalonia/releases` for v12.x breaking changes and fixes.
+4. **NuGet** - before adding any third-party Avalonia package, verify its latest stable version explicitly supports v12. A package whose newest release targets v11 is a rejection, not a risk to accept.
 
-If you find conflicting guidance, prefer the **newer source** and the **official Avalonia docs / GitHub repo** over third-party content.
+Use `WebSearch` with time-biased queries:
 
-## Workflow
-
-1. **Identify the Avalonia topic** (control, API, lifecycle event, renderer, theme, package, etc.).
-2. **Search the web** for the current v12 behavior, known issues, and recommended fixes.
-3. **Check the local codebase** for how v12 is already being used in `CCP.Avalonia*/` and `CCP.Core/`.
-4. **Only then** propose or implement a change.
-5. **Cite** the sources you used in your response (URLs or short descriptions) so the result is auditable.
-
-## Good search queries
-
-- `Avalonia v12 <topic>`
-- `Avalonia 12 <control> example`
-- `Avalonia 12 <exception>`
+- `Avalonia 12 <topic>`
+- `Avalonia v12 <exception message>`
 - `site:docs.avaloniaui.net <topic>`
 - `site:github.com/AvaloniaUI/Avalonia <topic>`
 
+Reject without re-verification: v11/v10 docs and samples, tutorials from 2025 or earlier that do not mention v12, and WPF-era workarounds copied from old Avalonia code. When sources conflict, prefer the newer source, and prefer official docs / the Avalonia repo over third-party content.
+
+### Step 3: Record what you learned
+
+Research that stays in the conversation is lost when the context ends. If you established a new v12 fact, bug, or workaround that future sessions will need:
+
+- Add it to the gotcha list in `crossplatform-rebuild-plan.md` section 21 (one concise bullet, with the source URL or issue number).
+- If it concerns compositor/rendering, add it to the "Avalonia v12 idiomatic confirmation" list in `unified-compositor-engine-plan.md` instead.
+- If it invalidates something a doc claims, fix the doc. Code and official docs outrank stale repo docs.
+
+Cite the sources you used in your response so the result is auditable.
+
 ## When to escalate
 
-If the web research contradicts the existing project code, or if no reliable v12 information exists, stop and tell the user before making a change. Do not guess based on v11 experience.
+If web research contradicts existing project code, or no reliable v12 information exists, stop and say so before changing anything. Do not guess from v11 experience. The failure mode this skill exists to prevent is confidently applying a pre-v12 pattern that compiles but breaks at runtime.
 
-## Example invocation
+## Example invocations
 
 > "Why is this Avalonia Window not showing?"
-> "How do I render video transparently in Avalonia?"
-> "Which Avalonia dialog library should I use?"
+> "How do I render video frames into a Skia surface in Avalonia?"
+> "Which Avalonia dialog/toast library should I use?"
+> "Can I make a window ignore mouse input on Linux?"
 
-Start with a web search for the v12-specific answer, not with offline assumptions.
+Each starts with Step 1 (local knowledge), then Step 2 (current v12 sources), never with offline assumptions.
+
+## Related skills
+
+- `unified-compositor-engine` - compositor architecture and its settled rendering facts
+- `overlay-clickthrough` - settled click-through/topmost interop knowledge
+- `port-feature` - the implementation workflow this research feeds into

@@ -99,4 +99,9 @@ public static class CompositorLayers
     /// Top of the info-text sub-band; a persistent corner readout that never overlaps the
     /// centred announcer line, so its exact z vs the announcer is not visually load-bearing.</summary>
     public const int ChaosWaveTimer = 155;
+
+    /// <summary>Attention-check gaze target (migrated from the standalone click-through Window
+    /// hosting <c>AttentionCheckControl</c>). Topmost of the effect stack so the "look here"
+    /// pulsing ring is never occluded (WPF hosted it in a Topmost window).</summary>
+    public const int AttentionCheck = 160;
 }

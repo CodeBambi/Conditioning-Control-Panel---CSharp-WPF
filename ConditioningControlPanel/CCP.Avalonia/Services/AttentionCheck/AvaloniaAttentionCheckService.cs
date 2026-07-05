@@ -7,6 +7,8 @@ using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Compositor;
+using ConditioningControlPanel.Avalonia.Compositor.Layers;
 using ConditioningControlPanel.Avalonia.Controls;
 using ConditioningControlPanel.Avalonia.Helpers;
 using ConditioningControlPanel.Core.Platform;
@@ -54,8 +56,9 @@ public sealed class AvaloniaAttentionCheckService : IAttentionCheckService, IDis
     private DispatcherTimer? _scheduleTimer;
     private DispatcherTimer? _tickTimer;
 
-    private Window? _activeWindow;
-    private AttentionCheckControl? _activeControl;
+    private readonly CompositorEngine? _compositor;
+    private readonly AttentionCheckLayer? _layer;
+    private bool _layerActive;
     private ConditioningControlPanel.Core.Platform.PixelRect _activeBounds;
     private DateTime _fireStartedAt;
     private double _dwellMs;
@@ -75,7 +78,8 @@ public sealed class AvaloniaAttentionCheckService : IAttentionCheckService, IDis
         ILockCardService lockCard,
         IAudioPlayer? audioPlayer,
         ISfxPlayer? sfxPlayer,
-        ILogger<AvaloniaAttentionCheckService> logger)
+        ILogger<AvaloniaAttentionCheckService> logger,
+        CompositorEngine? compositor = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _screens = screens ?? throw new ArgumentNullException(nameof(screens));
@@ -86,6 +90,12 @@ public sealed class AvaloniaAttentionCheckService : IAttentionCheckService, IDis
         _audioPlayer = audioPlayer;
         _sfxPlayer = sfxPlayer;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _compositor = compositor;
+        if (compositor != null)
+        {
+            _layer = new AttentionCheckLayer();
+            compositor.RegisterLayer(_layer);
+        }
     }
 
     public void Start()
@@ -99,7 +109,7 @@ public sealed class AvaloniaAttentionCheckService : IAttentionCheckService, IDis
 
     public void Stop()
     {
-        if (!_isRunning && _activeWindow == null) return;
+        if (!_isRunning && !_layerActive) return;
         _isRunning = false;
         _scheduleTimer?.Stop();
         _scheduleTimer = null;
@@ -179,9 +189,16 @@ public sealed class AvaloniaAttentionCheckService : IAttentionCheckService, IDis
                 return;
             }
 
-            if (_activeWindow != null)
+            if (_layerActive)
             {
                 _logger.LogDebug("AttentionCheck: fire skipped — popup already active");
+                ScheduleNext();
+                return;
+            }
+
+            if (_layer == null)
+            {
+                _logger.LogDebug("AttentionCheck: fire skipped — no compositor layer available");
                 ScheduleNext();
                 return;
             }
@@ -205,39 +222,17 @@ public sealed class AvaloniaAttentionCheckService : IAttentionCheckService, IDis
             var x = (int)(working.X + marginPx + _rng.Next((int)availableWidth));
             var y = (int)(working.Y + marginPx + _rng.Next((int)availableHeight));
 
-            _activeControl = new AttentionCheckControl();
-            _activeWindow = new Window
-            {
-                WindowDecorations = WindowDecorations.None,
-                TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent },
-                Background = Brushes.Transparent,
-                Topmost = true,
-                ShowInTaskbar = false,
-                CanResize = false,
-                ShowActivated = false,
-                Focusable = false,
-                IsHitTestVisible = false,
-                Width = 84,
-                Height = 84,
-                Position = new PixelPoint(x, y),
-                Content = _activeControl
-            };
-
-            if (global::Avalonia.Application.Current?.ApplicationLifetime is global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
-            {
-                _activeWindow.Closing += (_, _) => _activeWindow = null;
-            }
-
             _activeBounds = new ConditioningControlPanel.Core.Platform.PixelRect(
                 x - slackPx,
                 y - slackPx,
                 sizePx + slackPx * 2,
                 sizePx + slackPx * 2);
 
-            _activeWindow.Show();
-
-            _activeControl.StartPulse();
-            _activeControl.SetProgress(0);
+            // UCE: the gaze target is a compositor layer (migrated from a standalone
+            // click-through Window). Show at the target rect in physical px; the layer
+            // pulses intrinsically and starts at progress 0.
+            _layer?.Show(new ConditioningControlPanel.Core.Platform.PixelRect(x, y, sizePx, sizePx));
+            _layerActive = true;
 
             _fireStartedAt = DateTime.UtcNow;
             _dwellMs = 0;
@@ -274,7 +269,7 @@ public sealed class AvaloniaAttentionCheckService : IAttentionCheckService, IDis
         try
         {
             var settings = _settings.Current;
-            if (settings == null || _activeWindow == null) { ResolveActive(passed: false); return; }
+            if (settings == null || !_layerActive) { ResolveActive(passed: false); return; }
 
             var elapsed = (DateTime.UtcNow - _fireStartedAt).TotalMilliseconds;
             var graceMs = settings.AttentionCheckGraceMs;
@@ -282,7 +277,7 @@ public sealed class AvaloniaAttentionCheckService : IAttentionCheckService, IDis
             if (_lastGazePoint.HasValue && Contains(_activeBounds, _lastGazePoint.Value.X, _lastGazePoint.Value.Y))
             {
                 _dwellMs += TickMs;
-                _activeControl?.SetProgress(_dwellMs / DwellTargetMs);
+                _layer?.SetProgress(_dwellMs / DwellTargetMs);
 
                 if (_dwellMs >= DwellTargetMs)
                 {
@@ -293,7 +288,7 @@ public sealed class AvaloniaAttentionCheckService : IAttentionCheckService, IDis
             else
             {
                 _dwellMs = Math.Max(0, _dwellMs - TickMs * 2);
-                _activeControl?.SetProgress(_dwellMs / DwellTargetMs);
+                _layer?.SetProgress(_dwellMs / DwellTargetMs);
             }
 
             if (elapsed >= graceMs)
@@ -319,45 +314,9 @@ public sealed class AvaloniaAttentionCheckService : IAttentionCheckService, IDis
             _gazeSubscribed = false;
         }
 
-        if (_activeControl != null)
-        {
-            try { _activeControl.StopPulse(); } catch { }
-            _activeControl = null;
-        }
-
-        var win = _activeWindow;
-        _activeWindow = null;
-        if (win != null)
-        {
-            try
-            {
-                var fade = new Animation
-                {
-                    Duration = TimeSpan.FromMilliseconds(180),
-                    Children =
-                    {
-                        new KeyFrame
-                        {
-                            Setters = { new global::Avalonia.Styling.Setter(Window.OpacityProperty, win.Opacity) },
-                            KeyTime = TimeSpan.Zero
-                        },
-                        new KeyFrame
-                        {
-                            Setters = { new global::Avalonia.Styling.Setter(Window.OpacityProperty, 0.0) },
-                            KeyTime = TimeSpan.FromMilliseconds(180)
-                        }
-                    }
-                };
-                fade.RunAsync(win).ContinueWith(_ =>
-                {
-                    Dispatcher.UIThread.Post(() => { try { win.Close(); } catch { } });
-                });
-            }
-            catch
-            {
-                try { win.Close(); } catch { }
-            }
-        }
+        // UCE: dismiss the gaze-target layer with the WPF 180 ms opacity fade.
+        _layer?.Hide(180);
+        _layerActive = false;
 
         if (fireEvent)
         {
