@@ -1918,6 +1918,20 @@ public class OverlayService : IDisposable
     private bool ReassertZOrder(bool force = false)
     {
         bool anyRecovered = false;
+
+        // While a mandatory/session video is playing, keep the overlays in the topmost band but
+        // pinned BELOW the video window instead of forcing them to the front. Otherwise this
+        // reconciler (and NotifyTopWindowClosed after each clip) buries the video behind the
+        // spiral/pink filter; the video window is deliberately non-re-raising, so it never
+        // recovers, and with autonomy chaining clips the next one shows "only by flashes" (#497).
+        IntPtr videoHwnd = IntPtr.Zero;
+        try
+        {
+            if (App.Video?.IsPlaying == true && App.Video.PrimaryVideoWindow is Window vw)
+                videoHwnd = new System.Windows.Interop.WindowInteropHelper(vw).Handle;
+        }
+        catch { }
+
         foreach (var list in new[] { _pinkFilterWindows, _spiralWindows, _brainDrainBlurWindows })
         {
             foreach (var window in list)
@@ -1927,7 +1941,16 @@ public class OverlayService : IDisposable
 
                 int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
                 bool needsPin = (exStyle & WS_EX_TOPMOST) == 0;
-                if (needsPin || force)
+
+                if (videoHwnd != IntPtr.Zero && hwnd != videoHwnd)
+                {
+                    // Insert directly below the active video window: stays topmost (above the
+                    // desktop and other apps) but under the video the user is meant to watch.
+                    SetWindowPos(hwnd, videoHwnd, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    if (needsPin) anyRecovered = true;
+                }
+                else if (needsPin || force)
                 {
                     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
