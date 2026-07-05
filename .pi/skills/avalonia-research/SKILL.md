@@ -24,7 +24,6 @@ The port maintains a curated v12 knowledge base. Consult it first; most day-to-d
 | `ConditioningControlPanel/docs/crossplatform-rebuild-plan.md` section 21 | The canonical v12 gotcha list (compiled bindings / `x:DataType`, `WindowDecorations` rename, `TransparencyLevelHint` list type, LibVLC discovery, DI override pattern, click-through levels, theme accents, and more) |
 | Same file, section 23 | Official v12 documentation links. On conflict, official docs beat the plan doc |
 | `ConditioningControlPanel/docs/unified-compositor-engine-plan.md` | Researched v12 rendering facts with sources (custom draw ops, `ISkiaSharpApiLeaseFeature`, `CompositionCustomVisualHandler`, invalidation behavior) |
-| `ConditioningControlPanel/docs/EXECUTION_GOAL.md` | Condensed WPF-to-Avalonia conversion gotchas |
 | Code comments near P/Invoke and compositor code | Hard-won crash workarounds (for example the `SetWindowSubclass` ban and staggered window creation in `CCP.Avalonia/Compositor/`) |
 
 The plan doc is over 100KB: Grep for section headers first, then Read only the relevant slice.

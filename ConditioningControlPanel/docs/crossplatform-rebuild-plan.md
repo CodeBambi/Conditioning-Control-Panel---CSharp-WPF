@@ -1,5 +1,7 @@
 # Cross-Platform Rebuild Plan — Conditioning Control Panel
 
+> **Status banner (2026-07-05):** this is the historical master plan. **`docs/skia-rebuild-goal.md` is the active autonomous driver** — read it for current goals, workstreams, and the up-to-date "Current state". This document is kept for its still-useful REFERENCE sections (§5 LibVLC migration, §19 mainline-sync, §20 multi-agent swarm protocol, §21 Avalonia v12 gotchas, §23 official-doc links). Its **status/progress snapshots (§1A "Implementation Status Snapshot 2026-06-21", §8 phase roadmap) are HISTORICAL and no longer current** — do not treat their checkboxes or 🚧 markers as live status; live status lives in `skia-rebuild-goal.md`, `avalonia-ui-parity-matrix.md`, and `avalonia-migration-task-board.md`.
+
 **Goal:** Rebuild Conditioning Control Panel (CCP) for deployment on Windows, Linux, macOS, and Android using **Avalonia UI v12** and **LibVLCSharp**.
 
 **Current state:** .NET 8 WPF/WinForms desktop app, Windows-only (`net8.0-windows10.0.19041.0`), single-file publish for `win-x64`.

@@ -40,7 +40,7 @@ Compare the trackers against reality; the docs are updated in batches and DO dri
 
 - `crossplatform-rebuild-plan.md` section 1A vs actual code/git log.
 - `unified-compositor-engine-plan.md` current-state table vs the compositor code (a known instance: the doc claimed `WS_EX_LAYERED` was removed while `CompositorWindow` deliberately keeps it; code wins).
-- `EXECUTION_GOAL.md` has been observed materially stale (described the parity matrix as unverified after it was fully re-verified).
+- `skia-rebuild-goal.md` "Current state" is the active driver's status block and DOES drift as work lands (its 2026-07-04 snapshot lagged the video Phase E / chaos S5–S9 landings until refreshed 2026-07-05); trust its commit-hash evidence over prose. (The former `EXECUTION_GOAL.md`, long superseded and materially stale, was deleted in the 2026-07-05 docs cleanup.)
 - `avalonia-ui-parity-matrix.md`: OWNER RULING 2026-07-02: pre-existing `[x]` marks are void (hand-made port, no trusted baseline); rows are re-earned with evidence under `skia-rebuild-goal.md` WS0. During audits, only trust rows carrying WS0-era evidence; flip anything else back to `[ ]`.
 
 Fix the docs as part of the audit; stale trackers poison every future session.

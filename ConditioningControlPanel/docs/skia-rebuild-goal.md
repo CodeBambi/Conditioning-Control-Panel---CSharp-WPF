@@ -1,9 +1,10 @@
 # SKIA REBUILD GOAL - Windows + Linux, functionality first
 
 Created: 2026-07-02. Status: APPROVED by owner 2026-07-02 — this is the active
-autonomous driver. Supersedes `EXECUTION_GOAL.md`
-as the active autonomous driver once approved (that doc's goal was declared complete
-2026-06-23 and is stale). `unified-compositor-engine-goal.md` and
+autonomous driver. It superseded the former `EXECUTION_GOAL.md` (whose goal was declared
+complete 2026-06-23 and had gone stale); **that doc was deleted in the 2026-07-05 docs
+cleanup** — its canonical v12 gotcha content lives in `crossplatform-rebuild-plan.md` §21.
+`unified-compositor-engine-goal.md` and
 `unified-compositor-engine-plan.md` remain the detail tracker for Workstreams 1-2 and are
 NOT replaced by this file.
 
@@ -66,7 +67,7 @@ The doctrine this goal adds:
 | `dashboard-design` | Any user-facing surface; 5-theme reskin is part of done |
 | `port-audit` | End of every workstream and after every merge from main |
 
-## Current state (verified 2026-07-04 by full 10-hour audit; re-verify with `port-audit` if old)
+## Current state (verified 2026-07-04 by full 10-hour audit; **refreshed 2026-07-05** from git evidence — re-verify with `port-audit` if old)
 
 Exists and TRUSTED (earned, not assumed): the **WS0 review sweep is COMPLETE** — all 11
 lots passed (contract + adversarial rubric + optimality), parity matrix rows 1–11
@@ -76,12 +77,18 @@ Effect services (flash, subliminal, bouncing text, pink tint, spiral, brain drai
 bubbles) render as compositor layers; Avalonia measured faster than WPF on startup
 (~2.5s vs ~4.2s) and memory (~422MB vs ~1218MB).
 
-**Gates snapshot 2026-07-04 (post-WP1):** slnf 0 errors · WPF sln 0 errors · Core tests
-**205/205** · smoke **`[SMOKE] Findings: 5` = baseline, exit 0, no token material in the
-output** (the `StartSession` blocker is a known baseline finding) · `--verify-video` exit 0.
-Audit trail: ProfileSync slices 1–6 each independently reviewed or grep-proven (economy bug
-caught+fixed pre-commit in slice 6, `766d8322`); #462 pair re-reviewed SOUND + hardened
-(`fb704a6d`).
+**Gates snapshot (last full run 2026-07-04, post-WP1):** slnf 0 errors · WPF sln 0 errors ·
+Core tests **205/205** at that time · smoke **`[SMOKE] Findings: 5` = baseline, exit 0, no
+token material in the output** (the `StartSession` blocker is a known baseline finding) ·
+`--verify-video` exit 0. Audit trail: ProfileSync slices 1–6 each independently reviewed or
+grep-proven (economy bug caught+fixed pre-commit in slice 6, `766d8322`); #462 pair
+re-reviewed SOUND + hardened (`fb704a6d`). **Since then (2026-07-05 refresh, git-verified,
+build NOT re-run in this refresh): app is at v6.2.9 "The Fall" (`UpdateService.AppVersion`,
+merge `722f7dfa`); the Core test floor rose from 205 to **542/542** (513 at chaos S8
+`f0fea4a0`, then 542 after the v6.2.9 sync — most recent gated commits `4984c8d8`/`f33425a4`;
+the suite was NOT re-run in this refresh, read the live count from `dotnet test`); 20
+compositor layers are now registered (9 session + 10 chaos + 1 attention-check) per
+`uce-coverage-audit.md`.**
 
 Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
 - **WP1 — ProfileSync slice 7 (GDPR + live wiring): ✅ DONE 2026-07-04 — WS0 is COMPLETE.**
@@ -91,20 +98,17 @@ Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
   audit clean; pinned tests untouched, Core 205/205). Evidence per checklist step:
   `docs/profilesync-port-plan.md` §8. Follow-up (manual, small): first real logged-in
   purchase/name-change exercise against the live server.
-- **UCE video RENDERS (WS1 Phase A closed 2026-07-04, `85fa6570`)** — proven end-to-end by the
-  new Debug `--verify-video <path>` harness (layer registers → vmem frames decode → publish →
-  engine composites, live 30fps, exit 0). Legacy `AvaloniaMultiMonitorVideoService` remains the
-  runtime default + contract holder until Phase E; UCE video stays the `CCP_UCE_VIDEO=1` opt-in.
-  **Phase B substantially closed 2026-07-04** (`bbdb3077` B1 audio+IsPlaying, `99a50721` B2
-  attention/safety/segment/events — adversarially reviewed, 4 findings fixed pre-bank, failed-open
-  wedge closed; `2572535d` watch-credit wiring + penalties-reset parity; `37bd454a` Phase D.1/D.2
-  zero-alloc triple-buffered VideoLayer + timer fold, GPU-staleness empirically probed).
-  Phase C swept 2026-07-04 (`07c094e1` `--verify-layers` harness): all 7 migrated layers PASS
-  (registration z, activation, render-delta, teardown) and the dual-surface P0 held BOTH ways
-  (subliminal capture-VISIBLE delta; brain-drain active with NO capture delta + excluded window
-  0→1→0). **Remaining WP2**: side-by-side WPF eyes-verification (timing/opacity/z/multi-DPI —
-  list in the plan doc), Phase E flip+delete (HARD GATE: only after side-by-side parity is
-  proven by running), then the authorized libmpv spike. → WP2.
+- **UCE video — WS1 COMPLETE incl. Phase E (2026-07-05 refresh).** Phases A–D closed
+  2026-07-04 (`85fa6570` A vmem→SKImage render, `bbdb3077`/`99a50721` B audio+attention/
+  safety/segment/events, `37bd454a` D.1/D.2 zero-alloc triple-buffered `VideoLayer`;
+  `07c094e1` Phase C `--verify-layers`). **Phase E LANDED: E1 `6180efc2` (ESC/panic via the
+  global key hook) → E2 `ed636a7c` (default video flipped to the compositor path +
+  eyes-verified) → E3 `8069cfb7` (legacy video path DELETED — `AvaloniaMultiMonitorVideoService`
+  grep-confirmed 0 matches in `CCP.Avalonia`; `HasOpenVideoWindows => IsPlaying`,
+  `PrimaryVideoWindow => null`). The compositor `VideoLayer`/`MandatoryVideoLayer` are now the
+  live, only video path — there is no `CCP_UCE_VIDEO` env gate any more.** Remaining WP2 (the
+  benchmark-gated libmpv engine-swap spike) is OPTIONAL/opportunistic per the media-engine
+  decision record below; the compositor architecture is proven. → WP2 (spike only).
 - **WP3 OPENED 2026-07-04 (`0624d639`)**: chaos z-band `100–199` established in `CompositorLayers`
   (WPF `ChaosWindowZ` raise-above-everything evidence; chaos = capture-VISIBLE, main surface);
   **ALL 8 live passive chaos overlays are now compositor layers** (cursor glow `0624d639`,
@@ -112,30 +116,29 @@ Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
   `35418baa`, gif cascade `4c6c5992`, field FX `9fc0b420`; `--verify-layers` 15/15; ~15 legacy
   parity bugs found+fixed en route — per-leg animation durations, DPI px/DIP seams, streamed
   per-frame GIF decodes → decode-once with WPF memory caps, missing run-end teardowns; queue
-  rows carry evidence + honest false-positive corrections). Remaining WS2: 6 unwired passives +
-  production callers arrive with the **chaos run-engine faithful port**. **PROGRESS 2026-07-04
-  (commits `64c7f464`→`071a8d7e`): archaeology shipped 4 behavior-contract docs + a sliced
-  port plan (`docs/chaos-run-engine-port-plan.md`); the run-engine port's HARD/JUDGMENT slices
-  S1–S4 are DONE & adversarially audited (Core ChaosSpawnCatalog + ChaosRunRules + ChaosScoring
-  + ChaosSpawnDirector; spawn director, scoring, config/state parity, behavioral callbacks;
-  Core tests 205→426; all gates green every slice). ENGINE WORK IS COMPLETE (S4b-1/2/3/4:
-  bound enrage, treat rot, darter spank, ALL live-lambda knobs via ChaosRunKnobs — commit
-  `2d7bc384`); no remaining slice touches BubbleEngine. WPF 6.2.8 merged (`aba10210`, zero
-  chaos impact; #480/#483 parity fixes landed). REMAINING run-engine work is MECHANICAL
-  (S5 draft / S6 payloads / S7 lifecycle / S8 layer callers / S9 verify) — execution
-  discipline lives in the `mechanical-port-work` skill and the ordered queue in
-  `docs/model-handoff-queue.md`. Next: S5 (queue item Q1).** Interactive surfaces (HUD, toy
-  button, boon stage, bubbles, unlock card) stay
-  windows pending the hook decision; FPS-floor gate over a full chaos run once the run engine
-  drives the layers. → WP3.
+  rows carry evidence + honest false-positive corrections). **10 chaos layers are now
+  registered** (the original 8 + `ChaosFxLayer` `8df68031` + `ChaosWaveTimerLayer` `16fe5a92`);
+  dead `AvaloniaBubbleWindow` deleted (`c8bb20a1`, bubbles consolidated into `BubbleLayer`).
+  **Chaos run-engine faithful port COMPLETE (2026-07-05 refresh).** S1–S4 (HARD/JUDGMENT:
+  ChaosSpawnCatalog + ChaosRunRules + ChaosScoring + ChaosSpawnDirector + all live-lambda
+  knobs via ChaosRunKnobs, `2d7bc384`) were done 2026-07-04; **the MECHANICAL slices then all
+  landed: S5 draft/boon `490da8c6` · S6 payload dispatch + heavy gate + `EffectPayload.Ambient`
+  fix `f5fa0757` · S7 run lifecycle + economy `87515732` · S8 hints + layer production callers
+  `f0fea4a0` · S9 verify `1f4c19fc`/`e61633c0` (benchmark clean, user-confirmed).** Handoff
+  queue `docs/model-handoff-queue.md` Q1–Q5 = DONE; Core test floor rose to 513/513 at S8.
+  Interactive surfaces (HUD, toy button, boon stage, bubbles, unlock card) still stay windows
+  pending the hook decision. **Remaining WP3: the `AvaloniaMouseHook` click-swallow decision
+  (below) and the FPS-floor gate over a full chaos run (not yet benchmarked in this refresh).**
+  → WP3.
 - Avalonia mouse hook cannot swallow clicks (WPF can): bubble/flash pops leak the click
   to the app underneath. Decide and fix in WP3, or explicitly accept and document.
 - Linux: head builds and launches in a VM, but there is ZERO click-through code
   (`SupportsClickThrough = IsWindows`), no input hooks, no verified feature sweep. → WP5.
 - Standing deferred rows from the WS0 sweep (each has a task-board/parity row): Ditzy
   Data PRO analytics UI, Discord Rich Presence, companion AI + CompanionTab full port,
-  chaos run-engine faithful port (unblocks `EffectPayload.Ambient`), calibration
-  16-point window pipeline (~1300–1500 LoC), lots 7–11 DEFER rows.
+  calibration 16-point window pipeline (~1300–1500 LoC), lots 7–11 DEFER rows. (The chaos
+  run-engine faithful port — formerly listed here — is now COMPLETE, S1–S9;
+  `EffectPayload.Ambient` was unblocked via S6 `f5fa0757`.)
 
 ## Workstreams, in order
 
@@ -276,7 +279,11 @@ improvising whenever a precondition fails, a gate goes red, or a step is ambiguo
    faster/lighter tech is encouraged — but user-visible behavior must survive or improve.
 2. **Performance doctrine (owner mandate)**: same behavior with higher frame rate,
    smoother usage, fewer PC resources. Every WP leaves the app at least as fast; WS1/WS2
-   target MEASURABLE improvement. Run `--benchmark` before/after when touching render or
+   target MEASURABLE improvement. Concrete stretch targets (folded in from the retired
+   `optimization-goal.md`): startup time and 10-second working set each improve **≥10%**
+   vs the recorded baseline; effect/overlay animations hold **60fps** where feasible with
+   **30fps** as the floor; a 3-min `--max-benchmark` all-effects run stays not-worse than
+   `docs/benchmark-optimized.json`. Run `--benchmark` before/after when touching render or
    hot paths; a regression is reverted, not patched around. Tech choices are pre-decided
    in each WP to remove judgment calls — deviating requires `avalonia-research` evidence
    + benchmarks recorded in the commit.
@@ -408,8 +415,8 @@ without re-reading the claimed task-board row and this goal's relevant workstrea
 
 - [x] WS0 complete: the ENTIRE port reviewed lot by lot (contract + adversarial rubric + optimality), corrections merged, the parity matrix re-earned from a full reset with evidence per row, calibration-port blockage resolved or formally re-scoped. Any lot RE-OPENED by a later merge from main (see the task-board "Sync-from-main" backlogs; merge `5ce70de6` re-opened lots 1/2/3/4/6) must be re-closed before WS0 is done.
   - **STATUS 2026-07-04 (WP1 shipped): all 11 lots PASSED and EVERY merge-`5ce70de6` re-open is RE-CLOSED — the last one, ProfileSync slice 7 (GDPR + live wiring), landed as s7a `4f051ab0` + s7b `80e1442` (parity row 1 re-closed with evidence; gates slnf 0 · WPF 0 · Core 205/205 · smoke baseline · video canary exit 0). WS0 is DONE.** Re-close trail: #462 session-summary (`410bef87`), #462 interaction-race (`4d65e564`, hardened `fb704a6d`), #461 resolved-by-documentation (`648d21ac`), EffectPayload.Ambient dormant (chaos backlog). ProfileSync slices 1–6 of 7 are DONE and UNWIRED (Core 199/199; full sync round-trip + heartbeat + 401 recovery + cloud backup w/ P0 exclusion strip + purchase/oopsie/change-name; each slice independently reviewed or grep-proven — the slice-3 merge got a fresh-context adversarial review, the slice-5 P0 exclusion list is grep-proven 18==18 vs WPF, the slice-6 economy bug was caught+fixed pre-commit). Full history + per-slice evidence: `docs/profilesync-port-plan.md`. Standing deferred workstreams (not re-opens; scheduled after WP1–2): Ditzy Data PRO analytics, Discord Rich Presence, companion AI + CompanionTab, chaos run-engine faithful port, calibration 16-point pipeline.
-- [ ] Video, audio controls, and attention checks run through the compositor on Windows; legacy video windows deleted (WS1 Phase E complete).
-- [ ] All passive Chaos visuals are compositor layers; a full Chaos run holds the FPS floor; hook swallow gap resolved or explicitly accepted in the task board.
+- [x] Video, audio controls, and attention checks run through the compositor on Windows; legacy video windows deleted (WS1 Phase E complete). — **DONE 2026-07-05: Phase E E1 `6180efc2` / E2 `ed636a7c` / E3 `8069cfb7`; `AvaloniaMultiMonitorVideoService` grep-confirmed 0 matches; attention-check migrated to `AttentionCheckLayer` (`a315cb0f`, last UCE window gap closed).**
+- [ ] All passive Chaos visuals are compositor layers; a full Chaos run holds the FPS floor; hook swallow gap resolved or explicitly accepted in the task board. — **Layer migration DONE (10 chaos layers; run-engine S1–S9 complete, S8 `f0fea4a0` wired the production callers). REMAINING: FPS-floor gate over a full chaos run + the `AvaloniaMouseHook` click-swallow decision.**
 - [ ] No passive effect window remains in `CCP.Avalonia` (audited); interactive windows are justified.
 - [ ] Windows: every parity-matrix item re-verified `[x]` after WS1-3; benchmarks not worse than `benchmark-optimized.json`.
 - [ ] Linux: app builds and launches; every feature works, is improved, or degrades gracefully with a recorded gap; click-through works on X11; parity matrix has a completed Linux sweep.
