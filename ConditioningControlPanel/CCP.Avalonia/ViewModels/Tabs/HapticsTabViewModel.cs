@@ -416,13 +416,24 @@ public partial class HapticsTabViewModel : TabItemViewModel
 
     private void OnHapticsConnectionStateChanged(object? sender, bool connected)
     {
-        IsConnected = connected;
-        StatusText = connected ? Loc.Get("label_connected") : Loc.Get("label_disconnected");
-        ConnectButtonText = connected ? Loc.Get("btn_disconnect") : Loc.Get("btn_connect");
-        DevicesText = connected
-            ? string.Join(", ", _hapticsService?.ConnectedDevices ?? Array.Empty<string>())
-            : Loc.Get("label_no_devices");
-        UpdateStatusColor();
+        // Q9 cross-thread brush fix: AvaloniaHapticsService raises ConnectionStateChanged from the
+        // Buttplug WebSocket callbacks on BACKGROUND threads (AvaloniaHapticsService.cs:264 OnDeviceAdded,
+        // :279 OnDeviceRemoved, :294 OnServerDisconnect). UpdateStatusColor() assigns the bound StatusColor
+        // brush, which is live on Ellipse.Fill / TextBlock.Foreground (HapticsTabView.axaml:167/174); an
+        // off-thread assignment makes the Avalonia compositor serialize a half-written SolidColorBrush (the
+        // rare SolidColorBrush.SerializeChanges -> Compositor.CommitCore crash). Marshal the whole status
+        // update (brush + its tightly-coupled sibling bound props) onto the UI thread, mirroring the
+        // webcam-event pattern in LabTabViewModel.OnState (LabTabViewModel.cs:605).
+        Dispatcher.UIThread.Post(() =>
+        {
+            IsConnected = connected;
+            StatusText = connected ? Loc.Get("label_connected") : Loc.Get("label_disconnected");
+            ConnectButtonText = connected ? Loc.Get("btn_disconnect") : Loc.Get("btn_connect");
+            DevicesText = connected
+                ? string.Join(", ", _hapticsService?.ConnectedDevices ?? Array.Empty<string>())
+                : Loc.Get("label_no_devices");
+            UpdateStatusColor();
+        });
     }
 
     private void OnHapticsDeviceAdded(object? sender, string device)
