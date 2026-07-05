@@ -74,6 +74,12 @@ public sealed class BubbleEngine
     // PHYSICAL px (CenterPx x Scaling); no charge consumed, arcs never chain onward.
     private Action<IReadOnlyList<(Point From, Point To)>>? _onEStimArc;
 
+    // Owner-authorized: darter/sweeper sparkle trail. Fires once per emitted trail point so the
+    // head renders a fading sparkle via ChaosFieldFxLayer.TrailDot (WPF BubbleService.cs:3128-3129
+    // fallback ChaosFieldFxOverlay.TrailDot(nowPx, trailSec, warm: sweeper)). Args: (physical-px
+    // point, sparkle lifeSec = trailSec, warm = IsSweeper amber).
+    private Action<Point, double, bool>? _onDarterTrail;
+
     // ---- hold-to-defuse channel state (Avalonia port parity) ----
     private Func<ChaosBubbleSpec, bool>? _canChannel;
     private Action<ChaosBubbleSpec>? _onChannelStarted;
@@ -396,7 +402,8 @@ public sealed class BubbleEngine
         Func<ChaosBubbleSpec, bool>? canChannel = null,
         Action<ChaosBubbleSpec>? onChannelStarted = null,
         Action<ChaosBubbleSpec, string>? onChannelBroken = null,
-        Action<IReadOnlyList<(Point From, Point To)>>? onEStimArc = null)
+        Action<IReadOnlyList<(Point From, Point To)>>? onEStimArc = null,
+        Action<Point, double, bool>? onDarterTrail = null)
     {
         _onBenignPop = onBenignPop;
         _onDefuse = onDefuse;
@@ -420,6 +427,7 @@ public sealed class BubbleEngine
         _onChannelStarted = onChannelStarted;
         _onChannelBroken = onChannelBroken;
         _onEStimArc = onEStimArc;
+        _onDarterTrail = onDarterTrail;
         _chaosActive = true;
         _chaosFrozen = false;
         _chaosTimeScale = 1.0;
@@ -455,6 +463,7 @@ public sealed class BubbleEngine
         _onChannelStarted = null;
         _onChannelBroken = null;
         _onEStimArc = null;
+        _onDarterTrail = null;
         _channelBubbleId = null;
         _chaosSpawnQueue.Clear();
         _pendingChaperoneEscorts.Clear();
@@ -1248,6 +1257,8 @@ public sealed class BubbleEngine
             {
                 bubble.LastTrailEmitPx = nowPx;
                 bubble.TrailPoints.Add((nowPx, DateTime.UtcNow));
+                // Render a fading sparkle at the new trail point (WPF BubbleService.cs:3128-3129).
+                _onDarterTrail?.Invoke(nowPx, trailSec, spec.IsSweeper);
             }
             var cutoff = DateTime.UtcNow.AddSeconds(-trailSec);
             while (bubble.TrailPoints.Count > 0 && bubble.TrailPoints[0].T < cutoff)

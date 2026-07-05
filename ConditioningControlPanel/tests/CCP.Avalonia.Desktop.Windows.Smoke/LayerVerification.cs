@@ -617,6 +617,14 @@ internal static class LayerVerification
                 chaos.ChaosFieldRipple(cx, cy, radiusPx: 180, lifeMs: 1200);
                 chaos.ChaosFieldResidue(cx, cy, radiusPx: 140, lifeMs: 2500);
                 chaos.ChaosFieldSetTether(1, cx - 200, cy, cx + 200, cy);
+                // Rabbit sparkle trail (owner-authorized darter-trail wiring): a warm streak + a
+                // cool streak across the centre — the same ChaosFieldTrailDot seam the BubbleEngine
+                // _onDarterTrail callback drives in a live run.
+                for (int td = 0; td < 6; td++)
+                {
+                    chaos.ChaosFieldTrailDot(cx - 120 + td * 40, cy, 0.8, warm: true);
+                    chaos.ChaosFieldTrailDot(cx - 120 + td * 40, cy + 30, 0.8, warm: false);
+                }
                 var activated = await PollAsync(() => fieldFxLayer.IsActive, 2000, stepMs: 50);
                 row.Activated = activated ? "yes" : "TIMEOUT";
                 if (activated)
@@ -630,7 +638,7 @@ internal static class LayerVerification
                 var deactivated = await PollAsync(() => !fieldFxLayer.IsActive, 3000);
                 row.Teardown = deactivated ? "clean (ClearChaosFieldFx)" : "TIMEOUT";
                 FinishRow(row, activated, deactivated, envStable);
-                row.Note = AppendNote(row.Note, "seam-only: no production caller in this head yet (bubble-engine FX port pending); the old queue row's live tag was a false positive");
+                row.Note = AppendNote(row.Note, "TrailDot now has a production caller (darter-trail callback, owner-authorized); ripple/residue/tether still seam-only (Size Queen/Aftermath/Bound FX port pending)");
                 await SettleIdle(engine);
             }
 

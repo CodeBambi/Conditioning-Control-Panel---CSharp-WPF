@@ -505,7 +505,8 @@ public sealed class AvaloniaChaosService : IChaosService
             canChannel: CanChannelDefuse,
             onChannelStarted: OnChannelStarted,
             onChannelBroken: OnChannelBroken,
-            onEStimArc: OnEStimArc);
+            onEStimArc: OnEStimArc,
+            onDarterTrail: OnDarterTrail);
 
         // Seed the live knobs immediately after BeginChaosMode (which Reset() them) so the
         // config-shaped values — silk_touch HitboxScale/MagnetEnabled — hold from the first
@@ -2775,6 +2776,17 @@ public sealed class AvaloniaChaosService : IChaosService
             AvaloniaChaosSfx.Play("estim_zap", 0.45f);   // WPF EStimBurstAt zap (throttled cue)
         }
     }
+
+    /// <summary>
+    /// Darter/sweeper sparkle-trail callback (Core BubbleEngine, owner-authorized). Renders a
+    /// fading sparkle at each emitted trail point through the compositor
+    /// (<see cref="ChaosFieldFxLayer"/>.TrailDot via the existing <c>ChaosFieldTrailDot</c> seam,
+    /// replacing the WPF ChaosFieldFxOverlay fallback; WPF BubbleService.cs:3128-3129). <paramref
+    /// name="warm"/> = the amber GG-sweeper variant. The point is PHYSICAL px (Core CenterPx x
+    /// Scaling); projected to the field-fx double seam here.
+    /// </summary>
+    private void OnDarterTrail(Core.Platform.Point px, double lifeSec, bool warm)
+        => ChaosFieldTrailDot(px.X, px.Y, lifeSec, warm);
 
     /// <summary>Pop a floating chaos word at a PHYSICAL virtual-desktop px anchor (WS2:
     /// chaos on the compositor). Master-gated on ChaosAnnouncerEnabled exactly like WPF

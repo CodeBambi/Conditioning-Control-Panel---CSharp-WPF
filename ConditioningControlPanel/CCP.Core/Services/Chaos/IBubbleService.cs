@@ -101,7 +101,10 @@ public interface IBubbleService
         // Owner-authorized Q10b arc slice: the E-Stim discharge bolt callback. The default impl
         // below degrades to the 6-arg overload (dropping this, like the behavioral callbacks);
         // the real AvaloniaBubbleService impl forwards it to BubbleEngine.
-        Action<IReadOnlyList<(Point From, Point To)>>? onEStimArc = null)
+        Action<IReadOnlyList<(Point From, Point To)>>? onEStimArc = null,
+        // Owner-authorized: the darter/sweeper sparkle-trail callback. Also dropped by the default
+        // impl below (degrades to the 6-arg overload); the real AvaloniaBubbleService forwards it.
+        Action<Point, double, bool>? onDarterTrail = null)
         => BeginChaosMode(onBenignPop, onDefuse, onDetonate, canChannel, onChannelStarted, onChannelBroken);
 
     /// <summary>Leaves chaos mode and destroys all chaos bubbles.</summary>

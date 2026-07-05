@@ -230,7 +230,8 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
         Func<ChaosBubbleSpec, bool>? canChannel = null,
         Action<ChaosBubbleSpec>? onChannelStarted = null,
         Action<ChaosBubbleSpec, string>? onChannelBroken = null,
-        Action<IReadOnlyList<(ConditioningControlPanel.Core.Platform.Point From, ConditioningControlPanel.Core.Platform.Point To)>>? onEStimArc = null)
+        Action<IReadOnlyList<(ConditioningControlPanel.Core.Platform.Point From, ConditioningControlPanel.Core.Platform.Point To)>>? onEStimArc = null,
+        Action<ConditioningControlPanel.Core.Platform.Point, double, bool>? onDarterTrail = null)
     {
         LoadBubbleImage();
 
@@ -282,7 +283,8 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
             canChannel,
             onChannelStarted,
             onChannelBroken,
-            onEStimArc);
+            onEStimArc,
+            onDarterTrail);
 
         InstallMouseHook();
     }
