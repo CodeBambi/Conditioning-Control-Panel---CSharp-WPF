@@ -113,6 +113,32 @@ public class InteractionQueueService
     {
         lock (_lock)
         {
+            CompleteLocked(type);
+        }
+    }
+
+    /// <summary>
+    /// Release the slot ONLY if <paramref name="type"/> is the interaction currently active.
+    /// Safe to call from abnormal teardown paths (panic key, ForceCleanup, session switch) that
+    /// might run after a different interaction has already taken over — it will never clear the
+    /// wrong one. No-op if the queue is idle or a different type is active. Returns true if it
+    /// released the slot. The check-and-release is atomic under the queue lock (no TOCTOU with a
+    /// concurrent dequeue).
+    /// </summary>
+    public bool CompleteIfCurrent(InteractionType type)
+    {
+        lock (_lock)
+        {
+            if (CurrentInteraction != type) return false;
+            CompleteLocked(type);
+            return true;
+        }
+    }
+
+    /// <summary>Completion logic; caller MUST hold <see cref="_lock"/>.</summary>
+    private void CompleteLocked(InteractionType type)
+    {
+        {
             StopStuckDetectionTimer();
 
             if (CurrentInteraction != type)

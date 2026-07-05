@@ -906,6 +906,14 @@ namespace ConditioningControlPanel.Services
             CloseAll(synchronous);
             App.Audio?.ForceUnduck();
             _penalties = 0;
+
+            // Release the InteractionQueue slot if we still hold it. Panic key / stuck-timer /
+            // session-switch teardown routes through ForceCleanup (not Cleanup), so without this
+            // the "Video" slot stayed claimed for the full 5-minute stuck window (#14) — blocking
+            // the next interaction and leaving a dead fullscreen. CompleteIfCurrent is guarded, so
+            // it never clears a BubbleCount/LockCard that has since taken over.
+            App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
+
             App.Logger?.Information("VideoService: Force cleanup completed (synchronous={Sync})", synchronous);
         }
 
