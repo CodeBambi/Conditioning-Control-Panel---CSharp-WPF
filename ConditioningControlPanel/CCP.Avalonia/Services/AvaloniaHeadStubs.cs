@@ -3358,12 +3358,12 @@ public sealed class AvaloniaBarkService : IBarkService
     }
 }
 
-/// <summary>Video state for the Avalonia head, backed by the multi-monitor video service.</summary>
+/// <summary>Video state for the Avalonia head, backed by the compositor-only video service.</summary>
 public sealed class AvaloniaVideoInfo : IVideoInfo
 {
-    private readonly AvaloniaMultiMonitorVideoService? _videoService;
+    private readonly IVideoService? _videoService;
 
-    public AvaloniaVideoInfo(AvaloniaMultiMonitorVideoService? videoService = null)
+    public AvaloniaVideoInfo(IVideoService? videoService = null)
     {
         _videoService = videoService;
     }

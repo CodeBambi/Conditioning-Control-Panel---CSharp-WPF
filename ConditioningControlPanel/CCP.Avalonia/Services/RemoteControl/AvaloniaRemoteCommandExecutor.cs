@@ -45,7 +45,6 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
     private readonly IWallpaperProvider? _wallpaper;
     private readonly IBrowserHost? _browserHost;
     private readonly ISessionLogService? _sessionLog;
-    private readonly IMultiMonitorVideoService? _multiMonitor;
     private readonly IAutonomyService? _autonomy;
     private readonly IInteractionQueueService? _interactionQueue;
     private readonly ILogger<AvaloniaRemoteCommandExecutor>? _logger;
@@ -70,7 +69,6 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
         IWallpaperProvider? wallpaper = null,
         IBrowserHost? browserHost = null,
         ISessionLogService? sessionLog = null,
-        IMultiMonitorVideoService? multiMonitor = null,
         IAutonomyService? autonomy = null,
         IInteractionQueueService? interactionQueue = null,
         ILogger<AvaloniaRemoteCommandExecutor>? logger = null)
@@ -92,7 +90,6 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
         _wallpaper = wallpaper;
         _browserHost = browserHost;
         _sessionLog = sessionLog;
-        _multiMonitor = multiMonitor;
         _autonomy = autonomy;
         _interactionQueue = interactionQueue;
         _logger = logger;
@@ -263,13 +260,14 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
                 {
                     _logger?.LogInformation("[RemoteControl] play_hypnotube id={Id}", TryExtractHtVideoId(htUrl));
 
-                    // On Windows, route direct media URLs through the single-stream multi-monitor
-                    // mirroring service. HypnoTube HTML pages still use the embedded browser.
-                    if (OperatingSystem.IsWindows() && _multiMonitor != null && IsDirectVideoUrl(htUrl))
+                    // Route direct media URLs through the compositor video layer via
+                    // IVideoService (cross-platform single render surface). HypnoTube HTML
+                    // pages still use the embedded browser.
+                    if (_video != null && IsDirectVideoUrl(htUrl))
                     {
                         _remoteBrowserVideoActive = true;
-                        _multiMonitor.PlaybackEnded += OnRemoteVideoEnded;
-                        _multiMonitor.PlayUrl(htUrl);
+                        _video.VideoEnded += OnRemoteVideoEnded;
+                        _video.PlayUrl(htUrl);
                     }
                     else
                     {
@@ -533,8 +531,8 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
         _remoteBrowserVideoActive = false;
         try
         {
-            _multiMonitor?.Stop();
-            if (_multiMonitor != null) _multiMonitor.PlaybackEnded -= OnRemoteVideoEnded;
+            _video?.Stop();
+            if (_video != null) _video.VideoEnded -= OnRemoteVideoEnded;
             _ = _browserHost?.NavigateAsync(new Uri("about:blank"));
             _logger?.LogInformation("[RemoteControl] Stopped remote browser video");
         }
@@ -546,8 +544,8 @@ public sealed class AvaloniaRemoteCommandExecutor : IRemoteCommandExecutor
 
     private void OnRemoteVideoEnded(object? sender, EventArgs e)
     {
-        if (_multiMonitor != null)
-            _multiMonitor.PlaybackEnded -= OnRemoteVideoEnded;
+        if (_video != null)
+            _video.VideoEnded -= OnRemoteVideoEnded;
         _remoteBrowserVideoActive = false;
     }
 

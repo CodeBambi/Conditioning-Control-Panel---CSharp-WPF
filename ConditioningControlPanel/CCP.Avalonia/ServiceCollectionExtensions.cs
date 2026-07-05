@@ -165,8 +165,6 @@ public static class ServiceCollectionExtensions
         services.AddLogging(builder => builder.AddSerilog());
 
         services.AddSingleton<VideoMetadataCache>();
-        services.AddSingleton<AvaloniaMultiMonitorVideoService>();
-        services.AddSingleton<IMultiMonitorVideoService>(sp => sp.GetRequiredService<AvaloniaMultiMonitorVideoService>());
         services.AddSingleton<IAiService, AvaloniaQuizAiService>();
         services.AddTransient<IQuizService, QuizService>();
 

@@ -627,8 +627,8 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
 
         try
         {
-            // On Windows this is routed by AvaloniaVideoService to IMultiMonitorVideoService
-            // for single-stream mirroring; on other platforms it keeps the per-window path.
+            // The URL is routed to the compositor video layer via IVideoService (a single
+            // cross-platform render surface; no more IMultiMonitorVideoService).
             _video.VideoEnded += OnWebVideoEnded;
             _video.PlayUrl(selected.Value);
             _logger?.LogInformation("AvaloniaAutonomyService: Playing web video '{Name}' at {Url}", selected.Key, selected.Value);

@@ -490,7 +490,6 @@ public partial class App : Application
         DisposeServiceIfPossible(Services?.GetService<ConditioningControlPanel.Core.Services.Webcam.IWebcamService>(), "Webcam");
         DisposeServiceIfPossible(Services?.GetService<IHapticsService>(), "Haptics");
         DisposeServiceIfPossible(Services?.GetService<ConditioningControlPanel.Core.Services.Video.IVideoService>(), "Video");
-        DisposeServiceIfPossible(Services?.GetService<ConditioningControlPanel.Core.Services.Video.IMultiMonitorVideoService>(), "MultiMonitorVideo");
         DisposeServiceIfPossible(Services?.GetService<IRemoteControlService>(), "RemoteControl");
         DisposeServiceIfPossible(Services?.GetService<IScreenOcrService>(), "ScreenOcr");
         DisposeServiceIfPossible(Services?.GetService<IKeywordTriggerService>(), "KeywordTrigger");

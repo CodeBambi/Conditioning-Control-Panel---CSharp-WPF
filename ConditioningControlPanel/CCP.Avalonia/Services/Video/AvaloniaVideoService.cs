@@ -54,8 +54,6 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     private readonly IAchievementService? _achievements;
     private readonly IProgressionService? _progression;
     private readonly ILogger<AvaloniaVideoService>? _logger;
-    private readonly IMultiMonitorVideoService? _multiMonitor;
-    private readonly AvaloniaMultiMonitorVideoService? _multiMonitorImpl;
     private readonly IInputHook? _inputHook;
     private readonly IContentPackService? _contentPacks;
     private readonly ISystemAudioDucker? _audioDucker;
@@ -71,7 +69,6 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     private readonly CompositorEngine? _compositor;
     private readonly VideoLayer? _videoLayer;
     private readonly MandatoryVideoLayer? _mandatoryVideoLayer;
-    private readonly List<VideoOverlayWindow> _secondaryWindows = new();
 
     private CancellationTokenSource? _cts;
     private DispatcherTimer? _scheduledTimer;
@@ -81,10 +78,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     // "max length" contract: no mandatory video may stay on screen longer than the cap, even if a
     // too-long clip slipped through the (cold-cache) duration filter.
     private DispatcherTimer? _maxDurationTimer;
-    // True while any video (mandatory compositor layer, multi-monitor, or window) is on screen.
+    // True while any video (the mandatory or URL compositor layer) is on screen.
     // Guards the scheduler so it never preempts a playing video with the next scheduled one.
     private bool _isVideoActive;
-    private VideoOverlayWindow? _currentWindow;
     private string? _currentRetryPath;
     private bool _currentStrictMode;
     private double _currentDurationSeconds;
@@ -146,8 +142,8 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     private bool _layerOrchestrationActive;
     // Real media length reported by the layer's LengthChanged, in ms; -1 while unknown.
     private long _layerLengthMs = -1;
-    // One-shot chaos random-segment state captured at layer playback start (the window path
-    // captures the same values into the VideoOverlayWindow ctor in CreateWindow).
+    // One-shot chaos random-segment state captured at layer playback start; the seek itself
+    // runs from OnCompositorVideoLengthKnown once the real duration is known.
     private bool _pendingSegmentArmed;
     private double _pendingSegmentFraction;
     private double _pendingSegmentSec;
@@ -166,7 +162,6 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         IProgressionService? progression = null,
         ILogger<AvaloniaVideoService>? logger = null,
         IOverlayService? overlay = null,
-        IMultiMonitorVideoService? multiMonitor = null,
         CompositorEngine? compositor = null,
         IContentPackService? contentPacks = null,
         ISystemAudioDucker? audioDucker = null,
@@ -188,21 +183,17 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _progression = progression;
         _logger = logger;
         _overlay = overlay;
-        _multiMonitor = multiMonitor;
         _compositor = compositor;
         _contentPacks = contentPacks;
         _audioDucker = audioDucker;
         _flash = flash;
         _bubbles = bubbles;
         _companion = companion;
-        // UCE plan Phase E: compositor video (VideoLayer/MandatoryVideoLayer) is the DEFAULT
-        // path whenever the engine is available. The frame pipeline is proven (Phase A
-        // harness), audio/attention/segment/watch-credit reached parity (Phase B), it is
-        // zero-per-frame-alloc (Phase D), and ESC-dismiss/panic route through the global key
-        // hook (E1). The legacy multi-monitor / per-window path remains ONLY as a temporary
-        // opt-OUT escape hatch via CCP_LEGACY_VIDEO=1, deleted with the legacy path in E3.
-        var useCompositorVideo = compositor != null &&
-            !string.Equals(Environment.GetEnvironmentVariable("CCP_LEGACY_VIDEO"), "1", StringComparison.Ordinal);
+        // UCE plan Phase E3: compositor video (VideoLayer/MandatoryVideoLayer) is the ONLY
+        // video path — the legacy multi-monitor / per-window path was deleted here. The
+        // compositor engine is registered unconditionally on every head, so this is always
+        // true and the layers are always created.
+        var useCompositorVideo = compositor != null;
         _videoLayer = useCompositorVideo ? new VideoLayer(libVlc, _logger) : null;
         _mandatoryVideoLayer = useCompositorVideo ? new MandatoryVideoLayer(libVlc, _logger) : null;
         if (_videoLayer != null)
@@ -235,24 +226,6 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _mandatoryVideoLayer.PlaybackTimeChanged += (_, ms) => OnCompositorVideoTimeChanged(ms);
         }
 
-        if (_multiMonitor != null)
-        {
-            _multiMonitor.PlaybackStarted += OnMultiMonitorPlaybackStarted;
-            _multiMonitor.PlaybackEnded += OnMultiMonitorPlaybackEnded;
-        }
-
-        // The live Windows multi-monitor path surfaces user key intent (ESC dismiss / panic
-        // force-stop) and surface clicks from its own windows; wire them back into this
-        // service's cleanup + attention-target contract (WPF SetupStrictHandlers /
-        // BringTargetsToFront parity).
-        _multiMonitorImpl = multiMonitor as AvaloniaMultiMonitorVideoService;
-        if (_multiMonitorImpl != null)
-        {
-            _multiMonitorImpl.DismissRequested += OnMultiMonitorDismissRequested;
-            _multiMonitorImpl.PanicRequested += OnMultiMonitorPanicRequested;
-            _multiMonitorImpl.SurfaceClicked += OnMultiMonitorSurfaceClicked;
-        }
-
         // UCE video input (UCE plan Phase E prerequisite): the compositor video layers render
         // in a click-through / no-activate window that receives NO keyboard input, so the
         // legacy VideoOverlayWindow.OnKeyDown ESC-dismiss / panic-key contract has no receiver
@@ -265,20 +238,17 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     }
 
     public bool IsRunning { get; private set; }
-    // Phase B: IsPlaying/HasOpenVideoWindows must reflect the UCE layers too — the legacy
-    // expressions are window-based and read false while a compositor video plays, which
-    // starves every consumer (interaction queue, session-summary defer via the
-    // HasOpenVideoWindows DIM (#462), scheduler guards). Legacy-path behavior is unchanged.
-    public bool IsPlaying => (_currentWindow?.IsPlaying ?? false)
-        || _videoLayer?.IsPlaying == true
+    // UCE plan Phase E3: video plays only through the UCE layers now (the window path was
+    // deleted), so IsPlaying reflects the layers alone. Consumers (interaction queue,
+    // session-summary defer via the HasOpenVideoWindows DIM (#462), scheduler guards) rely on
+    // this reading true for the full life of a compositor video.
+    public bool IsPlaying => _videoLayer?.IsPlaying == true
         || _mandatoryVideoLayer?.IsPlaying == true;
-    // Real teardown/open-window state for the #462 summary defer. HasOpenVideoWindows reports
-    // any open primary/secondary window (even before playback starts or while closing); IsPlaying
-    // alone would miss those and let the summary pop over a dying surface.
+    // Real teardown/open-surface state for the #462 summary defer. With no video windows left,
+    // this tracks the compositor layers: it reads true while either layer is playing so the
+    // post-session summary can't pop over a still-active video surface.
     public bool IsCleaningUp => _isCleaningUp;
-    public bool HasOpenVideoWindows => _currentWindow != null || _secondaryWindows.Count > 0
-        || _videoLayer?.IsPlaying == true
-        || _mandatoryVideoLayer?.IsPlaying == true;
+    public bool HasOpenVideoWindows => IsPlaying;
     public string? LastVideoTitle => string.IsNullOrEmpty(_currentRetryPath) ? null : Path.GetFileNameWithoutExtension(_currentRetryPath);
     public string? LastVideoPath => _currentRetryPath;
     public int PlaythroughFailCount => _attentionPenalties;
@@ -289,18 +259,18 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     public bool LayerOrchestrationArmed => _layerOrchestrationActive;
 
     /// <summary>
-    /// Primary (audio-bearing) media player, or null if no video is playing.
-    /// Exposed for the Deeper EnhancementEngine to read playback time and
-    /// drive Seek/Pause. Treat as read-only — the engine should not mutate
-    /// state outside of Seek/Pause/Play helpers below.
+    /// Primary (audio-bearing) media player. Always null since UCE plan Phase E3 removed the
+    /// per-window video path: the compositor VideoLayer/MandatoryVideoLayer own their LibVLC
+    /// players internally, so no window-level player is exposed. Deeper enhancement time rules
+    /// read playback position via the <see cref="PrimaryPlaybackTimeMsChanged"/> seam instead.
     /// </summary>
-    public MediaPlayer? PrimaryMediaPlayer => _currentWindow?.MediaPlayer;
+    public MediaPlayer? PrimaryMediaPlayer => null;
 
     /// <summary>
-    /// Primary video window (audio monitor), or null if no video is playing.
-    /// Used to compute screen-space video rect for gaze-target rules.
+    /// Primary video window (audio monitor). Always null since UCE plan Phase E3 removed the
+    /// per-window video path; the compositor renders video into its own topmost surface.
     /// </summary>
-    public Window? PrimaryVideoWindow => _currentWindow;
+    public Window? PrimaryVideoWindow => null;
 
     /// <summary>
     /// The shared LibVLC instance used by this service (used by BubbleCountWindow and others).
@@ -434,10 +404,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
     public void Stop()
     {
-        // Phase B2: the layer-path equivalent of "_currentWindow != null" — a video started via
-        // PlaySpecificVideo/remote command (IsRunning=false, no window) must still be torn down
-        // when it plays through the UCE layers. Legacy behavior unchanged: layers are null there.
-        if (!IsRunning && _currentWindow == null && !_layerOrchestrationActive
+        // Phase B2: a video started via PlaySpecificVideo/remote command (IsRunning=false) must
+        // still be torn down when it plays through the UCE layers.
+        if (!IsRunning && !_layerOrchestrationActive
             && _videoLayer?.IsPlaying != true && _mandatoryVideoLayer?.IsPlaying != true) return;
         IsRunning = false;
 
@@ -846,13 +815,8 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         // WPF contract (VideoService.UpdatePlayingVideosVolume): a live volume change only
         // writes Volume to active players. Re-applying the output device here would re-bind
         // the audio endpoint mid-playback on every slider drag (WS0 lot 4 V1-22).
-        _currentWindow?.ApplyVolume();
-        if (_multiMonitor?.IsPlaying == true)
-        {
-            _multiMonitor.SetVolume(LibVlcAudioHelper.GetEffectiveVolume(_settings.Current));
-        }
-        // Phase B audio parity: live volume updates reach the UCE layers too (volume/mute
-        // only — no output-device re-bind, same WPF contract as above).
+        // Phase B audio parity: live volume updates reach the UCE layers (volume/mute only —
+        // no output-device re-bind, same WPF contract as above).
         if (_videoLayer?.IsPlaying == true) _videoLayer.ApplyVolume(_settings.Current);
         if (_mandatoryVideoLayer?.IsPlaying == true) _mandatoryVideoLayer.ApplyVolume(_settings.Current);
     }
@@ -913,8 +877,8 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
     /// <summary>
     /// Compositor-layer playback start (LibVLC Playing, marshaled to the UI thread by the
-    /// layer). Phase B2: the mandatory layer runs the same orchestration body the window path
-    /// runs in <see cref="OnVideoWindowStarted"/> — start timestamp, VideoStarted, duration
+    /// layer). Phase B2: the mandatory layer runs the full orchestration body — start
+    /// timestamp, VideoStarted, duration
     /// bookkeeping, interaction-queue timeout, safety timer, attention scheduling. The URL
     /// layer only raises VideoStarted: WPF PlayUrl is "No attention checks, no strict mode -
     /// just playback" (VideoService.cs:900-903).
@@ -932,10 +896,8 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
         // B2 review F2: guard BEFORE any side effect. LibVLC re-fires Playing after an
         // unpause/seek bounce; the start timestamp, the public VideoStarted event (session
-        // log dedupe), and the attention-spawn clock must fire exactly once per video. The
-        // window path keeps sole ownership of the orchestration if it is ever active
-        // alongside a layer.
-        if (_layerOrchestrationActive || _currentWindow != null) return;
+        // log dedupe), and the attention-spawn clock must fire exactly once per video.
+        if (_layerOrchestrationActive) return;
         _layerOrchestrationActive = true;
         _videoStartTime = DateTime.Now;
         VideoStarted?.Invoke(this, EventArgs.Empty);
@@ -1088,8 +1050,7 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
                 _segmentArmedAtUtc = DateTime.MinValue;
 
                 _mandatoryVideoLayer.PlayVideo(filePath, withAudio: true, loop: false);
-                // Phase B audio parity: apply volume/mute/output device to the layer's player,
-                // mirroring the legacy path (SetVolume + SetAudioOutputDevice below).
+                // Phase B audio parity: apply volume/mute/output device to the layer's player.
                 _mandatoryVideoLayer.ApplyAudioSettings(_settings.Current);
                 // Ambient bubbles pause + clear so they don't fight the video for clicks or
                 // z-order (WPF StartVideoPlayback, VideoService.cs:1270).
@@ -1098,35 +1059,11 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             return;
         }
 
-        // When the unified compositor is available it already renders the video layer
-        // on every monitor, so the pink filter and other overlays sit on top. Skip the
-        // legacy multi-monitor windows to avoid them covering the compositor.
-        if (OperatingSystem.IsWindows() && _multiMonitor != null && _mandatoryVideoLayer == null)
-        {
-            _interactionQueue.TryStart("Video", () =>
-            {
-                _multiMonitorImpl?.SetStrictMode(strictMode);
-                _multiMonitor.PlayFile(filePath);
-                _multiMonitor.SetVolume(LibVlcAudioHelper.GetEffectiveVolume(_settings.Current));
-                _multiMonitor.SetAudioOutputDevice(_settings.Current?.AudioOutputDeviceId);
-                // Ambient bubbles pause + clear so they don't fight the video for clicks or
-                // z-order (WPF StartVideoPlayback, VideoService.cs:1270).
-                try { _bubbles?.PauseAndClear(); } catch { /* best effort */ }
-            });
-            return;
-        }
-
-        // Fallback per-window path only when neither compositor nor multi-monitor service is available.
-        _interactionQueue.TryStart("Video", () =>
-        {
-            var screen = GetPrimaryScreen();
-            _currentWindow = CreateWindow(screen, filePath, fromUrl: false, strictMode);
-            _currentWindow.Show();
-            SpawnSecondaryWindows(filePath, fromUrl: false, strictMode);
-            try { _bubbles?.PauseAndClear(); } catch { /* best effort */ }
-            // Disarm random segment now that a video is playing
-            _segmentArmedAtUtc = DateTime.MinValue;
-        });
+        // UCE plan Phase E3: the compositor mandatory video layer is the only video path (the
+        // legacy multi-monitor / per-window branches were deleted here). The compositor engine
+        // is registered on every head, so _mandatoryVideoLayer is only ever null in a degenerate
+        // configuration — log rather than silently drop the request; do NOT recreate a window.
+        _logger?.LogWarning("AvaloniaVideoService: no compositor video layer available; mandatory video not played");
     }
 
     private void PlayUrlCore(string url)
@@ -1144,8 +1081,7 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             // Phase B2: WPF PlayUrl contract (VideoService.cs:900-903) — "No attention checks,
             // no strict mode - just playback" — so the URL layer path deliberately skips the
             // mandatory-video orchestration (safety timer / attention / segment / strict).
-            // Retry/strict state is reset exactly like CreateWindow(fromUrl: true) resets it
-            // on the window path, so a stale mandatory-video retry path can never leak in.
+            // Retry/strict state is reset so a stale mandatory-video retry path can never leak in.
             _currentRetryPath = null;
             _currentStrictMode = false;
             _layerOrchestrationActive = false;
@@ -1156,188 +1092,15 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             return;
         }
 
-        // When the unified compositor is available it already renders the video layer
-        // on every monitor, so the pink filter and other overlays sit on top. Skip the
-        // legacy multi-monitor windows to avoid them covering the compositor.
-        if (OperatingSystem.IsWindows() && _multiMonitor != null && _videoLayer == null)
-        {
-            _interactionQueue.TryStart("Video", () =>
-            {
-                _multiMonitorImpl?.SetStrictMode(false);
-                _multiMonitor.PlayUrl(url);
-                _multiMonitor.SetVolume(LibVlcAudioHelper.GetEffectiveVolume(_settings.Current));
-                _multiMonitor.SetAudioOutputDevice(_settings.Current?.AudioOutputDeviceId);
-            });
-            return;
-        }
-
-        // Fallback per-window path only when neither compositor nor multi-monitor service is available.
-        if (_videoLayer == null)
-        {
-            _interactionQueue.TryStart("Video", () =>
-            {
-                var screen = GetPrimaryScreen();
-                _currentWindow = CreateWindow(screen, url, fromUrl: true, strictMode: false);
-                _currentWindow.Show();
-                SpawnSecondaryWindows(url, fromUrl: true, strictMode: false);
-            });
-        }
-    }
-
-    private void OnMultiMonitorPlaybackStarted(object? sender, EventArgs e)
-    {
-        Dispatcher.UIThread.Post(() => VideoStarted?.Invoke(this, EventArgs.Empty));
-    }
-
-    private void OnMultiMonitorPlaybackEnded(object? sender, EventArgs e)
-    {
-        // Natural multi-monitor end: run the full teardown (watch credit, unduck, bubble
-        // resume, flash restart, scheduler-guard reset). CleanupInternal's Stop() call
-        // no-ops because the multi-monitor service already stopped itself.
-        Dispatcher.UIThread.Post(() => CleanupInternal(notifyEnded: true));
-    }
-
-    private void OnMultiMonitorDismissRequested(object? sender, EventArgs e)
-    {
-        // Non-strict ESC on the live multi-monitor path: dismiss the current video with the
-        // NORMAL cleanup path — the session keeps running (WPF VideoService.cs:1822-1835).
-        Dispatcher.UIThread.Post(() => CleanupInternal(notifyEnded: true));
-    }
-
-    private void OnMultiMonitorPanicRequested(object? sender, EventArgs e)
-    {
-        // The user-rebindable panic key force-ends playback (WPF ForceCleanup contract).
-        ForceCleanup();
-    }
-
-    private void OnMultiMonitorSurfaceClicked(object? sender, EventArgs e)
-    {
-        Dispatcher.UIThread.Post(BringTargetsToFront);
+        // UCE plan Phase E3: the compositor URL video layer is the only URL video path (the
+        // legacy multi-monitor / per-window branches were deleted here). The compositor engine
+        // is registered on every head, so _videoLayer is only ever null in a degenerate
+        // configuration — log rather than silently drop the request; do NOT recreate a window.
+        _logger?.LogWarning("AvaloniaVideoService: no compositor video layer available; URL video not played");
     }
 
     /// <summary>
-    /// Raises every active attention target back above the video surfaces. WPF parity: the
-    /// click overlay on each video window calls BringTargetsToFront so a click on the video
-    /// can't bury the clickable targets (VideoService.cs:1490-1512).
-    /// </summary>
-    private void BringTargetsToFront()
-    {
-        List<FloatingText> targets;
-        lock (_attentionTargets)
-        {
-            targets = _attentionTargets.ToList();
-        }
-        foreach (var t in targets) t.BringToFront();
-    }
-
-    private void SpawnSecondaryWindows(string source, bool fromUrl, bool strictMode)
-    {
-        try
-        {
-            var settings = _settings.Current;
-            var allScreens = _screens.GetAllScreens();
-            if (allScreens.Count <= 1) return;
-            if (!ShouldFillSecondaryMonitors(settings, allScreens.Count))
-            {
-                if (settings?.DualMonitorEnabled == true)
-                {
-                    _logger?.LogInformation("AvaloniaVideoService: skipping {Count} secondary video decoder(s) on {Total} monitors to avoid lag; enable 'Fill all monitors with video' to override.",
-                        allScreens.Count - 1, allScreens.Count);
-                }
-                return;
-            }
-
-            var primary = _screens.GetPrimaryScreen() ?? allScreens[0];
-            foreach (var screen in allScreens)
-            {
-                if (screen == primary) continue;
-                var win = new VideoOverlayWindow(_settings, _libVlc, screen, source, fromUrl, strictMode, () => { }, _logger, withAudio: false, isPrimary: false, onSurfaceClicked: BringTargetsToFront);
-                _secondaryWindows.Add(win);
-                win.Show();
-            }
-
-            _logger?.LogInformation("AvaloniaVideoService: spawned {Count} secondary video window(s)", _secondaryWindows.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "AvaloniaVideoService: failed to spawn secondary windows");
-        }
-    }
-
-    private VideoOverlayWindow CreateWindow(ScreenInfo screen, string source, bool fromUrl, bool strictMode)
-    {
-        _currentRetryPath = fromUrl ? null : source;
-        _currentStrictMode = strictMode;
-        _currentDurationSeconds = 0;
-        _attentionHits = 0;
-        _attentionSpawned = 0;
-        _attentionTotal = 0;
-        _attentionSpawnTimes.Clear();
-        lock (_attentionTargets) { _attentionTargets.Clear(); }
-
-        // Check if segment is armed (30s window)
-        var isSegmentArmed = (DateTime.UtcNow - _segmentArmedAtUtc).TotalSeconds < 30 && _segmentSec > 0;
-        var segFraction = isSegmentArmed ? _segmentFraction : 0;
-
-        var win = new VideoOverlayWindow(
-            _settings,
-            _libVlc,
-            screen,
-            source,
-            fromUrl,
-            strictMode,
-            () => { },
-            _logger,
-            withAudio: true,
-            isPrimary: true,
-            onCodecWarning: onWarning =>
-            {
-                if (onWarning && !_codecWarningShown)
-                {
-                    _codecWarningShown = true;
-                    _logger?.LogWarning("AvaloniaVideoService: codec warning — video may not play correctly. Verify libvlc runtime.");
-                }
-            },
-            onPositionChanged: ms =>
-            {
-                // Watermark for FinalizeWatchCredit: the furthest position actually reached.
-                if (ms > _lastWatchPositionMs) _lastWatchPositionMs = ms;
-                try { PrimaryPlaybackTimeMsChanged?.Invoke(ms); } catch { /* no-op if no subscribers */ }
-            },
-            segmentArmed: isSegmentArmed,
-            segmentFraction: segFraction,
-            segmentSec: isSegmentArmed ? _segmentSec : 0,
-            onDismissRequested: () => CleanupInternal(notifyEnded: true),
-            onPanicRequested: ForceCleanup,
-            onSurfaceClicked: BringTargetsToFront);
-        win.VideoStarted += OnVideoWindowStarted;
-        win.VideoEnded += OnVideoWindowEnded;
-        return win;
-    }
-
-    private void OnVideoWindowStarted()
-    {
-        _videoStartTime = DateTime.Now;
-        VideoStarted?.Invoke(this, EventArgs.Empty);
-        _overlay?.NotifyTopWindowOpened();
-
-        var settings = _settings.Current;
-        if (settings == null) return;
-
-        if (_currentWindow?.MediaPlayer is { } player && player.Length > 0)
-        {
-            _currentDurationSeconds = player.Length / 1000.0;
-        }
-        else
-        {
-            _currentDurationSeconds = 0;
-        }
-
-        BeginPlaybackOrchestration(settings);
-    }
-
-    /// <summary>
-    /// Shared start-of-playback orchestration body (window path and Phase B2 UCE layer path):
+    /// Shared start-of-playback orchestration body (Phase B2 UCE layer path):
     /// extends the interaction-queue stuck timeout past the video's runtime, arms the safety
     /// timer, and schedules attention-check setup. Callers seed _currentDurationSeconds first
     /// (0 = unknown → 600s safety fallback; the layer path upgrades it from
@@ -1355,21 +1118,15 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         }
     }
 
-    private void OnVideoWindowEnded()
-    {
-        _overlay?.NotifyTopWindowClosed();
-        OnVideoEnded();
-    }
-
     private void StartSafetyTimer(double timeoutSeconds)
     {
         _safetyTimer?.Stop();
         _safetyTimer = StartOneShotTimer(TimeSpan.FromSeconds(Math.Max(30, timeoutSeconds)), () =>
         {
-            // Window path: no window left = nothing to clean. Layer path (Phase B2): the
-            // orchestration flag plays the same role — CleanupInternal clears it, so a timer
-            // that outlives its playback no-ops while a hung layer still gets force-cleaned.
-            if (_currentWindow == null && !_layerOrchestrationActive) return;
+            // Layer path (Phase B2): the orchestration flag is the liveness check —
+            // CleanupInternal clears it, so a timer that outlives its playback no-ops while a
+            // hung layer still gets force-cleaned.
+            if (!_layerOrchestrationActive) return;
             _logger?.LogWarning("AvaloniaVideoService: safety timeout triggered, forcing cleanup");
             CleanupInternal(notifyEnded: true);
         });
@@ -1713,8 +1470,6 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _preAnnounceTimer = null;
         FinalizeWatchCredit();
 
-        _multiMonitor?.Stop();
-
         _attentionTimer?.Stop();
         _attentionTimer = null;
         _safetyTimer?.Stop();
@@ -1731,27 +1486,10 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
 
         CloseMessageWindows();
 
-        foreach (var win in _secondaryWindows.ToList())
-        {
-            try { win.Close(); } catch { }
-        }
-        _secondaryWindows.Clear();
-
+        // UCE plan Phase E3: video plays only through the compositor layers now (the window /
+        // multi-monitor teardown was deleted). Stop both layers.
         _videoLayer?.Stop();
         _mandatoryVideoLayer?.Stop();
-
-        if (_currentWindow != null)
-        {
-            try
-            {
-                _currentWindow.VideoStarted -= OnVideoWindowStarted;
-                _currentWindow.VideoEnded -= OnVideoWindowEnded;
-                _currentWindow.Close();
-            }
-            catch { }
-            _currentWindow = null;
-            _overlay?.NotifyTopWindowClosed();
-        }
 
         _currentStrictMode = false;
         // B2 parity (WPF Cleanup :2620 / ForceCleanup :895 reset _penalties): end the
@@ -1814,15 +1552,10 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     {
         try
         {
-            long liveMs = -1;
-            try { liveMs = _currentWindow?.MediaPlayer?.Time ?? -1; }
-            catch { /* player may already be disposed */ }
-            if (liveMs > _lastWatchPositionMs) _lastWatchPositionMs = liveMs;
-
             // B2 residual: UCE layers relay TimeChanged at ~1 Hz (throttled); read the live
             // position directly at teardown so the watermark is exact regardless of when the
-            // last relay landed (mirrors the window path's live MediaPlayer.Time read above).
-            // -1 (no player / post-Stop natural end) is a no-op. Only one layer is ever active.
+            // last relay landed. -1 (no player / post-Stop natural end) is a no-op. Only one
+            // layer is ever active.
             try
             {
                 var layerMs = _videoLayer?.CurrentTimeMs ?? -1;
@@ -1830,9 +1563,6 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
                 if (layerMs > _lastWatchPositionMs) _lastWatchPositionMs = layerMs;
             }
             catch { /* best effort */ }
-
-            var multiMs = _multiMonitorImpl?.ConsumePlaybackTimeMs() ?? -1;
-            if (multiMs > _lastWatchPositionMs) _lastWatchPositionMs = multiMs;
 
             var watchedSec = _lastWatchPositionMs / 1000.0;
             var uncredited = watchedSec - _creditedWatchSeconds;
@@ -1851,18 +1581,6 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _lastWatchPositionMs = 0;
             _creditedWatchSeconds = 0;
         }
-    }
-
-    /// <summary>
-    /// WPF ShouldFillSecondaryMonitors parity (VideoService.cs:933-938): the primary always
-    /// fills; secondaries only when DualMonitorEnabled; and on 3+ monitors only when the user
-    /// opts in via FillAllMonitorsWithVideo (avoids N independent decoders lagging, #389).
-    /// </summary>
-    private static bool ShouldFillSecondaryMonitors(AppSettings? settings, int screenCount)
-    {
-        if (settings?.DualMonitorEnabled != true) return false;
-        if (screenCount <= 2) return true;
-        return settings.FillAllMonitorsWithVideo;
     }
 
     private ScreenInfo GetPrimaryScreen()
@@ -1926,300 +1644,9 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _isDisposed = true;
         Stop();
 
-        if (_multiMonitor != null)
-        {
-            _multiMonitor.PlaybackStarted -= OnMultiMonitorPlaybackStarted;
-            _multiMonitor.PlaybackEnded -= OnMultiMonitorPlaybackEnded;
-        }
-        if (_multiMonitorImpl != null)
-        {
-            _multiMonitorImpl.DismissRequested -= OnMultiMonitorDismissRequested;
-            _multiMonitorImpl.PanicRequested -= OnMultiMonitorPanicRequested;
-            _multiMonitorImpl.SurfaceClicked -= OnMultiMonitorSurfaceClicked;
-        }
         if (_inputHook != null)
             _inputHook.KeyPressed -= OnCompositorVideoKey;
         CleanupTempPackFiles();
-    }
-
-    private sealed class VideoOverlayWindow : Window
-    {
-        private readonly ISettingsService _settings;
-        private readonly LibVLC _libVlc;
-        private readonly string _source;
-        private readonly bool _fromUrl;
-        private readonly bool _strictMode;
-        private readonly Action _onClosed;
-        private readonly VideoView _videoView;
-        private readonly ILogger<AvaloniaVideoService>? _logger;
-        private readonly bool _withAudio;
-        private readonly bool _isPrimary;
-        private readonly Action<bool>? _onCodecWarning;
-        private readonly Action<long>? _onPositionChanged;
-        private readonly bool _segmentArmed;
-        private readonly double _segmentFraction;
-        private readonly double _segmentSec;
-        private readonly Action? _onDismissRequested;
-        private readonly Action? _onPanicRequested;
-        private readonly Action? _onSurfaceClicked;
-        private MediaPlayer? _mediaPlayer;
-        private Media? _media;
-        private bool _isPlaying;
-        private bool _segmentSeekApplied;
-
-        public VideoOverlayWindow(ISettingsService settings, LibVLC libVlc, ScreenInfo screen, string source, bool fromUrl, bool strictMode, Action onClosed, ILogger<AvaloniaVideoService>? logger, bool withAudio = true, bool isPrimary = false, Action<bool>? onCodecWarning = null, Action<long>? onPositionChanged = null, bool segmentArmed = false, double segmentFraction = 0, double segmentSec = 0, Action? onDismissRequested = null, Action? onPanicRequested = null, Action? onSurfaceClicked = null)
-        {
-            _settings = settings;
-            _libVlc = libVlc;
-            _source = source;
-            _fromUrl = fromUrl;
-            _strictMode = strictMode;
-            _onClosed = onClosed;
-            _logger = logger;
-            _withAudio = withAudio;
-            _isPrimary = isPrimary;
-            _onCodecWarning = onCodecWarning;
-            _onPositionChanged = onPositionChanged;
-            _segmentArmed = segmentArmed;
-            _segmentFraction = segmentFraction;
-            _segmentSec = segmentSec;
-            _onDismissRequested = onDismissRequested;
-            _onPanicRequested = onPanicRequested;
-            _onSurfaceClicked = onSurfaceClicked;
-
-            WindowDecorations = WindowDecorations.None;
-            // WPF parity (VideoService.cs:1317-1320): video windows are Topmost and only the
-            // audio-bearing (primary) window activates so it receives ESC/panic keys.
-            Topmost = true;
-            ShowInTaskbar = false;
-            CanResize = false;
-            ShowActivated = withAudio;
-            WindowState = WindowState.Normal;
-
-            this.ConstrainToScreen(screen);
-
-            _videoView = new VideoView
-            {
-                HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Stretch,
-                VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Stretch
-            };
-            Content = _videoView;
-
-            Opened += OnOpened;
-            Closing += OnClosing;
-            Closed += OnClosed;
-            KeyDown += OnKeyDown;
-            PointerPressed += OnPointerPressed;
-        }
-
-        public bool IsPlaying => _isPlaying;
-        public MediaPlayer? MediaPlayer => _mediaPlayer;
-
-        public void ApplyAudioSettings() => _mediaPlayer?.ApplyAudioSettings(_settings.Current, _withAudio, _logger);
-
-        /// <summary>Volume/mute only — no output-device re-bind (live slider path).</summary>
-        public void ApplyVolume() => _mediaPlayer?.ApplyVolume(_settings.Current, _withAudio);
-
-        public event Action? VideoStarted;
-        public event Action? VideoEnded;
-
-        private void OnOpened(object? sender, EventArgs e)
-        {
-            try
-            {
-                _mediaPlayer = new MediaPlayer(_libVlc)
-                {
-                    // WPF parity (VideoService.cs:1337): the user setting is an escape hatch
-                    // for the rare systems with broken hardware decoders.
-                    EnableHardwareDecoding = _settings.Current?.VideoHardwareDecoding ?? true
-                };
-                _mediaPlayer.ApplyAudioSettings(_settings.Current, _withAudio, _logger);
-                _mediaPlayer.EndReached += OnEndReached;
-                _mediaPlayer.LengthChanged += OnLengthChanged;
-                _mediaPlayer.Playing += OnPlaying;
-                if (_isPrimary)
-                {
-                    _mediaPlayer.PositionChanged += OnPrimaryPositionChanged;
-                }
-
-                _media = _fromUrl
-                    ? new Media(_libVlc, new Uri(_source))
-                    : new Media(_libVlc, _source, FromType.FromPath);
-
-                _videoView.MediaPlayer = _mediaPlayer;
-                _mediaPlayer.Play(_media);
-                // The chaos random-segment seek is applied in OnLengthChanged, once the real
-                // media length is known — Length is still 0 here (the media hasn't parsed yet),
-                // so seeking now silently no-oped (WS0 lot 4 fix R1-21).
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "AvaloniaVideoService: failed to start video {Source}", _source);
-                OnCodecWarningIfNeeded();
-                Close();
-            }
-        }
-
-        private void OnCodecWarningIfNeeded()
-        {
-            if (!_isPrimary || _onCodecWarning == null) return;
-            _onCodecWarning(true);
-        }
-
-        private void OnPlaying(object? sender, EventArgs e)
-        {
-            _isPlaying = true;
-            // Re-apply audio settings once playback is active; some LibVLC aout backends
-            // only honor volume/output-device changes after the audio stream has started.
-            _mediaPlayer?.ApplyAudioSettings(_settings.Current, _withAudio, _logger);
-            // Fires from LibVLC's thread — marshal so subscribers (timers, interaction
-            // queue) always run on the UI thread.
-            Dispatcher.UIThread.Post(() => VideoStarted?.Invoke());
-        }
-
-        private void OnPrimaryPositionChanged(object? sender, MediaPlayerPositionChangedEventArgs e)
-        {
-            if (_isPrimary && _onPositionChanged != null)
-            {
-                // MediaPlayer.Time is already milliseconds — the event contract is ms
-                // (WS0 lot 4 fix V1-6/R1-5: the old *1000 emitted microseconds and broke
-                // Deeper enhancement time rules by three orders of magnitude).
-                Dispatcher.UIThread.Post(() => _onPositionChanged(_mediaPlayer?.Time ?? -1));
-            }
-        }
-
-        private void OnLengthChanged(object? sender, MediaPlayerLengthChangedEventArgs e)
-        {
-            // Length is in ms. The chaos random-segment seek runs here: LengthChanged is the
-            // first point where the real duration is known (WPF VideoService.cs:1369-1403).
-            // The seek itself is deferred ~700ms until the player is actually rolling —
-            // seeking mid-creation blanks the primary view.
-            if (!_isPrimary || !_segmentArmed || _segmentSeekApplied || _segmentSec <= 0) return;
-            var segMs = (long)(_segmentSec * 1000);
-            if (e.Length <= segMs) return;
-            var startMs = (long)((e.Length - segMs) * _segmentFraction);
-            if (startMs <= 500) return;
-            _segmentSeekApplied = true;
-            Dispatcher.UIThread.Post(() =>
-            {
-                StartOneShotTimer(TimeSpan.FromMilliseconds(700), () =>
-                {
-                    try
-                    {
-                        var player = _mediaPlayer;
-                        if (player != null && _isPlaying && player.IsSeekable)
-                        {
-                            player.Time = startMs;
-                            _logger?.LogInformation("AvaloniaVideoService: random segment — seeking to {Start}s of {Len}s",
-                                startMs / 1000, e.Length / 1000);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.LogDebug("AvaloniaVideoService: random-segment seek failed: {Error}", ex.Message);
-                    }
-                });
-            });
-        }
-
-        private void OnEndReached(object? sender, EventArgs e)
-        {
-            Dispatcher.UIThread.Post(() =>
-            {
-                _isPlaying = false;
-                try { Close(); } catch { }
-            });
-        }
-
-        private void OnClosing(object? sender, WindowClosingEventArgs e)
-        {
-            if (_strictMode && _isPlaying)
-            {
-                e.Cancel = true;
-                return;
-            }
-            _isPlaying = false;
-        }
-
-        private void OnClosed(object? sender, EventArgs e)
-        {
-            _isPlaying = false;
-            var player = _mediaPlayer;
-            var media = _media;
-            _mediaPlayer = null;
-            _media = null;
-            try
-            {
-                if (player != null)
-                {
-                    player.EndReached -= OnEndReached;
-                    player.LengthChanged -= OnLengthChanged;
-                    player.Playing -= OnPlaying;
-                    if (_isPrimary) player.PositionChanged -= OnPrimaryPositionChanged;
-                    player.Stop();
-                }
-                _videoView.MediaPlayer = null;
-            }
-            catch { }
-            if (player != null || media != null)
-            {
-                // Defer native disposal off the UI thread: LibVLC teardown can block while
-                // its internal threads unwind (same deferred pattern as the sibling video
-                // services; WS0 lot 4 fix R1-13).
-                _ = Task.Run(async () =>
-                {
-                    await Task.Delay(500);
-                    try { player?.Dispose(); } catch { /* best effort */ }
-                    try { media?.Dispose(); } catch { /* best effort */ }
-                });
-            }
-            VideoEnded?.Invoke();
-            _onClosed();
-        }
-
-        private void OnKeyDown(object? sender, KeyEventArgs e)
-        {
-            var settings = _settings.Current;
-            var isPanicKey = settings?.PanicKeyEnabled == true &&
-                string.Equals(e.Key.ToString(), settings.PanicKey, StringComparison.OrdinalIgnoreCase);
-
-            if (!_strictMode)
-            {
-                // WPF contract (SetupStrictHandlers non-strict branch, VideoService.cs:1822-1835):
-                // ESC is the hardcoded "dismiss current video" key (normal cleanup; the session
-                // keeps running), while the user's rebindable panic key force-ends the run.
-                if (e.Key == Key.Escape)
-                {
-                    e.Handled = true;
-                    _onDismissRequested?.Invoke();
-                    return;
-                }
-                if (isPanicKey)
-                {
-                    e.Handled = true;
-                    _onPanicRequested?.Invoke();
-                }
-                return;
-            }
-
-            // Strict mode: block the panic key, system keys and Alt+F4 (WPF VideoService.cs:1793-1801).
-            if (e.Key == Key.Escape || e.Key == Key.System || isPanicKey ||
-                (e.Key == Key.F4 && e.KeyModifiers.HasFlag(KeyModifiers.Alt)) ||
-                (e.Key == Key.Tab && (e.KeyModifiers == KeyModifiers.Alt || e.KeyModifiers == KeyModifiers.Control)) ||
-                e.Key == Key.LeftAlt || e.Key == Key.RightAlt ||
-                e.Key == Key.LWin || e.Key == Key.RWin)
-            {
-                e.Handled = true;
-            }
-        }
-
-        private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
-        {
-            // WPF parity (VideoService.cs:1490-1512): a click on the video surface raises the
-            // attention targets back above the video windows instead of burying them.
-            e.Handled = true;
-            _onSurfaceClicked?.Invoke();
-        }
     }
 
     internal sealed class FloatingText

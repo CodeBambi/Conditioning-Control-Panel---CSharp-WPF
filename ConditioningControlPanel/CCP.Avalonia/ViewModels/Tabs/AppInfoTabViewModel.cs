@@ -2,8 +2,8 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using ConditioningControlPanel.Avalonia.Services.Video;
 using ConditioningControlPanel.Core.Localization;
+using ConditioningControlPanel.Core.Services.Video;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Settings;
@@ -411,8 +411,8 @@ public partial class AppInfoTabViewModel : TabItemViewModel
                 return;
             }
 
-            var videoService = App.Services?.GetService<AvaloniaMultiMonitorVideoService>();
-            videoService?.PlayFile(path, 640, 360);
+            var videoService = App.Services?.GetService<IVideoService>();
+            videoService?.PlaySpecificVideo(path, false);
             await Task.Delay(3000);
             videoService?.Stop();
             _logger?.LogInformation("Video smoke-test completed");

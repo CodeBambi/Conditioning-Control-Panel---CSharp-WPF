@@ -59,7 +59,6 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly ICompanionService? _companionService;
     private readonly IAudioPlayer? _audioPlayer;
     private readonly ISfxPlayer? _sfxPlayer;
-    private readonly IMultiMonitorVideoService? _multiMonitor;
     private readonly IVideoService? _videoService;
     private readonly ISchedulerService? _schedulerService;
     private readonly IIntensityRampService? _intensityRamp;
@@ -122,7 +121,6 @@ public partial class MainWindowViewModel : ObservableObject
         _companionService = services.GetService<ICompanionService>();
         _audioPlayer = services.GetService<IAudioPlayer>();
         _sfxPlayer = services.GetService<ISfxPlayer>();
-        _multiMonitor = services.GetService<IMultiMonitorVideoService>();
         _videoService = services.GetService<IVideoService>();
         _schedulerService = services.GetService<ISchedulerService>();
         _intensityRamp = services.GetService<IIntensityRampService>();
@@ -777,18 +775,19 @@ public partial class MainWindowViewModel : ObservableObject
         {
             Dispatcher.UIThread.Post(() => BrowserFullscreenOverlayVisible = isFullscreen);
 
-            // On Windows, route direct-media fullscreen video to the multi-monitor mirror
-            // service. HTML pages (e.g. HypnoTube) remain in the browser; extracting their
-            // actual video stream is left to a future enhancement.
-            if (!OperatingSystem.IsWindows() || _multiMonitor == null) return;
+            // Route direct-media fullscreen video to the compositor video layer via
+            // IVideoService (cross-platform single render surface). HTML pages (e.g.
+            // HypnoTube) remain in the browser; extracting their actual video stream is
+            // left to a future enhancement.
+            if (_videoService == null) return;
 
             if (isFullscreen && IsDirectVideoUrl(_lastBrowserUrl))
             {
-                _multiMonitor.PlayUrl(_lastBrowserUrl!);
+                _videoService.PlayUrl(_lastBrowserUrl!);
             }
             else if (!isFullscreen)
             {
-                _multiMonitor.Stop();
+                _videoService.Stop();
             }
         };
     }

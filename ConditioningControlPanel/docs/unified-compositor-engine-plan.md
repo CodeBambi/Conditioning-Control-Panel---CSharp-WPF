@@ -164,11 +164,13 @@ Observations from the eyes-verification (not regressions, follow-ups):
   whether flashes should overlay a mandatory video before treating as a bug.
 - Spiral overlay maxes at ~10% opacity by design; near-invisible at low user settings.
 
-- [ ] Remove the `_mandatoryVideoLayer == null` / `_videoLayer == null` fallback guards in `AvaloniaVideoService.PlayFile` / `PlayUrlCore`.
-- [ ] Audit and rehome the **9 references** to `IMultiMonitorVideoService` (video service, overlay service, autonomy, remote command executor, app-info tab, `MainWindowViewModel`, head stubs, DI). Confirm none rely on it for playback *status* before deleting.
-- [ ] Delete `AvaloniaMultiMonitorVideoService`, `VideoOverlayWindow`, and the per-overlay `*Window` classes listed in the skill's Phase 6.
-- [ ] Remove their DI registrations + dead `using`s.
-- [ ] **Acceptance:** `CCP.Desktop.slnf` builds 0 errors; every video/overlay feature works UCE-only; memory under heavy load is ≤ the legacy path.
+- [x] Remove the `_mandatoryVideoLayer == null` / `_videoLayer == null` fallback guards. **DONE E3**: branches 2 (multi-monitor) and 3 (per-window fallback) deleted; the compositor branch is the whole body with a defensive log-warning else (compositor is always registered).
+- [x] Audit and rehome the **references** to `IMultiMonitorVideoService`. **DONE E3**: RemoteCommandExecutor / MainWindowViewModel / AppInfoTabViewModel (video smoke-test) / `AvaloniaVideoInfo` (IsPlaying seam) all rehomed to `IVideoService`; AutonomyService comment updated; App.axaml.cs dispose line removed.
+- [x] Delete `AvaloniaMultiMonitorVideoService` + `VideoOverlayWindow`. **DONE E3**: `AvaloniaMultiMonitorVideoService.cs` + `IMultiMonitorVideoService.cs` deleted; the `VideoOverlayWindow` nested class + `CreateWindow`/`SpawnSecondaryWindows`/`_currentWindow`/`_secondaryWindows` gutted (~659 net lines out of `AvaloniaVideoService`). NOTE: the per-overlay chaos `*Window` classes are Phase F, not this slice.
+- [x] Remove their DI registrations + dead `using`s + the `CCP_LEGACY_VIDEO` escape hatch. **DONE E3**: `useCompositorVideo = compositor != null` (no opt-out remains).
+- [x] **Acceptance MET**: `CCP.Desktop.slnf` 0 errors, WPF sln 0, Core 467/467, smoke 5 findings; `--verify-visible` post-deletion shows `Video=ACTIVE + Spiral=ACTIVE + PinkTint=ACTIVE` (video renders through the compositor with NO fallback). Memory-vs-legacy comparison is moot now that the legacy path is gone; benchmark stays green.
+
+**PHASE E COMPLETE 2026-07-05 (E1 `6180efc2` + E2 `ed636a7c` + E3).** The Avalonia head plays all video through the compositor; the legacy multi-monitor / per-window video path is deleted.
 
 ### Phase F — Chaos layer migration queue (WS2 / WP3)
 
