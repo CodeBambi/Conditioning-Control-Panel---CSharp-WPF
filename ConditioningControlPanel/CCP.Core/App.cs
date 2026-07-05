@@ -490,6 +490,27 @@ public interface IBarkService
     void NotifyChaosFocusLow();
     void NotifyChaosGoldFirst();
     void NotifyChaosDuoDemo();
+
+    // ---- Q11 chaos gameplay barks (WPF Services/Companion/BarkService.cs:275-318).
+    //      Default no-op bodies so existing implementers/fakes keep compiling. ----
+    /// <summary>T-minus ~10s of a chaos run: the hole is closing (once per run) (WPF BarkService.cs:292 "ChaosEndingSoon").</summary>
+    void NotifyChaosEndingSoon() { }
+    /// <summary>A darter was caught. ctx: points, combo, quick (WPF BarkService.cs:275 "ChaosDarterCaught").</summary>
+    void NotifyChaosDarterCaught(double points, int combo, bool quick) { }
+    /// <summary>A freeze bubble was caught. ctx: points, combo (WPF BarkService.cs:278 "ChaosFreezeCaught").</summary>
+    void NotifyChaosFreezeCaught(double points, int combo) { }
+    /// <summary>A combo milestone (every 10). ctx: combo, difficulty (WPF BarkService.cs:281 "ChaosComboMilestone").</summary>
+    void NotifyChaosComboMilestone(int combo, string difficulty) { }
+    /// <summary>A high combo threshold was crossed (edge-detected). ctx: combo, threshold (WPF BarkService.cs:284 "ChaosComboBig").</summary>
+    void NotifyChaosComboBig(int combo, double threshold) { }
+    /// <summary>The Tease's first-ever appearance (debut spawn) (WPF BarkService.cs:311 "ChaosTeaseDebut").</summary>
+    void NotifyChaosTeaseDebut() { }
+    /// <summary>A Tease expired untouched — the DENIED bonus paid. ctx: denied_count (WPF BarkService.cs:313 "ChaosTeaseDenied").</summary>
+    void NotifyChaosTeaseDenied(int deniedCount) { }
+    /// <summary>The player touched a Tease — payload + streak halve (WPF BarkService.cs:316 "ChaosTeaseClicked").</summary>
+    void NotifyChaosTeaseClicked() { }
+    /// <summary>5+ Teases denied in a single run. ctx: denied_count (WPF BarkService.cs:318 "ChaosTeaseDeniedStreak").</summary>
+    void NotifyChaosTeaseDeniedStreak(int deniedCount) { }
 }
 
 public interface IVideoInfo

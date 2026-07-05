@@ -763,7 +763,7 @@ public sealed class AvaloniaChaosService : IChaosService
             AnnounceChaos("the hole is closing…", ChaosAnnounceKind.Depth,
                 artKey: "ending_soon", subText: "ten seconds");
             _state.PushEvent("⏳ ten seconds. make them count.");
-            // WPF :1068 App.Bark?.NotifyChaosEndingSoon() — IBarkService lacks the member (follow-up).
+            try { AvaloniaChaosApp.Bark?.NotifyChaosEndingSoon(); } catch { }   // WPF ChaosModeService.cs:1075
         }
 
         // Run end (WPF ChaosModeService.cs:1078-1090). The Relapse sin bolts ONE more loop onto
@@ -1008,8 +1008,7 @@ public sealed class AvaloniaChaosService : IChaosService
                 AnnounceChaos("✖ THE TEASE — whatever you do, don't", ChaosAnnounceKind.Temptation,
                     artKey: "tease", subText: "whatever you do, don't");
                 _state.PushEvent("✖ it wants your hand. don't.");
-                // WPF :1318 App.Bark?.NotifyChaosTeaseDebut() — IBarkService has no such member
-                // in this head yet (follow-up row; not faked).
+                try { AvaloniaChaosApp.Bark?.NotifyChaosTeaseDebut(); } catch { }   // WPF ChaosModeService.cs:1316
             }
             ChaosMeta.MarkDiscovered("bubble:tease");
             _bubbles.SpawnChaosBubble(ChaosSpawnCatalog.BuildTease(effIntensity,
@@ -1543,7 +1542,9 @@ public sealed class AvaloniaChaosService : IChaosService
         }
         else ActivateSlowMo();
         // WPF :2292 Pulse(120,200,255) — no full-screen pulse seam in this head yet (follow-up).
-        // WPF :2293 App.Bark?.NotifyChaosDarterCaught(...) — IBarkService lacks the member (follow-up).
+        // Darter points are cosmetic phrase context; the head bark discards numeric args (WPF passes the
+        // unmultiplied base pts, here the multiplied catch score) (WPF ChaosModeService.cs:2299).
+        try { AvaloniaChaosApp.Bark?.NotifyChaosDarterCaught(ChaosScoring.DarterScore(quick, _state.TotalMult), _state.Combo, quick); } catch { }
         _state.PushEvent(extended ? "🐇 caught in the slow! +0.8s"
             : quick ? "⚡ quick catch! time slows" : "🐇 white rabbit caught! time slows");
         CheckComboMilestone();   // WPF ChaosModeService.cs:2302
@@ -1572,7 +1573,7 @@ public sealed class AvaloniaChaosService : IChaosService
         try { _achievements?.TrackBubblePopped(); } catch { }
         ChaosLessonHooks.OnFreezeCaught();   // freeze_trigger lesson (pickups only) (WPF :2315)
         ActivateFreeze();
-        // WPF :2317 App.Bark?.NotifyChaosFreezeCaught(...) — IBarkService lacks the member (follow-up).
+        try { AvaloniaChaosApp.Bark?.NotifyChaosFreezeCaught(ChaosScoring.FreezeScore(_state.TotalMult), _state.Combo); } catch { }   // WPF ChaosModeService.cs:2317
         _state.PushEvent("❄ frozen. the field holds");
         CheckComboMilestone();   // WPF ChaosModeService.cs:2319
         UpdateStateText();
@@ -1609,7 +1610,7 @@ public sealed class AvaloniaChaosService : IChaosService
         _lastComboBigFired = 0;   // streak reset — re-crossing a big threshold re-fires (WPF :1361)
         _state.PushEvent($"✖ you touched it. it laughs — streak halves to x{_state.Combo}");
         // WPF :1358 Pulse(FF3D5A, 0.38) — no pulse seam (follow-up).
-        // WPF :1359 App.Bark?.NotifyChaosTeaseClicked() — IBarkService lacks the member (follow-up).
+        try { AvaloniaChaosApp.Bark?.NotifyChaosTeaseClicked(); } catch { }   // WPF ChaosModeService.cs:1364
         UpdateStateText();
     }
 
@@ -1627,12 +1628,14 @@ public sealed class AvaloniaChaosService : IChaosService
         AnnounceChaos($"DENIED. +{gold} {ChaosGlyphs.Gold} gold", ChaosAnnounceKind.PowerUp,
             artKey: "denied", subText: $"+{gold} {ChaosGlyphs.Gold} gold");   // WPF :1416-1417
         // WPF :1418 Pulse(FFD700, 0.25) — no pulse seam (follow-up).
-        // WPF :1420-1424 NotifyChaosTeaseDenied / the 5-streak NotifyChaosTeaseDeniedStreak —
-        // IBarkService lacks both members (follow-up); the counters stay live for that port.
         MarkHintLearned("tease");   // restraint demonstrated — the tease lesson is learned (WPF BubbleService.cs:3890)
         _teaseDeniedThisRun++;
+        try { AvaloniaChaosApp.Bark?.NotifyChaosTeaseDenied(_teaseDeniedThisRun); } catch { }   // WPF ChaosModeService.cs:1420 (++_teaseDeniedThisRun)
         if (_teaseDeniedThisRun >= CoreChaosTuning.TEASE_DENIED_STREAK_COUNT && !_teaseDeniedStreakBarked)
+        {
             _teaseDeniedStreakBarked = true;
+            try { AvaloniaChaosApp.Bark?.NotifyChaosTeaseDeniedStreak(_teaseDeniedThisRun); } catch { }   // WPF ChaosModeService.cs:1424
+        }
         UpdateStateText();
     }
 
@@ -3118,7 +3121,7 @@ public sealed class AvaloniaChaosService : IChaosService
             {
                 _lastComboBigFired = t;
                 _state.PushEvent($"🔥🔥 STREAK x{combo}!");
-                // WPF :3006 App.Bark?.NotifyChaosComboBig — IBarkService lacks the member (follow-up).
+                try { AvaloniaChaosApp.Bark?.NotifyChaosComboBig(combo, t); } catch { }   // WPF ChaosModeService.cs:3006
                 AvaloniaChaosSfx.Play("streak_milestone", 0.5f);   // WPF :3007
                 AnnounceChaos($"STREAK ×{t}", ChaosAnnounceKind.Streak, artKey: "streak", subText: $"×{t}");
                 Pulse(COMBO_BIG_COLOR, COMBO_BIG_PULSE);   // distinct bigger beat (WPF :3010)
@@ -3129,7 +3132,7 @@ public sealed class AvaloniaChaosService : IChaosService
         if (combo % 10 == 0)
         {
             _state.PushEvent($"🔥 streak x{combo}!");
-            // WPF :3025 App.Bark?.NotifyChaosComboMilestone — IBarkService lacks the member (follow-up).
+            try { AvaloniaChaosApp.Bark?.NotifyChaosComboMilestone(combo, _state.Config.Difficulty); } catch { }   // WPF ChaosModeService.cs:3025
             Pulse(global::Avalonia.Media.Color.FromRgb(255, 200, 60), 0.4);   // gold combo flash (WPF :3027)
         }
     }
@@ -3415,6 +3418,16 @@ public sealed class AvaloniaBarkService : IBarkService
     public void NotifyChaosCursePicked(string boon, string rarity, double runMultBonus) => RaiseBark("chaos.cursepicked");
     public void NotifyChaosBoonSkipped(int shieldsNow) => RaiseBark("chaos.boonskipped");
     public void NotifyChaosActChanged(int act, int wave) => RaiseBark("chaos.actchanged");
+    // Q11 chaos gameplay barks (WPF Services/Companion/BarkService.cs:275-318).
+    public void NotifyChaosEndingSoon() => RaiseBark("chaos.endingsoon");
+    public void NotifyChaosDarterCaught(double points, int combo, bool quick) => RaiseBark("chaos.dartercaught");
+    public void NotifyChaosFreezeCaught(double points, int combo) => RaiseBark("chaos.freezecaught");
+    public void NotifyChaosComboMilestone(int combo, string difficulty) => RaiseBark("chaos.combomilestone");
+    public void NotifyChaosComboBig(int combo, double threshold) => RaiseBark("chaos.combobig");
+    public void NotifyChaosTeaseDebut() => RaiseBark("chaos.teasedebut");
+    public void NotifyChaosTeaseDenied(int deniedCount) => RaiseBark("chaos.teasedenied");
+    public void NotifyChaosTeaseClicked() => RaiseBark("chaos.teaseclicked");
+    public void NotifyChaosTeaseDeniedStreak(int deniedCount) => RaiseBark("chaos.teasedeniedstreak");
 
     private void RaiseBark(string kind)
     {
