@@ -16,7 +16,12 @@ public enum GazeSide { Left, Right, Center }
 /// feature. The selected mode is chosen at calibration time and recorded in the
 /// calibration so runtime feeds the matching feature.
 /// </summary>
-public enum GazeFeatureMode { Current, DeepModel }
+// Current   = the shipped MediaPipe iris-vector pipeline (default, never removed - A/B baseline).
+// Tier1     = improved-classical: the SAME iris vector but roll-normalized (de-rotated by the
+//             head-tilt angle between the two outer eye corners) and fit with a 3rd-order cubic
+//             ridge instead of the 2nd-order Cerrolaza polynomial. No new model / license.
+// DeepModel = appearance-based deep ONNX gaze (head-pose-invariant yaw/pitch).
+public enum GazeFeatureMode { Current, Tier1, DeepModel }
 
 /// <summary>
 /// Deep-gaze ONNX backbone (all share an identical I/O contract: input

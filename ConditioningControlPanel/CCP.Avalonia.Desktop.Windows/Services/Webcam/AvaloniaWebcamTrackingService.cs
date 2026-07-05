@@ -1022,7 +1022,7 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             {
                 var data = WebcamCalibrationSolver.BuildCalibrationData(
                     dots, screen, mode, out double rmsX, out double rmsY, out string? error, _logger,
-                    featureMode: _activeGazeMode == GazeFeatureMode.DeepModel ? "DeepModel" : "Current",
+                    featureMode: FeatureModeName(_activeGazeMode),
                     deepModel: _activeGazeMode == GazeFeatureMode.DeepModel ? _deepBackbone.ToString() : null);
                 if (data == null)
                     return new CalibrationPreviewResult(false, 0, 0, error ?? "Calibration failed.");
@@ -1109,8 +1109,19 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         }
 
         private static GazeFeatureMode ParseFeatureMode(string? s)
-            => string.Equals(s, "DeepModel", StringComparison.OrdinalIgnoreCase)
-                ? GazeFeatureMode.DeepModel : GazeFeatureMode.Current;
+        {
+            if (string.Equals(s, "DeepModel", StringComparison.OrdinalIgnoreCase)) return GazeFeatureMode.DeepModel;
+            if (string.Equals(s, "Tier1", StringComparison.OrdinalIgnoreCase)) return GazeFeatureMode.Tier1;
+            return GazeFeatureMode.Current;
+        }
+
+        // Inverse of ParseFeatureMode — the string stamped into WebcamCalibrationData.FeatureMode.
+        private static string FeatureModeName(GazeFeatureMode m) => m switch
+        {
+            GazeFeatureMode.DeepModel => "DeepModel",
+            GazeFeatureMode.Tier1 => "Tier1",
+            _ => "Current",
+        };
 
         private static DeepGazeBackbone? ParseBackbone(string? s)
             => Enum.TryParse<DeepGazeBackbone>(s, ignoreCase: true, out var b) ? b : (DeepGazeBackbone?)null;
@@ -1916,6 +1927,25 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
                     _rightRefCxBuffer, _rightRefCyBuffer, _rightRefWBuffer);
             }
 
+            // Tier 1 (improved-classical): roll-normalize BOTH iris vectors by the
+            // head-tilt angle between the two OUTER eye corners, de-rotating the
+            // image-space displacement into a head-level frame so head roll stops
+            // contaminating the gaze signal. Both eyes rotate by the SAME angle, so
+            // the two-eye disagreement gate + average below stay consistent, and the
+            // magnitude (~±0.5) is preserved so the One-Euro constants + IrisRange
+            // clamp still apply unchanged. Runtime AND calibration capture both flow
+            // through here, so the fit trains on exactly the runtime feature. Upright
+            // (roll≈0) ⇒ identity ⇒ Tier1 matches Current; the win shows on head tilt.
+            if (_activeGazeMode == GazeFeatureMode.Tier1)
+            {
+                double roll = ComputeEyeRoll(landmarks);
+                if (roll != 0.0)
+                {
+                    if (vLeft.HasValue) vLeft = RotateFeature(vLeft.Value, roll);
+                    if (vRight.HasValue) vRight = RotateFeature(vRight.Value, roll);
+                }
+            }
+
             if (vLeft.HasValue && vRight.HasValue)
             {
                 double ddx = vLeft.Value.Dx - vRight.Value.Dx;
@@ -2000,6 +2030,26 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             if (sw < 1.0) return (0, 0);
 
             return ((iris.X - scx) / sw, (iris.Y - scy) / sw);
+        }
+
+        /// <summary>
+        /// Head-roll angle (radians) from the two OUTER eye corners (idx 33 & 263) —
+        /// 0 when the eyes are level. Yaw barely perturbs it (the corner line stays
+        /// ~horizontal when the head turns), so it isolates roll. Tier-1 only.
+        /// </summary>
+        private static double ComputeEyeRoll(float[][] landmarks)
+        {
+            var lo = landmarks[LeftEyeOuterIdx];
+            var ro = landmarks[RightEyeOuterIdx];
+            return Math.Atan2(ro[1] - lo[1], ro[0] - lo[0]);
+        }
+
+        // De-rotate an iris feature vector by the head-roll angle (rotate by -roll),
+        // expressing it in the head-level frame. Magnitude-preserving.
+        private static (double Dx, double Dy) RotateFeature((double Dx, double Dy) v, double roll)
+        {
+            double c = Math.Cos(roll), s = Math.Sin(roll);
+            return (v.Dx * c + v.Dy * s, -v.Dx * s + v.Dy * c);
         }
 
         private static double Average(Queue<double> q)
@@ -2574,13 +2624,23 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             var poly = Calibration?.Polynomial;
             if (poly != null && poly.X != null && poly.Y != null
                 && poly.X.Length == poly.Y.Length
-                && (poly.X.Length == 6 || poly.X.Length == 7))
+                && (poly.X.Length == 6 || poly.X.Length == 7 || poly.X.Length == 10))
             {
                 var ix2 = irisDx * irisDx;
                 var iy2 = irisDy * irisDy;
                 var ixy = irisDx * irisDy;
                 double x, y;
-                if (poly.X.Length == 7)
+                if (poly.X.Length == 10)
+                {
+                    // Tier-1 cubic. Order MUST match WebcamCalibrationSolver.CubicRow:
+                    // [1, ix, iy, ix², ix·iy, iy², ix³, ix²·iy, ix·iy², iy³]
+                    double ix3 = ix2 * irisDx, iy3 = iy2 * irisDy;
+                    x = poly.X[0] + poly.X[1] * irisDx + poly.X[2] * irisDy + poly.X[3] * ix2 + poly.X[4] * ixy + poly.X[5] * iy2
+                      + poly.X[6] * ix3 + poly.X[7] * ix2 * irisDy + poly.X[8] * irisDx * iy2 + poly.X[9] * iy3;
+                    y = poly.Y[0] + poly.Y[1] * irisDx + poly.Y[2] * irisDy + poly.Y[3] * ix2 + poly.Y[4] * ixy + poly.Y[5] * iy2
+                      + poly.Y[6] * ix3 + poly.Y[7] * ix2 * irisDy + poly.Y[8] * irisDx * iy2 + poly.Y[9] * iy3;
+                }
+                else if (poly.X.Length == 7)
                 {
                     // [1, ix, iy, ix·iy, ix², iy², ix²·iy] for X
                     // [1, ix, iy, ix·iy, ix², iy², iy²·ix] for Y

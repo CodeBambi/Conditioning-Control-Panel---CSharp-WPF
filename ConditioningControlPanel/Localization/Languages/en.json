@@ -4145,6 +4145,7 @@
   "window_webcam_calibration_continue_content": "Continue",
   "window_webcam_cal_pipeline_label": "Gaze engine",
   "window_webcam_cal_pipeline_current": "Current (classic iris tracker)",
+  "window_webcam_cal_pipeline_tier1": "Tier 1 (improved classic - roll-corrected)",
   "window_webcam_cal_pipeline_deep": "Deep model (AI, experimental)",
   "window_webcam_cal_backbone_label": "Deep model backbone (speed vs accuracy)",
   "window_webcam_cal_pipeline_calibrated": "This gaze engine is calibrated and active.",

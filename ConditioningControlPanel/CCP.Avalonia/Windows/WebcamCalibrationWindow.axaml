@@ -115,6 +115,7 @@
             <ComboBox x:Name="CmbGazeMode" HorizontalAlignment="Stretch"
                       SelectionChanged="CmbGazeMode_SelectionChanged">
               <ComboBoxItem Content="{loc:Str window_webcam_cal_pipeline_current}" />
+              <ComboBoxItem Content="{loc:Str window_webcam_cal_pipeline_tier1}" />
               <ComboBoxItem Content="{loc:Str window_webcam_cal_pipeline_deep}" />
             </ComboBox>
             <StackPanel x:Name="BackbonePanel" IsVisible="False" Margin="0,8,0,0">

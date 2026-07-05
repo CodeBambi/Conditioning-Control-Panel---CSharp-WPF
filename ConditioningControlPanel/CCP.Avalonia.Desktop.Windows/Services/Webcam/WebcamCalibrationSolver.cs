@@ -115,7 +115,11 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             catch (Exception ex) { logger?.LogWarning(ex, "WebcamCalibrationSolver: FindHomography threw"); }
             if (homography == null) { error = "Couldn't fit calibration - the points may have been too similar. Look directly at each dot and try again."; return null; }
 
-            var polynomial = FitCerrolazaPolynomial(srcMeans, dstPoints, dotWeights, outlierFloorDip, logger, out rmsX, out rmsY);
+            // Tier1 ("improved-classical") uses a 3rd-order cubic ridge fit; Current/DeepModel keep the
+            // 2nd-order Cerrolaza fit byte-for-byte. The FEATURE difference (roll-normalized iris for Tier1)
+            // is applied upstream in the tracker, so the solver only needs the richer basis here.
+            bool cubic = string.Equals(featureMode, "Tier1", StringComparison.OrdinalIgnoreCase);
+            var polynomial = FitCerrolazaPolynomial(srcMeans, dstPoints, dotWeights, outlierFloorDip, logger, out rmsX, out rmsY, cubic);
             if (polynomial == null) { error = "Calibration fit failed - the iris signal was too noisy. Improve lighting, avoid glare, and try again."; return null; }
 
             double[] leftRef = new double[2], rightRef = new double[2];
@@ -242,6 +246,17 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         private static double[] CerrolazaRowY(double ix, double iy)
             => new[] { 1.0, ix, iy, ix * iy, ix * ix, iy * iy, iy * iy * ix };
 
+        // Full 3rd-order (cubic) design row for the Tier-1 improved-classical fit. Symmetric (same
+        // basis for X and Y); a strict superset of the Cerrolaza 2nd-order terms plus ix³/iy³ and
+        // BOTH mixed cubics. The order is CANONICAL and MUST match EvalPolynomial's length-10 branch
+        // below AND WebcamTrackingService.ProjectGazeToScreen's length-10 branch:
+        //   [1, ix, iy, ix², ix·iy, iy², ix³, ix²·iy, ix·iy², iy³]
+        private static double[] CubicRow(double ix, double iy)
+        {
+            double ix2 = ix * ix, iy2 = iy * iy, ixy = ix * iy;
+            return new[] { 1.0, ix, iy, ix2, ixy, iy2, ix2 * ix, ix2 * iy, ix * iy2, iy2 * iy };
+        }
+
         // Tikhonov-regularization weight, scaled by trace(AᵀA)/p (the mean
         // diagonal of the normal-equations matrix) so the value is invariant
         // to iris-vector magnitude. 1e-5 is essentially zero shrinkage on a
@@ -329,7 +344,7 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         // so a compressed / wildly-off / over-trimmed calibration is observable.
         private static PolynomialFitData? FitCerrolazaPolynomial(
             Point2d[] srcMeans, Point2d[] dstPoints, double[] dotWeights, double outlierFloorDip, ILogger? logger,
-            out double rmsX, out double rmsY)
+            out double rmsX, out double rmsY, bool cubic = false)
         {
             // Default to "unusable" so the fit-quality gate fails closed on any path
             // that returns null (degenerate solve, exception) without a real residual.
@@ -338,7 +353,7 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             try
             {
                 int n = srcMeans.Length;
-                int p = 7;
+                int p = cubic ? 10 : 7;
                 var designX = new double[n][];
                 var designY = new double[n][];
                 var targetsX = new double[n];
@@ -346,8 +361,8 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
                 double traceAtA = 0;
                 for (int i = 0; i < n; i++)
                 {
-                    designX[i] = CerrolazaRowX(srcMeans[i].X, srcMeans[i].Y);
-                    designY[i] = CerrolazaRowY(srcMeans[i].X, srcMeans[i].Y);
+                    designX[i] = cubic ? CubicRow(srcMeans[i].X, srcMeans[i].Y) : CerrolazaRowX(srcMeans[i].X, srcMeans[i].Y);
+                    designY[i] = cubic ? CubicRow(srcMeans[i].X, srcMeans[i].Y) : CerrolazaRowY(srcMeans[i].X, srcMeans[i].Y);
                     targetsX[i] = dstPoints[i].X;
                     targetsY[i] = dstPoints[i].Y;
                     // Sum the squared-feature magnitudes from the X design;
@@ -381,8 +396,10 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
                         mags.Add((i, Math.Sqrt(ex * ex + ey * ey)));
                     }
                     // Don't trim a small grid into instability (need a healthy
-                    // margin over the 7 coefficients for the refit to stay sane).
-                    if (mags.Count < 12) break;
+                    // margin over the fit's p coefficients for the refit to stay
+                    // sane): p+5 → 12 for the 7-coef Cerrolaza fit (unchanged),
+                    // 15 for the 10-coef cubic.
+                    if (mags.Count < p + 5) break;
 
                     var rs = mags.Select(m => m.R).OrderBy(v => v).ToList();
                     double med = rs[rs.Count / 2];
@@ -482,6 +499,15 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         private static (double X, double Y) EvalPolynomial(PolynomialFitData poly, double ix, double iy)
         {
             double ix2 = ix * ix, iy2 = iy * iy, ixy = ix * iy;
+            if (poly.X.Length == 10 && poly.Y.Length == 10)
+            {
+                double ix3 = ix2 * ix, iy3 = iy2 * iy;
+                double xc = poly.X[0] + poly.X[1] * ix + poly.X[2] * iy + poly.X[3] * ix2 + poly.X[4] * ixy + poly.X[5] * iy2
+                          + poly.X[6] * ix3 + poly.X[7] * ix2 * iy + poly.X[8] * ix * iy2 + poly.X[9] * iy3;
+                double yc = poly.Y[0] + poly.Y[1] * ix + poly.Y[2] * iy + poly.Y[3] * ix2 + poly.Y[4] * ixy + poly.Y[5] * iy2
+                          + poly.Y[6] * ix3 + poly.Y[7] * ix2 * iy + poly.Y[8] * ix * iy2 + poly.Y[9] * iy3;
+                return (xc, yc);
+            }
             double x = poly.X[0] + poly.X[1] * ix + poly.X[2] * iy
                      + poly.X[3] * ixy + poly.X[4] * ix2 + poly.X[5] * iy2
                      + poly.X[6] * ix2 * iy;
@@ -508,7 +534,9 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         private static AxisCorrectionData? BuildAxisCorrection(
             PolynomialFitData? poly, Point2d[] srcMeans, Point2d[] dstPoints, ILogger? logger)
         {
-            if (poly == null || poly.X.Length != 7 || poly.Y.Length != 7) return null;
+            if (poly == null
+                || (poly.X.Length != 7 && poly.X.Length != 10)
+                || (poly.Y.Length != 7 && poly.Y.Length != 10)) return null;
             const double MinGain = 0.4, MaxGain = 3.0; // dst-per-src slope sanity per segment
             try
             {

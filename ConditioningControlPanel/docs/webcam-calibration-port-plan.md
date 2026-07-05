@@ -428,7 +428,28 @@ window; switch-invalidates notice + baseline restore implemented; Current path u
 dropped locally (gitignored) for the owner's camera test. **READY FOR OWNER CAMERA A/B/C of Current vs Deep
 (all 5 backbones).**
 
-### TURN-KEY CHECKLIST — Commit 2 (Tier 1 classical), advisor sequence
+### STATUS 2026-07-06: Commit 2 (Tier 1 improved-classical) SHIPPED
+All gates green: desktop slnf 0 · WPF sln 0 · Core 542/542 · smoke exit 0 (0 gaze-related findings; the
+2 new S1 `quest_flash_rush_d_*` loc misses are a co-agent's quest work, not this change) · en.json valid.
+**As-built:** (1) `Tier1` added to `GazeFeatureMode` (`{Current, Tier1, DeepModel}`; string-persisted so enum
+ordinal is irrelevant). (2) FEATURE = roll-normalized iris: in `ProcessFrame`, when Tier1, both eyes' iris
+vectors are de-rotated by the head-roll angle `atan2` between the two OUTER eye corners (idx 33 & 263) via
+`ComputeEyeRoll`/`RotateFeature` — magnitude-preserving (One-Euro + IrisRange unchanged), same angle for both
+eyes (disagreement gate consistent), applied before the gate so calibration capture + runtime train/run on the
+SAME feature. Upright ⇒ identity ⇒ matches Current; win shows on head tilt. (3) REGRESSOR = full 3rd-order
+cubic (10-coeff, symmetric superset of Cerrolaza) selected in the solver only when `featureMode=="Tier1"`,
+stored in the EXISTING `PolynomialFitData.X/Y` as length-10; eval dispatches on `.Length` (6/7 → unchanged,
+10 → cubic) in BOTH the solver's `EvalPolynomial` and the tracker's `ProjectGazeToScreen`; `BuildAxisCorrection`
+accepts 10; trim guard generalized to `p+5` (7→12 unchanged, 10→15). Cubic-row order is CANONICAL and mirrored
+in all three sites: `[1, ix, iy, ix², ixiy, iy², ix³, ix²iy, ixiy², iy³]`. (4) Window: 3rd `CmbGazeMode` item
+"Tier 1 (improved classic - roll-corrected)"; mode mapping refactored to a decoupled `ModeOrder` array; reuses
+the switch-invalidates notice + baseline restore; loc key `window_webcam_cal_pipeline_tier1`.
+**Current/DeepModel 100% intact** (Current byte-identical; DeepModel unaffected). No `WebcamCalibrationData`
+schema change (cubic reuses `Polynomial`). **RISK NOTE:** the cubic can overfit a 16-dot grid — if the owner
+finds Tier1 worse than Current, the first dials are bumping the ridge λ for the cubic or reverting Tier1's
+regressor to Cerrolaza (roll-norm feature alone is the monotonic-safe win). **READY FOR OWNER 3-WAY A/B/C.**
+
+### TURN-KEY CHECKLIST — Commit 2 (Tier 1 classical), advisor sequence [IMPLEMENTED — see status above]
 Same feature-agnostic reuse; Tier 1 = a third `GazeFeatureMode` whose FEATURE is an improved iris vector and
 whose regressor is upgraded. Minimal first cut = roll/scale-norm feature + cubic-ridge regressor (the two
 cheapest, most independent wins; no new capture flow). Smooth-pursuit + fixation-snap are later enhancements.

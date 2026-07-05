@@ -96,6 +96,11 @@ public partial class WebcamCalibrationWindow : Window
     private DeepGazeBackbone _baselineBackbone = DeepGazeBackbone.MobileOneS0;
     private bool _committedMode;
     private bool _initSelectors;
+    // CmbGazeMode item order (index -> enum), decoupled from enum ordinal.
+    private static readonly GazeFeatureMode[] ModeOrder =
+    {
+        GazeFeatureMode.Current, GazeFeatureMode.Tier1, GazeFeatureMode.DeepModel,
+    };
     private static readonly DeepGazeBackbone[] BackboneOrder =
     {
         DeepGazeBackbone.MobileOneS0, DeepGazeBackbone.MobileNetV2,
@@ -409,7 +414,8 @@ public partial class WebcamCalibrationWindow : Window
             _selectedMode = _baselineMode;
             _selectedBackbone = _baselineBackbone;
 
-            CmbGazeMode.SelectedIndex = _selectedMode == GazeFeatureMode.DeepModel ? 1 : 0;
+            int mi = Array.IndexOf(ModeOrder, _selectedMode);
+            CmbGazeMode.SelectedIndex = mi >= 0 ? mi : 0;
             if (CmbBackbone != null)
             {
                 int bi = Array.IndexOf(BackboneOrder, _selectedBackbone);
@@ -424,7 +430,8 @@ public partial class WebcamCalibrationWindow : Window
     private void CmbGazeMode_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (_initSelectors || CmbGazeMode == null) return;
-        _selectedMode = CmbGazeMode.SelectedIndex == 1 ? GazeFeatureMode.DeepModel : GazeFeatureMode.Current;
+        int mi = CmbGazeMode.SelectedIndex;
+        _selectedMode = mi >= 0 && mi < ModeOrder.Length ? ModeOrder[mi] : GazeFeatureMode.Current;
         if (BackbonePanel != null) BackbonePanel.IsVisible = _selectedMode == GazeFeatureMode.DeepModel;
         UpdatePipelineNotice();
     }
