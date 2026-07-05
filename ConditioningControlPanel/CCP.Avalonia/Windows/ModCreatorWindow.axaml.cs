@@ -17,8 +17,10 @@ using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using ConditioningControlPanel.Avalonia.Dialogs;
+using ConditioningControlPanel.Avalonia.Services.Mod;
 using ConditioningControlPanel.Avalonia.Services.Tutorial;
 using ConditioningControlPanel.Core.Localization;
+using ConditioningControlPanel.Core.Services.Help;
 using ConditioningControlPanel.Models;
 using ConditioningControlPanel.Core.Platform;
 using Newtonsoft.Json;
@@ -31,8 +33,10 @@ namespace ConditioningControlPanel.Avalonia.Windows;
 /// <summary>
 /// Avalonia port of the .ccpmod creator window.
 ///
-/// WPF-only services (color picker, audio preview, ModResourceResolver, tutorial overlay)
-/// are stubbed with TODOs until cross-platform equivalents land in CCP.Core.
+/// All formerly WPF-only surfaces are now wired to cross-platform equivalents:
+/// color picker (ColorPickerDialog), audio preview (IAudioPlayer), tutorial
+/// overlay (TutorialOverlay), the modding help video (HelpContentService +
+/// HelpVideoWindow) and hint-image resolution (AvaloniaModResourceResolver).
 /// </summary>
 public partial class ModCreatorWindow : Window
 {
@@ -255,7 +259,15 @@ public partial class ModCreatorWindow : Window
 
     private void BtnHelp_Click(object? sender, RoutedEventArgs e)
     {
-        // TODO: wire HelpContentService once it is available in CCP.Core.
+        // Prefer the tutorial video when the topic ships a clip; otherwise fall
+        // back to the existing coach-mark tutorial.
+        // WPF ground truth: Windows/ModCreatorWindow.xaml.cs:229-240.
+        var content = HelpContentService.GetContent("Modding");
+        if (content.HasClip)
+        {
+            HelpVideoWindow.Show(content, this);
+            return;
+        }
         LaunchTutorial();
     }
 
@@ -1781,8 +1793,12 @@ public partial class ModCreatorWindow : Window
 
     private static IImage? ResolveHintImage(string resourceKey)
     {
-        // TODO: replace with ModResourceResolver once it is available in CCP.Core.
-        return null;
+        // WPF ground truth: Windows/ModCreatorWindow.xaml.cs:1682
+        // (Services.ModResourceResolver.ResolveImage(resourceKey)) - prefers the
+        // active mod's override, else the embedded asset. ResolveBitmap already
+        // swallows failures and returns null, matching the WPF try/catch.
+        var resolver = App.Services?.GetService<AvaloniaModResourceResolver>();
+        return resolver?.ResolveBitmap(resourceKey);
     }
 
     private void SetImageSlot(string key, string filePath)
