@@ -149,10 +149,12 @@ Open (this goal's actual work — execute via the EXECUTION PLAYBOOK below):
   (`SupportsClickThrough = IsWindows`), no input hooks, no verified feature sweep. → WP5.
 - Standing deferred rows from the WS0 sweep (each has a task-board/parity row): Ditzy
   Data PRO analytics UI, Discord Rich Presence, companion AI + CompanionTab full port
-  (**companion AI CLOUD + LOCAL (Ollama) transport ported 2026-07-05 `61ca0d1`/`2bd3789` —
-  `CoreAiService`/`LocalAiService` via `AiServiceStrategy` make companion chat (with persistent
-  multi-turn history on local) + all 5 awareness reactions functional; the OpenAI provider +
-  AI-command execution + the HasAiAccess + IModerationLog seams are filed follow-ups**),
+  (**companion AI CLOUD + LOCAL (Ollama) + OPENAI transport ported 2026-07-05
+  `61ca0d1`/`2bd3789`/`ca873d2` — `CoreAiService`/`LocalAiService`/`OpenAiService` via
+  `AiServiceStrategy` make companion chat (persistent multi-turn history on local) + all 5
+  awareness reactions functional across all three providers; AI-command execution
+  (AllowAiToControlEffects, needs the AiCommandService port) + the OpenAI key-entry UI + the
+  global chat hotkey + the HasAiAccess/IModerationLog seams are filed follow-ups**),
   calibration 16-point window pipeline (~1300–1500 LoC), lots 7–11 DEFER rows. (The chaos
   run-engine faithful port — formerly listed here — is now COMPLETE, S1–S9;
   `EffectPayload.Ambient` was unblocked via S6 `f5fa0757`.)
