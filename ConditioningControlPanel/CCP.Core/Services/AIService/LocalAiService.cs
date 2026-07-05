@@ -6,6 +6,8 @@ using System.Text.RegularExpressions;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Moderation;
 using ConditioningControlPanel.Core.Services.Settings;
+using ConditioningControlPanel.Core.Services.Commands;
+using ConditioningControlPanel.Core.Services.AIService.Enrichment;
 using ConditioningControlPanel.Models;
 using Microsoft.Extensions.Logging;
 
@@ -78,6 +80,9 @@ public sealed class LocalAiService : IAiService, IDisposable
 
     // _messages[0] = system (refreshed every call); then alternating user/assistant turns.
     private readonly List<LocalChatMessage> _messages = new();
+    private readonly IAiCommandService? _commands;
+    private readonly IAiResponseParser? _parser;
+    private readonly IPromptService? _promptService;
 
     private string? _activeHost;
     private string? _activeModel;
@@ -90,7 +95,10 @@ public sealed class LocalAiService : IAiService, IDisposable
         ISystemPromptBuilder promptBuilder,
         ILogger<LocalAiService>? logger = null,
         IModerationCounter? counter = null,
-        IModService? mods = null)
+        IModService? mods = null,
+        IAiCommandService? commands = null,
+        IAiResponseParser? parser = null,
+        IPromptService? promptService = null)
     {
         _settings = settings;
         _environment = environment;
@@ -99,6 +107,9 @@ public sealed class LocalAiService : IAiService, IDisposable
         _logger = logger;
         _counter = counter;
         _mods = mods;
+        _commands = commands;
+        _parser = parser;
+        _promptService = promptService;
         _historyPath = Path.Combine(environment.UserDataPath, HistoryFileName);
         LoadHistory();
     }
@@ -140,6 +151,7 @@ public sealed class LocalAiService : IAiService, IDisposable
         {
             var systemPrompt = _promptBuilder.GetSystemPrompt();
             EnsureSystemMessage(systemPrompt);
+            EnsureEnrichmentMessage();
 
             // --- INPUT moderation (LocalAiService.cs:390-410) ---
             var inputCheck = _moderation.CheckInput(userInput);
@@ -164,7 +176,21 @@ public sealed class LocalAiService : IAiService, IDisposable
                 return new AiReplyResult(GetFallbackResponse(), IsAiGenerated: false, Refusal: null);
             }
 
-            var sanitized = SanitizeResponse(raw);
+            // Extract text + (when the parser is registered) any AI commands. The parser handles the
+            // JSON {response, effects} format emitted in effects mode + plain text; SanitizeResponse is
+            // the no-parser fallback. parsed.CleanText is already sanitized.
+            string sanitized;
+            List<AiCommandData>? commands = null;
+            if (_parser != null)
+            {
+                var parsed = _parser.Parse(raw);
+                sanitized = parsed.CleanText;
+                commands = parsed.Commands;
+            }
+            else
+            {
+                sanitized = SanitizeResponse(raw);
+            }
             if (string.IsNullOrWhiteSpace(sanitized))
                 sanitized = GetFallbackResponse();
 
@@ -182,6 +208,14 @@ public sealed class LocalAiService : IAiService, IDisposable
                 LogModeration(ProhibitedCategory.ProfessionalAdvice, source: "output");
 
             _messages.Add(new LocalChatMessage("assistant", sanitized));
+
+            // AI-command dispatch (AllowAiToControlEffects): gated AFTER output moderation — a blocked
+            // response (the early return above) dispatches nothing. Fire-and-forget (async void).
+            if (_commands != null && commands != null && commands.Count > 0)
+            {
+                try { _commands.BeginBatch(); foreach (var cmd in commands) _commands.ExecuteCommand(cmd); }
+                catch (Exception ex) { _logger?.LogDebug(ex, "LocalAiService: command dispatch threw."); }
+            }
 
             if (_settings.Current?.CompanionPrompt?.ChatMemoryEnabled != false)
                 _ = PersistHistoryAsync(); // fire-and-forget; trimmed to MaxPersistedPairs
@@ -384,6 +418,30 @@ public sealed class LocalAiService : IAiService, IDisposable
             _messages[0] = new LocalChatMessage("system", systemPrompt); // refresh (persona may have changed)
         else
             _messages.Insert(0, new LocalChatMessage("system", systemPrompt));
+    }
+
+    /// <summary>Manages the [CONTEXT BLOCK] enrichment at _messages[1] (after system, before turns).
+    /// Insert/replace when AllowAiToControlEffects + a dispatcher + prompt service are registered;
+    /// remove when disabled so a toggled-off state doesn't leak the schema block. Mirrors WPF
+    /// LocalAiService:458-482.</summary>
+    private void EnsureEnrichmentMessage()
+    {
+        var effectsOn = _settings.Current?.CompanionPrompt?.AllowAiToControlEffects == true
+                        && _commands != null && _promptService != null;
+        var hasAt1 = _messages.Count > 1
+                     && _messages[1].Role == "user"
+                     && _messages[1].Content.StartsWith("[CONTEXT BLOCK", StringComparison.Ordinal);
+        if (effectsOn)
+        {
+            var content = _promptService!.BuildEnrichmentMessage("", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")).Content;
+            var em = new LocalChatMessage("user", content);
+            if (hasAt1) _messages[1] = em;
+            else _messages.Insert(1, em);
+        }
+        else if (hasAt1)
+        {
+            _messages.RemoveAt(1);
+        }
     }
 
     // ---------- History persistence (local_chat_history.json) ----------
