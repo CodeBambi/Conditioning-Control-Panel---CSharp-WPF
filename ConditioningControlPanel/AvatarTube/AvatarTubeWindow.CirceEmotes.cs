@@ -820,7 +820,18 @@ namespace ConditioningControlPanel
             if (!_circeEmoteMode) return;
             if (_circeQueue.Count > 0) { DoCirceCrossfade(_circeQueue.Dequeue()); return; }
             _circeReacting = false;
-            DoCirceCrossfade(PickWeightedIdle());
+            // Idle rotation is the steady-state ~1Hz churn (the bulk of [EMOTE] xfade under load). Defer the
+            // heavy two-GIF crossfade to a Background dispatcher tick so any in-flight layered-window present
+            // (a pooled Show(), a resize) finishes FIRST — the two colliding on the shared software render
+            // thread is the documented CompleteRender deadlock (see EnterCirceEmoteMode). Idle has no tight
+            // timing, unlike talk/queue which stay on the immediate path. If a reaction/talk claims the layers
+            // before this fires, skip — it drives its own crossfade.
+            var idle = PickWeightedIdle();
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+            {
+                if (_circeEmoteMode && !_circeReacting && _circeQueue.Count == 0)
+                    DoCirceCrossfade(idle);
+            }));
         }
 
         /// <summary>

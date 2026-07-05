@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -51,9 +52,18 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _scheduleTimer;
         private DispatcherTimer? _tickTimer;
 
-        private Window? _activeWindow;
-        private AttentionCheckControl? _activeControl;
+        // KEEP-ALIVE pooled popup: a fresh WS_EX_LAYERED (AllowsTransparency) Window.Show()
+        // runs a synchronous HwndTarget.OnResize -> MediaContext.CompleteRender() on first
+        // realization; firing that per-check while the shared render thread is saturated (avatar
+        // emote crossfades, OCR, whispers) is a UI-thread deadlock trigger (freeze #494). So the
+        // popup is realized ONCE and thereafter repositioned (Left/Top — moving is safe) + Hide()/
+        // Show() reused; a resize never happens because the ring content is a fixed size.
+        private Window? _window;                 // realized once, then Hide/Show reused
+        private AttentionCheckControl? _control; // kept-alive content
+        private bool _checkActive;               // true while a check is on screen
         private Rect _activeBounds; // window bounds in DIPs (with slack baked in for hit-test)
+
+        private const int WM_DPICHANGED = 0x02E0;
         private DateTime _fireStartedAt;
         private double _dwellMs;
         private System.Windows.Point? _lastGazePoint;
@@ -121,6 +131,18 @@ namespace ConditioningControlPanel.Services
             _scheduleTimer?.Stop();
             _scheduleTimer = null;
             ResolveActive(passed: false, fireEvent: false);
+
+            // Hard teardown of the kept-alive popup so an unowned/hidden window can't
+            // block OnLastWindowClose (the ResolveActive fade above only Hide()s it).
+            _checkActive = false;
+            if (_window != null)
+            {
+                var win = _window;
+                _window = null;
+                _control = null;
+                try { win.BeginAnimation(Window.OpacityProperty, null); } catch { }
+                try { win.Close(); } catch { }
+            }
         }
 
         private void TrySubscribeMainWindowClosing()
@@ -222,7 +244,7 @@ namespace ConditioningControlPanel.Services
                     return;
                 }
 
-                if (_activeWindow != null)
+                if (_checkActive)
                 {
                     App.Logger?.Debug("AttentionCheck: fire skipped — popup already active");
                     ScheduleNext();
@@ -241,27 +263,18 @@ namespace ConditioningControlPanel.Services
                 var x = bounds.X + margin + _rng.Next(Math.Max(1, bounds.Width - margin * 2 - size));
                 var y = bounds.Y + margin + _rng.Next(Math.Max(1, bounds.Height - margin * 2 - size));
 
-                _activeControl = new AttentionCheckControl();
-                _activeWindow = new Window
-                {
-                    WindowStyle = WindowStyle.None,
-                    AllowsTransparency = true,
-                    Background = Brushes.Transparent,
-                    Topmost = true,
-                    ShowInTaskbar = false,
-                    ShowActivated = false,
-                    SizeToContent = SizeToContent.WidthAndHeight,
-                    ResizeMode = ResizeMode.NoResize,
-                    Left = x,
-                    Top = y,
-                    Content = _activeControl,
-                    IsHitTestVisible = false,
-                };
-                // Owner = MainWindow so the popup closes cleanly with the
-                // app (avoids the unowned-window-blocks-shutdown trap).
-                var owner = System.Windows.Application.Current?.MainWindow;
-                if (owner != null && owner.IsLoaded) _activeWindow.Owner = owner;
-                _activeWindow.Show();
+                EnsureWindow();
+                if (_window == null || _control == null) { ScheduleNext(); return; }
+
+                // Reposition (moving a realized layered window is safe; only resizing deadlocks)
+                // and reset the reused ring for a fresh check.
+                _window.Left = x;
+                _window.Top = y;
+                _control.SetProgress(0);
+                _checkActive = true;
+                _window.BeginAnimation(Window.OpacityProperty, null); // release any prior fade
+                _window.Opacity = 1;
+                _window.Show();
 
                 // Hit-test bounds with a generous slack so a near-miss
                 // counts as fixation — the user's gaze cursor has tracking
@@ -272,8 +285,7 @@ namespace ConditioningControlPanel.Services
                     size + BoundsSlackDips * 2,
                     size + BoundsSlackDips * 2);
 
-                _activeControl.StartPulse();
-                _activeControl.SetProgress(0);
+                _control.StartPulse();
 
                 _fireStartedAt = DateTime.UtcNow;
                 _dwellMs = 0;
@@ -303,6 +315,48 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        /// <summary>Realize the reusable popup ONCE (first fire), hidden, so subsequent checks only
+        /// reposition + Show() and never pay the fresh-realization CompleteRender cost that can wedge
+        /// the render thread under load (#494). A WM_DPICHANGED swallow hook prevents WPF's automatic
+        /// DPI rescale (another synchronous CompleteRender) when the ring moves between mixed-DPI
+        /// monitors.</summary>
+        private void EnsureWindow()
+        {
+            if (_window != null) return;
+            _control = new AttentionCheckControl();
+            _window = new Window
+            {
+                WindowStyle = WindowStyle.None,
+                AllowsTransparency = true,
+                Background = Brushes.Transparent,
+                Topmost = true,
+                ShowInTaskbar = false,
+                ShowActivated = false,
+                SizeToContent = SizeToContent.WidthAndHeight,
+                ResizeMode = ResizeMode.NoResize,
+                Content = _control,
+                IsHitTestVisible = false,
+                Opacity = 0,
+            };
+            // Owner = MainWindow so the popup closes cleanly with the app
+            // (avoids the unowned-window-blocks-shutdown trap).
+            var owner = System.Windows.Application.Current?.MainWindow;
+            if (owner != null && owner.IsLoaded) _window.Owner = owner;
+            _window.SourceInitialized += (_, _) =>
+            {
+                try { HwndSource.FromHwnd(new WindowInteropHelper(_window!).Handle)?.AddHook(SwallowDpiChanged); }
+                catch { }
+            };
+            // Realize the hwnd once (invisible at Opacity 0), then hide until the first check shows it.
+            try { _window.Show(); _window.Hide(); } catch { }
+        }
+
+        private static IntPtr SwallowDpiChanged(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_DPICHANGED) handled = true;
+            return IntPtr.Zero;
+        }
+
         private void HandleGazeMove(System.Windows.Point p)
         {
             _lastGazePoint = p;
@@ -313,7 +367,7 @@ namespace ConditioningControlPanel.Services
             try
             {
                 var settings = App.Settings?.Current;
-                if (settings == null || _activeWindow == null) { ResolveActive(passed: false); return; }
+                if (settings == null || !_checkActive) { ResolveActive(passed: false); return; }
 
                 var elapsed = (DateTime.UtcNow - _fireStartedAt).TotalMilliseconds;
                 var graceMs = settings.AttentionCheckGraceMs;
@@ -321,7 +375,7 @@ namespace ConditioningControlPanel.Services
                 if (_lastGazePoint.HasValue && _activeBounds.Contains(_lastGazePoint.Value))
                 {
                     _dwellMs += TickMs;
-                    _activeControl?.SetProgress(_dwellMs / DwellTargetMs);
+                    _control?.SetProgress(_dwellMs / DwellTargetMs);
 
                     if (_dwellMs >= DwellTargetMs)
                     {
@@ -334,7 +388,7 @@ namespace ConditioningControlPanel.Services
                     // Gaze left bounds — drain dwell quickly so a brief
                     // glance doesn't bank progress that completes later.
                     _dwellMs = Math.Max(0, _dwellMs - TickMs * 2);
-                    _activeControl?.SetProgress(_dwellMs / DwellTargetMs);
+                    _control?.SetProgress(_dwellMs / DwellTargetMs);
                 }
 
                 if (elapsed >= graceMs)
@@ -360,31 +414,40 @@ namespace ConditioningControlPanel.Services
                 _gazeSubscribed = false;
             }
 
-            if (_activeControl != null)
-            {
-                try { _activeControl.StopPulse(); } catch { }
-                _activeControl = null;
-            }
+            try { _control?.StopPulse(); } catch { }
 
-            if (_activeWindow != null)
+            // Fade out then HIDE (not Close) — the window is kept alive and reused (see EnsureWindow).
+            if (_checkActive && _window != null)
             {
-                var win = _activeWindow;
-                _activeWindow = null;
+                _checkActive = false;
+                var win = _window;
                 try
                 {
-                    // Brief fade so the dismiss isn't jarring.
                     var anim = new DoubleAnimation
                     {
                         From = win.Opacity, To = 0,
                         Duration = TimeSpan.FromMilliseconds(180),
                     };
-                    anim.Completed += (_, _) => { try { win.Close(); } catch { } };
+                    anim.Completed += (_, _) =>
+                    {
+                        try
+                        {
+                            win.BeginAnimation(Window.OpacityProperty, null);
+                            win.Opacity = 0;
+                            win.Hide();
+                        }
+                        catch { }
+                    };
                     win.BeginAnimation(Window.OpacityProperty, anim);
                 }
                 catch
                 {
-                    try { win.Close(); } catch { }
+                    try { win.BeginAnimation(Window.OpacityProperty, null); win.Opacity = 0; win.Hide(); } catch { }
                 }
+            }
+            else
+            {
+                _checkActive = false;
             }
 
             if (fireEvent)

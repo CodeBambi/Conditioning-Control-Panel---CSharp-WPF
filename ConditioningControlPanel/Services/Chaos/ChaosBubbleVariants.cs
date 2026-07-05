@@ -751,8 +751,11 @@ public static class ChaosBubbleVariants
 
         if (ambient)
         {
-            // Trigger-bubble use: strip the fuse/defuse so it fires on pop, and float up gently.
-            motion = ChaosMotion.FloatUp;
+            // Trigger-bubble use: strip the fuse/defuse so it fires on pop. Honor an explicit motion
+            // override (the dashboard's Motion setting, e.g. "Rain") so ambient bubbles move like chaos
+            // ones; with no override ("Mixed") default to a gentle float. Ambient bubbles are treats, so
+            // TreatLifeMs dissolves them even if the motion (e.g. RoamBounce) never exits the screen.
+            if (motionOverride == null) motion = ChaosMotion.FloatUp;
             // Payloads may tone themselves down on the calm dashboard (e.g. video skips the
             // chaos random-segment arm — there is no 15s cap outside a run, #456/#458).
             payload.Ambient = true;
