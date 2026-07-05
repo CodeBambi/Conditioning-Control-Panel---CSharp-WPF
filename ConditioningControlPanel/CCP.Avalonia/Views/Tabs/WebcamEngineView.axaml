@@ -41,6 +41,29 @@
         </StackPanel>
       </Grid>
 
+      <!-- Gaze engine picker. Chooses which pipeline the NEXT calibration trains and
+           switches to; the live runtime feature always follows the loaded calibration,
+           so picking a not-yet-calibrated engine here can't corrupt tracking - it takes
+           effect when you press Calibrate. -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="{loc:Str window_webcam_cal_pipeline_label}"
+                   FontSize="12"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextLightBrush}" />
+        <ComboBox x:Name="CmbGazeEngine"
+                  SelectedIndex="{Binding SelectedGazeEngineIndex, Mode=TwoWay}"
+                  HorizontalAlignment="Stretch">
+          <ComboBoxItem Content="{loc:Str window_webcam_cal_pipeline_current}" />
+          <ComboBoxItem Content="{loc:Str window_webcam_cal_pipeline_tier1}" />
+          <ComboBoxItem Content="{loc:Str window_webcam_cal_pipeline_deep}" />
+        </ComboBox>
+        <TextBlock Text="{loc:Str lab_gaze_engine_hint}"
+                   FontSize="11"
+                   Opacity="0.7"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource TextLightBrush}" />
+      </StackPanel>
+
       <!-- Actions wrap instead of clipping when the host is narrow (feature popup).
            WrapPanel has no Spacing in Avalonia, so spacing is per-child margins. -->
       <WrapPanel>

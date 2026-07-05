@@ -196,6 +196,27 @@ public partial class LabTabViewModel : TabItemViewModel
     [ObservableProperty]
     private ObservableCollection<string> _debugLog;
 
+    // Gaze-engine picker (Current / Tier 1 / Deep) surfaced in the tracking popup.
+    // This chooses which engine the NEXT calibration trains + switches to; it does
+    // NOT flip the live runtime feature (that always follows the loaded calibration),
+    // so selecting a not-yet-calibrated engine can never corrupt live tracking. The
+    // chosen engine is applied when the user calibrates; after the calibration window
+    // closes we re-sync to whatever engine actually got committed.
+    [ObservableProperty]
+    private int _selectedGazeEngineIndex;
+
+    private static readonly GazeFeatureMode[] GazeEngineOrder =
+    {
+        GazeFeatureMode.Current, GazeFeatureMode.Tier1, GazeFeatureMode.DeepModel,
+    };
+
+    private void SyncGazeEngineFromTracker()
+    {
+        var active = _webcam?.GazePipelineMode ?? GazeFeatureMode.Current;
+        int i = Array.IndexOf(GazeEngineOrder, active);
+        SelectedGazeEngineIndex = i >= 0 ? i : 0;
+    }
+
     #endregion
 
     #region EYES cards
@@ -226,6 +247,7 @@ public partial class LabTabViewModel : TabItemViewModel
         AnnouncementsEnabled = true;
         TrackerButtonText = Loc.Get("lab_start_tracking");
         TrackerStatusText = Loc.Get("lab_tracker_status_stopped");
+        SyncGazeEngineFromTracker();
         CountersText = "0 blinks · 0 gaze hits · 0 rabbits";
         FocusGazeStatusText = Loc.Get("lab_focus_gaze_hint");
 
@@ -695,7 +717,10 @@ public partial class LabTabViewModel : TabItemViewModel
     {
         _webcam?.Calibrate();
         AppendLog(Loc.Get("lab_log_calibration_requested"));
-        await OpenWebcamWindowAsync(() => new WebcamCalibrationWindow(_frameSource));
+        var engine = GazeEngineOrder[Math.Clamp(SelectedGazeEngineIndex, 0, GazeEngineOrder.Length - 1)];
+        await OpenWebcamWindowAsync(() => new WebcamCalibrationWindow(_frameSource, initialEngine: engine));
+        // Reflect whatever engine was actually committed (or the baseline if cancelled).
+        SyncGazeEngineFromTracker();
     }
 
     [RelayCommand]

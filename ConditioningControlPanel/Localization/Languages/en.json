@@ -4252,6 +4252,7 @@
   "lab_tracker_status_running": "Running",
   "lab_refresh": "Refresh",
   "lab_camera_device": "Camera",
+  "lab_gaze_engine_hint": "Pick an engine, then press Calibrate to train and switch to it. The current engine keeps running until you finish calibrating.",
   "lab_calibrate": "Calibrate",
   "lab_quick_recal": "Quick Recal",
   "lab_start_tracking": "Start Tracking",

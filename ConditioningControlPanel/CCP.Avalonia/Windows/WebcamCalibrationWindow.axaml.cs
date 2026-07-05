@@ -96,6 +96,11 @@ public partial class WebcamCalibrationWindow : Window
     private DeepGazeBackbone _baselineBackbone = DeepGazeBackbone.MobileOneS0;
     private bool _committedMode;
     private bool _initSelectors;
+    // Optional engine the opener (e.g. the tracking popup's gaze-engine dropdown)
+    // wants pre-selected in the intro. It seeds ONLY the dropdown (_selectedMode);
+    // _baselineMode still snapshots the live GazePipelineMode so a close-without-
+    // commit restores the actually-calibrated engine and never corrupts tracking.
+    private GazeFeatureMode? _initialEngine;
     // CmbGazeMode item order (index -> enum), decoupled from enum ordinal.
     private static readonly GazeFeatureMode[] ModeOrder =
     {
@@ -122,10 +127,12 @@ public partial class WebcamCalibrationWindow : Window
     }
 
     /// <summary>Constructor preserved for callers that still pass the frame/video seams (unused here).</summary>
-    public WebcamCalibrationWindow(IFrameSource? frameSource = null, IVideoSurface? videoSurface = null) : this()
+    public WebcamCalibrationWindow(IFrameSource? frameSource = null, IVideoSurface? videoSurface = null,
+        GazeFeatureMode? initialEngine = null) : this()
     {
         _frameSource = frameSource;
         _videoSurface = videoSurface;
+        _initialEngine = initialEngine;
     }
 
     private async void Window_Loaded(object? sender, RoutedEventArgs e)
@@ -411,7 +418,8 @@ public partial class WebcamCalibrationWindow : Window
         {
             _baselineMode = _webcam.GazePipelineMode;
             _baselineBackbone = _webcam.DeepGazeModel;
-            _selectedMode = _baselineMode;
+            // Opener may pre-pick an engine to (re)calibrate; baseline stays the live one.
+            _selectedMode = _initialEngine ?? _baselineMode;
             _selectedBackbone = _baselineBackbone;
 
             int mi = Array.IndexOf(ModeOrder, _selectedMode);
