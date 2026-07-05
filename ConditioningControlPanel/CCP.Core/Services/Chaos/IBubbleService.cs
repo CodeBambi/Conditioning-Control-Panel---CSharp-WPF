@@ -97,7 +97,11 @@ public interface IBubbleService
         double chainReachDip = 120.0,
         Func<ChaosBubbleSpec, bool>? canChannel = null,
         Action<ChaosBubbleSpec>? onChannelStarted = null,
-        Action<ChaosBubbleSpec, string>? onChannelBroken = null)
+        Action<ChaosBubbleSpec, string>? onChannelBroken = null,
+        // Owner-authorized Q10b arc slice: the E-Stim discharge bolt callback. The default impl
+        // below degrades to the 6-arg overload (dropping this, like the behavioral callbacks);
+        // the real AvaloniaBubbleService impl forwards it to BubbleEngine.
+        Action<IReadOnlyList<(Point From, Point To)>>? onEStimArc = null)
         => BeginChaosMode(onBenignPop, onDefuse, onDetonate, canChannel, onChannelStarted, onChannelBroken);
 
     /// <summary>Leaves chaos mode and destroys all chaos bubbles.</summary>

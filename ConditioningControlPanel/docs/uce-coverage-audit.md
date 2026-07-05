@@ -17,8 +17,9 @@ and turns the gap into an ordered migration backlog.
 ## Verdict
 
 **Green.** The session-effect set, the *live* passive chaos overlays, AND the last window-based
-passive effect (attention-check) are all on the UCE (**20 registered layers** as of 2026-07-05:
-9 session + 10 chaos + 1 attention-check). The window-migration lane is complete.
+passive effect (attention-check) are all on the UCE (**21 registered layers** as of 2026-07-05:
+9 session + 11 chaos + 1 attention-check — `ChaosEStimArcLayer` (Z=125) added 2026-07-05, the
+owner-authorized E-Stim arc). The window-migration lane is complete.
 
 > **Fresh re-verification 2026-07-05 (post v6.2.10 merge `5603442`, by @glm5.2):** independent
 > read-only re-sweep of every `: Window` subclass in `CCP.Avalonia` reconciles 1:1 with this
@@ -26,11 +27,11 @@ passive effect (attention-check) are all on the UCE (**20 registered layers** as
 > only WPF-head files + shared loc/csproj/`UpdateService`; zero under `CCP.Avalonia` source).
 > Section A counts 9 + 10 = 19 listed layers; the 20th is `AttentionCheckLayer` (Z=160, §B1#3,
 > migrated) — the verdict's "20" is correct, the §A header "19" counts only the two §A tables.
-> The only new artifact vs this audit is an untracked co-agent WIP `Compositor/Layers/ChaosEStimArcLayer.cs`
-> (a compositor *layer* being added — that is backlog item §D#6, the E-Stim→layer migration, in
-> flight; its CS0117 build error is the co-agent's incomplete WIP, not a regression). **DoD item 4
-> holds for the LIVE rendering set**; the 4 unwired window classes (§B2) are blocked features,
-> not active gaps, and the E-Stim one is actively being converted to a layer.
+> UPDATE 2026-07-05: `ChaosEStimArcLayer` (Z=125) has LANDED (builds green, harness Stage 4m PASS);
+> the E-Stim arc (§D#6) now renders through the compositor via the owner-authorized
+> `BubbleEngine.EStimBurstAt` → head `OnEStimArc` path. **DoD item 4 holds for the LIVE rendering
+> set**; the remaining 3 unwired window classes (§B2 rows 5-7: EStimGlow/VibeTrail/SkiaFx) are
+> blocked features, not active gaps.
 
 > **Progress 2026-07-05:** gaps #1–2 closed — `ChaosFxWindow`→`ChaosFxLayer` (Z=118, `8df68031`)
 > and `ChaosWaveTimerOverlay`→`ChaosWaveTimerLayer` (Z=155, `16fe5a92`); both windows deleted;
@@ -47,7 +48,7 @@ passive effect (attention-check) are all on the UCE (**20 registered layers** as
 
 ---
 
-## A. USES UCE — 19 registered layers (the done set)
+## A. USES UCE — 20 registered layers (the done set)
 
 Verified by `RegisterLayer` call sites.
 
@@ -67,7 +68,7 @@ Verified by `RegisterLayer` call sites.
 Video path: Phase E complete (default flipped to compositor video; legacy
 `AvaloniaMultiMonitorVideoService` + `VideoOverlayWindow` deleted).
 
-### Passive chaos overlays (10) — registered in `AvaloniaHeadStubs`
+### Passive chaos overlays (11) — registered in `AvaloniaHeadStubs`
 | Layer | Z |
 |---|---|
 | `ChaosFieldFxLayer` | 100 |
@@ -75,13 +76,14 @@ Video path: Phase E complete (default flipped to compositor video; legacy
 | `ChaosGifCascadeLayer` | 110 |
 | `ChaosFlashWashLayer` | 115 |
 | `ChaosFxLayer` | 118 |
+| `ChaosEStimArcLayer` | 125 |
 | `ChaosCursorGlowLayer` | 130 |
 | `ChaosEffectBannerLayer` | 140 |
 | `ChaosPopTextLayer` | 145 |
 | `ChaosAnnouncerLayer` | 150 |
 | `ChaosWaveTimerLayer` | 155 |
 
-All 10 harness-verified (`--verify-layers`, `unified-compositor-engine-plan.md` Phase F; Stages 4j/4k added for ChaosFx/ChaosWaveTimer).
+All 11 harness-verified (`--verify-layers`, `unified-compositor-engine-plan.md` Phase F; Stages 4j/4k/4m added for ChaosFx/ChaosWaveTimer/ChaosEStimArc).
 
 ---
 
@@ -108,7 +110,7 @@ These have no production caller today (the run-engine paths that drive them are 
 visual chain / vibe / skia-glow features, still unwired). Convert to layers as their callers land.
 | # | Class | File | LOC | What it draws | Blocking note |
 |---|---|---|---|---|---|
-| 4 | `ChaosEStimOverlay` | `Chaos/ChaosEStimOverlay.axaml.cs` | 267 | lightning bolts between bubbles | `Strike` has no head caller — Q10b (frozen `BubbleEngine` seam, BLOCKED on user authorization; ready spec `docs/chaos-run-engine-contracts/estim-arc-visual-slice.md`) |
+| 4 | ~~`ChaosEStimOverlay`~~ ✅ **arc DONE → `ChaosEStimArcLayer` (Z=125)** | `Chaos/ChaosEStimOverlay.axaml.cs` | 267 | lightning bolts between bubbles | Arc `Strike` now wired: owner-authorized `BubbleEngine.EStimBurstAt` → head `OnEStimArc` → `ChaosEStimArcLayer.Strike` + throttled `estim_zap` cue (2026-07-05). Window now DEAD/unwired legacy (deletion is a cleanup follow-up once side-by-side visual parity is human-confirmed) |
 | 5 | `ChaosEStimGlowOverlay` | `Chaos/ChaosEStimGlowOverlay.axaml.cs` | 184 | E-Stim charge glow halo | same E-Stim chain (`Arm`/`Disarm` unwired) |
 | 6 | `ChaosVibeTrailOverlay` | `Chaos/ChaosVibeTrailOverlay.axaml.cs` | 300 | warm cursor glow + fading trail | no head caller (vibe-trail feature unwired) |
 | 7 | `ChaosSkiaFxOverlay` | `Chaos/ChaosSkiaFxOverlay.cs` | 632 | Skia bloom + sparks; **WPF's DEFAULT glow renderer** (`ChaosSkiaFxEnabled ?? true`) | no head caller; natural consolidation target for the cursor-glow bloom variant |
@@ -167,8 +169,9 @@ floor · `--verify-layers` exit 0 · `--verify-video` exit 0 · `--smoke-test` F
    All gates green. **Last LIVE window-based passive effect — the window-migration lane is now
    complete.** (Code co-mingled in co-agent commit `57f6f048` via a broad `git add`; verified in HEAD.)
 5. **`ChaosSkiaFxOverlay` → layer** (632 LOC, WPF default glow) — consolidation target; larger.
-6. **E-Stim chain (`ChaosEStimOverlay` + `ChaosEStimGlowOverlay`) → layers** — gated on the
-   Q10b frozen-`BubbleEngine` authorization landing (ready spec exists).
+6. **E-Stim arc DONE 2026-07-05** (`ChaosEStimOverlay` → `ChaosEStimArcLayer` Z=125; owner-
+   authorized Q10b `BubbleEngine.EStimBurstAt` → `OnEStimArc`). Remaining: `ChaosEStimGlowOverlay`
+   (charge-glow halo) → layer, still gated on the E-Stim glow feature being wired.
 7. **`ChaosVibeTrailOverlay` → layer** — gated on the vibe-trail feature being wired.
 
 Interactive set (section C) stays windows until the `AvaloniaMouseHook` click-swallow gap is

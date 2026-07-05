@@ -55,6 +55,11 @@ public sealed class AvaloniaChaosService : IChaosService
     // WS2/WP3 template migration: the Rabbit Caller cursor-glow telegraph is a compositor
     // layer, not a window. The service owns the state and drives it (UCE rule 7).
     private readonly ChaosCursorGlowLayer _cursorGlowLayer;
+    // E-Stim arc bolts (Electrified Rabbits free discharge) are a compositor layer, not a window
+    // (replaces the unwired ChaosEStimOverlay); the service drives it via OnEStimArc.
+    private readonly ChaosEStimArcLayer _eStimArcLayer;
+    // Throttle for the estim_zap cue (>=140ms; the VISUAL is never throttled). WPF _lastBurstZap.
+    private System.DateTime _lastEStimZap;
     // WS2/WP3 Phase F #2: chaos pop text is a compositor layer, not a pooled window set.
     private readonly ChaosPopTextLayer _popTextLayer;
     // WS2/WP3 Phase F #3: the effect-banner strip is a compositor layer, not a keep-alive window.
@@ -286,6 +291,8 @@ public sealed class AvaloniaChaosService : IChaosService
         compositor?.RegisterLayer(_fxLayer);
         _waveTimerLayer = new ChaosWaveTimerLayer();
         compositor?.RegisterLayer(_waveTimerLayer);
+        _eStimArcLayer = new ChaosEStimArcLayer();
+        compositor?.RegisterLayer(_eStimArcLayer);
         _screenProvider = screenProvider;
         _screenShake = screenShake;
         AvaloniaChaosCatalogs.EnsureInitialized();
@@ -497,7 +504,8 @@ public sealed class AvaloniaChaosService : IChaosService
             onDarterSpanked: OnDarterSpanked,
             canChannel: CanChannelDefuse,
             onChannelStarted: OnChannelStarted,
-            onChannelBroken: OnChannelBroken);
+            onChannelBroken: OnChannelBroken,
+            onEStimArc: OnEStimArc);
 
         // Seed the live knobs immediately after BeginChaosMode (which Reset() them) so the
         // config-shaped values — silk_touch HitboxScale/MagnetEnabled — hold from the first
@@ -2743,6 +2751,30 @@ public sealed class AvaloniaChaosService : IChaosService
 
     /// <summary>Center the telegraph on raw PHYSICAL virtual-desktop px (IPointerState space).</summary>
     public void MoveCursorGlow(double pxX, double pxY) => _cursorGlowLayer.MoveTo(pxX, pxY);
+
+    /// <summary>
+    /// Electrified-Rabbits free-discharge arc callback (Core BubbleEngine.EStimBurstAt, owner-
+    /// authorized Q10b slice). Renders the cyan bolts through the compositor
+    /// (<see cref="ChaosEStimArcLayer"/>, replacing the WPF ChaosEStimOverlay window) and plays a
+    /// throttled estim_zap cue (>=140ms; the VISUAL is never throttled — every discharge flashes).
+    /// Core <c>Point</c> is <c>Core.Platform.Point</c>; projected to the layer's raw-double
+    /// <c>Strike</c> at this seam (the endpoints are already PHYSICAL px from CenterPx).
+    /// </summary>
+    private void OnEStimArc(IReadOnlyList<(Core.Platform.Point From, Core.Platform.Point To)> bolts)
+    {
+        if (bolts == null || bolts.Count == 0) return;
+        var projected = new List<(double, double, double, double)>(bolts.Count);
+        foreach (var (from, to) in bolts)
+            projected.Add((from.X, from.Y, to.X, to.Y));
+        _eStimArcLayer.Strike(projected);
+
+        var now = System.DateTime.UtcNow;
+        if ((now - _lastEStimZap).TotalMilliseconds >= 140)
+        {
+            _lastEStimZap = now;
+            AvaloniaChaosSfx.Play("estim_zap", 0.45f);   // WPF EStimBurstAt zap (throttled cue)
+        }
+    }
 
     /// <summary>Pop a floating chaos word at a PHYSICAL virtual-desktop px anchor (WS2:
     /// chaos on the compositor). Master-gated on ChaosAnnouncerEnabled exactly like WPF

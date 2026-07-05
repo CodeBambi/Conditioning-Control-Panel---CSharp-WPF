@@ -68,6 +68,12 @@ public sealed class BubbleEngine
 
     private Action<ChaosBubbleSpec, bool>? _onDarterSpanked;
 
+    // S4b-4 head follow-up (owner-authorized Q10b arc slice): the Electrified-Rabbits free
+    // discharge emits arc bolts (fromPx -> each victim CenterPx) for the head to render through
+    // the compositor (ChaosEStimArcLayer) + play a throttled estim_zap cue. Endpoints are
+    // PHYSICAL px (CenterPx x Scaling); no charge consumed, arcs never chain onward.
+    private Action<IReadOnlyList<(Point From, Point To)>>? _onEStimArc;
+
     // ---- hold-to-defuse channel state (Avalonia port parity) ----
     private Func<ChaosBubbleSpec, bool>? _canChannel;
     private Action<ChaosBubbleSpec>? _onChannelStarted;
@@ -389,7 +395,8 @@ public sealed class BubbleEngine
         double chainReachDip = DefaultChainReachDip,
         Func<ChaosBubbleSpec, bool>? canChannel = null,
         Action<ChaosBubbleSpec>? onChannelStarted = null,
-        Action<ChaosBubbleSpec, string>? onChannelBroken = null)
+        Action<ChaosBubbleSpec, string>? onChannelBroken = null,
+        Action<IReadOnlyList<(Point From, Point To)>>? onEStimArc = null)
     {
         _onBenignPop = onBenignPop;
         _onDefuse = onDefuse;
@@ -412,6 +419,7 @@ public sealed class BubbleEngine
         _canChannel = canChannel;
         _onChannelStarted = onChannelStarted;
         _onChannelBroken = onChannelBroken;
+        _onEStimArc = onEStimArc;
         _chaosActive = true;
         _chaosFrozen = false;
         _chaosTimeScale = 1.0;
@@ -446,6 +454,7 @@ public sealed class BubbleEngine
         _canChannel = null;
         _onChannelStarted = null;
         _onChannelBroken = null;
+        _onEStimArc = null;
         _channelBubbleId = null;
         _chaosSpawnQueue.Clear();
         _pendingChaperoneEscorts.Clear();
@@ -1576,8 +1585,17 @@ public sealed class BubbleEngine
         if (pool.Count == 0) return;
 
         pool.Sort((x, y) => DistSq(CenterPx(x), fromPx).CompareTo(DistSq(CenterPx(y), fromPx)));
+        // Emit an arc bolt to each victim BEFORE popping it (CenterPx must be read while the
+        // bubble is still alive), then hand the bolt list to the head for compositor render +
+        // throttled zap cue (WPF BubbleService.EStimBurstAt builds bolts (fromPx, CenterPx) then
+        // Strike()s them, :407-441). The visual is never throttled; the head throttles the cue.
+        var arcs = new List<(Point From, Point To)>(Math.Min(pool.Count, maxArcs));
         for (int i = 0; i < pool.Count && i < maxArcs; i++)
+        {
+            arcs.Add((fromPx, CenterPx(pool[i])));
             PopBubble(pool[i].Id);
+        }
+        if (arcs.Count > 0) _onEStimArc?.Invoke(arcs);
     }
 
     private void FlingDarter(BubbleState darter, Point originPx)

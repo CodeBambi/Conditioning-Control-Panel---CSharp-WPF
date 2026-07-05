@@ -229,7 +229,8 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
         double chainReachDip = 120.0,
         Func<ChaosBubbleSpec, bool>? canChannel = null,
         Action<ChaosBubbleSpec>? onChannelStarted = null,
-        Action<ChaosBubbleSpec, string>? onChannelBroken = null)
+        Action<ChaosBubbleSpec, string>? onChannelBroken = null,
+        Action<IReadOnlyList<(ConditioningControlPanel.Core.Platform.Point From, ConditioningControlPanel.Core.Platform.Point To)>>? onEStimArc = null)
     {
         LoadBubbleImage();
 
@@ -280,7 +281,8 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
             chainReachDip,
             canChannel,
             onChannelStarted,
-            onChannelBroken);
+            onChannelBroken,
+            onEStimArc);
 
         InstallMouseHook();
     }

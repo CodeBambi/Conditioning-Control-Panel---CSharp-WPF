@@ -185,6 +185,7 @@ internal static class LayerVerification
             var fxLayer = ExpectLayer<ChaosFxLayer>(engine, CompositorLayers.ChaosFx, "ChaosFxLayer", rows);
             var waveTimerLayer = ExpectLayer<ChaosWaveTimerLayer>(engine, CompositorLayers.ChaosWaveTimer, "ChaosWaveTimerLayer", rows);
             var attentionCheckLayer = ExpectLayer<AttentionCheckLayer>(engine, CompositorLayers.AttentionCheck, "AttentionCheckLayer", rows);
+            var eStimArcLayer = ExpectLayer<ChaosEStimArcLayer>(engine, CompositorLayers.ChaosEStimArc, "ChaosEStimArcLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -721,6 +722,41 @@ internal static class LayerVerification
                 row.Teardown = deactivated ? "clean (Hide fade)" : "TIMEOUT";
                 FinishRow(row, activated, deactivated, envStable);
                 row.Note = AppendNote(row.Note, "driven directly; production caller is the gaze-dwell tick (webcam-gated); primary-monitor centre 84-DIP ring");
+                await SettleIdle(engine);
+            }
+
+            // Migrated from the standalone ChaosEStimOverlay (an unwired window). The production
+            // caller is the Core BubbleEngine EStimBurstAt arc callback -> head OnEStimArc
+            // (owner-authorized Q10b slice), so the stage drives the layer's public Strike
+            // directly: two cyan bolts crossing the primary centre. Life is 0.20s (fast), so the
+            // capture fires near peak (alpha holds while t>0.4) and natural expiry IS teardown; a
+            // missed fast capture is a SKIP, not a FAIL (the fxLayer precedent).
+            if (eStimArcLayer != null)
+            {
+                Console.WriteLine("[LAYERS] Stage 4m: ChaosEStimArcLayer via ChaosEStimArcLayer.Strike (E-Stim bolts)...");
+                var row = rows.First(r => r.Layer == "ChaosEStimArcLayer");
+                var cx = primary.Bounds.X + primary.Bounds.Width / 2.0;
+                var cy = primary.Bounds.Y + primary.Bounds.Height / 2.0;
+                var before = Capture(screens, primary);
+                eStimArcLayer.Strike(new[]
+                {
+                    (cx - 160, cy - 90, cx + 160, cy + 90),
+                    (cx + 160, cy - 90, cx - 160, cy + 90),
+                });
+                var activated = await PollAsync(() => eStimArcLayer.IsActive, 1000, stepMs: 16);
+                row.Activated = activated ? "yes" : "TIMEOUT";
+                if (activated)
+                {
+                    await Task.Delay(40); // near the 0.20s life, bolt hot (alpha hold t>0.4)
+                    var during = Capture(screens, primary);
+                    row.Delta = during.Center != before.Center
+                        ? "DIFFER (center-crop)"
+                        : "SKIP (fast 0.20s bolt; activation+teardown verified)";
+                }
+                var deactivated = await PollAsync(() => !eStimArcLayer.IsActive, 2000);
+                row.Teardown = deactivated ? "clean (0.20s life expiry)" : "TIMEOUT";
+                FinishRow(row, activated, deactivated, envStable);
+                row.Note = AppendNote(row.Note, "driven directly; production caller is Core BubbleEngine EStimBurstAt -> head OnEStimArc (owner-authorized); primary-centre cyan bolts");
                 await SettleIdle(engine);
             }
 

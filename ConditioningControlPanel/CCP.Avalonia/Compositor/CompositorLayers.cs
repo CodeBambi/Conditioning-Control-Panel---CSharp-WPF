@@ -78,6 +78,14 @@ public static class CompositorLayers
     /// keeping it under the info text is a deliberate readability improvement).</summary>
     public const int ChaosFx = 118;
 
+    /// <summary>E-Stim lightning arc bolts (Electrified Rabbits free discharge): transient cyan
+    /// bolts flashed between conducting bubble pairs on a pop burst. Ported from the WPF
+    /// ChaosSkiaFxOverlay bolt path (the DEFAULT arc renderer when ChaosSkiaFxEnabled),
+    /// replacing the standalone ChaosEStimOverlay window. In the cursor-telegraph sub-band,
+    /// just below the cursor glow — a foreground gameplay FX above the ambient field band
+    /// (100-119).</summary>
+    public const int ChaosEStimArc = 125;
+
     /// <summary>Rabbit Caller cursor-glow telegraph (first migrated chaos layer).</summary>
     public const int ChaosCursorGlow = 130;
 
