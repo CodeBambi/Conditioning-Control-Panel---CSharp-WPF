@@ -158,6 +158,30 @@ running:** the mandatory video renders through the compositor and the spiral/pin
 composite ON TOP of it (Stage 2 dump: `Video=ACTIVE + Spiral=ACTIVE + PinkTint=ACTIVE`) - the
 original 'video covers the overlays' bug is fixed. Remaining deletion work (below) is E3.
 
+**MEDIUM FOLLOW-UP - shutdown segfault under a THRASHING video stream (not normal use).**
+SEVERITY NOTE FIRST: normal video + clean exit does NOT crash - `--verify-visible` (plays a valid
+`_test_loop.mp4`, then `Stop()` + shutdown) exited 0 three times this session. The crash below needs
+the benchmark's failing-stream state, so it is a robustness issue, not an everyday crash-on-exit.
+Found via `--max-benchmark` 2026-07-05: the 4-min max session (incl. Phase 3 heavy chaos) runs
+to COMPLETION (session completes, XP awarded - the chaos port S5-S8 is validated under max load),
+then the process SEGFAULTS during shutdown teardown (exit 139), which also prevents the FPS
+results write (`benchmark-report.json` left stale). Diagnosis: `VideoLayer.Stop()`
+(`CCP.Avalonia/Compositor/Layers/VideoLayer.cs:358`) defers the LibVLC vmem teardown via a
+fire-and-forget `Task.Run(async () => { await Task.Delay(400); player.Dispose(); ... Marshal.FreeHGlobal(buffer); })`.
+Nothing awaits it, so on app shutdown (`App.axaml.cs` FlushPersistentState -> DisposeServiceIfPossible(IVideoService))
+the process tears down the LibVLC instance while that deferred task is still pending -> it frees
+pinned vmem buffers / disposes a player against a half-dead native LibVLC = native crash. The old
+`VideoOverlayWindow` used a `VideoView` (LibVLC-owned surface, no manual vmem buffers) so it never
+had this race - which is why the Jul-4 benchmark completed and today's did not. Aggravated by a
+failing stream state (`Failed to create video converter` + mjpeg/cache_read spam) leaving the
+decoder thrashing at teardown. Secondary suspect (less likely): the audio ducker's WASAPI teardown
+(a `ducking_recovery.json` was left behind, but that is a symptom of dying-while-ducked, not proof
+of cause). FIX SHAPE (needs a careful pass, forbidden-zone native race): give `VideoLayer` a
+DETERMINISTIC synchronous teardown for the shutdown path that drains `_locksOutstanding` (do NOT
+naively free synchronously - that reintroduces the exact mid-DisplayCallback race the 400ms defer
+avoids), OR make the video service `Dispose` await the pending teardown before the LibVLC instance
+is disposed. Do it as a focused pass with the `unified-compositor-engine` skill, not inline.
+
 Observations from the eyes-verification (not regressions, follow-ups):
 - Flash popups do NOT spawn while a mandatory video is active (`--verify-visible` Stage 2 flash
   count stays 0). Pre-existing (the legacy video window covered flashes too); confirm vs WPF
