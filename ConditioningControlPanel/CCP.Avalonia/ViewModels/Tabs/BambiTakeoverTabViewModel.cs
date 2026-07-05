@@ -316,6 +316,17 @@ public partial class BambiTakeoverTabViewModel : TabItemViewModel
         var s = _settingsService?.Current;
         if (s == null) return;
 
+        // Clamp persisted values into the sliders' ranges BEFORE assigning, and write the clamped
+        // value back so the setting and the UI agree: an out-of-range stored value (old-version
+        // scale, cloud-restored settings) otherwise silently clamps the slider to its bound while
+        // the label keeps the raw value (#485). Mirrors WPF MainWindow.Settings.cs:187-193; bounds
+        // match the sliders in BambiTakeoverTabView.axaml (intensity 0-100, cooldown 10-300,
+        // interval 60-600, announcement 0-100).
+        s.AutonomyIntensity = Math.Clamp(s.AutonomyIntensity, 0, 100);
+        s.AutonomyCooldownSeconds = Math.Clamp(s.AutonomyCooldownSeconds, 10, 300);
+        s.AutonomyRandomIntervalSeconds = Math.Clamp(s.AutonomyRandomIntervalSeconds, 60, 600);
+        s.AutonomyAnnouncementChance = Math.Clamp(s.AutonomyAnnouncementChance, 0, 100);
+
         AutonomyEnabled = s.AutonomyModeEnabled;
         AutonomyConsentGiven = s.AutonomyConsentGiven;
         AutonomyIntensity = s.AutonomyIntensity;
