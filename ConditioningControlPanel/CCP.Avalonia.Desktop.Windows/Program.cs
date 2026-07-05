@@ -42,9 +42,20 @@ class Program
         {
             if (verifyVideoIndex + 1 < args.Length && !args[verifyVideoIndex + 1].StartsWith("--", StringComparison.Ordinal))
                 verifyVideoPath = args[verifyVideoIndex + 1];
-            // The UCE video path is an env-var opt-in read in AvaloniaVideoService's ctor;
-            // set it BEFORE any DI construction so the harness verifies exactly that path.
-            Environment.SetEnvironmentVariable("CCP_UCE_VIDEO", "1");
+            // Compositor video is the default path now (UCE plan Phase E); force-clear the
+            // legacy opt-out so the harness verifies the compositor path regardless of the
+            // ambient environment.
+            Environment.SetEnvironmentVariable("CCP_LEGACY_VIDEO", null);
+        }
+        var verifyVisibleIndex = Array.IndexOf(args, "--verify-visible");
+        var verifyVisible = verifyVisibleIndex >= 0;
+        string? verifyVisiblePath = null;
+        if (verifyVisible)
+        {
+            if (verifyVisibleIndex + 1 < args.Length && !args[verifyVisibleIndex + 1].StartsWith("--", StringComparison.Ordinal))
+                verifyVisiblePath = args[verifyVisibleIndex + 1];
+            // Compositor video is the default path; clear any ambient legacy opt-out.
+            Environment.SetEnvironmentVariable("CCP_LEGACY_VIDEO", null);
         }
         BenchmarkContext.IsEnabled = benchmark || maxBenchmark;
         BenchmarkContext.IsMaxBenchmark = maxBenchmark;
@@ -120,6 +131,10 @@ class Program
         else if (verifyLayers)
         {
             LayerVerification.Attach(builder);
+        }
+        else if (verifyVisible)
+        {
+            VisibleOverlayVerification.Attach(builder, verifyVisiblePath);
         }
 #endif
 

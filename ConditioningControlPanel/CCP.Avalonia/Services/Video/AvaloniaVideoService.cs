@@ -195,15 +195,14 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         _flash = flash;
         _bubbles = bubbles;
         _companion = companion;
-        // WS0 lot 4 (skia-rebuild-goal.md): the LEGACY video path (multi-monitor service /
-        // per-window fallback) is the contract holder until UCE plan Phase E proves the
-        // compositor video layer by running. VideoLayer/MandatoryVideoLayer exist but their
-        // frame path is unproven (unified-compositor-engine skill "headline blockers"), so
-        // routing video into them by default plays audio with no visible frames AND used to
-        // strand the scheduler (_isVideoActive never cleared). Compositor video is therefore
-        // an explicit WS1 dev opt-in via CCP_UCE_VIDEO=1; the default stays legacy.
+        // UCE plan Phase E: compositor video (VideoLayer/MandatoryVideoLayer) is the DEFAULT
+        // path whenever the engine is available. The frame pipeline is proven (Phase A
+        // harness), audio/attention/segment/watch-credit reached parity (Phase B), it is
+        // zero-per-frame-alloc (Phase D), and ESC-dismiss/panic route through the global key
+        // hook (E1). The legacy multi-monitor / per-window path remains ONLY as a temporary
+        // opt-OUT escape hatch via CCP_LEGACY_VIDEO=1, deleted with the legacy path in E3.
         var useCompositorVideo = compositor != null &&
-            string.Equals(Environment.GetEnvironmentVariable("CCP_UCE_VIDEO"), "1", StringComparison.Ordinal);
+            !string.Equals(Environment.GetEnvironmentVariable("CCP_LEGACY_VIDEO"), "1", StringComparison.Ordinal);
         _videoLayer = useCompositorVideo ? new VideoLayer(libVlc, _logger) : null;
         _mandatoryVideoLayer = useCompositorVideo ? new MandatoryVideoLayer(libVlc, _logger) : null;
         if (_videoLayer != null)
