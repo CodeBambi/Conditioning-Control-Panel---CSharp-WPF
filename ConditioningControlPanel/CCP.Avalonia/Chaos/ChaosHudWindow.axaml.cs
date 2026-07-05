@@ -374,7 +374,13 @@ Panel.RenderTransform = _panelSlide;
         try
         {
             _vm.RippleReady = ready;
-            // TODO: replace DropShadowEffect with BoxShadow or Avalonia v12 effect API.
+            // WPF ChaosHudWindow.xaml.cs:444 - READY carries a soft cyan glow on the ripple readout.
+            // v12 DropShadowEffect works on a TextBlock (ChaosHubWindow.axaml:140); ShadowDepth=0 -> OffsetX/Y=0.
+            // WPF additionally breathes Opacity 0.25<->0.95 via a Forever SineEase clock; the port renders the
+            // static ready glow at the WPF-constructed Opacity 0.3 (toggle per plan Q12).
+            RippleStripText.Effect = ready
+                ? new DropShadowEffect { Color = Color.FromRgb(0x7A, 0xE0, 0xFF), BlurRadius = 12, OffsetX = 0, OffsetY = 0, Opacity = 0.3 }
+                : null;
         }
         catch { }
     }
@@ -385,7 +391,13 @@ Panel.RenderTransform = _panelSlide;
         _cursorOnLive = on;
         try
         {
-            // TODO: replace DropShadowEffect with BoxShadow or Avalonia v12 effect API.
+            // WPF ChaosHudWindow.xaml.cs:467 - cursor resting on a live bubble: both focus bars glow cyan.
+            // v12 DropShadowEffect on a Control (StackPanel here); ShadowDepth=0 -> OffsetX/Y=0. New effect per
+            // element mirrors WPF's per-element construction; owns .Effect (focus-low pulse owns .Opacity).
+            foreach (var el in new Control[] { FocusStripBlock, FocusPanelBlock })
+                el.Effect = on
+                    ? new DropShadowEffect { Color = Color.FromRgb(0x7A, 0xE0, 0xFF), BlurRadius = 14, OffsetX = 0, OffsetY = 0, Opacity = 0.85 }
+                    : null;
         }
         catch { }
     }
@@ -544,7 +556,11 @@ Panel.RenderTransform = _panelSlide;
             TxtStreakLbl.Foreground = _streakTier >= 2
                 ? new SolidColorBrush(Color.FromArgb(0xCC, tierColor.R, tierColor.G, tierColor.B))
                 : AppBrush("TextMutedBrush", new SolidColorBrush(Color.FromArgb(0xAA, 0xB8, 0xB8, 0xD0)));
-            // TODO: replace DropShadowEffect with BoxShadow or Avalonia v12 effect API.
+            // WPF ChaosHudWindow.xaml.cs:645 - tier>=2 gives the streak number a same-color glow, blur 8+tier*4.
+            // v12 DropShadowEffect on a TextBlock (ChaosHubWindow.axaml:140); ShadowDepth=0 -> OffsetX/Y=0.
+            TxtStreakNum.Effect = _streakTier >= 2
+                ? new DropShadowEffect { Color = tierColor, BlurRadius = 8 + _streakTier * 4, OffsetX = 0, OffsetY = 0, Opacity = 0.9 }
+                : null;
 
             if (gained)
             {
