@@ -108,9 +108,16 @@ public partial class WebcamCalibrationWindow : Window
 
     private async void Window_Loaded(object? sender, RoutedEventArgs e)
     {
-        if (_webcam == null || !_webcam.IsRunning)
+        if (_webcam == null)
         {
             ShowError(Loc.Get("window_webcam_calibration_not_available_detail"));
+            return;
+        }
+        if (!_webcam.IsRunning)
+        {
+            // The tracker exists on this platform - it's just not running. Don't claim the
+            // feature is missing; tell the user to start webcam tracking first.
+            ShowError(Loc.Get("window_webcam_tracking_off_detail"), Loc.Get("window_webcam_tracking_off_title"));
             return;
         }
 
@@ -506,7 +513,7 @@ public partial class WebcamCalibrationWindow : Window
         }
     }
 
-    private void ShowError(string detail)
+    private void ShowError(string detail, string? title = null)
     {
         StopRingPulse();
         _collecting = false;
@@ -516,6 +523,7 @@ public partial class WebcamCalibrationWindow : Window
         ValidationPanel.IsVisible = false;
         VerifyPanel.IsVisible = false;
         if (ShortcutHintBanner != null) ShortcutHintBanner.IsVisible = false;
+        if (TxtErrorTitle != null) TxtErrorTitle.Text = title ?? Loc.Get("window_webcam_calibration_not_available_title");
         TxtErrorDetail.Text = detail;
         ErrorPanel.IsVisible = true;
     }

@@ -605,16 +605,14 @@ public partial class DeeperTabViewModel : TabItemViewModel
         if (!IsWebcamConsentGranted)
         {
             await (_dialogService?.ShowMessageAsync(
-                Loc.Get("title_not_implemented"),
-                Loc.Get("deeper_webcam_consent_missing")) ?? Task.CompletedTask);
+                Loc.Get("deeper_webcam_consent_missing"),
+                Loc.Get("msg_webcam_consent_required_detail")) ?? Task.CompletedTask);
             return;
         }
 
         await OpenCalibrationWindowAsync();
-        // The calibration window is honest that full calibration is not
-        // available yet in this version; reflect whether a calibration
-        // actually exists (carried over from the classic app) instead of
-        // claiming success.
+        // The calibration window now runs the real 16-point flow; reflect whether a
+        // calibration actually exists afterward instead of assuming success.
         WebcamCalibrationStatusText = _webcamService?.HasCalibration == true
             ? Loc.GetF("blink_trainer_calibration_calibrated_format", Loc.Get("blink_trainer_section_webcam"))
             : Loc.Get("blink_trainer_calibration_none");
@@ -627,8 +625,8 @@ public partial class DeeperTabViewModel : TabItemViewModel
         if (!IsWebcamConsentGranted)
         {
             await (_dialogService?.ShowMessageAsync(
-                Loc.Get("title_not_implemented"),
-                Loc.Get("deeper_webcam_consent_missing")) ?? Task.CompletedTask);
+                Loc.Get("deeper_webcam_consent_missing"),
+                Loc.Get("msg_webcam_consent_required_detail")) ?? Task.CompletedTask);
             return;
         }
 
@@ -677,16 +675,17 @@ public partial class DeeperTabViewModel : TabItemViewModel
         if (!IsWebcamConsentGranted)
         {
             await (_dialogService?.ShowMessageAsync(
-                Loc.Get("title_not_implemented"),
-                Loc.Get("deeper_webcam_consent_missing")) ?? Task.CompletedTask);
+                Loc.Get("deeper_webcam_consent_missing"),
+                Loc.Get("msg_webcam_consent_required_detail")) ?? Task.CompletedTask);
             return;
         }
 
-        // L3-05: there is no ported gaze-tracker start path in the Deeper tab — the real tracker
-        // lives in the Blink Trainer tab. Rather than faking IsTrackerRunning (which would
-        // misrepresent that the camera is active), surface an honest "not implemented" notice
-        // and leave the toggle state untouched.
-        await ShowNotImplementedAsync(Loc.Get("deeper_webcam_start_tracker"));
+        // The real gaze tracker (with full start/stop + state UI) lives in the Blink Trainer
+        // tab. The Deeper toggle doesn't own that tracker state, so route the user there rather
+        // than a dead-end "not implemented" - the feature IS implemented, just on another tab.
+        await (_dialogService?.ShowMessageAsync(
+            Loc.Get("deeper_webcam_start_tracker"),
+            Loc.Get("msg_webcam_start_tracker_use_blink_tab")) ?? Task.CompletedTask);
     }
 
     #endregion
