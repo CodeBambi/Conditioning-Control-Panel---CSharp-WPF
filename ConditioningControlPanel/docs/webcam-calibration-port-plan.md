@@ -146,6 +146,71 @@ crops and a shippable ONNX model exists. Keep the working polynomial path as a f
 for A/B until the new path is human-verified better. Implement behind the same `IWebcamService`
 calibration seam; one improvement per commit; gate each; hand to owner for camera A/B.
 
-### Open research dispatched 2026-07-05 (results feed the design)
-codebase-analyzer (current pipeline signals) + web research (SOTA gaze models / calibration methods /
-head-pose normalization + filtering). Findings land here before implementation.
+### Research synthesis 2026-07-05 (4 agents: pipeline map + SOTA models + calibration + head-pose/filtering)
+(NB web agents answered from training knowledge w/ canonical source URLs — not a live fetch; verify
+URLs/numbers with parent web tools before formal citation. Sources: Cheng TPAMI'24 survey arxiv 2104.12668;
+Pfeuffer UIST'13 Pursuit Calibration; Vidal UbiComp'13 Pursuits; Drewes MUM'18 pursuit speeds;
+Cerrolaza TOCHI'12 polynomials; Zhang ETRA'18 data-normalization; Casiez CHI'12 1€ filter; Salvucci
+ETRA'00 I-VT/I-DT; L2CS-Net arxiv 2203.03339; GazeTR 2105.14424; ETH-XGaze 2007.15837; FAZE 1905.01941.)
+
+**Current pipeline signals (codebase-analyzer 50e938f5):** BlazeFace box + FaceMesh 468 landmarks +
+MediaPipe Iris (5 iris + 71 lid pts). `OnRawIris` (AvaTrk:2025) = two-eye-avg, **eye-width-normalized**
+iris-center−eye-corner-midpoint vector, 3-tap median pre-filtered, **head-pose-NAÏVE**. Head pose = solvePnP
+on 6 landmarks (yaw/pitch rad, trusted only as deltas), **gaze comp RETIRED** (PnP jitter > the motion it
+corrected; pitch term fought vertical gaze). **Per-eye pixel crops (64×64 iris, 192×192 face) AND the full
+640×480 BGR frame + landmarks + eye ROIs all coexist at `ProcessFrame` (:1673) but are discarded** → an
+appearance-based deep model is FEASIBLE with only a crop-and-infer insert at :1714-1795. Two plug points:
+feature→screen regressor at `ProjectGazeToScreen` (:2395); deep gaze at ProcessFrame.
+
+**Core diagnosis:** the 2nd-order Cerrolaza polynomial **conflates gaze with head pose** — valid only at the
+calibration head pose; head motion breaks it. Current calibration copes by REJECTING head-moved samples
+(one-pose-only). This is the real ceiling, not a porting gap. Realistic webcam accuracy target: **~2-3° ≈
+~120-180px @1080p**; IR trackers do ~0.5-1°. Wild inaccuracy = an UNBOUNDED stage (extrapolation, un-gated
+outlier, un-guarded solve, DPI bug) — the code already clamps to IrisRange, guards NaN, gates outliers.
+
+**Rework design — TIER 1 (classical, ships on the existing geometric pipeline; no new model/license; user-A/B-verifiable):**
+1. **Smooth-pursuit calibration** (moving dot the eyes follow) REPLACES/augments 16 discrete dots: an
+   edge+corner-covering path (raster or edge Lissajous), ~10-12°/s, ~20-30s → **600-1800 dense samples**
+   incl. screen edges (where polynomials extrapolate worst). Pearson-correlation gate (target↔gaze, windowed)
+   auto-drops blinks/saccades/glances; **cross-correlate to estimate + time-shift the ~100-150ms gaze lag.**
+2. **Better regressor** at the fit + `ProjectGazeToScreen`: cheapest-that-wins = **ridge-regularized CUBIC**
+   polynomial (dense pursuit data controls the overfit Cerrolaza warns of; single dot-product/frame). Accuracy
+   king = **sparse GP** (~50-100 inducing pts → fixed per-frame cost) or regularized **thin-plate-spline/RBF**
+   (~30-60 centers). Keep homography + IrisRange clamp as guards; keep the 2nd-order poly as fallback/A-B.
+3. **Roll-normalize** the iris vector (rotate by eye-line-tilt θ from the 2 corner landmarks) on top of the
+   existing eye-width scale-norm → real small-head-motion freedom, using only 2D landmarks (NO solvePnP →
+   avoids the retired-comp trap). Fit + apply in the same normalized frame.
+4. **Fixation snap** (I-DT/I-VT) atop the existing One-Euro cascade: dispersion < thr over ~200-350ms → snap
+   to fixation centroid (kills rest jitter), release on a velocity spike. Generalizes the existing GazeLock.
+5. Robust fit already present (RobustPerDotMean/MAD/outlier-drop/inverse-spread); add Huber/RANSAC if needed.
+   Validation/refinement + fit-quality gate already landed (`bfeebd60`).
+
+**Rework design — TIER 2 (deep appearance gaze, highest ceiling, more work + license risk):** full-face CNN
+(L2CS-Net/GazeTR → ONNX, or distill MobileNetV3 on ETH-XGaze) → head-pose-INVARIANT gaze vector → small
+per-user ridge/GP calibration (kappa correction). Needs data-normalization warp + a crop-and-infer stage at
+ProcessFrame + a shippable model. **License:** most pretrained weights are research-only → distill/retrain
+our own head OR gate as experimental; the calibration regressor (user's own samples) is ours regardless.
+
+**Recommendation:** Tier 1 first (big grounded win, no license/model risk, keeps the working poly as A/B
+fallback, fully camera-verifiable by owner), Tier 2 as a follow-up if Tier 1 isn't enough.
+
+**Sequence (ADVISOR-REORDERED 2026-07-05 — lead with the cheapest/most-independent, NOT smooth pursuit
+which is the highest-variance + most-coupled bet):**
+- **T1-0 — A/B SWITCH SCAFFOLD FIRST (non-negotiable de-risk):** keep the 2nd-order/16-dot path 100%
+  intact as baseline; add the new path behind a mode flag/setting so the owner A/Bs old-vs-new on their
+  own camera in one session. Never delete the working path until the owner confirms the new one wins.
+- **T1c — roll/scale-normalization** (cheapest, most independent, improves BOTH paths, no solvePnP): rotate
+  the iris vector by eye-line tilt from the 2 corner landmarks atop the existing eye-width scale-norm.
+- **T1b — cubic-ridge regressor** on the existing 16-dot data (low-risk, improves the current path now).
+- **T1a — smooth-pursuit capture + lag-align + correlation gate** ONLY after a normalized feature + capable
+  regressor exist to realize its value, and after camera-verified confidence on the cheaper slices.
+- **T1d — fixation snap** (independent runtime change, slot anytime).
+Gate each; one slice → green → owner camera A/B → next. Never stack two unverified slices between camera tests.
+
+**Before building, verify with PARENT web tools (sub-agents had no live web):** (a) smooth-pursuit works on a
+consumer webcam (Pfeuffer/Vidal/WebGazer) before betting the T1a slice; (b) the license of any Tier-2 model
+before planning around it. Do not cite the memory-sourced degree/latency numbers as verified.
+
+**Owner decision pending:** Tier 1 incremental first (behind the A/B switch) vs go straight for the Tier-2
+deep appearance model. Tier 1 has a real ceiling (~2-3°, still head-pose-sensitive); Tier 2 is the only path
+that truly decouples head pose but is weeks + model-sourcing/license work.
