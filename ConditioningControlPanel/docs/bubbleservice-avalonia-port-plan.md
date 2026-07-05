@@ -66,6 +66,7 @@ Already available:
 - `IInputHook` / `AvaloniaInputHook` → keyboard hook on Windows; mouse is stubbed.
 - `IAppLogger`, `ISettingsService`, etc.
 - Avalonia Chaos overlays already ported: `ChaosBubbleHostOverlay`, `ChaosSkiaFxOverlay`, `ChaosFieldFxOverlay` (via `ChaosSkiaFxOverlay` fallback), `ChaosDvdHostOverlay`, `ChaosPopText`, `AvaloniaChaosWindowZ`, `AvaloniaChaosArt`.
+  - **STALE 2026-07-05:** most of these are now COMPOSITOR LAYERS; the window classes `ChaosSkiaFxOverlay`, `ChaosDvdHostOverlay`, `ChaosPopText`, `ChaosFieldFxOverlay` (etc.) were DELETED. Wire chaos FX through the `AvaloniaChaosService` layer seams, NOT these deleted windows.
 - `AvaloniaChaosCompat.cs` already exposes `IAvaloniaBubbleService` and `AvaloniaChaosEnv.Bubbles` as stubs.
 
 **Gaps**
@@ -176,7 +177,7 @@ AvaloniaChaosEnv.Bubbles = (IAvaloniaBubbleService)CoreApp.Bubbles;
 ### Stage 2 — Chaos effect bubbles
 - Port `BeginChaosMode`/`EndChaosMode` and `SpawnChaosBubble`.
 - Implement effect visuals: tint overlay, fuse ring, freeze aura, labels, darter telegraph, brittle cracks, tease face, prism ghost, chaperone shield, echo outline, hint pill.
-- Wire chaos callbacks to existing Avalonia overlays (`ChaosSkiaFxOverlay`, `ChaosBubbleHostOverlay`, `ChaosPopText`).
+- Wire chaos callbacks to the `AvaloniaChaosService` compositor-layer seams (the `ChaosSkiaFxOverlay`/`ChaosPopText` windows this referenced were DELETED 2026-07-05; `ChaosBubbleHostOverlay` remains, gated by the experimental `ChaosBubbleSharedHost` setting).
 - Implement field hazards: ripples, residue, player ripple, chain reaction.
 - Test via a temporary debug harness or the future `ChaosModeService` port.
 

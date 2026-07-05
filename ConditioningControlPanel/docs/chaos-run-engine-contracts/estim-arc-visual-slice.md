@@ -1,10 +1,19 @@
 # E-Stim arc visual slice (Q10b) - ready-to-execute spec
 
-Status: BLOCKED on authorization. This slice edits the FROZEN `BubbleEngine`.
-Do NOT execute until the user explicitly authorizes the frozen-engine edit (the
-same class of sanctioned edit as the VideoLayer teardown fix and the fps-timing
-change). Once authorized, this is a mechanical task: every decision below is made
-and cited. No further judgment required.
+Status: ✅ **DONE 2026-07-05 (owner-authorized). DO NOT RE-EXECUTE THIS SPEC.**
+The arc now renders through the compositor layer `ChaosEStimArcLayer` (Z=125), NOT the
+`ChaosEStimOverlay.Strike` / `ChaosSkiaFxOverlay.Strike` window renderers referenced in the
+snippets below — **those window classes have been DELETED**. Wiring landed as:
+`BubbleEngine.EStimBurstAt` emits `(fromPx -> victim CenterPx)` bolts via an authorized
+`onEStimArc` callback -> head `OnEStimArc` -> `ChaosEStimArcLayer.Strike` + a throttled
+`estim_zap` cue. The code snippets below are kept ONLY as the historical WPF-parity record; the
+Avalonia class/method names in them (`ChaosEStimOverlay`, `ChaosSkiaFxOverlay`) no longer exist.
+
+--- ORIGINAL (now-executed) SPEC BELOW ---
+
+This slice edited the FROZEN `BubbleEngine` (a sanctioned edit, same class as the VideoLayer
+teardown fix and the fps-timing change). It was a mechanical task: every decision below made
+and cited.
 
 Scope of THIS slice: emit E-Stim arc bolts + the `estim_zap` cue from the ONE
 cleanly-ported discharge path (`EStimBurstAt`, the Electrified-Rabbits free
