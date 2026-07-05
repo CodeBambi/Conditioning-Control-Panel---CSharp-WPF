@@ -171,8 +171,17 @@ public static class BenchmarkContext
         // Save original settings to restore later
         var originalSettings = settingsService.Current?.Clone();
         bool originalStrictLock = settingsService.Current?.StrictLockEnabled ?? false;
+        // Attention checks (the click-the-words video game) require a human; in a headless
+        // benchmark the targets go un-clicked and the mandatory video cuts out early on the
+        // attention-fail path, which defeats the point - the FULL video duration is needed to
+        // measure render performance. Disable them for the run and restore after (mirrors the
+        // StrictLock handling above/below).
+        bool originalAttentionChecks = settingsService.Current?.AttentionChecksEnabled ?? false;
         if (settingsService.Current != null)
+        {
             settingsService.Current.StrictLockEnabled = false;
+            settingsService.Current.AttentionChecksEnabled = false;
+        }
 
         try
         {
@@ -288,6 +297,7 @@ public static class BenchmarkContext
             if (settingsService.Current != null && originalSettings != null)
             {
                 settingsService.Current.StrictLockEnabled = originalStrictLock;
+                settingsService.Current.AttentionChecksEnabled = originalAttentionChecks;
             }
         }
 
