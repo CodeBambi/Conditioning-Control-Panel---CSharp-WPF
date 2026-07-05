@@ -77,23 +77,34 @@ public partial class FeaturePopupWindow : Window
     {
         try
         {
-            if (Screens.Primary is { } screen)
+            // WorkingArea is PHYSICAL pixels; Window.Height is DIPs -> divide by scaling.
+            // (Repo convention: ChaosHudWindow.axaml.cs:93, ScreenWindowHelper.cs:21.) Treating
+            // physical px as DIPs made the cap ~1.3-1.5x too tall on scaled displays, so the
+            // window exceeded the screen and the bottom was cut off.
+            var screen = Screens.Primary;
+            var scale = screen is null || screen.Scaling <= 0 ? 1.0 : screen.Scaling;
+            var screenDipH = screen is null ? 0 : screen.WorkingArea.Height / scale;
+            if (screenDipH <= 0) screenDipH = 800; // safe fallback
+            var maxWindowH = screenDipH * 0.9;
+
+            // The window is NOT auto-sized (SizeToContent removed): it measured the content
+            // ScrollViewer at infinite height and broke scrolling (Avalonia issue #6441).
+            // Instead measure the hosted content and fit the window to it, capped at maxWindowH.
+            // The ScrollViewer then scrolls when a feature popup is taller than the screen;
+            // short/medium popups stay snug.
+            if (ContentHost.Content is Control content)
             {
-                // Cap the CONTENT scroller, not just the window. The window uses
-                // SizeToContent="Height", so it measures the ScrollViewer at infinite height —
-                // a window-level MaxHeight therefore only CLIPS tall content instead of scrolling
-                // it (the viewport never overflows). Bounding the ScrollViewer itself makes
-                // Avalonia's MeasureCore clamp its available height, so it measures its content
-                // bounded and actually scrolls when a feature popup is taller than the screen.
-                // Short/medium popups stay snug via SizeToContent; only tall ones cap + scroll.
-                var screenH = screen.WorkingArea.Height;
-                if (screenH > 0)
-                {
-                    ContentScroll.MaxHeight = screenH * 0.85;
-                    MaxHeight = screenH * 0.92; // backstop: window never exceeds the screen
-                    InvalidateMeasure();
-                }
+                // Content width = window width (520) - outer border (2) - ScrollViewer padding (32).
+                const double contentWidth = 486;
+                content.Measure(new Size(contentWidth, double.PositiveInfinity));
+                var desiredWindowH = content.DesiredSize.Height + 88; // titlebar + padding + border
+                Height = Math.Clamp(desiredWindowH, MinHeight, maxWindowH);
             }
+            else
+            {
+                Height = maxWindowH;
+            }
+            MaxHeight = maxWindowH;
         }
         catch { }
     }
