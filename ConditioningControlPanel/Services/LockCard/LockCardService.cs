@@ -176,6 +176,11 @@ namespace ConditioningControlPanel.Services
                 catch (Exception ex)
                 {
                     App.Logger?.Error("Failed to show lock card: {Error}", ex.Message);
+                    // If ShowOnAllMonitors threw mid-show a half-registered window can linger in
+                    // LockCardWindow's visible set, leaving IsAnyOpen() permanently true and silently
+                    // skipping every future lock card until the next stop. Force-close clears that set
+                    // so the guard can't stay armed with zero visible cards.
+                    try { LockCardWindow.ForceCloseAll(); } catch { }
                     App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
                 }
             });
