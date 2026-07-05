@@ -15,8 +15,10 @@
                  FontSize="15"
                  FontWeight="Bold"
                  Foreground="{DynamicResource TextLightBrush}" />
-      <Grid ColumnDefinitions="*,*,Auto,Auto,Auto,Auto"
-            ColumnSpacing="10">
+      <!-- Device + monitor pickers on their own row so the action buttons below
+           always have the full width. The old single 6-column row overflowed the
+           fixed-width (520px) feature popup and clipped the Start-tracking button. -->
+      <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
         <StackPanel Grid.Column="0" Spacing="4">
           <TextBlock Text="{loc:Str lab_camera_device}"
                      FontSize="12"
@@ -37,15 +39,20 @@
                     DisplayMemberBinding="{Binding Label}"
                     HorizontalAlignment="Stretch" />
         </StackPanel>
-        <Button Grid.Column="2"
-                Content="{loc:Str lab_refresh}"
+      </Grid>
+
+      <!-- Actions wrap instead of clipping when the host is narrow (feature popup).
+           WrapPanel has no Spacing in Avalonia, so spacing is per-child margins. -->
+      <WrapPanel>
+        <Button Content="{loc:Str lab_refresh}"
                 Command="{Binding RefreshDevicesCommand}"
-                VerticalAlignment="Bottom" />
-        <Border Grid.Column="3"
-                Background="{DynamicResource ElevatedSurfaceBrush}"
+                Margin="0,0,8,0"
+                VerticalAlignment="Center" />
+        <Border Background="{DynamicResource ElevatedSurfaceBrush}"
                 CornerRadius="12"
                 Padding="8,4"
-                VerticalAlignment="Bottom">
+                Margin="0,0,8,0"
+                VerticalAlignment="Center">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Ellipse Width="8"
                      Height="8"
@@ -56,16 +63,15 @@
                        VerticalAlignment="Center" />
           </StackPanel>
         </Border>
-        <Button Grid.Column="4"
-                Content="{loc:Str lab_calibrate}"
+        <Button Content="{loc:Str lab_calibrate}"
                 Command="{Binding CalibrateCommand}"
-                VerticalAlignment="Bottom" />
-        <Button Grid.Column="5"
-                Content="{Binding TrackerButtonText}"
+                Margin="0,0,8,0"
+                VerticalAlignment="Center" />
+        <Button Content="{Binding TrackerButtonText}"
                 Command="{Binding StartTrackingCommand}"
                 Theme="{StaticResource PinkButton}"
-                VerticalAlignment="Bottom" />
-      </Grid>
+                VerticalAlignment="Center" />
+      </WrapPanel>
 
       <Expander HorizontalAlignment="Stretch">
         <Expander.Header>
