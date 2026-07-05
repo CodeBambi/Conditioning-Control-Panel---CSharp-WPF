@@ -7,7 +7,7 @@ using global::Avalonia.Threading;
 namespace ConditioningControlPanel.Avalonia.Chaos;
 
 /// <summary>DispatcherTimer-based animation helpers for overlay code-behind.
-/// Mirrors the WPF animation contracts (opacity fades, scale pulses, double tweens)
+/// Mirrors the WPF animation contracts (opacity fades + one-shot double tweens)
 /// without requiring Avalonia's animation system on keep-alive overlay windows.
 /// TODO: replace with Avalonia Animation classes once the overlay lifetime model is stable.</summary>
 internal sealed class OpacityFade : IDisposable
