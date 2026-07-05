@@ -20,51 +20,56 @@ namespace ConditioningControlPanel.Services
         /// <summary>
         /// Current application version - UPDATE THIS WHEN BUMPING VERSION
         /// </summary>
-        public const string AppVersion = "6.2.10";
+        public const string AppVersion = "6.2.11";
 
         /// <summary>
         /// Patch notes for the current version - UPDATE THIS WHEN BUMPING VERSION
         /// These are shown in the update dialog and can be used when GitHub release notes are unavailable.
         /// </summary>
-        public const string CurrentPatchNotes = @"v6.2.10 - The Fall
-
-⚡ PERFORMANCE & STABILITY
-- Fixed the freeze that could lock the app up mid-session and force you to
-  kill the process. The attention-check and floating avatar bubbles no
-  longer stall the render thread, and the avatar's emote animation is
-  lighter now, so heavy sessions (webcam, whispers and effects all at once)
-  stay responsive.
+        public const string CurrentPatchNotes = @"v6.2.11 - The Fall
 
 🔧 BUG FIXES
-- The dashboard ""Cascade"" (Rain) trigger bubble now rains its gifs where
-  you can actually see them, including on multi-monitor setups where it
-  used to fall onto a screen you weren't looking at.
+- Lock cards work again. After the last update only the first one played and
+  then they went quiet; every scheduled lock card triggers now.
+- Fixed the spiral and pink filter getting stuck on top of everything after
+  a video during a locked-in session. They no longer bury the next video or
+  trap you into a force quit, and the video you are meant to watch stays on
+  top.
+- The bouncing subliminal text keeps running when you send the app to the
+  system tray, instead of vanishing.
+- The weekly quest no longer gets stuck on ""Loading"" with no image. If your
+  weekly is already done it now shows a clear ""complete, new one Monday"" card.
 
---- Still in The Fall (6.2.9) ---
+🗣️ COMPANION PACING
+- She no longer runs her mouth constantly. Her reactive and idle voice lines,
+  including the webcam ""welcome back into frame"" line, are now capped to about
+  once a minute. Panic lines, milestone celebrations, and the mandatory-video
+  ""pay attention"" correction still speak right away. A proper cooldown slider
+  is coming next.
+
+--- Still in The Fall (6.2.9 / 6.2.10) ---
 
 ✨ THE FALL
-- Our latest side project is live and free for everyone: an endless rabbit
-  hole visualizer powered by YOUR media. Drop in a folder or zip of your
-  pictures and videos and watch them spiral into an endless descent. Pop
-  the bubbles, sink deeper. It runs entirely in your browser, so your media
-  never leaves your device. Try it: https://cclabs.app/fall.html
+- Our side project is live and free for everyone: an endless rabbit hole
+  visualizer powered by YOUR media. Drop in a folder or zip of your pictures
+  and videos and watch them spiral into an endless descent. It runs entirely
+  in your browser, so your media never leaves your device.
+  Try it: https://cclabs.app/fall.html
+
+⚡ EARLIER STABILITY
+- Fixed the mid-session freeze that could force you to kill the process, and
+  the flash-window hangs, so heavy sessions (webcam, whispers and effects all
+  at once) stay responsive.
+- The dashboard ""Cascade"" (Rain) bubble rains its gifs where you can see them
+  on multi-monitor setups.
 
 🔧 EARLIER FIXES
-- Lock card phrases now change with your mode instead of always showing
-  Circe's; scrambled backups heal automatically.
-- Updating no longer wipes your lock card and subliminal phrases, plus
-  export / import in the Phrase Manager.
-- Bambi Takeover respects the interval slider again, retries within seconds
-  when briefly busy, and the ""time aware"" toggle works.
-- The Takeover quest counts your real active time again.
-- Fixed a Takeover slot leak that could leave her silent for minutes.
-- A mandatory video no longer jumps in front of the bubbles when clicked.
-- Fixed the flash-window hangs that could freeze the app mid-session.
-- Revived the season shimmer that had stopped rendering.
-
-🎨 UI/UX
-- Settings tidied up: advanced audio collapses into its own section, and
-  logout is easier to find.
+- Lock card and subliminal phrases survive updates and change with your mode,
+  plus export / import in the Phrase Manager.
+- Bambi Takeover respects the interval slider, retries when briefly busy, the
+  ""time aware"" toggle works, and the quest counts your real active time.
+- A mandatory video no longer jumps in front of the bubbles when clicked, and
+  the season shimmer renders again.
 
 Season: Jelly July";
 
