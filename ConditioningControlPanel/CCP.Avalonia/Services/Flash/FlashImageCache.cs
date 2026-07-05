@@ -6,15 +6,25 @@ namespace ConditioningControlPanel.Avalonia.Services.Flash;
 
 /// <summary>
 /// LRU decode cache for flash images, mirroring WPF FlashService._imageDecodeCache
-/// (keyed path|decodeMax, 50 entries / 200MB byte cap). WPF added this cache after a
-/// production chaos OOM (~1.3GB native heap from per-spawn decodes); the port needs it
-/// for the same reason — every flash spawn without it is a full decode.
+/// (50 entries / 200MB byte cap). WPF added this cache after a production chaos OOM
+/// (~1.3GB native heap from per-spawn decodes); the port needs it for the same reason —
+/// every flash spawn without it is a full decode.
+///
+/// <b>Path-only keying (#486).</b> The cache holds <b>one entry per file path</b>, with the
+/// <see cref="CacheEntry.DecodeMax"/> it was decoded at stored alongside. Keying by path+dim
+/// (the original scheme) let the performance tier's auto up/down-shifts cache the same file at
+/// 2-3 sizes at once, halving effective capacity and forcing extra decodes exactly when the
+/// system was already under load. A request at an equal-or-smaller cap, or any request when the
+/// source was never capped (decoded dims strictly below the stored cap = native res kept), is
+/// served as-is; only a genuinely capped decode asked for MORE pixels re-decodes, and the store
+/// then replaces the entry — one entry per file, always. Mirrors WPF
+/// <c>FlashService.LoadImageAsync</c> (the hit test at :618-623 and the replace-at :692-731).
 ///
 /// Ref-count contract: the cache holds one reference on each entry; every hit returned
 /// by <see cref="GetOrDecode"/> carries an additional reference the consumer must
 /// Release (FlashLayer does this when the item is removed, under its render lock).
-/// Eviction releases only the cache's reference, so frames still shown by a live flash
-/// are never disposed under the render thread.
+/// Eviction <b>and release-on-replace</b> release only the cache's reference, so frames
+/// still shown by a live flash are never disposed under the render thread.
 /// </summary>
 internal sealed class FlashImageCache
 {
@@ -38,15 +48,20 @@ internal sealed class FlashImageCache
     /// </summary>
     public SkiaFrameSet? GetOrDecode(string path, int decodeMaxDim)
     {
-        var key = path + "|" + decodeMaxDim;
-
+        // Hit test (WPF LoadImageAsync :614-625): one entry per path. A cached decode serves
+        // any request at the same-or-smaller cap, AND any request when the source was never
+        // capped (native res kept). Only a genuinely capped decode asked for more re-decodes.
         lock (_lock)
         {
-            if (_entries.TryGetValue(key, out var hit))
+            if (_entries.TryGetValue(path, out var hit))
             {
-                hit.LastAccess = DateTime.UtcNow;
-                hit.Set.AddRef();
-                return hit.Set;
+                bool uncapped = Math.Max(hit.Set.Width, hit.Set.Height) < hit.DecodeMax;
+                if (hit.DecodeMax >= decodeMaxDim || uncapped)
+                {
+                    hit.LastAccess = DateTime.UtcNow;
+                    hit.Set.AddRef();   // caller's reference
+                    return hit.Set;
+                }
             }
         }
 
@@ -57,19 +72,21 @@ internal sealed class FlashImageCache
 
         lock (_lock)
         {
-            if (_entries.TryGetValue(key, out var raced))
+            // Release-on-replace (WPF LoadImageAsync :692-701): a concurrent decode of the same
+            // path, or a genuine capped-upscale, supersedes the prior entry. Release the cache's
+            // reference to the old set so its frames are disposed only when no live flash still
+            // leases them (ref-count contract). Bytes are re-accounted from the new set below.
+            if (_entries.TryGetValue(path, out var prior))
             {
-                // A concurrent decode of the same key won the race; use its entry and drop ours.
-                raced.LastAccess = DateTime.UtcNow;
-                raced.Set.AddRef();
-                set.Release(); // ours never left this method — no renderer can reference it
-                return raced.Set;
+                _bytes -= prior.Set.PixelBytes;
+                _entries.Remove(path);
+                prior.Set.Release();   // cache's reference only
             }
 
             EvictWhileOverBudget(set.PixelBytes);
 
             set.AddRef(); // cache's reference (the creator reference is the caller's)
-            _entries[key] = new CacheEntry(set) { LastAccess = DateTime.UtcNow };
+            _entries[path] = new CacheEntry(set, decodeMaxDim) { LastAccess = DateTime.UtcNow };
             _bytes += set.PixelBytes;
         }
 
@@ -117,7 +134,13 @@ internal sealed class FlashImageCache
     private sealed class CacheEntry
     {
         public SkiaFrameSet Set { get; }
+        /// <summary>The decode cap this entry was decoded at (WPF stores it alongside the data).</summary>
+        public int DecodeMax { get; }
         public DateTime LastAccess { get; set; }
-        public CacheEntry(SkiaFrameSet set) => Set = set;
+        public CacheEntry(SkiaFrameSet set, int decodeMax)
+        {
+            Set = set;
+            DecodeMax = decodeMax;
+        }
     }
 }
