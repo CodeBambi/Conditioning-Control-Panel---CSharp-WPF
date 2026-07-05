@@ -12,27 +12,34 @@ namespace ConditioningControlPanel.Core.Services.AIService;
 /// selection is live (read on every call, no restart) — matching WPF (<c>AiServiceStrategy.cs:21,32-65</c>).
 /// </summary>
 /// <remarks>
-/// <b>v1:</b> Cloud (<see cref="CoreAiService"/>) and Local (<see cref="LocalAiService"/>) are
-/// ported. The OpenAI-compatible provider is not yet ported — it falls back to Cloud here (a
-/// documented v1 limitation; see the task-board row). <see cref="GetRawChatCompletionAsync"/>
-/// delegates to the active provider; both implement it as stateless local Ollama (the quiz contract).
+/// <b>v1:</b> Cloud (<see cref="CoreAiService"/>), Local (<see cref="LocalAiService"/>), and OpenAI-compatible
+/// (<see cref="OpenAiService"/>) providers are all ported. <see cref="GetRawChatCompletionAsync"/> delegates to
+/// the active provider; cloud/local implement it as stateless local Ollama, OpenAI as its own transport (the
+/// quiz contract). AI-command execution (<c>AllowAiToControlEffects</c>) + the enrichment block + a key-entry
+/// UI for the OpenAI provider are filed follow-ups (see the task-board row).
 /// </remarks>
 public sealed class AiServiceStrategy : IAiService
 {
     private readonly CoreAiService _cloud;
     private readonly LocalAiService _local;
+    private readonly OpenAiService _openai;
     private readonly ISettingsService _settings;
 
-    public AiServiceStrategy(CoreAiService cloud, LocalAiService local, ISettingsService settings)
+    public AiServiceStrategy(CoreAiService cloud, LocalAiService local, OpenAiService openai, ISettingsService settings)
     {
         _cloud = cloud;
         _local = local;
+        _openai = openai;
         _settings = settings;
     }
 
     /// <summary>The active provider for the current <see cref="CompanionPromptSettings.AiProvider"/>.</summary>
-    private IAiService Active =>
-        _settings.Current?.CompanionPrompt?.AiProvider == AiProviderType.Local ? _local : _cloud;
+    private IAiService Active => _settings.Current?.CompanionPrompt?.AiProvider switch
+    {
+        AiProviderType.Local => _local,
+        AiProviderType.OpenAiCompatible => _openai,
+        _ => _cloud
+    };
 
     /// <inheritdoc/>
     public bool IsAvailable => Active.IsAvailable;

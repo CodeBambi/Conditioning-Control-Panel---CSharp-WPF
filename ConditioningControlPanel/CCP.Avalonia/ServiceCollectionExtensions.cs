@@ -165,14 +165,26 @@ public static class ServiceCollectionExtensions
         services.AddLogging(builder => builder.AddSerilog());
 
         services.AddSingleton<VideoMetadataCache>();
-        // Companion AI: provider strategy selects Cloud (CoreAiService) vs Local
-        //        (LocalAiService) from CompanionPrompt.AiProvider. Cloud = codebambi-proxy V2 +
-        //        moderation sandwich + all 5 reactions; Local = Ollama + persistent multi-turn
-        //        history + moderation + reactions. OpenAI provider + AI command execution
-        //        (AllowAiToControlEffects, needs AiCommandService port) are documented follow-ups.
+        // Companion AI: provider strategy selects Cloud (CoreAiService) / Local (LocalAiService) /
+        //        OpenAI-compatible (OpenAiService) from CompanionPrompt.AiProvider. Cloud = codebambi-proxy
+        //        V2; Local = Ollama + persistent history; OpenAI = OpenAI-compatible transport + ISecretStore
+        //        key + the moderation sandwich the WPF provider omits. All 5 reactions on every provider.
+        //        AI command execution (AllowAiToControlEffects, needs AiCommandService port) + the OpenAI
+        //        key-entry UI are documented follow-ups.
         services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
+        services.AddSingleton<IAiResponseParser>(sp =>
+        {
+            // AiResponseParser needs a fallback phrase for when CleanText is empty after sanitize.
+            var mods = sp.GetService<IModService>();
+            return new AiResponseParser(() =>
+            {
+                var phrases = mods?.GetPhrases("Idle");
+                return phrases is null || phrases.Length == 0 ? "Good girl~" : phrases[0];
+            });
+        });
         services.AddSingleton<CoreAiService>();
         services.AddSingleton<LocalAiService>();
+        services.AddSingleton<OpenAiService>();
         services.AddSingleton<IAiService, AiServiceStrategy>();
         services.AddTransient<IQuizService, QuizService>();
 
