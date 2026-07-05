@@ -82,6 +82,19 @@ Optionally add a `--verify-webcam` CLI entry that opens the window straight into
 - **S3 — polish to full contract**: gesture warm-up (blink/mouth/tongue), bubble-test gaze-trim,
   axis-correction/head-pose comp. Each a sub-slice.
 
+## Avalonia v12 UI notes (researched 2026-07-05 — belongs in crossplatform-rebuild-plan.md §21)
+- **`Animation.RunAsync` throws by design when `IterationCount` is Infinite** (AvaloniaUI/Avalonia
+  Discussion #16757; AvaloniaBook Ch29). For a looping ring pulse use a **`DispatcherTimer`**
+  (imperative, matches §21 :518-520 "drive per-frame invalidation from a ~16ms DispatcherTimer")
+  or a Style-applied infinite animation — NEVER await an infinite `RunAsync`.
+- Window's current screen: `this.Screens.ScreenFromWindow(this)` (v12 `Avalonia.Controls.Screens`;
+  docs.avaloniaui.net/docs/app-development/window-management). Match to the Core `ScreenInfo` via
+  `IScreenProvider` for the seam call. Use each monitor's own `Scaling` for DIP↔px math (§21 :677).
+- Dot placement: `Canvas.SetLeft/SetTop`. Panels: `IsVisible` (not WPF `Visibility`). Async flow:
+  `Dispatcher.UIThread` + `Task.Delay`. All already used across the ported windows.
+- Solver stays **OpenCvSharp** (already referenced by the Windows tracker) — it IS the WPF behavior
+  contract (Cerrolaza polynomial + FindHomography); not a dependency to swap.
+
 ## Guardrails
 - Never edit the WPF head or tracker internals (only call the tracker's public calib seam).
 - Privacy: frames/per-frame data never persisted; only calibration JSON (numbers). The verify

@@ -994,6 +994,54 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             _logger?.LogInformation("AvaloniaWebcamTrackingService: calibration cleared");
         }
 
+        // Candidate calibration produced by BuildCalibrationPreview and applied in-memory (no disk
+        // write) for the verify phase; persisted by CommitCalibration, discarded by CancelCalibrationPreview.
+        private WebcamCalibrationData? _pendingCalibration;
+
+        /// <summary>
+        /// Core seam (IWebcamService): solve a calibration from the shared window's per-dot iris samples,
+        /// apply it IN-MEMORY so OnGazeMove reflects it for the verify pass, and return the fit quality.
+        /// Does not persist until <see cref="CommitCalibration"/>. The window owns the sampling UI.
+        /// </summary>
+        public CalibrationPreviewResult BuildCalibrationPreview(IReadOnlyList<CalibrationDotSamples> dots, ScreenInfo screen, string mode)
+        {
+            try
+            {
+                var data = WebcamCalibrationSolver.BuildCalibrationData(
+                    dots, screen, mode, out double rmsX, out double rmsY, out string? error, _logger);
+                if (data == null)
+                    return new CalibrationPreviewResult(false, 0, 0, error ?? "Calibration failed.");
+                _pendingCalibration = data;
+                SetCalibrationLive(data);
+                _logger?.LogInformation("AvaloniaWebcamTrackingService: calibration preview built (rms_x={Rx:F1} rms_y={Ry:F1} DIPs)", rmsX, rmsY);
+                return new CalibrationPreviewResult(true, rmsX, rmsY);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "AvaloniaWebcamTrackingService: BuildCalibrationPreview threw");
+                return new CalibrationPreviewResult(false, 0, 0, "Calibration failed unexpectedly.");
+            }
+        }
+
+        /// <summary>Core seam: persist the calibration most recently previewed. No-op with no pending preview.</summary>
+        public void CommitCalibration()
+        {
+            var pending = _pendingCalibration;
+            if (pending == null) return;
+            ApplyCalibration(pending);
+            _pendingCalibration = null;
+            _logger?.LogInformation("AvaloniaWebcamTrackingService: calibration committed (mode={Mode})", pending.Mode);
+        }
+
+        /// <summary>Core seam: discard a pending preview and revert to the previously persisted calibration (or none).</summary>
+        public void CancelCalibrationPreview()
+        {
+            if (_pendingCalibration == null) return;
+            _pendingCalibration = null;
+            SetCalibrationLive(WebcamCalibrationData.Load(_environment, _calibrationLogger));
+            _logger?.LogInformation("AvaloniaWebcamTrackingService: calibration preview cancelled - reverted to persisted");
+        }
+
         /// <summary>
         /// Atomically replace the live calibration's <see cref="WebcamCalibrationData.RuntimeOffset"/>
         /// (the post-projection nudge captured by Quick Recal) with a new value.
