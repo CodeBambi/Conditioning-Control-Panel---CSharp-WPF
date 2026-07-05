@@ -10,14 +10,15 @@ namespace ConditioningControlPanel.Avalonia.Compositor.Layers;
 /// overlay migrated onto the compositor (WS2/WP3 template migration — the recipe lives in
 /// docs/unified-compositor-engine-plan.md Phase F).
 ///
-/// Behavior contract (WPF Chaos/ChaosCursorGlowOverlay.cs — the plain-window path; the WPF
-/// consolidated ChaosSkiaFxOverlay bloom variant is a separate queue item):
+/// Behavior contract (WPF Chaos/ChaosCursorGlowOverlay.cs — the plain-window path; the richer
+/// WPF ChaosSkiaFxOverlay bloom variant is intentionally NOT ported — the plain glow is the only
+/// cursor halo, and the Avalonia ChaosSkiaFxOverlay window was deleted 2026-07-05):
 /// - 76-DIP circle, radial gradient FFD700 alpha 0 @0.18 -> FF8FC8 alpha 150 @0.55 ->
 ///   FF4DC4 alpha 0 @1.0 (center-origin, spans the full circle);
 /// - "slow breath" scale pulse 0.85..1.12, SineEase in-out, 620ms per leg with AutoReverse
-///   = 1240ms full cycle. NOTE: the legacy Avalonia window passed 620ms as ScalePulse's FULL
-///   cycle (ScalePulse period = up+down; see the ChaosEStimGlow 160->320 doubling), i.e. it
-///   breathed 2x too fast vs WPF — this layer restores the WPF timing;
+///   = 1240ms full cycle. NOTE: the legacy Avalonia window (since deleted) treated 620ms as the
+///   FULL breath cycle (a per-leg-vs-full-cycle mixup), i.e. it breathed 2x too fast vs WPF —
+///   this layer restores the WPF timing;
 /// - armed => visible riding the cursor; disarmed => hidden; parked off-screen until the
 ///   first MoveTo (WPF parks at -2*SIZE).
 ///

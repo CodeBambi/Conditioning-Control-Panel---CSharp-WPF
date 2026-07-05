@@ -31,8 +31,9 @@ window-migration lane is complete.
 > UPDATE 2026-07-05: `ChaosEStimArcLayer` (Z=125) has LANDED (builds green, harness Stage 4m PASS);
 > the E-Stim arc (§D#6) now renders through the compositor via the owner-authorized
 > `BubbleEngine.EStimBurstAt` → head `OnEStimArc` path. **DoD item 4 holds for the LIVE rendering
-> set**; the remaining 3 unwired window classes (§B2 rows 5-7: EStimGlow/VibeTrail/SkiaFx) are
-> blocked features, not active gaps.
+> set**. UPDATE 2026-07-05: all 4 formerly-unwired passive windows (EStim/EStimGlow/VibeTrail/
+> SkiaFx) are now DELETED (dead code removed so they cannot be re-wired or mis-used). EStimGlow's
+> charge-glow remains a DEFERRED FEATURE (the charged-pop mechanic), not a window to migrate.
 >
 > Independent re-verification post-landing (`fb0dfd1`/`fb5414` agent, 2026-07-05): slnf 0 err/0 warn,
 > Core 542/542, smoke 44 tabs / Findings 5 / exit 0 — **identical to baseline, no regression**.
@@ -115,10 +116,10 @@ These have no production caller today (the run-engine paths that drive them are 
 visual chain / vibe / skia-glow features, still unwired). Convert to layers as their callers land.
 | # | Class | File | LOC | What it draws | Blocking note |
 |---|---|---|---|---|---|
-| 4 | ~~`ChaosEStimOverlay`~~ ✅ **arc DONE → `ChaosEStimArcLayer` (Z=125)** | `Chaos/ChaosEStimOverlay.axaml.cs` | 267 | lightning bolts between bubbles | Arc `Strike` now wired: owner-authorized `BubbleEngine.EStimBurstAt` → head `OnEStimArc` → `ChaosEStimArcLayer.Strike` + throttled `estim_zap` cue (2026-07-05). Window now DEAD/unwired legacy (deletion is a cleanup follow-up once side-by-side visual parity is human-confirmed) |
-| 5 | `ChaosEStimGlowOverlay` | `Chaos/ChaosEStimGlowOverlay.axaml.cs` | 184 | E-Stim charge glow halo | same E-Stim chain (`Arm`/`Disarm` unwired) |
-| 6 | ~~`ChaosVibeTrailOverlay`~~ ✅ **DONE → `ChaosVibeTrailLayer` (Z=128)** | `Chaos/ChaosVibeTrailOverlay.axaml.cs` | 300 | warm cursor glow + fading trail | MIGRATED 2026-07-05: wired to the already-live vibe_popping toy lifecycle (StartVibeTrail on UseToy + 16ms IPointerState cursor feed, StopVibeTrail on expiry/teardown). Window now dead legacy |
-| 7 | `ChaosSkiaFxOverlay` | `Chaos/ChaosSkiaFxOverlay.cs` | 632 | Skia bloom + sparks; **WPF's DEFAULT glow renderer** (`ChaosSkiaFxEnabled ?? true`) | no head caller; natural consolidation target for the cursor-glow bloom variant |
+| 4 | ~~`ChaosEStimOverlay`~~ ✅ **arc DONE → `ChaosEStimArcLayer` (Z=125)** | `Chaos/ChaosEStimOverlay.axaml.cs` | 267 | lightning bolts between bubbles | Arc `Strike` now wired: owner-authorized `BubbleEngine.EStimBurstAt` → head `OnEStimArc` → `ChaosEStimArcLayer.Strike` + throttled `estim_zap` cue (2026-07-05). Window DELETED 2026-07-05 (arc renders via the layer; dead code removed) |
+| 5 | ~~`ChaosEStimGlowOverlay`~~ 🗑 **DELETED 2026-07-05** | `Chaos/ChaosEStimGlowOverlay.axaml.cs` | 184 | E-Stim charge glow halo | Dead/unwired window removed; its charge-glow = the DEFERRED charged-pop FEATURE (not ported), so the window is gone and can't be mis-wired |
+| 6 | ~~`ChaosVibeTrailOverlay`~~ ✅ **DONE → `ChaosVibeTrailLayer` (Z=128)** | `Chaos/ChaosVibeTrailOverlay.axaml.cs` | 300 | warm cursor glow + fading trail | MIGRATED 2026-07-05: wired to the already-live vibe_popping toy lifecycle (StartVibeTrail on UseToy + 16ms IPointerState cursor feed, StopVibeTrail on expiry/teardown). Window DELETED 2026-07-05 |
+| 7 | ~~`ChaosSkiaFxOverlay`~~ 🗑 **DELETED 2026-07-05** | `Chaos/ChaosSkiaFxOverlay.cs` | 632 | Skia bloom + sparks (WPF's DEFAULT glow renderer) | Dead/unwired superset renderer removed; its effects (glow/bolts/burst/ripple/trail) render via the simpler layers now — no longer a consolidation target |
 
 ### B3 — DEAD / VESTIGIAL cleanup
 | Class | File | LOC | Finding |
@@ -173,10 +174,11 @@ floor · `--verify-layers` exit 0 · `--verify-video` exit 0 · `--smoke-test` F
    self-registered via injected `CompositorEngine`, WPF 180 ms opacity fade preserved) + Stage 4l.
    All gates green. **Last LIVE window-based passive effect — the window-migration lane is now
    complete.** (Code co-mingled in co-agent commit `57f6f048` via a broad `git add`; verified in HEAD.)
-5. **`ChaosSkiaFxOverlay` → layer** (632 LOC, WPF default glow) — consolidation target; larger.
-6. **E-Stim arc DONE 2026-07-05** (`ChaosEStimOverlay` → `ChaosEStimArcLayer` Z=125; owner-
-   authorized Q10b `BubbleEngine.EStimBurstAt` → `OnEStimArc`). Remaining: `ChaosEStimGlowOverlay`
-   (charge-glow halo) → layer, still gated on the E-Stim glow feature being wired.
+5. ~~`ChaosSkiaFxOverlay` → layer~~ **RETIRED 2026-07-05: window DELETED (dead code); its effects
+   render via the simpler layers, so no consolidation is needed.**
+6. **E-Stim arc DONE 2026-07-05** (`ChaosEStimOverlay` → `ChaosEStimArcLayer` Z=125; window DELETED).
+   `ChaosEStimGlowOverlay` window also DELETED 2026-07-05; its charge-glow is the deferred
+   charged-pop FEATURE (not a window migration).
 7. **VibeTrail DONE 2026-07-05** (`ChaosVibeTrailOverlay` → `ChaosVibeTrailLayer` Z=128; the vibe_popping toy path was already live — only the visual was unported).
 
 Interactive set (section C) stays windows until the `AvaloniaMouseHook` click-swallow gap is
