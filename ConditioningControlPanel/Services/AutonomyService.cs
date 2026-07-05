@@ -83,6 +83,11 @@ namespace ConditioningControlPanel.Services
         private DispatcherTimer? _heartbeatTimer;
         private bool _forceTestMode = false; // When true, use 30s interval instead of settings
 
+        // When a random tick fires but she can't act yet (cooldown, a fullscreen interaction, or a
+        // web video), we re-check after this short window instead of waiting a whole fresh interval —
+        // so she acts the moment she's free and the countdown bar stays honest.
+        private const double RetryIntervalSeconds = 12;
+
         // State
         private DateTime _lastActionTime = DateTime.MinValue;
         private DateTime _lastUserActivity = DateTime.Now;
@@ -667,7 +672,7 @@ namespace ConditioningControlPanel.Services
             ScheduleNextRandomTick();
         }
 
-        private void ScheduleNextRandomTick()
+        private void ScheduleNextRandomTick(bool retry = false)
         {
             var settings = App.Settings?.Current;
             if (settings == null) return;
@@ -675,7 +680,16 @@ namespace ConditioningControlPanel.Services
             double actualSeconds;
             string modeInfo;
 
-            if (_forceTestMode)
+            if (retry)
+            {
+                // A tick fired but she couldn't act (cooldown / fullscreen interaction / web video).
+                // Re-check soon instead of burning a whole fresh interval — otherwise the countdown
+                // bar completes with nothing happening and her real cadence drifts far below the
+                // slider. ~12–24s jittered so it doesn't hammer while a long video is on screen.
+                actualSeconds = RetryIntervalSeconds + _random.NextDouble() * RetryIntervalSeconds;
+                modeInfo = "retry (was blocked)";
+            }
+            else if (_forceTestMode)
             {
                 // Force test mode: always use 30 seconds
                 actualSeconds = 30;
@@ -689,7 +703,18 @@ namespace ConditioningControlPanel.Services
                 var baseSeconds = settings.AutonomyRandomIntervalSeconds;
                 var variance = (2.0 / 3.0) + _random.NextDouble() * (2.0 / 3.0); // 0.667 to 1.333
                 actualSeconds = baseSeconds * variance;
-                modeInfo = $"base: {baseSeconds}s (±33%)";
+
+                // Time-of-day pacing: when "time aware" is on, a higher activity multiplier means she's
+                // MORE active, so the gap shrinks at night and stretches in the morning. Until now
+                // GetTimeMultiplier() was computed but never applied anywhere, so the toggle (and every
+                // morning/afternoon/evening/night multiplier) did nothing at all.
+                var timeMult = GetTimeMultiplier();
+                if (timeMult > 0)
+                    actualSeconds /= timeMult;
+
+                // Keep the result sane no matter how jitter and the multiplier combine.
+                actualSeconds = Math.Clamp(actualSeconds, 15, 900);
+                modeInfo = $"base: {baseSeconds}s (±33%, timeMult {timeMult:0.00})";
             }
 
             _randomTimer?.Stop();
@@ -831,15 +856,18 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
-            // Schedule next tick regardless of whether we take action
-            ScheduleNextRandomTick();
-
             if (!CanTakeAction())
             {
-                App.Logger?.Warning("AutonomyService: Random tick - cannot take action (cooldown or busy)");
+                // Temporarily blocked — schedule a short retry rather than a full fresh interval, so
+                // she acts as soon as she's free instead of skipping a whole cycle every time she's
+                // briefly busy (which made the interval feel much slower than the slider).
+                App.Logger?.Debug("AutonomyService: Random tick - cannot take action (cooldown or busy), retrying soon");
+                ScheduleNextRandomTick(retry: true);
                 return;
             }
 
+            // Free to act — schedule the next full interval, then go.
+            ScheduleNextRandomTick();
             App.Logger?.Information("AutonomyService: Random interval triggered - executing action!");
             ExecuteAutonomousAction(AutonomyTriggerSource.Random);
         }

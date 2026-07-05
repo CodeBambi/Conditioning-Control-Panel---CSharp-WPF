@@ -1433,12 +1433,20 @@ namespace ConditioningControlPanel.Services
             // Lock-card / bouncing-text / custom-trigger pools: same rule as subliminals —
             // when there's no per-mod backup, keep the loaded flat pool instead of stamping
             // defaults over the user's customizations.
-            if (settings.LockCardPhrasesByMod?.TryGetValue(modId, out var savedLock) == true)
-                settings.LockCardPhrases = new Dictionary<string, bool>(savedLock);
-            else
-                settings.LockCardPhrases = settings.LockCardPhrases is { Count: > 0 }
+            Dictionary<string, bool>? savedLock = null;
+            var hadLockBackup = settings.LockCardPhrasesByMod?.TryGetValue(modId, out savedLock) == true;
+            settings.LockCardPhrases = hadLockBackup && savedLock != null
+                ? new Dictionary<string, bool>(savedLock)
+                : settings.LockCardPhrases is { Count: > 0 }
                     ? new Dictionary<string, bool>(settings.LockCardPhrases)
                     : new Dictionary<string, bool>(GetDefaultLockCardPhrases());
+
+            // Make the lock-card pool actually match the active mod: strip phrases that are some
+            // OTHER built-in mod's default (the baked-in cross-mod leak that made every mode show
+            // Circe's Lock phrases) and seed this mod's own themed defaults. Mirrors the subliminal
+            // PruneCrossMod pass — lock cards previously had neither a prune nor a top-up, so
+            // switching modes never actually changed the phrases.
+            ReconcileLockCardPhrasesWithActiveMod(modId, settings, hadLockBackup);
 
             if (settings.CustomTriggersByMod?.TryGetValue(modId, out var savedTriggers) == true)
                 settings.CustomTriggers = new List<string>(savedTriggers);
@@ -1503,6 +1511,57 @@ namespace ConditioningControlPanel.Services
             if (toRemove.Count > 0)
                 _log?.Information("Pruned {Count} cross-mod subliminal entries from the active pool: {Keys}",
                     toRemove.Count, string.Join(", ", toRemove));
+        }
+
+        /// <summary>
+        /// Aligns the active lock-card phrase pool with the active mod. Removes phrases that are some
+        /// OTHER built-in mod's default (cross-mod contamination) and — when building a fresh pool, or
+        /// when the prune left the pool with none of this mod's own defaults — seeds the active mod's
+        /// themed phrases. Phrases matching no built-in mod's default are treated as user-added and
+        /// always kept; kept phrases' enable/disable state is never touched (the top-up is additive
+        /// only). This is why switching modes now actually swaps the phrases instead of forever showing
+        /// the last-used mod's set (typically Circe's Lock).
+        /// </summary>
+        private void ReconcileLockCardPhrasesWithActiveMod(string modId, Models.AppSettings settings, bool hadBackup)
+        {
+            var activeDefaults = GetDefaultLockCardPhrases();
+            if (activeDefaults.Count == 0) return; // mod ships no lock-card phrases — nothing to reconcile against
+
+            settings.LockCardPhrases ??= new Dictionary<string, bool>();
+            var activeKeys = new HashSet<string>(activeDefaults.Keys, StringComparer.OrdinalIgnoreCase);
+
+            var foreignDefaults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var allBuiltIn = new[]
+            {
+                Models.BuiltInMods.CCPDefault, Models.BuiltInMods.BambiSleep,
+                Models.BuiltInMods.SissyHypno, Models.BuiltInMods.Dronification,
+                Models.BuiltInMods.Locked
+            };
+            foreach (var m in allBuiltIn)
+                if (m.LockCardPhrases != null)
+                    foreach (var key in m.LockCardPhrases.Keys)
+                        foreignDefaults.Add(key);
+
+            // Strip other mods' default phrases that aren't part of the active mod. A phrase in NO
+            // built-in default is user-added, so it survives; a phrase shared with the active mod
+            // (in activeKeys) is kept too.
+            var removed = settings.LockCardPhrases.Keys
+                .Where(k => foreignDefaults.Contains(k) && !activeKeys.Contains(k))
+                .ToList();
+            foreach (var k in removed)
+                settings.LockCardPhrases.Remove(k);
+
+            // Seed this mod's own themed defaults when building a fresh pool, or when the prune left
+            // the pool holding none of them (a previously fully-contaminated backup). Additive only —
+            // TryAdd never overwrites a phrase the user kept or toggled off.
+            var hasOwnDefault = settings.LockCardPhrases.Keys.Any(activeKeys.Contains);
+            if (!hadBackup || !hasOwnDefault)
+                foreach (var kvp in activeDefaults)
+                    settings.LockCardPhrases.TryAdd(kvp.Key, true);
+
+            if (removed.Count > 0)
+                _log?.Information("Reconciled lock-card phrases for mod {ModId}: pruned {Count} cross-mod phrase(s): {Keys}",
+                    modId, removed.Count, string.Join(", ", removed));
         }
 
         /// <summary>
