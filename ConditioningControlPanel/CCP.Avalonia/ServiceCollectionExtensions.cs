@@ -242,7 +242,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMantraService, MantraService>();
         services.AddSingleton<IAchievementService, AchievementService>();
 
-        // Auth, Chaos, avatar, bark, video and session-log stubs for the Avalonia head.
+        // Auth, Chaos, avatar, bark, video and session-log services for the Avalonia head
+        // (facades over the DI-registered Core services, not stubs).
         services.AddSingleton<IV2AuthService, AvaloniaV2AuthService>();
         services.AddSingleton<IV2DeviceCodeService, AvaloniaV2DeviceCodeService>();
         services.AddSingleton<AvaloniaPatreonProvider>();

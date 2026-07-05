@@ -543,7 +543,7 @@ public sealed class BubblePreset
 
 #endregion
 
-#region static service stubs
+#region static facades over DI services
 
 public static class ChaosMeta
 {
