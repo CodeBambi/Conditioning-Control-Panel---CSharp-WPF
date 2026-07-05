@@ -60,6 +60,10 @@ public sealed class AvaloniaChaosService : IChaosService
     private readonly ChaosEStimArcLayer _eStimArcLayer;
     // Throttle for the estim_zap cue (>=140ms; the VISUAL is never throttled). WPF _lastBurstZap.
     private System.DateTime _lastEStimZap;
+    // Vibe-pop cursor trail (the vibe_popping toy buzz) is a compositor layer, not a window.
+    private readonly ChaosVibeTrailLayer _vibeTrailLayer;
+    // 16ms cursor-feed poll while the vibe buzz runs (mirrors the Rabbit-Caller aim tick).
+    private DispatcherTimer? _vibeAimTimer;
     // WS2/WP3 Phase F #2: chaos pop text is a compositor layer, not a pooled window set.
     private readonly ChaosPopTextLayer _popTextLayer;
     // WS2/WP3 Phase F #3: the effect-banner strip is a compositor layer, not a keep-alive window.
@@ -293,6 +297,8 @@ public sealed class AvaloniaChaosService : IChaosService
         compositor?.RegisterLayer(_waveTimerLayer);
         _eStimArcLayer = new ChaosEStimArcLayer();
         compositor?.RegisterLayer(_eStimArcLayer);
+        _vibeTrailLayer = new ChaosVibeTrailLayer();
+        compositor?.RegisterLayer(_vibeTrailLayer);
         _screenProvider = screenProvider;
         _screenShake = screenShake;
         AvaloniaChaosCatalogs.EnsureInitialized();
@@ -2341,6 +2347,7 @@ public sealed class AvaloniaChaosService : IChaosService
         ClearChaosGifCascade();
         // WPF parity (ChaosModeService.cs:3108/3157/3243): field FX die with the run.
         ClearChaosFieldFx();
+        StopVibeTrail();   // end the buzz cursor trail if a run is torn down mid-vibe
         _state = null;
         _vibeRemainingSec = 0;
         _freezeRemainingSec = 0;
@@ -2611,6 +2618,7 @@ public sealed class AvaloniaChaosService : IChaosService
             case "vibe_popping":
                 _bubbles.SetVibePop(true, hoverPops: maxed);
                 _vibeRemainingSec = Math.Max(1, power);
+                StartVibeTrail();   // WPF ChaosModeService.cs:2632 ChaosVibeTrailOverlay.Start()
                 toy.CooldownRemainingSec = toy.CooldownSec;
                 toy.IsEffectActive = true;
                 _state.PushEvent("🔸 it buzzes. hold and sweep");
@@ -2787,6 +2795,36 @@ public sealed class AvaloniaChaosService : IChaosService
     /// </summary>
     private void OnDarterTrail(Core.Platform.Point px, double lifeSec, bool warm)
         => ChaosFieldTrailDot(px.X, px.Y, lifeSec, warm);
+
+    /// <summary>
+    /// Start the vibe-pop cursor trail (vibe_popping toy buzz): show the warm glow layer and begin a
+    /// 16ms poll of the cursor (IPointerState) that feeds the layer — the same source the
+    /// Rabbit-Caller aim loop uses. WPF ChaosModeService.cs:2632 ChaosVibeTrailOverlay.Start().
+    /// </summary>
+    private void StartVibeTrail()
+    {
+        _compositor?.Start();
+        _vibeTrailLayer.Start();
+        if (_vibeAimTimer == null)
+        {
+            _vibeAimTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+            _vibeAimTimer.Tick += VibeAimTick;
+        }
+        _vibeAimTimer.Start();
+    }
+
+    /// <summary>Stop the vibe-pop cursor trail (buzz expired or run torn down). WPF :2869.</summary>
+    private void StopVibeTrail()
+    {
+        _vibeAimTimer?.Stop();
+        _vibeTrailLayer.Stop();
+    }
+
+    private void VibeAimTick(object? sender, EventArgs e)
+    {
+        var cur = _pointerState?.GetCursorPosition();
+        if (cur.HasValue) _vibeTrailLayer.Push(cur.Value.X, cur.Value.Y);
+    }
 
     /// <summary>Pop a floating chaos word at a PHYSICAL virtual-desktop px anchor (WS2:
     /// chaos on the compositor). Master-gated on ChaosAnnouncerEnabled exactly like WPF
@@ -3124,6 +3162,7 @@ public sealed class AvaloniaChaosService : IChaosService
             if (_vibeRemainingSec <= 0)
             {
                 _bubbles.SetVibePop(false);
+                StopVibeTrail();   // WPF ChaosModeService.cs:2869 ChaosVibeTrailOverlay.Stop()
             }
         }
         if (_dvdBannerOn && !ChaosDvdToyActive) { EndEffectBanner("dvd"); _dvdBannerOn = false; }   // WPF ChaosModeService.cs:2953

@@ -17,9 +17,10 @@ and turns the gap into an ordered migration backlog.
 ## Verdict
 
 **Green.** The session-effect set, the *live* passive chaos overlays, AND the last window-based
-passive effect (attention-check) are all on the UCE (**21 registered layers** as of 2026-07-05:
-9 session + 11 chaos + 1 attention-check — `ChaosEStimArcLayer` (Z=125) added 2026-07-05, the
-owner-authorized E-Stim arc). The window-migration lane is complete.
+passive effect (attention-check) are all on the UCE (**22 registered layers** as of 2026-07-05:
+9 session + 12 chaos + 1 attention-check — `ChaosEStimArcLayer` (Z=125) + `ChaosVibeTrailLayer`
+(Z=128) added 2026-07-05, the owner-authorized E-Stim arc + vibe-pop cursor trail). The
+window-migration lane is complete.
 
 > **Fresh re-verification 2026-07-05 (post v6.2.10 merge `5603442`, by @glm5.2):** independent
 > read-only re-sweep of every `: Window` subclass in `CCP.Avalonia` reconciles 1:1 with this
@@ -51,7 +52,7 @@ owner-authorized E-Stim arc). The window-migration lane is complete.
 
 ---
 
-## A. USES UCE — 20 registered layers (the done set)
+## A. USES UCE — 21 registered layers (the done set)
 
 Verified by `RegisterLayer` call sites.
 
@@ -71,7 +72,7 @@ Verified by `RegisterLayer` call sites.
 Video path: Phase E complete (default flipped to compositor video; legacy
 `AvaloniaMultiMonitorVideoService` + `VideoOverlayWindow` deleted).
 
-### Passive chaos overlays (11) — registered in `AvaloniaHeadStubs`
+### Passive chaos overlays (12) — registered in `AvaloniaHeadStubs`
 | Layer | Z |
 |---|---|
 | `ChaosFieldFxLayer` | 100 |
@@ -80,13 +81,14 @@ Video path: Phase E complete (default flipped to compositor video; legacy
 | `ChaosFlashWashLayer` | 115 |
 | `ChaosFxLayer` | 118 |
 | `ChaosEStimArcLayer` | 125 |
+| `ChaosVibeTrailLayer` | 128 |
 | `ChaosCursorGlowLayer` | 130 |
 | `ChaosEffectBannerLayer` | 140 |
 | `ChaosPopTextLayer` | 145 |
 | `ChaosAnnouncerLayer` | 150 |
 | `ChaosWaveTimerLayer` | 155 |
 
-All 11 harness-verified (`--verify-layers`, `unified-compositor-engine-plan.md` Phase F; Stages 4j/4k/4m added for ChaosFx/ChaosWaveTimer/ChaosEStimArc).
+All 12 harness-verified (`--verify-layers`, `unified-compositor-engine-plan.md` Phase F; Stages 4j/4k/4m/4n added for ChaosFx/ChaosWaveTimer/ChaosEStimArc/ChaosVibeTrail).
 
 ---
 
@@ -115,7 +117,7 @@ visual chain / vibe / skia-glow features, still unwired). Convert to layers as t
 |---|---|---|---|---|---|
 | 4 | ~~`ChaosEStimOverlay`~~ ✅ **arc DONE → `ChaosEStimArcLayer` (Z=125)** | `Chaos/ChaosEStimOverlay.axaml.cs` | 267 | lightning bolts between bubbles | Arc `Strike` now wired: owner-authorized `BubbleEngine.EStimBurstAt` → head `OnEStimArc` → `ChaosEStimArcLayer.Strike` + throttled `estim_zap` cue (2026-07-05). Window now DEAD/unwired legacy (deletion is a cleanup follow-up once side-by-side visual parity is human-confirmed) |
 | 5 | `ChaosEStimGlowOverlay` | `Chaos/ChaosEStimGlowOverlay.axaml.cs` | 184 | E-Stim charge glow halo | same E-Stim chain (`Arm`/`Disarm` unwired) |
-| 6 | `ChaosVibeTrailOverlay` | `Chaos/ChaosVibeTrailOverlay.axaml.cs` | 300 | warm cursor glow + fading trail | no head caller (vibe-trail feature unwired) |
+| 6 | ~~`ChaosVibeTrailOverlay`~~ ✅ **DONE → `ChaosVibeTrailLayer` (Z=128)** | `Chaos/ChaosVibeTrailOverlay.axaml.cs` | 300 | warm cursor glow + fading trail | MIGRATED 2026-07-05: wired to the already-live vibe_popping toy lifecycle (StartVibeTrail on UseToy + 16ms IPointerState cursor feed, StopVibeTrail on expiry/teardown). Window now dead legacy |
 | 7 | `ChaosSkiaFxOverlay` | `Chaos/ChaosSkiaFxOverlay.cs` | 632 | Skia bloom + sparks; **WPF's DEFAULT glow renderer** (`ChaosSkiaFxEnabled ?? true`) | no head caller; natural consolidation target for the cursor-glow bloom variant |
 
 ### B3 — DEAD / VESTIGIAL cleanup
@@ -175,7 +177,7 @@ floor · `--verify-layers` exit 0 · `--verify-video` exit 0 · `--smoke-test` F
 6. **E-Stim arc DONE 2026-07-05** (`ChaosEStimOverlay` → `ChaosEStimArcLayer` Z=125; owner-
    authorized Q10b `BubbleEngine.EStimBurstAt` → `OnEStimArc`). Remaining: `ChaosEStimGlowOverlay`
    (charge-glow halo) → layer, still gated on the E-Stim glow feature being wired.
-7. **`ChaosVibeTrailOverlay` → layer** — gated on the vibe-trail feature being wired.
+7. **VibeTrail DONE 2026-07-05** (`ChaosVibeTrailOverlay` → `ChaosVibeTrailLayer` Z=128; the vibe_popping toy path was already live — only the visual was unported).
 
 Interactive set (section C) stays windows until the `AvaloniaMouseHook` click-swallow gap is
 resolved (WP3 JUDGMENT / owner decision).

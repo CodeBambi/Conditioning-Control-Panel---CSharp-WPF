@@ -86,6 +86,12 @@ public static class CompositorLayers
     /// (100-119).</summary>
     public const int ChaosEStimArc = 125;
 
+    /// <summary>Vibe-pop cursor trail (the vibe_popping toy's buzz): a warm buzzing glow + a short
+    /// fading sparkle trail that follows the cursor while the buzz runs. Ported from the
+    /// ChaosVibeTrailOverlay window. In the cursor-telegraph sub-band, just below the cool Rabbit
+    /// Caller glow (they belong to different toys and do not normally coexist).</summary>
+    public const int ChaosVibeTrail = 128;
+
     /// <summary>Rabbit Caller cursor-glow telegraph (first migrated chaos layer).</summary>
     public const int ChaosCursorGlow = 130;
 

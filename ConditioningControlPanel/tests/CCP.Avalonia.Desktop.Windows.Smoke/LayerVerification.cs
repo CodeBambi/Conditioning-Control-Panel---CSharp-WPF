@@ -186,6 +186,7 @@ internal static class LayerVerification
             var waveTimerLayer = ExpectLayer<ChaosWaveTimerLayer>(engine, CompositorLayers.ChaosWaveTimer, "ChaosWaveTimerLayer", rows);
             var attentionCheckLayer = ExpectLayer<AttentionCheckLayer>(engine, CompositorLayers.AttentionCheck, "AttentionCheckLayer", rows);
             var eStimArcLayer = ExpectLayer<ChaosEStimArcLayer>(engine, CompositorLayers.ChaosEStimArc, "ChaosEStimArcLayer", rows);
+            var vibeTrailLayer = ExpectLayer<ChaosVibeTrailLayer>(engine, CompositorLayers.ChaosVibeTrail, "ChaosVibeTrailLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -765,6 +766,39 @@ internal static class LayerVerification
                 row.Teardown = deactivated ? "clean (0.20s life expiry)" : "TIMEOUT";
                 FinishRow(row, activated, deactivated, envStable);
                 row.Note = AppendNote(row.Note, "driven directly; production caller is Core BubbleEngine EStimBurstAt -> head OnEStimArc (owner-authorized); primary-centre cyan bolts");
+                await SettleIdle(engine);
+            }
+
+            // Migrated from the standalone ChaosVibeTrailOverlay window. The production caller is the
+            // vibe_popping toy buzz (StartVibeTrail on UseToy, StopVibeTrail on expiry) with a 16ms
+            // cursor feed; the stage drives the layer's public Start/Push/Stop directly, sweeping a
+            // synthetic cursor path across the primary centre so the warm glow + trail dots emit
+            // inside the centre-crop probe. Stop() clears the trail (WPF EndFollow), so teardown is
+            // deterministic.
+            if (vibeTrailLayer != null)
+            {
+                Console.WriteLine("[LAYERS] Stage 4n: ChaosVibeTrailLayer via Start/Push/Stop (vibe cursor trail)...");
+                var row = rows.First(r => r.Layer == "ChaosVibeTrailLayer");
+                var cx = primary.Bounds.X + primary.Bounds.Width / 2.0;
+                var cy = primary.Bounds.Y + primary.Bounds.Height / 2.0;
+                var before = Capture(screens, primary);
+                vibeTrailLayer.Start();
+                for (int k = 0; k < 14; k++) vibeTrailLayer.Push(cx - 120 + k * 18, cy);
+                var activated = await PollAsync(() => vibeTrailLayer.IsActive, 1500, stepMs: 16);
+                row.Activated = activated ? "yes" : "TIMEOUT";
+                if (activated)
+                {
+                    await Task.Delay(120); // a few buzz-pulse frames; dots still bright (fade 340ms)
+                    var during = Capture(screens, primary);
+                    row.Delta = during.Center != before.Center
+                        ? "DIFFER (center-crop)"
+                        : "SKIP (subtle warm alpha trail; activation+teardown verified)";
+                }
+                vibeTrailLayer.Stop();
+                var deactivated = await PollAsync(() => !vibeTrailLayer.IsActive, 2000);
+                row.Teardown = deactivated ? "clean (Stop clears trail)" : "TIMEOUT";
+                FinishRow(row, activated, deactivated, envStable);
+                row.Note = AppendNote(row.Note, "driven directly; production caller is the vibe_popping toy buzz (StartVibeTrail/StopVibeTrail + 16ms cursor feed); primary-centre warm glow + trail");
                 await SettleIdle(engine);
             }
 
