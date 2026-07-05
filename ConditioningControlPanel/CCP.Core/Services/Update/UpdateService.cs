@@ -35,54 +35,57 @@ public class UpdateService : IUpdateService, IDisposable
     public bool IsDownloading { get; private set; }
 
     /// <inheritdoc />
-    public string CurrentVersion => "6.2.9";
+    public string CurrentVersion => "6.2.10";
 
     /// <summary>
     /// Hard-coded current application version (single source for heads that need a const,
     /// e.g. the What's-New dialog title). Mirrors the WPF UpdateService.AppVersion constant.
     /// </summary>
-    public const string AppVersion = "6.2.9";
+    public const string AppVersion = "6.2.10";
 
     /// <summary>
     /// Patch notes for the current version — shown in the update/what's-new dialogs and used as a
     /// fallback when GitHub release notes are unavailable. Update together with <see cref="AppVersion"/>.
     /// </summary>
-    public const string CurrentPatchNotes = @"v6.2.9 - The Fall
-
-✨ NEW: THE FALL
-- Our latest side project is live and free for everyone: an endless
-  rabbit hole visualizer powered by YOUR media. Drop in a folder or zip
-  of your pictures and videos and watch them spiral into an endless
-  descent. Pop the bubbles, sink deeper. It runs entirely in your
-  browser, so your media never leaves your device.
-  Try it: https://cclabs.app/fall.html
-
-🔧 BUG FIXES
-- Lock card phrases now change with your mode. Switching between Sissy
-  Hypno, Circe's Lock, Bambi Sleep and the rest finally shows that
-  mode's own phrases instead of always showing Circe's. Backups that
-  were already scrambled by the old bug are healed automatically.
-- Updating no longer wipes your lock card and subliminal phrases. Phrase
-  loading is resilient now, and a corrupt file is kept safe instead of
-  reset. Added export / import in the Phrase Manager so you can back up
-  and move your phrase sets.
-- Bambi Takeover respects the interval slider again. When she is briefly
-  busy she retries within seconds instead of skipping a whole cycle, and
-  the ""time aware"" toggle now actually works.
-- The Takeover quest counts your real active time again. A 15-minute
-  quest no longer drags out to an hour when the app is in the background
-  or running a fullscreen takeover.
-- Fixed a Takeover slot leak that could leave her silent for minutes.
-- A mandatory video no longer jumps in front of the bubbles when clicked.
+    public const string CurrentPatchNotes = @"v6.2.10 - The Fall
 
 ⚡ PERFORMANCE & STABILITY
-- Fixed the flash-window hangs that could freeze the app mid-session,
-  plus a new internal harness to catch these before they ship.
+- Fixed the freeze that could lock the app up mid-session and force you to
+  kill the process. The attention-check and floating avatar bubbles no
+  longer stall the render thread, and the avatar's emote animation is
+  lighter now, so heavy sessions (webcam, whispers and effects all at once)
+  stay responsive.
+
+🔧 BUG FIXES
+- The dashboard ""Cascade"" (Rain) trigger bubble now rains its gifs where
+  you can actually see them, including on multi-monitor setups where it
+  used to fall onto a screen you weren't looking at.
+
+--- Still in The Fall (6.2.9) ---
+
+✨ THE FALL
+- Our latest side project is live and free for everyone: an endless rabbit
+  hole visualizer powered by YOUR media. Drop in a folder or zip of your
+  pictures and videos and watch them spiral into an endless descent. Pop
+  the bubbles, sink deeper. It runs entirely in your browser, so your media
+  never leaves your device. Try it: https://cclabs.app/fall.html
+
+🔧 EARLIER FIXES
+- Lock card phrases now change with your mode instead of always showing
+  Circe's; scrambled backups heal automatically.
+- Updating no longer wipes your lock card and subliminal phrases, plus
+  export / import in the Phrase Manager.
+- Bambi Takeover respects the interval slider again, retries within seconds
+  when briefly busy, and the ""time aware"" toggle works.
+- The Takeover quest counts your real active time again.
+- Fixed a Takeover slot leak that could leave her silent for minutes.
+- A mandatory video no longer jumps in front of the bubbles when clicked.
+- Fixed the flash-window hangs that could freeze the app mid-session.
 - Revived the season shimmer that had stopped rendering.
 
 🎨 UI/UX
-- Settings tidied up: advanced audio options collapse into their own
-  section, and logout is easier to find.
+- Settings tidied up: advanced audio collapses into its own section, and
+  logout is easier to find.
 
 Season: Jelly July";
 

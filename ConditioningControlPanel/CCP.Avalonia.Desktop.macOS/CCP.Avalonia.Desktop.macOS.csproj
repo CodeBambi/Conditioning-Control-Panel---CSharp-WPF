@@ -5,7 +5,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>ConditioningControlPanel.Avalonia.Desktop.macOS</RootNamespace>
     <AssemblyName>CCP.Desktop.macOS</AssemblyName>
-    <Version>6.2.9</Version>
+    <Version>6.2.10</Version>
     <RuntimeIdentifiers>osx-x64;osx-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
