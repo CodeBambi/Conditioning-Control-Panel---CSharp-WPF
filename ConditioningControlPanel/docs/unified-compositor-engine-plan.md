@@ -37,7 +37,7 @@ the unified audio mixer (skill Phase 5), Android.
 | **Mandatory / regular video layer** | ✅ renders + performs (Phase A harness-proven; Phase D.1/D.2 perf pass landed 2026-07-04: zero per-frame alloc, engine-driven tick) |
 | Video audio: volume / output-device / mute control | ❌ missing on UCE path (only `Mute` at start) |
 | Mandatory-video attention checks / duration / safety timer / segment mode | ❌ bypassed — tied to legacy `VideoOverlayWindow`, not the layer |
-| Legacy `AvaloniaMultiMonitorVideoService` | ⚠️ still the only *working* video path; **keep as fallback until UCE video is proven** |
+| Legacy `AvaloniaMultiMonitorVideoService` | ⚠️ no longer the default (compositor video is, since E2 `ed636a7c`); now only the `CCP_LEGACY_VIDEO=1` opt-out fallback. Slated for deletion in Phase E3. |
 | Flash / subliminal / bouncing-text / bubbles / lock-card on UCE | ✅ harness-verified 2026-07-04 (`--verify-layers`, Phase C): flash/subliminal/bubbles/bouncing + pink/spiral/brain-drain all register/activate/render/tear down; dual-surface capture affinity asserted both directions. Lock-card is NOT a layer (still a window) — truthfully out of scope until migrated |
 | Chaos overlays | ⚠️ migration UNDERWAY (WS2/WP3): ALL EIGHT live passive overlays are layers now, harness-verified 2026-07-04 — `ChaosFieldFxLayer` (Z=100) + `ChaosDvdLayer` (Z=105) + `ChaosGifCascadeLayer` (Z=110) + `ChaosFlashWashLayer` (Z=115) + `ChaosCursorGlowLayer` (Z=130, the template) + `ChaosEffectBannerLayer` (Z=140) + `ChaosPopTextLayer` (Z=145) + `ChaosAnnouncerLayer` (Z=150); remaining queue = the 6 UNWIRED passives (blocked on the run-engine port) + the interactive set (hook click-swallow gap); queue + recipe in Phase F below |
 
@@ -148,6 +148,22 @@ Deferred with evidence:**
 - [ ] Dirty-rect / opaque-cull (skill Phase 7) only if profiling shows a need.
 
 ### Phase E — Flip default to UCE-only, then delete legacy (skill Phase 6)
+
+**DEFAULT FLIPPED + LIVE-VERIFIED 2026-07-05.** Compositor video is now the runtime default
+(`AvaloniaVideoService` ctor: `useCompositorVideo = compositor != null && CCP_LEGACY_VIDEO != 1`);
+the legacy path is a temporary opt-OUT escape hatch. E1 (`6180efc2`) routed ESC-dismiss/panic
+through the global `IInputHook` (the layer path has no window to receive keys). E2 (`ed636a7c`)
+flipped the default + added the `--verify-visible` eyes-verification harness. **User-confirmed by
+running:** the mandatory video renders through the compositor and the spiral/pink overlays
+composite ON TOP of it (Stage 2 dump: `Video=ACTIVE + Spiral=ACTIVE + PinkTint=ACTIVE`) - the
+original 'video covers the overlays' bug is fixed. Remaining deletion work (below) is E3.
+
+Observations from the eyes-verification (not regressions, follow-ups):
+- Flash popups do NOT spawn while a mandatory video is active (`--verify-visible` Stage 2 flash
+  count stays 0). Pre-existing (the legacy video window covered flashes too); confirm vs WPF
+  whether flashes should overlay a mandatory video before treating as a bug.
+- Spiral overlay maxes at ~10% opacity by design; near-invisible at low user settings.
+
 - [ ] Remove the `_mandatoryVideoLayer == null` / `_videoLayer == null` fallback guards in `AvaloniaVideoService.PlayFile` / `PlayUrlCore`.
 - [ ] Audit and rehome the **9 references** to `IMultiMonitorVideoService` (video service, overlay service, autonomy, remote command executor, app-info tab, `MainWindowViewModel`, head stubs, DI). Confirm none rely on it for playback *status* before deleting.
 - [ ] Delete `AvaloniaMultiMonitorVideoService`, `VideoOverlayWindow`, and the per-overlay `*Window` classes listed in the skill's Phase 6.
