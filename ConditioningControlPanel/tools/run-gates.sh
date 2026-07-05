@@ -12,7 +12,7 @@
 # =============================================================================
 set -u
 
-CORE_TEST_FLOOR=541          # raise when adding tests; NEVER lower
+CORE_TEST_FLOOR=542          # raise when adding tests; NEVER lower
 SMOKE_TABS_EXPECTED=44
 SMOKE_FINDINGS_EXPECTED=5
 

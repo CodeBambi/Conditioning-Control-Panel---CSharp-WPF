@@ -99,7 +99,7 @@ public sealed class SettingsServiceFileIoTests : IDisposable
     }
 
     [Fact]
-    public void Load_CorruptSettingsFile_ReturnsDefaults_AndLeavesFileUntouched()
+    public void Load_CorruptSettingsFile_ReturnsDefaults_AndPreservesFileAsTimestampedBackup()
     {
         var garbage = new byte[] { 0x00, 0x01, 0xFF, (byte)'{', (byte)'g', (byte)'a', (byte)'r', 0xFE };
         File.WriteAllBytes(SettingsPath, garbage);
@@ -108,10 +108,16 @@ public sealed class SettingsServiceFileIoTests : IDisposable
 
         // Falls back to defaults without throwing...
         Assert.Equal("en", service.Current.Language);
-        // ...but reports the file as "missing" even though it exists (actual behavior).
-        Assert.True(service.WasSettingsFileMissing);
-        // Load itself does not rewrite the corrupt file; the bytes survive until a Save is requested.
-        Assert.Equal(garbage, File.ReadAllBytes(SettingsPath));
+        // ...and reports the file as CORRUPT, not a fresh install (v6.2.9 parity: the two are now
+        // distinguished so callers can surface "we preserved a backup" instead of silent reset).
+        Assert.True(service.WasSettingsFileCorrupt);
+        Assert.False(service.WasSettingsFileMissing);
+        // The unparseable original is MOVED aside to a timestamped backup (not left in place), so the
+        // first debounced Save can't clobber it. LastCorruptBackupPath points at the preserved bytes.
+        Assert.NotNull(service.LastCorruptBackupPath);
+        Assert.False(File.Exists(SettingsPath));
+        Assert.True(File.Exists(service.LastCorruptBackupPath!));
+        Assert.Equal(garbage, File.ReadAllBytes(service.LastCorruptBackupPath!));
     }
 
     [Fact]
@@ -120,10 +126,38 @@ public sealed class SettingsServiceFileIoTests : IDisposable
         var garbage = new byte[] { 0x00, 0x01, 0xFF, (byte)'{', (byte)'g', 0xFE };
         File.WriteAllBytes(SettingsPath, garbage);
 
-        CreateService();
+        var service = CreateService();
 
-        // A recoverable copy survives even after a later Save clobbers the original.
-        Assert.Equal(garbage, File.ReadAllBytes(SettingsPath + ".corrupt"));
+        // A recoverable copy survives under a timestamped settings.corrupt-*.json name so a later
+        // Save (which writes a clean settings.json) can't destroy the original bytes.
+        var backups = Directory.GetFiles(_userDataPath, "settings.corrupt-*.json");
+        Assert.Single(backups);
+        Assert.Equal(garbage, File.ReadAllBytes(backups[0]));
+        Assert.Equal(backups[0], service.LastCorruptBackupPath);
+    }
+
+    [Fact]
+    public void Load_SettingsWithOneUnparseableMember_KeepsTheRestInsteadOfResettingToDefaults()
+    {
+        // A single bad member (here an invalid value for a strongly-typed int field) must NOT
+        // discard the whole document and reset every phrase/pool to factory defaults. This is the
+        // v6.2.9 "my lock-card phrases / subliminals get wiped every time I update" fix: the load
+        // is resilient, skips only the unparseable member, and keeps everything that DID parse.
+        WriteJson(SettingsPath, new JObject
+        {
+            ["Language"] = "de",
+            ["PlayerLevel"] = 42,
+            ["FlashFrequency"] = "not-a-number"   // unparseable int -> per-member error, skipped
+        });
+
+        var service = CreateService();
+
+        // The good members were preserved (NOT reset to defaults)...
+        Assert.Equal("de", service.Current.Language);
+        Assert.Equal(42, service.Current.PlayerLevel);
+        // ...and this counts as a successful load, not a corrupt-file fallback.
+        Assert.False(service.WasSettingsFileCorrupt);
+        Assert.False(service.WasSettingsFileMissing);
     }
 
     [Fact]

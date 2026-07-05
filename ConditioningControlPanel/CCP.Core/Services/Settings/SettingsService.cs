@@ -31,6 +31,19 @@ public sealed class SettingsService : ISettingsService
     /// <inheritdoc />
     public bool WasSettingsFileMissing { get; private set; }
 
+    /// <summary>
+    /// True if a settings file was present but could not be parsed and was preserved as a
+    /// <c>.corrupt-*.json</c> backup rather than overwritten. Distinct from a genuine fresh
+    /// install (<see cref="WasSettingsFileMissing"/>).
+    /// </summary>
+    public bool WasSettingsFileCorrupt { get; private set; }
+
+    /// <summary>
+    /// Path of the most recent <c>.corrupt-*.json</c> backup created by
+    /// <see cref="QuarantineCorruptSettingsFile"/>, or null if none.
+    /// </summary>
+    public string? LastCorruptBackupPath { get; private set; }
+
     /// <inheritdoc />
     public List<string> PendingPresetReinstalls { get; } = new();
 
@@ -84,14 +97,33 @@ public sealed class SettingsService : ISettingsService
             if (File.Exists(_settingsPath))
             {
                 var json = File.ReadAllText(_settingsPath);
+                // Error handler makes the load RESILIENT: a single unparseable member (e.g. an enum
+                // value renamed/removed in a new release, which StringEnumConverter throws on) must
+                // NOT discard the whole document and reset every phrase/pool to factory defaults.
+                // We swallow per-member errors and keep everything that DID parse. This is the fix
+                // for "my lock card phrases / subliminals get wiped every time I update" — a new
+                // release's enum change used to throw here and fall through to `new AppSettings()`,
+                // whose defaults then overwrote the file on the next save.
+                var badMembers = new List<string>();
                 var serializerSettings = new JsonSerializerSettings
                 {
-                    ObjectCreationHandling = ObjectCreationHandling.Replace
+                    ObjectCreationHandling = ObjectCreationHandling.Replace,
+                    Error = (sender, args) =>
+                    {
+                        var path = args.ErrorContext.Path;
+                        badMembers.Add(path);
+                        Log.Warning("Skipping unparseable settings member '{Path}' (kept the rest): {Error}",
+                            path, args.ErrorContext.Error.Message);
+                        args.ErrorContext.Handled = true;
+                    }
                 };
 
                 var settings = JsonConvert.DeserializeObject<AppSettings>(json, serializerSettings);
                 if (settings != null)
                 {
+                    if (badMembers.Count > 0)
+                        Log.Warning("Settings loaded with {Count} skipped member(s); the rest were preserved: {Members}",
+                            badMembers.Count, string.Join(", ", badMembers.Distinct()));
                     Log.Information("Settings loaded from {Path} (Triggers: {TriggerCount})",
                         _settingsPath, settings.CustomTriggers?.Count ?? 0);
 
@@ -112,33 +144,56 @@ public sealed class SettingsService : ISettingsService
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Could not load settings");
+            // The file existed but could not be parsed even with per-member error tolerance
+            // (truncated/malformed JSON, or a top-level structural error). Do NOT let the fresh
+            // defaults below get silently written over it — preserve the original so the user's
+            // phrases/pools stay recoverable instead of being lost forever.
+            Log.Error(ex, "Could not load settings — preserving the unparseable file");
             QuarantineCorruptSettingsFile();
         }
 
-        WasSettingsFileMissing = true;
-        Log.Information("Using default settings (fresh install detected)");
+        // If a settings file is still present here we reached the fallback because it failed to
+        // load (not because it was missing) — preserve it before defaults overwrite it on save.
+        if (File.Exists(_settingsPath) && !WasSettingsFileCorrupt)
+        {
+            Log.Error("Settings file present but did not load — preserving it before applying defaults");
+            QuarantineCorruptSettingsFile();
+        }
+
+        if (!WasSettingsFileCorrupt)
+            WasSettingsFileMissing = true;
+        Log.Information("Using default settings ({Reason})",
+            WasSettingsFileCorrupt ? "previous file unparseable, preserved a backup" : "fresh install detected");
         var fresh = new AppSettings();
         MergeBuiltInAwarenessPresets(fresh);
         return fresh;
     }
 
     /// <summary>
-    /// An unreadable settings file would otherwise be clobbered with defaults by the
-    /// first debounced save, silently destroying years of user data that may be
-    /// hand-recoverable (truncated tail, encoding glitch). Preserve a copy first.
+    /// An unreadable settings file would otherwise be clobbered with defaults by the first
+    /// debounced save, silently destroying years of user data that may be hand-recoverable
+    /// (truncated tail, encoding glitch). Rename it to <c>settings.corrupt-&lt;timestamp&gt;.json</c>
+    /// first so the fresh defaults can't overwrite it, and record
+    /// <see cref="WasSettingsFileCorrupt"/> / <see cref="LastCorruptBackupPath"/> so callers can
+    /// surface it or an import path can pull phrases back from it.
     /// </summary>
     private void QuarantineCorruptSettingsFile()
     {
         try
         {
             if (!File.Exists(_settingsPath)) return;
-            var quarantinePath = _settingsPath + ".corrupt";
-            File.Copy(_settingsPath, quarantinePath, overwrite: true);
-            Log.Warning("Settings file unreadable; preserved a copy at {Path} before falling back to defaults", quarantinePath);
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var backupPath = _settingsPath.Replace(".json", $".corrupt-{stamp}.json");
+            // Move (not copy) so the next save writes a clean file to _settingsPath, and the
+            // unparseable original is set aside under a timestamped name for inspection/import.
+            File.Move(_settingsPath, backupPath, overwrite: true);
+            LastCorruptBackupPath = backupPath;
+            WasSettingsFileCorrupt = true;
+            Log.Warning("Settings file unreadable; preserved it at {Path} before falling back to defaults", backupPath);
         }
         catch (Exception ex)
         {
+            // If we can't even rename it, leave it in place rather than deleting anything.
             Log.Warning(ex, "Failed to preserve unreadable settings file");
         }
     }
