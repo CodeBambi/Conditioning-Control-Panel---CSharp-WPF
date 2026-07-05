@@ -8,22 +8,28 @@ cleanup** — its canonical v12 gotcha content lives in `crossplatform-rebuild-p
 `unified-compositor-engine-plan.md` remain the detail tracker for Workstreams 1-2 and are
 NOT replaced by this file.
 
+This goal is the umbrella driver for the entire Avalonia v12 port: every WPF feature
+must be rehomed onto Avalonia + CCP.Core seams with preserved or improved behavior, and
+all real-time visuals must flow through the unified Skia compositor.
+
 ## The goal, in one paragraph
 
-Finish rebuilding the Conditioning Control Panel as an Avalonia v12 app whose every
-feature WORKS on Windows and Linux: build, launch, and run all current WPF features (or
-improved versions of them). Functionality is the contract; the implementation underneath
-is not. Old WPF code, old dependencies, and old architectural choices carry zero
-sentimental weight: replace anything if the replacement is faster, safer, or simpler,
-as long as the user-visible behavior survives or improves. All real-time visuals
-(engine mode: session effects; game mode: Chaos) render through the unified Skia
-compositor, not per-effect windows.
+Finish rebuilding the Conditioning Control Panel as an Avalonia v12 app whose **every
+current WPF feature is fully ported to Avalonia** and WORKS on Windows and Linux: build,
+launch, and run all features (or improved versions of them) through the Avalonia heads.
+Functionality is the contract; the implementation underneath is not. Old WPF code, old
+dependencies, and old architectural choices carry zero sentimental weight: replace
+anything if the replacement is faster, safer, or simpler, as long as the user-visible
+behavior survives or improves. All real-time visuals (engine mode: session effects;
+game mode: Chaos) render through the unified Skia compositor, not per-effect windows;
+non-visual and interactive features are likewise rehomed onto Avalonia+Core seams so
+that this goal applies to **all feature ports, not just the UCE**.
 
 ## What matters and what does not
 
 | Matters (the contract) | Does not matter |
 |---|---|
-| Every current feature works end-to-end in the running app | Which library/dependency provides it |
+| Every current feature works end-to-end in the **Avalonia heads** on Windows and Linux | Which library/dependency provides it |
 | At least as fast and smooth as WPF; low-end machines are a hard requirement | Whether the code resembles the WPF code |
 | Windows AND Linux: build, launch, features function | Matching WPF pixel-for-pixel (keep the design language, see `dashboard-design`) |
 | Overlays stay tinted glass: user keeps using the PC while conditioning runs | Keeping legacy per-effect windows |
@@ -53,6 +59,13 @@ The doctrine this goal adds:
    `ISkiaSharpApiLeaseFeature` lease, or `CompositionCustomVisualHandler` for
    render-thread loops). Persistent `SKImage`s, engine-owned invalidation, no per-frame
    `SKBitmap` allocation (see `unified-compositor-engine` skill rules).
+
+## Porting doctrine: Avalonia everywhere
+
+All user-facing functionality, including tabs, dialogs, sessions, progression,
+integrations, and overlays, must ultimately run through Avalonia UI and CCP.Core seams.
+WPF remains the behavior reference only; new feature work and fixes land in
+Avalonia/Core first.
 
 ## Skills to drive this goal (invoke them; do not re-derive)
 
@@ -235,7 +248,9 @@ must hold 60fps target / 30fps floor during heavy activity on a low-end machine.
 `port-audit` over the whole app; every remaining effect-window candidate either becomes
 a layer, is justified as interactive, or gets a task-board row. Re-verify the parity
 matrix rows invalidated by WS1/WS2. Perf gate: `--benchmark` and `--max-benchmark` not
-worse than `docs/benchmark-optimized.json`.
+worse than `docs/benchmark-optimized.json`. This sweep includes any remaining WPF-only
+features (tabs, dialogs, integrations, progression, etc.): each must either have an
+Avalonia implementation with parity, a documented improvement, or a gated/recorded gap.
 
 ### WS4: Linux bring-up to feature parity
 Target: `dotnet build` + launch + full feature sweep on Linux (X11 first; Wayland
@@ -252,6 +267,10 @@ input, never crash). Known mechanisms to research and implement via `avalonia-re
   research a Linux-native equivalent first (e.g. layer-shell wallpaper, WebKitGTK or
   system-browser flow, PipeWire/PulseAudio ducking); if none is proportionate, degrade
   gracefully and record the gap.
+
+As features are verified on Linux, any WPF-only behavior must either be ported to
+Avalonia in a cross-platform way, or explicitly gated/degraded with a recorded gap; no
+feature is considered "done" until its Avalonia implementation is the primary path.
 Verification per `docs/linux-vm-testing.md` + `build-linux.sh`; add a Linux column or
 section to the parity matrix and sweep every feature there.
 
