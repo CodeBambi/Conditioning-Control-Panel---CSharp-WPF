@@ -372,9 +372,14 @@ public static class BenchmarkContext
                     }
 
                     // Keep sustained overlays alive in case something clears them (idempotent).
-                    overlay?.ShowOverlaySustained("braindrain", 1.0);
-                    overlay?.ShowOverlaySustained("spiral", 0.25);
-                    overlay?.ShowOverlaySustained("pink", 0.25);
+                    // Held at 10% to match the initial force block: braindrain at 1.0 rendered a
+                    // full-screen DARK-VIOLET tint (its capture-fallback) on the capture-excluded
+                    // surface, which sits ABOVE every other layer and the desktop - that was the
+                    // "purple-blue 100%" that blacked out the screen. This tick re-forced it every
+                    // 200ms, overriding the initial 0.10, so it had to be lowered here too.
+                    overlay?.ShowOverlaySustained("braindrain", 0.10);
+                    overlay?.ShowOverlaySustained("spiral", 0.10);
+                    overlay?.ShowOverlaySustained("pink", 0.10);
 
                     // In web video phase, periodically trigger web video
                     if (useWebVideo && rng.NextDouble() < 0.3)
