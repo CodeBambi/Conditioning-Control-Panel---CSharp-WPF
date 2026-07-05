@@ -66,6 +66,16 @@ namespace ConditioningControlPanel.Services
         /// </summary>
         private const int GlobalMinGapMs = 60000;
 
+        /// <summary>
+        /// Triggers that skip ONLY the hard global min-gap floor above (they keep their own per-rule
+        /// cooldown_ms and every other gate). These are FUNCTIONAL corrections that must keep their
+        /// authored cadence rather than flavor chatter — currently the mandatory-video attention-check
+        /// fail ("eyes on the screen, pay attention"), which authors a 20s cooldown. Trigger keys are
+        /// app-raised constants, so a mod's rule under this trigger inherits the exemption.
+        /// </summary>
+        private static readonly HashSet<string> GlobalGapExemptTriggers =
+            new(StringComparer.OrdinalIgnoreCase) { "AttentionCheckFail" };
+
         /// <summary>Barks at/above this priority (or any non-Normal class) speak via GigglePriority; lower ones queue via Giggle.</summary>
         private const int PriorityBarkThreshold = 100;
 
@@ -1350,10 +1360,15 @@ namespace ConditioningControlPanel.Services
                 if (!willPreempt && (App.AvatarWindow?.IsSpeaking ?? false))
                     return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = "speaking" };
 
-                // Global min-gap.
-                var sinceGlobal = (DateTime.UtcNow - _globalLastFireUtc).TotalMilliseconds;
-                if (sinceGlobal < GlobalMinGapMs)
-                    return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = $"min-gap ({sinceGlobal:F0}/{GlobalMinGapMs}ms)" };
+                // Global min-gap. Functional triggers (e.g. the video attention-check correction) skip
+                // ONLY this floor and keep their own per-rule cooldown below, so a needed correction
+                // still speaks even when recent chatter would otherwise wall it off for a full minute.
+                if (!GlobalGapExemptTriggers.Contains(rule.Trigger))
+                {
+                    var sinceGlobal = (DateTime.UtcNow - _globalLastFireUtc).TotalMilliseconds;
+                    if (sinceGlobal < GlobalMinGapMs)
+                        return new GateDecision { WouldFire = false, VariantIndex = -1, Reason = $"min-gap ({sinceGlobal:F0}/{GlobalMinGapMs}ms)" };
+                }
 
                 // Per-bark cooldown.
                 if (rule.CooldownMs > 0 && _lastFiredUtc.TryGetValue(rule.Id, out var last))
