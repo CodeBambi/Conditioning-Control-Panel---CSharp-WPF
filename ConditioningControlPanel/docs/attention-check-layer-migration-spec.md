@@ -1,6 +1,6 @@
 # Attention-Check → Compositor Layer migration spec
 
-**Status:** READY TO EXECUTE (fully investigated 2026-07-05; not yet implemented).
+**Status:** ✅ DONE 2026-07-05 (`AttentionCheckLayer` Z=160, Stage 4l; all gates green — slnf 0 / WPF 0 / Core 542 / verify-layers exit 0 + Stage 4l PASS `DIFFER center-crop` / smoke Findings 5 / 44 tabs). Code landed (co-mingled) in `57f6f048` after a co-agent broad `git add` swept the 4 uncommitted files; intact + verified in HEAD. This spec is retained as the as-built record.
 **Owner claim:** see `avalonia-migration-task-board.md` Active Claims Ledger.
 **Goal alignment:** this is the **last live window-based passive effect** in the Avalonia
 head. Migrating it completes the UCE window-migration lane (`skia-rebuild-goal.md`:

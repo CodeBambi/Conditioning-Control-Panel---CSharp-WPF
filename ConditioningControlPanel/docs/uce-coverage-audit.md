@@ -16,18 +16,20 @@ and turns the gap into an ordered migration backlog.
 
 ## Verdict
 
-**Yellow → Green-ish.** The session-effect set and the *live* passive chaos overlays are
-fully on the UCE (**19 registered layers** as of 2026-07-05: 9 session + 10 chaos).
+**Green.** The session-effect set, the *live* passive chaos overlays, AND the last window-based
+passive effect (attention-check) are all on the UCE (**20 registered layers** as of 2026-07-05:
+9 session + 10 chaos + 1 attention-check). The window-migration lane is complete.
 
 > **Progress 2026-07-05:** gaps #1–2 closed — `ChaosFxWindow`→`ChaosFxLayer` (Z=118, `8df68031`)
 > and `ChaosWaveTimerOverlay`→`ChaosWaveTimerLayer` (Z=155, `16fe5a92`); both windows deleted;
 > `--verify-layers` Stages 4j/4k PASS. Dead `AvaloniaBubbleWindow` deleted (`c8bb20a1`).
 > All gates green each commit (slnf 0 · WPF 0 · Core 542 · verify-layers exit 0 · smoke Findings 5).
 >
-> **Remaining gap is small:** the only LIVE passive effect still on a `Window` is the standalone
-> attention-check — and it is **now entangled with the co-agent's compositor-video E-phase**, so
-> migrate it only in coordination with the video lane. The other 4 window-based effects
-> (`ChaosEStim`/`EStimGlow`/`VibeTrail`/`SkiaFx`) are **unwired** (no live caller). `AvaloniaOverlaySurface`
+> **Window-migration lane complete:** the standalone attention-check — the last LIVE passive
+> effect on a `Window` — was migrated to `AttentionCheckLayer` (Z=160, `--verify-layers` Stage 4l
+> PASS; code co-mingled in co-agent commit `57f6f048`). The remaining 4 window-based effects
+> (`ChaosEStim`/`EStimGlow`/`VibeTrail`/`SkiaFx`) are **unwired** (no live caller — blocked, not
+> migration gaps). `AvaloniaOverlaySurface`
 > was mis-listed as dead — it is a **live** `IOverlaySurface` consumer (see B3) and is kept.
 > No interactive surface is wrongly a layer; no migrated effect regressed to a window.
 
@@ -146,11 +148,12 @@ floor · `--verify-layers` exit 0 · `--verify-video` exit 0 · `--smoke-test` F
    `--verify-layers` Stage 4k PASS; Skia text pill, primary-monitor only).
 3. ~~**`AvaloniaBubbleWindow` delete**~~ ✅ **DONE `c8bb20a1`** (dead, 0 callers). **`AvaloniaOverlaySurface`
    JUSTIFIED** — not dead; live `IOverlaySurface` consumer (Core `AchievementService` visibility gate + `MainWindowViewModel`). Kept.
-4. **Standalone attention-check → layer** (LIVE-but-dormant): route `AttentionCheckControl`'s
-   pulsing target through a compositor layer instead of a bespoke `Window`. Confirm the WPF
-   contract + dormancy first (`wpf-parity`). ⚠️ **COORDINATE with the co-agent's video lane** —
-   attention-checks fire during compositor video and their timing was touched in the video
-   E1/E2/E3 work; this is no longer a clean solo pickup.
+4. ~~**Standalone attention-check → layer**~~ ✅ **DONE 2026-07-05** (`AttentionCheckLayer` Z=160;
+   `--verify-layers` Stage 4l PASS `DIFFER center-crop`, clean Hide fade). Confirmed PASSIVE
+   (`IsHitTestVisible=false` + webcam gaze-dwell). New layer + service rewire (Window→layer,
+   self-registered via injected `CompositorEngine`, WPF 180 ms opacity fade preserved) + Stage 4l.
+   All gates green. **Last LIVE window-based passive effect — the window-migration lane is now
+   complete.** (Code co-mingled in co-agent commit `57f6f048` via a broad `git add`; verified in HEAD.)
 5. **`ChaosSkiaFxOverlay` → layer** (632 LOC, WPF default glow) — consolidation target; larger.
 6. **E-Stim chain (`ChaosEStimOverlay` + `ChaosEStimGlowOverlay`) → layers** — gated on the
    Q10b frozen-`BubbleEngine` authorization landing (ready spec exists).
