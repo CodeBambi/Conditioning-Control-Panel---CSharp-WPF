@@ -34,6 +34,17 @@ namespace ConditioningControlPanel
         private readonly int _size;
         private readonly double _screenTop;
 
+        // KEEP-ALIVE window pool. A fresh WS_EX_LAYERED (AllowsTransparency) Window.Show() runs a
+        // synchronous HwndTarget.OnResize -> MediaContext.CompleteRender() on first realization;
+        // spawning one per bubble while the render thread is saturated (avatar emote crossfades,
+        // OCR, whispers) is a UI-thread deadlock trigger (freeze #494). Windows are a FIXED size and
+        // realized once, then Hide()/Show() reused; the bubble image is centred inside, so it can
+        // vary size without ever resizing the window (a resize is the deadlock, moving is safe).
+        private const int WINDOW_DIM = 200;   // fixed reusable size (max bubble 150 + slack)
+        private const int POOL_MAX = 6;
+        private const int WM_DPICHANGED = 0x02E0;
+        private static readonly System.Collections.Generic.Stack<Window> _pool = new();
+
         public AvatarRandomBubble(Point avatarScreenPos, Random random, Action onPop)
         {
             _random = random;
@@ -55,13 +66,15 @@ namespace ConditioningControlPanel
             _posY = avatarScreenPos.Y / dpiScale;
             _screenTop = -_size - 50; // Off top of screen
 
-            // Create bubble image
+            // Create bubble image (centred inside the fixed-size window; size varies, window doesn't)
             _bubbleImage = new Image
             {
                 Width = _size,
                 Height = _size,
                 Stretch = Stretch.Uniform,
                 RenderTransformOrigin = new Point(0.5, 0.5),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
                 Cursor = Cursors.Hand,
                 IsHitTestVisible = true
             };
@@ -118,29 +131,16 @@ namespace ConditioningControlPanel
                 e.Handled = true;
             };
 
-            // Create window
-            _window = new Window
-            {
-                WindowStyle = WindowStyle.None,
-                AllowsTransparency = true,
-                Background = Brushes.Transparent,
-                Topmost = true,
-                ShowInTaskbar = false,
-                ShowActivated = false,
-                Focusable = false,
-                Width = _size + 40,
-                Height = _size + 40,
-                Left = _posX + 2,
-                Top = _posY - 20,
-                Content = grid,
-                Cursor = Cursors.Hand,
-                IsHitTestVisible = true
-            };
+            // Rent a fixed-size, kept-alive window and drop in this bubble's content. No window-level
+            // click handler here: it would accumulate across pooled reuses. The grid + image handlers
+            // (rebuilt fresh every spawn) already cover the whole surface.
+            _window = RentWindow();
+            _window.Content = grid;
+            _window.BeginAnimation(Window.OpacityProperty, null);
+            _window.Opacity = 1;
+            UpdateWindowPos();
 
-            // Window click as final backup
-            _window.MouseLeftButtonDown += (s, e) => Pop();
-
-            // Show window
+            // Show window (realizes the hwnd on a freshly created one; un-hides a pooled one)
             _window.Show();
 
             // Hide from Alt+Tab
@@ -227,8 +227,7 @@ namespace ConditioningControlPanel
                 }
 
                 _window.Opacity = _fadeAlpha;
-                _window.Left = _posX + 2;
-                _window.Top = _posY - 20;
+                UpdateWindowPos();
             }
             catch (Exception ex)
             {
@@ -249,8 +248,73 @@ namespace ConditioningControlPanel
             if (!_isAlive) return;
             _isAlive = false;
             _animTimer.Stop();
+            ReturnWindow();
+        }
 
-            try { _window.Close(); } catch { }
+        /// <summary>Position the fixed-size window so the (centred) bubble image sits where the old
+        /// per-size window put it. WINDOW_DIM/2 = 100; the image centre carried a 22px X / 0px Y
+        /// offset from the old margins.</summary>
+        private void UpdateWindowPos()
+        {
+            _window.Left = _posX + _size / 2.0 - 78;   // (_posX + _size/2 + 22) - 100
+            _window.Top = _posY + _size / 2.0 - 100;   // (_posY + _size/2)      - 100
+        }
+
+        private Window RentWindow()
+        {
+            lock (_pool)
+            {
+                if (_pool.Count > 0) return _pool.Pop();
+            }
+            var win = new Window
+            {
+                WindowStyle = WindowStyle.None,
+                AllowsTransparency = true,
+                Background = Brushes.Transparent,
+                Topmost = true,
+                ShowInTaskbar = false,
+                ShowActivated = false,
+                Focusable = false,
+                Width = WINDOW_DIM,
+                Height = WINDOW_DIM,
+                Cursor = Cursors.Hand,
+                IsHitTestVisible = true,
+            };
+            // Swallow WM_DPICHANGED: WPF's automatic DPI rescale is another synchronous CompleteRender
+            // and the bubble floats near the avatar, which can straddle mixed-DPI monitors.
+            win.SourceInitialized += (_, _) =>
+            {
+                try
+                {
+                    System.Windows.Interop.HwndSource
+                        .FromHwnd(new System.Windows.Interop.WindowInteropHelper(win).Handle)
+                        ?.AddHook(SwallowDpiChanged);
+                }
+                catch { }
+            };
+            return win;
+        }
+
+        private void ReturnWindow()
+        {
+            var w = _window;
+            try { w.BeginAnimation(Window.OpacityProperty, null); } catch { }
+            try { w.Content = null; w.Opacity = 1; w.Hide(); } catch { }
+            lock (_pool)
+            {
+                if (_pool.Count < POOL_MAX && !_pool.Contains(w))
+                {
+                    _pool.Push(w);
+                    return;
+                }
+            }
+            try { w.Close(); } catch { }
+        }
+
+        private static IntPtr SwallowDpiChanged(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_DPICHANGED) handled = true;
+            return IntPtr.Zero;
         }
 
         #region Win32

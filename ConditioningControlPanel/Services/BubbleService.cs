@@ -982,6 +982,13 @@ public class BubbleService : IDisposable
     {
         try
         {
+            // Honor the dashboard's Motion setting (ChaosMotionMode: "Mixed"/"FloatUp"/"RainDown"/
+            // "RoamBounce") so dashboard effect bubbles move like chaos ones — e.g. "Rain" makes them fall.
+            // "Mixed" (and any unrecognised value) don't parse → null → the gentle FloatUp default below.
+            // Ambient bubbles are treats (TreatLifeMs dissolves them), so even RoamBounce is safe here.
+            ChaosMotion? motion = Enum.TryParse<ChaosMotion>(App.Settings?.Current?.ChaosMotionMode, out var mm)
+                ? mm : (ChaosMotion?)null;
+
             // Trigger effects linger longer than the brisk chaos cadence (user feedback:
             // pink filter / glitch wash were too quick on the calm dashboard).
             const double LINGER = 2.5;
@@ -1000,13 +1007,13 @@ public class BubbleService : IDisposable
                     Label = "GLITCH",
                     IsLive = false,
                     FuseMs = 0,
-                    Motion = ChaosMotion.FloatUp,
+                    Motion = motion ?? ChaosMotion.FloatUp,
                     TreatLifeMs = 7000,
                 };
             }
             var v = ChaosBubbleVariants.All.FirstOrDefault(x => x.Id == id);
             if (v == null) return null;
-            var spec = ChaosBubbleVariants.Build(v, intensity: 0.3, motionOverride: ChaosMotion.FloatUp, ambient: true);
+            var spec = ChaosBubbleVariants.Build(v, intensity: 0.3, motionOverride: motion, ambient: true);
             if (spec.Payload != null) spec.Payload.DurationMult = LINGER;   // longer-lasting overlays/flashes
             return spec;
         }
@@ -1995,7 +2002,13 @@ internal class Bubble
     // allocated once per slot and recycled. A single full-screen canvas host was rejected because
     // it can't do click-through-except-on-bubbles without a global mouse hook.
     private const int WINDOW_POOL_MAX = 64;
-    private static readonly System.Collections.Generic.Stack<Window> _windowPool = new();
+    // Size-aware pool: one stack per quantized square side (128, 256, 384, …). A single shared stack meant
+    // renting a shell last sized for a DIFFERENT bucket, forcing a layered-window resize — HwndTarget.OnResize
+    // -> synchronous MediaContext.CompleteRender, which wedges the UI thread under a backed-up render thread
+    // (the #494 mechanism), on top of the native DIB realloc. Keying by size makes every rental an exact
+    // match, so a bubble window is never resized after creation.
+    private static readonly System.Collections.Generic.Dictionary<int, System.Collections.Generic.Stack<Window>> _windowPool = new();
+    private static int _windowPoolCount;   // total idle shells across all buckets, for the WINDOW_POOL_MAX cap
 
     // Shared frozen near-invisible hit brush — identical on every bubble, so one frozen instance the
     // render thread realizes once beats a fresh SolidColorBrush per spawn (alloc + per-instance realize).
@@ -2010,13 +2023,18 @@ internal class Bubble
     /// does, but driven by the AppSettings.BubbleSharedHost flag instead of the chaos one.</summary>
     internal static bool AmbientHostActive;
 
-    /// <summary>A hidden, reset transparent window shell — recycled or freshly built. UI thread only.</summary>
-    private static Window RentWindow()
+    /// <summary>A hidden, reset transparent window shell of exactly <paramref name="bucket"/> px square —
+    /// recycled from that bucket or freshly built at that size. Never resized after creation. UI thread only.</summary>
+    private static Window RentWindow(int bucket)
     {
-        while (_windowPool.Count > 0)
+        if (_windowPool.TryGetValue(bucket, out var stack))
         {
-            var w = _windowPool.Pop();
-            if (w != null) return w;
+            while (stack.Count > 0)
+            {
+                var w = stack.Pop();
+                _windowPoolCount--;
+                if (w != null) return w;
+            }
         }
         return new Window
         {
@@ -2029,19 +2047,31 @@ internal class Bubble
             Focusable = false,
             ResizeMode = ResizeMode.NoResize,
             WindowStartupLocation = WindowStartupLocation.Manual,
+            Width = bucket,
+            Height = bucket,   // sized once, here — the resize that used to happen per-spawn is gone
         };
     }
 
-    /// <summary>Reset a dead bubble's window to a bare hidden shell and return it to the pool
-    /// (or Close it if the pool is full). Drops Content/Effect so the visual tree + bitmaps
-    /// release immediately and nothing roots the old bubble. UI thread only.</summary>
-    private static void ReturnWindow(Window? w)
+    /// <summary>Reset a dead bubble's window to a bare hidden shell and return it to its size bucket
+    /// (or Close it if the pool is full). Drops Content/Effect so the visual tree + bitmaps release
+    /// immediately and nothing roots the old bubble. <paramref name="bucket"/> is the window's square
+    /// side (its _winDim) — the shell is never resized, so it stays in exactly this bucket. UI thread only.</summary>
+    private static void ReturnWindow(Window? w, int bucket)
     {
         if (w == null) return;
         // Restore the topmost default: a Free Desktop chaos bubble may have set this false, and the
         // pool is shared with ambient bubbles that must always ride on top.
         try { w.Effect = null; w.Content = null; w.Opacity = 0; w.Topmost = true; w.Hide(); } catch { }
-        if (_windowPool.Count < WINDOW_POOL_MAX) _windowPool.Push(w);
+        if (_windowPoolCount < WINDOW_POOL_MAX)
+        {
+            if (!_windowPool.TryGetValue(bucket, out var stack))
+            {
+                stack = new System.Collections.Generic.Stack<Window>();
+                _windowPool[bucket] = stack;
+            }
+            stack.Push(w);
+            _windowPoolCount++;
+        }
         else { try { w.Close(); } catch { } }
     }
 
@@ -2049,10 +2079,15 @@ internal class Bubble
     /// and would otherwise hold its hidden HWNDs for the process lifetime.</summary>
     public static void DrainWindowPool()
     {
-        while (_windowPool.Count > 0)
+        foreach (var stack in _windowPool.Values)
         {
-            try { _windowPool.Pop()?.Close(); } catch { }
+            while (stack.Count > 0)
+            {
+                try { stack.Pop()?.Close(); } catch { }
+            }
         }
+        _windowPool.Clear();
+        _windowPoolCount = 0;
     }
 
     private readonly Window? _window;   // null in shared-host mode (the grid lives on ChaosBubbleHostOverlay)
@@ -2799,8 +2834,9 @@ internal class Bubble
             // PER-WINDOW MODE (default): one pooled top-level layered Window per bubble. Quantize to a
             // 128px bucket so a recycled shell reuses its DIB back-buffer (per-spawn resize of a layered
             // window reallocs the native DIB — that was the chaos OOM; managed heap flat, GDI climbing).
-            _window = RentWindow();
-            if (_window.Width != _winDim) { _window.Width = _winDim; _window.Height = _winDim; }
+            // Rent an exact-size shell from the pool: the size-aware pool guarantees Width==Height==_winDim,
+            // so a layered-window resize (OnResize -> CompleteRender wedge + DIB realloc) never happens here.
+            _window = RentWindow((int)_winDim);
             // Null (not Transparent) background so the quantized margin around the centred grid is NOT
             // hit-testable — clicks there pass through; the click area stays exactly the grid.
             _window.Background = null;
@@ -4451,8 +4487,9 @@ internal class Bubble
         else
         {
             // Recycle the window shell instead of closing it (no per-bubble HWND churn → no
-            // finalizer-queue flood → bounded native memory). ReturnWindow hides + resets it.
-            ReturnWindow(_window);
+            // finalizer-queue flood → bounded native memory). ReturnWindow hides + resets it, filing it
+            // back under its size bucket (_winDim) so the next same-size rental needs no resize.
+            ReturnWindow(_window, (int)_winDim);
         }
 
         // Notify service to remove from list (after animation completed)

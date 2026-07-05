@@ -522,7 +522,11 @@
                             <TranslateTransform x:Name="AvatarAnimatedTranslate" Y="0"/>
                         </Image.RenderTransform>
                         <Image.Effect>
-                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                            <!-- BlurRadius 20->10 (2026-07-05): during a crossfade BOTH animated layers
+                                 composite a full-size blur shader every frame; Gaussian cost scales ~radius^2,
+                                 so halving the radius is ~4x cheaper per layer. Cuts the render-thread load
+                                 that feeds the emote/CompleteRender freeze (#494) with only a subtly tighter glow. -->
+                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.6"/>
                         </Image.Effect>
                     </Image>
                     <!-- Second animated layer: crossfade target for Circe WebP emotes
@@ -538,7 +542,8 @@
                             <TranslateTransform x:Name="AvatarAnimatedTranslateB" Y="0"/>
                         </Image.RenderTransform>
                         <Image.Effect>
-                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="20" ShadowDepth="0" Opacity="0.6"/>
+                            <!-- BlurRadius 20->10: see ImgAvatarAnimated above (halves the crossfade blur cost). -->
+                            <DropShadowEffect Color="{DynamicResource PinkColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.6"/>
                         </Image.Effect>
                     </Image>
                 </Grid>

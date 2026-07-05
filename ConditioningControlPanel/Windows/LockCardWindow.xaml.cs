@@ -10,6 +10,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using ConditioningControlPanel.Services;
 using ConditioningControlPanel.Services.Speech;
+using ConditioningControlPanel.Services.UI;
 using ConditioningControlPanel.Localization;
 using ConditioningControlPanel.Models;
 
@@ -21,9 +22,10 @@ namespace ConditioningControlPanel
     /// </summary>
     public partial class LockCardWindow : Window
     {
-        private readonly string _phrase;
-        private readonly int _requiredRepeats;
-        private readonly bool _strictMode;
+        // Per-session config (mutable: a pooled window is reconfigured on every reuse — see Configure).
+        private string _phrase = "";
+        private int _requiredRepeats;
+        private bool _strictMode;
         private bool _voiceMode;   // solve by speaking instead of typing (may fall back mid-session)
         private int _completedRepeats = 0;
         private bool _isCompleted = false;
@@ -31,11 +33,25 @@ namespace ConditioningControlPanel
         private bool _voiceListening = false;
         private System.Threading.CancellationTokenSource? _voiceCts; // cancels the in-flight recognize on close/panic/privacy
         private bool _evictedAutonomy = false; // we stood the "Hey Bambi" wake/PTT mic down and must restore it
-        
+
         // Multi-monitor support
-        private readonly bool _isPrimary;
-        private static List<LockCardWindow> _allWindows = new();
+        private bool _isPrimary;
+        private System.Windows.Forms.Screen? _screen;   // remembered so re-show can reposition on reuse
+        private static List<LockCardWindow> _allWindows = new();   // the visible set (drives IsAnyOpen / sync)
         private static string _sharedInput = "";
+
+        // Keep-alive pool. A lock card is a WS_EX_LAYERED/AllowsTransparency window; a FRESH Window.Show()
+        // runs a synchronous MediaContext.CompleteRender on first realization, which — under a render thread
+        // already backed up by many animating overlays — never returns and wedges the whole UI (the #494
+        // freeze; same mechanism dump-confirmed for flashes 2026-07-05). So instead of new/Close per card we
+        // realize once, then Hide()/Show() and reconfigure. Hidden instances live here between cards.
+        private static readonly Stack<LockCardWindow> _pool = new();
+        private const int POOL_MAX = 6;   // enough for a very wide multi-monitor rig; surplus is closed
+        private static DispatcherTimer? _deferTimer;   // holds a show while a display change settles
+        private static int _deferAttempts = 0;
+        private const int DEFER_MAX_ATTEMPTS = 6;      // ~5.4s ceiling — a required card always appears
+
+        private const int WM_DPICHANGED = 0x02E0;
         
         // Achievement tracking
         private static DateTime _startTime;
@@ -64,7 +80,9 @@ namespace ConditioningControlPanel
         /// <summary>
         /// Check if any lock card window is currently open
         /// </summary>
-        public static bool IsAnyOpen() => _allWindows.Count > 0;
+        // A card is "open" if any window is visible OR a show is deferred waiting on a display change to
+        // settle (so a poller like BubbleCountResultWindow doesn't conclude the card closed before it opened).
+        public static bool IsAnyOpen() => _allWindows.Count > 0 || _deferTimer != null;
 
         /// <summary>
         /// Create a lock card window for a specific screen
@@ -74,15 +92,56 @@ namespace ConditioningControlPanel
         /// <param name="strictMode">If true, ESC is disabled</param>
         /// <param name="screen">The screen to show on (null for primary)</param>
         /// <param name="isPrimary">If true, this window handles input</param>
-        public LockCardWindow(string phrase, int repeats, bool strictMode,
-            System.Windows.Forms.Screen? screen = null, bool isPrimary = true, bool voiceMode = false)
+        // One-time shell construction. All per-session state is applied in Configure(), so a single
+        // realized instance can be reused for any later card without a fresh Window.Show() on the hot path.
+        public LockCardWindow()
         {
             InitializeComponent();
+
+            // When focus is lost, immediately reclaim it using Win32 to prevent keystrokes from leaking
+            // into other apps (e.g. Discord). Wired once and unconditionally: it reads the CURRENT
+            // session's _isPrimary/_isCompleted/_voiceMode, so it keeps working across reuse (and a
+            // hidden pooled window never raises Deactivated, with the IsVisible check as a backstop).
+            Deactivated += (s, e) =>
+            {
+                if (!_isPrimary || _isCompleted) return;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (_isCompleted || !IsVisible) return;
+                    if (_hwnd != IntPtr.Zero)
+                    {
+                        SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                        SetForegroundWindow(_hwnd);
+                    }
+                    Activate();
+                    if (_voiceMode) Focus(); else TxtInput.Focus();
+                }), DispatcherPriority.Input);
+            };
+        }
+
+        /// <summary>
+        /// Apply per-session configuration to this (possibly reused) window: tear down any prior card's
+        /// state, set the phrase/mode/colors, and position it on the target screen. Safe to call repeatedly
+        /// on a pooled instance — this is what lets us avoid realizing a fresh layered window per card.
+        /// </summary>
+        private void Configure(string phrase, int repeats, bool strictMode,
+            System.Windows.Forms.Screen? screen, bool isPrimary, bool voiceMode)
+        {
+            // ── reset transient state (a pooled window still carries the previous card's) ──
+            _closeTimer?.Stop();
+            _closeTimer = null;
+            _voiceMode = false;      // force any prior voice loop to fully tear down before we reconfigure
+            StopVoiceSolve();
+            _completedRepeats = 0;
+            _isCompleted = false;
+            _sharedInput = "";
 
             _phrase = phrase;
             _requiredRepeats = repeats;
             _strictMode = strictMode;
             _isPrimary = isPrimary;
+            _screen = screen;
             // Voice mode degrades gracefully to typing if the offline engine isn't usable, so the
             // user can never be trapped behind a mic that won't cooperate.
             _voiceMode = voiceMode && App.Speech?.IsAvailable == true && App.Settings.Current.MicConsentGiven;
@@ -92,6 +151,16 @@ namespace ConditioningControlPanel
             // Set the phrase text
             TxtPhrase.Text = phrase;
 
+            // Clear any pulse/shake transform and reset input + panels to the fresh (unsolved) look —
+            // a reused window may have been left mid-completion or mid-encouragement.
+            CardBorder.RenderTransform = null;
+            TxtInput.IsEnabled = true;
+            TxtInput.Clear();
+            CompletionPanel.Visibility = Visibility.Collapsed;
+            TxtHint.Visibility = Visibility.Visible;
+            TxtHint.Foreground = new SolidColorBrush(Color.FromRgb(0x66, 0x66, 0x66));
+            TxtVoiceHeard.Text = "I heard: …";
+
             // Swap the input affordance for the voice panel when solving by voice.
             if (_voiceMode)
             {
@@ -100,22 +169,28 @@ namespace ConditioningControlPanel
                 TxtTitle.Text = "SAY IT TO UNLOCK";
                 TxtHint.Text = "Say the phrase out loud, clearly.";
                 TxtVoiceState.Text = _isPrimary ? "🎤 Listening…" : "🎤 Speak on the main monitor";
+                VoiceStateBrush.Color = VoicePink;
+                if (VoiceLevelFill.RenderTransform is ScaleTransform st) st.ScaleX = 0;
+            }
+            else
+            {
+                InputBorder.Visibility = Visibility.Visible;
+                VoicePanel.Visibility = Visibility.Collapsed;
+                TxtTitle.Text = Loc.Get("label_type_to_unlock_2");
             }
 
             // Update progress display
             UpdateProgress();
-            
+
             // Handle strict mode
-            if (_strictMode)
-            {
-                TxtStrict.Text = Loc.Get("label_strict");
-            }
+            TxtStrict.Text = _strictMode ? Loc.Get("label_strict") : "";
             // Esc always works now (even in strict mode) so always show the hint.
             TxtEscHint.Text = Loc.Get("label_press_esc_to_close");
-            
+
             // Position on screen
             if (screen != null)
             {
+                WindowState = WindowState.Normal;
                 PositionOnScreen(screen);
             }
             else
@@ -123,7 +198,7 @@ namespace ConditioningControlPanel
                 // Default to primary screen, maximized
                 WindowState = WindowState.Maximized;
             }
-            
+
             // Non-primary windows show synced text but input is read-only
             if (!_isPrimary)
             {
@@ -131,48 +206,32 @@ namespace ConditioningControlPanel
                 TxtInput.Focusable = false;
                 TxtHint.Text = Loc.Get("label_input_synced_from_primary_monitor");
             }
-            
+            else
+            {
+                TxtInput.IsReadOnly = false;
+                TxtInput.Focusable = true;
+                if (!_voiceMode) TxtHint.Text = Loc.Get("label_type_the_phrase_exactly_as_shown_above");
+            }
+
             // Apply custom colors from settings
             ApplyColors();
-            
-            // Register this window
-            _allWindows.Add(this);
-
-            // When focus is lost, immediately reclaim it using Win32 to prevent
-            // keystrokes from leaking into other apps (e.g., Discord)
-            if (_isPrimary)
-            {
-                Deactivated += (s, e) =>
-                {
-                    if (_isCompleted) return;
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        if (_isCompleted || !IsVisible) return;
-                        if (_hwnd != IntPtr.Zero)
-                        {
-                            SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-                            SetForegroundWindow(_hwnd);
-                        }
-                        Activate();
-                        if (_voiceMode) Focus(); else TxtInput.Focus();
-                    }), DispatcherPriority.Input);
-                };
-            }
         }
 
         private void PositionOnScreen(System.Windows.Forms.Screen screen)
         {
-            // Get DPI scale
-            var dpiScale = VisualTreeHelper.GetDpi(this);
-            var scaleX = dpiScale.DpiScaleX;
-            var scaleY = dpiScale.DpiScaleY;
-            
+            // Use the TARGET monitor's DPI (derived from its bounds), NOT GetDpi(this): a reused/pooled
+            // window may currently sit on a different-DPI monitor, and we now swallow WM_DPICHANGED so
+            // WPF won't auto-correct the size after the move. Getting the scale right here keeps full-
+            // screen coverage on mixed-DPI rigs — critical for a lock that must not leave the desktop
+            // reachable around the card.
+            var scale = BubbleCountWindow.GetDpiForScreen(screen);
+            if (scale <= 0) scale = 1.0;
+
             // Position window to cover the entire screen
-            Left = screen.Bounds.Left / scaleX;
-            Top = screen.Bounds.Top / scaleY;
-            Width = screen.Bounds.Width / scaleX;
-            Height = screen.Bounds.Height / scaleY;
+            Left = screen.Bounds.Left / scale;
+            Top = screen.Bounds.Top / scale;
+            Width = screen.Bounds.Width / scale;
+            Height = screen.Bounds.Height / scale;
         }
 
         private void ApplyColors()
@@ -232,28 +291,55 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void Window_Loaded(object sender, RoutedEventArgs e)
+        // Realization setup. OnSourceInitialized fires ONCE, synchronously during the first Show() and
+        // before Show() returns, so _hwnd is valid by the time OnShown() runs (even on the first card).
+        // Hide()/Show() reuse does NOT re-raise it, so this is strictly one-time.
+        protected override void OnSourceInitialized(EventArgs e)
         {
+            base.OnSourceInitialized(e);
             _hwnd = new WindowInteropHelper(this).Handle;
 
-            // Force this window to foreground via Win32 on primary
-            if (_isPrimary)
+            // Swallow WM_DPICHANGED: this window's geometry is computed manually per-monitor
+            // (PositionOnScreen uses the target monitor's DPI), so WPF's automatic DPI rescale is
+            // unwanted — and its OnDpiChanged -> OnResize -> synchronous MediaContext.CompleteRender
+            // deadlocks the UI thread on a backed-up render thread (the same #494 mechanism). Fired only
+            // on cross-DPI-monitor moves, so dropping it never affects the initial render.
+            if (_hwnd != IntPtr.Zero)
+                HwndSource.FromHwnd(_hwnd)?.AddHook(SwallowDpiChanged);
+        }
+
+        // XAML still wires Loaded="Window_Loaded"; keep a no-op so the binding resolves. All realization
+        // setup is in OnSourceInitialized; everything per-show is in OnShown().
+        private void Window_Loaded(object sender, RoutedEventArgs e) { }
+
+        // WndProc hook: drop WM_DPICHANGED so WPF never runs its auto DPI-rescale (which deadlocks under
+        // a backed-up render thread). Mirrors FlashService.SwallowDpiChanged.
+        private static IntPtr SwallowDpiChanged(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_DPICHANGED) handled = true;   // consume it; WPF's HwndTarget never sees the resize
+            return IntPtr.Zero;
+        }
+
+        // Runs on EVERY show (fresh or reused) — the foreground grab, focus, log, and voice-solve start
+        // that used to live in Window_Loaded. Called from ShowOnAllMonitors after Show().
+        private void OnShown()
+        {
+            if (!_isPrimary) return;
+
+            if (_hwnd != IntPtr.Zero)
             {
-                if (_hwnd != IntPtr.Zero)
-                {
-                    SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                        SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-                    SetForegroundWindow(_hwnd);
-                }
-                Activate();
-                if (_voiceMode) Focus(); else TxtInput.Focus();
-
-                App.Logger?.Information("Lock Card shown - Phrase: {Phrase}, Repeats: {Repeats}, Strict: {Strict}, Voice: {Voice}, Monitors: {Count}",
-                    _phrase, _requiredRepeats, _strictMode, _voiceMode, _allWindows.Count);
-
-                // Begin the spoken-solve listen loop on the primary monitor.
-                if (_voiceMode) StartVoiceSolve();
+                SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                SetForegroundWindow(_hwnd);
             }
+            Activate();
+            if (_voiceMode) Focus(); else TxtInput.Focus();
+
+            App.Logger?.Information("Lock Card shown - Phrase: {Phrase}, Repeats: {Repeats}, Strict: {Strict}, Voice: {Voice}, Monitors: {Count}",
+                _phrase, _requiredRepeats, _strictMode, _voiceMode, _allWindows.Count);
+
+            // Begin the spoken-solve listen loop on the primary monitor.
+            if (_voiceMode) StartVoiceSolve();
         }
 
         private void Window_KeyDown(object sender, KeyEventArgs e)
@@ -650,7 +736,7 @@ namespace ConditioningControlPanel
 
         private void CloseAllWindows()
         {
-            ForceCloseAll();
+            DismissAll();
         }
 
         /// <summary>
@@ -674,22 +760,27 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
-        /// Force close all lock card windows (used by panic button)
+        /// Dismiss all lock card windows (panic button, engine stop, remote stop, and the normal
+        /// post-completion auto-close). Windows are hidden and returned to the keep-alive pool rather
+        /// than closed, so the next card reuses a pre-realized layered window instead of realizing a
+        /// fresh one on the hot path — the fix for the #494 render-thread-deadlock freeze.
         /// </summary>
-        public static void ForceCloseAll()
+        public static void ForceCloseAll() => DismissAll();
+
+        private static void DismissAll()
         {
-            // Create a copy of the list to avoid modification during iteration
-            var windowsToClose = new List<LockCardWindow>(_allWindows);
+            // Cancel any pending deferred show so a card can't pop up after "stop everything".
+            _deferTimer?.Stop();
+            _deferTimer = null;
+            _deferAttempts = 0;
+
+            // Copy to avoid modification during iteration.
+            var windows = new List<LockCardWindow>(_allWindows);
             _allWindows.Clear();
 
-            foreach (var window in windowsToClose)
+            foreach (var window in windows)
             {
-                window._isCompleted = true; // Allow closing even in strict mode
-                try
-                {
-                    window.Close();
-                }
-                catch { }
+                try { window.DismissToPool(); } catch { }
             }
 
             // Notify InteractionQueue that lock card is complete (triggers queued items).
@@ -698,11 +789,66 @@ namespace ConditioningControlPanel
             // current (e.g. an in-flight Video), letting the session summary race the video
             // teardown (#462). The current-interaction check also dedups against OnClosing's
             // last-window release (whichever runs first wins; the other sees a foreign slot).
-            if (windowsToClose.Count > 0 &&
+            if (windows.Count > 0 &&
                 App.InteractionQueue?.CurrentInteraction == Services.InteractionQueueService.InteractionType.LockCard)
             {
                 App.InteractionQueue.Complete(Services.InteractionQueueService.InteractionType.LockCard);
             }
+        }
+
+        // Hide this window and return it to the keep-alive pool for reuse. Full teardown of voice + timers
+        // so no zombie loop survives; the window is deliberately NOT closed (closing would force a fresh
+        // layered-window realization — and its CompleteRender — on the next card's hot path).
+        private void DismissToPool()
+        {
+            _isCompleted = true;   // allow dismissal even in strict mode; also unblocks the voice loop guard
+            _closeTimer?.Stop();
+            _closeTimer = null;
+            _voiceMode = false;    // drop voice so RunVoiceSolveLoopAsync's `while (!_isCompleted && _voiceMode)` exits
+            StopVoiceSolve();
+            try { Hide(); } catch { }
+            ReturnToPool();
+        }
+
+        private void ReturnToPool()
+        {
+            if (_pool.Count < POOL_MAX)
+            {
+                if (!_pool.Contains(this)) _pool.Push(this);
+            }
+            else
+            {
+                // Over the cap (e.g. a wide multi-monitor rig shrank): close the surplus so hidden windows
+                // don't leak. This Close() is on the dismissal path, never a card show, so it's off the
+                // deadlock-prone hot path.
+                try { _isCompleted = true; Close(); } catch { }
+            }
+        }
+
+        // Take a window from the keep-alive pool, or realize a new one on a pool miss (the first card of a
+        // session, or more monitors than we've pooled). Only the miss path pays the one-time realization.
+        private static LockCardWindow RentWindow()
+        {
+            while (_pool.Count > 0)
+            {
+                var w = _pool.Pop();
+                if (w != null) return w;
+            }
+            return new LockCardWindow();
+        }
+
+        // Drop a window from the pool (it's being genuinely closed). Stack has no Remove, so rebuild.
+        private static void RemoveFromPool(LockCardWindow target)
+        {
+            if (_pool.Count == 0 || !_pool.Contains(target)) return;
+            var kept = new List<LockCardWindow>(_pool.Count);
+            while (_pool.Count > 0)
+            {
+                var w = _pool.Pop();
+                if (w != target) kept.Add(w);
+            }
+            // Restore original top-of-stack order.
+            for (int i = kept.Count - 1; i >= 0; i--) _pool.Push(kept[i]);
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
@@ -723,6 +869,9 @@ namespace ConditioningControlPanel
             _voiceMode = false;
             StopVoiceSolve();
             _allWindows.Remove(this);
+            // If this window is being genuinely closed (app shutdown, Alt+F4), make sure it can't be
+            // handed back out of the keep-alive pool as a dead shell.
+            RemoveFromPool(this);
             // Non-strict cards can be closed without completing (Alt+F4, titlebar) — if this
             // was the last one, release the interaction slot or videos/lock cards stay blocked
             // for the 5-minute stuck timer. Guarded on CurrentInteraction so a close arriving
@@ -761,7 +910,40 @@ namespace ConditioningControlPanel
         /// </summary>
         public static void ShowOnAllMonitors(string phrase, int repeats, bool strictMode, bool isTest = false, bool voiceMode = false)
         {
-            // Clear any existing windows
+            // A display topology / DPI change is mid-flight: realizing or juggling layered windows during
+            // that volatile ~900ms window is exactly what backs up the render thread and wedges the UI.
+            // Defer briefly rather than drop — a lock card is a required interaction, not a transient
+            // effect — and bound the retries so the card always appears even if changes keep firing.
+            if (DisplayChangeCoordinator.SpawnsSuppressed && _deferAttempts < DEFER_MAX_ATTEMPTS)
+            {
+                _deferAttempts++;
+                _deferTimer?.Stop();
+                _deferTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+                _deferTimer.Tick += (s, e) =>
+                {
+                    _deferTimer?.Stop();
+                    _deferTimer = null;
+                    ShowOnAllMonitors(phrase, repeats, strictMode, isTest, voiceMode);
+                };
+                _deferTimer.Start();
+                App.Logger?.Debug("LockCardWindow: display change in progress — deferring card (attempt {N})", _deferAttempts);
+                return;
+            }
+            _deferTimer?.Stop();
+            _deferTimer = null;
+            _deferAttempts = 0;
+
+            // Defensive: hide + pool any still-visible cards from a prior show before starting a new one.
+            // The interaction queue normally serializes lock cards, but a stray overlap must never leak a
+            // visible window (it would sit on screen forever, un-dismissable). Does NOT release the queue
+            // slot — we're reusing it for the new card.
+            if (_allWindows.Count > 0)
+            {
+                foreach (var w in new List<LockCardWindow>(_allWindows))
+                {
+                    try { w.DismissToPool(); } catch { }
+                }
+            }
             _allWindows.Clear();
             _sharedInput = "";
 
@@ -770,7 +952,7 @@ namespace ConditioningControlPanel
             _totalErrors = 0;
             _totalCharsTyped = 0;
             _isTest = isTest;
-            
+
             var screens = App.GetAllScreensCached();
             if (screens.Length == 0)
             {
@@ -783,7 +965,12 @@ namespace ConditioningControlPanel
             foreach (var screen in screens)
             {
                 var isPrimary = screen.Primary;
-                var window = new LockCardWindow(phrase, repeats, strictMode, screen, isPrimary, voiceMode);
+                // Reuse a pre-realized shell from the pool (or realize one on a miss). Reusing means the
+                // Show() below re-shows an existing layered window instead of realizing a fresh one —
+                // no synchronous CompleteRender on the hot path, so no render-thread deadlock (#494).
+                var window = RentWindow();
+                window.Configure(phrase, repeats, strictMode, screen, isPrimary, voiceMode);
+                _allWindows.Add(window);
 
                 if (isPrimary)
                 {
@@ -791,6 +978,7 @@ namespace ConditioningControlPanel
                 }
 
                 window.Show();
+                window.OnShown();   // per-show foreground/focus/voice (Loaded no longer re-fires on reuse)
             }
 
             // Focus primary window
