@@ -85,15 +85,23 @@ namespace ConditioningControlPanel
             if (_seasonTitleStoryboard != null) return; // already running
             try
             {
+                // The brush and title live inside the QuestsTabView UserControl, which has its OWN
+                // XAML name scope — MainWindow's scope can't resolve them by name, so the old
+                // SetTargetName("QuestsTab.SeasonTitleBrush") silently failed (post partial-split)
+                // and the shimmer never ran. Target the objects directly instead.
+                var brush = QuestsTab?.SeasonTitleBrush;
+                var title = QuestsTab?.TxtSeasonTitle;
+                if (brush == null || title == null) return;
+
                 _seasonTitleStoryboard = new Storyboard { RepeatBehavior = RepeatBehavior.Forever };
                 var startPt = new PointAnimation { From = new Point(-1, 0.5), To = new Point(1, 0.5), Duration = TimeSpan.FromSeconds(3) };
-                Storyboard.SetTargetName(startPt, "QuestsTab.SeasonTitleBrush");
+                Storyboard.SetTarget(startPt, brush);
                 Storyboard.SetTargetProperty(startPt, new PropertyPath("StartPoint"));
                 var endPt = new PointAnimation { From = new Point(0, 0.5), To = new Point(2, 0.5), Duration = TimeSpan.FromSeconds(3) };
-                Storyboard.SetTargetName(endPt, "QuestsTab.SeasonTitleBrush");
+                Storyboard.SetTarget(endPt, brush);
                 Storyboard.SetTargetProperty(endPt, new PropertyPath("EndPoint"));
                 var glow = new DoubleAnimation { From = 0.3, To = 0.9, Duration = TimeSpan.FromSeconds(1.5), AutoReverse = true };
-                Storyboard.SetTargetName(glow, "QuestsTab.TxtSeasonTitle");
+                Storyboard.SetTarget(glow, title);
                 Storyboard.SetTargetProperty(glow, new PropertyPath("(TextBlock.Effect).(DropShadowEffect.Opacity)"));
                 _seasonTitleStoryboard.Children.Add(startPt);
                 _seasonTitleStoryboard.Children.Add(endPt);
