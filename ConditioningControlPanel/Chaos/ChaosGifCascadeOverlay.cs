@@ -51,14 +51,24 @@ public sealed class ChaosGifCascadeOverlay : Window
         try
         {
             var files = PickFiles();
-            if (files.Count == 0) return;
+            if (files.Count == 0) { App.Logger?.Debug("GifCascade: no images in pool — nothing to rain"); return; }
             if (_active == null) { _active = new ChaosGifCascadeOverlay(); ((Window)_active).Show(); }
             else if (!_active.IsVisible) { try { ((Window)_active).Show(); } catch { } }   // idles hidden between cascades
+
+            // Confine the rain: dashboard triggers (no chaos run) always rain across ALL monitors so the
+            // user sees them wherever they are (#493); a chaos run keeps its per-config coverage (all
+            // screens when DualMonitor is on, primary-only when off).
+            bool chaosRun = App.Chaos?.IsRunning == true;
+            bool dual = App.Settings?.Current?.DualMonitorEnabled ?? true;
+            _active.SetSpawnSpread(fullSpread: !chaosRun || dual);
+
             ChaosWindowZ.RaiseAboveVideo(_active);   // un-hiding doesn't re-stack — kick over a playing video
             // Dashboard "cascade" trigger-bubble use (no chaos run): force the singleton topmost so a
             // stale Topmost=false from a prior Free-Desktop run can't bury the rain behind the app.
-            if (App.Chaos?.IsRunning != true) ChaosWindowZ.ForceTopmost(_active);
+            if (!chaosRun) ChaosWindowZ.ForceTopmost(_active);
             _active.Restart(files, spawnRatePerSec, durationSec, gifSize, fallSpeed, opacity, startScale);
+            App.Logger?.Information("GifCascade: raining (pool={N}, spread=[{L:F0}..{R:F0}], chaos={Chaos})",
+                files.Count, _active._spawnLeft, _active._spawnLeft + _active._spawnWidth, chaosRun);
         }
         catch (Exception ex) { App.Logger?.Debug("ChaosGifCascadeOverlay.Show: {E}", ex.Message); }
     }
@@ -83,6 +93,11 @@ public sealed class ChaosGifCascadeOverlay : Window
     private double _fallSpeed = 4;
     private double _opacity = 1.0;
     private double _startScale = 1.0;   // <1: clips spawn small at the top and grow toward _gifSize as they slide down
+    // Window-local DIP band in which clips may spawn/fall. The window always spans the full virtual
+    // screen; this confines the rain (full-width for dashboard + multi-monitor; primary-only for a
+    // single-screen chaos run). Set per-Show by SetSpawnSpread.
+    private double _spawnLeft;
+    private double _spawnWidth;
     private readonly List<Faller> _fallers = new();
     private readonly DispatcherTimer _spawn;
     private readonly DispatcherTimer _life;
@@ -114,10 +129,17 @@ public sealed class ChaosGifCascadeOverlay : Window
         IsHitTestVisible = false;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.Manual;
-        // Single-monitor by default: confine to the primary screen unless multi-monitor is on,
-        // so the falling cascade doesn't rain across every screen (see ChaosWindowZ.StageBounds).
-        var (sl, st, sw, sh) = ChaosWindowZ.StageBounds();
-        Left = sl; Top = st; Width = sw; Height = sh;
+        // The window ALWAYS spans the full virtual screen (all monitors). A realized layered window
+        // can't be resized without risking a render-thread deadlock, and this singleton is reused across
+        // dashboard triggers AND chaos runs that want different coverage — so we size to the superset
+        // once and confine only WHERE CLIPS SPAWN, per-Show (SetSpawnSpread). This also fixes the
+        // dashboard "Gif Rain does nothing" report (#493): the old primary-only sizing rained off the
+        // visible area for multi-monitor users whose active screen wasn't the primary.
+        Left = SystemParameters.VirtualScreenLeft;
+        Top = SystemParameters.VirtualScreenTop;
+        Width = SystemParameters.VirtualScreenWidth;
+        Height = SystemParameters.VirtualScreenHeight;
+        _spawnLeft = 0; _spawnWidth = Width;
 
         _canvas = new Canvas { IsHitTestVisible = false };
         Content = _canvas;
@@ -128,6 +150,16 @@ public sealed class ChaosGifCascadeOverlay : Window
 
         _life = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
         _life.Tick += (_, _) => { _life.Stop(); _spawning = false; _spawn.Stop(); };  // stop spawning; let in-flight fall out
+    }
+
+    /// <summary>Set the window-local X band clips spawn/fall in. Full = the whole virtual screen (all
+    /// monitors); otherwise the primary monitor only. Window-local X = global DIP − window.Left, and the
+    /// window's Left is VirtualScreenLeft, so the primary's left edge is (0 − VirtualScreenLeft).</summary>
+    private void SetSpawnSpread(bool fullSpread)
+    {
+        if (fullSpread) { _spawnLeft = 0; _spawnWidth = Width; return; }
+        _spawnLeft = 0 - SystemParameters.VirtualScreenLeft;
+        _spawnWidth = SystemParameters.PrimaryScreenWidth;
     }
 
     /// <summary>(Re)start a cascade in the existing window — any in-flight clips are replaced.</summary>
@@ -213,7 +245,7 @@ public sealed class ChaosGifCascadeOverlay : Window
 
             // Fixed layout (Width + Canvas slot set ONCE); per-frame motion/growth are pure
             // render transforms, so no layout pass ever runs during the fall.
-            double centerX = _gifSize / 2 + _rng.NextDouble() * Math.Max(1, Width - _gifSize);
+            double centerX = _spawnLeft + _gifSize / 2 + _rng.NextDouble() * Math.Max(1, _spawnWidth - _gifSize);
             double y = -_gifSize;
             var move = new TranslateTransform(0, y);
             var grow = new ScaleTransform(ScaleAt(y), ScaleAt(y));
