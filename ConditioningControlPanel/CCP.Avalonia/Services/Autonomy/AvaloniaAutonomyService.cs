@@ -56,6 +56,12 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
 
     private bool _isEnabled;
     private bool _forceTestMode;
+
+    // When a random tick fires but she can't act yet (cooldown, a fullscreen interaction, or a web
+    // video), re-check after this short window instead of waiting a whole fresh interval — so she
+    // acts the moment she's free and the countdown bar stays honest (~12-24s jittered in use).
+    private const double RetryIntervalSeconds = 12;
+
     private bool _disposed;
     private DateTime _lastActionTime = DateTime.MinValue;
     private DateTime _lastUserActivity = DateTime.Now;
@@ -335,12 +341,20 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
         ScheduleNextRandomTick(testIntervalSeconds);
     }
 
-    private void ScheduleNextRandomTick(int? testIntervalSeconds = null)
+    private void ScheduleNextRandomTick(int? testIntervalSeconds = null, bool retry = false)
     {
         if (!_isEnabled) return;
 
         double intervalSeconds;
-        if (testIntervalSeconds.HasValue)
+        if (retry)
+        {
+            // A tick fired but she couldn't act (cooldown / fullscreen interaction / web video).
+            // Re-check soon instead of burning a whole fresh interval — otherwise the countdown bar
+            // completes with nothing happening and her real cadence drifts far below the slider.
+            // ~12-24s jittered so it doesn't hammer while a long video is on screen.
+            intervalSeconds = RetryIntervalSeconds + _random.NextDouble() * RetryIntervalSeconds;
+        }
+        else if (testIntervalSeconds.HasValue)
         {
             intervalSeconds = testIntervalSeconds.Value;
         }
@@ -352,7 +366,17 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
             var baseInterval = settings.AutonomyRandomIntervalSeconds;
             var variance = baseInterval * 0.3;
             intervalSeconds = baseInterval + (_random.NextDouble() * variance * 2 - variance);
-            intervalSeconds = Math.Max(10, intervalSeconds);
+
+            // Time-of-day pacing: when "time aware" is on, a higher activity multiplier means she's
+            // MORE active, so the gap shrinks at night and stretches in the morning. The Avalonia
+            // head never applied this before, so the toggle (and every per-period multiplier) did
+            // nothing; port it for parity. Harmless (returns 1.0) until the toggle is surfaced.
+            var timeMult = GetTimeMultiplier();
+            if (timeMult > 0)
+                intervalSeconds /= timeMult;
+
+            // Keep the result sane no matter how jitter and the multiplier combine.
+            intervalSeconds = Math.Clamp(intervalSeconds, 15, 900);
         }
 
         _nextRandomFireAt = DateTime.UtcNow.AddSeconds(intervalSeconds);
@@ -368,15 +392,40 @@ public sealed partial class AvaloniaAutonomyService : IAutonomyService, IDisposa
 
             if (CanTakeAction())
             {
+                // Free to act — schedule the next full interval, then go.
+                ScheduleNextRandomTick(testIntervalSeconds);
                 ExecuteAutonomousAction(AutonomyTriggerSource.Random);
             }
             else
             {
-                _logger?.LogDebug("AvaloniaAutonomyService: Random tick - cannot take action (cooldown or busy)");
+                // Temporarily blocked — schedule a short retry rather than a full fresh interval, so
+                // she acts as soon as she's free instead of skipping a whole cycle every time she's
+                // briefly busy (which made the interval feel much slower than the slider).
+                _logger?.LogDebug("AvaloniaAutonomyService: Random tick - cannot take action (cooldown or busy), retrying soon");
+                ScheduleNextRandomTick(testIntervalSeconds, retry: true);
             }
-
-            ScheduleNextRandomTick(testIntervalSeconds);
         });
+    }
+
+    /// <summary>
+    /// Time-of-day pacing multiplier for the random interval. Returns 1.0 (no effect) unless the
+    /// "time aware" toggle is on; then a higher multiplier means she's MORE active, so the interval
+    /// is divided down. Ported from the WPF head for parity.
+    /// </summary>
+    private double GetTimeMultiplier()
+    {
+        var settings = _settings.Current;
+        if (settings == null || !settings.AutonomyTimeAwareEnabled)
+            return 1.0;
+
+        var hour = DateTime.Now.Hour;
+        return hour switch
+        {
+            >= 22 or < 6 => settings.AutonomyNightMultiplier,
+            >= 18 => settings.AutonomyEveningMultiplier,
+            >= 12 => settings.AutonomyAfternoonMultiplier,
+            _ => settings.AutonomyMorningMultiplier
+        };
     }
 
     private void StartHeartbeatTimer()
