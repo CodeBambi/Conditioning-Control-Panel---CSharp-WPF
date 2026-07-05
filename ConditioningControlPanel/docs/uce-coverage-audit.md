@@ -16,21 +16,24 @@ and turns the gap into an ordered migration backlog.
 
 ## Verdict
 
-**Yellow.** The session-effect set and the *live* passive chaos overlays are fully on
-the UCE (18 registered layers as of 2026-07-05).
+**Yellow → Green-ish.** The session-effect set and the *live* passive chaos overlays are
+fully on the UCE (**19 registered layers** as of 2026-07-05: 9 session + 10 chaos).
 
-> **Progress 2026-07-05:** gaps #1–2 closed — `ChaosFxWindow`→`ChaosFxLayer` (Z=118) and
-> `ChaosWaveTimerOverlay`→`ChaosWaveTimerLayer` (Z=155); both windows deleted;
-> `--verify-layers` Stages 4j/4k PASS; all gates green each commit (slnf 0 · WPF 0 · Core
-> 540 · verify-layers exit 0 · smoke Findings 5). Remaining LIVE gap: the standalone
-> attention-check window. The remaining gap is **7 passive "just draws" effects that
-still render as their own `Window`** (2 live + 4 unwired chaos + 1 live standalone
-attention-check), plus **2 dead/vestigial windows to delete**. No interactive surface is
-wrongly a layer; no passive effect that was migrated regressed to a window.
+> **Progress 2026-07-05:** gaps #1–2 closed — `ChaosFxWindow`→`ChaosFxLayer` (Z=118, `8df68031`)
+> and `ChaosWaveTimerOverlay`→`ChaosWaveTimerLayer` (Z=155, `16fe5a92`); both windows deleted;
+> `--verify-layers` Stages 4j/4k PASS. Dead `AvaloniaBubbleWindow` deleted (`c8bb20a1`).
+> All gates green each commit (slnf 0 · WPF 0 · Core 542 · verify-layers exit 0 · smoke Findings 5).
+>
+> **Remaining gap is small:** the only LIVE passive effect still on a `Window` is the standalone
+> attention-check — and it is **now entangled with the co-agent's compositor-video E-phase**, so
+> migrate it only in coordination with the video lane. The other 4 window-based effects
+> (`ChaosEStim`/`EStimGlow`/`VibeTrail`/`SkiaFx`) are **unwired** (no live caller). `AvaloniaOverlaySurface`
+> was mis-listed as dead — it is a **live** `IOverlaySurface` consumer (see B3) and is kept.
+> No interactive surface is wrongly a layer; no migrated effect regressed to a window.
 
 ---
 
-## A. USES UCE — 17 registered layers (the done set)
+## A. USES UCE — 19 registered layers (the done set)
 
 Verified by `RegisterLayer` call sites.
 
@@ -50,19 +53,21 @@ Verified by `RegisterLayer` call sites.
 Video path: Phase E complete (default flipped to compositor video; legacy
 `AvaloniaMultiMonitorVideoService` + `VideoOverlayWindow` deleted).
 
-### Passive chaos overlays (8) — registered in `AvaloniaHeadStubs` (`RegisterLayer` :258–282)
+### Passive chaos overlays (10) — registered in `AvaloniaHeadStubs`
 | Layer | Z |
 |---|---|
 | `ChaosFieldFxLayer` | 100 |
 | `ChaosDvdLayer` | 105 |
 | `ChaosGifCascadeLayer` | 110 |
 | `ChaosFlashWashLayer` | 115 |
+| `ChaosFxLayer` | 118 |
 | `ChaosCursorGlowLayer` | 130 |
 | `ChaosEffectBannerLayer` | 140 |
 | `ChaosPopTextLayer` | 145 |
 | `ChaosAnnouncerLayer` | 150 |
+| `ChaosWaveTimerLayer` | 155 |
 
-All 8 harness-verified (`--verify-layers`, per `unified-compositor-engine-plan.md` Phase F rows 1–8).
+All 10 harness-verified (`--verify-layers`, `unified-compositor-engine-plan.md` Phase F; Stages 4j/4k added for ChaosFx/ChaosWaveTimer).
 
 ---
 
@@ -94,11 +99,11 @@ visual chain / vibe / skia-glow features, still unwired). Convert to layers as t
 | 6 | `ChaosVibeTrailOverlay` | `Chaos/ChaosVibeTrailOverlay.axaml.cs` | 300 | warm cursor glow + fading trail | no head caller (vibe-trail feature unwired) |
 | 7 | `ChaosSkiaFxOverlay` | `Chaos/ChaosSkiaFxOverlay.cs` | 632 | Skia bloom + sparks; **WPF's DEFAULT glow renderer** (`ChaosSkiaFxEnabled ?? true`) | no head caller; natural consolidation target for the cursor-glow bloom variant |
 
-### B3 — DEAD / VESTIGIAL → delete or justify (not a migration, a cleanup)
+### B3 — DEAD / VESTIGIAL cleanup
 | Class | File | LOC | Finding |
 |---|---|---|---|
-| `AvaloniaBubbleWindow` | `Chaos/AvaloniaBubbleWindow.cs` | 95 | 0 callers (grep-verified); bubbles are on `BubbleLayer`. Delete. |
-| `AvaloniaOverlaySurface` | `Platform/AvaloniaOverlaySurface.cs` | small | `IOverlaySurface` `Window` seam; injected into `MainWindowViewModel` (`_overlaySurface`) but only assigned, no render call found. Compositor (`PinkTintLayer` etc.) superseded it. Verify no consumer, then delete the impl (keep the Core seam if other heads need it). |
+| ~~`AvaloniaBubbleWindow`~~ ✅ **DELETED `c8bb20a1`** | (deleted 2026-07-05) | 95 | 0 callers (grep-verified repo-wide); bubbles render on `BubbleLayer`. `AvaloniaBubble` (inner visual) retained. |
+| `AvaloniaOverlaySurface` — **NOT dead, KEEP** | `Platform/AvaloniaOverlaySurface.cs` | small | Earlier "dead" call was WRONG. It is the **live** `IOverlaySurface` impl: DI-registered (`ServiceCollectionExtensions.cs:130`), injected + resolved in `MainWindowViewModel` (`:48`/`:110`), and consumed by **Core `AchievementService.cs:918-919`** which gates on `CoreApp.Overlay is IOverlaySurface surface && surface.IsVisible`. Do not delete — it is a `Window` acting as a visibility seam, not a rendered effect surface. |
 
 ---
 
@@ -139,11 +144,13 @@ floor · `--verify-layers` exit 0 · `--verify-video` exit 0 · `--smoke-test` F
    Stage 4j PASS; only the live `Pulse` ported, dead edge/heat/freeze API dropped).
 2. ~~**`ChaosWaveTimerOverlay` → `ChaosWaveTimerLayer`**~~ ✅ **DONE 2026-07-05** (Z=155;
    `--verify-layers` Stage 4k PASS; Skia text pill, primary-monitor only).
-3. **`AvaloniaBubbleWindow` delete** (dead) + **`AvaloniaOverlaySurface` delete-or-justify**
-   (vestigial) — cleanup, no behavior change.
+3. ~~**`AvaloniaBubbleWindow` delete**~~ ✅ **DONE `c8bb20a1`** (dead, 0 callers). **`AvaloniaOverlaySurface`
+   JUSTIFIED** — not dead; live `IOverlaySurface` consumer (Core `AchievementService` visibility gate + `MainWindowViewModel`). Kept.
 4. **Standalone attention-check → layer** (LIVE-but-dormant): route `AttentionCheckControl`'s
    pulsing target through a compositor layer instead of a bespoke `Window`. Confirm the WPF
-   contract + dormancy first (`wpf-parity`).
+   contract + dormancy first (`wpf-parity`). ⚠️ **COORDINATE with the co-agent's video lane** —
+   attention-checks fire during compositor video and their timing was touched in the video
+   E1/E2/E3 work; this is no longer a clean solo pickup.
 5. **`ChaosSkiaFxOverlay` → layer** (632 LOC, WPF default glow) — consolidation target; larger.
 6. **E-Stim chain (`ChaosEStimOverlay` + `ChaosEStimGlowOverlay`) → layers** — gated on the
    Q10b frozen-`BubbleEngine` authorization landing (ready spec exists).
