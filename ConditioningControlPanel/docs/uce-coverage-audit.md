@@ -135,7 +135,7 @@ Not defects. Listed so a future sweep doesn't re-flag them.
 
 - **Interactive chaos surfaces** (user clicks IN them, hook click-swallow gap): `ChaosHudWindow`,
   `ChaosBoonBarOverlay`, `ChaosToyButtonWindow`, `ChaosOverlayWindow` (Pick buttons / boon draft),
-  `ChaosUnlockCardOverlay`, `ChaosBubbleHostOverlay` (bubble host input).
+  `ChaosUnlockCardOverlay`. (The experimental `ChaosBubbleHostOverlay` shared-host bubble renderer was DELETED 2026-07-05 — chaos bubbles always use the compositor `BubbleLayer`; the `ChaosBubbleSharedHost` setting stays in Core for the WPF head only.)
 - **Chaos non-effect UI**: `ChaosHubWindow` (dollhouse hub), `ChaosIntroWindow` (modal intro card).
 - **Interactive session surfaces**: `LockCardWindow` (type-to-unlock; `LockCard=20` z is reserved
   but there is deliberately no `LockCardLayer`), `MantraWindow`, `QuizWindow`, `PopQuizWindow`,

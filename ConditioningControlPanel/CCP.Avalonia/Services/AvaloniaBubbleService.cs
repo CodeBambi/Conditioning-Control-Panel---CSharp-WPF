@@ -32,8 +32,6 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
     private readonly BubbleLayer? _bubbleLayer;
 
     private BubbleEngine? _chaosEngine;
-    private SharedHostBubbleRenderer? _sharedHostRenderer;
-    private bool _sharedHost;
     private Bitmap? _bubbleBitmap;
     private int _mouseHookRefCount;
 
@@ -129,7 +127,6 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
         _ambientEngine.Stop();
         _chaosEngine?.Stop();
         _chaosEngine = null;
-        _sharedHostRenderer = null;
         ReleaseMouseHook();
         _bubbleLayer?.Clear();
         _bubbleBitmap?.Dispose();
@@ -242,18 +239,10 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
             _chaosEngine = null;
         }
 
-        _sharedHost = _settings.Current.ChaosBubbleSharedHost;
-        IBubbleRenderer chaosRenderer;
-        if (_sharedHost)
-        {
-            ChaosBubbleHostOverlay.EnsureCreated();
-            _sharedHostRenderer = new SharedHostBubbleRenderer(_bubbleBitmap);
-            chaosRenderer = _sharedHostRenderer;
-        }
-        else
-        {
-            chaosRenderer = this;
-        }
+        // Chaos bubbles always render through the compositor BubbleLayer (this service is the
+        // IBubbleRenderer). The experimental Avalonia window-based shared-host path was removed
+        // 2026-07-05; the WPF head keeps its own, gated by AppSettings.ChaosBubbleSharedHost.
+        IBubbleRenderer chaosRenderer = this;
 
         _chaosEngine = new BubbleEngine(_screens, _settings, chaosRenderer, _pointerState, _bubbleEngineLogger);
         _chaosEngine.OnBubblePopped += OnEngineBubblePopped;
@@ -293,7 +282,6 @@ public sealed class AvaloniaBubbleService : IBubbleService, IAvaloniaBubbleServi
     {
         _chaosEngine?.EndChaosMode();
         _chaosEngine = null;
-        _sharedHostRenderer = null;
         ReleaseMouseHook();
     }
 
