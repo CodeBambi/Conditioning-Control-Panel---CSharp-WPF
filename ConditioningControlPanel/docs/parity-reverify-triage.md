@@ -62,9 +62,35 @@ its verification path so a headed/runtime pass (human or headed session) can exe
   whether the avatar yanks foreground). If it does disrupt, file a task-board row (clamp the grab to
   in-app, or only force-foreground when the avatar already has app focus).
 
+## Section: Cross-cutting (partial — high-value rows spot-checked)
+
+| Row | Status | Code evidence | Runtime check still needed for `[x]` |
+|---|---|---|---|
+| Multi-monitor screen enumeration (per-screen bounds/DPI/primary/hot-plug) | **CODE✓** | `CCP.Avalonia/Platform/AvaloniaScreenProvider.cs`: enumerates `Screens.All`/`.Primary`, maps per-screen bounds + working area + scaling; `ComputeLayoutSignature` dedupes spurious `Screens.Changed` (count/bounds/scaling/primary); `DisplayChangeCoordinator.NotifyDisplayChange` mirrors WPF's layered-spawn quiesce; `EnsureAttached()` self-heals the early-construction attach race. Bounds are device-pixels in both heads (WPF `Screen.Bounds`, Avalonia `Screen.Bounds`); Scaling provided for DIP conversion. Arguably better-engineered than WPF's raw `Screen.AllScreens`. | Headed: multi-monitor rig, drag main window across monitors, trigger an overlay/effect, confirm it lands on the correct monitor at correct DPI; hot-plug a monitor mid-run, confirm overlays rebuild without blink. |
+| Account login persists (DPAPI tokens, 24h cache) | **CODE✓** (storage) / **NEEDS-ENV** | lot 8 (auth): `ISecretStore` seam; Avalonia desktop head uses DPAPI on Windows, in-memory fallback elsewhere. | Headed + account: log in, restart, confirm session restored; verify token cache 24h expiry. Linux/macOS secret-store parity (currently in-memory fallback) is a known NEEDS-ENV gap. |
+| START launches selected mode (session engine) | **CODE✓** (engine) / **BLOCKED** (effect render) | lot 5 (session engine). START→mode logic is Core/portable; modes that render effects route through the compositor (co-agent lane). | Headed: start each mode, confirm correct effect launches. Effect render = UCE lane. |
+| Avatar reacts (companion speech/barks on events) | **CODE✓** (reactions) + **GAP?** (focus) | lot 8 (avatar seam). Reaction logic portable; **see Main-sync avatar row** for the Ctrl+T `ForceForegroundWindow` cross-app-focus GAP?. | Headed: trigger events (level-up, quest complete, session event), confirm avatar reacts; confirm speech does NOT steal focus. |
+| Chaos economy (XP/buffs/economy ticks) | **BLOCKED** | lot 6. Chaos lane (co-agent). | Defer until chaos lane settles. |
+| Overlays click-through (selected regions interactive) | **NEEDS-ENV** (human decision) | DoD #3b `AvaloniaMouseHook` click-swallow — needs owner product decision (port WPF swallow semantics vs accept+document gap). | Human decision + headed verification. |
+| Per-mod theme reskin (every surface re-skins across 5 themes) | **NEEDS-ENV** (eyes) | DoD #7. Theming lane (non-conflicting). | Headed + eyes: load each theme × each mod, screenshot every surface. Multi-session. |
+| Performance (startup/working-set/FPS vs WPF + benchmark-optimized.json) | **NEEDS-ENV** | DoD #3 (FPS floor 138.7 ≫ 30 HELD this session). benchmark-optimized.json comparison environmentally confounded on this machine (web-video decode failure). | Re-baseline on a machine where web video decodes (filed). |
+
+## Saturation read (2026-07-05)
+
+Spot-checked the two highest platform-divergence-risk Cross-cutting rows:
+- **Multi-monitor**: solid (`AvaloniaScreenProvider` well-engineered) — CODE✓, no gap.
+- **Avatar focus**: the one real divergence found this pass (Main-sync row, GAP?).
+
+**Pattern:** Avalonia infrastructure rows (screen, auth storage seam, session engine) are CODE✓ and
+well-engineered; the lots already did this work. The remaining `[x]` gap is **runtime exercise**, and
+the only divergences headless code-parity surfaces are subtle **platform-adaptation** ones (Win32
+focus P/Invoke). Continuing headless code-parity has **diminishing returns**; the high-value path to
+close DoD #5 is a **headed runtime verification pass** (human or headed session) using this triage as
+the checklist, plus headed confirmation of the avatar force-foreground GAP?.
+
 ## Next sections (multi-session; append below as each is triaged)
 
-- [ ] Cross-cutting (account login / START / avatar reacts / chaos economy / overlays / multi-monitor / theme / perf)
+- [x] Cross-cutting (partial — 8 rows triaged above)
 - [ ] Tab views (32)
 - [ ] Feature controls (18)
 - [ ] Dialogs (33)
