@@ -256,6 +256,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBarkService, AvaloniaBarkService>();
         services.AddSingleton<IVideoInfo, AvaloniaVideoInfo>();
         services.AddSingleton<IMainWindowService, AvaloniaMainWindowService>();
+        // Screen-shake seam (Q15): TranslateTransform jitter on the main window content root,
+        // ported from WPF Services/UI/ScreenShakeService.cs. No-ops safely when headless. The
+        // impl uses only cross-platform Avalonia APIs, so CCP.Avalonia owns it directly (like
+        // AvaloniaOverlayService/AvaloniaFlashService) rather than a per-head override.
+        services.AddSingleton<IScreenShakeService, AvaloniaScreenShakeService>();
         services.AddSingleton<ISessionLogService, SessionLogService>();
 
         services.AddSingleton<IKeywordTriggerPresetService, AvaloniaKeywordTriggerPresetService>();

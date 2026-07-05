@@ -81,6 +81,9 @@ public sealed class AvaloniaChaosService : IChaosService
     private bool _announceShowing;
     private readonly CompositorEngine? _compositor;
     private readonly IScreenProvider? _screenProvider;
+    // Q15 screen-shake seam. Optional: null in heads/tests without a shakeable content
+    // root, in which case Shake() no-ops (WPF ChaosModeService.cs:1684 App.ScreenShake?.Shake).
+    private readonly IScreenShakeService? _screenShake;
 
     /// <summary>WPF ChaosAnnouncerOverlay.TEACH_HOLD_MS — onboarding/help lines linger so
     /// they can actually be read.</summary>
@@ -225,7 +228,8 @@ public sealed class AvaloniaChaosService : IChaosService
         global::ConditioningControlPanel.Core.Services.Progression.IAchievementService? achievements = null,
         ChaosCrashSentinel? crashSentinel = null,
         CompositorEngine? compositor = null,
-        IScreenProvider? screenProvider = null)
+        IScreenProvider? screenProvider = null,
+        IScreenShakeService? screenShake = null)
     {
         _bubbles = bubbles;
         _settings = settings;
@@ -277,6 +281,7 @@ public sealed class AvaloniaChaosService : IChaosService
         _fieldFxLayer = new ChaosFieldFxLayer();
         compositor?.RegisterLayer(_fieldFxLayer);
         _screenProvider = screenProvider;
+        _screenShake = screenShake;
         AvaloniaChaosCatalogs.EnsureInitialized();
         // Lesson complete: pause the fall and show the unlock card (each fires exactly once)
         // (WPF ChaosModeService.cs:126).
@@ -1255,6 +1260,7 @@ public sealed class AvaloniaChaosService : IChaosService
             return;
         }
 
+        double s = spec.Strength / 100.0;   // WPF ChaosModeService.cs:2080
         const int shieldCost = 1;
         if (_state.Shields >= shieldCost)
         {
@@ -1265,6 +1271,7 @@ public sealed class AvaloniaChaosService : IChaosService
             _state.PushEvent($"♥ resistance crumbles ({spec.VariantId})");
             // The last point of resistance going has its own, sadder cue (WPF :2109).
             AvaloniaChaosSfx.Play(_state.Shields == 0 ? "resist_crumble" : "resist_absorb", 0.6f);
+            Shake(0.25 + s * 0.3, 280);   // WPF ChaosModeService.cs:2108
         }
         else if (_state.CollarSaves > 0)
         {
@@ -1274,6 +1281,7 @@ public sealed class AvaloniaChaosService : IChaosService
             _state.CollarSaves--;
             _state.PushEvent($"📿 the collar holds ({_state.CollarSaves} left)");
             AvaloniaChaosSfx.Play("collar_save", 0.6f);
+            Shake(0.25 + s * 0.3, 280);   // WPF ChaosModeService.cs:2115
             // Unleashed: the save ITSELF strikes back — a golden shockwave snaps every live bubble.
             if (_state.UnleashedEnabled)
             {
@@ -1290,6 +1298,7 @@ public sealed class AvaloniaChaosService : IChaosService
             _state.Heat = 0;
             _state.PushEvent($"💥 {spec.VariantId} triggered!");
             AvaloniaChaosSfx.Play("trigger", 0.55f);   // the muffled boom under the payload stinger (WPF :2145)
+            Shake(0.4 + s * 0.5, 380);   // the malus jolt (WPF ChaosModeService.cs:2136)
         }
         UpdateStateText();
     }
@@ -1603,7 +1612,8 @@ public sealed class AvaloniaChaosService : IChaosService
             FirePayloadForDetonation(spec);   // WPF FirePayloadForDetonation :1349
             _state.EffectsFired++;
             AvaloniaChaosSfx.Play("trigger", 0.55f);
-            // WPF :1352 Shake(0.3+s*0.4, 320) — no screen-shake seam in this head yet (follow-up).
+            double s = spec.Strength / 100.0;   // WPF ChaosModeService.cs:1341
+            Shake(0.3 + s * 0.4, 320);          // WPF ChaosModeService.cs:1356
         }
 
         _state.Combo = _state.Combo > 1 ? _state.Combo / 2 : 0;   // ALWAYS — the price of touching (WPF :1355)
@@ -1672,7 +1682,8 @@ public sealed class AvaloniaChaosService : IChaosService
         {
             FirePayloadForDetonation(spec);   // WPF FirePayloadForDetonation :1381
             _state.EffectsFired++;
-            // WPF :1384 Shake(0.25+s*0.35, 300) — no screen-shake seam (follow-up).
+            double s = spec.Strength / 100.0;   // WPF ChaosModeService.cs:1388
+            Shake(0.25 + s * 0.35, 300);        // WPF ChaosModeService.cs:1389
             _state.PushEvent($"◇ it shatters — {spec.PayloadKind} was inside");
         }
         // WPF :1389 Pulse(BFE6FF, 0.32) — no pulse seam (follow-up).
@@ -2133,6 +2144,16 @@ public sealed class AvaloniaChaosService : IChaosService
         _finalLoopAnnounced = true;
         AnnounceChaos("THE LAST LOOP", ChaosAnnounceKind.Depth, artKey: "final_loop", subText: "nothing after this one");
         _state.PushEvent("🕳 the last loop.");
+    }
+
+    /// <summary>Config-gated screen shake (WPF ChaosModeService.cs:1680-1685). Gated on
+    /// ScreenShakeEnabled; the base intensity is scaled by the run's ShakeIntensity and
+    /// clamped to 0..1 before the platform seam (which clamps again + short-circuits).</summary>
+    private void Shake(double baseIntensity, int durMs)
+    {
+        var cfg = _state?.Config;
+        if (cfg?.ScreenShakeEnabled == true)
+            _screenShake?.Shake(Math.Clamp(baseIntensity * cfg.ShakeIntensity, 0, 1), durMs);
     }
 
     /// <summary>Config-gated juice: a soft full-screen vignette pulse (WPF ChaosModeService.cs:1676-1679).
@@ -2641,6 +2662,7 @@ public sealed class AvaloniaChaosService : IChaosService
         _freezeCueOn = true;   // the catch/toy cue covers the way IN; the shatter covers the way OUT (WPF :2967)
         _bubbles.SetChaosFrozen(true);
         _bubbles.VibrateAllForFreeze(FREEZE_VIBRATE_MS);
+        Shake(0.3, FREEZE_VIBRATE_MS);   // WPF ChaosModeService.cs:2977 (distinct from the bubble-field VibrateAllForFreeze)
     }
 
     private void EndFreeze()

@@ -197,6 +197,10 @@ namespace ConditioningControlPanel.Core.Services.Deeper
         private readonly IHapticsService _haptics;
         private readonly IBubbleService _bubbles;
         private readonly ISpeakPromptHost? _speakHost;
+        // Screen-shake seam (Q15). Optional: a head without a shakeable content root
+        // leaves this null and the screen_shake action no-ops (WPF path always had a
+        // service — Services/Deeper/IActionDispatcher.cs:233-234 App.ScreenShake?.Shake).
+        private readonly IScreenShakeService? _screenShake;
 
         // Per-EffectId tracking for band-mode effects. Lets Stop hide the right
         // overlay kind and Restart re-issue a haptic with its previously dispatched
@@ -222,7 +226,8 @@ namespace ConditioningControlPanel.Core.Services.Deeper
             IHapticsService haptics,
             IBubbleService bubbles,
             ILogger<RealActionDispatcher>? logger = null,
-            ISpeakPromptHost? speakHost = null)
+            ISpeakPromptHost? speakHost = null,
+            IScreenShakeService? screenShake = null)
         {
             _environment = environment ?? throw new ArgumentNullException(nameof(environment));
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -234,6 +239,7 @@ namespace ConditioningControlPanel.Core.Services.Deeper
             _bubbles = bubbles ?? throw new ArgumentNullException(nameof(bubbles));
             _logger = logger;
             _speakHost = speakHost;
+            _screenShake = screenShake;
         }
 
         public async Task DispatchAsync(EnhancementAction action, EnhancementDispatchContext ctx, CancellationToken ct = default)
@@ -268,8 +274,10 @@ namespace ConditioningControlPanel.Core.Services.Deeper
                         break;
 
                     case ScreenShakeAction shake:
-                        _logger?.LogDebug("Deeper: screen_shake action stubbed in cross-platform runtime (intensity={Intensity}, duration={Duration}ms)",
-                            shake.Intensity, shake.DurationMs);
+                        // WPF Services/Deeper/IActionDispatcher.cs:233-234 — the Deeper path does
+                        // NOT gate on any setting; it passes intensity/duration straight through
+                        // and the service clamps them internally (ScreenShakeService.cs:46-47).
+                        _screenShake?.Shake(shake.Intensity, shake.DurationMs);
                         break;
 
                     case SetIntensityAction:
