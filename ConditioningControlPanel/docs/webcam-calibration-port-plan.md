@@ -214,3 +214,30 @@ before planning around it. Do not cite the memory-sourced degree/latency numbers
 **Owner decision pending:** Tier 1 incremental first (behind the A/B switch) vs go straight for the Tier-2
 deep appearance model. Tier 1 has a real ceiling (~2-3°, still head-pose-sensitive); Tier 2 is the only path
 that truly decouples head pose but is weeks + model-sourcing/license work.
+
+### Open-source model LICENSE audit 2026-07-05 (VERIFIED with parent web tools — live-fetched GitHub/LICENSE)
+The load-bearing Tier-2 fact: for a COMMERCIAL (Patreon-paid) product, **CODE licenses are permissive but
+WEIGHTS are almost universally non-commercial** because they inherit the training-dataset license.
+
+| Project | Code license | Weights (as shipped) | Commercial-shippable? |
+|---|---|---|---|
+| **Gaze360 dataset** (erkil1452) | — | — | **NO — "non-commercial research use only"** (verified LICENSE) |
+| MPIIGaze / MPIIFaceGaze (MPI) | — | — | **NO** — research-only |
+| ETH-XGaze (ETH) | — | — | **NO** — CC BY-NC-SA |
+| GazeCapture (MIT CSAIL) | — | — | **NO** — research-only |
+| **L2CS-Net** (Ahmednull) | **MIT** | `L2CSNet_gaze360.pkl` → **Gaze360-trained** | code YES, **weights NO** |
+| **MobileGaze** (yakhyo) ResNet/MobileNet/MobileOne ONNX, real-time CPU | **MIT** | **"All models trained only on Gaze360"** | code YES, **weights NO** |
+| **OpenSeeFace** (emilianavt) MobileNetV3, ONNX, 30-60fps CPU, proven in VTube Studio | **BSD-2** | **BSD-2 (models incl.)** but gaze model trained on **MPIIGaze**+UnityEyes | **pragmatic YES** (maintainer BSD-2-licenses the models; used commercially at scale) — **but MPIIGaze provenance is a gray area** a careful counsel would flag; and its gaze is **landmark-rough (eye-openness + coarse gaze), NOT SOTA appearance-invariant gaze** — roughly what CCP already gets from MediaPipe Iris. Strength = robustness (glasses/low-light/wide-pose) + blink. |
+| MediaPipe BlazeFace/FaceMesh/Iris (already shipped in CCP) | **Apache-2.0** | Apache-2.0 | **YES** (already vetted, in-product) |
+
+**Consequence for Tier 2:** "grab an ONNX and infer" is NOT legally available for a paid product — the good
+weights (L2CS/MobileGaze/ETH-XGaze) are all Gaze360/MPIIGaze/ETH-XGaze-tainted. A legally-clean deep head
+means **training the (MIT/BSD) architecture ourselves on a commercially-usable dataset** — synthetic
+(UnityEyes / MS "Fake It Till You Make It") or a permissive real set — with a GPU training + eval pipeline.
+That is the real "weeks" cost (the ML, not the integration). **The per-user calibration regressor is 100%
+ours regardless** (trained on the user's own live samples at runtime — no dataset license attaches).
+
+**This strengthens Tier-1-first:** Tier 1 has ZERO license exposure (our own math on Apache-2.0 MediaPipe
+Iris features). The one pragmatic drop-in (OpenSeeFace, BSD-2) is a robustness/blink upgrade, not a gaze-
+accuracy leap, and carries a provenance gray area. So: Tier 1 now; if the owner wants the true head-pose-
+invariant ceiling, Tier 2 = train-our-own on synthetic/permissive data (scoped as a distinct ML workstream).
