@@ -431,6 +431,11 @@ public interface IChaosService
     void OpenWarrenAt(string tag);
     void UnequipFromSidebar(string id);
     void UseToyById(string id);
+    /// <summary>Hard teardown for app exit / main-window close: stop everything, clear the run,
+    /// close the HUD + overlay, and CLEAR the crash sentinel so a clean shutdown mid-run never
+    /// false-positives a crash at the next launch. No results, no payout. Safe when idle.
+    /// DIM no-op default so existing implementers/fakes keep compiling (WPF ChaosModeService.cs:3085).</summary>
+    void ForceShutdown() { }
 }
 
 public interface IAvatarWindowService

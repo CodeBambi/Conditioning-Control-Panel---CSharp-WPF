@@ -449,6 +449,13 @@ public partial class App : Application
         if (_stateFlushed) return;
         _stateFlushed = true;
 
+        // Parity with WPF App.xaml.cs OnExit → ChaosModeService.ForceShutdown (WPF
+        // ChaosModeService.cs:3085): a mid-run exit must hard-tear-down the run so its crash
+        // sentinel is CLEARED (P0-5) — otherwise a clean shutdown mid-descent false-positives a
+        // native crash at the next launch. Best-effort, null-guarded (no-op when idle or unregistered).
+        try { Services?.GetService<ConditioningControlPanel.IChaosService>()?.ForceShutdown(); }
+        catch (Exception ex) { Log.Logger?.Warning(ex, "Chaos force-shutdown on exit failed"); }
+
         try { Services?.GetService<ISettingsService>()?.SaveImmediate(); }
         catch (Exception ex) { Log.Logger?.Warning(ex, "Settings flush on exit failed"); }
 

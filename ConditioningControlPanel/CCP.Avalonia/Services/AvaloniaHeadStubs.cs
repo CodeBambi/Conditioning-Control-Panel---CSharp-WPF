@@ -165,6 +165,30 @@ public sealed class AvaloniaChaosService : IChaosService
     private int _teaseDeniedThisRun;
     private bool _teaseDeniedStreakBarked;
 
+    // ---- run-lifecycle completion state (S7; WPF ChaosModeService.cs) ----
+    // Per-LOOP detonation tally: AwardLoopTip pays double for a clean (zero-detonation) loop and
+    // resets this at each loop boundary. Incremented at BOTH detonation sites (OnDetonated + a
+    // touched Tease); NOT the Brittle (it never counts as a missed trance). Reset at BeginRun and
+    // after every AwardLoopTip read (WPF ChaosModeService.cs:83 / :389 / :1338 / :1751 / :2075).
+    private int _waveDetonations;
+    // Crash-sentinel refresh throttle: RunTick fires 4×/s, so >=60 ticks ≈ 15s between Marks
+    // (WPF ChaosModeService.cs:65 / :958). Reset at BeginRun (WPF :527).
+    private int _memSampleTick;
+    // T-10s "the hole is closing" beat: once per run; a Relapse extension does NOT re-arm it
+    // (WPF ChaosModeService.cs:1063 _endingSoonFired).
+    private bool _endingSoonFired;
+    // A freeze cue played on the way IN (catch/toy); the shatter is owed on the way OUT
+    // (WPF ChaosModeService.cs:2967 _freezeCueOn).
+    private bool _freezeCueOn;
+    // Highest big-combo threshold already announced this streak (edge-detected; reset on a break)
+    // (WPF ChaosModeService.cs:84 _lastComboBigFired).
+    private int _lastComboBigFired;
+
+    // Big-combo milestone thresholds + beat palette (WPF ChaosModeService.cs:90 / :102-104).
+    private static readonly int[] COMBO_BIG_THRESHOLDS = { 25, 50, 100 };
+    private static readonly global::Avalonia.Media.Color COMBO_BIG_COLOR = global::Avalonia.Media.Color.FromRgb(255, 230, 120);
+    private const double COMBO_BIG_PULSE = 0.55;
+
     // Freeze power-up windows (WPF ChaosModeService.cs:2957-2959 service consts).
     private const double FREEZE_DURATION_SEC = 3.5;
     private const int FREEZE_VIBRATE_MS = 200;
@@ -403,6 +427,24 @@ public sealed class AvaloniaChaosService : IChaosService
     public void OpenWarrenAt(string tag) { }
     public void UnequipFromSidebar(string id) { }
 
+    /// <summary>Hard teardown for app exit / main-window close (WPF ChaosModeService.cs:3085
+    /// ForceShutdown): stop everything and funnel through <see cref="CleanupAfterRun"/>, which
+    /// CLEARS the crash sentinel (P0-5) so a clean shutdown mid-run never reads as a native crash
+    /// at the next launch. No results, no payout. Safe to call when no run is active.</summary>
+    public void ForceShutdown()
+    {
+        if (!_active && _hud == null && _overlay == null) return;   // nothing to tear down (WPF :3092)
+        _spawning = false;
+        _active = false;
+        _paused = false;
+        _manualPaused = false;
+        // Sever the overlay callbacks so its Close can't re-enter CleanupAfterRun via OnOverlayClosed
+        // (WPF ChaosModeService.cs:3113-3116).
+        if (_overlay != null) { _overlay.OnDismissed = null; _overlay.OnRunAgain = null; }
+        // The single teardown funnel Clears the sentinel synchronously at its top (WPF :3120).
+        CleanupAfterRun();
+    }
+
     private void BeginRun()
     {
         if (!_active || _state == null) return;
@@ -457,6 +499,9 @@ public sealed class AvaloniaChaosService : IChaosService
         _heavyUntilUtc = DateTime.MinValue; _chaosVideoCapUtc = DateTime.MinValue;   // WPF :402
         _heartRolledWave = 0; _heartArmedThisWave = false;                     // WPF :400
         _teaseDeniedThisRun = 0; _teaseDeniedStreakBarked = false;             // WPF :421-422
+        // Run-completion per-run resets (WPF ChaosModeService.cs:83/84/389/527 + :1063).
+        _waveDetonations = 0; _lastComboBigFired = 0; _freezeCueOn = false;
+        _memSampleTick = 0; _endingSoonFired = false;
         // Draft/act lifecycle per-run resets (WPF ChaosModeService.cs:390-394).
         _lastActFired = 1;
         _finalLoopAnnounced = false;
@@ -597,6 +642,16 @@ public sealed class AvaloniaChaosService : IChaosService
         _state.ElapsedSec += dt;
         _state.Heat = Math.Max(0, _state.Heat - 0.0015);
 
+        // Crash-sentinel refresh: RunTick fires 4×/s → >=60 ticks ≈ 15s. Re-Mark the sentinel with
+        // this run's context so a NATIVE mid-run vanish self-reports at the next launch (P0-5 Mark
+        // cadence = run-start + every ~15s; WPF ChaosModeService.cs:958 LogMemSample("tick")). NOT
+        // gated on any telemetry toggle — only the WPF [CHAOSMEM] log line is gated, not the Mark.
+        if (++_memSampleTick >= 60)
+        {
+            _memSampleTick = 0;
+            try { _crashSentinel?.Mark(BuildSentinelContext()); } catch { }
+        }
+
         // Power-ups run on the real clock (so they don't extend the run length)
         // (WPF ChaosModeService.cs:963-975).
         if (_slowMoRemainingSec > 0)
@@ -699,11 +754,36 @@ public sealed class AvaloniaChaosService : IChaosService
             }
         }
 
-        // Run end first (WPF ChaosModeService.cs:1078-1090; the Relapse loop extension is S7).
+        // T-10s: "the hole is closing" — one quiet announce + a feed line so the run gets an
+        // ending instead of an interruption. Once per run; a Relapse extension that pushes the
+        // clock back out does NOT re-arm it (Relapse announces itself) (WPF ChaosModeService.cs:1063-1069).
+        if (!_endingSoonFired && _state.RunDurationSec - _state.ElapsedSec <= 10)
+        {
+            _endingSoonFired = true;
+            AnnounceChaos("the hole is closing…", ChaosAnnounceKind.Depth,
+                artKey: "ending_soon", subText: "ten seconds");
+            _state.PushEvent("⏳ ten seconds. make them count.");
+            // WPF :1068 App.Bark?.NotifyChaosEndingSoon() — IBarkService lacks the member (follow-up).
+        }
+
+        // Run end (WPF ChaosModeService.cs:1078-1090). The Relapse sin bolts ONE more loop onto
+        // the end (paying double drops + gold) before the run can close; otherwise it ends.
         if (_state.ElapsedSec >= _state.RunDurationSec)
         {
-            EndRun(ranFullCourse: true);
-            return;
+            if (_state.RelapseLoopArmed && !_state.RelapseLoopActive)
+            {
+                _state.ExtendOneLoop();   // grows WaveCount + RunDurationSec; RelapseLoopActive=true (WPF ChaosModels.cs:494-502)
+                AnnounceChaos("☠ RELAPSE — one more loop", ChaosAnnounceKind.Temptation,
+                    artKey: "relapse", subText: "one more loop");
+                AvaloniaChaosSfx.Play("sin_accept", 0.6f);   // WPF :1086
+                _state.PushEvent("☠ relapse. one more loop — everything drips double");
+                try { AvaloniaChaosApp.Bark?.NotifyChaosWaveEscalated(_state.WaveIndex + 1); } catch { }   // WPF :1088
+            }
+            else
+            {
+                EndRun(ranFullCourse: true);
+                return;
+            }
         }
 
         // Wave crossing (WPF ChaosModeService.cs:1093-1101): newWave is capped at WaveCount so
@@ -1033,6 +1113,7 @@ public sealed class AvaloniaChaosService : IChaosService
             _state.Score += prismPts;
             try { _achievements?.TrackBubblePopped(); } catch { }
             _state.PushEvent($"🔮 prism! 10x · {(string.IsNullOrEmpty(spec.MimicVariantId) ? spec.PayloadKind : spec.MimicVariantId)} fires");
+            CheckComboMilestone();   // WPF ChaosModeService.cs:1845
             UpdateStateText();
             return;
         }
@@ -1071,6 +1152,7 @@ public sealed class AvaloniaChaosService : IChaosService
             _state.PushEvent("🐇 GG! they multiply");
         }
         _state.PushEvent($"○ popped {spec.VariantId}");
+        CheckComboMilestone();   // WPF ChaosModeService.cs:1900
         UpdateStateText();
     }
 
@@ -1121,6 +1203,7 @@ public sealed class AvaloniaChaosService : IChaosService
         if (fuseSecLeft <= 1.5 && _state.MaxedBoons.Contains("slowburner"))
             _state.PushEvent("🐌 slow burn! x3");
         _state.PushEvent($"✔ snapped {spec.VariantId}");
+        CheckComboMilestone();   // WPF ChaosModeService.cs:2058
         UpdateStateText();
     }
 
@@ -1143,6 +1226,7 @@ public sealed class AvaloniaChaosService : IChaosService
             _state.EffectsFired++;
         }
         _state.Detonated++;
+        _waveDetonations++;   // per-LOOP tally — dirties the loop for AwardLoopTip's clean bonus (WPF :2075)
         ChaosLessonHooks.OnDetonation();
         ChaosNarrativeHooks.OnFirstDetonation(BuildNarrativeContext(depth: _waveIndex));
 
@@ -1187,6 +1271,7 @@ public sealed class AvaloniaChaosService : IChaosService
             // Bare hit: streak breaks and the heat GUTTERS to zero — WPF zeroes Heat here, it
             // does NOT nibble it by 0.15 (WPF ChaosModeService.cs:2138-2151).
             _state.Combo = 0;
+            _lastComboBigFired = 0;   // combo broke — reset the big-streak latch (WPF :2130)
             _state.Heat = 0;
             _state.PushEvent($"💥 {spec.VariantId} triggered!");
             AvaloniaChaosSfx.Play("trigger", 0.55f);   // the muffled boom under the payload stinger (WPF :2145)
@@ -1402,6 +1487,7 @@ public sealed class AvaloniaChaosService : IChaosService
         // WPF :2293 App.Bark?.NotifyChaosDarterCaught(...) — IBarkService lacks the member (follow-up).
         _state.PushEvent(extended ? "🐇 caught in the slow! +0.8s"
             : quick ? "⚡ quick catch! time slows" : "🐇 white rabbit caught! time slows");
+        CheckComboMilestone();   // WPF ChaosModeService.cs:2302
         UpdateStateText();
     }
 
@@ -1429,6 +1515,7 @@ public sealed class AvaloniaChaosService : IChaosService
         ActivateFreeze();
         // WPF :2317 App.Bark?.NotifyChaosFreezeCaught(...) — IBarkService lacks the member (follow-up).
         _state.PushEvent("❄ frozen. the field holds");
+        CheckComboMilestone();   // WPF ChaosModeService.cs:2319
         UpdateStateText();
     }
 
@@ -1439,6 +1526,7 @@ public sealed class AvaloniaChaosService : IChaosService
     {
         if (_state == null || _paused || _manualPaused) return;
         _state.Detonated++;   // WPF :1333
+        _waveDetonations++;   // a touched Tease dirties the loop too (WPF :1338)
         ChaosLessonHooks.OnDetonation();   // silk_touch: a touched Tease dirties the loop too (WPF :1336)
 
         const int shieldCost = 1;
@@ -1459,6 +1547,7 @@ public sealed class AvaloniaChaosService : IChaosService
         }
 
         _state.Combo = _state.Combo > 1 ? _state.Combo / 2 : 0;   // ALWAYS — the price of touching (WPF :1355)
+        _lastComboBigFired = 0;   // streak reset — re-crossing a big threshold re-fires (WPF :1361)
         _state.PushEvent($"✖ you touched it. it laughs — streak halves to x{_state.Combo}");
         // WPF :1358 Pulse(FF3D5A, 0.38) — no pulse seam (follow-up).
         // WPF :1359 App.Bark?.NotifyChaosTeaseClicked() — IBarkService lacks the member (follow-up).
@@ -2021,6 +2110,7 @@ public sealed class AvaloniaChaosService : IChaosService
         DisarmRabbitCall();
         CloseToyButtons();
         _bubbles.EndChaosMode();
+        EndSlowMo(); EndFreeze();   // drop any live power-up state (frozen field → freeze_shatter) (WPF ChaosModeService.cs:3141)
 
         var state = _state;
         if (state != null)
@@ -2031,26 +2121,54 @@ public sealed class AvaloniaChaosService : IChaosService
             ChaosLessonHooks.OnRunCompleted(state.Shields, ranFullCourse, state.Config.Difficulty);
             ChaosNarrativeHooks.OnRunEnded(BuildNarrativeContext(depth: _waveIndex), state.Score, ranFullCourse);
 
-            double baseXp = Math.Sqrt(Math.Max(0, state.Score)) * 1.5 + state.RunDurationSec / 60.0 * 35.0 * state.DifficultyMult;
-            // Skill-tree XP multiplier for the recap (WPF ChaosModeService.cs:3166 / ChaosModels.cs:535).
-            // Sparks stay on baseXp: IProgressionService.AddXP re-applies the multiplier internally,
-            // so the recap's finalXp reflects the skill tree without double-counting the payout.
-            double skillMult = _skillTree?.GetTotalXpMultiplier() ?? 1.0;
-            double finalXp = baseXp * skillMult;
-            int sparks = (int)Math.Round(baseXp);
-            long previousBest = (long)ChaosMeta.State.BestScore;
+            // ---- XP payout (P0-3: XP is paid PRE-multiplier). baseXp is the run Score CLAMPED
+            //      to 250·durMin·diff — the run's TotalMult stack never touches XP, and the
+            //      skill-tree multiplier is applied ONCE inside Progression.AddXP, NOT here.
+            //      (WPF ChaosModeService.cs:3162-3169; economy-scoring.md §3.) ----
+            double baseXp = ChaosEconomy.BaseXp(state.Score, state.RunDurationSec, state.DifficultyMult);
+            double skillMult = _skillTree?.GetTotalXpMultiplier() ?? 1.0;   // WPF ChaosModels.cs:535
+            double finalXp = baseXp * skillMult;                            // DISPLAY ONLY (recap/bark; WPF :3166)
 
-            try { _progression.AddXP(sparks, XPSource.Chaos); }
+            // P0-3: hand AddXP the UNmultiplied baseXp — AvaloniaProgressionService.AddXP re-applies
+            // the skill-tree multiplier ONCE internally (AvaloniaProgressionService.cs:48-50), exactly
+            // like WPF ProgressionService.cs:56-58. Passing finalXp here would double-multiply. The
+            // seam takes int (the head's XP is integer-grained), so the double base is truncated.
+            try { _progression.AddXP((int)baseXp, XPSource.Chaos); }   // WPF ChaosModeService.cs:3168
             catch (Exception ex) { _logger?.LogDebug("Chaos payout AddXP: {E}", ex.Message); }
+
+            // Capture the previous best BEFORE the Spark award updates it — for the PB delta line
+            // (WPF ChaosModeService.cs:3172).
+            long previousBest = ChaosMeta.State.BestScore;
+
+            // ---- Spark reward (separate economy from XP). Faithful WPF AwardRunRewards
+            //      (ChaosUpgrades.cs:495-521): the pure math lives in ChaosEconomy.SparkReward
+            //      (√score + completion bonus)·SparkGainMult + TrickleDrops, ×1.10 drip capstone,
+            //      +25 first-fall. The first-fall guard reads RunsCompleted==0 BEFORE the
+            //      increment so it fires exactly once ever. ----
+            bool firstFall = ChaosMeta.State.RunsCompleted == 0;
+            int sparks = ChaosEconomy.SparkReward(
+                state.Score, state.DifficultyMult, state.RunDurationSec, state.Config.SparkGainMult,
+                state.TrickleDrops, state.MaxedBoons.Contains("drip_feed"), firstFall);
 
             ChaosMeta.State.Sparks += Math.Max(0, sparks);
             ChaosMeta.State.RunsCompleted++;
             ChaosMeta.State.BestScore = Math.Max(ChaosMeta.State.BestScore, (long)state.Score);
             ChaosMeta.State.BestCombo = Math.Max(ChaosMeta.State.BestCombo, state.BestCombo);
             ChaosMeta.State.TotalDefused += state.Defused;
-            ChaosMeta.State.TotalRunSeconds += state.ElapsedSec;
+            ChaosMeta.State.TotalRunSeconds += Math.Max(0, state.ElapsedSec);
             ChaosMeta.Save();
-            RevealService.Sync("run_complete");
+            RevealService.Sync("run_end");   // RunsCompleted moved — queue freshly crossed reveals (WPF :3178)
+
+            // Rank spine: only the HIGHEST new rank gets a card; the overlay stamps LastRankSeen
+            // when it shows the card (WPF ChaosModeService.cs:3182-3189).
+            ChaosRank? rankUp = null;
+            try
+            {
+                var nowRank = ChaosRanks.For(ChaosMeta.State.RunsCompleted);
+                if ((int)nowRank > ChaosMeta.State.LastRankSeen) rankUp = nowRank;
+            }
+            catch { }
+
             ChaosHappyPath.OnRunResultsShown(state, baseXp, skillMult, finalXp, previousBest, sparks);
 
             RunOnUi(() =>
@@ -2059,7 +2177,7 @@ public sealed class AvaloniaChaosService : IChaosService
                 _hud = null;
                 try { _fx?.Close(); } catch { }   // the vignette pulses die with the run (WPF ChaosModeService.cs:3160)
                 _fx = null;
-                _overlay?.ShowResults(state, baseXp, skillMult, finalXp, previousBest, sparks);
+                _overlay?.ShowResults(state, baseXp, skillMult, finalXp, previousBest, sparks, rankUp);
             });
         }
 
@@ -2129,6 +2247,7 @@ public sealed class AvaloniaChaosService : IChaosService
         _state = null;
         _vibeRemainingSec = 0;
         _freezeRemainingSec = 0;
+        _freezeCueOn = false;   // no owed shatter survives a hard teardown (WPF ChaosModeService.cs:2967)
         _snapFlashRemainingSec = 0;
         _rippleCooldownSec = 0;
         // Spawn-director transients die with the run (WPF ChaosModeService.cs:399-402 resets
@@ -2451,6 +2570,7 @@ public sealed class AvaloniaChaosService : IChaosService
     private void ActivateFreeze()
     {
         _freezeRemainingSec = FREEZE_DURATION_SEC;
+        _freezeCueOn = true;   // the catch/toy cue covers the way IN; the shatter covers the way OUT (WPF :2967)
         _bubbles.SetChaosFrozen(true);
         _bubbles.VibrateAllForFreeze(FREEZE_VIBRATE_MS);
     }
@@ -2459,6 +2579,8 @@ public sealed class AvaloniaChaosService : IChaosService
     {
         _freezeRemainingSec = 0;
         _bubbles.SetChaosFrozen(false);
+        if (_freezeCueOn) AvaloniaChaosSfx.Play("freeze_shatter", 0.5f);   // the ice lets go (WPF ChaosModeService.cs:2987)
+        _freezeCueOn = false;
     }
 
     private void ArmRabbitCall(int rabbits, bool maxed)
@@ -2893,19 +3015,58 @@ public sealed class AvaloniaChaosService : IChaosService
             "mode={0} difficulty={1} waves={2} elapsed={3:F0}s",
             AvaloniaChaosMode.ActiveMode, _state?.Config?.Difficulty, _waveCount, _state?.ElapsedSec ?? 0);
 
-    /// <summary>Her gold tip for a finished loop (WPF AwardLoopTip). A clean loop pays double.
-    /// Note: the simplified engine has no per-loop detonation counter, so "clean" here means
-    /// zero detonations across the whole descent (a stricter proxy than WPF's final-loop test).</summary>
+    /// <summary>Her gold tip for a finished loop (WPF ChaosModeService.cs:1747-1759 AwardLoopTip).
+    /// A clean (zero-detonation) loop pays double; the Relapse bonus loop doubles the gold via
+    /// <see cref="GoldScaled"/>. Uses the per-LOOP <c>_waveDetonations</c> tally (reset here after
+    /// the read), matching WPF's final-loop test — not a whole-run proxy.</summary>
     private void AwardLoopTip(ChaosRunState state)
     {
-        bool clean = state.Detonated == 0;
-        int tip = (int)Math.Round(_rng.Next(3, 7) * state.DifficultyMult);
-        if (clean) tip *= 2;
-        tip = Math.Max(1, tip);
-        ChaosMeta.AddGold(tip);
+        // Clean = ZERO detonations in the loop JUST FINISHED — a per-LOOP tally, not the whole
+        // run. WPF reads _waveDetonations then resets it, so each loop boundary (and the final
+        // loop at run end) judges only its own loop (WPF ChaosModeService.cs:1750-1751).
+        bool clean = _waveDetonations == 0;
+        _waveDetonations = 0;
+        int tip = (int)Math.Round(_rng.Next(3, 7) * state.DifficultyMult);   // WPF :1752
+        if (clean) tip *= 2;                                                 // WPF :1753
+        tip = GoldScaled(tip);   // Relapse's bonus loop pays double gold (WPF :1754 GoldScaled)
+        ChaosMeta.AddGold(tip);  // WPF :1755 BankGold
         state.PushEvent(clean
             ? $"{ChaosGlyphs.Gold} clean loop — she tips +{tip} gold"
             : $"{ChaosGlyphs.Gold} loop done — she tips +{tip} gold");
+    }
+
+    /// <summary>Combo-milestone beats (WPF ChaosModeService.cs:2993-3041). The big thresholds
+    /// (25/50/100) are edge-detected — each fires ONCE per streak: the <c>streak_milestone</c>
+    /// engine cue + a STREAK announce + a bright pulse. Every ×10 gets a gold pulse + feed line.
+    /// The latch (<c>_lastComboBigFired</c>) resets when the streak breaks (bare hit / touched
+    /// Tease), so re-crossing a threshold re-fires. Called at every combo-increment site.</summary>
+    private void CheckComboMilestone()
+    {
+        if (_state == null) return;
+        int combo = _state.Combo;
+        if (combo <= 0) return;
+
+        // Big-combo crossing: edge-detected, fires ONCE per threshold per streak (WPF :3000-3011).
+        foreach (int t in COMBO_BIG_THRESHOLDS)
+        {
+            if (combo >= t && _lastComboBigFired < t)
+            {
+                _lastComboBigFired = t;
+                _state.PushEvent($"🔥🔥 STREAK x{combo}!");
+                // WPF :3006 App.Bark?.NotifyChaosComboBig — IBarkService lacks the member (follow-up).
+                AvaloniaChaosSfx.Play("streak_milestone", 0.5f);   // WPF :3007
+                AnnounceChaos($"STREAK ×{t}", ChaosAnnounceKind.Streak, artKey: "streak", subText: $"×{t}");
+                Pulse(COMBO_BIG_COLOR, COMBO_BIG_PULSE);   // distinct bigger beat (WPF :3010)
+            }
+        }
+
+        // Every ×10 between big thresholds gets a gold combo flash + feed line (WPF :3015-3021).
+        if (combo % 10 == 0)
+        {
+            _state.PushEvent($"🔥 streak x{combo}!");
+            // WPF :3025 App.Bark?.NotifyChaosComboMilestone — IBarkService lacks the member (follow-up).
+            Pulse(global::Avalonia.Media.Color.FromRgb(255, 200, 60), 0.4);   // gold combo flash (WPF :3027)
+        }
     }
 
     private ChaosNarrativeContext BuildNarrativeContext(int depth)
