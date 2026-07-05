@@ -68,13 +68,14 @@ Optionally add a `--verify-webcam` CLI entry that opens the window straight into
 (and logs) so it becomes the standing webcam verification ritual.
 
 ## Slicing (gate after each: slnf 0 · WPF 0 · Core 542 · smoke exit 0)
-- **S1a — Core seam**: add `CalibrationDotSamples`/`CalibrationIrisSample`/`CalibrationPreviewResult`
-  DTOs + `BuildCalibrationPreview`/`CommitCalibration`/`CancelCalibrationPreview` DIMs (no-op defaults)
-  on `IWebcamService`. Nothing calls them yet → tree green. First commit.
-- **S1b — Windows solver impl**: override the DIMs in `AvaloniaWebcamTrackingService` — port
-  `FitCerrolazaPolynomial`/`EvalPolynomial` (pure math, near-verbatim) + build `WebcamCalibrationData`
-  (Polynomial + IrisRange + MonitorBounds) + `SetCalibrationLive`/persist. Nothing calls it yet → green.
-- **S1c — window flow**: replace the stub body — intro → 16-dot sample loop (subscribe OnRawIris/
+- **S1a — Core seam ✅ DONE `bc6eba94`**: `CalibrationDotSamples`/`CalibrationIrisSample`/
+  `CalibrationPreviewResult` DTOs + `BuildCalibrationPreview`/`CommitCalibration`/
+  `CancelCalibrationPreview` DIMs on `IWebcamService`.
+- **S1b — Windows solver ✅ DONE `5cece1c8`**: `WebcamCalibrationSolver.cs` (Windows head) ports the
+  WPF math verbatim (`BuildCalibrationData(dots, screen, mode, out rmsX, out rmsY, out error)`);
+  `AvaloniaWebcamTrackingService` overrides the 3 DIMs (`_pendingCalibration` field, SetCalibrationLive
+  on preview, ApplyCalibration on commit, Load-revert on cancel).
+- **S1c — window flow (NEXT)**: replace the stub body — intro → 16-dot sample loop (subscribe OnRawIris/
   OnHeadPose, build `CalibrationDotSamples[]`) → `BuildCalibrationPreview` → minimal Done →
   `CommitCalibration`. Port constants + dot UI (ring via DispatcherTimer, not WPF Storyboard). smoke green.
 - **S2 — human-testing/verify mode**: logged gaze-test phase (live cursor via OnGazeMove + target
