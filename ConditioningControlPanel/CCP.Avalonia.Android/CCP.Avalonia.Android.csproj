@@ -5,11 +5,11 @@
     <TargetFramework>net10.0-android</TargetFramework>
     <RootNamespace>ConditioningControlPanel.Avalonia.Android</RootNamespace>
     <AssemblyName>CCP.Android</AssemblyName>
-    <Version>6.2.8</Version>
+    <Version>6.2.9</Version>
     <SupportedOSPlatformVersion>21.0</SupportedOSPlatformVersion>
     <Nullable>enable</Nullable>
     <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>6.2.8</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion>6.2.9</ApplicationDisplayVersion>
   </PropertyGroup>
 
   <ItemGroup>

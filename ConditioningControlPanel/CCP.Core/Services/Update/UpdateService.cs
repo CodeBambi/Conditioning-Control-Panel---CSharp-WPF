@@ -35,47 +35,54 @@ public class UpdateService : IUpdateService, IDisposable
     public bool IsDownloading { get; private set; }
 
     /// <inheritdoc />
-    public string CurrentVersion => "6.2.8";
+    public string CurrentVersion => "6.2.9";
 
     /// <summary>
     /// Hard-coded current application version (single source for heads that need a const,
     /// e.g. the What's-New dialog title). Mirrors the WPF UpdateService.AppVersion constant.
     /// </summary>
-    public const string AppVersion = "6.2.8";
+    public const string AppVersion = "6.2.9";
 
     /// <summary>
     /// Patch notes for the current version — shown in the update/what's-new dialogs and used as a
     /// fallback when GitHub release notes are unavailable. Update together with <see cref="AppVersion"/>.
     /// </summary>
-    public const string CurrentPatchNotes = @"v6.2.8 - Tunnel Vision
+    public const string CurrentPatchNotes = @"v6.2.9 - The Fall
 
-⚡ STABILITY & MEMORY
-- Fixed the slow memory climb that could push the app past 3GB and crash
-  with an empty log. Flashes and glitch effects now decode with a hard
-  memory cap and stop leaking native memory as they cycle.
-- Popping a glitch bubble no longer crashes the app.
-- Dragging the avatar between two monitors that use different display
-  scaling no longer freezes the app.
-- The avatar quick-menu Stop Engine now respects lockdown and will not
-  kill the app while a mandatory video or bubble-count is finishing.
-- The ""Enhanced videos detected"" prompt no longer stacks behind the
-  update popup and locks up input on startup.
-- Minimize-to-tray restores on a single click now, and re-centers the
-  window if its saved spot is off-screen.
+✨ NEW: THE FALL
+- Our latest side project is live and free for everyone: an endless
+  rabbit hole visualizer powered by YOUR media. Drop in a folder or zip
+  of your pictures and videos and watch them spiral into an endless
+  descent. Pop the bubbles, sink deeper. It runs entirely in your
+  browser, so your media never leaves your device.
+  Try it: https://cclabs.app/fall.html
 
 🔧 BUG FIXES
-- Timeline ""start at minute X"" now works for every feature (flashes,
-  subliminals, whispers, bouncing text, mandatory videos, lock cards,
-  bubble count and mind wipe), not just a handful. The rest used to
-  start right away.
-- The corner GIF can be changed mid-session now: swap the file, move it,
-  or resize it without restarting.
-- Web video takeover stops at the video's real length instead of running
-  on when a site auto-plays the next clip.
-- Takeover timing labels match the sliders on startup instead of showing
-  stale defaults.
-- The quests header no longer shows last month's season name after a
-  failed refresh.
+- Lock card phrases now change with your mode. Switching between Sissy
+  Hypno, Circe's Lock, Bambi Sleep and the rest finally shows that
+  mode's own phrases instead of always showing Circe's. Backups that
+  were already scrambled by the old bug are healed automatically.
+- Updating no longer wipes your lock card and subliminal phrases. Phrase
+  loading is resilient now, and a corrupt file is kept safe instead of
+  reset. Added export / import in the Phrase Manager so you can back up
+  and move your phrase sets.
+- Bambi Takeover respects the interval slider again. When she is briefly
+  busy she retries within seconds instead of skipping a whole cycle, and
+  the ""time aware"" toggle now actually works.
+- The Takeover quest counts your real active time again. A 15-minute
+  quest no longer drags out to an hour when the app is in the background
+  or running a fullscreen takeover.
+- Fixed a Takeover slot leak that could leave her silent for minutes.
+- A mandatory video no longer jumps in front of the bubbles when clicked.
+
+⚡ PERFORMANCE & STABILITY
+- Fixed the flash-window hangs that could freeze the app mid-session,
+  plus a new internal harness to catch these before they ship.
+- Revived the season shimmer that had stopped rendering.
+
+🎨 UI/UX
+- Settings tidied up: advanced audio options collapse into their own
+  section, and logout is easier to find.
 
 Season: Jelly July";
 
