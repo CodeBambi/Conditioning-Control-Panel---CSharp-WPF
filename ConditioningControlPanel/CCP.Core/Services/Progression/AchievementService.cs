@@ -40,6 +40,13 @@ public sealed class AchievementService : IAchievementService, IDisposable
     private DateTime _lastMindWipeCheck = DateTime.Now;
     private DateTime _lastDeeperCheck = DateTime.Now;
     private DateTime _lastAutonomyCheck = DateTime.Now;
+
+    // Per-tick credit ceiling for Bambi Takeover (autonomy) quest time. The tracking timer fires
+    // every ~1s, but when the app is backgrounded or busy with a fullscreen takeover the tick gets
+    // starved and can slip well past that. Crediting min(elapsed, cap) still counts that
+    // legitimately-active time (fixing the "15-min quest took an hour when backgrounded" report)
+    // while a single long stall (sleep/resume, app suspended for minutes) can only ever add 10s.
+    private const double AutonomyTickCreditCapMinutes = 10.0 / 60.0;
     private bool _isDisposed;
 
     public event EventHandler<Achievement>? AchievementUnlocked;
@@ -295,9 +302,13 @@ public sealed class AchievementService : IAchievementService, IDisposable
         if (autonomy?.IsEnabled == true)
         {
             var elapsed = (now - _lastAutonomyCheck).TotalMinutes;
-            if (elapsed > 0 && elapsed < 0.1) // sanity: max ~6s between ticks
+            // Credit the elapsed time, capping a single tick so a starved/backgrounded tick still
+            // counts (the old hard "< 6s or drop it" guard silently threw away real active time,
+            // which is why the quest crawled) while a long stall can't dump minutes in at once.
+            var credit = ComputeAutonomyTickCredit(elapsed);
+            if (credit > 0)
             {
-                TryQuestTrack("TrackAutonomyMinutes", elapsed);
+                TryQuestTrack("TrackAutonomyMinutes", credit);
             }
             _lastAutonomyCheck = now;
         }
@@ -328,6 +339,15 @@ public sealed class AchievementService : IAchievementService, IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Per-tick Bambi Takeover (autonomy) quest credit: elapsed minutes since the last tick clamped
+    /// to <see cref="AutonomyTickCreditCapMinutes"/> (so a starved/backgrounded tick still counts real
+    /// active time, while a long stall can't dump minutes in at once); 0 for a non-positive interval.
+    /// Internal for regression tests.
+    /// </summary>
+    internal static double ComputeAutonomyTickCredit(double elapsedMinutes)
+        => elapsedMinutes > 0 ? Math.Min(elapsedMinutes, AutonomyTickCreditCapMinutes) : 0.0;
 
     /// <inheritdoc />
     public void CheckLevelAchievements(int level)
