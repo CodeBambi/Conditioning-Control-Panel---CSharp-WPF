@@ -22,6 +22,8 @@ using ConditioningControlPanel.Core.Services.Sessions;
 using ConditioningControlPanel.Core.Services.Settings;
 using ConditioningControlPanel.Core.Services.Video;
 using Microsoft.Extensions.DependencyInjection;
+using Avalonia.Threading;
+using ConditioningControlPanel.Avalonia.Helpers;
 
 namespace ConditioningControlPanel.Avalonia.Views;
 
@@ -34,6 +36,12 @@ public partial class MainWindow : Window
     private readonly IAudioPlayer? _audioPlayer;
     private readonly ILogger<MainWindow>? _logger;
     private readonly ILockdownService? _lockdownService;
+
+    // Window placement persistence (see WindowPlacementStore): the Avalonia head remembers the
+    // user's last drag position; WPF relies on Win32 to do this. Position-only by design.
+    private string? _userDataPath;
+    private DispatcherTimer? _placementSaveTimer;
+    private bool _applyingPlacement;
 
     private DateTime _lastPanicPress = DateTime.MinValue;
     private int _panicPressCount;
@@ -49,6 +57,7 @@ public partial class MainWindow : Window
         _audioPlayer = App.Services?.GetService<IAudioPlayer>();
         _logger = App.Services?.GetRequiredService<ILogger<MainWindow>>();
         _lockdownService = App.Services?.GetService<ILockdownService>();
+        _userDataPath = App.Services?.GetService<IAppEnvironment>()?.UserDataPath;
 
         var themeService = App.Services?.GetService<AvaloniaThemeService>();
         ApplyPlayerTitleShadow();
@@ -71,6 +80,7 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         KeyDown += OnKeyDown;
         Opened += OnOpened;
+        PositionChanged += OnPositionChanged;
 
         AddHandler(DragDrop.DragEnterEvent, MainWindow_DragEnter);
         AddHandler(DragDrop.DragLeaveEvent, MainWindow_DragLeave);
@@ -536,12 +546,121 @@ public partial class MainWindow : Window
 
     #endregion
 
+    #region Window Placement Persistence
+
+    private void ApplySavedPlacement()
+    {
+        try
+        {
+            _applyingPlacement = true;
+            var saved = WindowPlacementStore.Load(_userDataPath);
+            if (saved is { } p && SavedPositionIsOnScreen(new PixelPoint(p.X, p.Y)))
+            {
+                Position = new PixelPoint(p.X, p.Y);
+            }
+            else
+            {
+                // First run, or the saved spot is off-screen (monitor reconfigured): center on
+                // the primary working area so the window is never stranded or opened at a corner.
+                CenterOnPrimary();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "ApplySavedPlacement failed");
+        }
+        finally
+        {
+            // Let the restore's own PositionChanged(s) settle, then re-enable saving.
+            Dispatcher.UIThread.Post(() => _applyingPlacement = false);
+        }
+    }
+
+    private void OnPositionChanged(object? sender, PixelPointEventArgs e)
+    {
+        // Ignore movement we caused (restore), and never persist a minimized/tray position
+        // (PositionChanged can also fire around the minimize-to-tray path in OnClosing).
+        if (_applyingPlacement || WindowState != WindowState.Normal) return;
+        if (string.IsNullOrEmpty(_userDataPath)) return;
+
+        _placementSaveTimer ??= CreatePlacementSaveTimer();
+        _placementSaveTimer.Stop();
+        _placementSaveTimer.Start();
+    }
+
+    private DispatcherTimer CreatePlacementSaveTimer()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (_applyingPlacement || WindowState != WindowState.Normal) return;
+            var pos = Position;
+            WindowPlacementStore.Save(_userDataPath, pos.X, pos.Y);
+        };
+        return timer;
+    }
+
+    // Mirrors App.axaml.cs EnsureOnScreen's overlap test: true if >=60x30 px of the window at
+    // the given position overlaps any screen's working area (enough to grab the title bar).
+    private bool SavedPositionIsOnScreen(PixelPoint pos)
+    {
+        try
+        {
+            var all = Screens?.All;
+            if (all is null || all.Count == 0) return false;
+
+            double scaling = RenderScaling <= 0 ? 1.0 : RenderScaling;
+            int w = (int)(Bounds.Width * scaling);
+            int h = (int)(Bounds.Height * scaling);
+            if (w <= 0 || h <= 0) return false;
+
+            int rx = pos.X, ry = pos.Y, rr = rx + w, rb = ry + h;
+            foreach (var screen in all)
+            {
+                var wa = screen.WorkingArea;
+                int iw = Math.Min(wa.Right, rr) - Math.Max(wa.X, rx);
+                int ih = Math.Min(wa.Bottom, rb) - Math.Max(wa.Y, ry);
+                if (iw >= 60 && ih >= 30) return true;
+            }
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void CenterOnPrimary()
+    {
+        try
+        {
+            var primary = Screens?.Primary ?? Screens?.All?.FirstOrDefault();
+            if (primary == null) return;
+
+            var wa = primary.WorkingArea; // physical px
+            double scaling = RenderScaling <= 0 ? 1.0 : RenderScaling;
+            int w = (int)(Bounds.Width * scaling);
+            int h = (int)(Bounds.Height * scaling);
+            if (w <= 0 || h <= 0) return;
+
+            Position = new PixelPoint(wa.X + (wa.Width - w) / 2, wa.Y + (wa.Height - h) / 2);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "CenterOnPrimary failed");
+        }
+    }
+
+    #endregion
+
     #region Startup Dialogs
 
     private async void OnOpened(object? sender, EventArgs e)
     {
         try
         {
+            ApplySavedPlacement();
             await TryShowWelcomeDialogAsync();
             await TryShowWhatsNewDialogAsync();
             await TryShowSeasonRecapAsync();

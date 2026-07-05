@@ -17,7 +17,7 @@
         MinHeight="450"
         WindowDecorations="None"
         CanResize="True"
-        WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="Manual"
         DragDrop.AllowDrop="True">
 
   <Design.DataContext>
