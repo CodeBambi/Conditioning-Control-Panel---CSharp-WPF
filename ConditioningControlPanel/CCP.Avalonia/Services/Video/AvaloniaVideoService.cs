@@ -16,6 +16,7 @@ using ConditioningControlPanel.Avalonia.Chaos;
 using ConditioningControlPanel.Avalonia.Compositor;
 using ConditioningControlPanel.Avalonia.Compositor.Layers;
 using ConditioningControlPanel.Avalonia.Helpers;
+using ConditioningControlPanel.Avalonia.Platform;
 using ConditioningControlPanel.Avalonia.Services.Overlays;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Services.Chaos;
@@ -55,6 +56,7 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     private readonly ILogger<AvaloniaVideoService>? _logger;
     private readonly IMultiMonitorVideoService? _multiMonitor;
     private readonly AvaloniaMultiMonitorVideoService? _multiMonitorImpl;
+    private readonly IInputHook? _inputHook;
     private readonly IContentPackService? _contentPacks;
     private readonly ISystemAudioDucker? _audioDucker;
     private readonly IFlashService? _flash;
@@ -170,7 +172,8 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         ISystemAudioDucker? audioDucker = null,
         IFlashService? flash = null,
         IBubbleService? bubbles = null,
-        ICompanionService? companion = null)
+        ICompanionService? companion = null,
+        IInputHook? inputHook = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _environment = environment ?? throw new ArgumentNullException(nameof(environment));
@@ -250,6 +253,14 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _multiMonitorImpl.PanicRequested += OnMultiMonitorPanicRequested;
             _multiMonitorImpl.SurfaceClicked += OnMultiMonitorSurfaceClicked;
         }
+
+        // UCE video input (UCE plan Phase E prerequisite): the compositor video layers render
+        // in a click-through / no-activate window that receives NO keyboard input, so the
+        // legacy VideoOverlayWindow.OnKeyDown ESC-dismiss / panic-key contract has no receiver
+        // on the layer path. Route those keys through the global low-level keyboard hook.
+        _inputHook = inputHook;
+        if (_inputHook != null)
+            _inputHook.KeyPressed += OnCompositorVideoKey;
 
         RefreshVideosPath();
     }
@@ -1885,6 +1896,31 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         return timer;
     }
 
+    // Global keyboard receiver for the COMPOSITOR video path only (the legacy window path
+    // owns its keys via VideoOverlayWindow.OnKeyDown). Mirrors that non-strict contract
+    // (WPF VideoService.cs:1822-1835): ESC dismisses the current video (the session keeps
+    // running), the rebindable panic key force-ends. Strict mode is a no-op here: the layer
+    // path has no window to dismiss, so ESC/panic are inherently inert (UCE plan B2 residual).
+    // The low-level hook cannot swallow keys (AvaloniaInputHook.CanSuppressKeys=false), so we
+    // never suppress; we only react while a compositor video is actually playing.
+    private void OnCompositorVideoKey(object? sender, KeyboardHookEventArgs e)
+    {
+        var compositorVideoActive = _videoLayer?.IsPlaying == true || _mandatoryVideoLayer?.IsPlaying == true;
+        if (!compositorVideoActive) return;
+        if (_currentStrictMode) return; // strict: ESC/panic inert on the layer path
+
+        const int VK_ESCAPE = 0x1B;
+        var settings = _settings.Current;
+        var isPanicKey = settings?.PanicKeyEnabled == true
+            && AvaloniaKeyInterop.TryGetVirtualKeyCode(settings.PanicKey ?? string.Empty, out var panicVk)
+            && panicVk == e.VirtualKeyCode;
+
+        if (isPanicKey)
+            Dispatcher.UIThread.Post(ForceCleanup);
+        else if (e.VirtualKeyCode == VK_ESCAPE)
+            Dispatcher.UIThread.Post(() => CleanupInternal(notifyEnded: true));
+    }
+
     public void Dispose()
     {
         if (_isDisposed) return;
@@ -1902,6 +1938,8 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             _multiMonitorImpl.PanicRequested -= OnMultiMonitorPanicRequested;
             _multiMonitorImpl.SurfaceClicked -= OnMultiMonitorSurfaceClicked;
         }
+        if (_inputHook != null)
+            _inputHook.KeyPressed -= OnCompositorVideoKey;
         CleanupTempPackFiles();
     }
 
