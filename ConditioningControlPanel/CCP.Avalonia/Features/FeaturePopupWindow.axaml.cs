@@ -79,10 +79,18 @@ public partial class FeaturePopupWindow : Window
         {
             if (Screens.Primary is { } screen)
             {
-                var maxHeight = screen.WorkingArea.Height * 0.9;
-                if (maxHeight > 0)
+                // Cap the CONTENT scroller, not just the window. The window uses
+                // SizeToContent="Height", so it measures the ScrollViewer at infinite height —
+                // a window-level MaxHeight therefore only CLIPS tall content instead of scrolling
+                // it (the viewport never overflows). Bounding the ScrollViewer itself makes
+                // Avalonia's MeasureCore clamp its available height, so it measures its content
+                // bounded and actually scrolls when a feature popup is taller than the screen.
+                // Short/medium popups stay snug via SizeToContent; only tall ones cap + scroll.
+                var screenH = screen.WorkingArea.Height;
+                if (screenH > 0)
                 {
-                    MaxHeight = maxHeight;
+                    ContentScroll.MaxHeight = screenH * 0.85;
+                    MaxHeight = screenH * 0.92; // backstop: window never exceeds the screen
                     InvalidateMeasure();
                 }
             }

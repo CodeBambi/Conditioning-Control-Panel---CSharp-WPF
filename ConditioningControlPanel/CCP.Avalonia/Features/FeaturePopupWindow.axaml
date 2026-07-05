@@ -80,8 +80,9 @@
       </Border>
 
       <!-- Content host -->
-      <ScrollViewer Grid.Row="1"
-                    VerticalScrollBarVisibility="Visible"
+      <ScrollViewer x:Name="ContentScroll"
+                    Grid.Row="1"
+                    VerticalScrollBarVisibility="Auto"
                     HorizontalScrollBarVisibility="Disabled"
                     Padding="16">
         <ContentControl x:Name="ContentHost" />
