@@ -158,10 +158,21 @@ running:** the mandatory video renders through the compositor and the spiral/pin
 composite ON TOP of it (Stage 2 dump: `Video=ACTIVE + Spiral=ACTIVE + PinkTint=ACTIVE`) - the
 original 'video covers the overlays' bug is fixed. Remaining deletion work (below) is E3.
 
-**MEDIUM FOLLOW-UP - shutdown segfault under a THRASHING video stream (not normal use).**
-SEVERITY NOTE FIRST: normal video + clean exit does NOT crash - `--verify-visible` (plays a valid
-`_test_loop.mp4`, then `Stop()` + shutdown) exited 0 three times this session. The crash below needs
-the benchmark's failing-stream state, so it is a robustness issue, not an everyday crash-on-exit.
+**RESOLVED 2026-07-05 - shutdown segfault under a THRASHING video stream.**
+FIX (commit pending this edit): `VideoLayer.Stop()` now stores its deferred vmem-teardown `Task`
+(`_teardownTask`, only when there is something to free so a redundant Stop cannot overwrite a
+pending real teardown) and exposes `WaitForTeardown(timeoutMs=1500)`; `AvaloniaVideoService.Dispose`
+drains both layers before returning, so the process no longer exits while the ~400 ms deferred native
+player.Dispose()/FreeHGlobal is pending. The 400 ms race-avoidance defer itself is unchanged; only
+the shutdown drain is added. VERIFIED: `--max-benchmark` re-run exits 0 (was 139/segfault), the FPS
+report writes cleanly, and the mandatory video plays to completion (with the attention-check benchmark
+fix). S9 FPS captured: max-intensity 4-min AvgFPS=157.0, MaxFPS=206, AvgCPU=19.8%, PeakCPU=57.4%,
+WorkingSet~2.3 GB. PERF-WATCH (not a blocker): 157 avg is ~12% under the stored optimized reference
+(178, 3-min); not apples-to-apples (this run decodes the full video through the UCE path over 4 min),
+but worth a dedicated perf pass if it drops further - well above the aim 60 / floor 30 targets.
+Historical severity note: normal video + clean exit never crashed (`--verify-visible` x3 exit 0); the
+crash needed the benchmark's failing-stream teardown state - it was a robustness issue, not an
+everyday crash-on-exit.
 Found via `--max-benchmark` 2026-07-05: the 4-min max session (incl. Phase 3 heavy chaos) runs
 to COMPLETION (session completes, XP awarded - the chaos port S5-S8 is validated under max load),
 then the process SEGFAULTS during shutdown teardown (exit 139), which also prevents the FPS

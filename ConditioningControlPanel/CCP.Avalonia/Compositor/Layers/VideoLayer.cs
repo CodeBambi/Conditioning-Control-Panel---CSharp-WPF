@@ -110,6 +110,11 @@ public class VideoLayer : BaseLayer, IDisposable
     private uint _videoHeight = DefaultVideoHeight;
     private uint _videoPitch = DefaultVideoWidth * 4;
     private bool _disposed;
+    // Holds the most recent deferred teardown scheduled by Stop() so a synchronous app shutdown
+    // (AvaloniaVideoService.Dispose -> WaitForTeardown) can drain it before the process exits.
+    // Without the drain the ~400 ms deferred native player.Dispose()/FreeHGlobal races runtime
+    // teardown and segfaults on exit. UI-thread-only (Stop is UI-thread-only), so no volatile.
+    private Task? _teardownTask;
 
     private bool _firstFrameLogged;
     private bool _loop;
@@ -356,26 +361,46 @@ public class VideoLayer : BaseLayer, IDisposable
         // vout and the render thread may be mid-draw of the front wrapper on the last engine
         // tick. Dispose the player first (no more callbacks), then the SKImage wrappers, and
         // only then free the pinned memory they wrap.
-        Task.Run(async () =>
+        // Track the task (only when there is something to free, so a redundant Stop() cannot
+        // overwrite a still-pending real teardown with a no-op task) so WaitForTeardown() can
+        // drain it on app shutdown.
+        if (player != null || media != null || buffers != null || images != null)
         {
-            await Task.Delay(400);
-            try { player?.Dispose(); } catch { }
-            try { media?.Dispose(); } catch { }
-            if (images != null)
+            _teardownTask = Task.Run(async () =>
             {
-                foreach (var image in images)
+                await Task.Delay(400);
+                try { player?.Dispose(); } catch { }
+                try { media?.Dispose(); } catch { }
+                if (images != null)
                 {
-                    try { image?.Dispose(); } catch { }
+                    foreach (var image in images)
+                    {
+                        try { image?.Dispose(); } catch { }
+                    }
                 }
-            }
-            if (buffers != null)
-            {
-                foreach (var buffer in buffers)
+                if (buffers != null)
                 {
-                    if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
+                    foreach (var buffer in buffers)
+                    {
+                        if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
+                    }
                 }
-            }
-        });
+            });
+        }
+    }
+
+    /// <summary>
+    /// Blocks up to <paramref name="timeoutMs"/> ms for the most recent deferred teardown scheduled
+    /// by <see cref="Stop"/> to finish (dispose the player/media and free the pinned buffers). Called
+    /// by AvaloniaVideoService.Dispose on app shutdown so the process does not exit while a native
+    /// LibVLC dispose / HGlobal free is still pending - that race segfaults on teardown. No-op when
+    /// no teardown is pending. Safe from the UI thread: the deferred body runs entirely on the thread
+    /// pool and touches no UI-thread state, so Wait() cannot deadlock.
+    /// </summary>
+    public void WaitForTeardown(int timeoutMs = 1500)
+    {
+        try { _teardownTask?.Wait(timeoutMs); }
+        catch { /* a faulted/timed-out teardown is non-fatal at shutdown */ }
     }
 
     private void OnEndReached(object? sender, EventArgs e)

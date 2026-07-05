@@ -1643,6 +1643,12 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
         if (_isDisposed) return;
         _isDisposed = true;
         Stop();
+        // Shutdown safety: Stop() here (and the earlier session-stop) schedules a ~400 ms deferred
+        // vmem teardown in each video layer. On app exit nothing else keeps the process alive for
+        // it, so drain both before returning - otherwise the native LibVLC dispose / HGlobal free
+        // races process teardown and segfaults (UCE plan Phase E shutdown-teardown follow-up).
+        try { _videoLayer?.WaitForTeardown(); } catch { }
+        try { _mandatoryVideoLayer?.WaitForTeardown(); } catch { }
 
         if (_inputHook != null)
             _inputHook.KeyPressed -= OnCompositorVideoKey;
