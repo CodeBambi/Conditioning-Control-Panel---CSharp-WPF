@@ -5,6 +5,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.Controls.Shapes;
+using Avalonia.Media;
+using Microsoft.Extensions.Logging;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel.Core.Localization;
 using ConditioningControlPanel.Core.Services.Help;
@@ -59,6 +62,7 @@ public partial class WebcamCalibrationWindow : Window
     private readonly IWebcamService? _webcam;
     private readonly IScreenProvider? _screenProvider;
     private readonly ISettingsService? _settings;
+    private readonly ILogger? _verifyLogger;
 
     // Per-dot iris samples, allocated up-front so OnRawIris lands in the active dot's bucket.
     private readonly List<List<CalibrationIrisSample>> _allSamples = new();
@@ -69,6 +73,12 @@ public partial class WebcamCalibrationWindow : Window
     private int _activeDotIndex = -1;
     private ScreenInfo? _calScreen;
     private double _calW, _calH;
+
+    // S2 verify/testing mode state (live gaze cursor + per-target accuracy).
+    private Ellipse? _gazeCursor;
+    private bool _verifyRunning;
+    private bool _verifyCollecting;
+    private readonly List<(double X, double Y)> _verifyGaze = new();
 
     private DispatcherTimer? _ringPulse;
     private double _ringPulsePhaseMs;
@@ -86,6 +96,7 @@ public partial class WebcamCalibrationWindow : Window
         _webcam = services?.GetService<IWebcamService>();
         _screenProvider = services?.GetService<IScreenProvider>();
         _settings = services?.GetService<ISettingsService>();
+        _verifyLogger = services?.GetService<ILoggerFactory>()?.CreateLogger("WebcamVerify");
     }
 
     /// <summary>Constructor preserved for callers that still pass the frame/video seams (unused here).</summary>
@@ -352,8 +363,130 @@ public partial class WebcamCalibrationWindow : Window
         Close(_completedOk);
     }
 
-    // Verify panel: "Verify Accuracy" is the S2 logged live-gaze test; not wired in S1c.
-    private void BtnVerifyAccuracy_Click(object? sender, RoutedEventArgs e) { }
+    // S2: "Verify Accuracy" runs a logged live-gaze test against known targets so the user can
+    // confirm tracking works (live cursor on-screen) and the log captures AGGREGATE error only.
+    private void BtnVerifyAccuracy_Click(object? sender, RoutedEventArgs e) => _ = RunLiveGazeTestAsync();
+
+    private async Task RunLiveGazeTestAsync()
+    {
+        if (_verifyRunning || _webcam == null || _cancelled) return;
+        _verifyRunning = true;
+        try
+        {
+            VerifyPanel.IsVisible = false;
+            if (ShortcutHintBanner != null) ShortcutHintBanner.IsVisible = false;
+            DotCanvas.IsVisible = true;
+            StatusPanel.IsVisible = true;
+            EnsureGazeCursor();
+            _webcam.OnGazeMove += OnVerifyGaze;
+
+            // Spread targets in monitor-local DIP space (same space OnGazeMove emits): center + insets.
+            var targets = new (double X, double Y)[]
+            {
+                (_calW * 0.5, _calH * 0.5),
+                (_calW * 0.15, _calH * 0.15),
+                (_calW * 0.85, _calH * 0.15),
+                (_calW * 0.15, _calH * 0.85),
+                (_calW * 0.85, _calH * 0.85),
+            };
+
+            double sumErr = 0, maxErr = 0; int measured = 0;
+            for (int i = 0; i < targets.Length; i++)
+            {
+                if (_cancelled) break;
+                MoveDotTo(targets[i].X, targets[i].Y);
+                TxtStatus.Text = "Look at the pink dot...";
+                TxtProgress.Text = $"Accuracy check {i + 1} / {targets.Length}";
+                await Task.Delay(650);
+                if (_cancelled) break;
+
+                _verifyGaze.Clear();
+                _verifyCollecting = true;
+                await Task.Delay(1400);
+                _verifyCollecting = false;
+                if (_cancelled) break;
+
+                if (_verifyGaze.Count >= 5)
+                {
+                    double mx = 0, my = 0;
+                    foreach (var g in _verifyGaze) { mx += g.X; my += g.Y; }
+                    mx /= _verifyGaze.Count; my /= _verifyGaze.Count;
+                    double err = Math.Sqrt((mx - targets[i].X) * (mx - targets[i].X) + (my - targets[i].Y) * (my - targets[i].Y));
+                    sumErr += err; if (err > maxErr) maxErr = err; measured++;
+                    TxtStatus.Text = $"~{err:F0} px off";
+                    await Task.Delay(250);
+                }
+            }
+
+            _webcam.OnGazeMove -= OnVerifyGaze;
+            RemoveGazeCursor();
+            DotCanvas.IsVisible = false;
+            if (_cancelled) return;
+
+            if (measured > 0)
+            {
+                double mean = sumErr / measured;
+                // Privacy: only AGGREGATE accuracy metrics are logged (like the fit RMS) - never
+                // per-frame gaze points / iris vectors; the live cursor was on-screen only.
+                _verifyLogger?.LogInformation(
+                    "webcam-verify: targets={Measured}/{Total} mean_err={Mean:F1} max_err={Max:F1} DIPs",
+                    measured, targets.Length, mean, maxErr);
+                string verdict = mean <= 90 ? "looks accurate" : mean <= 180 ? "usable but loose" : "inaccurate - consider Recalibrate";
+                TxtVerifyStatus.Text = $"Accuracy: mean ~{mean:F0} px, worst ~{maxErr:F0} px ({verdict}). " +
+                                       "Keep it with Done, or try again with Recalibrate.";
+            }
+            else
+            {
+                TxtVerifyStatus.Text = "Couldn't measure accuracy (no gaze samples - is your face in frame and lit?). " +
+                                       "You can still keep the calibration or recalibrate.";
+            }
+
+            StatusPanel.IsVisible = false;
+            VerifyPanel.IsVisible = true;
+            if (ShortcutHintBanner != null) ShortcutHintBanner.IsVisible = true;
+        }
+        catch (Exception)
+        {
+            try { _webcam.OnGazeMove -= OnVerifyGaze; } catch { }
+            RemoveGazeCursor();
+        }
+        finally
+        {
+            _verifyCollecting = false;
+            _verifyRunning = false;
+        }
+    }
+
+    private void OnVerifyGaze(Point p)
+    {
+        if (_gazeCursor != null)
+        {
+            Canvas.SetLeft(_gazeCursor, p.X - _gazeCursor.Width / 2);
+            Canvas.SetTop(_gazeCursor, p.Y - _gazeCursor.Height / 2);
+        }
+        if (_verifyCollecting) _verifyGaze.Add((p.X, p.Y));
+    }
+
+    private void EnsureGazeCursor()
+    {
+        if (_gazeCursor != null) return;
+        _gazeCursor = new Ellipse
+        {
+            Width = 30, Height = 30,
+            Fill = new SolidColorBrush(Color.FromArgb(160, 80, 220, 255)),
+            Stroke = new SolidColorBrush(Color.FromArgb(220, 200, 245, 255)),
+            StrokeThickness = 2,
+            IsHitTestVisible = false,
+        };
+        DotCanvas.Children.Add(_gazeCursor);
+    }
+
+    private void RemoveGazeCursor()
+    {
+        if (_gazeCursor == null) return;
+        DotCanvas.Children.Remove(_gazeCursor);
+        _gazeCursor = null;
+    }
 
     private void BtnVerifyRecalibrate_Click(object? sender, RoutedEventArgs e) => _verifyDone.TrySetResult(VerifyChoice.Recalibrate);
 
@@ -420,6 +553,7 @@ public partial class WebcamCalibrationWindow : Window
         {
             _webcam.OnRawIris -= OnRawIris;
             _webcam.OnHeadPose -= OnHeadPose;
+            _webcam.OnGazeMove -= OnVerifyGaze;
             _webcam.OnTrackingStateChanged -= OnWebcamStateChanged;
         }
         base.OnClosed(e);

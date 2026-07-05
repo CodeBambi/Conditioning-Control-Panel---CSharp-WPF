@@ -81,8 +81,11 @@ Optionally add a `--verify-webcam` CLI entry that opens the window straight into
   → Done=`CommitCalibration` / Recalibrate|ESC=`CancelCalibrationPreview`. ScreenInfo resolved via
   `IScreenProvider` by window `Position`. **Avalonia can create calibrations again (was a stub).**
   Gates green (slnf/WPF/Core 542/smoke). Final gaze-accuracy proof is HUMAN+CAMERA — that is S2.
-- **S2 — human-testing/verify mode (NEXT)**: logged gaze-test phase (live cursor via OnGazeMove + target
-  dots + telemetry log) + human-confirm + recalibrate loop. The owner's testing mode.
+- **S2 — human-testing/verify mode ✅ DONE**: "Verify Accuracy" runs a logged live-gaze test — a live
+  on-screen gaze cursor follows `OnGazeMove` (monitor-local DIP, no conversion), 5 target dots, per-target
+  mean error vs target. PRIVACY: only AGGREGATE mean/max error is logged (`_verifyLogger` "webcam-verify:
+  mean_err=.. max_err=..", like the fit RMS) — NO per-frame gaze points/iris to disk; cursor is on-screen
+  only. Result + verdict shown on the verify panel; user gives the final Done/Recalibrate call.
 - **S3 — polish to full contract**: gesture warm-up (blink/mouth/tongue), bubble-test gaze-trim,
   axis-correction/head-pose comp. Each a sub-slice.
 
