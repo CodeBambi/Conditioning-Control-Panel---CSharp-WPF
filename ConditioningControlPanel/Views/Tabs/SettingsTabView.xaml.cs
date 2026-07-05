@@ -157,6 +157,16 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnSubliminalSettings_Click(sender, e);
         }
+        private void BtnExportPhrases_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnExportPhrases_Click(sender, e);
+        }
+        private void BtnImportPhrases_Click(object sender, RoutedEventArgs e)
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.BtnImportPhrases_Click(sender, e);
+        }
         private void BtnTestAudio_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

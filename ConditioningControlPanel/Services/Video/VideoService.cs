@@ -907,6 +907,14 @@ namespace ConditioningControlPanel.Services
             CloseAll(synchronous);
             App.Audio?.ForceUnduck();
             _penalties = 0;
+
+            // Release the InteractionQueue slot if we still hold it. Panic key / stuck-timer /
+            // session-switch teardown routes through ForceCleanup (not Cleanup), so without this
+            // the "Video" slot stayed claimed for the full 5-minute stuck window (#14) — blocking
+            // the next interaction and leaving a dead fullscreen. CompleteIfCurrent is guarded, so
+            // it never clears a BubbleCount/LockCard that has since taken over.
+            App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.Video);
+
             App.Logger?.Information("VideoService: Force cleanup completed (synchronous={Sync})", synchronous);
         }
 
@@ -1299,6 +1307,12 @@ namespace ConditioningControlPanel.Services
                         // no-activate it stays put for the whole video. See MakeNonActivating.
                         if (App.Chaos?.IsRunning == true)
                             foreach (var w in _windows) MakeNonActivating(w);
+
+                        // Regardless of chaos, clicking the mandatory video (e.g. missing a bubble
+                        // and hitting the video behind it) must NOT re-raise it above whatever is
+                        // layered on top. Answer WM_MOUSEACTIVATE with MA_NOACTIVATE so the click
+                        // never triggers a z-order raise. Focus-preserving, so ESC/panic still work.
+                        foreach (var w in _windows) PreventClickRaise(w);
 
                         // Ambient bubble game: pause + clear so it doesn't fight the video for
                         // clicks / z-order (no-op during a chaos run, which isn't "running").
@@ -2898,6 +2912,8 @@ namespace ConditioningControlPanel.Services
         private const int WS_EX_NOACTIVATE = 0x08000000;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_NOACTIVATE = 0x0010;
+        private const int WM_MOUSEACTIVATE = 0x0021;
+        private const int MA_NOACTIVATE = 3;
 
         /// <summary>
         /// Pins a fullscreen video window to the true physical bounds of its target monitor.
@@ -2963,6 +2979,55 @@ namespace ConditioningControlPanel.Services
             {
                 App.Logger?.Debug("MakeNonActivating failed: {Error}", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Stops a fullscreen video window from being re-raised in the topmost z-band when the user
+        /// clicks it (e.g. missing a bubble and hitting the video behind it). WS_EX_NOACTIVATE alone
+        /// (MakeNonActivating) only blocks focus-driven raises; Windows still brings a topmost window
+        /// to the top of its band on mouse-down. We answer WM_MOUSEACTIVATE with MA_NOACTIVATE, which
+        /// denies the click-activation (and the z-order raise that rides on it) while KEEPING the
+        /// mouse message — so the WPF click overlay + attention targets still register — and WITHOUT
+        /// dropping existing focus, so ESC / panic-key on non-chaos videos keep working. This is the
+        /// pre-emptive counterpart to the reactive BringTargetsToFront lift. Idempotent per window.
+        /// </summary>
+        private void PreventClickRaise(Window win)
+        {
+            try
+            {
+                void Wire()
+                {
+                    try
+                    {
+                        var hwnd = new WindowInteropHelper(win).Handle;
+                        if (hwnd == IntPtr.Zero) return;
+                        HwndSource.FromHwnd(hwnd)?.AddHook(NoClickRaiseHook);
+                    }
+                    catch (Exception ex)
+                    {
+                        App.Logger?.Debug("PreventClickRaise wire failed: {Error}", ex.Message);
+                    }
+                }
+
+                if (new WindowInteropHelper(win).Handle != IntPtr.Zero)
+                    Wire();
+                else
+                    win.SourceInitialized += (_, _) => Wire();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("PreventClickRaise failed: {Error}", ex.Message);
+            }
+        }
+
+        private static IntPtr NoClickRaiseHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_MOUSEACTIVATE)
+            {
+                handled = true;
+                return new IntPtr(MA_NOACTIVATE);
+            }
+            return IntPtr.Zero;
         }
 
         /// <summary>

@@ -801,6 +801,22 @@
                                     ToolTip="{loc:Str tooltip_clear_selection_use_random}"/>
                         </StackPanel>
     
+                        <!-- Phrase Backup (export/import all editable phrase pools) -->
+                        <Grid Margin="0,6,0,0"
+                              ToolTip="Save or restore your lock-card phrases, subliminals, mantras and other custom text. Use this to back up your phrases before an update or when moving to a new PC.">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="Phrase backup" Foreground="#B0B0B0" FontSize="11" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="📤 Export" Style="{StaticResource OutlineButton}" Padding="8,3" Margin="0,0,6,0"
+                                        Click="BtnExportPhrases_Click"
+                                        ToolTip="Save all your custom phrases to a backup file."/>
+                                <Button Content="📥 Import" Style="{StaticResource OutlineButton}" Padding="8,3"
+                                        Click="BtnImportPhrases_Click"
+                                        ToolTip="Restore custom phrases from a backup file (replaces your current phrases)."/>
+                            </StackPanel>
+                        </Grid>
+
                         <!-- Gaming Tip -->
                         <Grid Margin="0,5,0,0">
                             <TextBlock Text="{loc:Str label_use_borderless_windowed_for_overlays}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center"
@@ -1174,15 +1190,44 @@
                             <helpers:EmojiTextBlock Style="{StaticResource SectionHeader}" Text="{loc:Str section_audio}" FontSize="12"/>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                 <Button x:Name="HelpBtnAudio" x:FieldModifier="internal" Style="{StaticResource HelpButtonStyle}" Tag="Audio" Margin="0,0,8,0"/>
-                                <TextBlock Text="{loc:Str label_duck}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                <CheckBox x:Name="ChkAudioDuck" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
-                                          IsChecked="True"
-                                          Checked="ChkAudioDuck_Changed" Unchecked="ChkAudioDuck_Changed"
-                                          ToolTip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
+                                <!-- Expand/collapse the advanced audio options -->
+                                <ToggleButton x:Name="BtnAudioAdvanced" x:FieldModifier="internal"
+                                              ToolTip="Show advanced audio options (video &amp; duck volume, output device, ducking)"
+                                              Cursor="Hand" VerticalAlignment="Center">
+                                    <ToggleButton.Style>
+                                        <Style TargetType="ToggleButton">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ToggleButton">
+                                                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="6,1">
+                                                            <TextBlock x:Name="arrow" Text="&#x25BE;" FontSize="13"
+                                                                       Foreground="{DynamicResource PinkBrush}"
+                                                                       RenderTransformOrigin="0.5,0.5"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsChecked" Value="True">
+                                                                <Setter TargetName="arrow" Property="RenderTransform">
+                                                                    <Setter.Value>
+                                                                        <RotateTransform Angle="180"/>
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                            </Trigger>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="arrow" Property="Foreground" Value="White"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ToggleButton.Style>
+                                </ToggleButton>
                             </StackPanel>
                         </Grid>
-    
-                        <!-- Master Volume -->
+
+                        <!-- Master Volume (always visible) -->
                         <Grid Margin="0,4,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="45"/>
@@ -1196,7 +1241,24 @@
                                     ToolTip="{loc:Str tooltip_overall_audio_volume_level}"/>
                             <TextBlock x:Name="TxtMaster" x:FieldModifier="internal" Grid.Column="2" Style="{StaticResource ValueLabel}" Text="50%" FontSize="10"/>
                         </Grid>
-    
+
+                        <!-- Advanced audio options (collapsed by default, toggled by the down arrow) -->
+                        <StackPanel Visibility="{Binding IsChecked, ElementName=BtnAudioAdvanced, Converter={StaticResource BoolToVisibility}}">
+
+                        <!-- Auto-duck toggle -->
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{loc:Str label_duck}" Style="{StaticResource SettingLabel}" FontSize="10" VerticalAlignment="Center"
+                                       ToolTip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
+                            <CheckBox Grid.Column="1" x:Name="ChkAudioDuck" x:FieldModifier="internal" Style="{StaticResource ToggleStyle}"
+                                      IsChecked="True"
+                                      Checked="ChkAudioDuck_Changed" Unchecked="ChkAudioDuck_Changed"
+                                      ToolTip="{loc:Str tooltip_automatically_reduce_other_app_volumes_during}"/>
+                        </Grid>
+
                         <!-- Video Volume -->
                         <Grid Margin="0,4,0,0">
                             <Grid.ColumnDefinitions>
@@ -1272,9 +1334,11 @@
                                     BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1" Cursor="Hand"
                                     VerticalAlignment="Center"/>
                         </Grid>
+                        </StackPanel>
+                        <!-- /Advanced audio options -->
                     </StackPanel>
                 </Border>
-    
+
                 <!-- Quick Actions (right half) -->
                 <Border Grid.Column="2" CornerRadius="12" Padding="9" Margin="0,0,0,6"
                         Background="{DynamicResource ElevatedSurfaceBrush}"
@@ -1322,22 +1386,54 @@
     
                         <!-- Logged In Status (shown when logged in) -->
                         <Border x:Name="LoggedInStatusPanel" x:FieldModifier="internal" Visibility="Collapsed"
-                                Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
+                                Background="{DynamicResource PanelBgBrush}" CornerRadius="6" Padding="12,10" Margin="0,0,0,6"
+                                BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <StackPanel>
+                                <StackPanel VerticalAlignment="Center">
                                     <TextBlock x:Name="TxtLoggedInAs" Text="{loc:Str label_logged_in_as}"
                                                Foreground="{DynamicResource TextMutedBrush}" FontSize="10"/>
                                     <TextBlock x:Name="TxtLoggedInName" x:FieldModifier="internal" Text="{loc:Str label_username}"
-                                               Foreground="White" FontWeight="Bold" FontSize="12"/>
+                                               Foreground="White" FontWeight="Bold" FontSize="17" Margin="0,1,0,0">
+                                        <TextBlock.Effect>
+                                            <DropShadowEffect Color="#FF69B4" BlurRadius="10" ShadowDepth="0" Opacity="0.65"/>
+                                        </TextBlock.Effect>
+                                    </TextBlock>
                                 </StackPanel>
+                                <!-- Prominent, high-contrast Logout button -->
                                 <Button x:Name="BtnQuickLogout" Grid.Column="1" Content="{loc:Str btn_logout}"
-                                        Click="BtnQuickLogout_Click"
-                                        Padding="10,5" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
-                                        BorderThickness="0" FontSize="10" Cursor="Hand"/>
+                                        Click="BtnQuickLogout_Click" VerticalAlignment="Center"
+                                        Padding="16,7" FontSize="12" FontWeight="Bold" Cursor="Hand"
+                                        ToolTip="{loc:Str btn_logout}">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Foreground" Value="White"/>
+                                            <Setter Property="Background" Value="{DynamicResource PinkBrush}"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="lborder" Background="{TemplateBinding Background}"
+                                                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="lborder" Property="Background" Value="#E055A0"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsPressed" Value="True">
+                                                                <Setter TargetName="lborder" Property="Background" Value="#C04888"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
                             </Grid>
                         </Border>
     

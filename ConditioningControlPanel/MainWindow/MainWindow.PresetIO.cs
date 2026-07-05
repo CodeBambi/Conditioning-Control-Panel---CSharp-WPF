@@ -55,6 +55,85 @@ namespace ConditioningControlPanel
             }
         }
 
+        // ---- Phrase backup export / import ---------------------------------
+
+        private Services.PhraseBackupService? _phraseBackupService;
+
+        internal void BtnExportPhrases_Click(object sender, RoutedEventArgs e)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            _phraseBackupService ??= new Services.PhraseBackupService();
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "Export Phrases",
+                Filter = "Phrase backup (*.ccpphrases.json)|*.ccpphrases.json",
+                FileName = Services.PhraseBackupService.GetExportFileName(),
+                DefaultExt = ".ccpphrases.json"
+            };
+
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                var count = _phraseBackupService.Export(settings, dialog.FileName);
+                ShowStyledDialog("Phrases Exported",
+                    $"Saved {count} phrase(s) to:\n{dialog.FileName}", "OK", "");
+                App.Logger?.Information("Phrases exported: {Count} to {Path}", count, dialog.FileName);
+            }
+            catch (Exception ex)
+            {
+                ShowStyledDialog("Export Failed",
+                    $"Could not export phrases:\n{ex.Message}", "OK", "");
+                App.Logger?.Error(ex, "Failed to export phrases");
+            }
+        }
+
+        internal void BtnImportPhrases_Click(object sender, RoutedEventArgs e)
+        {
+            var settings = App.Settings?.Current;
+            if (settings == null) return;
+            _phraseBackupService ??= new Services.PhraseBackupService();
+
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Import Phrases",
+                Filter = "Phrase backup (*.ccpphrases.json)|*.ccpphrases.json|All files (*.*)|*.*"
+            };
+
+            if (dialog.ShowDialog() != true) return;
+
+            if (!_phraseBackupService.Validate(dialog.FileName, out var error))
+            {
+                ShowStyledDialog("Import Failed",
+                    $"That file isn't a valid phrase backup:\n{error}", "OK", "");
+                return;
+            }
+
+            // Importing replaces the current phrase pools — confirm first.
+            var confirm = ShowStyledDialog("Import Phrases?",
+                "This replaces your current lock-card phrases, subliminals, mantras and other " +
+                "custom text with the ones in the backup file. Continue?", "Import", "Cancel");
+            if (!confirm) return;
+
+            try
+            {
+                var count = _phraseBackupService.Import(settings, dialog.FileName);
+                App.Settings?.Save();
+                ShowStyledDialog("Phrases Imported",
+                    $"Restored {count} phrase(s). You may need to reopen any open phrase editors to see them.",
+                    "OK", "");
+                App.Logger?.Information("Phrases imported: {Count} from {Path}", count, dialog.FileName);
+            }
+            catch (Exception ex)
+            {
+                ShowStyledDialog("Import Failed",
+                    $"Could not import phrases:\n{ex.Message}", "OK", "");
+                App.Logger?.Error(ex, "Failed to import phrases");
+            }
+        }
+
         // ---- Preset drag-drop import ---------------------------------------
 
         private void HandlePresetDrop(string filePath)
