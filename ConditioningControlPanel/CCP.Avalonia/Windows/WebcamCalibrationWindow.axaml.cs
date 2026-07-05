@@ -83,7 +83,7 @@ public partial class WebcamCalibrationWindow : Window
     private DispatcherTimer? _ringPulse;
     private double _ringPulsePhaseMs;
     private readonly TaskCompletionSource<bool> _introDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly TaskCompletionSource<VerifyChoice> _verifyDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private TaskCompletionSource<VerifyChoice>? _verifyChoice;
 
     private enum VerifyChoice { Done, Recalibrate }
 
@@ -196,97 +196,111 @@ public partial class WebcamCalibrationWindow : Window
             }
         }
 
-        _allSamples.Clear();
-        for (int i = 0; i < positions.Length; i++) _allSamples.Add(new List<CalibrationIrisSample>());
-
-        for (int i = 0; i < positions.Length; i++)
+        // Retry loop: Recalibrate (and declining a too-inaccurate fit) re-runs the whole grid
+        // in-window without closing, so it works whether the window was opened via .Show() or
+        // ShowDialog. Mirrors the WPF ShowDialogWithRecalibrate loop.
+        while (!_cancelled)
         {
-            if (_cancelled) return;
-            MoveDotTo(positions[i].X, positions[i].Y);
-            TxtProgress.Text = $"Point {i + 1} / {positions.Length}  ({positions[i].Label})";
+            VerifyPanel.IsVisible = false;
+            DotCanvas.IsVisible = true;
+            StatusPanel.IsVisible = true;
 
-            bool succeeded = false;
-            for (int attempt = 1; attempt <= MaxAttemptsPerPoint && !succeeded; attempt++)
+            _allSamples.Clear();
+            for (int i = 0; i < positions.Length; i++) _allSamples.Add(new List<CalibrationIrisSample>());
+
+            for (int i = 0; i < positions.Length; i++)
             {
                 if (_cancelled) return;
-                StopRingPulse();
-                ResetProgressRing();
-                _allSamples[i].Clear();
-                _activeDotIndex = i;
+                MoveDotTo(positions[i].X, positions[i].Y);
+                TxtProgress.Text = $"Point {i + 1} / {positions.Length}  ({positions[i].Label})";
 
-                TxtStatus.Text = attempt == 1 ? "Look at the pink dot..." : "Missed that one - look at the pink dot again...";
-                await Task.Delay(attempt == 1 ? ReadyMs : RetryReadyMs);
-                if (_cancelled) return;
-
-                TxtStatus.Text = "Hold steady - sampling...";
-                _collecting = true;
-                await Task.Delay(SampleMs);
-                _collecting = false;
-                if (_cancelled) return;
-
-                if (_allSamples[i].Count >= MinSamplesPerPoint)
+                bool succeeded = false;
+                for (int attempt = 1; attempt <= MaxAttemptsPerPoint && !succeeded; attempt++)
                 {
-                    succeeded = true;
-                    UpdateProgressRing(1.0);
-                    StartRingPulse();
-                }
-            }
-            _activeDotIndex = -1;
+                    if (_cancelled) return;
+                    StopRingPulse();
+                    ResetProgressRing();
+                    _allSamples[i].Clear();
+                    _activeDotIndex = i;
 
-            if (!succeeded)
+                    TxtStatus.Text = attempt == 1 ? "Look at the pink dot..." : "Missed that one - look at the pink dot again...";
+                    await Task.Delay(attempt == 1 ? ReadyMs : RetryReadyMs);
+                    if (_cancelled) return;
+
+                    TxtStatus.Text = "Hold steady - sampling...";
+                    _collecting = true;
+                    await Task.Delay(SampleMs);
+                    _collecting = false;
+                    if (_cancelled) return;
+
+                    if (_allSamples[i].Count >= MinSamplesPerPoint)
+                    {
+                        succeeded = true;
+                        UpdateProgressRing(1.0);
+                        StartRingPulse();
+                    }
+                }
+                _activeDotIndex = -1;
+
+                if (!succeeded)
+                {
+                    ShowError($"Couldn't sample point {i + 1} ({positions[i].Label}) after {MaxAttemptsPerPoint} tries " +
+                              $"(got {_allSamples[i].Count}, need {MinSamplesPerPoint}). Make sure you're well-lit, facing the camera, and your face fits in frame.");
+                    return;
+                }
+
+                StopRingPulse();
+                await Task.Delay(SettleMs);
+            }
+            if (_cancelled) return;
+
+            var dots = new List<CalibrationDotSamples>(positions.Length);
+            for (int i = 0; i < positions.Length; i++)
+                dots.Add(new CalibrationDotSamples(positions[i].X, positions[i].Y, _allSamples[i]));
+
+            var result = _webcam!.BuildCalibrationPreview(dots, _calScreen!, CalibrationMode);
+            if (!result.Success)
             {
-                ShowError($"Couldn't sample point {i + 1} ({positions[i].Label}) after {MaxAttemptsPerPoint} tries " +
-                          $"(got {_allSamples[i].Count}, need {MinSamplesPerPoint}). Make sure you're well-lit, facing the camera, and your face fits in frame.");
+                ShowError(result.Error ?? "Calibration failed. Improve lighting and try again.");
                 return;
             }
 
+            // Fit-quality gate (WPF WebcamCalibrationWindow:528): a fit whose residual exceeds ~20%
+            // of the screen "completed but is wildly off" - warn prominently and steer to Recalibrate
+            // instead of letting the user unknowingly keep an unusable calibration.
+            bool poorFit = result.RmsX > _calW * 0.20 || result.RmsY > _calH * 0.20;
+
             StopRingPulse();
-            await Task.Delay(SettleMs);
-        }
+            DotCanvas.IsVisible = false;
+            StatusPanel.IsVisible = false;
+            TxtVerifyStatus.Text = poorFit
+                ? $"This calibration came out very inaccurate (fit error ~{result.RmsX:F0} x {result.RmsY:F0} px) - eye tracking would be unreliable. For a better result: good even lighting, no glare on glasses, hold your head still and look right at each dot. Recalibrate is strongly recommended."
+                : $"Fit residual ~{result.RmsX:F0} x {result.RmsY:F0} px. Click Done to keep it, or Recalibrate to try again.";
+            VerifyPanel.IsVisible = true;
+            if (ShortcutHintBanner != null) ShortcutHintBanner.IsVisible = true;
 
-        if (_cancelled) return;
+            _verifyChoice = new TaskCompletionSource<VerifyChoice>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var choice = await _verifyChoice.Task;
+            if (_cancelled) return;
 
-        var dots = new List<CalibrationDotSamples>(positions.Length);
-        for (int i = 0; i < positions.Length; i++)
-            dots.Add(new CalibrationDotSamples(positions[i].X, positions[i].Y, _allSamples[i]));
+            if (choice == VerifyChoice.Recalibrate)
+            {
+                _webcam.CancelCalibrationPreview();
+                continue; // re-run the grid in-window
+            }
 
-        var result = _webcam!.BuildCalibrationPreview(dots, _calScreen!, CalibrationMode);
-        if (!result.Success)
-        {
-            ShowError(result.Error ?? "Calibration failed. Improve lighting and try again.");
+            _webcam.CommitCalibration();
+            if (_settings?.Current is { } s)
+            {
+                s.WebcamCalibrated = true;
+                s.WebcamCalibrationMode = CalibrationMode;
+                _settings.Save();
+            }
+            _completedOk = true;
+            DialogResult = true;
+            Close(true);
             return;
         }
-
-        // Verify panel: the candidate fit is live (SetCalibrationLive). Show its residual and confirm.
-        DotCanvas.IsVisible = false;
-        StatusPanel.IsVisible = false;
-        TxtVerifyStatus.Text = $"Fit residual ~{result.RmsX:F0} x {result.RmsY:F0} px. " +
-                               "Click Done to keep it, or Recalibrate to try again.";
-        VerifyPanel.IsVisible = true;
-        if (ShortcutHintBanner != null) ShortcutHintBanner.IsVisible = true;
-
-        var choice = await _verifyDone.Task;
-        if (_cancelled) return;
-
-        if (choice == VerifyChoice.Recalibrate)
-        {
-            _webcam.CancelCalibrationPreview();
-            WantsRecalibrate = true;
-            DialogResult = false;
-            Close(false);
-            return;
-        }
-
-        _webcam.CommitCalibration();
-        if (_settings?.Current is { } s)
-        {
-            s.WebcamCalibrated = true;
-            s.WebcamCalibrationMode = CalibrationMode;
-            _settings.Save();
-        }
-        _completedOk = true;
-        DialogResult = true;
-        Close(true);
     }
 
     private void OnRawIris(double dx, double dy)
@@ -307,7 +321,7 @@ public partial class WebcamCalibrationWindow : Window
         {
             _cancelled = true;
             _introDone.TrySetResult(false);
-            _verifyDone.TrySetResult(VerifyChoice.Recalibrate);
+            _verifyChoice?.TrySetResult(VerifyChoice.Recalibrate);
             DialogResult ??= false;
             Dispatcher.UIThread.Post(() => { try { Close(false); } catch { } });
         }
@@ -495,9 +509,9 @@ public partial class WebcamCalibrationWindow : Window
         _gazeCursor = null;
     }
 
-    private void BtnVerifyRecalibrate_Click(object? sender, RoutedEventArgs e) => _verifyDone.TrySetResult(VerifyChoice.Recalibrate);
+    private void BtnVerifyRecalibrate_Click(object? sender, RoutedEventArgs e) => _verifyChoice?.TrySetResult(VerifyChoice.Recalibrate);
 
-    private void BtnVerifyDone_Click(object? sender, RoutedEventArgs e) => _verifyDone.TrySetResult(VerifyChoice.Done);
+    private void BtnVerifyDone_Click(object? sender, RoutedEventArgs e) => _verifyChoice?.TrySetResult(VerifyChoice.Done);
 
     private void Window_KeyDown(object? sender, KeyEventArgs e)
     {
@@ -506,7 +520,7 @@ public partial class WebcamCalibrationWindow : Window
             _cancelled = true;
             _collecting = false;
             _introDone.TrySetResult(false);
-            _verifyDone.TrySetResult(VerifyChoice.Recalibrate);
+            _verifyChoice?.TrySetResult(VerifyChoice.Recalibrate);
             _webcam?.CancelCalibrationPreview();
             DialogResult = false;
             Close(false);
@@ -556,7 +570,7 @@ public partial class WebcamCalibrationWindow : Window
         _collecting = false;
         StopRingPulse();
         _introDone.TrySetResult(false);
-        _verifyDone.TrySetResult(VerifyChoice.Recalibrate);
+        _verifyChoice?.TrySetResult(VerifyChoice.Recalibrate);
         if (_webcam != null)
         {
             _webcam.OnRawIris -= OnRawIris;

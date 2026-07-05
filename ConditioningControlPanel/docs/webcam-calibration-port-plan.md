@@ -108,3 +108,44 @@ Optionally add a `--verify-webcam` CLI entry that opens the window straight into
   log stores gaze POINTS + iris VECTORS (derived numbers, transient debug) — write to the local
   log only, never network; document it and gate it behind the verify mode, not normal runs.
 - Final gaze-accuracy proof is HUMAN+CAMERA (S2 provides the ritual + evidence).
+
+---
+
+## PIVOT 2026-07-05 (owner): NOT parity — make it MUCH BETTER than WPF (research-driven)
+
+Owner tested the ported calibration/tracking: **"worse than WPF, unacceptable."** Then escalated:
+**do not accept WPF-parity quality — rework it into something substantially BETTER; research online;
+size/time is no issue; the rework can be as big as needed.** Owner is the camera-in-the-loop tester,
+which unlocks bigger algorithmic swings than a can't-see-the-camera agent could otherwise verify.
+
+### Verified findings that reframe the problem (2026-07-05, wpf-archaeologist c36ff52c + self-audit)
+- **The Avalonia tracker is a FAITHFUL byte-for-byte port of the WPF runtime gaze path** (poly eval,
+  ApplyAxisCurve, One-Euro, SoftEdge, GazeLock, ShapeCursorMotion; one dormant LightSource-margin
+  divergence that never triggers). NOT the cause.
+- **My solver `WebcamCalibrationSolver.BuildCalibrationData` is COMPLETE** — it already does
+  RobustPerDotMean (saccade-settle + MAD), head-pose sample rejection, inverse-spread weighting,
+  2-pass outlier-dot rejection, ridge λ + 7-coeff Cerrolaza, **axis-correction**, iris-range. The
+  archaeologist's "missing steps B1-B6" were speculative; reading the code shows they're present.
+- **Persistence/apply is complete** (BuildCalibrationPreview → SetCalibrationLive → CommitCalibration
+  → ApplyCalibration.Save; the full Calibration object incl. AxisCorrection+IrisRange is applied).
+- **`OnHeadPose` (AvaTrk:1931) + `OnRawIris` (AvaTrk:2025) both fire** — sampling + B6 work.
+- **The one real parity gap is the WPF fit-quality gate** (CalWin:528-568): WPF rejects fits with
+  `rms > 20% screen` and offers a redo; its own comment says it was added because bad fits "completed
+  but were wildly off / not usable" — **exactly the owner's complaint.** My S1c lacked it.
+- Conclusion: WPF's own approach (2nd-order Cerrolaza polynomial + per-row/col axis warp on a
+  discrete 16-dot grid) is near its ceiling. To be MUCH better we must change the ALGORITHM/UX,
+  not finish the port.
+
+### The rework direction (to be finalized after research + advisor)
+Candidate levers (research will rank + source each): **smooth-pursuit / continuous moving-target
+calibration** (orders of magnitude more (target,iris) pairs, less tedious, better-conditioned fit);
+**a stronger regressor** (Gaussian-Process or RBF/thin-plate vs a 2nd-order polynomial);
+**head-pose normalization** (decouple head motion, ETH-XGaze-style) so the user can move;
+**appearance-based deep gaze** (L2CS-Net/ETH-XGaze/FAZE few-shot) IF the pipeline exposes eye
+crops and a shippable ONNX model exists. Keep the working polynomial path as a fallback/baseline
+for A/B until the new path is human-verified better. Implement behind the same `IWebcamService`
+calibration seam; one improvement per commit; gate each; hand to owner for camera A/B.
+
+### Open research dispatched 2026-07-05 (results feed the design)
+codebase-analyzer (current pipeline signals) + web research (SOTA gaze models / calibration methods /
+head-pose normalization + filtering). Findings land here before implementation.
