@@ -773,3 +773,26 @@ Next priorities (pick one lane at a time):
 1. **Phase 4 UI parity smoke-test / cleanup** — run the Avalonia desktop app, fix first-chance issues, replace `MessageBoxStub` with `IDialogService`, and fill `docs/avalonia-ui-parity-matrix.md` gaps.
 2. **Feature controls code-behind** — wire file pickers, audio, dispatch seams, and complete `FeatureSettingsPopup` parity.
 3. **Deeper player/editor integration live smoke test** — verify opening an enhancement from the hub plays correctly and editor edits persist.
+
+---
+
+## Companion AI transport port (2026-07-05)
+
+### ✅ DONE — Port the cloud companion AI transport to Core (`CoreAiService`)
+
+| Files | Description | Status | Commit |
+|---|---|---|---|
+| `CCP.Core/Services/AIService/CoreAiService.cs` (new), `CCP.Core/Services/AIService/SystemPromptBuilder.cs` (new), `CCP.Avalonia/ServiceCollectionExtensions.cs`, `CCP.Avalonia/Services/Quiz/AvaloniaQuizAiService.cs` (deleted) | Real cross-platform `IAiService` for the Avalonia head, faithful to the WPF cloud provider (`Services/AiService.cs`). Replaces the `AvaloniaQuizAiService` stub (which had `IsAvailable=>false`, `GetBambiReply=>empty`, all reactions=>null) that left companion chat (`AvatarTubeWindow.axaml.cs:950`) + all 5 awareness reactions (`AvaloniaKeywordTriggerService:1180` etc.) non-functional. Cloud V2 transport + daily rate limit (server-authoritative `requests_remaining` sync) + `SanitizeResponse` + the full input/output `IModerationGuard` sandwich with the CCBill escalation rule. `SystemPromptBuilder` mirrors `BambiSprite.GetSystemPrompt` + `SafetyComposer.Wrap`. Fresh-context adversarial review: FIX-THEN-SHIP, no blockers; moderation sandwich verified faithful. | `✅ done` | `61ca0d1c` |
+
+### ⬜ Follow-up rows filed by this port (each one task)
+
+| Files | Description | Priority |
+|---|---|---|
+| `CCP.Core/Services/AIService/` (new `LocalAiService`) + `IAiService` strategy | Port the **Local (Ollama) provider** for chat: persistent multi-turn history (50 pairs, `ChatMemoryEnabled`, disk-persisted), the `[CONTEXT BLOCK]` enrichment + command parse/execute (`AllowAiToControlEffects`, 3-cmd cap via `IAiCommandService`), and the per-turn queue/rollback semantics (`Services/AIService/LocalAiService.cs`). | P2 |
+| `CCP.Core/Services/AIService/` (new `OpenAiCompatibleService`) | Port the **OpenAI-compatible provider** (`Services/AIService/OpenAiCompatibleService.cs`: endpoint/key-via-`ISecretStore`/model/sampler settings). ⚠️ **Also close the WPF moderation gap** — the WPF `OpenAiCompatibleService` runs NO `IModerationGuard` on input or output (oversight); the Core port MUST add the full sandwich like Cloud/Local. | P2 |
+| `CCP.Core/Platform/` (new `IAiAccessProvider` or extend `IUserIdentityProvider`) | Add a real **`HasAiAccess` seam** so `IsAvailable`/`DailyLimit` stop proxying via `HasCachedPremiumAccess`. Bounded regression today: whitelisted non-subscribers get free-tier limits (compliance-safe fail direction: deny/under-grant). | P2 |
+| `CCP.Core/Services/Moderation/` (new `IModerationLog`) | Port the **dedicated `ModerationLog` compliance file** seam; `CoreAiService.LogModeration` currently falls back to Serilog. | P2 |
+| `CCP.Core/Services/AIService/` (new `IPatreonTokenProvider`) | Port the **legacy Patreon bearer fallback** (`/ai/chat`) for V2-404 / no-cloud-identity users. | P3 |
+| `CCP.Core/Services/AIService/SystemPromptBuilder.cs` | Add `GlobalKnowledgeBaseLinks` + hypnotube reverse-link lookup + quiz-context + `FillVideoPlaceholders` to reach full `BambiSprite.BuildPromptFromPreset` parity. | P3 |
+
+**Gates (2026-07-05):** slnf 0 errors · WPF sln 0/0 · Core 542/542 · smoke Findings:5 / exit 0 (baseline held). Runtime verification still pending (headed exercise of companion chat + an awareness reaction against the WPF head).
