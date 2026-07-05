@@ -127,6 +127,8 @@ public sealed class AvaloniaChaosService : IChaosService
     // Full-screen vignette pulse — a compositor layer (migrated from ChaosFxWindow, WS2/WP3).
     // Registered once for the service lifetime; IsActive is content-driven so idle costs nothing.
     private readonly ChaosFxLayer _fxLayer;
+    // Wave-timer pill (top-right) — a compositor layer (migrated from ChaosWaveTimerOverlay, WS2/WP3).
+    private readonly ChaosWaveTimerLayer _waveTimerLayer;
 
     // ---- pulse palette (WPF ChaosModeService.cs:106-110, verbatim) ----
     private static readonly global::Avalonia.Media.Color SHIELD_GAIN_COLOR = global::Avalonia.Media.Color.FromRgb(120, 220, 160);
@@ -282,6 +284,8 @@ public sealed class AvaloniaChaosService : IChaosService
         compositor?.RegisterLayer(_fieldFxLayer);
         _fxLayer = new ChaosFxLayer();
         compositor?.RegisterLayer(_fxLayer);
+        _waveTimerLayer = new ChaosWaveTimerLayer();
+        compositor?.RegisterLayer(_waveTimerLayer);
         _screenProvider = screenProvider;
         _screenShake = screenShake;
         AvaloniaChaosCatalogs.EnsureInitialized();
@@ -801,7 +805,7 @@ public sealed class AvaloniaChaosService : IChaosService
         // Pocket Watch: the wave countdown at the top of the screen (+ a live score line)
         // (WPF ChaosModeService.cs:1097-1099).
         if (_state.ShowWaveTimer)
-            ChaosWaveTimerOverlay.Update(newWave, _waveCount, waveLen - (_state.ElapsedSec % waveLen), _state.Score);
+            _waveTimerLayer.SetValues(newWave, _waveCount, waveLen - (_state.ElapsedSec % waveLen), _state.Score);
 
         if (newWave > _waveIndex) BeginWaveTransition(newWave);   // WPF ChaosModeService.cs:1101
     }
@@ -1836,7 +1840,7 @@ public sealed class AvaloniaChaosService : IChaosService
 
         _paused = true;
         _spawnTimer?.Stop();               // WPF :1467
-        ChaosWaveTimerOverlay.Clear();     // the watch blanks while the draft table is out (WPF :1468)
+        _waveTimerLayer.Hide();     // the watch blanks while the draft table is out (WPF :1468)
         // WPF wipes the field silently here (App.Bubbles.PopAllBubbles — a force-destroy,
         // WPF BubbleService.cs:1917) so live fuses can't detonate behind the draft. The Core
         // engine has no silent-wipe seam (PopAllChaosPaid PAYS and fires callbacks) and the
@@ -1881,7 +1885,7 @@ public sealed class AvaloniaChaosService : IChaosService
         if (options == null || options.Count == 0) return false;   // WPF :1498
         _paused = true;
         _spawnTimer?.Stop();               // WPF :1500
-        ChaosWaveTimerOverlay.Clear();     // WPF :1501
+        _waveTimerLayer.Hide();     // WPF :1501
         // Field hold in place of WPF's silent PopAllBubbles wipe (WPF :1502; see BeginWaveTransition).
         _bubbles.SetChaosFrozen(true);
         _bubbles.SetChaosInputLocked(true);
@@ -2184,7 +2188,7 @@ public sealed class AvaloniaChaosService : IChaosService
         if (_video != null) _video.VideoEnded -= OnVideoEndedDuringRun;   // stop extending the heavy quarantine (WPF ChaosModeService.cs:3138)
         try { _crashSentinel?.Clear(); } catch { }               // the field is coming down (WPF ChaosModeService.cs:3126)
         try { ChaosBoonBarOverlay.CloseActive(); } catch { }     // WPF ChaosModeService.cs:3153
-        try { ChaosWaveTimerOverlay.CloseActive(); } catch { }   // the pocket watch dies with the run (WPF ChaosModeService.cs:3149)
+        _waveTimerLayer.Clear();   // the pocket watch dies with the run (WPF ChaosModeService.cs:3149)
         try { ChaosUnlockCardOverlay.CloseActive(); } catch { }  // WPF ChaosModeService.cs:3147
         _pendingLessonCards.Clear();
         _lessonCardPaused = false;
@@ -2300,7 +2304,7 @@ public sealed class AvaloniaChaosService : IChaosService
             _overlay = null;
             try { ChaosBoonBarOverlay.CloseActive(); } catch { }   // WPF ChaosModeService.cs:3239
             try { ChaosBackdropService.CloseActive(); } catch { }
-            try { ChaosWaveTimerOverlay.CloseActive(); } catch { }   // WPF ChaosModeService.cs:3241
+            _waveTimerLayer.Clear();   // WPF ChaosModeService.cs:3241
             try { ChaosUnlockCardOverlay.CloseActive(); } catch { }  // WPF ChaosModeService.cs:3242
             _fxLayer.Clear();
         });

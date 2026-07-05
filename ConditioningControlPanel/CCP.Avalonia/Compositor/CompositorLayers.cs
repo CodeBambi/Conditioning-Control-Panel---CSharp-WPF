@@ -94,4 +94,9 @@ public static class CompositorLayers
 
     /// <summary>Chaos announcer subtitle line (pickups/beats + the Madam's narrator lines).</summary>
     public const int ChaosAnnouncer = 150;
+
+    /// <summary>Chaos wave-timer pill (top-right of the primary monitor: wave, time-left, score).
+    /// Top of the info-text sub-band; a persistent corner readout that never overlaps the
+    /// centred announcer line, so its exact z vs the announcer is not visually load-bearing.</summary>
+    public const int ChaosWaveTimer = 155;
 }

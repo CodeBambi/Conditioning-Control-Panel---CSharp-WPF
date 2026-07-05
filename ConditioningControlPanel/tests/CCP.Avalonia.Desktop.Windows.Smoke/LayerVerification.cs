@@ -179,6 +179,7 @@ internal static class LayerVerification
             var gifCascadeLayer = ExpectLayer<ChaosGifCascadeLayer>(engine, CompositorLayers.ChaosGifCascade, "ChaosGifCascadeLayer", rows);
             var fieldFxLayer = ExpectLayer<ChaosFieldFxLayer>(engine, CompositorLayers.ChaosFieldFx, "ChaosFieldFxLayer", rows);
             var fxLayer = ExpectLayer<ChaosFxLayer>(engine, CompositorLayers.ChaosFx, "ChaosFxLayer", rows);
+            var waveTimerLayer = ExpectLayer<ChaosWaveTimerLayer>(engine, CompositorLayers.ChaosWaveTimer, "ChaosWaveTimerLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -655,6 +656,34 @@ internal static class LayerVerification
                 row.Teardown = deactivated ? "clean (auto-complete + Clear)" : "TIMEOUT";
                 FinishRow(row, activated, deactivated, envStable);
                 row.Note = AppendNote(row.Note, "driven directly; production caller is the run engine's private ColorFlashesEnabled-gated Pulse; edge-only vignette, 300ms fade");
+                await SettleIdle(engine);
+            }
+
+            // ---------------- Stage 4k: ChaosWaveTimerLayer (Z=155) via ChaosWaveTimerLayer.SetValues ----------------
+            // Migrated from the standalone ChaosWaveTimerOverlay. The production caller is the
+            // run tick's SetValues (private), so the stage drives the layer's public
+            // SetValues/Clear directly. The pill is an OPAQUE persistent readout pinned to the
+            // primary top-right (working area), so the FULL working-area hash reliably differs
+            // while it is shown (no fade-timing fragility).
+            if (waveTimerLayer != null)
+            {
+                Console.WriteLine("[LAYERS] Stage 4k: ChaosWaveTimerLayer via ChaosWaveTimerLayer.SetValues (top-right pill)...");
+                var row = rows.First(r => r.Layer == "ChaosWaveTimerLayer");
+                var before = Capture(screens, primary);
+                waveTimerLayer.SetValues(wave: 2, waveCount: 3, secLeftInWave: 8.0, score: 12345);   // wave 2/3, 8s (urgent), score
+                var activated = await PollAsync(() => waveTimerLayer.IsActive, 2000, stepMs: 50);
+                row.Activated = activated ? "yes" : "TIMEOUT";
+                if (activated)
+                {
+                    await Task.Delay(200);   // let the pill render (persistent, no fade)
+                    var during = Capture(screens, primary);
+                    row.Delta = during.Full != before.Full ? "DIFFER (full/top-right pill)" : "SAME (FAIL)";
+                }
+                waveTimerLayer.Clear();   // WPF CloseActive run teardown
+                var deactivated = await PollAsync(() => !waveTimerLayer.IsActive, 2000);
+                row.Teardown = deactivated ? "clean (Clear)" : "TIMEOUT";
+                FinishRow(row, activated, deactivated, envStable);
+                row.Note = AppendNote(row.Note, "driven directly; production caller is the run tick's SetValues; primary-monitor top-right pill");
                 await SettleIdle(engine);
             }
 
