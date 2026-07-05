@@ -24,15 +24,27 @@ WPF `ConditioningControlPanel/Windows/WebcamCalibrationWindow.xaml.cs` (~1893 Lo
 - `RunBubbleTestAsync` (:1530) + `OnBubbleTestGaze` — gaze-trim residual capture (GazeTrim).
 - Dot UI: `MoveDotTo` (:1811), `UpdateProgressRing`/`ResetProgressRing`/`Start|StopRingPulse`.
 
-## Seam (already anticipated by the tracker — do NOT edit tracker internals)
-- Sample stream: `IWebcamService.OnRawIris` (Action<double,double>).
-- Verify stream: `IWebcamService.OnGazeMove` (Action<Point>) — projected gaze (needs a live calib).
-- Apply candidate in-memory (no disk): `AvaloniaWebcamTrackingService.SetCalibrationLive(data)` (:984).
-- Persist + apply: `ApplyCalibration(data)` (:969, calls `data.Save`).
-- Data model: `CCP.Avalonia.Desktop.Windows/Services/Webcam/WebcamCalibrationData.cs`
-  (per-head, NOT Core) — model only (no solver). `PolynomialFitData` = X[7]/Y[7].
-- Tracker `Calibrate()` (:887) is a STUB; the WINDOW owns the flow. Head wires the window
-  to `Calibrate()` (or the calibration button) — find the caller and light it up.
+## Seam (CORRECTED 2026-07-05 — Core DIM seam, NOT direct tracker calls)
+**Architectural constraint:** the window lives in shared `CCP.Avalonia` (constructed by shared
+viewmodels `BlinkTrainerTabViewModel`/`DeeperTabViewModel`/`LabTabViewModel`; also referenced by
+the Windows head's `GazeDriftCorrectionService`). CCP.Avalonia is referenced BY the Windows head,
+so it CANNOT see `AvaloniaWebcamTrackingService`, `WebcamCalibrationData`, `SetCalibrationLive`,
+or `PolynomialFitData` (all Windows-head). The window drives calibration through a **Core seam**.
+- Sample streams (already on the Core seam): `IWebcamService.OnRawIris` (Action<double,double>),
+  `OnHeadPose` (Action<double,double>), `OnGazeMove` (Action<Point>, verify phase).
+- **NEW Core DTOs** (`CCP.Core/Services/Webcam/`): `CalibrationDotSamples` { double TargetX,TargetY;
+  IReadOnlyList<CalibrationIrisSample> Samples } where CalibrationIrisSample = (Dx,Dy,Yaw,Pitch,HasPose);
+  and `CalibrationPreviewResult` { bool Success; double RmsX,RmsY; string? Error }.
+- **NEW DIM methods on `IWebcamService`** (default no-op bodies so the stub + fakes compile; the
+  Windows tracker overrides): `CalibrationPreviewResult BuildCalibrationPreview(IReadOnlyList<CalibrationDotSamples> dots, ScreenInfo screen, string mode)`
+  (solves + `SetCalibrationLive` internally, returns quality), `void CommitCalibration()` (persist via
+  `ApplyCalibration`), `void CancelCalibrationPreview()` (`SetCalibrationLive(null)`).
+- **Windows tracker** owns the math: port `FitCerrolazaPolynomial`/`EvalPolynomial` + build
+  `WebcamCalibrationData` INSIDE `AvaloniaWebcamTrackingService` (its `Calibrate()` :887 stub becomes
+  the seam impl). Data model `WebcamCalibrationData.cs` (Windows-head) unchanged.
+- Linux/macOS stub `AvaloniaWebcamService`: DIM defaults → `Success=false` → window shows the honest
+  "not available" panel (webcam is Windows-only anyway).
+- Callers already exist (shared VMs new up `WebcamCalibrationWindow`); no head wiring needed.
 
 ## AXAML shell (already exists, reuse)
 `CCP.Avalonia/Windows/WebcamCalibrationWindow.axaml`: `DotCanvas`(Dot+DotRingBg+DotRingFg),
@@ -56,11 +68,17 @@ Optionally add a `--verify-webcam` CLI entry that opens the window straight into
 (and logs) so it becomes the standing webcam verification ritual.
 
 ## Slicing (gate after each: slnf 0 · WPF 0 · Core 542 · smoke exit 0)
-- **S1 — core calibration path**: intro → 16-dot sample loop (OnRawIris) → FitCerrolazaPolynomial
-  → build WebcamCalibrationData (Polynomial + IrisRange + MonitorBounds) → SetCalibrationLive →
-  minimal Done → ApplyCalibration persist. Port constants + solver verbatim. Wire the head caller.
-- **S2 — human-testing/verify mode**: logged gaze-test phase (live cursor + target dots + telemetry
-  log) + human-confirm + recalibrate loop. The owner's testing mode.
+- **S1a — Core seam**: add `CalibrationDotSamples`/`CalibrationIrisSample`/`CalibrationPreviewResult`
+  DTOs + `BuildCalibrationPreview`/`CommitCalibration`/`CancelCalibrationPreview` DIMs (no-op defaults)
+  on `IWebcamService`. Nothing calls them yet → tree green. First commit.
+- **S1b — Windows solver impl**: override the DIMs in `AvaloniaWebcamTrackingService` — port
+  `FitCerrolazaPolynomial`/`EvalPolynomial` (pure math, near-verbatim) + build `WebcamCalibrationData`
+  (Polynomial + IrisRange + MonitorBounds) + `SetCalibrationLive`/persist. Nothing calls it yet → green.
+- **S1c — window flow**: replace the stub body — intro → 16-dot sample loop (subscribe OnRawIris/
+  OnHeadPose, build `CalibrationDotSamples[]`) → `BuildCalibrationPreview` → minimal Done →
+  `CommitCalibration`. Port constants + dot UI (ring via DispatcherTimer, not WPF Storyboard). smoke green.
+- **S2 — human-testing/verify mode**: logged gaze-test phase (live cursor via OnGazeMove + target
+  dots + telemetry log) + human-confirm + recalibrate loop. The owner's testing mode.
 - **S3 — polish to full contract**: gesture warm-up (blink/mouth/tongue), bubble-test gaze-trim,
   axis-correction/head-pose comp. Each a sub-slice.
 

@@ -42,6 +42,26 @@ public sealed record RuntimeGazeOffset(double Dx, double Dy, DateTime CapturedAt
 public sealed record WebcamDeviceInfo(int Index, string Name);
 
 /// <summary>
+/// One raw-iris sample captured while the user fixated a calibration dot, paired with the
+/// head pose at that frame. <c>Dx</c>/<c>Dy</c> are the averaged iris vector (~[-0.5,+0.5]);
+/// <c>Yaw</c>/<c>Pitch</c> are head-pose degrees, valid only when <c>HasPose</c> is true.
+/// Portable, Core-friendly view the shared calibration window hands to the platform tracker.
+/// </summary>
+public readonly record struct CalibrationIrisSample(double Dx, double Dy, double Yaw, double Pitch, bool HasPose);
+
+/// <summary>
+/// All raw-iris samples collected while the user fixated one calibration dot, paired with that
+/// dot's on-screen target in calibrated-monitor-local screen pixels/DIPs.
+/// </summary>
+public sealed record CalibrationDotSamples(double TargetX, double TargetY, IReadOnlyList<CalibrationIrisSample> Samples);
+
+/// <summary>
+/// Outcome of <see cref="IWebcamService.BuildCalibrationPreview"/>: whether the fit succeeded,
+/// the residual RMS per axis (screen px; lower is better), and a message when it failed.
+/// </summary>
+public sealed record CalibrationPreviewResult(bool Success, double RmsX, double RmsY, string? Error = null);
+
+/// <summary>
 /// Cross-platform seam for webcam / gaze tracking.
 /// The legacy engine lives in the WPF head under <c>Lab/GazeMinigame</c> and related services.
 /// </summary>
@@ -110,6 +130,29 @@ public interface IWebcamService
     /// to sample raw projection output, then restore on cancel.
     /// </summary>
     void ClearRuntimeOffset(bool persist);
+
+    /// <summary>
+    /// Solve a gaze calibration from per-dot iris samples and apply it IN-MEMORY only (no disk
+    /// write) so <see cref="OnGazeMove"/> immediately reflects the candidate fit for a verify pass.
+    /// The shared calibration window owns the sampling UI + dot targets; the platform tracker owns
+    /// the solver and the (platform-specific) calibration data model. Default no-op returns a failed
+    /// result — platforms without a real tracker cannot calibrate, and the window shows an honest
+    /// "not available" panel.
+    /// </summary>
+    CalibrationPreviewResult BuildCalibrationPreview(IReadOnlyList<CalibrationDotSamples> dots, ScreenInfo screen, string mode)
+        => new(false, 0, 0, "Calibration is not supported on this platform.");
+
+    /// <summary>
+    /// Persist the calibration most recently previewed by <see cref="BuildCalibrationPreview"/>
+    /// (write the calibration file and keep it live). No-op when there is no pending preview.
+    /// </summary>
+    void CommitCalibration() { }
+
+    /// <summary>
+    /// Discard a pending calibration preview and revert to the previously loaded calibration (or
+    /// none). Called when the user cancels or chooses to recalibrate. No-op by default.
+    /// </summary>
+    void CancelCalibrationPreview() { }
 
     // ---- Events consumed by the Deeper enhancement engine + UI ----
     // All events are marshalled to the UI thread by the provider, so handlers
