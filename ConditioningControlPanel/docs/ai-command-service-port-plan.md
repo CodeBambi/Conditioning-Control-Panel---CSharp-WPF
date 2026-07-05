@@ -1,5 +1,7 @@
 # AiCommandService Port Plan (`AllowAiToControlEffects`)
 
+**STATUS (2026-07-05): COMPLETE for the providers that support it.** Dispatcher ported + adversarially reviewed (`70cf980`); enrichment+dispatch wired into OpenAiService (`9fa0985`) + LocalAiService (`424ea52`). Cloud (`CoreAiService`) FAITHFULLY omits the feature — verified WPF `Services/AiService.cs` has 0 command/enrichment refs (the cloud proxy doesn't support AI commands). Remaining: 3 minor gaps (P3) tracked in the task board (bubbles freq override; local-reactions enrichment; facts source). Effect fidelity is per-effect (flash/subliminal are stub seams → no-op until those engines port).
+
 **Goal:** Port the WPF AI-triggers-effects feature so the model can emit commands that the app dispatches to effect seams. Unlocks the signature AI feature for BOTH working providers (LocalAiService + OpenAiService). Source of truth: WPF `Services/Commands/AiCommandService.cs` (224 lines) + the per-type executor classes. Archaeology: 2026-07-05.
 
 ## What's ALREADY in Core (no work needed)
