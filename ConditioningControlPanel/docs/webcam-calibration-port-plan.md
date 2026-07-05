@@ -75,10 +75,13 @@ Optionally add a `--verify-webcam` CLI entry that opens the window straight into
   WPF math verbatim (`BuildCalibrationData(dots, screen, mode, out rmsX, out rmsY, out error)`);
   `AvaloniaWebcamTrackingService` overrides the 3 DIMs (`_pendingCalibration` field, SetCalibrationLive
   on preview, ApplyCalibration on commit, Load-revert on cancel).
-- **S1c — window flow (NEXT)**: replace the stub body — intro → 16-dot sample loop (subscribe OnRawIris/
-  OnHeadPose, build `CalibrationDotSamples[]`) → `BuildCalibrationPreview` → minimal Done →
-  `CommitCalibration`. Port constants + dot UI (ring via DispatcherTimer, not WPF Storyboard). smoke green.
-- **S2 — human-testing/verify mode**: logged gaze-test phase (live cursor via OnGazeMove + target
+- **S1c — window flow ✅ DONE `df06d06d`**: `WebcamCalibrationWindow.axaml.cs` real flow — intro →
+  16-dot pink-dot grid with per-dot iris sampling (OnRawIris + head-pose pairing, ring fill +
+  DispatcherTimer pulse) → `BuildCalibrationPreview` (solve + live-apply) → verify panel (residual)
+  → Done=`CommitCalibration` / Recalibrate|ESC=`CancelCalibrationPreview`. ScreenInfo resolved via
+  `IScreenProvider` by window `Position`. **Avalonia can create calibrations again (was a stub).**
+  Gates green (slnf/WPF/Core 542/smoke). Final gaze-accuracy proof is HUMAN+CAMERA — that is S2.
+- **S2 — human-testing/verify mode (NEXT)**: logged gaze-test phase (live cursor via OnGazeMove + target
   dots + telemetry log) + human-confirm + recalibrate loop. The owner's testing mode.
 - **S3 — polish to full contract**: gesture warm-up (blink/mouth/tongue), bubble-test gaze-trim,
   axis-correction/head-pose comp. Each a sub-slice.
