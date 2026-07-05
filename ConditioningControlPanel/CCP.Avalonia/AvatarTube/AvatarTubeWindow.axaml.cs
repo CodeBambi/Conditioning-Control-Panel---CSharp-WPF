@@ -25,6 +25,7 @@ using ConditioningControlPanel.Core.Services.Progression;
 using ConditioningControlPanel.Core.Services.Sessions;
 using ConditioningControlPanel.Core.Platform;
 using ConditioningControlPanel;
+using ConditioningControlPanel.Avalonia.ViewModels;
 using ConditioningControlPanel.Core.Services.AIService;
 using ConditioningControlPanel.Core.Services.Avatar;
 using ConditioningControlPanel.Core.Services.AvatarTube;
@@ -559,28 +560,56 @@ _parentWindow = parentWindow;
         private void MenuItemDismiss_Click(object? sender, RoutedEventArgs e) => HideTube();
         private void MenuItemEngine_Click(object? sender, RoutedEventArgs e)
         {
-            var engine = App.Services.GetService<IAwarenessEngine>();
-            bool next;
-            if (engine != null)
+            // WPF parity (#479, AvatarTubeWindow.ChatInput.cs:947-985): this item starts/stops
+            // the conditioning ENGINE (flash/video/subliminal/...), NOT Awareness. The earlier
+            // port wired it to IAwarenessEngine/AwarenessModeEnabled, a divergence that also let
+            // a right-click kill the engine mid lockdown/strict video (the #479 teardown crash).
+            // Guards mirror WPF's BtnStart_Click.
+
+            // Guard 1: a connected remote controller owns the session — do not toggle
+            // (ChatInput.cs:957).
+            if (App.Services.GetService<IRemoteControlService>()?.ControllerConnected == true)
+                return;
+
+            // Flash.IsRunning is WPF's engine-state proxy (ChatInput.cs:959, 1320).
+            var flash = App.Services.GetService<global::ConditioningControlPanel.Core.Services.Flash.IFlashService>();
+            bool engineRunning = flash?.IsRunning == true;
+
+            // MainWindowViewModel is a DI singleton (the dashboard DataContext). StopEngine is
+            // the WPF MainWindow.StopEngine() equivalent (StartStop.cs:270-353: tears down whatever
+            // is running, no dialog); StartEngineOnlyRun is the WPF StartEngine() equivalent
+            // (App.axaml.cs:346-348). Both self-guard. (#479)
+            var vm = App.Services.GetService<MainWindowViewModel>();
+            if (engineRunning)
             {
-                next = !engine.IsEnabled;
-                engine.IsEnabled = next;
-            }
-            else if (_settings?.Current != null)
-            {
-                next = !_settings.Current.AwarenessModeEnabled;
-                _settings.Current.AwarenessModeEnabled = next;
-                if (next)
-                    _settings.Current.AwarenessConsentGiven = true;
-                _settings.Save();
+                if (IsEngineStopLocked())
+                {
+                    Giggle("nuh-uh~ no stopping now, you're locked in~");
+                    return;
+                }
+                vm?.StopEngine();
+                Giggle("Engine stopped~");
             }
             else
             {
-                next = !_engineEnabled;
+                vm?.StartEngineOnlyRun();
+                Giggle("Engine started! *giggles*");
             }
-            _engineEnabled = next;
-            Giggle(next ? "Engine started! *giggles*" : "Engine stopped~");
             UpdateQuickMenuState();
+        }
+
+        /// <summary>
+        /// True when stopping the engine must be refused: lockdown mode, a strict-locked
+        /// mandatory video, or a strict-locked bubble-count game is in progress (#479).
+        /// Mirrors WPF AvatarTubeWindow.ChatInput.cs:982-985.
+        /// </summary>
+        private bool IsEngineStopLocked()
+        {
+            var settings = _settings?.Current;
+            return App.Services.GetService<ILockdownService>()?.IsActive == true
+                || App.Services.GetService<global::ConditioningControlPanel.Core.Services.Video.IVideoService>()?.IsStrictActive == true
+                || (App.Services.GetService<IBubbleCountService>()?.IsBusy == true
+                    && settings?.BubbleCountStrictLock == true);
         }
         private void MenuItemTriggerMode_Click(object? sender, RoutedEventArgs e)
         {
@@ -720,20 +749,22 @@ _parentWindow = parentWindow;
             if (MenuItemTriggerMode != null && _settings?.Current != null)
                 MenuItemTriggerMode.Header = _settings.Current.TriggerModeEnabled ? "Stop trigger mode" : "Start trigger mode";
 
-            // Engine (Awareness) toggle
-            bool engineRunning;
-            var engine = App.Services.GetService<IAwarenessEngine>();
-            if (engine != null)
-                engineRunning = engine.IsEnabled;
-            else
-                engineRunning = _settings?.Current?.AwarenessModeEnabled ?? _engineEnabled;
+            // Engine start/stop (WPF parity, #479): Flash.IsRunning is the engine-state proxy
+            // (AvatarTubeWindow.ChatInput.cs:1320), NOT Awareness — that was the port divergence.
+            var flash = App.Services.GetService<global::ConditioningControlPanel.Core.Services.Flash.IFlashService>();
+            bool engineRunning = flash?.IsRunning == true;
             _engineEnabled = engineRunning;
+            bool remoteControlled = App.Services.GetService<IRemoteControlService>()?.ControllerConnected == true;
             if (MenuItemEngine != null)
             {
                 MenuItemEngine.ToggleType = MenuItemToggleType.CheckBox;
                 MenuItemEngine.IsChecked = engineRunning;
                 MenuItemEngine.Header = engineRunning ? Loc.Get("menu_stop_engine") : Loc.Get("menu_start_engine");
                 MenuItemEngine.Foreground = engineRunning ? AppBrush("DangerBrush", new SolidColorBrush(Color.FromRgb(255, 99, 71))) : new SolidColorBrush(Color.FromRgb(144, 238, 144));
+                // WPF parity (ChatInput.cs:1361-1363, 1386): disabled while remote-controlled,
+                // or while the engine is running AND a stop would be refused (lockdown / strict
+                // video / strict bubble game). Starting is always allowed when not remote-controlled.
+                MenuItemEngine.IsEnabled = !remoteControlled && !(engineRunning && IsEngineStopLocked());
             }
 
             // Bambi Takeover toggle

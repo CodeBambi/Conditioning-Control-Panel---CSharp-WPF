@@ -244,6 +244,13 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
     // this reading true for the full life of a compositor video.
     public bool IsPlaying => _videoLayer?.IsPlaying == true
         || _mandatoryVideoLayer?.IsPlaying == true;
+    // Mirrors WPF IsStrictActive => _videoPlaying && _strictActive (VideoService.cs:182). The
+    // compositor window is permanently click-through/no-activate and receives no keyboard, so
+    // strict ESC/panic blocking is inherently satisfied on this path (see the PlaySpecificVideo
+    // strict-mode note at the _currentStrictMode assignment); this flag only reports the state
+    // for the avatar quick-menu engine-stop guard (#479). _currentStrictMode is set when a strict
+    // video starts and reset on every cleanup path, so this reads true only while one is playing.
+    public bool IsStrictActive => IsPlaying && _currentStrictMode;
     // Real teardown/open-surface state for the #462 summary defer. With no video windows left,
     // this tracks the compositor layers: it reads true while either layer is playing so the
     // post-session summary can't pop over a still-active video surface.

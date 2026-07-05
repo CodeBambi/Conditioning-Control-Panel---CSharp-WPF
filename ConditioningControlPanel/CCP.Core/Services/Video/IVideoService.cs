@@ -15,6 +15,16 @@ public interface IVideoService
     bool IsPlaying { get; }
 
     /// <summary>
+    /// Whether a STRICT mandatory video is currently playing (attention-locked: ESC/panic
+    /// must not dismiss it). Mirrors WPF <c>VideoService.IsStrictActive =&gt; _videoPlaying
+    /// &amp;&amp; _strictActive</c> (VideoService.cs:182). Default-implemented as <c>false</c> so
+    /// existing implementations and test fakes keep compiling; only the real head overrides
+    /// it. Used by the avatar quick-menu engine-stop guard (#479) to refuse stopping the
+    /// engine mid strict-locked video.
+    /// </summary>
+    bool IsStrictActive => false;
+
+    /// <summary>
     /// Whether the service is in the middle of tearing down active video windows.
     /// Default-implemented as <c>false</c> so existing implementations and test fakes keep
     /// compiling; only heads with a real teardown phase override it. Used to defer the

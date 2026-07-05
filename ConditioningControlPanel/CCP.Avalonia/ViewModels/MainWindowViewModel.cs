@@ -1619,6 +1619,28 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Direct engine stop with no confirmation dialog: the avatar quick-menu equivalent of
+    /// WPF <c>MainWindow.StopEngine()</c> (MainWindow.StartStop.cs:270-353), which tears down
+    /// whatever is running without distinguishing preset-session vs engine-only. Here a live
+    /// preset session is stopped via its own path (the SessionStopped handler resets UI/effects);
+    /// otherwise the engine-only run is stopped. The lockdown / strict-video / strict-bubble
+    /// guards are the caller's job (WPF <c>AvatarTubeWindow.IsEngineStopLocked</c>,
+    /// ChatInput.cs:982-985) — this does NOT re-check them, matching WPF where the menu checks
+    /// before calling StopEngine. Does not notify the scheduler (WPF StopEngine does not; only
+    /// BtnStart_Click does, MainWindow.StartStop.cs:92-97).
+    /// </summary>
+    internal void StopEngine()
+    {
+        if (_sessionService != null && _sessionService.State != SessionState.Idle)
+        {
+            _sessionService.StopSession(completed: false);
+            return;
+        }
+
+        StopEngineOnlyRun();
+    }
+
+    /// <summary>
     /// Stops an engine-only run. Mirrors WPF StopEngine (MainWindow.StartStop.cs:270-353):
     /// silent stop, no XP, no completion window. Preset-session stops go through
     /// SessionService.StopSession instead.
