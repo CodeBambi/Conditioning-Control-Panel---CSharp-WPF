@@ -107,6 +107,33 @@
           </StackPanel>
         </Grid>
 
+        <Border Background="#12121A" BorderBrush="{DynamicResource TransparentPink50Brush}" BorderThickness="1"
+                CornerRadius="10" Padding="16,12" Margin="0,0,0,16">
+          <StackPanel>
+            <TextBlock Text="{loc:Str window_webcam_cal_pipeline_label}" Foreground="#FFFFFF"
+                       FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
+            <ComboBox x:Name="CmbGazeMode" HorizontalAlignment="Stretch"
+                      SelectionChanged="CmbGazeMode_SelectionChanged">
+              <ComboBoxItem Content="{loc:Str window_webcam_cal_pipeline_current}" />
+              <ComboBoxItem Content="{loc:Str window_webcam_cal_pipeline_deep}" />
+            </ComboBox>
+            <StackPanel x:Name="BackbonePanel" IsVisible="False" Margin="0,8,0,0">
+              <TextBlock Text="{loc:Str window_webcam_cal_backbone_label}" Foreground="#CCCCCC"
+                         FontSize="12" Margin="0,0,0,4" />
+              <ComboBox x:Name="CmbBackbone" HorizontalAlignment="Stretch"
+                        SelectionChanged="CmbBackbone_SelectionChanged">
+                <ComboBoxItem Content="MobileOne-S0 — fastest" />
+                <ComboBoxItem Content="MobileNet-V2" />
+                <ComboBoxItem Content="ResNet-18" />
+                <ComboBoxItem Content="ResNet-34 — most accurate" />
+                <ComboBoxItem Content="ResNet-50" />
+              </ComboBox>
+            </StackPanel>
+            <TextBlock x:Name="TxtPipelineNotice" Foreground="{DynamicResource PinkButtonHoveredBrush}"
+                       FontSize="12" TextWrapping="Wrap" Margin="0,10,0,0" />
+          </StackPanel>
+        </Border>
+
         <TextBlock Text="{loc:Str window_webcam_calibration_sit_comfortably_even_lighting_on_face}" xml:space="preserve"
                    Foreground="#888888" FontSize="12"
                    HorizontalAlignment="Center" TextAlignment="Center"

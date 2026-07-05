@@ -1,0 +1,8 @@
+# Large deep-gaze ONNX weights (MobileGaze / L2CS-Net backbones) are NOT committed to
+# the repo — same policy as vosk/, silero-vad/, sherpa-kws/. They are fetched locally
+# for dev/testing and bundled by the installer for release. See README.md for the
+# download URLs + fetch script.
+*
+!.gitignore
+!README.md
+!fetch-gaze-models.sh

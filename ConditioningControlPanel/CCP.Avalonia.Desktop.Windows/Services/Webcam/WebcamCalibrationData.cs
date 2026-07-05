@@ -20,6 +20,25 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         /// <summary>"TwoPoint" (gaze-side only), "FivePoint" (legacy), "NinePoint" (3×3), "SixteenPoint" (4×4), or "TwentyFivePoint" (current, 5×5 with margin=40). The 5×5 grid puts dots at every edge midpoint and shrinks the corner-to-bezel extrapolation from ~90 DIPs to ~40 DIPs — directly addresses the top/bottom undershoot that 4×4 had to extrapolate. Earlier 5×5 attempts had jumpy cursor + drift, but those traced to issues in the regression / outlier rejection / head-pose comp / edge-pull, all since fixed.</summary>
         [JsonProperty] public string Mode { get; set; } = "";
 
+        /// <summary>
+        /// Which gaze-feature pipeline this calibration was fit for:
+        /// "Current" (classical MediaPipe-iris vector, the default/baseline) or
+        /// "DeepModel" (appearance-based deep gaze, feature = yaw/pitch radians).
+        /// The tracker restores its active feature mode from this on load so
+        /// runtime feeds the SAME feature the fit was trained on. Absent on
+        /// calibrations from before the deep pipeline shipped → treated as
+        /// "Current".
+        /// </summary>
+        [JsonProperty] public string FeatureMode { get; set; } = "Current";
+
+        /// <summary>
+        /// When <see cref="FeatureMode"/> is "DeepModel", the ONNX backbone the
+        /// fit was trained with (e.g. "MobileOneS0", "ResNet34"). Restored on
+        /// load so the same model is used at runtime; switching backbone needs a
+        /// recalibrate. Null for the Current pipeline.
+        /// </summary>
+        [JsonProperty] public string? DeepModel { get; set; }
+
         [JsonProperty] public DateTime Timestamp { get; set; }
 
         [JsonProperty] public MonitorBoundsRecord? MonitorBounds { get; set; }
@@ -192,6 +211,8 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             return new WebcamCalibrationData
             {
                 Mode = this.Mode,
+                FeatureMode = this.FeatureMode,
+                DeepModel = this.DeepModel,
                 Timestamp = this.Timestamp,
                 MonitorBounds = this.MonitorBounds,
                 PrimaryDeviceId = this.PrimaryDeviceId,

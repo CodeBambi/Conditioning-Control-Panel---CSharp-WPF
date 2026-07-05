@@ -31,7 +31,8 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         /// </summary>
         public static WebcamCalibrationData? BuildCalibrationData(
             IReadOnlyList<CalibrationDotSamples> dots, ScreenInfo screen, string mode,
-            out double rmsX, out double rmsY, out string? error, ILogger? logger = null)
+            out double rmsX, out double rmsY, out string? error, ILogger? logger = null,
+            string featureMode = "Current", string? deepModel = null)
         {
             rmsX = double.PositiveInfinity; rmsY = double.PositiveInfinity; error = null;
             int n = dots.Count;
@@ -144,6 +145,8 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             return new WebcamCalibrationData
             {
                 Mode = string.IsNullOrEmpty(mode) ? "SixteenPoint" : mode,
+                FeatureMode = string.IsNullOrEmpty(featureMode) ? "Current" : featureMode,
+                DeepModel = deepModel,
                 Timestamp = DateTime.UtcNow,
                 MonitorBounds = new MonitorBoundsRecord
                 {

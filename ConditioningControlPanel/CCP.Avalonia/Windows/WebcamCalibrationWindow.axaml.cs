@@ -85,6 +85,23 @@ public partial class WebcamCalibrationWindow : Window
     private readonly TaskCompletionSource<bool> _introDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private TaskCompletionSource<VerifyChoice>? _verifyChoice;
 
+    // Gaze-pipeline A/B/C selection (intro panel). The tracker's runtime feature
+    // strictly follows the LOADED calibration; the selector only chooses what the
+    // NEXT calibrate run trains. _baseline* snapshot the loaded calibration's
+    // mode+backbone at open so the notice can tell the user when a selection needs
+    // (re)calibration, and so a close-without-commit restores it.
+    private GazeFeatureMode _selectedMode = GazeFeatureMode.Current;
+    private DeepGazeBackbone _selectedBackbone = DeepGazeBackbone.MobileOneS0;
+    private GazeFeatureMode _baselineMode = GazeFeatureMode.Current;
+    private DeepGazeBackbone _baselineBackbone = DeepGazeBackbone.MobileOneS0;
+    private bool _committedMode;
+    private bool _initSelectors;
+    private static readonly DeepGazeBackbone[] BackboneOrder =
+    {
+        DeepGazeBackbone.MobileOneS0, DeepGazeBackbone.MobileNetV2,
+        DeepGazeBackbone.ResNet18, DeepGazeBackbone.ResNet34, DeepGazeBackbone.ResNet50,
+    };
+
     private enum VerifyChoice { Done, Recalibrate }
 
     public WebcamCalibrationWindow()
@@ -140,6 +157,7 @@ public partial class WebcamCalibrationWindow : Window
         VerifyPanel.IsVisible = false;
         ValidationPanel.IsVisible = false;
         ErrorPanel.IsVisible = false;
+        InitPipelineSelectors();
         IntroPanel.IsVisible = true;
         if (ShortcutHintBanner != null) ShortcutHintBanner.IsVisible = true;
 
@@ -290,6 +308,7 @@ public partial class WebcamCalibrationWindow : Window
             }
 
             _webcam.CommitCalibration();
+            _committedMode = true;
             if (_settings?.Current is { } s)
             {
                 s.WebcamCalibrated = true;
@@ -362,7 +381,86 @@ public partial class WebcamCalibrationWindow : Window
         _ringPulse = null;
     }
 
-    private void BtnIntroContinue_Click(object? sender, RoutedEventArgs e) => _introDone.TrySetResult(true);
+    private void BtnIntroContinue_Click(object? sender, RoutedEventArgs e)
+    {
+        // Commit the pipeline selection to the tracker BEFORE sampling so the
+        // grid captures the chosen feature and the fit is stamped with it.
+        if (_webcam != null)
+        {
+            _webcam.SetGazePipelineMode(_selectedMode);
+            if (_selectedMode == GazeFeatureMode.DeepModel) _webcam.SetDeepGazeModel(_selectedBackbone);
+        }
+        _introDone.TrySetResult(true);
+    }
+
+    /// <summary>
+    /// Populate the gaze-engine + backbone selectors from the tracker's current
+    /// (loaded-calibration) mode, and snapshot it as the baseline for the
+    /// "needs calibration" notice + close-without-commit restore.
+    /// </summary>
+    private void InitPipelineSelectors()
+    {
+        if (_webcam == null || CmbGazeMode == null) return;
+        _initSelectors = true;
+        try
+        {
+            _baselineMode = _webcam.GazePipelineMode;
+            _baselineBackbone = _webcam.DeepGazeModel;
+            _selectedMode = _baselineMode;
+            _selectedBackbone = _baselineBackbone;
+
+            CmbGazeMode.SelectedIndex = _selectedMode == GazeFeatureMode.DeepModel ? 1 : 0;
+            if (CmbBackbone != null)
+            {
+                int bi = Array.IndexOf(BackboneOrder, _selectedBackbone);
+                CmbBackbone.SelectedIndex = bi >= 0 ? bi : 0;
+            }
+            if (BackbonePanel != null) BackbonePanel.IsVisible = _selectedMode == GazeFeatureMode.DeepModel;
+        }
+        finally { _initSelectors = false; }
+        UpdatePipelineNotice();
+    }
+
+    private void CmbGazeMode_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_initSelectors || CmbGazeMode == null) return;
+        _selectedMode = CmbGazeMode.SelectedIndex == 1 ? GazeFeatureMode.DeepModel : GazeFeatureMode.Current;
+        if (BackbonePanel != null) BackbonePanel.IsVisible = _selectedMode == GazeFeatureMode.DeepModel;
+        UpdatePipelineNotice();
+    }
+
+    private void CmbBackbone_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_initSelectors || CmbBackbone == null) return;
+        int ix = CmbBackbone.SelectedIndex;
+        if (ix >= 0 && ix < BackboneOrder.Length) _selectedBackbone = BackboneOrder[ix];
+        UpdatePipelineNotice();
+    }
+
+    /// <summary>
+    /// Tell the user whether the current selection is already calibrated (active)
+    /// or needs a (re)calibration, and block Continue when Deep is picked but the
+    /// model files are missing.
+    /// </summary>
+    private void UpdatePipelineNotice()
+    {
+        if (TxtPipelineNotice == null) return;
+
+        if (_selectedMode == GazeFeatureMode.DeepModel && !(_webcam?.DeepGazeModelAvailable ?? false))
+        {
+            TxtPipelineNotice.Text = Loc.Get("window_webcam_cal_pipeline_deep_missing");
+            if (BtnIntroContinue != null) BtnIntroContinue.IsEnabled = false;
+            return;
+        }
+        if (BtnIntroContinue != null) BtnIntroContinue.IsEnabled = true;
+
+        bool matches = _selectedMode == _baselineMode
+            && (_selectedMode != GazeFeatureMode.DeepModel || _selectedBackbone == _baselineBackbone)
+            && (_webcam?.HasCalibration ?? false);
+        TxtPipelineNotice.Text = matches
+            ? Loc.Get("window_webcam_cal_pipeline_calibrated")
+            : Loc.Get("window_webcam_cal_pipeline_needs_cal");
+    }
 
     private void BtnCalibrationHelp_Click(object? sender, RoutedEventArgs e)
     {
@@ -573,6 +671,18 @@ public partial class WebcamCalibrationWindow : Window
         _verifyChoice?.TrySetResult(VerifyChoice.Recalibrate);
         if (_webcam != null)
         {
+            // If the user changed the pipeline selection but never committed a
+            // calibration for it, restore the tracker to the loaded calibration's
+            // mode so runtime never runs an uncalibrated feature.
+            if (!_committedMode)
+            {
+                try
+                {
+                    _webcam.SetGazePipelineMode(_baselineMode);
+                    if (_baselineMode == GazeFeatureMode.DeepModel) _webcam.SetDeepGazeModel(_baselineBackbone);
+                }
+                catch { }
+            }
             _webcam.OnRawIris -= OnRawIris;
             _webcam.OnHeadPose -= OnHeadPose;
             _webcam.OnGazeMove -= OnVerifyGaze;

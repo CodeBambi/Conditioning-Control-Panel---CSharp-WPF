@@ -8,6 +8,25 @@ namespace ConditioningControlPanel.Core.Services.Webcam;
 public enum GazeSide { Left, Right, Center }
 
 /// <summary>
+/// Which gaze-feature pipeline the tracker feeds into the (feature-agnostic)
+/// calibrate→fit→project stack. <see cref="Current"/> = the classical
+/// MediaPipe-iris vector (the shipped baseline, kept 100% intact for A/B).
+/// <see cref="DeepModel"/> = an appearance-based deep gaze estimator
+/// (MobileGaze / L2CS-Net ONNX) that emits a head-pose-invariant (yaw,pitch)
+/// feature. The selected mode is chosen at calibration time and recorded in the
+/// calibration so runtime feeds the matching feature.
+/// </summary>
+public enum GazeFeatureMode { Current, DeepModel }
+
+/// <summary>
+/// Deep-gaze ONNX backbone (all share an identical I/O contract: input
+/// [1,3,448,448], named outputs yaw/pitch [1,90]). Selectable via a dropdown
+/// when <see cref="GazeFeatureMode.DeepModel"/> is active. Ordered fastest →
+/// most accurate; <see cref="MobileOneS0"/> is the default.
+/// </summary>
+public enum DeepGazeBackbone { MobileOneS0, MobileNetV2, ResNet18, ResNet34, ResNet50 }
+
+/// <summary>
 /// Coarse state of the webcam tracking engine, surfaced via
 /// <see cref="IWebcamService.OnTrackingStateChanged"/>. Consumers show honest
 /// status text (starting / tracking / camera-busy / denied / error) instead of
@@ -153,6 +172,40 @@ public interface IWebcamService
     /// none). Called when the user cancels or chooses to recalibrate. No-op by default.
     /// </summary>
     void CancelCalibrationPreview() { }
+
+    // ---- Gaze feature pipeline (A/B/C) ----
+    // The tracker runs one feature pipeline at a time; the choice is made at
+    // calibration time and persisted into the calibration, so each fit is
+    // paired with the feature it was trained on. Default no-ops / Current keep
+    // platforms without a real tracker honest.
+
+    /// <summary>The gaze-feature pipeline the tracker is currently running.</summary>
+    GazeFeatureMode GazePipelineMode => GazeFeatureMode.Current;
+
+    /// <summary>
+    /// Select the gaze-feature pipeline. Call BEFORE a calibrate run so the
+    /// resulting fit is stamped with the matching feature. No-op on platforms
+    /// without a real tracker.
+    /// </summary>
+    void SetGazePipelineMode(GazeFeatureMode mode) { }
+
+    /// <summary>The deep-gaze backbone currently selected.</summary>
+    DeepGazeBackbone DeepGazeModel => DeepGazeBackbone.MobileOneS0;
+
+    /// <summary>
+    /// Select the deep-gaze ONNX backbone. Only meaningful when
+    /// <see cref="GazePipelineMode"/> is <see cref="GazeFeatureMode.DeepModel"/>.
+    /// Switching backbone should prompt a recalibrate (each carries a slightly
+    /// different systematic bias the per-user fit absorbs). No-op by default.
+    /// </summary>
+    void SetDeepGazeModel(DeepGazeBackbone backbone) { }
+
+    /// <summary>
+    /// True when the deep-gaze model files are present and the platform can run
+    /// the <see cref="GazeFeatureMode.DeepModel"/> pipeline. The calibration
+    /// window greys out the Deep option when this is false.
+    /// </summary>
+    bool DeepGazeModelAvailable => false;
 
     // ---- Events consumed by the Deeper enhancement engine + UI ----
     // All events are marshalled to the UI thread by the provider, so handlers

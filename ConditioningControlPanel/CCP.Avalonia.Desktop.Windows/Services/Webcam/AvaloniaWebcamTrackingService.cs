@@ -509,6 +509,16 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         private BlazeFaceDetector? _faceDetector;
         private FaceMeshDetector? _faceMesh;
         private IrisDetector? _irisDetector;
+        // Tier 2 deep-gaze estimator (MobileGaze / L2CS-Net ONNX). Lazy-loaded on
+        // the capture thread the first frame DeepModel mode is active, and
+        // swapped when the backbone changes. _deepGaze/_deepGazeLoaded are
+        // capture-thread-only; the mode/backbone/reload flags are volatile
+        // because the calibration window sets them from the UI thread.
+        private MobileGazeDetector? _deepGaze;
+        private DeepGazeBackbone _deepGazeLoaded = (DeepGazeBackbone)(-1); // backbone _deepGaze holds; -1 = none
+        private volatile GazeFeatureMode _activeGazeMode = GazeFeatureMode.Current;
+        private volatile DeepGazeBackbone _deepBackbone = DeepGazeBackbone.MobileOneS0;
+        private volatile bool _deepReloadPending;
         private Thread? _captureThread;
         private volatile bool _stopRequested;
 
@@ -787,6 +797,7 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             _screenProvider = screenProvider;
             _logger.LogInformation("AvaloniaWebcamTrackingService: constructed");
             Calibration = WebcamCalibrationData.Load(_environment, _calibrationLogger);
+            AdoptCalibrationGazeMode(Calibration);
         }
 
         /// <summary>
@@ -971,7 +982,8 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             data.Save(_environment, _calibrationLogger);
             Calibration = data;
             _lastGazeSide = GazeSide.Center;
-            _logger?.LogInformation("AvaloniaWebcamTrackingService: calibration applied (mode={Mode})", data.Mode);
+            AdoptCalibrationGazeMode(data);
+            _logger?.LogInformation("AvaloniaWebcamTrackingService: calibration applied (mode={Mode}, feature={Feature})", data.Mode, data.FeatureMode);
         }
 
         /// <summary>
@@ -985,6 +997,7 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
         {
             Calibration = data;
             _lastGazeSide = GazeSide.Center;
+            AdoptCalibrationGazeMode(data);
         }
 
         public void ClearCalibration()
@@ -1008,7 +1021,9 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             try
             {
                 var data = WebcamCalibrationSolver.BuildCalibrationData(
-                    dots, screen, mode, out double rmsX, out double rmsY, out string? error, _logger);
+                    dots, screen, mode, out double rmsX, out double rmsY, out string? error, _logger,
+                    featureMode: _activeGazeMode == GazeFeatureMode.DeepModel ? "DeepModel" : "Current",
+                    deepModel: _activeGazeMode == GazeFeatureMode.DeepModel ? _deepBackbone.ToString() : null);
                 if (data == null)
                     return new CalibrationPreviewResult(false, 0, 0, error ?? "Calibration failed.");
                 _pendingCalibration = data;
@@ -1040,6 +1055,121 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             _pendingCalibration = null;
             SetCalibrationLive(WebcamCalibrationData.Load(_environment, _calibrationLogger));
             _logger?.LogInformation("AvaloniaWebcamTrackingService: calibration preview cancelled - reverted to persisted");
+        }
+
+        // ---- Gaze feature pipeline (A/B/C) — Core IWebcamService seam ----
+
+        /// <summary>The gaze-feature pipeline the tracker is currently running.</summary>
+        public GazeFeatureMode GazePipelineMode => _activeGazeMode;
+
+        /// <summary>
+        /// Select the gaze-feature pipeline for the NEXT calibrate run. Called by
+        /// the calibration window on Start so the fit is stamped with the matching
+        /// feature. Runtime reverts to the loaded calibration's feature on
+        /// commit/cancel via <see cref="AdoptCalibrationGazeMode"/>.
+        /// </summary>
+        public void SetGazePipelineMode(GazeFeatureMode mode)
+        {
+            _activeGazeMode = mode;
+            if (mode == GazeFeatureMode.DeepModel) _deepReloadPending = true;
+            _logger?.LogInformation("AvaloniaWebcamTrackingService: gaze pipeline mode -> {Mode}", mode);
+        }
+
+        /// <summary>The deep-gaze ONNX backbone currently selected.</summary>
+        public DeepGazeBackbone DeepGazeModel => _deepBackbone;
+
+        /// <summary>Select the deep-gaze ONNX backbone (swaps the model on the next Deep frame).</summary>
+        public void SetDeepGazeModel(DeepGazeBackbone backbone)
+        {
+            if (backbone == _deepBackbone) return;
+            _deepBackbone = backbone;
+            _deepReloadPending = true;
+            _logger?.LogInformation("AvaloniaWebcamTrackingService: deep gaze backbone -> {Backbone}", backbone);
+        }
+
+        /// <summary>True when the default deep-gaze model file is present on disk.</summary>
+        public bool DeepGazeModelAvailable => ResolveGazeModelPath(DeepGazeBackbone.MobileOneS0) != null;
+
+        /// <summary>
+        /// Point the tracker's active feature mode + backbone at what a loaded
+        /// (or preview) calibration was fit for, so runtime always feeds the same
+        /// feature the fit was trained on. Called from load / ApplyCalibration /
+        /// SetCalibrationLive. Flags a deep-model (re)load when the calibration is
+        /// a DeepModel fit.
+        /// </summary>
+        private void AdoptCalibrationGazeMode(WebcamCalibrationData? data)
+        {
+            var mode = ParseFeatureMode(data?.FeatureMode);
+            _activeGazeMode = mode;
+            if (mode == GazeFeatureMode.DeepModel)
+            {
+                if (ParseBackbone(data?.DeepModel) is DeepGazeBackbone bb) _deepBackbone = bb;
+                _deepReloadPending = true;
+            }
+        }
+
+        private static GazeFeatureMode ParseFeatureMode(string? s)
+            => string.Equals(s, "DeepModel", StringComparison.OrdinalIgnoreCase)
+                ? GazeFeatureMode.DeepModel : GazeFeatureMode.Current;
+
+        private static DeepGazeBackbone? ParseBackbone(string? s)
+            => Enum.TryParse<DeepGazeBackbone>(s, ignoreCase: true, out var b) ? b : (DeepGazeBackbone?)null;
+
+        private static string GazeModelFileName(DeepGazeBackbone b) => b switch
+        {
+            DeepGazeBackbone.MobileOneS0 => "mobileone_s0_gaze.onnx",
+            DeepGazeBackbone.MobileNetV2 => "mobilenetv2_gaze.onnx",
+            DeepGazeBackbone.ResNet18 => "resnet18_gaze.onnx",
+            DeepGazeBackbone.ResNet34 => "resnet34_gaze.onnx",
+            DeepGazeBackbone.ResNet50 => "resnet50_gaze.onnx",
+            _ => "mobileone_s0_gaze.onnx",
+        };
+
+        private static string? ResolveGazeModelPath(DeepGazeBackbone b)
+        {
+            try
+            {
+                var p = Path.Combine(AppContext.BaseDirectory, "Resources", "Models", "gaze", GazeModelFileName(b));
+                return File.Exists(p) ? p : null;
+            }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// Capture-thread lazy (re)load of the deep-gaze model for the currently
+        /// selected backbone. The ONNX session ctor is heavy, so it never runs on
+        /// the UI thread. On failure <see cref="_deepGaze"/> is left null and the
+        /// ProcessFrame branch falls back to the iris path.
+        /// </summary>
+        private void EnsureDeepGazeLoaded()
+        {
+            _deepReloadPending = false;
+            var want = _deepBackbone;
+            if (_deepGaze != null && _deepGazeLoaded == want) return;
+            try
+            {
+                var path = ResolveGazeModelPath(want);
+                if (path == null)
+                {
+                    _logger?.LogWarning("AvaloniaWebcamTrackingService: deep gaze model missing for {Backbone} (Resources/Models/gaze/)", want);
+                    _deepGaze?.Dispose();
+                    _deepGaze = null;
+                    _deepGazeLoaded = (DeepGazeBackbone)(-1);
+                    return;
+                }
+                var fresh = new MobileGazeDetector(path, _logger);
+                var old = _deepGaze;
+                _deepGaze = fresh;
+                _deepGazeLoaded = want;
+                old?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "AvaloniaWebcamTrackingService: deep gaze model load failed for {Backbone}", want);
+                try { _deepGaze?.Dispose(); } catch { }
+                _deepGaze = null;
+                _deepGazeLoaded = (DeepGazeBackbone)(-1);
+            }
         }
 
         /// <summary>
@@ -1524,9 +1654,12 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             try { _faceDetector?.Dispose(); } catch { }
             try { _faceMesh?.Dispose(); } catch { }
             try { _irisDetector?.Dispose(); } catch { }
+            try { _deepGaze?.Dispose(); } catch { }
             _faceDetector = null;
             _faceMesh = null;
             _irisDetector = null;
+            _deepGaze = null;
+            _deepGazeLoaded = (DeepGazeBackbone)(-1);
         }
 
         private void ResetHeuristicState()
@@ -1732,6 +1865,40 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
             double mar = ComputeMAR(landmarks);
             UpdateMouthState(mar);
             UpdateTongueState(bgr, landmarks);
+
+            // 5b) Deep-gaze (Tier 2) branch. When the DeepModel pipeline is
+            //     active, the gaze FEATURE is an appearance-based (yaw,pitch)
+            //     estimate from the full-face crop instead of the iris vector.
+            //     It flows through the SAME EmitGazeEvents path (median filter →
+            //     OnRawIris calibration sampler → projection), so the
+            //     feature-agnostic calibrate→fit→project stack is reused. Blink
+            //     / mouth / tongue above still use MediaPipe. Privacy: the face
+            //     crop is processed in-memory only and never persisted/sent.
+            if (_activeGazeMode == GazeFeatureMode.DeepModel)
+            {
+                if (_deepReloadPending || _deepGaze == null || _deepGazeLoaded != _deepBackbone)
+                    EnsureDeepGazeLoaded();
+                if (_deepGaze != null)
+                {
+                    try
+                    {
+                        using var faceCrop = new Mat(bgr, faceRect);
+                        if (faceCrop.Width >= 16 && faceCrop.Height >= 16)
+                        {
+                            var (yaw, pitch) = _deepGaze.Estimate(faceCrop);
+                            EmitGazeEvents(yaw, pitch);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogDebug(ex, "AvaloniaWebcamTrackingService: deep gaze estimate failed");
+                    }
+                    return; // deep feature emitted; skip the iris-vector gaze path
+                }
+                // Deep selected but the model isn't loadable — fall through to the
+                // iris path so gaze still works (the window greys Deep out when
+                // the model files are missing, so this is a rare degraded case).
+            }
 
             // 6) Iris-vector for gaze (head-pose stable, normalized against
             //    eye-corner midpoint and scaled by corner-to-corner distance).
@@ -3444,6 +3611,113 @@ namespace ConditioningControlPanel.Avalonia.Desktop.Windows.Services.Webcam
                 try { _resizedBuffer?.Dispose(); } catch { }
                 _croppedBuffer = null;
                 _resizedBuffer = null;
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        //  MobileGaze / L2CS-Net deep gaze estimator (Tier 2 — *_gaze.onnx)
+        //  ────────────────────────────────────────────────────────────────────────
+        //  Input:  1×3×448×448 RGB, /255 then ImageNet-normalized (mean/std), of a
+        //          full-face crop (BlazeFace bbox).
+        //  Output: two [1,90] logit vectors named "yaw" and "pitch". Decoded per
+        //          L2CS: softmax → Σ(prob_i·i)·binwidth − offset (bins=90,
+        //          binwidth=4, offset=180) → degrees → radians. yaw = horizontal,
+        //          pitch = vertical, in the camera frame. All backbones
+        //          (MobileOne-S0 / MobileNet-V2 / ResNet-18/34/50) share this exact
+        //          contract; only the .onnx file differs.
+        //
+        //  Privacy: the face crop and every derived tensor live only in memory for
+        //  the duration of one inference; nothing is persisted or transmitted.
+        private sealed class MobileGazeDetector : IDisposable
+        {
+            private const int Size = 448;
+            private const float BinWidth = 4f;
+            private const float AngleOffset = 180f;
+            private static readonly float[] Mean = { 0.485f, 0.456f, 0.406f };
+            private static readonly float[] Std = { 0.229f, 0.224f, 0.225f };
+
+            private readonly InferenceSession _session;
+            private readonly string _inputName;
+            private readonly string[] _outputNames;
+            private readonly float[] _input = new float[3 * Size * Size];
+            private readonly byte[] _bytes = new byte[Size * Size * 3];
+            private Mat? _resized;
+
+            public MobileGazeDetector(string modelPath, ILogger? logger)
+            {
+                var so = new SessionOptions
+                {
+                    GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
+                    InterOpNumThreads = 1,
+                    IntraOpNumThreads = 2,
+                };
+                _session = new InferenceSession(modelPath, so);
+                _inputName = _session.InputMetadata.Keys.First();
+                _outputNames = _session.OutputMetadata.Keys.ToArray();
+                logger?.LogInformation("MobileGazeDetector: loaded {File} (in={In}, out=[{Out}])",
+                    Path.GetFileName(modelPath), _inputName, string.Join(",", _outputNames));
+            }
+
+            /// <summary>Full-face BGR crop → (yaw, pitch) in radians.</summary>
+            public (double Yaw, double Pitch) Estimate(Mat bgrFace)
+            {
+                _resized ??= new Mat();
+                Cv2.Resize(bgrFace, _resized, new CvSize(Size, Size), 0, 0, InterpolationFlags.Linear);
+                if (_resized.Type() != MatType.CV_8UC3)
+                    throw new InvalidOperationException("MobileGazeDetector: expected CV_8UC3 crop");
+
+                int total = Size * Size;
+                System.Runtime.InteropServices.Marshal.Copy(_resized.Data, _bytes, 0, total * 3);
+                // Interleaved BGR bytes → planar CHW float in RGB order, /255, ImageNet-normalized.
+                for (int i = 0; i < total; i++)
+                {
+                    float r = _bytes[3 * i + 2] / 255f;
+                    float g = _bytes[3 * i + 1] / 255f;
+                    float b = _bytes[3 * i + 0] / 255f;
+                    _input[i] = (r - Mean[0]) / Std[0];
+                    _input[total + i] = (g - Mean[1]) / Std[1];
+                    _input[2 * total + i] = (b - Mean[2]) / Std[2];
+                }
+
+                var tensor = new DenseTensor<float>(_input, new[] { 1, 3, Size, Size });
+                using var results = _session.Run(new[] { NamedOnnxValue.CreateFromTensor(_inputName, tensor) });
+
+                float[]? yaw = null, pitch = null;
+                foreach (var r in results)
+                {
+                    if (string.Equals(r.Name, "yaw", StringComparison.OrdinalIgnoreCase)) yaw = r.AsTensor<float>().ToArray();
+                    else if (string.Equals(r.Name, "pitch", StringComparison.OrdinalIgnoreCase)) pitch = r.AsTensor<float>().ToArray();
+                }
+                if (yaw == null || pitch == null)
+                {
+                    // Fallback to graph order [yaw, pitch] if the names ever differ.
+                    var arr = results.ToArray();
+                    yaw ??= arr[0].AsTensor<float>().ToArray();
+                    pitch ??= arr[1].AsTensor<float>().ToArray();
+                }
+                return (DecodeRadians(yaw), DecodeRadians(pitch));
+            }
+
+            // softmax over the bins, expected bin index → angle (deg) → radians.
+            private static double DecodeRadians(float[] logits)
+            {
+                int n = logits.Length;
+                double max = double.NegativeInfinity;
+                for (int i = 0; i < n; i++) if (logits[i] > max) max = logits[i];
+                double sum = 0, expect = 0;
+                var probs = new double[n];
+                for (int i = 0; i < n; i++) { double e = Math.Exp(logits[i] - max); probs[i] = e; sum += e; }
+                if (sum <= 0) return 0;
+                for (int i = 0; i < n; i++) expect += (probs[i] / sum) * i;
+                double deg = expect * BinWidth - AngleOffset;
+                return deg * Math.PI / 180.0;
+            }
+
+            public void Dispose()
+            {
+                try { _session.Dispose(); } catch { }
+                try { _resized?.Dispose(); } catch { }
+                _resized = null;
             }
         }
 

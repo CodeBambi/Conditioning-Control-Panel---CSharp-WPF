@@ -404,6 +404,16 @@ Exact per-file changes (all facts verified in-code as of HEAD after d56b23c2):
    (Current | Deep model) + a backbone `ComboBox` (visible only when Deep) listing the 5 backbones. On Start,
    call `_webcam.SetGazePipelineMode(...)` + `SetDeepGazeModel(...)` BEFORE sampling. Grey out Deep when
    `!DeepGazeModelAvailable`. New en.json loc keys for labels.
+   **OWNER REQ — switch-invalidates-calibration notice:** each mode+backbone has its OWN fit; runtime mode
+   strictly follows the LOADED calibration (structural guarantee: outside an active calibrate session
+   `_activeGazeMode == Calibration.FeatureMode`, so a mere selection change NEVER makes gaze use an
+   uncalibrated pipeline). On selection-changed in the intro, compare the selection to the loaded
+   calibration's `FeatureMode`/`DeepModel` and update an inline notice + the Start button label:
+   - MATCH → "This pipeline is calibrated and active." (Start = "Recalibrate").
+   - MISMATCH/uncalibrated → "⚠ This mode/model isn't calibrated yet — gaze keeps using <current> until you
+     calibrate it. Press Start to calibrate it now." (Start = "Calibrate <selection>").
+   So switching tiers OR backbone tells the user it won't be used until calibrated and points them at the
+   recalibrate action. Loc keys for both notice states + the dynamic Start label.
 7. **`Localization/Languages/en.json`**: keys e.g. `webcam_cal_pipeline_label`, `webcam_cal_pipeline_current`,
    `webcam_cal_pipeline_deep`, `webcam_cal_backbone_label`, backbone names.
 8. **Assets**: DONE — `Resources/Models/gaze/` (gitignored binaries + committed README/.gitignore/fetch script).
