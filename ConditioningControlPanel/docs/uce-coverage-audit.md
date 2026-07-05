@@ -32,6 +32,9 @@ owner-authorized E-Stim arc). The window-migration lane is complete.
 > `BubbleEngine.EStimBurstAt` → head `OnEStimArc` path. **DoD item 4 holds for the LIVE rendering
 > set**; the remaining 3 unwired window classes (§B2 rows 5-7: EStimGlow/VibeTrail/SkiaFx) are
 > blocked features, not active gaps.
+>
+> Independent re-verification post-landing (`fb0dfd1`/`fb5414` agent, 2026-07-05): slnf 0 err/0 warn,
+> Core 542/542, smoke 44 tabs / Findings 5 / exit 0 — **identical to baseline, no regression**.
 
 > **Progress 2026-07-05:** gaps #1–2 closed — `ChaosFxWindow`→`ChaosFxLayer` (Z=118, `8df68031`)
 > and `ChaosWaveTimerOverlay`→`ChaosWaveTimerLayer` (Z=155, `16fe5a92`); both windows deleted;
