@@ -25,7 +25,15 @@ public class AchievementService : IDisposable
     private DateTime _lastMindWipeCheck = DateTime.Now;
     private DateTime _lastDeeperCheck = DateTime.Now;
     private DateTime _lastAutonomyCheck = DateTime.Now;
-    
+
+    // Per-tick credit ceiling for Takeover quest time. The tracking timer fires every 1s, but when
+    // the app is backgrounded or busy with a fullscreen takeover video the tick gets starved and can
+    // slip well past that. Crediting min(elapsed, cap) still counts that legitimately-active time
+    // (fixing the "15-min quest took an hour, foreground/background changed the timing" report) while
+    // a single long stall — sleep/resume, the app suspended for minutes — can only ever add 10s.
+    private const double AutonomyTickCreditCapMinutes = 10.0 / 60.0;
+
+
     public event EventHandler<Achievement>? AchievementUnlocked;
 
     /// <summary>
@@ -256,9 +264,12 @@ public class AchievementService : IDisposable
         if (App.Autonomy?.IsEnabled == true)
         {
             var elapsed = (now - _lastAutonomyCheck).TotalMinutes;
-            if (elapsed > 0 && elapsed < 0.1) // sanity: max ~6s between ticks
+            if (elapsed > 0)
             {
-                App.Quests?.TrackAutonomyMinutes(elapsed);
+                // Credit the elapsed time, capping a single tick so a starved/backgrounded tick still
+                // counts (the old hard "< 6s or drop it" guard silently threw away real active time,
+                // which is why the quest crawled) while a long stall can't dump minutes in at once.
+                App.Quests?.TrackAutonomyMinutes(Math.Min(elapsed, AutonomyTickCreditCapMinutes));
             }
             _lastAutonomyCheck = now;
         }
