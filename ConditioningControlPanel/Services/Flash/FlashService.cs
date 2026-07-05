@@ -46,6 +46,15 @@ namespace ConditioningControlPanel.Services
         // (which both starved CompleteRender into the resize deadlock and drove the native-memory
         // ramp — managed heap stayed ~82MB while private memory hit 3GB). 10 relieves both.
         private const int MAX_CONCURRENT_FLASH = 10;
+        // Per-window shells are sized to a coarse bucket grid so the pool recycles by size instead of
+        // realizing a fresh window on nearly every (image-sized, so almost-always-unique) flash. A fresh
+        // Window.Show() runs a synchronous MediaContext.CompleteRender on first realization; under a
+        // backed-up render thread that call never returns and wedges the whole UI (dump-confirmed
+        // 2026-07-05). Bucketing => the pool hits => almost no fresh realizations on the hot path.
+        // SLACK guarantees the bucket is large enough to center the glow border inside without clipping.
+        private const int FLASH_SHELL_BUCKET = 128;
+        private const int FLASH_SHELL_SLACK = 64;
+        private static int BucketUp(int v) => ((Math.Max(0, v) + FLASH_SHELL_SLACK + FLASH_SHELL_BUCKET - 1) / FLASH_SHELL_BUCKET) * FLASH_SHELL_BUCKET;
         private List<string> _imageList = new();  // Cached image list for random selection
         private List<(string PackId, PackFileEntry File)> _packImageList = new();  // Cached pack images for random selection
         private Queue<string> _soundQueue = new();  // Performance: Changed to Queue for O(1) dequeue
@@ -1059,9 +1068,15 @@ namespace ConditioningControlPanel.Services
                 // on the compositor and deadlocks the UI thread under chaos load (see AcquireFlashWindow).
                 // Left/Top is a move (no surface resize) and is safe on a live window.
                 // (A host-mode state bag has no hwnd, so sizing it is plain property storage.)
+                // True display size (from the image geometry) vs. the bucketed per-window shell that
+                // the pool recycles. Host mode has no window shell, so it stays at true size.
+                int trueW = geom.Width, trueH = geom.Height;
+                int shellW = useHost ? trueW : BucketUp(trueW);
+                int shellH = useHost ? trueH : BucketUp(trueH);
+
                 window = useHost
-                    ? new FlashWindow { UsesHost = true, Width = geom.Width, Height = geom.Height }
-                    : AcquireFlashWindow(geom.Width, geom.Height);
+                    ? new FlashWindow { UsesHost = true, Width = trueW, Height = trueH }
+                    : AcquireFlashWindow(shellW, shellH);
                 window.Left = finalX;
                 window.Top = finalY;
                 window.Frames = imageData.Frames;
@@ -1100,7 +1115,11 @@ namespace ConditioningControlPanel.Services
                 var image = new Image
                 {
                     Stretch = Stretch.Uniform,
-                    Source = imageData.Frames[0]
+                    Source = imageData.Frames[0],
+                    // Pin the display size so centering the flash inside the (larger) bucketed shell
+                    // never rescales it — the visual stays exactly the size/aspect it was before.
+                    Width = trueW,
+                    Height = trueH,
                 };
                 // Cheaper resampling — after decode-at-display-size there is little residual
                 // scaling, so the quality difference is imperceptible while saving GPU fill cost.
@@ -1196,13 +1215,19 @@ namespace ConditioningControlPanel.Services
                     content = border;
                     window.GlowEffect = glowEffect;   // tracked so SafeCloseFlashWindow can stop its animations + free the native blur target
 
-                    // Expand window to accommodate glow padding (in host mode this keeps the
-                    // Left/Top/Width/Height bookkeeping — the gaze rect — matching the visual).
-                    var padding = blurRadius / 2;
-                    window.Width += padding * 2;
-                    window.Height += padding * 2;
-                    window.Left -= padding;
-                    window.Top -= padding;
+                    // Host mode expands the bookkeeping rect (the gaze rect) to match the glow-expanded
+                    // visual. Per-window mode must NOT resize the window here: the shell is already
+                    // bucketed with slack to fit the glow, and the glow border is centered inside it
+                    // (see the shell wrap below). Resizing a pooled/realized layered window is itself a
+                    // synchronous-CompleteRender deadlock trigger — this used to run on every glow flash.
+                    if (useHost)
+                    {
+                        var padding = blurRadius / 2;
+                        window.Width += padding * 2;
+                        window.Height += padding * 2;
+                        window.Left -= padding;
+                        window.Top -= padding;
+                    }
 
                     // Pulsing golden animation for lucky procs
                     if (isLucky)
@@ -1224,11 +1249,10 @@ namespace ConditioningControlPanel.Services
                 }
                 else
                 {
-                    // In host mode the image is a Canvas child, so it needs the black backing and
-                    // explicit size a window shell would otherwise provide.
-                    content = useHost
-                        ? new Border { Background = System.Windows.Media.Brushes.Black, Child = image }
-                        : image;
+                    // The image gets the black backing the window shell used to provide directly: the
+                    // per-window shell background is Transparent now (so the bucket padding stays
+                    // invisible), and host mode needs it because the image is a bare Canvas child.
+                    content = new Border { Background = System.Windows.Media.Brushes.Black, Child = image };
                 }
 
                 if (useHost)
@@ -1260,6 +1284,26 @@ namespace ConditioningControlPanel.Services
                 }
                 else
                 {
+                    // Bucket shell: the window is sized to the pool-recyclable bucket, so render the
+                    // true-size flash CENTERED inside it with invisible transparent padding. Centering
+                    // keeps the visual exactly where it was positioned regardless of shell/glow padding
+                    // (the content's centre == the shell's centre == the intended image centre).
+                    if (shellW > trueW || shellH > trueH)
+                    {
+                        content.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
+                        content.VerticalAlignment = System.Windows.VerticalAlignment.Center;
+                        content = new Grid
+                        {
+                            Width = shellW,
+                            Height = shellH,
+                            Background = System.Windows.Media.Brushes.Transparent,
+                            Children = { content },
+                        };
+                        window.Left = finalX - (shellW - trueW) / 2.0;
+                        window.Top = finalY - (shellH - trueH) / 2.0;
+                    }
+                    // Shell padding is invisible: the window itself must not paint an opaque background.
+                    window.Background = System.Windows.Media.Brushes.Transparent;
                     window.Content = content;
                     window.Opacity = 0;
 
@@ -2299,6 +2343,17 @@ namespace ConditioningControlPanel.Services
             }
         }
 
+        // WndProc hook for flash windows: drop WM_DPICHANGED so WPF never runs its auto DPI-rescale
+        // (OnDpiChanged -> OnResize -> CompleteRender), which deadlocks the UI thread. See the hook
+        // registration in HideFromAltTab.
+        private static IntPtr SwallowDpiChanged(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int WM_DPICHANGED = 0x02E0;
+            if (msg == WM_DPICHANGED)
+                handled = true;   // consume it; WPF's HwndTarget never sees the resize
+            return IntPtr.Zero;
+        }
+
         private void HideFromAltTab(Window window)
         {
             try
@@ -2310,6 +2365,15 @@ namespace ConditioningControlPanel.Services
                     var extendedStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
                     NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE,
                         extendedStyle | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE);
+
+                    // Swallow WM_DPICHANGED on flash windows. These are transient overlays whose
+                    // per-monitor geometry is already computed manually (CalculateGeometry uses the
+                    // target monitor's DpiScale), so WPF's automatic DPI rescale is unwanted — and its
+                    // OnDpiChanged -> OnResize -> synchronous MediaContext.CompleteRender deadlocks the
+                    // UI thread on a backed-up render thread, especially re-entrantly while a flash window
+                    // is closing (dump-confirmed 2026-07-05). Fired only on cross-DPI-monitor moves, so
+                    // dropping it never affects the initial render.
+                    System.Windows.Interop.HwndSource.FromHwnd(hwnd)?.AddHook(SwallowDpiChanged);
                 };
             }
             catch (Exception ex)

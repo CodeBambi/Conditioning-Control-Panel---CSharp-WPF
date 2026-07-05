@@ -824,6 +824,59 @@ namespace ConditioningControlPanel
             }
         }
 
+        // HANG HUNT stress driver — see the `--stress` call site in OnStartup. Runs entirely on the UI
+        // thread via a fast DispatcherTimer (mirrors how chaos/triggers really drive these services), so
+        // when the render thread deadlocks the ticks simply stop and the external watcher captures it.
+        private void StartHangStressMode()
+        {
+            int EnvInt(string name, int fallback) =>
+                int.TryParse(Environment.GetEnvironmentVariable(name), out int v) && v > 0 ? v : fallback;
+
+            int tickMs      = EnvInt("CCP_STRESS_TICK_MS", 12);   // loop period
+            int spawnPer    = EnvInt("CCP_STRESS_SPAWN", 3);      // bubble spawns per tick (layered-window churn)
+            int flashEvery  = EnvInt("CCP_STRESS_FLASH_EVERY", 6);// flash-window churn cadence (in ticks)
+            int toggleEvery = EnvInt("CCP_STRESS_TOGGLE_EVERY", 40); // shared-host create/close churn cadence
+
+            try { Logger?.Warning("[STRESS] Hang-hunt stress mode ON — tick={Tick}ms spawn={Spawn} flashEvery={Flash} toggleEvery={Toggle}", tickMs, spawnPer, flashEvery, toggleEvery); } catch { }
+
+            // Make sure the bubble engine is actually running so spawns render (bypass the level gate).
+            try { Bubbles?.Start(bypassLevelCheck: true); } catch { }
+
+            long tick = 0;
+            var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Normal)
+            {
+                Interval = TimeSpan.FromMilliseconds(tickMs)
+            };
+            timer.Tick += (s, _) =>
+            {
+                tick++;
+                // Bubble spawns — SpawnOnce self-marshals and respects its own cap, so continuous calls
+                // keep create/destroy churn at the cap indefinitely.
+                for (int i = 0; i < spawnPer; i++)
+                    try { Bubbles?.SpawnOnce(); } catch { }
+
+                // Flash windows — pool churn (create/show/hide of layered flash surfaces).
+                if (tick % flashEvery == 0)
+                    try { Flash?.TriggerFlashOnce(); } catch { }
+
+                // The prime suspect: flip the shared-host flag so the click-through host window is
+                // created and closed repeatedly — the keep-alive contract warns this deadlocks the
+                // render thread. This is the single most likely provocateur of the hang.
+                if (tick % toggleEvery == 0 && Settings?.Current != null)
+                {
+                    try
+                    {
+                        Settings.Current.BubbleSharedHost = !Settings.Current.BubbleSharedHost;
+                        Settings.Current.ChaosBubbleSharedHost = Settings.Current.BubbleSharedHost;
+                    }
+                    catch { }
+                }
+            };
+            timer.Start();
+            _hangStressTimer = timer; // root it so it isn't collected
+        }
+        private System.Windows.Threading.DispatcherTimer? _hangStressTimer;
+
         protected override void OnStartup(StartupEventArgs e)
         {
             // Dump-writer mode: spawned by UiHangWatchdog in a WEDGED sibling CCP process
@@ -1600,6 +1653,14 @@ namespace ConditioningControlPanel
             // Same problem hits anywhere code does `Application.Current.MainWindow as MainWindow`
             // — popups, feature controls, etc. Expose a stable static reference.
             MainWindowRef = mainWindow;
+
+            // HANG HUNT: `--stress` drives the layered-window subsystems (bubbles, flash, shared-host
+            // create/close) at max rate to provoke the recurring render-thread deadlock quickly, so the
+            // external watcher (hang-hunt.ps1) can auto-capture a stack the moment the UI thread wedges.
+            // Dead code in every normal launch — only runs when the flag is passed. Intensity is tunable
+            // via env vars so the harness can dial it without a rebuild.
+            if (e.Args.Contains("--stress"))
+                StartHangStressMode();
 
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
