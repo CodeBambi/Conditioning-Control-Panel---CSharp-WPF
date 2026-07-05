@@ -1,0 +1,73 @@
+# Parity Re-Verification Triage (DoD #5) — STARTED 2026-07-05
+
+**Scope:** `docs/skia-rebuild-goal.md` DoD item 5 — "every parity-matrix item re-verified `[x]` after
+WS1-3." This triage is the honest precursor to earning `[x]`: it maps each unchecked matrix row to
+its verification path so a headed/runtime pass (human or headed session) can execute efficiently.
+**It does NOT mark `[x]`** — per the matrix's own reset rule, "a smoke-test visit alone never earns
+`[x]`," and headless code-parity alone is the *rubric* check, not the *exercised-end-to-end* check.
+
+## Key finding (read first)
+
+1. **Code-level parity is already verified.** Lots 1-11 (parity-matrix WS0 review) each did a
+   multi-agent adversarial review of their service area's code vs the WPF contract. The unchecked
+   granular rows (tab views / feature controls / dialogs / windows / deeper / main-sync deltas) are
+   unchecked because those lot verdicts live at the LOT row, not propagated to each surface row —
+   NOT because the code is unverified.
+2. **What remains for `[x]` is RUNTIME END-TO-END EXERCISE** (matrix rule: "exercised end-to-end in
+   the running app against the WPF behavior contract"). This is the piece the voided 2026-06-23 marks
+   lacked.
+3. **Runtime exercise cannot be automated headlessly for non-compositor rows.** The only automated
+   verification harnesses (`--verify-layers`, `--verify-video`, `--verify-spiral`, `--benchmark`)
+   exercise the compositor/video — currently the co-agent's active UCE lane (do-not-touch per owner,
+   2026-07-05). For all other surfaces there is no harness; earning `[x]` needs a **headed session**
+   exercising each feature side-by-side with the WPF head.
+4. **Implication:** DoD #5 completion is fundamentally a **headed/manual verification effort**, not a
+   headless-agent task. This triage makes it tractable by stating, per row: the lot that verified the
+   code, the exact runtime check still needed, and whether the row is in the blocked lane.
+
+## Status legend (triage-specific; distinct from matrix `[ ]/[x]/🚧/❌`)
+
+- **CODE✓** — code-level parity confirmed (lot citation + spot check); runtime exercise pending.
+- **GAP?** — code-parity surfaced a *possible* divergence; runtime check must confirm whether it's a bug.
+- **BLOCKED** — in the co-agent's UCE/bubble/video lane; defer until that lane settles.
+- **NEEDS-ENV** — needs accounts / hardware / Linux / human-eyes not available headless.
+
+## Section: Main-sync deltas ("ported from WPF 6.1.7; re-verify against current main")
+
+| Row | Status | Code evidence | Runtime check still needed for `[x]` |
+|---|---|---|---|
+| Chaos "Down the Rabbit Hole" main menu (logo, How-to-Play, menu music, fog/intro FX, options) | **BLOCKED** | lot 6 (chaos run-engine S1-S9 complete) | Co-agent chaos/UCE lane. Defer. |
+| Quest pool refresh (20 free + 20 patron + art) | **CODE✓** | lot 7 ("quest pool 20+20 (6.1.7 sync)" verified); quests in shared `CCP.Core/Services/Progression/QuestDefinitionService.cs` | Headed: open Quests tab, confirm 20 free + 20 patron load + render art. |
+| Auth graceful browser-launch fallback (clipboard + dialog) | **CODE✓** | lot 8 (B1 OAuth → system browser via `IBrowserHost.OpenExternalAsync`; Linux/macOS system-browser degradation) | Headed: trigger OAuth, confirm system-browser launch + clipboard/dialog fallback when browser unavailable. |
+| Subliminal double-flash fix (keep-alive windows, no Hide between flashes) | **CODE✓** (service) / **BLOCKED** (render) | lot 3 (`SubliminalLayer` always-on shared host; `SubliminalSolidMode` architecturally moot) | Render path = UCE lane. Headed: trigger back-to-back subliminals, confirm no flicker/Hide between. |
+| Avatar focus-steal fix (`ShowActivated=false`, `SWP_NOACTIVATE`, no forced chat focus) | **CODE✓ + GAP?** | lot 8 (C1 avatar seam). `SWP_NOACTIVATE` mirrored (`AvatarTubeWindow.Windowing.cs`); `ShowActivated=false` (`AvatarRandomBubble.cs:104`); `ForceForegroundWindow()` (`ChatInput.cs:90`) called ONLY from `ShowInputPanel()` (user Ctrl+T, `axaml.cs:864`) — NOT the speech path → the no-forced-focus-on-speech fix IS honored. **GAP?:** Avalonia `ShowInputPanel` force-foregrounds the WINDOW (`AttachThreadInput`/`SetForegroundWindow`/`Activate`) vs WPF's textbox-`Focus()`-only — could yank foreground from *other apps* on Ctrl+T. | Headed: (a) confirm avatar speech/updates don't steal focus; (b) with focus in another app, press Ctrl+T, confirm whether foreground is yanked from the other app (the GAP?). |
+| Bubble pace (FIELD_PACE) / ChaosArt / ChaosTuning / Achievement autonomy quests / Lab tab | **BLOCKED** (bubble/chaos) / **CODE✓** (achievement/Lab) | FIELD_PACE/ChaosArt/ChaosTuning = co-agent lane; achievement autonomy quests + Lab tab = lot 7/9 | Bubble/chaos pieces defer; achievement/Lab headed exercise. |
+
+## Concrete divergence surfaced this pass (highest-value output)
+
+**Avatar `ShowInputPanel` force-foreground (potential cross-app focus disruption).**
+- WPF `AvatarTube/AvatarTubeWindow.ChatInput.cs:453-465`: `ShowInputPanel` → `FocusInputAfterLayout()`
+  → `TxtUserInput.Focus()` + `Keyboard.Focus(...)` (textbox focus only, within the app).
+- Avalonia `CCP.Avalonia/AvatarTube/AvatarTubeWindow.axaml.cs:862-866`: `ShowInputPanel` →
+  `ForceForegroundWindow()` + `FocusInputAfterLayout()`. `ForceForegroundWindow()`
+  (`ChatInput.cs:90-144`) uses Win32 `AttachThreadInput` + `SetForegroundWindow` + `BringWindowToTop`
+  (+ `Activate()`), or a Topmost-pulse + `Activate()` on Linux/macOS.
+- **Why it may be justified:** Avalonia's keyboard-focus model differs from WPF's; a topmost avatar
+  window may not receive keyboard input without an explicit foreground grab. So this is plausibly a
+  necessary platform adaptation for the chat textbox to be typeable.
+- **Why it may be a regression:** `AttachThreadInput`+`SetForegroundWindow` is an aggressive grab that
+  can steal foreground from *another application* the user is actively using when they press Ctrl+T
+  (WPF's in-app `Focus()` cannot). On Linux/macOS the Topmost-pulse + `Activate()` has the same risk.
+- **Not marked `[x]` or `❌`** — needs a headed observation (focus another app, press Ctrl+T, watch
+  whether the avatar yanks foreground). If it does disrupt, file a task-board row (clamp the grab to
+  in-app, or only force-foreground when the avatar already has app focus).
+
+## Next sections (multi-session; append below as each is triaged)
+
+- [ ] Cross-cutting (account login / START / avatar reacts / chaos economy / overlays / multi-monitor / theme / perf)
+- [ ] Tab views (32)
+- [ ] Feature controls (18)
+- [ ] Dialogs (33)
+- [ ] Windows (27)
+- [ ] Deeper (5)
+- [ ] Chaos overlays & AvatarTube (3) — mostly BLOCKED (co-agent lane)
