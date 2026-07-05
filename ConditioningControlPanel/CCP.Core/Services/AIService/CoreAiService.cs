@@ -41,8 +41,9 @@ namespace ConditioningControlPanel.Core.Services.AIService;
 ///   <c>AvaloniaQuizAiService</c>).</item>
 /// <item>The legacy Patreon bearer fallback (<c>/ai/chat</c>) is not ported — no Patreon-token
 ///   seam in Core yet. V2 404 → null (logged).</item>
-/// <item>The dedicated <c>ModerationLog</c> compliance file has no Core seam; hits are logged via
-///   the structured logger (Serilog) as a fallback until <c>IModerationLog</c> is ported.</item>
+/// <item>The dedicated <c>ModerationLog</c> compliance file is written via the injected
+///   <c>IModerationLog</c> seam (faithful to WPF <c>App.ModerationLog</c>); Serilog is the fallback
+///   only when the seam is absent.</item>
 /// </list>
 /// </remarks>
 public sealed class CoreAiService : IAiService
@@ -71,6 +72,7 @@ public sealed class CoreAiService : IAiService
     private readonly ISystemPromptBuilder _promptBuilder;
     private readonly IModService? _mods;
     private readonly ILogger<CoreAiService>? _logger;
+    private readonly IModerationLog? _moderationLog;
     private readonly HttpClient _cloud;
     private readonly Random _fallbackRandom = new();
 
@@ -84,7 +86,8 @@ public sealed class CoreAiService : IAiService
         ISystemPromptBuilder promptBuilder,
         ILogger<CoreAiService>? logger = null,
         IModerationCounter? counter = null,
-        IModService? mods = null)
+        IModService? mods = null,
+        IModerationLog? moderationLog = null)
     {
         _settings = settings;
         _identity = identity;
@@ -93,6 +96,7 @@ public sealed class CoreAiService : IAiService
         _logger = logger;
         _counter = counter;
         _mods = mods;
+        _moderationLog = moderationLog;
         _cloud = new HttpClient { BaseAddress = new Uri(ProxyBaseUrl), Timeout = TimeSpan.FromSeconds(30) };
         _cloud.DefaultRequestHeaders.TryAddWithoutValidation("X-Client-Version", "avalonia");
         _cloud.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "ConditioningControlPanel/Avalonia");
@@ -370,14 +374,18 @@ public sealed class CoreAiService : IAiService
     }
 
     /// <summary>
-    /// Compliance record. WPF routes through <c>App.ModerationLog</c> (a dedicated file). No
-    /// <c>IModerationLog</c> seam in Core yet, so this logs via the structured logger (Serilog)
-    /// as a fallback. Follow-up: port the <c>IModerationLog</c> seam so the dedicated compliance
-    /// log is restored.
+    /// Compliance record. Routes through the injected <c>IModerationLog</c> (the dedicated
+    /// moderation.log file, faithful to WPF <c>App.ModerationLog</c>); Serilog is the fallback
+    /// only when the seam is absent. No message bodies are logged — category + source + model only.
     /// </summary>
     private void LogModeration(ProhibitedCategory category, string source, string modelHint)
-        => _logger?.LogWarning("Moderation hit | category={Category} | source={Source} | model={Model}",
+    {
+        // Prefer the dedicated compliance file (IModerationLog, faithful to WPF App.ModerationLog);
+        // Serilog is the fallback when the seam isn't registered.
+        if (_moderationLog != null) { _moderationLog.Record(category, source, modelHint); return; }
+        _logger?.LogWarning("Moderation hit | category={Category} | source={Source} | model={Model}",
             category, source, modelHint);
+    }
 
     // ---------- Helpers ----------
 

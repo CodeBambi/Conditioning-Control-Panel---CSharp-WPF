@@ -83,6 +83,7 @@ public sealed class LocalAiService : IAiService, IDisposable
     private readonly IAiCommandService? _commands;
     private readonly IAiResponseParser? _parser;
     private readonly IPromptService? _promptService;
+    private readonly IModerationLog? _moderationLog;
 
     private string? _activeHost;
     private string? _activeModel;
@@ -98,7 +99,8 @@ public sealed class LocalAiService : IAiService, IDisposable
         IModService? mods = null,
         IAiCommandService? commands = null,
         IAiResponseParser? parser = null,
-        IPromptService? promptService = null)
+        IPromptService? promptService = null,
+        IModerationLog? moderationLog = null)
     {
         _settings = settings;
         _environment = environment;
@@ -110,6 +112,7 @@ public sealed class LocalAiService : IAiService, IDisposable
         _commands = commands;
         _parser = parser;
         _promptService = promptService;
+        _moderationLog = moderationLog;
         _historyPath = Path.Combine(environment.UserDataPath, HistoryFileName);
         LoadHistory();
     }
@@ -482,8 +485,11 @@ public sealed class LocalAiService : IAiService, IDisposable
     // ---------- Helpers ----------
 
     private void LogModeration(ProhibitedCategory category, string source)
-        => _logger?.LogWarning("Moderation hit | category={Category} | source={Source} | model={Model}",
+    {
+        if (_moderationLog != null) { _moderationLog.Record(category, source, ModelHint); return; }
+        _logger?.LogWarning("Moderation hit | category={Category} | source={Source} | model={Model}",
             category, source, ModelHint);
+    }
 
     private static string SanitizeResponse(string text)
     {

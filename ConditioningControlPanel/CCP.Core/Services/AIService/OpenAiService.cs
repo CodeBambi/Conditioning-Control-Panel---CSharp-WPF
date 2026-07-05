@@ -80,6 +80,7 @@ public sealed class OpenAiService : IAiService, IDisposable
     private readonly IPromptService? _promptService;
     private readonly IModService? _mods;
     private readonly ILogger<OpenAiService>? _logger;
+    private readonly IModerationLog? _moderationLog;
     private readonly Random _fallbackRandom = new();
 
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(60) };
@@ -96,7 +97,8 @@ public sealed class OpenAiService : IAiService, IDisposable
         IModerationCounter? counter = null,
         IModService? mods = null,
         IAiCommandService? commands = null,
-        IPromptService? promptService = null)
+        IPromptService? promptService = null,
+        IModerationLog? moderationLog = null)
     {
         _settings = settings;
         _secrets = secrets;
@@ -108,6 +110,7 @@ public sealed class OpenAiService : IAiService, IDisposable
         _mods = mods;
         _commands = commands;
         _promptService = promptService;
+        _moderationLog = moderationLog;
     }
 
     /// <summary>Gate: offline / no endpoint / no key / over the client daily limit (0 = unlimited).</summary>
@@ -537,7 +540,10 @@ public sealed class OpenAiService : IAiService, IDisposable
     }
 
     private void LogModeration(ProhibitedCategory category, string source)
-        => _logger?.LogWarning("Moderation hit | category={Category} | source={Source} | model={Model}", category, source, ModelHint);
+    {
+        if (_moderationLog != null) { _moderationLog.Record(category, source, ModelHint); return; }
+        _logger?.LogWarning("Moderation hit | category={Category} | source={Source} | model={Model}", category, source, ModelHint);
+    }
 
     private string GetFallbackResponse()
     {
