@@ -560,7 +560,53 @@ public partial class App : Application
         window.Show();
         if (window.WindowState == WindowState.Minimized)
             window.WindowState = WindowState.Normal;
+        EnsureOnScreen(window);
         window.Activate();
+    }
+
+    /// <summary>
+    /// Mirrors WPF TrayIconService.EnsureOnScreen (Services/Notifications/TrayIconService.cs:191, #475):
+    /// MinimizeToTray keeps the window's last position, so restoring after a monitor is unplugged or a
+    /// resolution change leaves it off-screen and invisible while the tray icon looks broken. If less
+    /// than 60x30 px of the window overlaps any screen's working area (not enough to grab the title bar),
+    /// re-center on primary. Best-effort and fully guarded.
+    /// Coordinate note: unlike WPF (Left/Top in DIPs), Avalonia Window.Position is already physical px,
+    /// while Width/Height (here Bounds, the rendered size) are DIPs and are converted via RenderScaling.
+    /// screen.WorkingArea is physical px.
+    /// </summary>
+    private static void EnsureOnScreen(Window window)
+    {
+        try
+        {
+            var screens = window.Screens;
+            var all = screens?.All;
+            if (all is null || all.Count == 0) return;
+
+            double scaling = window.RenderScaling <= 0 ? 1.0 : window.RenderScaling;
+            int w = (int)(window.Bounds.Width * scaling);
+            int h = (int)(window.Bounds.Height * scaling);
+            if (w <= 0 || h <= 0) return; // size not laid out yet; don't risk a bad re-center
+
+            int rx = window.Position.X, ry = window.Position.Y;
+            int rr = rx + w, rb = ry + h;
+            foreach (var screen in all)
+            {
+                var wa = screen.WorkingArea; // physical px
+                int iw = Math.Min(wa.Right, rr) - Math.Max(wa.X, rx);
+                int ih = Math.Min(wa.Bottom, rb) - Math.Max(wa.Y, ry);
+                if (iw >= 60 && ih >= 30) return; // enough to grab the title bar
+            }
+
+            var primaryWa = (screens!.Primary ?? all[0]).WorkingArea;
+            int cx = primaryWa.X + (primaryWa.Width - w) / 2;
+            int cy = primaryWa.Y + (primaryWa.Height - h) / 2;
+            window.Position = new PixelPoint(cx, cy);
+            Log.Logger?.Information("Tray restore: window was off-screen, re-centered on primary");
+        }
+        catch (Exception ex)
+        {
+            Log.Logger?.Debug("EnsureOnScreen failed: {Error}", ex.Message);
+        }
     }
 
     private static void ConfigureLogging()
