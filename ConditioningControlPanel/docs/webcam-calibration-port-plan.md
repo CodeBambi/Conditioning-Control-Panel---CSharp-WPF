@@ -420,3 +420,30 @@ Exact per-file changes (all facts verified in-code as of HEAD after d56b23c2):
    `installer.iss` add for release (later).
 **GATES:** slnf 0 errors · WPF sln 0 · Core tests green · smoke exit 0 (baseline 5 findings). Current path 100%
 intact (default mode). Commit `feat(av): deep ONNX gaze pipeline (Tier 2) + backbone dropdown, A/B-selectable`.
+
+### STATUS 2026-07-05: Commit 1 (T0 + Tier 2) SHIPPED = `f25018be`
+All gates green: desktop slnf 0 · WPF sln 0 · Core 542/542 · smoke exit 0 (baseline 5 findings, 0 novel) ·
+en.json valid. Deep pipeline + backbone dropdown (MobileOne-S0..ResNet-50) selectable in the calibration
+window; switch-invalidates notice + baseline restore implemented; Current path untouched. 5 ONNX models
+dropped locally (gitignored) for the owner's camera test. **READY FOR OWNER CAMERA A/B/C of Current vs Deep
+(all 5 backbones).**
+
+### TURN-KEY CHECKLIST — Commit 2 (Tier 1 classical), advisor sequence
+Same feature-agnostic reuse; Tier 1 = a third `GazeFeatureMode` whose FEATURE is an improved iris vector and
+whose regressor is upgraded. Minimal first cut = roll/scale-norm feature + cubic-ridge regressor (the two
+cheapest, most independent wins; no new capture flow). Smooth-pursuit + fixation-snap are later enhancements.
+1. **Core `IWebcamService.cs`**: add `Tier1` (or `NormalizedIris`) to `enum GazeFeatureMode`.
+2. **Tracker `ProcessFrame`**: when mode==Tier1, compute the iris vector as today BUT roll-normalize it — rotate
+   the iris−cornermid vector by the eye-line tilt θ = atan2(Δy,Δx) between the two outer eye corners (2D only,
+   NO solvePnP) and keep the eye-width scale-norm; emit via `EmitGazeEvents` (same path). Apply the SAME
+   rotation in calibration capture (it already flows through OnRawIris, so it's automatic).
+3. **Solver `WebcamCalibrationSolver`**: add an optional cubic (3rd-order) ridge fit selected when
+   featureMode==Tier1; keep 2nd-order Cerrolaza + homography + axis-correction + IrisRange as guards/fallback.
+   Runtime `ProjectGazeToScreen` already reads `Polynomial` (7-coeff) — extend to accept a cubic coeff set
+   (new length) OR store cubic coeffs in a new nullable field read only in Tier1. Keep 6/7-coeff paths intact.
+4. **Window**: add "Tier 1 (improved classic)" as a 3rd `CmbGazeMode` item; same switch-notice logic.
+5. Gate identically; commit `feat(av): Tier 1 improved-classical gaze (roll-norm + cubic ridge)`.
+**Later Tier-1 enhancements (separate commits):** smooth-pursuit calibration (moving dot + lag-align + Pearson
+gate — VERIFY consumer-webcam pursuit feasibility with PARENT web tools first) and fixation snap (I-DT/I-VT
+atop One-Euro). **Cadence decision (owner):** build Tier 1 now for a full 3-way, OR camera-test Current-vs-Deep
+first then build Tier 1 informed by results.
