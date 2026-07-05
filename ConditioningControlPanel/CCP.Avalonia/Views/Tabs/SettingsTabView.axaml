@@ -416,12 +416,25 @@
                             ToolTip.Tip="{loc:Str btn_help}" />
                     <TextBlock Text="{loc:Str label_duck}" Foreground="{DynamicResource TextMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="0,0,4,0" />
                     <ToggleSwitch IsChecked="{Binding AudioDuckEnabled, Mode=TwoWay}" />
+                    <!-- v6.2.9 #9: collapse/expand the advanced audio options (WPF SettingsTabView.xaml:1193-1247). Master volume + duck-enable stay always visible. -->
+                    <ToggleButton x:Name="BtnAudioAdvanced" Background="Transparent" BorderThickness="0" Padding="4,1"
+                                  Cursor="Hand" VerticalAlignment="Center" Margin="6,0,0,0"
+                                  ToolTip.Tip="Show advanced audio options (video &amp; duck volume, output device, ducking)">
+                      <Panel>
+                        <TextBlock Text="▾" FontSize="13" Foreground="{DynamicResource PinkBrush}"
+                                   IsVisible="{Binding !#BtnAudioAdvanced.IsChecked}" />
+                        <TextBlock Text="▴" FontSize="13" Foreground="{DynamicResource PinkBrush}"
+                                   IsVisible="{Binding #BtnAudioAdvanced.IsChecked}" />
+                      </Panel>
+                    </ToggleButton>
                   </StackPanel>
                 </Grid>
 
                 <controls:SliderHeader Label="{loc:Str setting_master}" ValueText="{Binding MasterVolumeText}" />
                 <Slider Value="{Binding MasterVolume, Mode=TwoWay}" Minimum="0" Maximum="100" Margin="0,0,0,6" />
 
+                <!-- Advanced audio options, collapsed by default; toggled by BtnAudioAdvanced (v6.2.9 #9) -->
+                <StackPanel IsVisible="{Binding #BtnAudioAdvanced.IsChecked}">
                 <controls:SliderHeader Label="{loc:Str setting_video}" ValueText="{Binding VideoVolumeText}" />
                 <Slider Value="{Binding VideoVolume, Mode=TwoWay}" Minimum="0" Maximum="100" Margin="0,0,0,6" />
 
@@ -459,6 +472,7 @@
                           BorderBrush="{DynamicResource PinkBrush}" BorderThickness="1"
                           VerticalAlignment="Center" />
                 </Grid>
+                </StackPanel><!-- end advanced audio options (v6.2.9 #9) -->
               </StackPanel>
             </Border>
 
