@@ -165,7 +165,11 @@ public static class ServiceCollectionExtensions
         services.AddLogging(builder => builder.AddSerilog());
 
         services.AddSingleton<VideoMetadataCache>();
-        services.AddSingleton<IAiService, AvaloniaQuizAiService>();
+        // CoreAiService: real cloud companion AI (codebambi-proxy V2) + moderation sandwich +
+        //        all 5 reactions; replaces the quiz-only AvaloniaQuizAiService stub. Local/
+        //        OpenAI providers + legacy Patreon fallback are documented follow-ups.
+        services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
+        services.AddSingleton<IAiService, CoreAiService>();
         services.AddTransient<IQuizService, QuizService>();
 
         // Settings, session and achievement services (extracted to Core).
