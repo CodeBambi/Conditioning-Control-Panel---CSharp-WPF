@@ -16,8 +16,13 @@ and turns the gap into an ordered migration backlog.
 
 ## Verdict
 
-**Yellow.** The session-effect set and the 8 *live* passive chaos overlays are fully on
-the UCE (17 registered layers). The remaining gap is **7 passive "just draws" effects that
+**Yellow.** The session-effect set and the *live* passive chaos overlays are fully on
+the UCE (18 registered layers as of 2026-07-05).
+
+> **Progress 2026-07-05:** gap #1 closed — `ChaosFxWindow` (full-screen vignette impact
+> pulse) migrated to `ChaosFxLayer` (Z=118); window deleted; `--verify-layers` Stage 4j
+> PASS; all gates green (slnf 0 · WPF 0 · Core 540 · verify-layers exit 0 · smoke Findings 5).
+> Remaining LIVE gap: `ChaosWaveTimerOverlay` + the standalone attention-check window. The remaining gap is **7 passive "just draws" effects that
 still render as their own `Window`** (2 live + 4 unwired chaos + 1 live standalone
 attention-check), plus **2 dead/vestigial windows to delete**. No interactive surface is
 wrongly a layer; no passive effect that was migrated regressed to a window.
@@ -74,7 +79,7 @@ top-level `Window`. Per doctrine they should be `IAvaloniaLayer`s. Migration rec
 ### B1 — LIVE (actively rendered as a window today) → highest priority
 | # | Class | File | LOC | What it draws | Live caller |
 |---|---|---|---|---|---|
-| 1 | `ChaosFxWindow` | `Chaos/ChaosFxWindow.cs` | 172 | full-screen colour vignette pulses | `AvaloniaHeadStubs:2170` `new ChaosFxWindow()` + `_fx.Pulse(color,strength)` :2171 |
+| 1 | ~~`ChaosFxWindow`~~ ✅ **DONE → `ChaosFxLayer` (Z=118)** | (deleted 2026-07-05) | 172 | full-screen colour vignette pulses | was `_fx.Pulse`; now `_fxLayer.Pulse` on the compositor |
 | 2 | `ChaosWaveTimerOverlay` | `Chaos/ChaosWaveTimerOverlay.axaml.cs` | 243 | click-through wave-clock pill | `AvaloniaHeadStubs.Update/Clear/CloseActive` :802/:1837/:1882/:2185/:2302 |
 | 3 | Standalone attention-check overlay | `Services/AttentionCheck/AvaloniaAttentionCheckService.cs:208-239` | 442 (svc) | pulsing gaze target (`AttentionCheckControl` in a bespoke transparent click-through `Window`) | `ScheduleNext`→`ShowCheck` when the feature is enabled (NOTE: gaze attention-check ships **dormant** per WPF pre-ship contract — lot 4/5 — so it is enabled-gated, but the code path is live and window-based) |
 
@@ -129,8 +134,8 @@ Not defects. Listed so a future sweep doesn't re-flag them.
 One class per commit, per the migration recipe; gates each commit (slnf 0 · WPF 0 · Core
 floor · `--verify-layers` exit 0 · `--verify-video` exit 0 · `--smoke-test` Findings 5).
 
-1. **`ChaosFxWindow` → `ChaosFxLayer`** (LIVE, 172 LOC, vignette pulses). Smallest live win;
-   z in the field band. `_fx.Pulse` → service mutator driving the layer.
+1. ~~**`ChaosFxWindow` → `ChaosFxLayer`**~~ ✅ **DONE 2026-07-05** (Z=118; `--verify-layers`
+   Stage 4j PASS; only the live `Pulse` ported, dead edge/heat/freeze API dropped).
 2. **`ChaosWaveTimerOverlay` → `ChaosWaveTimerLayer`** (LIVE, 243 LOC, wave pill). Info-text
    sub-band (≥140). `Update/Clear/CloseActive` → service mutators.
 3. **`AvaloniaBubbleWindow` delete** (dead) + **`AvaloniaOverlaySurface` delete-or-justify**

@@ -71,6 +71,13 @@ public static class CompositorLayers
     /// gif cascade — as an "attention asset", so it caps the 100–119 field band).</summary>
     public const int ChaosFlashWash = 115;
 
+    /// <summary>Chaos full-screen coloured-vignette "impact juice" pulses (migrated from the
+    /// standalone ChaosFxWindow). Sits at the top of the ambient field band, above the flash
+    /// wash, below the cursor-attached telegraphs and the info-text sub-band so the announcer /
+    /// pop-text read clearly over the subtle edge tint (WPF raised the FX window fully topmost;
+    /// keeping it under the info text is a deliberate readability improvement).</summary>
+    public const int ChaosFx = 118;
+
     /// <summary>Rabbit Caller cursor-glow telegraph (first migrated chaos layer).</summary>
     public const int ChaosCursorGlow = 130;
 

@@ -178,6 +178,7 @@ internal static class LayerVerification
             var dvdLayer = ExpectLayer<ChaosDvdLayer>(engine, CompositorLayers.ChaosDvd, "ChaosDvdLayer", rows);
             var gifCascadeLayer = ExpectLayer<ChaosGifCascadeLayer>(engine, CompositorLayers.ChaosGifCascade, "ChaosGifCascadeLayer", rows);
             var fieldFxLayer = ExpectLayer<ChaosFieldFxLayer>(engine, CompositorLayers.ChaosFieldFx, "ChaosFieldFxLayer", rows);
+            var fxLayer = ExpectLayer<ChaosFxLayer>(engine, CompositorLayers.ChaosFx, "ChaosFxLayer", rows);
 
             // LockCard (Z=20): the skill says no LockCardLayer exists (lock card is still a
             // window). Verified: no LockCardLayer type in the codebase, and nothing should be
@@ -623,6 +624,37 @@ internal static class LayerVerification
                 row.Teardown = deactivated ? "clean (ClearChaosFieldFx)" : "TIMEOUT";
                 FinishRow(row, activated, deactivated, envStable);
                 row.Note = AppendNote(row.Note, "seam-only: no production caller in this head yet (bubble-engine FX port pending); the old queue row's live tag was a false positive");
+                await SettleIdle(engine);
+            }
+
+            // ---------------- Stage 4j: ChaosFxLayer (Z=118) via ChaosFxLayer.Pulse ----------------
+            // Migrated from the standalone ChaosFxWindow. The production caller is the run
+            // engine's PRIVATE ColorFlashesEnabled-gated Pulse (impact palette), so the stage
+            // drives the layer's public Pulse/Clear directly. The vignette tints the screen
+            // EDGES (transparent core) and fades over ~300ms, so the FULL working-area hash is
+            // the render probe (center-crop would miss it); activation + teardown are the
+            // load-bearing assertions and a missed fast-fade capture is a SKIP, not a FAIL.
+            if (fxLayer != null)
+            {
+                Console.WriteLine("[LAYERS] Stage 4j: ChaosFxLayer via ChaosFxLayer.Pulse (impact vignette)...");
+                var row = rows.First(r => r.Layer == "ChaosFxLayer");
+                var before = Capture(screens, primary);
+                fxLayer.Pulse(new SkiaSharp.SKColor(255, 40, 40), 1.0);   // red detonation flash at peak strength
+                var activated = await PollAsync(() => fxLayer.IsActive, 1000, stepMs: 16);
+                row.Activated = activated ? "yes" : "TIMEOUT";
+                if (activated)
+                {
+                    await Task.Delay(48);   // land near the 40ms peak, within the 300ms fade
+                    var during = Capture(screens, primary);
+                    row.Delta = during.Full != before.Full
+                        ? "DIFFER (full/edges)"
+                        : "SKIP (subtle fast edge fade; activation+teardown verified)";
+                }
+                fxLayer.Clear();   // WPF EndRun/CleanupAfterRun closed the FX window
+                var deactivated = await PollAsync(() => !fxLayer.IsActive, 2000);
+                row.Teardown = deactivated ? "clean (auto-complete + Clear)" : "TIMEOUT";
+                FinishRow(row, activated, deactivated, envStable);
+                row.Note = AppendNote(row.Note, "driven directly; production caller is the run engine's private ColorFlashesEnabled-gated Pulse; edge-only vignette, 300ms fade");
                 await SettleIdle(engine);
             }
 

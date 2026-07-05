@@ -124,9 +124,9 @@ public sealed class AvaloniaChaosService : IChaosService
     private bool _lessonCardsAfterDraft;
     // Lessons completed AT the draft table defer their cards to the post-pick GO (WPF ChaosModeService.cs:133).
     private readonly List<ChaosUnlockCardData> _pendingLessonCards = new();
-    // Full-screen vignette pulse window, created lazily on the first pulse
-    // (WPF creates it eagerly at BeginRun, ChaosModeService.cs:491).
-    private ChaosFxWindow? _fx;
+    // Full-screen vignette pulse — a compositor layer (migrated from ChaosFxWindow, WS2/WP3).
+    // Registered once for the service lifetime; IsActive is content-driven so idle costs nothing.
+    private readonly ChaosFxLayer _fxLayer;
 
     // ---- pulse palette (WPF ChaosModeService.cs:106-110, verbatim) ----
     private static readonly global::Avalonia.Media.Color SHIELD_GAIN_COLOR = global::Avalonia.Media.Color.FromRgb(120, 220, 160);
@@ -280,6 +280,8 @@ public sealed class AvaloniaChaosService : IChaosService
         compositor?.RegisterLayer(_gifCascadeLayer);
         _fieldFxLayer = new ChaosFieldFxLayer();
         compositor?.RegisterLayer(_fieldFxLayer);
+        _fxLayer = new ChaosFxLayer();
+        compositor?.RegisterLayer(_fxLayer);
         _screenProvider = screenProvider;
         _screenShake = screenShake;
         AvaloniaChaosCatalogs.EnsureInitialized();
@@ -2157,8 +2159,9 @@ public sealed class AvaloniaChaosService : IChaosService
     }
 
     /// <summary>Config-gated juice: a soft full-screen vignette pulse (WPF ChaosModeService.cs:1676-1679).
-    /// The FX window is created lazily on the first pulse (WPF creates it eagerly at BeginRun :491);
-    /// it dies with the run in EndRun/CleanupAfterRun.</summary>
+    /// Renders through the compositor <see cref="ChaosFxLayer"/> (migrated from the standalone
+    /// ChaosFxWindow); the layer is registered for the service lifetime and clears in
+    /// EndRun/CleanupAfterRun.</summary>
     private void Pulse(global::Avalonia.Media.Color color, double strength)
     {
         if (_state?.Config?.ColorFlashesEnabled != true) return;
@@ -2167,8 +2170,7 @@ public sealed class AvaloniaChaosService : IChaosService
             try
             {
                 if (!_active) return;
-                if (_fx == null) { _fx = new ChaosFxWindow(); _fx.Show(); }
-                _fx.Pulse(color, strength);
+                _fxLayer.Pulse(new global::SkiaSharp.SKColor(color.R, color.G, color.B), strength);
             }
             catch (Exception ex) { _logger?.LogDebug("Chaos Pulse failed: {E}", ex.Message); }
         });
@@ -2259,8 +2261,7 @@ public sealed class AvaloniaChaosService : IChaosService
             {
                 _hud?.Close();
                 _hud = null;
-                try { _fx?.Close(); } catch { }   // the vignette pulses die with the run (WPF ChaosModeService.cs:3160)
-                _fx = null;
+                _fxLayer.Clear();   // the vignette pulses die with the run (WPF ChaosModeService.cs:3160)
                 _overlay?.ShowResults(state, baseXp, skillMult, finalXp, previousBest, sparks, rankUp);
             });
         }
@@ -2301,8 +2302,7 @@ public sealed class AvaloniaChaosService : IChaosService
             try { ChaosBackdropService.CloseActive(); } catch { }
             try { ChaosWaveTimerOverlay.CloseActive(); } catch { }   // WPF ChaosModeService.cs:3241
             try { ChaosUnlockCardOverlay.CloseActive(); } catch { }  // WPF ChaosModeService.cs:3242
-            try { _fx?.Close(); } catch { }
-            _fx = null;
+            _fxLayer.Clear();
         });
         // Clear lesson-card state so a torn-down service is inert (WPF ChaosModeService.cs:3271-3273).
         _pendingLessonCards.Clear();
