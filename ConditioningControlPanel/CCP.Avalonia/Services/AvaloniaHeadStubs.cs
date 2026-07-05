@@ -1042,6 +1042,12 @@ public sealed class AvaloniaChaosService : IChaosService
     {
         if (_state == null || _paused || _manualPaused) return;
         ChaosNarrativeHooks.OnFirstPop(BuildNarrativeContext(depth: _waveIndex));
+        // First-contact verb hint (treat/golden/heart/droplet/prism/freeze/heavy): WPF marks these
+        // ONLY on a genuine PopByClick (BubbleService.cs:3684-3688), never on a toy sweep/chain. This
+        // benign-pop callback fires for BOTH (engine PopBubble routes sweeps here too, BubbleEngine.cs:342),
+        // so marking here would over-teach on automated pops — deferred to the hint-pill slice, which
+        // will carry a click-vs-sweep signal. The completed-hold mark (OnDefused) and the tease-denied
+        // mark are player-only and safe, so they ARE wired.
 
         // ---- pickup early-returns: OUTSIDE the score/combo economy — they bank gold or
         //      resistance; never touch Score/Combo, no mults/flips (WPF ChaosModeService.cs:1780-1828) ----
@@ -1111,6 +1117,7 @@ public sealed class AvaloniaChaosService : IChaosService
             _state.Heat = Math.Min(1.0, _state.Heat + 0.05);
             double prismPts = ChaosScoring.PrismScore(spec.Strength, _state.TotalMult, _state.BlindfoldPayMult);
             _state.Score += prismPts;
+            ShowPopScore(prismPts);   // Blank Eyes score floater (WPF ChaosModeService.cs:1838)
             try { _achievements?.TrackBubblePopped(); } catch { }
             _state.PushEvent($"🔮 prism! 10x · {(string.IsNullOrEmpty(spec.MimicVariantId) ? spec.PayloadKind : spec.MimicVariantId)} fires");
             CheckComboMilestone();   // WPF ChaosModeService.cs:1845
@@ -1136,6 +1143,7 @@ public sealed class AvaloniaChaosService : IChaosService
             _state.TotalMult, _state.BlindfoldPayMult);
         _state.Score += pts;
         BankDripFeed();   // Drip Feed (x2 in the relapse loop, clamped to the per-descent cap) (WPF :1870)
+        ShowPopScore(pts);   // Blank Eyes score floater (WPF ChaosModeService.cs:1871)
         // Achievement bubble-pop tracker: every benign/prism pop counts (WPF ChaosModeService.cs:1843,1869).
         try { _achievements?.TrackBubblePopped(); } catch { }
         if (spec.PayMult > 1) _state.PushEvent("🪨 heavy drop! x3");
@@ -1173,6 +1181,13 @@ public sealed class AvaloniaChaosService : IChaosService
             _state.ChannelTargetBubbleId = null;
         }
 
+        // First-contact verb hint: a completed hold IS the lesson for this variant (WPF CompleteDefuse
+        // BubbleService.cs:3665-3669 marks KeyFor(spec) when !IsBoundHalf). Bound halves learn on the
+        // PAIR clearing, not one held half (WPF OnBoundHalfResolved :1477) — that pair-clear mark and
+        // the brittle-dodge mark (:3333) are engine-side in WPF and have no head callback here, so they
+        // stay a documented follow-up.
+        if (viaChannel && !spec.IsBoundHalf) MarkHintLearned(spec);
+
         // Snap Chain mantra: every completed defuse opens a brief invulnerability window
         // (WPF ChaosModeService.cs:2012-2013).
         if (_state.DefuseInvulnMs > 0)
@@ -1196,6 +1211,7 @@ public sealed class AvaloniaChaosService : IChaosService
             _state.TotalMult, _state.BlindfoldPayMult);
         _state.Score += pts;
         BankDripFeed();   // Drip Feed (x2 in the relapse loop, clamped to the per-descent cap) (WPF :2023)
+        ShowPopScore(pts);   // Blank Eyes score floater (WPF ChaosModeService.cs:2023)
         try { _achievements?.TrackBubblePopped(); } catch { }
         // Last Breath / Slowburner feed lines so score spikes explain themselves (WPF :2044-2052).
         if (_state.LastBreathWindowSec > 0 && fuseSecLeft <= _state.LastBreathWindowSec && _state.LastBreathPayMult > 1)
@@ -1413,6 +1429,49 @@ public sealed class AvaloniaChaosService : IChaosService
     /// (WPF ChaosModeService.cs:1705).</summary>
     private int GoldScaled(int gold) => _state?.RelapseLoopActive == true ? gold * 2 : gold;
 
+    /// <summary>Physical virtual-desktop px of a chaos DIP anchor. The frozen BubbleEngine stamps
+    /// ChaosLastPopX/Y in DIP (bounds = workingArea / scaling; BubbleEngine.cs:258), but the pop-text
+    /// layer anchors in PHYSICAL px (ChaosPopTextLayer coordinate contract). WPF anchored in the pop
+    /// window's own DIP; this head has no per-pop screen, so the primary scaling converts — exact on
+    /// uniform-DPI setups, drifting only on mixed-DPI multi-monitor (follow-up: a physical ChaosLastPop
+    /// accessor would need a frozen-engine change).</summary>
+    private (double X, double Y) ToPopPhysicalPx(double dipX, double dipY)
+    {
+        double s = _screenProvider?.GetPrimaryScreen()?.Scaling ?? 1.0;
+        if (s <= 0) s = 1.0;
+        return (dipX * s, dipY * s);
+    }
+
+    /// <summary>Blank Eyes: float the point score at the last pop (WPF ChaosModeService.cs:1689-1694
+    /// ShowPopScore — gated on ShowPopScores, +30 DIP below the pop, warm gold). Routes through the
+    /// ShowChaosPopText layer seam (itself master-gated on ChaosAnnouncerEnabled, exactly like WPF
+    /// ChaosPopText.Show).</summary>
+    private void ShowPopScore(double pts)
+    {
+        if (_state?.ShowPopScores != true || pts <= 0) return;
+        var (x, y) = ToPopPhysicalPx(_bubbles.ChaosLastPopX, _bubbles.ChaosLastPopY + 30);
+        ShowChaosPopText(x, y, "+" + ((long)pts).ToString("N0"),
+            global::Avalonia.Media.Color.FromRgb(0xFF, 0xE9, 0xA0));
+    }
+
+    /// <summary>First-contact verb hint learned: persist the archetype key to the run-meta learned-set
+    /// (WPF ChaosBubbleHints.MarkLearned). The WPF sibling also calls App.Bubbles?.HideChaosHints(key)
+    /// to strip the on-screen pill the instant it's learned — this head has no hint-pill render seam yet
+    /// (the WPF pill is a per-bubble Border in the frozen bubble visual), so the strip is a documented
+    /// follow-up; the persistence is faithful. Safe to call repeatedly / with a null key.</summary>
+    private static void MarkHintLearned(ChaosBubbleSpec? spec) => MarkHintLearned(ChaosBubbleHints.KeyFor(spec));
+
+    private static void MarkHintLearned(string? key)
+    {
+        if (string.IsNullOrEmpty(key)) return;
+        try
+        {
+            if (!ChaosMeta.State.BubbleHintsLearned.Add(key)) return;
+            ChaosMeta.Save();
+        }
+        catch { }
+    }
+
     /// <summary>Drip Feed drops per pop, doubled during the Relapse bonus loop
     /// (WPF ChaosModeService.cs:1744).</summary>
     private int DropsPerPopNow() => (_state?.DropPerPop ?? 0) * (_state?.RelapseLoopActive == true ? 2 : 1);
@@ -1570,6 +1629,7 @@ public sealed class AvaloniaChaosService : IChaosService
         // WPF :1418 Pulse(FFD700, 0.25) — no pulse seam (follow-up).
         // WPF :1420-1424 NotifyChaosTeaseDenied / the 5-streak NotifyChaosTeaseDeniedStreak —
         // IBarkService lacks both members (follow-up); the counters stay live for that port.
+        MarkHintLearned("tease");   // restraint demonstrated — the tease lesson is learned (WPF BubbleService.cs:3890)
         _teaseDeniedThisRun++;
         if (_teaseDeniedThisRun >= CoreChaosTuning.TEASE_DENIED_STREAK_COUNT && !_teaseDeniedStreakBarked)
             _teaseDeniedStreakBarked = true;
@@ -2481,6 +2541,11 @@ public sealed class AvaloniaChaosService : IChaosService
     {
         if (!_spawning || _state == null) return;
         _bubbles.TriggerPlayerRipple(px, _state.RippleRadiusPx, _state.RippleLifeMs);
+        // WPF BubbleService.TriggerPlayerRipple (:1323-1333) casts BOTH the gameplay wave AND the
+        // SnapRipple field-FX; the Core BubbleEngine.TriggerPlayerRipple only adds the gameplay wave,
+        // so the strong player wavefront visual is fired here (px is already PHYSICAL virtual-desktop
+        // px — the same anchor the gameplay wave hit-tests against, BubbleEngine.CenterPx :1603).
+        ChaosFieldSnapRipple(px.X, px.Y, _state.RippleRadiusPx, _state.RippleLifeMs);
     }
 
     public void UseToyById(string id)
