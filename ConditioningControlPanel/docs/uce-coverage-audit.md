@@ -20,6 +20,18 @@ and turns the gap into an ordered migration backlog.
 passive effect (attention-check) are all on the UCE (**20 registered layers** as of 2026-07-05:
 9 session + 10 chaos + 1 attention-check). The window-migration lane is complete.
 
+> **Fresh re-verification 2026-07-05 (post v6.2.10 merge `5603442`, by @glm5.2):** independent
+> read-only re-sweep of every `: Window` subclass in `CCP.Avalonia` reconciles 1:1 with this
+> audit — no new LIVE passive effect window appeared and the 6.2.10 merge added none (it touched
+> only WPF-head files + shared loc/csproj/`UpdateService`; zero under `CCP.Avalonia` source).
+> Section A counts 9 + 10 = 19 listed layers; the 20th is `AttentionCheckLayer` (Z=160, §B1#3,
+> migrated) — the verdict's "20" is correct, the §A header "19" counts only the two §A tables.
+> The only new artifact vs this audit is an untracked co-agent WIP `Compositor/Layers/ChaosEStimArcLayer.cs`
+> (a compositor *layer* being added — that is backlog item §D#6, the E-Stim→layer migration, in
+> flight; its CS0117 build error is the co-agent's incomplete WIP, not a regression). **DoD item 4
+> holds for the LIVE rendering set**; the 4 unwired window classes (§B2) are blocked features,
+> not active gaps, and the E-Stim one is actively being converted to a layer.
+
 > **Progress 2026-07-05:** gaps #1–2 closed — `ChaosFxWindow`→`ChaosFxLayer` (Z=118, `8df68031`)
 > and `ChaosWaveTimerOverlay`→`ChaosWaveTimerLayer` (Z=155, `16fe5a92`); both windows deleted;
 > `--verify-layers` Stages 4j/4k PASS. Dead `AvaloniaBubbleWindow` deleted (`c8bb20a1`).
