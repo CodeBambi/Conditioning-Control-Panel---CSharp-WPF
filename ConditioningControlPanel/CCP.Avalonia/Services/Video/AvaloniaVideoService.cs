@@ -506,7 +506,11 @@ public sealed class AvaloniaVideoService : IVideoService, IDisposable
             // resets the penalty tally.
             _retryPending = false;
             CleanupInternal(notifyEnded: true);
-            try { _interactionQueue.ForceReset(); } catch { /* best effort */ }
+            try { _interactionQueue.CompleteIfCurrent("Video"); } catch { /* best effort */ }
+            // #5/#14 parity (WPF ForceCleanup VideoService.cs:916): release the Video interaction
+            // slot ONLY if we still hold it, so a BubbleCount/LockCard that took over isn't cleared.
+            // ForceReset() (the prior Avalonia behavior) nuked the whole queue on every video
+            // teardown — a divergence; CompleteIfCurrent is the WPF-faithful surgical release.
             // WPF ForceCleanup parity (VideoService.cs:888): reset the duck refcount.
             _duckedForVideo = false;
             try { _audioDucker?.ForceUnduck(); } catch { /* best effort */ }

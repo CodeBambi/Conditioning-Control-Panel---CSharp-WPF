@@ -359,6 +359,17 @@ public interface IInteractionQueueService
     /// <summary>Mark the current interaction as complete and trigger the next queued one.</summary>
     void Complete(string interactionType);
 
+    /// <summary>
+    /// Release the interaction slot ONLY if <paramref name="interactionType"/> is the interaction
+    /// currently active. Safe to call from abnormal teardown (panic key, ForceCleanup, session
+    /// switch) that may have already released the slot — it can never clear a BubbleCount/LockCard
+    /// that has since taken over. Atomic under the queue lock (no TOCTOU). Returns true if the slot
+    /// was held by this type and released; false otherwise (no-op). Mirrors WPF
+    /// <c>InteractionQueueService.CompleteIfCurrent</c> (v6.2.9 #14 / port #5). Default no-op for
+    /// heads/tests that don't override it.
+    /// </summary>
+    bool CompleteIfCurrent(string interactionType) => false;
+
     /// <summary>Force clear the current interaction and any queued items.</summary>
     void ForceReset();
 

@@ -94,27 +94,52 @@ public sealed class AvaloniaInteractionQueueService : IInteractionQueueService
                     interactionType, _currentInteraction, activeDuration.TotalSeconds);
             }
 
-            _logger.LogInformation("InteractionQueue: Completed {Type}", interactionType);
-            _currentInteraction = null;
+            CompleteLocked(interactionType);
+        }
+    }
 
-            if (_queue.Count > 0)
+    /// <summary>
+    /// Release the slot ONLY if <paramref name="interactionType"/> is the interaction currently
+    /// active. Safe to call from abnormal teardown (panic key, ForceCleanup, session switch) that
+    /// may have already released the slot. Atomic under <see cref="_sync"/> (no TOCTOU with a
+    /// concurrent Complete/ForceReset), so it can never clear a BubbleCount/LockCard that has since
+    /// taken over. Mirrors WPF InteractionQueueService.CompleteIfCurrent (v6.2.9 #14 / port #5).
+    /// </summary>
+    public bool CompleteIfCurrent(string interactionType)
+    {
+        lock (_sync)
+        {
+            if (_currentInteraction != interactionType)
+                return false;
+            StopStuckDetectionTimer();
+            CompleteLocked(interactionType);
+            return true;
+        }
+    }
+
+    /// <summary>Shared release-and-advance logic. Caller MUST already hold <see cref="_sync"/>.</summary>
+    private void CompleteLocked(string interactionType)
+    {
+        _logger.LogInformation("InteractionQueue: Completed {Type}", interactionType);
+        _currentInteraction = null;
+
+        if (_queue.Count > 0)
+        {
+            var next = _queue.Dequeue();
+            _currentInteraction = next.Type;
+            _interactionStartTime = DateTime.Now;
+            StartStuckDetectionTimer();
+            _logger.LogInformation("InteractionQueue: Starting queued {Type} (remaining: {Count})", next.Type, _queue.Count);
+
+            Dispatcher.UIThread.Post(() =>
             {
-                var next = _queue.Dequeue();
-                _currentInteraction = next.Type;
-                _interactionStartTime = DateTime.Now;
-                StartStuckDetectionTimer();
-                _logger.LogInformation("InteractionQueue: Starting queued {Type} (remaining: {Count})", next.Type, _queue.Count);
-
-                Dispatcher.UIThread.Post(() =>
+                try { next.Trigger(); }
+                catch (Exception ex)
                 {
-                    try { next.Trigger(); }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "InteractionQueue: queued {Type} trigger failed", next.Type);
-                        Complete(next.Type);
-                    }
-                });
-            }
+                    _logger.LogWarning(ex, "InteractionQueue: queued {Type} trigger failed", next.Type);
+                    Complete(next.Type);
+                }
+            });
         }
     }
 
