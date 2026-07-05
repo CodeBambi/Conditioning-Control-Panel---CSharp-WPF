@@ -111,8 +111,11 @@ namespace ConditioningControlPanel.Services
         {
             DispatcherHelper.RunOnUISync(() =>
             {
-                // Prevent stacking multiple lock cards
-                if (Application.Current.Windows.OfType<LockCardWindow>().Any())
+                // Prevent stacking multiple lock cards.
+                // Gate on the visible set (IsAnyOpen), NOT Application.Current.Windows: since 6.2.10 the
+                // window is keep-alive pooled (dismiss => Hide(), not Close()), so a hidden pooled instance
+                // lingers in Application.Current.Windows forever and would block every card after the first.
+                if (LockCardWindow.IsAnyOpen())
                 {
                     App.Logger?.Information("LockCardService: A lock card is already open. Skipping.");
                     return;

@@ -56,8 +56,15 @@ namespace ConditioningControlPanel.Services
         /// <summary>How many distinct just-spoken lines to avoid replaying across all rules.</summary>
         private const int RecentlySpokenMemory = 8;
 
-        /// <summary>Global minimum gap between any two barks.</summary>
-        private const int GlobalMinGapMs = 4000;
+        /// <summary>
+        /// Hard global cooldown between any two reactive/idle barks (temporary — a user-facing slider
+        /// is the planned follow-up). Users reported she "runs her mouth constantly" and that reactive
+        /// lines (esp. the webcam FaceFound "back into frame" line) ignore the interval sliders; a 60s
+        /// floor keeps her from firing more than once a minute. Safety (Panic) and `guaranteed` barks
+        /// bypass this (see the `!bypass` block in EvaluateGate), so this never mutes a panic response
+        /// or a one-shot milestone.
+        /// </summary>
+        private const int GlobalMinGapMs = 60000;
 
         /// <summary>Barks at/above this priority (or any non-Normal class) speak via GigglePriority; lower ones queue via Giggle.</summary>
         private const int PriorityBarkThreshold = 100;
