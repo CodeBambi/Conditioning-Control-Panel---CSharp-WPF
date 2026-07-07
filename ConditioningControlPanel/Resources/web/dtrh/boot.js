@@ -40,6 +40,13 @@ let initMsg = null;
 let haveManifest = false;
 let started = false;
 
+// Shared page state the run brain (M3+) reads; M2 just keeps it current.
+export const hostState = {
+  meta: null, metaRev: -1,          // latest chaos_meta snapshot from C#
+  payloadCover: false,              // a native video is covering the page
+  lastPayout: null,                 // last payout-result
+};
+
 const scenePromise = import('./engine/scene.js'); // download while init/manifest arrive
 
 async function maybeStart() {
@@ -70,10 +77,29 @@ function shutdown() {
   bridge.send({ type: 'exit-done' });
 }
 
-bridge.on('init', (m) => { initMsg = m; maybeStart(); });
+bridge.on('init', (m) => {
+  initMsg = m;
+  if (m.m2Test) import('./m2test.js').then((t) => t.run(bridge, hostState)).catch((e) => bridge.log('m2test load failed: ' + e));
+  maybeStart();
+});
 bridge.on('manifest', (m) => { media.setManifest(m); haveManifest = true; maybeStart(); });
+bridge.on('meta', (m) => { hostState.meta = m.state; hostState.metaRev = m.rev; });
+bridge.on('payout-result', (m) => { hostState.lastPayout = m; bridge.log(`payout: base=${Math.round(m.baseXp)} final=${Math.round(m.finalXp)} sparks=${m.sparksEarned}${m.dryRun ? ' (dry)' : ''}`); });
+bridge.on('payload-state', (m) => {
+  hostState.payloadCover = m.kind === 'video' ? !!m.on : hostState.payloadCover;
+  // M3 wires this into the run brain (pause spawns/clock while covered); the engine keeps
+  // rendering for now - occlusion throttling is already disabled by the host's browser args.
+});
 bridge.on('end-run', () => shutdown());
 bridge.on('ping', (m) => bridge.send({ type: 'pong', t: m.t }));
+
+// Liveness for the host's wedge watchdog: a beating rAF posts every ~2s. If the page's
+// main thread locks up, the silence (not this code) is the signal.
+let lastBeat = 0;
+(function beat(now) {
+  if (now - lastBeat > 2000) { lastBeat = now; bridge.send({ type: 'heartbeat', t: now }); }
+  requestAnimationFrame(beat);
+})(0);
 
 // Exit UX (M1): HOLD Escape ~1.2s to leave (a tap stays the engine's pause toggle).
 // A radial fill on the HUD would be nicer - that arrives with the pause menu in M3.

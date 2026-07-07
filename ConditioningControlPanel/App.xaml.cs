@@ -1669,9 +1669,12 @@ namespace ConditioningControlPanel
             if (e.Args.Contains("--dtrh-spike"))
                 Services.Chaos.DtrhSpike.Run();
 
-            // DtRH browser game, dev shortcut (`--dtrh`): launch the web game window immediately,
-            // bypassing the Lab UI and the ChaosWebGameEnabled flag. Dev/testing only.
-            if (e.Args.Contains("--dtrh"))
+            // DtRH browser game, dev shortcuts: `--dtrh` launches the web game window immediately,
+            // bypassing the Lab UI and the ChaosWebGameEnabled flag; `--dtrh-m2test` additionally
+            // runs the M2 bridge exercise against a CLONED meta state (real save untouched).
+            if (e.Args.Contains("--dtrh-m2test"))
+                Services.Chaos.DtrhHostService.Launch(testMode: true);
+            else if (e.Args.Contains("--dtrh"))
                 Services.Chaos.DtrhHostService.Launch();
 
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them

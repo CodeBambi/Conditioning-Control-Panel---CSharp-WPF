@@ -229,7 +229,9 @@ internal sealed class ChaosWebViewHost : IDisposable
                     try { _opts.OnReady?.Invoke(); } catch { }
                     break;
                 case "log":
-                    App.Logger?.Debug("{Tag}[page]: {Msg}", _opts.LogTag, (string?)o["msg"]);
+                    // Information, not Debug: the global logger floor is Information and page
+                    // logs are the only devtools-less window into the hosted page.
+                    App.Logger?.Information("{Tag}[page]: {Msg}", _opts.LogTag, (string?)o["msg"]);
                     break;
                 default:
                     _opts.OnMessage?.Invoke(o);

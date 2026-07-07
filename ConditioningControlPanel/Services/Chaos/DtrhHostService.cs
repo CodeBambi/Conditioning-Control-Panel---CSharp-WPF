@@ -13,8 +13,12 @@ namespace ConditioningControlPanel.Services.Chaos;
 /// Host service for the DtRH browser game (feat/dtrh-web-port). Owns the fullscreen
 /// input-receiving WebView2 window (via <see cref="ChaosWebViewHost"/>), the virtual-host
 /// mappings (ccp.game -> Resources/web, ccp.assets -> the user's active preset), and the
-/// bridge protocol (v1). M1 scope: boot The Fall engine on the active preset's media.
-/// Payload firing / meta persistence / XP payout land in M2 (DtrhBridgeRouter/DtrhMetaBridge).
+/// bridge protocol (v1):
+///   - fire-payload -> the REAL desktop conditioning effects (EffectPayloadFactory)
+///   - meta-command -> <see cref="DtrhMetaBridge"/> (chaos_meta.json stays C#-owned)
+///   - run-started/run-ended -> crash sentinel, barks, XP payout + payout-result reply
+///   - payload-state (video) -> page pauses while a mandatory video covers it; focus returns after
+///   - heartbeat watchdog + ProcessFailed relaunch-once recovery
 ///
 /// Deliberately NOT an evolution of ChaosTunnelService - opposite window semantics (the
 /// tunnel is a passive backdrop under the WPF game; this IS the game surface). The two
@@ -24,19 +28,29 @@ internal static class DtrhHostService
 {
     private const int Protocol = 1;
     private static ChaosWebViewHost? _host;
+    private static DtrhMetaBridge? _meta;
     private static DispatcherTimer? _exitWatchdog;
+    private static DispatcherTimer? _heartbeatWatch;
+    private static DateTime _lastHeartbeatUtc;
     private static bool _exiting;
+    private static bool _runActive;
+    private static bool _relaunchedOnce;
+    private static bool _testMode;
+    private static bool _videoHooked;
 
     public static bool IsActive => _host != null;
 
     /// <summary>Launch the game window (idempotent). The page boots into The Fall on the
     /// active preset; the Warren hub becomes the boot target in M5.</summary>
-    public static void Launch()
+    public static void Launch(bool testMode = false)
     {
         if (_host != null) { _host.FocusWeb(); return; }
         try
         {
             _exiting = false;
+            _runActive = false;
+            _testMode = testMode;
+            _meta = new DtrhMetaBridge(testMode, msg => _host?.Post(msg));
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
             _host = new ChaosWebViewHost(new ChaosWebViewHost.Options
             {
@@ -59,7 +73,9 @@ internal static class DtrhHostService
                 OnProcessFailed = OnProcessFailed,
             });
             _host.Show();
-            App.Logger?.Information("DtrhHostService: launched");
+            HookVideoEvents(true);
+            StartHeartbeatWatch();
+            App.Logger?.Information("DtrhHostService: launched{T}", testMode ? " (M2 TEST MODE)" : "");
         }
         catch (Exception ex)
         {
@@ -79,10 +95,7 @@ internal static class DtrhHostService
             {
                 _exiting = true;
                 _host.Post(new { type = "end-run", reason = "host" });
-                CancelExitWatchdog();
-                _exitWatchdog = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
-                _exitWatchdog.Tick += (_, _) => DisposeAll();
-                _exitWatchdog.Start();
+                ArmExitWatchdog();
             }
             else
             {
@@ -92,19 +105,21 @@ internal static class DtrhHostService
         catch (Exception ex) { App.Logger?.Debug("DtrhHostService.CloseActive: {E}", ex.Message); DisposeAll(); }
     }
 
+    // ============================ boot ============================
+
     private static void OnPageReady()
     {
         try
         {
+            _lastHeartbeatUtc = DateTime.UtcNow;
             _host?.Post(new
             {
                 type = "init",
                 protocol = Protocol,
-                settings = new
-                {
-                    masterVolume = SafeMasterVolume(),
-                },
+                settings = new { masterVolume = SafeMasterVolume() },
+                m2Test = _testMode,
             });
+            if (_meta != null) _host?.Post(_meta.SnapshotMessage());
             var m = DtrhAssetManifest.Build();
             _host?.Post(new
             {
@@ -118,17 +133,45 @@ internal static class DtrhHostService
         catch (Exception ex) { App.Logger?.Warning("DtrhHostService.OnPageReady: {E}", ex.Message); }
     }
 
+    // ============================ page messages ============================
+
     private static void OnPageMessage(JObject o)
     {
         switch ((string?)o["type"])
         {
             case "sfx":
+            {
                 var name = (string?)o["name"];
                 var scale = (float?)o["scale"] ?? 0.6f;
                 if (!string.IsNullOrEmpty(name)) ChaosSfx.Play(name, scale);
                 break;
+            }
+            case "fire-payload":
+                FirePayload(o);
+                break;
+            case "meta-command":
+                _meta?.Handle(o);
+                break;
             case "run-started":
-                App.Logger?.Information("DtrhHost: page run started ({Mode})", (string?)o["mode"]);
+            {
+                _runActive = true;
+                var diff = (string?)o["difficulty"] ?? "Gentle";
+                if (!_testMode)
+                {
+                    try { ChaosCrashSentinel.Mark($"mode=dtrh-web diff={diff}"); } catch { }
+                    try { App.Bark?.NotifyChaosRunStarted(diff); } catch { }
+                }
+                App.Logger?.Information("DtrhHost: run started (diff={D}, mode={M})", diff, (string?)o["mode"]);
+                break;
+            }
+            case "run-ended":
+                OnRunEnded(o);
+                break;
+            case "bark":
+                RouteBark(o);
+                break;
+            case "heartbeat":
+                _lastHeartbeatUtc = DateTime.UtcNow;
                 break;
             case "boot-error":
                 App.Logger?.Warning("DtrhHost: page boot-error: {Msg} - closing", (string?)o["msg"]);
@@ -136,25 +179,244 @@ internal static class DtrhHostService
                 break;
             case "exit":       // page-initiated (Esc held): it winds itself down, then exit-done
                 _exiting = true;
-                CancelExitWatchdog();
-                _exitWatchdog = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
-                _exitWatchdog.Tick += (_, _) => DisposeAll();
-                _exitWatchdog.Start();
+                ArmExitWatchdog();
                 break;
             case "exit-done":
                 DisposeAll();
                 break;
             case "pong":
-                break; // watchdog plumbing arrives in M2
+                _lastHeartbeatUtc = DateTime.UtcNow;
+                break;
         }
+    }
+
+    /// <summary>fire-payload {kind, overlay?, strength?, durationMult?} -> the real desktop effect.
+    /// The page decides WHEN; the native services own HOW (they already handle their own z-order,
+    /// which lands payload windows above the game surface - M0-verified).</summary>
+    private static void FirePayload(JObject o)
+    {
+        try
+        {
+            var kindStr = (string?)o["kind"];
+            if (string.IsNullOrWhiteSpace(kindStr)) return;
+
+            EffectPayload payload;
+            if (string.Equals(kindStr, "overlay", StringComparison.OrdinalIgnoreCase))
+            {
+                // Explicit overlay flavor when given; factory picks randomly otherwise.
+                var flavor = (string?)o["overlay"];
+                payload = flavor is "pink_filter" or "spiral" or "braindrain"
+                    ? new OverlayPayload(flavor)
+                    : EffectPayloadFactory.Build(EffectBubblePayloadKind.Overlay);
+            }
+            else if (Enum.TryParse<EffectBubblePayloadKind>(kindStr, ignoreCase: true, out var kind))
+            {
+                payload = EffectPayloadFactory.Build(kind);
+            }
+            else
+            {
+                App.Logger?.Warning("DtrhHost: unknown payload kind '{K}' ignored", kindStr);
+                return;
+            }
+
+            payload.Strength = Math.Clamp((int?)o["strength"] ?? 60, 0, 100);
+            payload.DurationMult = Math.Clamp((double?)o["durationMult"] ?? 1.0, 0.1, 10.0);
+            payload.Fire();
+            App.Logger?.Information("DtrhHost: fired payload {K} (strength {S})", payload.DisplayName, payload.Strength);
+        }
+        catch (Exception ex) { App.Logger?.Warning("DtrhHost.FirePayload: {E}", ex.Message); }
+    }
+
+    /// <summary>run-ended -> XP payout (C#-owned formula, identical to the WPF EndRun) +
+    /// meta banking via the shared AwardRunRewards, answered with payout-result.</summary>
+    private static void OnRunEnded(JObject o)
+    {
+        _runActive = false;
+        try
+        {
+            double score = (double?)o["score"] ?? 0;
+            double durationSec = Math.Max(1, (double?)o["durationSec"] ?? 60);
+            double elapsedSec = Math.Clamp((double?)o["elapsedSec"] ?? durationSec, 0, durationSec * 2);
+            double diffMult = Math.Clamp((double?)o["difficultyMult"] ?? 1.0, 0.5, 5.0);
+            double sparkGainMult = Math.Clamp((double?)o["sparkGainMult"] ?? 1.0, 0.5, 5.0);
+            string diff = (string?)o["difficulty"] ?? "Gentle";
+
+            double durMin = durationSec / 60.0;
+            double capBase = 250.0 * durMin * diffMult;
+            double baseXp = Math.Min(score, capBase);
+            double skillMult = App.SkillTree?.GetTotalXpMultiplier() ?? 1.0;
+            double finalXp = baseXp * skillMult;
+
+            long previousBest = _meta?.TestMode == true ? 0 : ChaosMeta.State.BestScore;
+
+            int sparksEarned = 0;
+            if (_meta != null)
+            {
+                sparksEarned = _meta.AwardRun(new ChaosMeta.ChaosRunRewardInput(
+                    RunDurationSec: durationSec,
+                    DifficultyMult: diffMult,
+                    SparkGainMult: sparkGainMult,
+                    Score: score,
+                    TrickleDrops: (double?)o["trickleDrops"] ?? 0,
+                    DripFeedMaxed: (bool?)o["dripFeedMaxed"] ?? false,
+                    BestCombo: (int?)o["bestCombo"] ?? 0,
+                    Defused: (int?)o["defused"] ?? 0,
+                    ElapsedSec: elapsedSec));
+            }
+
+            ChaosRank? rankUp = null;
+            if (!_testMode)
+            {
+                try { App.Progression?.AddXP(baseXp, XPSource.Chaos); }
+                catch (Exception ex) { App.Logger?.Debug("DtrhHost payout AddXP: {E}", ex.Message); }
+                try { RevealService.Sync("run_end"); } catch { }
+                try
+                {
+                    var nowRank = ChaosRanks.For(ChaosMeta.State.RunsCompleted);
+                    if ((int)nowRank > ChaosMeta.State.LastRankSeen) rankUp = nowRank;
+                }
+                catch { }
+                try { App.Bark?.NotifyChaosRunCompleted((int)finalXp, diff); } catch { }
+                try { ChaosCrashSentinel.Clear(); } catch { }
+            }
+
+            _host?.Post(new
+            {
+                type = "payout-result",
+                baseXp,
+                skillMult,
+                finalXp,
+                sparksEarned,
+                previousBest,
+                rankUp = rankUp?.ToString(),
+                dryRun = _testMode,
+            });
+            App.Logger?.Information(
+                "DtrhHost: web run complete: base {Base:0} x skill {Mult:0.0} = {Final:0} XP, {Sparks} sparks{T}",
+                baseXp, skillMult, finalXp, sparksEarned, _testMode ? " (TEST, no XP credited)" : "");
+        }
+        catch (Exception ex) { App.Logger?.Warning("DtrhHost.OnRunEnded: {E}", ex.Message); }
+    }
+
+    /// <summary>bark {event, ...} -> the matching App.Bark chaos hook (voice stays native).</summary>
+    private static void RouteBark(JObject o)
+    {
+        if (_testMode) return;
+        try
+        {
+            switch ((string?)o["event"])
+            {
+                case "ending-soon": App.Bark?.NotifyChaosEndingSoon(); break;
+                // The bark surface grows with the gameplay port (M3/M4) - unknown events just log.
+                default: App.Logger?.Debug("DtrhHost: unrouted bark event '{E}'", (string?)o["event"]); break;
+            }
+        }
+        catch (Exception ex) { App.Logger?.Debug("DtrhHost.RouteBark: {E}", ex.Message); }
+    }
+
+    // ============================ native payload state ============================
+
+    /// <summary>A mandatory video fully covers the game - tell the page (pause/duck) and
+    /// give it Win32 focus back when the video closes (video clicks steal activation).</summary>
+    private static void HookVideoEvents(bool on)
+    {
+        try
+        {
+            if (App.Video == null) return;
+            if (on && !_videoHooked)
+            {
+                App.Video.VideoStarted += OnVideoStarted;
+                App.Video.VideoEnded += OnVideoEnded;
+                _videoHooked = true;
+            }
+            else if (!on && _videoHooked)
+            {
+                App.Video.VideoStarted -= OnVideoStarted;
+                App.Video.VideoEnded -= OnVideoEnded;
+                _videoHooked = false;
+            }
+        }
+        catch { }
+    }
+
+    private static void OnVideoStarted(object? sender, EventArgs e)
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || _host == null) return;
+        disp.BeginInvoke(() => _host?.Post(new { type = "payload-state", kind = "video", on = true }));
+    }
+
+    private static void OnVideoEnded(object? sender, EventArgs e)
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null || _host == null) return;
+        disp.BeginInvoke(() =>
+        {
+            _host?.Post(new { type = "payload-state", kind = "video", on = false });
+            _host?.FocusWeb();   // the video window had Win32 focus; reclaim keyboard for the game
+        });
+    }
+
+    // ============================ watchdogs / recovery ============================
+
+    private static void StartHeartbeatWatch()
+    {
+        StopHeartbeatWatch();
+        _lastHeartbeatUtc = DateTime.UtcNow;
+        _heartbeatWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _heartbeatWatch.Tick += (_, _) =>
+        {
+            // Only a WEDGED live run warrants the recovery ladder; the hub idling with the
+            // page not yet booted (no heartbeat source) must not trip it.
+            if (!_runActive || _host == null || !_host.IsReady || _exiting) return;
+            if ((DateTime.UtcNow - _lastHeartbeatUtc).TotalSeconds > 10)
+            {
+                App.Logger?.Warning("DtrhHost: page heartbeat silent >10s during a run - recovering");
+                Recover("heartbeat-silent");
+            }
+        };
+        _heartbeatWatch.Start();
+    }
+
+    private static void StopHeartbeatWatch()
+    {
+        try { _heartbeatWatch?.Stop(); } catch { }
+        _heartbeatWatch = null;
     }
 
     private static void OnProcessFailed(CoreWebView2ProcessFailedKind kind)
     {
-        // M1: no mid-run state to lose - tear down cleanly. The reload-and-resume
-        // recovery ladder lands with the watchdog work in M2.
-        App.Logger?.Warning("DtrhHost: WebView2 process failed ({Kind}) - closing", kind);
-        DisposeAll();
+        Recover($"process-failed:{kind}");
+    }
+
+    /// <summary>Recovery ladder: relaunch once per session (mid-run state is lost - the
+    /// sentinel records the abnormal end); a second failure gives up cleanly.</summary>
+    private static void Recover(string reason)
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null) { DisposeAll(); return; }
+        disp.BeginInvoke(() =>
+        {
+            bool retry = !_relaunchedOnce;
+            bool wasTest = _testMode;
+            App.Logger?.Warning("DtrhHost: recovery ({Reason}) - {Action}", reason, retry ? "relaunching once" : "giving up");
+            DisposeAll();
+            if (retry)
+            {
+                _relaunchedOnce = true;
+                Launch(wasTest);
+            }
+        });
+    }
+
+    // ============================ teardown ============================
+
+    private static void ArmExitWatchdog()
+    {
+        CancelExitWatchdog();
+        _exitWatchdog = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1200) };
+        _exitWatchdog.Tick += (_, _) => DisposeAll();
+        _exitWatchdog.Start();
     }
 
     private static void CancelExitWatchdog()
@@ -166,8 +428,19 @@ internal static class DtrhHostService
     private static void DisposeAll()
     {
         CancelExitWatchdog();
+        StopHeartbeatWatch();
+        HookVideoEvents(false);
+        try { _meta?.FlushSave(); } catch { }
+        if (_runActive && !_testMode)
+        {
+            // The window died mid-run (crash/force close): leave the sentinel armed only for
+            // genuine process death; a deliberate close is a clean end.
+            try { ChaosCrashSentinel.Clear(); } catch { }
+        }
+        _runActive = false;
         try { _host?.Dispose(); } catch { }
         _host = null;
+        _meta = null;
         _exiting = false;
         App.Logger?.Information("DtrhHostService: closed");
     }
