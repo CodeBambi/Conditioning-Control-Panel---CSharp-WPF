@@ -103,6 +103,13 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // DtRH browser game (beta flag): the whole experience lives in the web page —
+                // hub, run and all. The legacy WPF path below is byte-for-byte untouched when off.
+                if (App.Settings?.Current?.ChaosWebGameEnabled == true)
+                {
+                    Services.Chaos.DtrhHostService.Launch();
+                    return;
+                }
                 if (App.Chaos == null || App.Chaos.IsRunning) return;
                 // Happy path run 1: the Dollhouse stays shut until the first descent is done.
                 // FALL IN drops straight into the scripted naked run instead.
@@ -132,6 +139,12 @@ namespace ConditioningControlPanel
         {
             try
             {
+                // DtRH browser game (beta flag): same surface as the hero card — see BtnStartChaos_Click.
+                if (App.Settings?.Current?.ChaosWebGameEnabled == true)
+                {
+                    Services.Chaos.DtrhHostService.Launch();
+                    return;
+                }
                 if (App.Chaos == null || App.Chaos.IsRunning) return;
                 // Happy path run 1: the quick start drops into the same scripted naked run.
                 if (Services.Chaos.ChaosMeta.State.RunsCompleted == 0)

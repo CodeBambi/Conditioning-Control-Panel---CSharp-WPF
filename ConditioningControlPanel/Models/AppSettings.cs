@@ -2386,6 +2386,16 @@ namespace ConditioningControlPanel.Models
             set { _chaosTunnelEnabled = value; OnPropertyChanged(); }
         }
 
+        private bool _chaosWebGameEnabled = false;
+        /// <summary>DtRH browser game (beta): the whole Rabbit Hole runs as a three.js game inside a
+        /// fullscreen WebView2 window built on The Fall engine, instead of the WPF windows layer.
+        /// Default OFF while the port matures; the legacy path is untouched when off.</summary>
+        public bool ChaosWebGameEnabled
+        {
+            get => _chaosWebGameEnabled;
+            set { _chaosWebGameEnabled = value; OnPropertyChanged(); }
+        }
+
         private string _chaosAccessoryKey1 = "Q";
         /// <summary>Keybind for accessory pocket 1 (reserved: active-use accessories are a future system).</summary>
         public string ChaosAccessoryKey1

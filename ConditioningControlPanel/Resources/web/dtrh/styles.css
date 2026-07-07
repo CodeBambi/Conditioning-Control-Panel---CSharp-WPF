@@ -1,0 +1,952 @@
+/* ============================================================================
+ * fall-styles.css - Sissy Fall (fall.html)
+ * Page chrome (drop screen / HUD / loader) + the Bubble Pop field styles.
+ *
+ * The bubble field block is copied from explore-styles.css (bubbles.js expects
+ * these exact rh-* class names); dock/toggle/persona chrome is intentionally
+ * left out - the fall page owns its own HUD.
+ * ==========================================================================*/
+
+:root {
+  --pink: #ff69b4;
+  --pink-hover: #ff1493;
+  /* theme effect colors as R,G,B triplets (alpha varies per use); scene.js
+     rewrites these from the paint picker's colLine / colSpiral. Defaults match
+     the original Sissy pinks so an untouched fall is unchanged. */
+  --fx-accent-rgb: 255, 105, 180;
+  --fx-spiral-rgb: 229, 108, 192;
+  --rh-font: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: radial-gradient(120% 120% at 50% 0%, #2a1030 0%, #12081a 55%, #08040e 100%);
+  color: #fff;
+  font-family: var(--rh-font);
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation; /* page-wide: suppress iOS double-tap-to-zoom */
+}
+
+/* ------------- WebGL canvas ------------- */
+#sf-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  touch-action: none; /* we handle scroll/drag ourselves */
+}
+
+/* ------------- HUD layer ------------- */
+.sf-hud {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none; /* container is transparent to input */
+  /* kill iOS double-tap-to-zoom for everything in the HUD: two quick pops on
+     adjacent bubbles would otherwise register as a zoom gesture, and there's no
+     good way back out on a phone. Single taps still pop. */
+  touch-action: manipulation;
+}
+.sf-hud > * { pointer-events: auto; } /* actual controls are clickable */
+
+.sf-score {
+  position: absolute;
+  top: calc(1rem + env(safe-area-inset-top, 0px));
+  left: 3.5rem; /* clears the controls gear in the top-left corner */
+  pointer-events: none !important;
+  font-weight: 800;
+  font-size: 1.35rem;
+  color: #fff;
+  text-shadow: 0 0 12px rgba(255, 105, 180, 0.85);
+}
+.sf-score .sf-combo {
+  margin-left: 0.6rem;
+  font-size: 1rem;
+  color: #ffd45e;
+  text-shadow: 0 0 10px rgba(255, 212, 94, 0.9);
+}
+.sf-meters {
+  position: absolute;
+  top: calc(1rem + env(safe-area-inset-top, 0px));
+  right: 1.2rem;
+  pointer-events: none !important;
+  text-align: right;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 0 10px rgba(255, 105, 180, 0.6);
+}
+.sf-meters .sf-depth { font-size: 1.2rem; display: block; }
+.sf-meters .sf-speed { color: var(--pink); }
+
+.sf-hearts {
+  position: absolute;
+  top: calc(3.6rem + env(safe-area-inset-top, 0px));
+  left: 1.2rem;
+  pointer-events: none !important;
+  font-size: 0.95rem;
+  letter-spacing: 0.1em;
+  filter: drop-shadow(0 0 6px rgba(255, 105, 180, 0.7));
+}
+
+/* Bottom-left control dock */
+.sf-dock {
+  position: absolute;
+  left: 1rem;
+  bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  z-index: 12;
+  pointer-events: none;
+}
+.sf-dock-btn {
+  pointer-events: auto;
+  font-family: var(--rh-font);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(20, 12, 28, 0.78);
+  border: 1px solid rgba(255, 105, 180, 0.55);
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: border-color .2s, background .2s, opacity .2s;
+}
+.sf-dock-btn:hover { border-color: var(--pink); background: rgba(40, 18, 50, 0.85); }
+.sf-dock-btn.is-off { color: #b0b0c0; border-color: rgba(255, 255, 255, 0.18); opacity: 0.75; }
+
+/* Audio button + expandable granular level sliders */
+.sf-audio-wrap { position: relative; display: flex; align-items: center; gap: 0.3rem; pointer-events: none; }
+.sf-caret {
+  pointer-events: auto;
+  font-family: var(--rh-font); font-size: 0.72rem; font-weight: 700; line-height: 1;
+  color: #fff; background: rgba(20, 12, 28, 0.78);
+  border: 1px solid rgba(255, 105, 180, 0.55); border-radius: 999px;
+  width: 1.5rem; height: 1.5rem; cursor: pointer; backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .2s, border-color .2s, background .2s;
+}
+.sf-caret:hover { border-color: var(--pink); background: rgba(40, 18, 50, 0.85); }
+.sf-caret.is-open { transform: rotate(180deg); }
+.sf-audio-panel {
+  pointer-events: auto;
+  position: absolute; left: 0; bottom: calc(100% + 0.5rem);
+  width: 210px; padding: 0.85rem 0.95rem;
+  background: rgba(16, 8, 24, 0.94);
+  border: 1px solid rgba(255, 105, 180, 0.35); border-radius: 14px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 26px rgba(0, 0, 0, 0.4);
+  z-index: 14;
+}
+.sf-audio-panel[hidden] { display: none; }
+.sf-audio-row { display: block; margin: 0.6rem 0; }
+.sf-audio-row:first-child { margin-top: 0; }
+.sf-audio-row:last-child { margin-bottom: 0; }
+.sf-audio-rowhead {
+  display: flex; justify-content: space-between;
+  font-size: 0.75rem; color: #cbb3d6; margin-bottom: 0.2rem; text-transform: capitalize;
+}
+.sf-audio-val { color: var(--pink); font-weight: 600; }
+.sf-audio-panel input[type="range"] { width: 100%; accent-color: var(--pink); cursor: pointer; }
+
+/* Paint button + tunnel color/theme picker */
+.sf-theme-wrap { position: relative; display: flex; align-items: center; pointer-events: none; }
+.sf-paint-btn { padding: 0.4rem 0.6rem; }
+/* fullscreen toggle - compact icon button; tinted while active */
+.sf-fs-btn { padding: 0.4rem 0.62rem; font-size: 1rem; line-height: 1; }
+.sf-fs-btn.is-on { color: var(--pink); border-color: var(--pink); background: rgba(40, 18, 50, 0.85); }
+/* iPhone-only "add to home screen" hint popover, anchored above the dock */
+.sf-fs-tip {
+  position: fixed;
+  left: 1rem;
+  bottom: calc(3.6rem + env(safe-area-inset-bottom, 0px));
+  z-index: 13;
+  max-width: min(78vw, 320px);
+  padding: 0.7rem 0.85rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #fff;
+  background: rgba(20, 12, 28, 0.96);
+  border: 1px solid var(--pink);
+  border-radius: 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+.sf-fs-tip[hidden] { display: none; }
+
+/* Skip-video button - centered above the dock, shown only during a clip */
+.sf-skip {
+  position: fixed;
+  left: 50%;
+  bottom: calc(4.8rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 13;
+  pointer-events: none;
+}
+.sf-skip[hidden] { display: none; }
+.sf-skip .sf-btn {
+  pointer-events: auto;
+  font-weight: 700;
+  animation: sf-skip-glow 1.6s ease-in-out infinite;
+}
+@keyframes sf-skip-glow {
+  0%, 100% { box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4), 0 0 0 0 rgba(255, 105, 180, 0.5); }
+  50%      { box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4), 0 0 22px 4px rgba(255, 105, 180, 0.55); }
+}
+
+/* Quiet "explore the app" link, bottom-right - a small dim circle that
+   brightens on hover. Compact so it never crowds the dock on phones. */
+.sf-explore {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+  z-index: 12;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  font-family: var(--rh-font);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(20, 12, 28, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  backdrop-filter: blur(4px);
+  opacity: 0.6;
+  transition: color .2s, border-color .2s, background .2s, opacity .2s;
+}
+.sf-explore:hover {
+  color: #fff;
+  opacity: 1;
+  border-color: var(--pink);
+  background: rgba(40, 18, 50, 0.75);
+}
+
+/* Master controls toggle - small dim gear, top-left; reveals/hides the chrome */
+.sf-uitoggle {
+  position: fixed;
+  top: calc(0.9rem + env(safe-area-inset-top, 0px));
+  left: 1rem;
+  z-index: 13;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  font-size: 1rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(20, 12, 28, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  opacity: 0.6;
+  transition: color .2s, border-color .2s, background .2s, opacity .2s, transform .3s;
+}
+.sf-uitoggle:hover { color: #fff; opacity: 1; border-color: var(--pink); }
+.sf-uitoggle.is-on {
+  color: #fff;
+  opacity: 1;
+  border-color: var(--pink);
+  background: rgba(40, 18, 50, 0.8);
+  transform: rotate(90deg);
+}
+/* Chrome hidden by default - the gear brings it back */
+.sf-hud.sf-chrome-hidden .sf-dock,
+.sf-hud.sf-chrome-hidden .sf-explore,
+.sf-hud.sf-chrome-hidden .sf-panel { display: none; }
+.sf-theme-panel {
+  pointer-events: auto;
+  position: absolute; left: 0; bottom: calc(100% + 0.5rem);
+  width: 220px; padding: 0.85rem 0.95rem;
+  background: rgba(16, 8, 24, 0.94);
+  border: 1px solid rgba(255, 105, 180, 0.35); border-radius: 14px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 26px rgba(0, 0, 0, 0.4);
+  z-index: 14;
+}
+.sf-theme-panel[hidden] { display: none; }
+.sf-swatches {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  padding-bottom: 0.7rem; margin-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 105, 180, 0.2);
+}
+.sf-swatch {
+  width: 1.7rem; height: 1.7rem; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25); cursor: pointer;
+  padding: 0; transition: transform .15s, border-color .15s;
+}
+.sf-swatch:hover { transform: scale(1.12); border-color: #fff; }
+.sf-color-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.78rem; color: #cbb3d6; margin: 0.4rem 0;
+}
+.sf-color-row input[type="color"] {
+  width: 2.2rem; height: 1.5rem; padding: 0; cursor: pointer;
+  background: none; border: 1px solid rgba(255, 105, 180, 0.4); border-radius: 6px;
+}
+
+/* Speed hint, fades out after the intro */
+.sf-hint {
+  position: absolute;
+  bottom: calc(1.4rem + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none !important;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.65);
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+  transition: opacity 1.2s;
+}
+.sf-hint.is-gone { opacity: 0; }
+
+/* Results overlay (challenge mode run end) */
+.sf-results {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 4, 14, 0.72);
+  backdrop-filter: blur(4px);
+}
+.sf-results[hidden] { display: none; }
+.sf-results-card {
+  text-align: center;
+  padding: 2.2rem 2.8rem;
+  border-radius: 22px;
+  background: rgba(24, 12, 32, 0.92);
+  border: 1px solid rgba(255, 105, 180, 0.45);
+  box-shadow: 0 0 44px rgba(255, 105, 180, 0.25);
+}
+.sf-results-card h2 {
+  margin: 0 0 1rem;
+  font-size: 1.6rem;
+  background: linear-gradient(135deg, #ff69b4, #b388ff);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.sf-results-card p { margin: 0.3rem 0; color: #e8d8ee; }
+.sf-results-card .sf-btn { margin-top: 1.4rem; }
+
+/* ------------- Loader ------------- */
+.sf-loader {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 1rem;
+  background: #0d0716;
+  color: #b0b0c0;
+}
+.sf-loader[hidden] { display: none; }
+.sf-loader-ring {
+  width: 48px; height: 48px; border-radius: 50%;
+  border: 3px solid rgba(255, 105, 180, 0.2);
+  border-top-color: var(--pink);
+  animation: sfSpin 0.9s linear infinite;
+}
+@keyframes sfSpin { to { transform: rotate(360deg); } }
+
+/* ------------- Drop screen + "no 3D" notice ------------- */
+.sf-drop, .sf-nope {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; flex-direction: column;
+  background: radial-gradient(120% 120% at 50% 20%, rgba(38, 14, 48, 0.96), rgba(8, 6, 16, 0.98));
+  overflow-y: auto;
+}
+.sf-drop[hidden], .sf-nope[hidden] { display: none; }
+/* the "no 3D" notice has no nav bar, so centre its lone card vertically too */
+.sf-nope { align-items: center; justify-content: center; padding: 1.5rem; }
+
+/* Site header on the landing screen */
+.sf-nav {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem clamp(1rem, 4vw, 2rem);
+  border-bottom: 1px solid rgba(255, 105, 180, 0.12);
+  background: rgba(13, 7, 20, 0.55);
+  backdrop-filter: blur(8px);
+}
+.sf-nav-brand { display: flex; align-items: center; gap: 0.55rem; text-decoration: none; }
+.sf-nav-logo { height: 34px; width: auto; border-radius: 8px; }
+.sf-nav-name {
+  font-size: 1.25rem; font-weight: 700; letter-spacing: 0.01em;
+  background: linear-gradient(135deg, #ff69b4, #b388ff);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.sf-nav-links { display: flex; align-items: center; gap: clamp(0.85rem, 2.5vw, 1.8rem); }
+.sf-nav-links a {
+  color: #cbb3d6; text-decoration: none; font-weight: 500; font-size: 0.92rem;
+  transition: color .2s;
+}
+.sf-nav-links a:hover { color: var(--pink); }
+.sf-nav-discord {
+  background: #5865F2; color: #fff !important;
+  padding: 0.42rem 1rem; border-radius: 999px; font-weight: 600 !important;
+  transition: background .2s, transform .2s, box-shadow .2s;
+}
+.sf-nav-discord:hover {
+  background: #4752c4; transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(88, 101, 242, 0.4);
+}
+
+/* Centres the card in the space left under the header */
+.sf-drop-inner {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 2rem 1.5rem;
+}
+
+.sf-drop-card {
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+  padding: 2.2rem 2rem;
+  border-radius: 24px;
+  background: rgba(20, 10, 28, 0.85);
+  border: 1px solid rgba(255, 105, 180, 0.35);
+  box-shadow: 0 0 60px rgba(255, 105, 180, 0.18);
+}
+.sf-eyebrow {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  margin-bottom: 1rem; padding: 0.4rem 0.95rem;
+  border-radius: 999px;
+  background: rgba(255, 105, 180, 0.1);
+  border: 1px solid rgba(255, 105, 180, 0.3);
+  color: var(--pink); font-size: 0.78rem; font-weight: 500; letter-spacing: 0.01em;
+}
+.sf-eyebrow-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--pink); animation: sfBlink 2s infinite;
+}
+@keyframes sfBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.sf-drop-card h1 {
+  margin: 0 0 0.4rem;
+  font-size: 2.4rem;
+  letter-spacing: 0.06em;
+  background: linear-gradient(135deg, #ff69b4, #b388ff);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.sf-tagline { margin: 0 0 0.9rem; color: #cbb3d6; font-size: 0.98rem; }
+.sf-pitch {
+  margin: 0 0 1.6rem; color: #a98cb8; font-size: 0.9rem; line-height: 1.6;
+}
+.sf-pitch strong { color: #e8d8ee; font-weight: 600; }
+.sf-nope a { color: var(--pink); }
+
+/* Cross-promo back to the full app, below the fold of the card */
+.sf-crosslink {
+  margin-top: 1.6rem; padding-top: 1.4rem;
+  border-top: 1px solid rgba(255, 105, 180, 0.15);
+}
+.sf-crosslink p {
+  margin: 0 0 0.9rem; color: #907a9e; font-size: 0.82rem; line-height: 1.6;
+}
+.sf-btn-ghost {
+  background: transparent;
+  border-color: rgba(255, 105, 180, 0.4);
+  color: #e8d8ee;
+  font-size: 0.86rem;
+  padding: 0.5rem 1.3rem;
+}
+.sf-btn-ghost:hover { background: rgba(255, 105, 180, 0.1); border-color: var(--pink); }
+
+.sf-dropzone {
+  border: 2px dashed rgba(255, 105, 180, 0.45);
+  border-radius: 18px;
+  padding: 1.4rem 1rem;
+  transition: border-color .2s, background .2s;
+}
+.sf-dropzone.is-over { border-color: var(--pink); background: rgba(255, 105, 180, 0.08); }
+.sf-dropzone-line { margin: 0 0 0.4rem; color: #e8d8ee; font-size: 0.92rem; }
+.sf-dropzone-or { margin: 0.2rem 0 0.7rem; color: #907a9e; font-size: 0.8rem; }
+.sf-pick-row { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+.sf-dropzone-hint { margin: 0.7rem 0 0; color: #7a6688; font-size: 0.72rem; }
+
+/* Zip ingest progress bar (hidden until an archive is being unpacked) */
+.sf-progress { margin-top: 0.9rem; }
+.sf-progress[hidden] { display: none; }
+.sf-progress-track {
+  height: 7px; border-radius: 999px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 105, 180, 0.25);
+}
+.sf-progress-fill {
+  display: block; width: 0%; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #d6479c, #8e50c9);
+  box-shadow: 0 0 12px rgba(214, 71, 156, 0.6);
+  transition: width 0.15s ease;
+}
+.sf-progress-label {
+  margin: 0.45rem 0 0; color: var(--pink); font-size: 0.76rem; font-weight: 600;
+}
+
+.sf-stats {
+  margin: 0.9rem 0 0;
+  color: var(--pink);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.sf-challenge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.3rem 0 0.4rem;
+  color: #cbb3d6;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+.sf-challenge input { accent-color: var(--pink); }
+
+.sf-btn {
+  font-family: var(--rh-font);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(30, 16, 40, 0.9);
+  border: 1px solid rgba(255, 105, 180, 0.55);
+  border-radius: 999px;
+  padding: 0.55rem 1.3rem;
+  cursor: pointer;
+  transition: border-color .2s, background .2s, transform .15s;
+}
+.sf-btn:hover { border-color: var(--pink); background: rgba(50, 22, 62, 0.95); transform: translateY(-1px); }
+.sf-btn-primary {
+  margin-top: 1rem;
+  font-size: 1.05rem;
+  padding: 0.7rem 2.2rem;
+  background: linear-gradient(135deg, #d6479c, #8e50c9);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 6px 24px rgba(214, 71, 156, 0.4);
+}
+.sf-btn-primary:hover { box-shadow: 0 8px 30px rgba(214, 71, 156, 0.6); }
+.sf-fineprint { margin: 1.1rem 0 0; color: #907a9e; font-size: 0.74rem; }
+
+/* ============================================================================
+ * Bubble Pop field - copied from explore-styles.css so the (copied) bubbles.js
+ * module finds its classes. Keep in sync with the source block if it changes.
+ * ==========================================================================*/
+
+.rh-bubbles-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none !important;
+  z-index: 0; /* below the HUD chrome, above the canvas */
+}
+.rh-bubble-wrap {
+  position: absolute;
+  bottom: 0;
+  pointer-events: none;
+  will-change: transform;
+  animation: rhBubbleRise var(--rise, 12s) linear forwards;
+}
+@keyframes rhBubbleRise {
+  from { transform: translateY(12vh); }
+  to { transform: translateY(-122vh); }
+}
+.rh-bubble {
+  pointer-events: auto;
+  touch-action: manipulation; /* iOS: no double-tap zoom when popping fast */
+  border-radius: 50%;
+  cursor: pointer;
+  will-change: transform;
+  animation: rhBubbleSway var(--sway-dur, 4s) ease-in-out infinite alternate;
+  background: center / contain no-repeat url('/assets/bubbles/bubble.png');
+  filter: drop-shadow(0 0 7px rgba(255, 120, 195, 0.5));
+}
+@keyframes rhBubbleSway {
+  from { transform: translateX(calc(var(--sway, 28px) * -0.5)); }
+  to { transform: translateX(calc(var(--sway, 28px) * 0.5)); }
+}
+.rh-bubble--flash { background-image: url('/assets/bubbles/effects/flash.png'); filter: drop-shadow(0 0 9px rgba(255, 240, 200, 0.75)); }
+.rh-bubble--subliminal { background-image: url('/assets/bubbles/effects/subliminal.png'); filter: drop-shadow(0 0 9px rgba(210, 130, 255, 0.75)); }
+.rh-bubble--spiral { background-image: url('/assets/bubbles/effects/spiral.png'); filter: drop-shadow(0 0 9px rgba(110, 225, 255, 0.75)); }
+.rh-bubble--glitch { background-image: url('/assets/bubbles/effects/glitch.png'); filter: drop-shadow(0 0 9px rgba(140, 255, 170, 0.75)); }
+.rh-bubble--braindrain { background-image: url('/assets/bubbles/effects/braindrain.png'); filter: drop-shadow(0 0 9px rgba(180, 150, 255, 0.75)); }
+.rh-bubble--prism { background-image: url('/assets/bubbles/effects/prism.png'); filter: drop-shadow(0 0 10px rgba(255, 200, 245, 0.8)); }
+.rh-bubble--pinkfilter { background-image: url('/assets/bubbles/effects/pinkfilter.png'); filter: drop-shadow(0 0 10px rgba(var(--fx-accent-rgb), 0.85)); }
+.rh-bubble--lucky { background-image: url('/assets/bubbles/effects/golden.png'); filter: drop-shadow(0 0 13px rgba(255, 210, 90, 0.95)); }
+.rh-bubble.is-pop { animation: rhBubblePop 0.3s ease-out forwards; }
+@keyframes rhBubblePop {
+  0% { transform: scale(1); opacity: 1; }
+  40% { transform: scale(1.55); opacity: 0.85; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+/* Full-screen, non-interactive layer for pop FX. */
+.rh-bubble-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none !important;
+  overflow: hidden;
+  z-index: 11;
+}
+
+.rh-xp-pop {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--rh-font);
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 105, 180, 0.9);
+  white-space: nowrap;
+  animation: rhXpFloat 0.95s ease-out forwards;
+}
+.rh-xp-combo { color: #ffd45e; font-size: 1.25rem; text-shadow: 0 0 12px rgba(255, 212, 94, 0.9); }
+.rh-xp-lucky { color: #ffe27a; font-size: 1.6rem; text-shadow: 0 0 18px rgba(255, 212, 94, 1); }
+@keyframes rhXpFloat {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.7); }
+  18% { opacity: 1; transform: translate(-50%, -55%) scale(1.08); }
+  100% { opacity: 0; transform: translate(-50%, -150%) scale(1); }
+}
+
+.rh-fx-spiralvid {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  object-fit: cover;
+  mix-blend-mode: screen;
+  opacity: 0;
+  animation: rhFade30 5s linear forwards;
+}
+/* phone spiral pop: a static spiral image spun on the compositor - the webm
+   overlay's decoder cold-start was a guaranteed pop-frame skip on mobile.
+   scale(2) keeps the cover-fit image over the corners while it rotates. */
+img.rh-fx-spiralspin {
+  animation: rhFade30 5s linear forwards, rhSpiralSpin 9s linear infinite;
+}
+@keyframes rhSpiralSpin {
+  from { transform: rotate(0deg) scale(2); }
+  to { transform: rotate(360deg) scale(2); }
+}
+.rh-fx-glitchvid {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  object-fit: cover;
+  filter: saturate(1.5) contrast(1.2) hue-rotate(8deg);
+  opacity: 0;
+  animation: rhFade30 5s linear forwards;
+}
+/* --gifop / --fxop are set per-element by bubbles.js from the options panel */
+@keyframes rhVidIn { from { opacity: 0; } to { opacity: var(--gifop, 0.95); } }
+@keyframes rhFade30 {
+  0% { opacity: 0; }
+  8% { opacity: var(--fxop, 0.3); }
+  86% { opacity: var(--fxop, 0.3); }
+  100% { opacity: 0; }
+}
+
+.rh-fx-flashclip {
+  position: absolute;
+  width: var(--w, 34vw);
+  max-width: 560px;
+  height: auto;
+  max-height: 62vh;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  touch-action: manipulation; /* iOS: no double-tap zoom when popping the hydra fast */
+  cursor: pointer;
+  /* cover, not contain: when max-height clamps a tall clip the element box stops
+     matching the video's aspect, and `contain` letterboxed it - leaving the
+     glowing frame drawn around empty transparent bands. cover fills the frame. */
+  object-fit: cover;
+  border-radius: 10px;
+  box-shadow: 0 0 34px rgba(255, 105, 180, 0.55), inset 0 0 0 2px rgba(255, 255, 255, 0.22);
+  opacity: 0;
+  animation: rhVidIn 0.2s ease-out forwards, rhFlashPulse 1.2s ease-in-out 0.2s infinite;
+}
+@keyframes rhFlashPulse {
+  0%, 100% { box-shadow: 0 0 26px rgba(var(--fx-accent-rgb), 0.5), inset 0 0 0 2px rgba(255, 255, 255, 0.18); }
+  50% { box-shadow: 0 0 48px rgba(var(--fx-accent-rgb), 0.9), inset 0 0 0 2px rgba(255, 255, 255, 0.35); }
+}
+.rh-sublim-word {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font-family: var(--rh-font);
+  font-weight: 900;
+  font-size: clamp(2.5rem, 9vw, 7rem);
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 0 24px rgba(var(--fx-accent-rgb), 0.9);
+  text-transform: uppercase;
+  white-space: nowrap;
+  animation: rhSublim 0.5s ease-out forwards;
+}
+@keyframes rhSublim {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.3); }
+  18% { opacity: 0.95; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+}
+
+.rh-fx-drain {
+  background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0) 22%, rgba(40, 10, 50, 0.95) 100%);
+  animation: rhFade30 5s linear forwards;
+}
+.rh-fx-prism {
+  background: conic-gradient(from 0deg,
+    rgba(255, 0, 128, 0.30), rgba(255, 200, 0, 0.30), rgba(0, 255, 170, 0.30),
+    rgba(0, 170, 255, 0.30), rgba(180, 0, 255, 0.30), rgba(255, 0, 128, 0.30));
+  mix-blend-mode: screen;
+  animation: rhPrism 0.9s ease-out forwards;
+}
+@keyframes rhPrism {
+  0% { opacity: 0; transform: scale(0.7) rotate(0deg); }
+  25% { opacity: 0.9; }
+  100% { opacity: 0; transform: scale(1.5) rotate(90deg); }
+}
+
+.rh-fx { position: absolute; inset: 0; pointer-events: none; }
+.rh-fx-flash {
+  background: rgba(var(--fx-accent-rgb), 1);
+  animation: rhFadePink 5s linear forwards;
+}
+@keyframes rhFadePink {
+  0% { opacity: 0; }
+  8% { opacity: var(--fxop, 0.25); }
+  86% { opacity: var(--fxop, 0.25); }
+  100% { opacity: 0; }
+}
+.rh-fx-spiral {
+  background: conic-gradient(from 0deg, rgba(var(--fx-spiral-rgb), 0) 0deg, rgba(var(--fx-spiral-rgb), 0.4) 60deg, rgba(var(--fx-accent-rgb), 0) 120deg, rgba(159, 216, 255, 0.4) 200deg, rgba(var(--fx-spiral-rgb), 0) 300deg);
+  mix-blend-mode: screen;
+  animation: rhFxSpiral 0.7s ease-out forwards;
+  transform-origin: 50% 55%;
+}
+@keyframes rhFxSpiral {
+  0% { opacity: 0; transform: rotate(0deg) scale(0.6); }
+  20% { opacity: 0.9; }
+  100% { opacity: 0; transform: rotate(320deg) scale(1.6); }
+}
+.rh-fx-glitch {
+  background:
+    repeating-linear-gradient(0deg, rgba(159, 216, 255, 0.12) 0 2px, rgba(0, 0, 0, 0) 2px 4px);
+  mix-blend-mode: screen;
+  animation: rhFxGlitch 0.42s steps(3) forwards;
+}
+@keyframes rhFxGlitch {
+  0% { opacity: 0; transform: translateX(0); }
+  25% { opacity: 1; transform: translateX(-6px); }
+  50% { opacity: 0.7; transform: translateX(5px); }
+  75% { opacity: 1; transform: translateX(-3px); }
+  100% { opacity: 0; transform: translateX(0); }
+}
+.rh-canvas-glitch { animation: rhCanvasGlitch 0.42s steps(2) 1; }
+@keyframes rhCanvasGlitch {
+  0% { filter: none; transform: translateX(0); }
+  30% { filter: hue-rotate(40deg) saturate(1.6); transform: translateX(-4px); }
+  60% { filter: hue-rotate(-30deg) saturate(1.4); transform: translateX(4px); }
+  100% { filter: none; transform: translateX(0); }
+}
+
+/* ESC pause: bubble field + fx freeze in place */
+.is-frozen, .is-frozen * { animation-play-state: paused !important; }
+
+/* Pause overlay (same card styling as the results screen) */
+.sf-pause {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 4, 14, 0.6);
+  backdrop-filter: blur(3px);
+  z-index: 20;
+}
+.sf-pause[hidden] { display: none; }
+
+/* ------------- Options panel (gear) ------------- */
+.sf-panel {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: min(340px, 92vw);
+  padding: 1.1rem 1.2rem 2rem;
+  overflow-y: auto;
+  background: rgba(16, 8, 24, 0.94);
+  border-left: 1px solid rgba(255, 105, 180, 0.35);
+  backdrop-filter: blur(10px);
+  transform: translateX(105%);
+  transition: transform 0.25s ease;
+  z-index: 30;
+}
+.sf-panel.is-open { transform: none; }
+.sf-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+.sf-panel-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: 0.05em;
+  background: linear-gradient(135deg, #ff69b4, #b388ff);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.sf-panel-close {
+  border: 0;
+  background: none;
+  color: #cbb3d6;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+.sf-panel-close:hover { color: #fff; }
+
+.sf-row { margin: 0.85rem 0; }
+.sf-row-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #cbb3d6;
+  margin-bottom: 0.25rem;
+}
+.sf-row-label span:last-child { color: var(--pink); font-weight: 600; }
+.sf-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--pink);
+  cursor: pointer;
+}
+
+.sf-words-head { margin-top: 1.2rem; }
+.sf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.sf-chip {
+  font-family: var(--rh-font);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #907a9e;
+  background: rgba(20, 12, 28, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 0.28rem 0.7rem;
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.sf-chip.is-on {
+  color: #fff;
+  border-color: rgba(255, 105, 180, 0.7);
+  background: rgba(255, 105, 180, 0.16);
+}
+.sf-chip:hover { border-color: var(--pink); }
+
+/* reset-to-default: top of the options list, right-aligned above the sliders */
+.sf-reset-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0.1rem 0 0.35rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sf-spiralzone {
+  border: 1.5px dashed rgba(255, 105, 180, 0.4);
+  border-radius: 12px;
+  padding: 0.8rem 0.7rem;
+  margin: 0.2rem 0 0.5rem;
+  text-align: center;
+  font-size: 0.78rem;
+  color: #a98cb8;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+}
+.sf-spiralzone.is-over,
+.sf-spiralzone:hover { border-color: var(--pink); background: rgba(255, 105, 180, 0.08); color: #e8d8ee; }
+
+/* diagnostics readout: the on-phone black box behind the gear panel */
+.sf-diag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.68rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #c9b6d6;
+  background: rgba(20, 12, 28, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  padding: 0.6rem 0.7rem;
+  margin: 0.2rem 0 0.5rem;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.sf-wordadd {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.sf-wordadd input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--rh-font);
+  font-size: 0.82rem;
+  color: #fff;
+  background: rgba(20, 12, 28, 0.8);
+  border: 1px solid rgba(255, 105, 180, 0.35);
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  outline: none;
+}
+.sf-wordadd input:focus { border-color: var(--pink); }
+.sf-wordadd .sf-btn { padding: 0.4rem 1rem; font-size: 0.82rem; }
+
+.sf-panel-done { display: block; margin: 1.4rem auto 0; }
+
+@media (max-width: 640px) {
+  /* backdrop-filter over an always-repainting WebGL canvas costs a compositor
+     blur pass EVERY frame on phones; the translucent backgrounds carry the
+     look on their own */
+  .sf-dock-btn, .sf-caret, .sf-audio-panel, .sf-theme-panel,
+  .sf-panel, .sf-results, .sf-pause, .sf-nav {
+    backdrop-filter: none;
+  }
+  /* bubble glow: drop-shadow puts every bubble through an offscreen filter
+     pass and fattens its compositor layer (bubbles scale up to 250% now);
+     the art reads fine bare at phone sizes. Same class specificity as the
+     per-kind rules above - this later rule wins. */
+  .rh-bubble { filter: none; }
+  /* flash clips: the infinite box-shadow pulse repaints the layer every frame
+     (box-shadow never animates on the compositor); keep the static glow */
+  .rh-fx-flashclip {
+    animation: rhVidIn 0.2s ease-out forwards;
+    box-shadow: 0 0 26px rgba(var(--fx-accent-rgb), 0.5), inset 0 0 0 2px rgba(255, 255, 255, 0.22);
+  }
+  .sf-drop-card { padding: 1.6rem 1.2rem; }
+  .sf-score { font-size: 1.1rem; }
+  .sf-meters { font-size: 0.85rem; }
+  .sf-drop-inner { padding: 1.25rem 1rem; }
+  .sf-nav { padding: 0.75rem 1rem; }
+  .sf-nav-name { display: none; }
+  .sf-nav-links { gap: 0.9rem; }
+  /* keep the header uncluttered on phones: drop the deep links, keep the app + Discord */
+  .sf-nav-links a:nth-child(2), .sf-nav-links a:nth-child(3) { display: none; }
+}

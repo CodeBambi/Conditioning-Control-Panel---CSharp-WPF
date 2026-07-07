@@ -54,6 +54,10 @@ internal sealed class ChaosWebViewHost : IDisposable
 
         /// <summary>Serilog-ish tag used in log lines, e.g. "DtrhHost".</summary>
         public string LogTag { get; init; } = "ChaosWebViewHost";
+
+        /// <summary>Extra Chromium args appended to the shared anti-MPO/occlusion set
+        /// (e.g. "--autoplay-policy=no-user-gesture-required" for the game's audio bed).</summary>
+        public string? ExtraBrowserArguments { get; init; }
     }
 
     private readonly Options _opts;
@@ -150,11 +154,10 @@ internal sealed class ChaosWebViewHost : IDisposable
             // through DWM (the app's established anti-MPO flag). CalculateNativeWinOcclusion:
             // native payload windows stack over the page; Chromium's occlusion tracker would
             // decide the page is covered and throttle rAF — turn it off.
-            var options = new CoreWebView2EnvironmentOptions
-            {
-                AdditionalBrowserArguments =
-                    "--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion"
-            };
+            var args = "--disable-direct-composition-video-overlays --disable-features=CalculateNativeWinOcclusion";
+            if (!string.IsNullOrWhiteSpace(_opts.ExtraBrowserArguments))
+                args += " " + _opts.ExtraBrowserArguments;
+            var options = new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = args };
             var env = await CoreWebView2Environment
                 .CreateAsync(browserExecutableFolder: null, userDataFolder: userDataFolder, options: options)
                 .ConfigureAwait(true);
