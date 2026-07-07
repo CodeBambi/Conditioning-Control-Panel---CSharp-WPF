@@ -1,0 +1,19 @@
+<!doctype html>
+<!-- M0 spike page for the DtRH browser-game port. Throwaway: verifies the virtual-host
+     pipeline (Range-seek, CORS->WebGL) and the input-receiving window before M1 builds
+     the real app here. Driven by Services/Chaos/DtrhSpike.cs. -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>DtRH M0 spike</title>
+<style>
+  html, body { margin:0; height:100%; background:#0b0b16; color:#ff9ad5; font:14px/1.5 Consolas, monospace; }
+  #log { padding:24px; white-space:pre-wrap; }
+  .ok { color:#7dff9a; } .fail { color:#ff5d5d; }
+</style>
+</head>
+<body>
+<div id="log">DtRH M0 spike booting…\n</div>
+<script type="module" src="./spike.js"></script>
+</body>
+</html>

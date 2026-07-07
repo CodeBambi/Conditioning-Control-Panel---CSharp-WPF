@@ -1662,6 +1662,13 @@ namespace ConditioningControlPanel
             if (e.Args.Contains("--stress"))
                 StartHangStressMode();
 
+            // DtRH browser-game port, M0 spike (`--dtrh-spike`): verifies the WebView2 virtual-host
+            // pipeline (Range-seek, CORS->WebGL, payload z-order/focus) against the user's real
+            // assets folder, writes logs/dtrh-spike.json, then shuts the app down. Throwaway harness
+            // — dead code in every normal launch.
+            if (e.Args.Contains("--dtrh-spike"))
+                Services.Chaos.DtrhSpike.Run();
+
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
             // for Takeover to start. No-op unless consent is given and the speech engine is available.
