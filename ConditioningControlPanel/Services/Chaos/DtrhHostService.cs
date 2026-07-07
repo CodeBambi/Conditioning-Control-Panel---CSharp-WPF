@@ -753,6 +753,7 @@ internal static class DtrhHostService
                     rabbitRateMult = state.RabbitRateMult,
                     intrusiveThoughtsSec = state.IntrusiveThoughtsSec,
                     slowMoBonusSec = state.SlowMoBonusSec,
+                    moodRingLevel = state.MoodRingLevel,
                     bubbleScale = state.BubbleScale,
                     chainReactionReach = state.ChainReactionReach,
                     cursorPullStrength = state.CursorPullStrength,

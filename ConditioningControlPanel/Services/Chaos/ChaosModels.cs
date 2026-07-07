@@ -660,6 +660,10 @@ public sealed class ChaosRunState : INotifyPropertyChanged
     public double RippleRadiusPx = ChaosTuning.RIPPLE_RADIUS_PX;
     /// <summary>Ripple expansion time in ms (Skipping Stone slows it per level — wider AND longer).</summary>
     public double RippleLifeMs = ChaosTuning.RIPPLE_LIFE_MS;
+    /// <summary>Mood Ring (Wave 2, browser game only): 0 = unworn; 1 forecast the next
+    /// weather, 2 weather effects x1.5, 3 one weather reroll per descent. The WPF game
+    /// has no weather system — the knob just rides the loadout snapshot to JS.</summary>
+    public int MoodRingLevel;
 
     // ---- run-boon (mantra/sin) knobs — the 2026-06-11 visible pool ----
     /// <summary>Gold Digger: golden bubbles burst into 3 falling gold droplets on pop.</summary>

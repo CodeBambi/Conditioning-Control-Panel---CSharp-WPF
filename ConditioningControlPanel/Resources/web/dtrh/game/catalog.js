@@ -226,6 +226,12 @@ export const LIFETIME_BOONS = [
     flavor: 'borrowed from the white rabbit. he knows where you live.',
     unlockCost: 150, upgradeCosts: [], levelValues: [1],
     value: () => 'on' },
+  { id: 'mood_ring', cat: 'utility', rankFloor: RANK.Tempted, name: 'Mood Ring', glyph: '💍', webOnly: true,
+    desc: 'the sky down there changes every loop. level 1 forecasts the next weather on the HUD; level 2 makes every weather effect hit x1.5; level 3 lets you click the sky to reroll it, once per descent.',
+    flavor: 'she always knows what you\'re in the mood for.',
+    unlockCost: 200, upgradeCosts: [300, 450], levelValues: [1, 2, 3],
+    value: (v) => v >= 3 ? 'forecast + x1.5 + reroll' : v >= 2 ? 'forecast + x1.5' : 'forecast',
+    capstone: 'click the sky — she changes her mind, once per descent.' },
   { id: 'skipping_stone', cat: 'utility', rankFloor: RANK.Entranced, name: 'Skipping Stone', glyph: '🪨',
     desc: 'your ripple gathers in 13/11/9/8 seconds by level (15 bare-handed), and each level sends a wider, slower wave.',
     flavor: 'flat stone, still water. she taught you the wrist for it.',
@@ -370,6 +376,17 @@ export const DIARY_CODEX = [
     desc: 'Two of them, one thread. Each costs half a hold — but the second must come down quick, or the one left waiting turns furious: half the trance, half again the speed.' },
   { codex: 'bubble:brittle', name: 'The Brittle', glyph: '◇', tint: '217,239,255',
     desc: 'Thin glass with something live sealed inside. Your cursor brushing it is enough — it shatters, and whatever it held fires. Toys slide around it; a frozen field is safe to cross. Steer wide.' },
+  // ---- the weather (Wave 2): one sky per loop, worn by the tunnel itself ----
+  { codex: 'weather:stillness', name: 'Stillness', glyph: '🕯', tint: '255,214,236',
+    desc: 'Weather. The deep holds its breath — trances burn 10% slower under it.' },
+  { codex: 'weather:perfume', name: 'Her Perfume', glyph: '🌸', tint: '255,143,206',
+    desc: 'Weather. The fog turns sweet and pink — lust climbs 25% faster and every pop pays +10%.' },
+  { codex: 'weather:static', name: 'Static', glyph: '⚡', tint: '217,160,255',
+    desc: 'Weather. Stray current cracks through the tube — every few seconds a bolt pops a treat FOR you. One bolt in ten bites a live fuse down to half instead.' },
+  { codex: 'weather:foolsgold', name: 'Fool\'s Gold', glyph: '✨', tint: '255,215,0',
+    desc: 'Weather. Everything glitters — lucky bubbles drift in noticeably more often.' },
+  { codex: 'weather:overstim', name: 'Overstim', glyph: '💉', tint: '255,47,158',
+    desc: 'Weather. Too bright, too fast — the fall runs 15% hotter and bubbles surface 10% faster.' },
 ];
 
 // ============================ run setup (pool + presets) ============================

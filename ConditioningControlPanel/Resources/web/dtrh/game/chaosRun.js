@@ -38,6 +38,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildHeart, build
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById } from './boons.js';
+import { WEATHER_BY_ID, rollWeather } from './weather.js';
 import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
 import { createChaosHud } from './chaosHud.js';
@@ -154,6 +155,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       // ---- loadout knobs (pre-applied by C# ChaosMeta.ApplyLifetimeBoons) ----
       baseMult: cfg.baseMult,
       fuseTimeMult: lo.fuseTimeMult ?? rc.fuseTimeMult ?? 1.0,
+      fuseTimeMultBase: lo.fuseTimeMult ?? rc.fuseTimeMult ?? 1.0, // weather re-derives fuseTimeMult from this
       benignBaseline: lo.benignBaseline ?? 0.4,
       blindfoldPayMult: lo.blindfoldPayMult ?? 1.0,
       lastBreathWindowSec: lo.lastBreathWindowSec ?? 0,
@@ -162,7 +164,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       rerollsLeft: lo.rerollsLeft ?? 0,
       sinExtraMult: lo.sinExtraMult ?? 0,
       goldenChance: lo.goldenChance ?? 0.005,
+      goldenChanceBase: lo.goldenChance ?? 0.005, // weather re-derives goldenChance from this
       goldenPay: lo.goldenPayRange || [10, 20],
+      moodRingLevel: lo.moodRingLevel ?? 0,       // 💍 forecast / x1.5 weather / reroll
       dropPerPop: lo.dropPerPop ?? 0,
       dripFeedCap: lo.dripFeedCap ?? 0,
       trickleDrops: 0,
@@ -189,6 +193,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       detonationDurationMult: 1.0, lastSecondGold: false,
       prismChance: 0, prismTreatOnly: false,
       camGirlFlee: 0, camGirlTipChance: 0,
+      stormChaser: false,      // the sky locks to Static + detonations arc
       activesDisabled: false,
       relapseArmed: false, relapseActive: false,
       surrenderShieldUsed: false,
@@ -198,7 +203,22 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   }
   const comboMult = () => Math.min(1.0 + st.combo * 0.08, 6.0);
   const heatMult = () => 1.0 + st.heat;
-  const totalMult = () => st.baseMult * comboMult() * cfg.difficultyMult * heatMult() * st.boonMult * st.urgeMult;
+  const totalMult = () => st.baseMult * comboMult() * cfg.difficultyMult * heatMult() * st.boonMult * st.urgeMult * wxPay();
+
+  // ---- Wave 2 weather math (weather.js) ----
+  // Mood Ring L2 amplifies every weather effect x1.5 (bonus part only).
+  const wxAmp = () => (st && st.moodRingLevel >= 2 ? 1.5 : 1.0);
+  const wxMult = (v) => (weatherNow && v ? 1 + (v - 1) * wxAmp() : 1);
+  const wxPay = () => wxMult(weatherNow && weatherNow.payMult);
+  const wxHeatGain = () => wxMult(weatherNow && weatherNow.heatGain);
+  const wxFuse = () => wxMult(weatherNow && weatherNow.fuseMult);
+  const wxSpeed = () => wxMult(weatherNow && weatherNow.speedMult);
+  const wxSpawnRate = () => wxMult(weatherNow && weatherNow.spawnRate);
+  const wxGolden = () => (weatherNow && weatherNow.goldenBonus ? weatherNow.goldenBonus * wxAmp() : 0);
+  /** The run's resting time factor (freeze/slow-mo restore to THIS, not 1). */
+  const baseTime = () => wxSpeed();
+  /** All LUST gains flow through here so Her Perfume can sweeten them. */
+  const addHeat = (x) => { st.heat = Math.min(1.0, st.heat + x * wxHeatGain()); };
   const basePoints = (strength) => 40 + strength * 1.6;
   const intensity = () => clamp(st ? st.elapsedSec / st.runDurationSec : 0, 0, 1);
   const chanceFlip = () => st.chanceDoubleOdds > 0 ? (Math.random() < st.chanceDoubleOdds ? 2.0 : 0.5) : 1.0;
@@ -228,6 +248,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   let lustFullSeen = false;  // Lust Bleed: pink-fog hold while the bar stays high
   let weatherZone = null;    // W3 weather: the zone held for the current loop
   let comboWarp = 0;         // Heat Warp: latest combo-driven warp 0..1
+  let weatherNow = null;     // the loop's rolled weather (weather.js record)
+  let weatherNext = null;    // pre-rolled for the Mood Ring's forecast
+  let weatherRerollUsed = false; // Mood Ring L3: one reroll per descent
+  let staticBoltIn = 0;      // Static weather: seconds until the next bolt
+  const weatherSeen = new Set(); // per-run: which skies already explained themselves
 
   // ---- bridge helpers ----
   const sfx = (name, scale) => bridge.send({ type: 'sfx', name, scale });
@@ -406,6 +431,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     ctx.director.killBoost();
     // Heat Warp: a big streak dying while the tube runs hot cracks real lightning
     if (comboWarp >= 0.6 || comboBefore >= 15) ctx.fx.strikeNow();
+    // Storm Chaser: your detonations arc into the field (Body Buzz's reach)
+    if (st.stormChaser) {
+      field.dischargeAt(x, y, { maxTargets: 4, reach: 440 });
+      ctx.fx.strikeNow();
+      sfx('estim_zap', 0.5);
+    }
     hudUi.toast(`💥 ${NAME_OF[spec.variantId] || spec.variantId} triggered!`);
     hudUi.flashShields();
     bark('detonated', { variant: spec.variantId, strength: spec.strength, runDetonations: st.runDetonations, combo: comboBefore, difficulty: diff });
@@ -457,7 +488,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       st.effectsFired++;
       st.combo++;
       if (st.combo > st.bestCombo) st.bestCombo = st.combo;
-      st.heat = Math.min(1.0, st.heat + 0.05);
+      addHeat(0.05);
       const prismPts = basePoints(spec.strength) * 10.0 * totalMult() * st.blindfoldPayMult;
       st.score += prismPts;
       showPopScore(prismPts, x, y);
@@ -480,7 +511,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     const focusGain = spec.payMult > 1 ? FOCUS_PER_HEAVY : FOCUS_PER_POP;
     st.focus = clamp(st.focus + focusGain, 0, FOCUS_MAX);
     if (focusWasLow) field.floatText(`+${focusGain} FOCUS`, x, y + 34, 'cf-pop--focus');
-    st.heat = Math.min(1.0, st.heat + 0.04);
+    addHeat(0.04);
     const pts = basePoints(spec.strength) * st.benignBaseline * spec.payMult
       * pendulumFactor() * chanceFlip() * totalMult() * st.blindfoldPayMult;
     st.score += pts;
@@ -546,7 +577,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     st.defused++;
     st.combo++;
     if (st.combo > st.bestCombo) st.bestCombo = st.combo;
-    st.heat = Math.min(1.0, st.heat + 0.07);
+    addHeat(0.07);
     const lastBreath = st.lastBreathWindowSec > 0 && fuseSecLeft <= st.lastBreathWindowSec
       ? st.lastBreathPayMult : 1.0;
     const slowburn = fuseSecLeft <= 1.5 && st.maxedBoons.has('slowburner') ? 3.0 : 1.0;
@@ -590,7 +621,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     st.focus = clamp(st.focus + FOCUS_PER_RABBIT, 0, FOCUS_MAX);
     st.combo++;
     if (st.combo > st.bestCombo) st.bestCombo = st.combo;
-    st.heat = Math.min(1.0, st.heat + 0.05);
+    addHeat(0.05);
     // Chained catches top the window up by +0.8s instead of re-arming it.
     const extended = st.slowMoRemainingSec > 0;
     if (extended) { st.slowMoRemainingSec += 0.8; pendulumSlowActive = false; }
@@ -608,7 +639,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     st.score += FREEZE_BASE_POINTS * totalMult();
     st.combo++;
     if (st.combo > st.bestCombo) st.bestCombo = st.combo;
-    st.heat = Math.min(1.0, st.heat + 0.05);
+    addHeat(0.05);
     activateFreeze();
     bark('freeze-caught', { points: Math.round(FREEZE_BASE_POINTS * totalMult()), combo: st.combo });
     checkComboMilestone();
@@ -734,7 +765,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     st.slowMoRemainingSec = 0;
     pendulumSlowActive = false;
     field.setTimeScale(1.0);
-    if (st.freezeRemainingSec <= 0 && state === 'running') ctx.director.setTimeFactor(1);
+    if (st.freezeRemainingSec <= 0 && state === 'running') ctx.director.setTimeFactor(baseTime());
     if (slowMoCueOn) sfx('time_slow_out', 0.45);
     slowMoCueOn = false;
   }
@@ -752,7 +783,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   function endFreeze() {
     st.freezeRemainingSec = 0;
     field.setFrozen(false);
-    if (state === 'running') ctx.director.setTimeFactor(st.slowMoRemainingSec > 0 ? 0.35 : 1);
+    if (state === 'running') ctx.director.setTimeFactor(st.slowMoRemainingSec > 0 ? 0.35 : baseTime());
     if (freezeCueOn) sfx('freeze_shatter', 0.5);
     freezeCueOn = false;
   }
@@ -935,12 +966,73 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   /** Reset every tunnel-reactivity verb (run end / fresh run / back to hub). */
   function clearAmbient() {
     tiltSins = 0; lustFullSeen = false; weatherZone = null; comboWarp = 0;
+    weatherNow = null; weatherNext = null; weatherRerollUsed = false; staticBoltIn = 0;
+    weatherSeen.clear();
+    if (hudUi) hudUi.setWeather(null);
     if (!ctx) return;
     ctx.nav.setRollOffset(0);
     ctx.fx.setTint(null);
     ctx.fx.setDensity(null);
     ctx.fx.setRushOverride(0);
     ctx.fx.forceZone(null);
+  }
+
+  // ---- Wave 2: THE WEATHER (weather.js data; one sky per loop) --------------
+  function updateWeatherHud() {
+    if (!hudUi) return;
+    if (!weatherNow) { hudUi.setWeather(null); return; }
+    hudUi.setWeather({
+      glyph: weatherNow.glyph,
+      name: weatherNow.name,
+      desc: weatherNow.desc,
+      forecast: (st.moodRingLevel >= 1 && weatherNext && !st.stormChaser)
+        ? `${weatherNext.glyph} ${weatherNext.name}` : null,
+      rerollable: st.moodRingLevel >= 3 && !weatherRerollUsed && !st.stormChaser && state === 'running',
+    });
+  }
+
+  /** Make w the loop's sky: force the matching tunnel zone, re-derive the
+   * weather-touched knobs, announce a debut. */
+  function applyWeather(w, announceIt = true) {
+    weatherNow = w;
+    staticBoltIn = w && w.boltEverySec ? 2.5 : 0;
+    st.fuseTimeMult = st.fuseTimeMultBase * wxFuse();
+    st.goldenChance = st.goldenChanceBase + wxGolden();
+    weatherZone = w ? w.zone : null;
+    syncZone();
+    if (state === 'running' && st.freezeRemainingSec <= 0 && st.slowMoRemainingSec <= 0) {
+      ctx.director.setTimeFactor(baseTime());
+    }
+    updateWeatherHud();
+    if (w && announceIt) {
+      hudUi.announce(`${w.glyph} ${w.name}`, 'depth', 2000);
+      if (!weatherSeen.has(w.id)) {
+        weatherSeen.add(w.id);
+        hudUi.toast(`${w.glyph} ${w.desc}`);
+      }
+      markDiscovered('weather:' + w.id);
+    }
+  }
+
+  /** Advance the sky at a loop boundary (Storm Chaser holds it at Static). */
+  function advanceWeather() {
+    if (st.stormChaser) {
+      applyWeather(WEATHER_BY_ID.static, !weatherNow || weatherNow.id !== 'static');
+      return;
+    }
+    const w = weatherNext || rollWeather(weatherNow && weatherNow.id);
+    weatherNext = rollWeather(w.id);
+    applyWeather(w);
+  }
+
+  /** Mood Ring L3: the HUD chip rerolls the current sky, once per descent. */
+  function rerollWeather() {
+    if (!st || state !== 'running' || !weatherNow) return;
+    if (st.moodRingLevel < 3 || weatherRerollUsed || st.stormChaser) return;
+    weatherRerollUsed = true;
+    sfx('boon_pick', 0.4);
+    hudUi.toast('💍 she changes her mind');
+    applyWeather(rollWeather(weatherNow.id));
   }
 
   /** Per-RunTick: Lust Bleed (the tube blushes with the LUST bar; a held full
@@ -964,6 +1056,22 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     st.elapsedSec += dt;
     st.heat = Math.max(0, st.heat - 0.0015);
     ambientTick();
+
+    // Static weather: stray current pops a treat FOR you every few seconds;
+    // one bolt in ten bites a live fuse down to half instead.
+    if (weatherNow && weatherNow.boltEverySec && st.freezeRemainingSec <= 0) {
+      staticBoltIn -= dt;
+      if (staticBoltIn <= 0) {
+        staticBoltIn = (weatherNow.boltEverySec * (0.7 + Math.random() * 0.6)) / wxAmp();
+        const bite = Math.random() < 0.10;
+        const hit = field.stormStrike(bite);
+        if (hit) {
+          ctx.fx.strikeNow();
+          sfx('estim_zap', 0.35);
+          if (hit.kind === 'life') hudUi.toast('⚡ static bit a fuse — it burns faster now');
+        }
+      }
+    }
 
     if (st.slowMoRemainingSec > 0) {
       st.slowMoRemainingSec -= dt;
@@ -1225,8 +1333,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     } else {
       sfx('tunnel_zone', 0.5);
     }
-    // P1: zone-shift wave transition - a fresh tunnel mood rolls in ahead.
-    ctx.fx.seedZoneAhead(intensity());
+    // Wave 2: THE WEATHER - a named sky rolls in with every loop (it forces
+    // the matching tunnel zone, so the old seedZoneAhead ride is subsumed).
+    advanceWeather();
     ctx.fx.pulseFlash(0.6);
     pulse('150,200,255', 0.30);
     if (!cfg.boonDraftEnabled) announceFinalLoopIfEntering();
@@ -1411,6 +1520,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     // Refill cadence: 1000ms early -> 320ms late (/difficulty), floor 280ms.
     let interval = (1000 - i * 680) / cfg.difficultyMult;
     interval /= cfg.spawnRateMult;
+    interval /= wxSpawnRate();   // Overstim weather: bubbles come faster
     if (st.slowMoRemainingSec > 0) interval /= SLOWMO_FACTOR;   // slow-mo stretches the cadence
     spawnWait = Math.max(280, interval) / 1000;
   }
@@ -1558,6 +1668,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     heartbeatCd = 0;
     scriptedDraftActive = false;
     clearAmbient();
+    weatherNext = rollWeather(null);   // loop 1 flies under an open sky; the weather lands with loop 2
     // A live run owns the stage: no approach-promoted spotlight video may
     // hijack it mid-descent (Private Show is the only sanctioned takeover).
     if (ctx.spawner) {
@@ -1693,7 +1804,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
         onDarterCaught, onTeaseTouched, onTeaseDenied, onBrittleShattered, onBoundEnraged,
         onRabbitSmacked: (first) => lessons.onRabbitSmacked(first),
       });
-      hudUi = createChaosHud(ctx.hud, { onToyUse: (id) => { const t = toys.find((x) => x.id === id); if (t) useToy(t); } });
+      hudUi = createChaosHud(ctx.hud, {
+      onToyUse: (id) => { const t = toys.find((x) => x.id === id); if (t) useToy(t); },
+      onWeatherClick: () => rerollWeather(),
+    });
       overlays = createOverlays(ctx.hud);
       lessons = createLessonTracker({ bridge, onComplete: onLessonComplete, onFirstTime: onFirstTimeAwarded });
       lessons.setCoveredProbe(() => covered || heavyActive());

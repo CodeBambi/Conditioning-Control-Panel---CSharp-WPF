@@ -50,6 +50,10 @@ export const BOONS = [
     desc: 'the pendulum swings once per loop. pops during its 2.5s slow swing pay x3.',
     flavor: 'watch the watch. everything else can wait.',
     apply: (s) => { s.pendulumPayMult = 3.0; } },
+  { id: 'storm_chaser', name: 'Storm Chaser', rarity: 'Uncommon', curse: false, mult: 0.0, unique: true,
+    desc: 'the weather locks to STATIC for the rest of the descent, and every detonation arcs lightning into up to 4 bubbles within 440px.',
+    flavor: 'you taste the metal before it hits.',
+    apply: (s) => { s.stormChaser = true; } },
 
   // ---- synergy duos: only drafted when the partner is equipped (gold frame) ----
   { id: 'overload', name: 'Overload', rarity: 'Rare', curse: false, mult: 0.0, unique: true,

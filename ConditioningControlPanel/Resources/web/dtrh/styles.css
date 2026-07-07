@@ -1147,6 +1147,20 @@ img.rh-fx-spiralspin {
 .cf-focus-bar.cf-focus-flash { animation: cfFocusFlash 0.5s ease-out; }
 @keyframes cfFocusFlash { 0%, 60% { box-shadow: 0 0 0 2px #ff5468, 0 0 14px #ff5468; } }
 .cf-hud-clock { font-size: 0.85rem; opacity: 0.9; }
+/* Wave 2: the weather chip - the loop's named sky (+ Mood Ring forecast) */
+.cf-hud-weather {
+  align-self: flex-start;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 9px;
+  border-radius: 10px;
+  background: rgba(255, 105, 180, 0.14);
+  box-shadow: 0 0 0 1px rgba(255, 154, 214, 0.35);
+  color: #ffd3ea;
+}
+.cf-hud-weather.is-reroll { pointer-events: auto; cursor: pointer; }
+.cf-hud-weather.is-reroll:hover { background: rgba(255, 105, 180, 0.3); }
 .cf-hud-ripple { font-size: 0.8rem; opacity: 0.75; }
 .cf-hud-ripple.is-ready { opacity: 1; color: #9deaff; }
 

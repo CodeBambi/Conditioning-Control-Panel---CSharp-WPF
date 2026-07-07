@@ -13,7 +13,7 @@
 const DEFUSE_COST = 30; // FOCUS bar low-threshold (ChaosTuning.DEFUSE_COST)
 const ART = 'https://ccp.art/';
 
-export function createChaosHud(hud, { onToyUse } = {}) {
+export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
   const root = document.createElement('div');
   root.className = 'cf-hud';
   hud.appendChild(root);
@@ -60,6 +60,12 @@ export function createChaosHud(hud, { onToyUse } = {}) {
   heatRow.append(heatLabel, heatBar);
 
   const clockRow = mk('cf-hud-clock');
+
+  // ---- the weather chip (Wave 2): named sky + Mood Ring forecast/reroll ----
+  const weatherRow = mk('cf-hud-weather');
+  weatherRow.style.display = 'none';
+  weatherRow.addEventListener('click', () => { if (onWeatherClick) onWeatherClick(); });
+
   const rippleRow = mk('cf-hud-ripple');
 
   // ---- the run-pick ribbon (drafted mantras/sins, in pick order) ----
@@ -207,6 +213,20 @@ export function createChaosHud(hud, { onToyUse } = {}) {
       clockRow.textContent = `${fmtClock(st.elapsedSec)} / ${fmtClock(st.runDurationSec)} · LOOP ${st.waveIndex}/${st.waveCount}`;
       rippleRow.textContent = st.rippleCooldown <= 0 ? '🌊 ripple READY · right-click' : `🌊 ${Math.ceil(st.rippleCooldown)}s`;
       rippleRow.classList.toggle('is-ready', st.rippleCooldown <= 0);
+    },
+    /** Wave 2: show/hide the weather chip. wx = { glyph, name, desc,
+     * forecast: 'glyph NAME' | null, rerollable: bool } or null to hide. */
+    setWeather(wx) {
+      if (!wx) {
+        weatherRow.style.display = 'none';
+        weatherRow.classList.remove('is-reroll');
+        return;
+      }
+      weatherRow.style.display = '';
+      weatherRow.textContent = `${wx.glyph} ${wx.name}` + (wx.forecast ? ` → ${wx.forecast}` : '');
+      weatherRow.title = (wx.desc || '')
+        + (wx.rerollable ? '\n💍 click: she changes her mind (once per descent)' : '');
+      weatherRow.classList.toggle('is-reroll', !!wx.rerollable);
     },
     flashFocus() {
       focusBar.classList.remove('cf-focus-flash');

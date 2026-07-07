@@ -980,5 +980,24 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       }
       return min;
     },
+    /** Wave 2 (Static weather): a stray bolt pops a random treat FOR the
+     * player - or, the sour case, zaps a random live fuse down to half.
+     * Returns { x, y, kind } for the 3D strike mirror, or null (nothing hit). */
+    stormStrike(zapLife) {
+      if (zapLife) {
+        const lives = [...live].filter((b) => b.spec.kind === 'live' && b.fuseLeft > 2000);
+        if (!lives.length) return null;
+        const b = lives[(Math.random() * lives.length) | 0];
+        b.fuseLeft *= 0.5;
+        floatText('ZAP', b.x, b.y - b.size * 0.2, 'cf-pop--bad');
+        return { x: b.x, y: b.y, kind: 'life' };
+      }
+      const treats = [...live].filter((b) => b.spec.kind === 'treat');
+      if (!treats.length) return null;
+      const b = treats[(Math.random() * treats.length) | 0];
+      const bx = b.x, by = b.y;
+      popBenign(b, bx, by, 'storm');
+      return { x: bx, y: by, kind: 'treat' };
+    },
   };
 }
