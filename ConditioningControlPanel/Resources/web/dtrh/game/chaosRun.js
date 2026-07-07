@@ -223,6 +223,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   const discovered = new Set();
   let toys = [];
 
+  // ---- Wave 2: tunnel reactivity state ----
+  let tiltSins = 0;          // The Tilt: unshielded sins accepted this run (max 3)
+  let lustFullSeen = false;  // Lust Bleed: pink-fog hold while the bar stays high
+  let weatherZone = null;    // W3 weather: the zone held for the current loop
+  let comboWarp = 0;         // Heat Warp: latest combo-driven warp 0..1
+
   // ---- bridge helpers ----
   const sfx = (name, scale) => bridge.send({ type: 'sfx', name, scale });
   const bark = (event, data) => bridge.send({ type: 'bark', event, ...(data || {}) });
@@ -398,6 +404,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     // P1: the fall STUMBLES - FOV punch + the speed boost dies on the spot.
     ctx.nav.fovKick(3 + s * 2.5);
     ctx.director.killBoost();
+    // Heat Warp: a big streak dying while the tube runs hot cracks real lightning
+    if (comboWarp >= 0.6 || comboBefore >= 15) ctx.fx.strikeNow();
     hudUi.toast(`💥 ${NAME_OF[spec.variantId] || spec.variantId} triggered!`);
     hudUi.flashShields();
     bark('detonated', { variant: spec.variantId, strength: spec.strength, runDetonations: st.runDetonations, combo: comboBefore, difficulty: diff });
@@ -489,6 +497,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
         estimCharges--;
         sfx('estim_zap', 0.6);
         pulse('156,92,255', 0.25);
+        ctx.fx.strikeNow(); // Chain Mirror: the tunnel feels the current too
         hudUi.toast(estimCharges > 0 ? `⚡ the current arcs (${estimCharges} left)` : '⚡ the charge is spent');
       }
     }
@@ -496,12 +505,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     if (st.electrifiedRabbits && src === 'sweep') {
       field.dischargeAt(x, y, { maxTargets: 3, reach: 620 });
       sfx('estim_zap', 0.45);
+      ctx.fx.strikeNow();
     }
     // Body Buzz: one pop in eight detonates an electric shockwave.
     if (st.estimShockwaveChance > 0 && Math.random() < st.estimShockwaveChance) {
       field.dischargeAt(x, y, { maxTargets: 8, reach: 440 });
       sfx('estim_zap', 0.5);
       pulse('122,224,255', 0.25);
+      ctx.fx.strikeNow();
       hudUi.toast('⚡ body buzz — the current spreads');
     }
     // GG make more GG: sometimes a popped treat bursts into 3 wild sweeper rabbits.
@@ -913,11 +924,46 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     if (changed || toys.length) hudUi.updateToys(toys, toyStatus());
   }
 
+  // ============================ Wave 2: the tunnel reacts ============================
+
+  /** One holder of fx.forceZone: a full LUST bar outranks the loop's weather. */
+  function syncZone() {
+    if (!ctx) return;
+    ctx.fx.forceZone(lustFullSeen ? 'pinkfog' : weatherZone);
+  }
+
+  /** Reset every tunnel-reactivity verb (run end / fresh run / back to hub). */
+  function clearAmbient() {
+    tiltSins = 0; lustFullSeen = false; weatherZone = null; comboWarp = 0;
+    if (!ctx) return;
+    ctx.nav.setRollOffset(0);
+    ctx.fx.setTint(null);
+    ctx.fx.setDensity(null);
+    ctx.fx.setRushOverride(0);
+    ctx.fx.forceZone(null);
+  }
+
+  /** Per-RunTick: Lust Bleed (the tube blushes with the LUST bar; a held full
+   * bar forces pink fog) + Heat Warp (the combo streak re-patterns the rings
+   * and burns the speed-lines hotter). Engine-side easing smooths all of it. */
+  function ambientTick() {
+    ctx.fx.setTint('#ff4fae', st.heat * 0.6);
+    if (!lustFullSeen && st.heat >= 0.98) { lustFullSeen = true; syncZone(); }
+    else if (lustFullSeen && st.heat < 0.5) { lustFullSeen = false; syncZone(); }
+    // 25-streak = fully warped (engine defaults: 125 rings / 45 turns)
+    comboWarp = Math.min(1, st.combo / 25);
+    ctx.fx.setDensity(comboWarp > 0.02
+      ? { rings: 125 + Math.round(30 * comboWarp), spiralTurns: 45 + Math.round(15 * comboWarp) }
+      : null);
+    ctx.fx.setRushOverride(comboWarp >= 0.6 ? ((comboWarp - 0.6) / 0.4) * 0.8 : 0);
+  }
+
   // ============================ RunTick (0.25s) ============================
 
   function tick(dt) {
     st.elapsedSec += dt;
     st.heat = Math.max(0, st.heat - 0.0015);
+    ambientTick();
 
     if (st.slowMoRemainingSec > 0) {
       st.slowMoRemainingSec -= dt;
@@ -1121,6 +1167,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       const sinShielded = rigShield || surrShield;
       applyBoon(boon, sinShielded);
       if (boon.curse) {
+        // The Tilt: the world tips a little every time you say yes (a shielded
+        // sin keeps the horizon - the candle takes the tilt too)
+        if (!sinShielded && tiltSins < 3) {
+          tiltSins++;
+          ctx.nav.setRollOffset(tiltSins * 2.5);
+        }
         if (st.sinExtraMult > 0) {
           st.boonMult += st.sinExtraMult;
           hudUi.toast(`🕯 sin embraced (+${st.sinExtraMult.toFixed(2)}x)`);
@@ -1505,6 +1557,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     estimCharges = 0; rabbitCallPending = 0; rabbitStormSec = 0; thoughtAccum = 0;
     heartbeatCd = 0;
     scriptedDraftActive = false;
+    clearAmbient();
+    // A live run owns the stage: no approach-promoted spotlight video may
+    // hijack it mid-descent (Private Show is the only sanctioned takeover).
+    if (ctx.spawner) {
+      ctx.spawner.setAutoSpotlight(false);
+      if (ctx.spawner.spotlightActive()) ctx.spawner.skipSpotlight();
+    }
     buildToys();
     syncPhys();
     lessons.seed(hostState ? hostState.meta : null, cfg.allowCurses);
@@ -1553,6 +1612,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     happy.onRunEnded();
     if (ranFullCourse) awardLoopTip();   // the final loop ends at the run clock
     field.clearAll();
+    clearAmbient();
+    if (ctx.spawner) ctx.spawner.setAutoSpotlight(true); // the idling tunnel may feature again
     ctx.director.killBoost();
     ctx.director.setTimeFactor(0.3);     // idle crawl under the recap
     sfx('surface', 0.5);
@@ -1603,6 +1664,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     hudUi.setVisible(false);
     hudUi.setPicks([]);
     field.clearAll();
+    clearAmbient();
+    if (ctx.spawner) ctx.spawner.setAutoSpotlight(true);
     ctx.director.setTimeFactor(0.3);
     state = 'warren';
     drafting = false;
