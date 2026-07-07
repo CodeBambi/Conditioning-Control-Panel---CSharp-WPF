@@ -87,6 +87,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     dimOpacity: 1.0,      // Blindfold: plain bubbles render at this opacity
     residueZones: false,  // Aftermath drafted: poll fx.inResidue per bubble
     rabbitTrailSec: 0,    // Tail-Plug: rabbits drag a popping sparkle trail
+    pumpPull: 0,          // The Pump (toy): temporary suction, sweet kinds only
   };
   let vibeOn = false, vibeHover = false;
 
@@ -771,6 +772,17 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         if (b.baseY != null) b.baseY += (dy / d) * phys.cursorPull * ts;
       }
 
+      // The Pump (toy): a hard temporary suction - the sweet kinds only, lives
+      // stay exactly where they were (the toy never drags danger to your hand).
+      if (phys.pumpPull > 0 && (k === 'treat' || k === 'golden' || k === 'heart' || k === 'droplet' || k === 'prism')) {
+        const dx = curX - b.x, dy = curY - b.y;
+        const d = Math.max(24, Math.hypot(dx, dy));
+        b.x += (dx / d) * phys.pumpPull * ts;
+        b.y += (dy / d) * phys.pumpPull * ts;
+        if (b.baseX != null) b.baseX += (dx / d) * phys.pumpPull * ts;
+        if (b.baseY != null) b.baseY += (dy / d) * phys.pumpPull * ts;
+      }
+
       if (m === MOTION.FloatUp || m === MOTION.RainDown) {
         b.y += b.vy * ts;
         b.swayT += b.swaySpeed * ts;
@@ -979,6 +991,37 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         if (min == null || s < min) min = s;
       }
       return min;
+    },
+    /** Wave 2 (the Wand): pop every treat within the beam's radius of (x,y).
+     * includeSpecials (capstone) also takes golden/heart/droplet/prism. Lives,
+     * teases and brittles ignore the wand entirely. Returns pops. */
+    wandSweep(x, y, radiusPx, includeSpecials) {
+      let n = 0;
+      for (const b of [...live]) {
+        if (b.state !== 'live' || TOY_IMMUNE.has(b.spec.kind) || isShielded(b)) continue;
+        const k = b.spec.kind;
+        const ok = k === 'treat'
+          || (includeSpecials && (k === 'golden' || k === 'heart' || k === 'droplet' || k === 'prism'));
+        if (!ok) continue;
+        if (Math.hypot(b.x - x, b.y - y) > radiusPx + b.size / 2) continue;
+        popBenign(b, b.x, b.y, 'wand');
+        n++;
+      }
+      return n;
+    },
+    /** Wave 2 (Sticky Fingers): pop the treats whose center the held 3D card's
+     * screen rect covers. Returns pops (src 'card' pays the accessory bonus). */
+    sweepRect(rect) {
+      if (!rect) return 0;
+      let n = 0;
+      for (const b of [...live]) {
+        if (b.state !== 'live' || TOY_IMMUNE.has(b.spec.kind) || isShielded(b)) continue;
+        if (b.spec.kind !== 'treat') continue;
+        if (b.x < rect.left || b.x > rect.right || b.y < rect.top || b.y > rect.bottom) continue;
+        popBenign(b, b.x, b.y, 'card');
+        n++;
+      }
+      return n;
     },
     /** Wave 2 (Static weather): a stray bolt pops a random treat FOR the
      * player - or, the sour case, zaps a random live fuse down to half.

@@ -754,6 +754,7 @@ internal static class DtrhHostService
                     intrusiveThoughtsSec = state.IntrusiveThoughtsSec,
                     slowMoBonusSec = state.SlowMoBonusSec,
                     moodRingLevel = state.MoodRingLevel,
+                    stickyFingersLevel = state.StickyFingersLevel,
                     bubbleScale = state.BubbleScale,
                     chainReactionReach = state.ChainReactionReach,
                     cursorPullStrength = state.CursorPullStrength,

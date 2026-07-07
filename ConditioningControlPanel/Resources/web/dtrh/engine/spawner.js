@@ -1437,10 +1437,20 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     return { left: minX, top: minY, right: maxX, bottom: maxY };
   }
 
-  // Wave 2 (Private Show): put a chosen video on the stage RIGHT NOW, bypassing
+  // Wave 2 (Private Show): put a video on the stage RIGHT NOW, bypassing
   // approach auto-promotion (which the game disables during live runs).
-  function forceSpotlight(url, secs, release) {
+  // url = null draws a random user video from the media pool. Async: resolves
+  // true once the stage is taken, false if there was nothing to show.
+  async function forceSpotlight(url, secs, release) {
     if (spotlight) return false;
+    if (!url) {
+      const entry = media.drawKind('video');
+      if (!entry) return false;
+      const acq = await entry.acquire();
+      if (!acq) return false;
+      if (spotlight) { if (acq.release) acq.release(); return false; }
+      url = acq.url; release = acq.release;
+    }
     const rec = buildVideoCard(camDepthNow + 12, url, { withAudio: true, release });
     if (!rec) return false;
     addCard(rec);

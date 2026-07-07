@@ -664,6 +664,9 @@ public sealed class ChaosRunState : INotifyPropertyChanged
     /// weather, 2 weather effects x1.5, 3 one weather reroll per descent. The WPF game
     /// has no weather system — the knob just rides the loadout snapshot to JS.</summary>
     public int MoodRingLevel;
+    /// <summary>Sticky Fingers (Wave 2, browser game only): the held tunnel card pops the
+    /// treats it sweeps at a premium. 0 = unworn; the level tiers the pay (JS-side).</summary>
+    public int StickyFingersLevel;
 
     // ---- run-boon (mantra/sin) knobs — the 2026-06-11 visible pool ----
     /// <summary>Gold Digger: golden bubbles burst into 3 falling gold droplets on pop.</summary>

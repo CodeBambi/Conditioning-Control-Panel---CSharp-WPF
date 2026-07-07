@@ -167,6 +167,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       goldenChanceBase: lo.goldenChance ?? 0.005, // weather re-derives goldenChance from this
       goldenPay: lo.goldenPayRange || [10, 20],
       moodRingLevel: lo.moodRingLevel ?? 0,       // 💍 forecast / x1.5 weather / reroll
+      stickyFingersLevel: lo.stickyFingersLevel ?? 0, // 🍯 held-card paddle pay tier
       dropPerPop: lo.dropPerPop ?? 0,
       dripFeedCap: lo.dripFeedCap ?? 0,
       trickleDrops: 0,
@@ -194,6 +195,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       prismChance: 0, prismTreatOnly: false,
       camGirlFlee: 0, camGirlTipChance: 0,
       stormChaser: false,      // the sky locks to Static + detonations arc
+      teslaCoil: false,        // the wand's beam chains e-stim arcs onward
+      freefallActive: false, freefallCadence: false,  // Freefall sin: 2x fall (+25% spawns)
+      spunRollRate: 0,         // Spun sin: deg/s of continuous camera roll
+      privateShowPending: false, privateShowAt: 0, privateShowPayMult: 1.0,
       activesDisabled: false,
       relapseArmed: false, relapseActive: false,
       surrenderShieldUsed: false,
@@ -215,8 +220,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   const wxSpeed = () => wxMult(weatherNow && weatherNow.speedMult);
   const wxSpawnRate = () => wxMult(weatherNow && weatherNow.spawnRate);
   const wxGolden = () => (weatherNow && weatherNow.goldenBonus ? weatherNow.goldenBonus * wxAmp() : 0);
-  /** The run's resting time factor (freeze/slow-mo restore to THIS, not 1). */
-  const baseTime = () => wxSpeed();
+  /** The run's resting time factor (freeze/slow-mo restore to THIS, not 1).
+   * Overstim weather and the Freefall sin both live here. */
+  const baseTime = () => wxSpeed() * (st && st.freefallActive ? 2 : 1);
   /** All LUST gains flow through here so Her Perfume can sweeten them. */
   const addHeat = (x) => { st.heat = Math.min(1.0, st.heat + x * wxHeatGain()); };
   const basePoints = (strength) => 40 + strength * 1.6;
@@ -255,6 +261,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   const weatherSeen = new Set(); // per-run: which skies already explained themselves
   let condensationIn = 0;    // W4 pickups: seconds until the next wall droplet
   let rabbitPickupWave = 0;  // W4 pickups: last loop the white rabbit rolled on
+  let wandRemainingSec = 0, wandMaxed = false, wandTeslaCd = 0; // W5: the Wand's beam
+  let pumpRemainingSec = 0;  // W5: the Pump's suction window
+  let showActive = false, showDetonationsAt = 0; // W5: Private Show stage tracking
 
   // ---- bridge helpers ----
   const sfx = (name, scale) => bridge.send({ type: 'sfx', name, scale });
@@ -514,8 +523,18 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     st.focus = clamp(st.focus + focusGain, 0, FOCUS_MAX);
     if (focusWasLow) field.floatText(`+${focusGain} FOCUS`, x, y + 34, 'cf-pop--focus');
     addHeat(0.04);
-    const pts = basePoints(spec.strength) * st.benignBaseline * spec.payMult
+    let pts = basePoints(spec.strength) * st.benignBaseline * spec.payMult
       * pendulumFactor() * chanceFlip() * totalMult() * st.blindfoldPayMult;
+    // Sticky Fingers: pops taken by the held card pay a premium (L3 leaks gold)
+    if (src === 'card' && st.stickyFingersLevel > 0) {
+      pts *= st.stickyFingersLevel >= 2 ? 1.4 : 1.2;
+      if (st.stickyFingersLevel >= 3 && Math.random() < 0.25) {
+        markDiscovered('bubble:gold_droplet');
+        field.spawn(buildGoldDroplet(x + randInt(-30, 30), y + randInt(-15, 15)));
+      }
+    }
+    // Private Show (shielded half): pops pay x3 while she holds the stage
+    if (showActive && st.privateShowPayMult > 1) pts *= st.privateShowPayMult;
     st.score += pts;
     bankDripFeed();
     showPopScore(pts, x, y);
@@ -872,6 +891,29 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
           ? `⚡ charged — your next ${estimCharges} pops chain-react`
           : `⚡ charged — your next ${estimCharges} pops conduct`);
         break;
+      case 'the_wand':
+        // Wave 2: 2.5s beam at the cursor - every treat it sweeps pops itself;
+        // the tube glares while it hums. Charge-based like the freeze.
+        if (t.chargesLeft <= 0) { sfx('toy_denied', 0.4); return; }
+        t.chargesLeft--;
+        wandRemainingSec = 2.5;
+        wandMaxed = t.maxed;
+        wandTeslaCd = 0;
+        ctx.fx.holdFlash(true, 0.5);
+        sfx('vibe_buzz', 0.6);
+        t.cooldownLeft = 3;   // anti-doubletap between charges
+        pulse('255,180,240', 0.25);
+        hudUi.toast('🪄 it announces');
+        break;
+      case 'the_pump':
+        // Wave 2: seconds of hard suction (sweet kinds only), then whatever
+        // arrived at the cursor bursts at once.
+        pumpRemainingSec = Math.max(1, t.power);
+        field.phys.pumpPull = 480;
+        sfx('vibe_buzz', 0.5);
+        t.cooldownLeft = t.cooldownSec;
+        hudUi.toast('🫧 the pump draws them in');
+        break;
     }
     lessons.onToyFired();   // first_play
     hudUi.updateToys(toys, toyStatus());
@@ -954,6 +996,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
         : t.id === 'porn_dvd' ? field.dvdActive()
         : t.id === 'rabbit_caller' ? (rabbitCallPending > 0 || rabbitStormSec > 0)
         : t.id === 'e_stim' ? estimCharges > 0
+        : t.id === 'the_wand' ? wandRemainingSec > 0
+        : t.id === 'the_pump' ? pumpRemainingSec > 0
         : false;
       if (on !== t.effectActive) { t.effectActive = on; changed = true; }
     }
@@ -976,16 +1020,22 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     weatherSeen.clear();
     condensationIn = 6 + Math.random() * 6;   // first droplet lands early in the run
     rabbitPickupWave = 1;                     // no rabbit on the opening loop
+    wandRemainingSec = 0; pumpRemainingSec = 0; showActive = false;
+    if (field) field.phys.pumpPull = 0;
     if (hudUi) hudUi.setWeather(null);
     if (!ctx) return;
     if (ctx.spawner) {
       ctx.spawner.clearPickups();
       ctx.spawner.setPickupTimeScale(1);
+      ctx.spawner.setThrowOnRelease(null);
     }
     ctx.nav.setRollOffset(0);
+    ctx.nav.setRollRate(0);
+    ctx.nav.setSpeedCapMult(1);
     ctx.fx.setTint(null);
     ctx.fx.setDensity(null);
     ctx.fx.setRushOverride(0);
+    ctx.fx.holdFlash(false);
     ctx.fx.forceZone(null);
   }
 
@@ -1102,7 +1152,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     ctx.fx.setDensity(comboWarp > 0.02
       ? { rings: 125 + Math.round(30 * comboWarp), spiralTurns: 45 + Math.round(15 * comboWarp) }
       : null);
-    ctx.fx.setRushOverride(comboWarp >= 0.6 ? ((comboWarp - 0.6) / 0.4) * 0.8 : 0);
+    // speed-line heat: Heat Warp's streak burn, outranked by Freefall's howl
+    const heatRush = comboWarp >= 0.6 ? ((comboWarp - 0.6) / 0.4) * 0.8 : 0;
+    ctx.fx.setRushOverride(st.freefallActive ? Math.max(0.95, heatRush) : heatRush);
+    // W5 sins that ride the camera: Freefall raises the speed ceiling, Spun rolls
+    ctx.nav.setSpeedCapMult(st.freefallActive ? 2 : 1);
+    ctx.nav.setRollRate(st.spunRollRate || 0);
   }
 
   // ============================ RunTick (0.25s) ============================
@@ -1126,6 +1181,32 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
         rabbitPickupWave = st.waveIndex;
         const foot = st.goldenChanceBase > 0.005 ? 1.5 : 1.0; // Rabbit's Foot worn
         if (Math.random() < 0.15 * foot) spawnWhiteRabbit();
+      }
+    }
+
+    // Private Show sin: once mid-descent, one of your videos takes the stage
+    // at full volume while the bubbles keep coming.
+    if (st.privateShowPending && intensity() >= st.privateShowAt && !covered
+        && ctx.spawner && !ctx.spawner.spotlightActive()) {
+      st.privateShowPending = false;
+      showDetonationsAt = st.detonated;
+      ctx.spawner.forceSpotlight(null, 15).then((ok) => {
+        if (!ok || state !== 'running') return;
+        showActive = true;
+        hudUi.announce('💋 PRIVATE SHOW', 'bad', 2400, { artKey: 'private_show' });
+        sfx('sin_accept', 0.5);
+      }).catch(() => {});
+    }
+    // ...and when she leaves the stage: a streak kept through the show doubles.
+    if (showActive && ctx.spawner && !ctx.spawner.spotlightActive()) {
+      showActive = false;
+      if (st.detonated <= showDetonationsAt && st.combo > 0) {
+        st.combo = Math.min(999, st.combo * 2);
+        if (st.combo > st.bestCombo) st.bestCombo = st.combo;
+        hudUi.announce('💋 eyes stayed on her — STREAK DOUBLED', 'powerup', 2600);
+        sfx('streak_milestone', 0.6);
+      } else {
+        hudUi.toast('💋 the show cost you the streak');
       }
     }
 
@@ -1320,6 +1401,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       takenIds: st.takenBoonIds,
       sinChance: cfg.sinChance,
       equipment: cfg.equipment,
+      hasVideo: !!(hostState && hostState.mediaStats && hostState.mediaStats.videos > 0),
     });
     happy.rigDraft(options, hpIo);   // run 4's defanged first sin / the duo demo
     for (const o of options) markDiscovered('boon:' + o.id);
@@ -1593,6 +1675,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     let interval = (1000 - i * 680) / cfg.difficultyMult;
     interval /= cfg.spawnRateMult;
     interval /= wxSpawnRate();   // Overstim weather: bubbles come faster
+    if (st.freefallCadence) interval /= 1.25;   // Freefall sin (unshielded half)
     if (st.slowMoRemainingSec > 0) interval /= SLOWMO_FACTOR;   // slow-mo stretches the cadence
     spawnWait = Math.max(280, interval) / 1000;
   }
@@ -1749,6 +1832,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     }
     buildToys();
     syncPhys();
+    // Sticky Fingers capstone: releasing a held card hurls it down the tube;
+    // the impact rains a treat shower.
+    if (ctx.spawner && st.stickyFingersLevel > 0 && st.maxedBoons.has('sticky_fingers')) {
+      ctx.spawner.setThrowOnRelease(() => {
+        if (state !== 'running') return;
+        ctx.fx.pulseFlash(0.7);
+        sfx('wave_clear', 0.5);
+        hudUi.toast('🍯 delivered — treats follow');
+        spawnWelcomeShower();
+      });
+    }
     lessons.seed(hostState ? hostState.meta : null, cfg.allowCurses);
     happy.onRunStarted(cfg.runsCompleted, cfg.scriptedFirstRun);
 
@@ -1942,6 +2036,40 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
         if (state === 'running' && st.freezeRemainingSec <= 0) {
           spawnWait -= dt;
           if (spawnWait <= 0) spawnTick();
+        }
+        // ---- Wave 2 toys/accessory on the frame clock ----
+        if (state === 'running') {
+          // the Wand: sweep the beam every frame; Tesla Coil arcs off its pops
+          if (wandRemainingSec > 0) {
+            wandRemainingSec -= dt;
+            wandTeslaCd -= dt;
+            const c = field.cursor();
+            ffx.vibePoint(c.x, c.y);
+            const took = field.wandSweep(c.x, c.y, 140, wandMaxed);
+            if (took > 0 && st.teslaCoil && wandTeslaCd <= 0) {
+              wandTeslaCd = 0.45;
+              field.dischargeAt(c.x, c.y, { maxTargets: 3, reach: 400 });
+              sfx('estim_zap', 0.4);
+              ctx.fx.strikeNow();
+            }
+            if (wandRemainingSec <= 0) ctx.fx.holdFlash(false);
+          }
+          // the Pump: when the suction ends, the arrivals burst at the cursor
+          if (pumpRemainingSec > 0) {
+            pumpRemainingSec -= dt;
+            if (pumpRemainingSec <= 0) {
+              field.phys.pumpPull = 0;
+              const c = field.cursor();
+              const got = field.wandSweep(c.x, c.y, 190, true);
+              sfx('golden_pop', 0.5);
+              if (got > 0) hudUi.toast(`🫧 ${got} arrived at once`);
+            }
+          }
+          // Sticky Fingers: the held 3D card pops the treats it sweeps over
+          if (st.stickyFingersLevel > 0 && ctx.spawner && ctx.spawner.isGrabbing()) {
+            const rect = ctx.spawner.heldCardScreenRect();
+            if (rect) field.sweepRect(rect);
+          }
         }
       }
       field.update(dt);

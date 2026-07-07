@@ -137,8 +137,51 @@ public static class ChaosLifetimeBoons
             IsActiveUse = true, UseCooldownSec = 30,
             Apply = (s, v) => s.ToyPower["e_stim"] = v,
         },
+        new()
+        {
+            // Wave 2 (browser game): a 2.5s cursor beam that pops every treat it sweeps.
+            Id = "the_wand", Category = ChaosBoonCategory.Skill, RankFloor = ChaosRank.Slipping, Name = "The Wand", Glyph = "🪄",
+            Desc = "press: for 2.5s a humming beam rides your cursor and every treat it sweeps pops itself — the whole tunnel glares while it's on. 2/3/4 charges per descent by level.",
+            Flavor = "the wand doesn't ask. it announces.",
+            UnlockCost = 600,
+            UpgradeCosts = new[] { 900, 1400 },                   // levels 2..3
+            LevelValues  = new[] { 2.0, 3, 4 },                   // charges per descent
+            ValueLabel = "{0:0} charges",
+            CapstoneDesc = "the beam takes the sweet specials too — lucky bubbles, hearts, droplets, prisms.",
+            IsActiveUse = true, UseCooldownSec = 0,               // charge-based
+            WebOnly = true,
+            Apply = (s, v) => s.ToyPower["the_wand"] = v,
+        },
+        new()
+        {
+            // Wave 2 (browser game): seconds of treat-only suction, then the arrivals burst.
+            Id = "the_pump", Category = ChaosBoonCategory.Skill, RankFloor = ChaosRank.Slipping, Name = "The Pump", Glyph = "🫙",
+            Desc = "press: for 3/4/5s by level a hard suction drags every treat toward your cursor (live ones never move), then whatever arrived bursts at once. 45s cooldown.",
+            Flavor = "suction does the work. you take the credit.",
+            UnlockCost = 500,
+            UpgradeCosts = new[] { 700, 1100 },                   // levels 2..3
+            LevelValues  = new[] { 3.0, 4, 5 },                   // suction seconds
+            ValueLabel = "{0:0}s suction",
+            IsActiveUse = true, UseCooldownSec = 45,
+            WebOnly = true,
+            Apply = (s, v) => s.ToyPower["the_pump"] = v,
+        },
 
         // ---- Accessories (passives that shape the run) ----
+        new()
+        {
+            // Wave 2 (browser game): the grab-a-card mechanic becomes a paying paddle.
+            Id = "sticky_fingers", Category = ChaosBoonCategory.Accessory, RankFloor = ChaosRank.Tempted, Name = "Sticky Fingers", Glyph = "🍯",
+            Desc = "grab a picture off the tunnel wall (click and hold it) and it becomes a paddle: treats it sweeps over pop at x1.2/x1.4 pay by level; at level 3 they also leak gold droplets.",
+            Flavor = "what you catch, you keep. what you keep, you use.",
+            UnlockCost = 250,
+            UpgradeCosts = new[] { 350, 550 },                    // levels 2..3
+            LevelValues  = new[] { 1.2, 1.4, 1.4 },               // card-pop pay multiplier
+            ValueLabel = "x{0:0.0} card pops",
+            CapstoneDesc = "letting go HURLS the card down the tube — a treat shower follows the impact.",
+            WebOnly = true,
+            Apply = (s, v) => s.StickyFingersLevel = ChaosMeta.BoonLevel("sticky_fingers"),
+        },
         // breast_enlargement moved to Utility 2026-06-10 (it reads as a trained habit, not a
         // pocketed accessory) — same id, levels carry over; Utility pockets are uncapped.
         new()

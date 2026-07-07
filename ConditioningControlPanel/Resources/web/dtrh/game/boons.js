@@ -91,6 +91,11 @@ export const BOONS = [
     desc: '1 treat pop in 8 fires a 440px shockwave, arcing lightning into up to 8 bubbles caught inside it.',
     flavor: 'it hums under your skin between pops.',
     apply: (s) => { s.estimShockwaveChance = 0.125; } },
+  { id: 'tesla_coil', name: 'Tesla Coil', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+    requiresAll: ['e_stim', 'the_wand'],
+    desc: 'while the wand hums, every treat its beam takes arcs lightning onward into up to 3 bubbles within 400px.',
+    flavor: 'two currents, one body.',
+    apply: (s) => { s.teslaCoil = true; } },
 
   // ---- sins - risk/reward: visible drawbacks, visible sweetness ----
   { id: 'hair_trigger', name: 'Hair Trigger', rarity: 'Rare', curse: true, mult: 0.40, unique: true,
@@ -122,6 +127,24 @@ export const BOONS = [
     flavor: 'one more. it\'s always just one more.',
     apply: (s) => { s.relapseArmed = Math.random() < 0.6; },
     applyShielded: (s) => { s.relapseArmed = true; } },   // shielded: the extra loop is certain
+
+  // ---- Wave 2 sins: the tunnel itself joins the bargain ----
+  { id: 'freefall', name: 'Freefall', rarity: 'Rare', curse: true, mult: 0.40, unique: true,
+    desc: 'the fall runs at DOUBLE speed and bubbles come 25% faster. in exchange, +0.40x run multiplier.',
+    flavor: 'stop bracing. it\'s happening.',
+    apply: (s) => { s.freefallActive = true; s.freefallCadence = true; },
+    applyShielded: (s) => { s.freefallActive = true; } },   // shielded: the speed stays, the cadence doesn't
+  { id: 'private_show', name: 'Private Show', rarity: 'Rare', curse: true, mult: 0.25, unique: true,
+    needsVideo: true,
+    desc: 'once, mid-descent, one of your videos takes the stage at FULL volume for 15s while the bubbles keep coming. keep your streak alive through the show and it DOUBLES; +0.25x run multiplier.',
+    flavor: 'eyes on her. hands busy.',
+    apply: (s) => { s.privateShowPending = true; s.privateShowAt = 0.5 + Math.random() * 0.2; },
+    applyShielded: (s) => { s.privateShowPending = true; s.privateShowAt = 0.5 + Math.random() * 0.2; s.privateShowPayMult = 3.0; } },
+  { id: 'spun', name: 'Spun', rarity: 'Rare', curse: true, mult: 0.35, unique: true,
+    desc: 'the whole world rolls, slowly, for the rest of the descent. in exchange, +0.35x run multiplier.',
+    flavor: 'which way is up, dolly?',
+    apply: (s) => { s.spunRollRate = 9; },
+    applyShielded: (s) => { s.spunRollRate = 4.5; } },
 ];
 
 export const boonById = (id) => BOONS.find((b) => b.id === id) || null;
@@ -132,12 +155,13 @@ export const boonById = (id) => BOONS.find((b) => b.id === id) || null;
  * need their partner equipped; unique cards already taken sit the run out.
  */
 export function draft({ allowCurses = true, choices = 3, guaranteeCurse = false,
-  takenIds = null, sinChance = 0.5, equipment = [] } = {}) {
+  takenIds = null, sinChance = 0.5, equipment = [], hasVideo = false } = {}) {
   choices = Math.min(4, Math.max(2, choices));
   const has = (id) => equipment.includes(id);
   const draftable = (b) =>
     (!b.requiresAny || b.requiresAny.some(has))
     && (!b.requiresAll || b.requiresAll.every(has))
+    && (!b.needsVideo || hasVideo)   // Private Show needs a video in the preset
     && !(b.unique && takenIds && takenIds.has(b.id));
   const shuffle = (arr) => arr.map((v) => [Math.random(), v]).sort((a, z) => a[0] - z[0]).map((p) => p[1]);
   const boons = shuffle(BOONS.filter((b) => !b.curse && draftable(b)));
