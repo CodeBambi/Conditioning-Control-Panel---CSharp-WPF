@@ -495,21 +495,41 @@ public static class ChaosMeta
     public static int AwardRunRewards(ChaosRunState run)
     {
         if (run == null) return 0;
+        return AwardRunRewards(new ChaosRunRewardInput(
+            RunDurationSec: run.RunDurationSec,
+            DifficultyMult: run.Config.DifficultyMult,
+            SparkGainMult: run.Config.SparkGainMult,
+            Score: run.Score,
+            TrickleDrops: run.TrickleDrops,
+            DripFeedMaxed: run.MaxedBoons.Contains("drip_feed"),
+            BestCombo: run.BestCombo,
+            Defused: run.Defused,
+            ElapsedSec: run.ElapsedSec));
+    }
 
+    /// <summary>Plain-value award input so run brains that are NOT a ChaosRunState (the DtRH
+    /// browser game reports its runs over the bridge) share the exact same formula/banking.</summary>
+    public readonly record struct ChaosRunRewardInput(
+        double RunDurationSec, double DifficultyMult, double SparkGainMult,
+        double Score, double TrickleDrops, bool DripFeedMaxed,
+        int BestCombo, int Defused, double ElapsedSec);
+
+    public static int AwardRunRewards(in ChaosRunRewardInput run)
+    {
         const double COMPLETION_BONUS_BASE = 35.0;   // the predictable per-descent Spark floor
         const double SCORE_SQRT_SCALE = 1.5;
         const double FULL_BONUS_MINUTES = 3.0;
 
         double durationMin = Math.Max(0, run.RunDurationSec) / 60.0;
-        double completionBonus = COMPLETION_BONUS_BASE * run.Config.DifficultyMult
+        double completionBonus = COMPLETION_BONUS_BASE * run.DifficultyMult
                                  * Math.Min(1.0, durationMin / FULL_BONUS_MINUTES);
         double scorePart = SCORE_SQRT_SCALE * Math.Sqrt(Math.Max(0, run.Score));
-        int sparks = (int)Math.Round((scorePart + completionBonus) * run.Config.SparkGainMult);
+        int sparks = (int)Math.Round((scorePart + completionBonus) * run.SparkGainMult);
 
         // Drip Feed: the per-pop trickle gathered during the run lands here, and the
         // capstone tips 10% extra on the whole haul.
         sparks += (int)Math.Max(0, run.TrickleDrops);
-        if (run.MaxedBoons.Contains("drip_feed")) sparks = (int)Math.Round(sparks * 1.10);
+        if (run.DripFeedMaxed) sparks = (int)Math.Round(sparks * 1.10);
 
         // One-time cold-start kindness ("first fall"): +25 the first time RunsCompleted
         // goes 0→1 (guarded so it only ever applies once). Displayed on the recap card.

@@ -1662,6 +1662,21 @@ namespace ConditioningControlPanel
             if (e.Args.Contains("--stress"))
                 StartHangStressMode();
 
+            // DtRH browser-game port, M0 spike (`--dtrh-spike`): verifies the WebView2 virtual-host
+            // pipeline (Range-seek, CORS->WebGL, payload z-order/focus) against the user's real
+            // assets folder, writes logs/dtrh-spike.json, then shuts the app down. Throwaway harness
+            // — dead code in every normal launch.
+            if (e.Args.Contains("--dtrh-spike"))
+                Services.Chaos.DtrhSpike.Run();
+
+            // DtRH browser game, dev shortcuts: `--dtrh` launches the web game window immediately,
+            // bypassing the Lab UI and the ChaosWebGameEnabled flag; `--dtrh-m2test` additionally
+            // runs the M2 bridge exercise against a CLONED meta state (real save untouched).
+            if (e.Args.Contains("--dtrh-m2test"))
+                Services.Chaos.DtrhHostService.Launch(testMode: true);
+            else if (e.Args.Contains("--dtrh"))
+                Services.Chaos.DtrhHostService.Launch();
+
             // Arm the offline mic features (wake word / push-to-talk) at startup if the user left them
             // on. They're decoupled from Takeover ("She's Listening" owns them), so they no longer wait
             // for Takeover to start. No-op unless consent is given and the speech engine is available.
@@ -3088,6 +3103,9 @@ Application State:
             // A clean shutdown — even mid-run — is NOT a crash. Clear the chaos sentinel so the next
             // launch doesn't false-report it as an abnormal exit.
             try { Services.Chaos.ChaosCrashSentinel.Clear(); } catch { }
+
+            // DtRH browser game: dispose the WebView2 window/process if it's up.
+            try { Services.Chaos.DtrhHostService.CloseActive(); } catch { }
 
             // If the companion is on its own UI thread (AvatarOwnThread), shut its Dispatcher down so the
             // STA thread's Dispatcher.Run() returns and the thread exits cleanly. Background thread, so it

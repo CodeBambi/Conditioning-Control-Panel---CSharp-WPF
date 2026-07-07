@@ -343,8 +343,11 @@
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </Content>
-    <!-- Endless three.js "rabbit hole" tunnel background (HTML/JS + vendored three.js).
-         Served to a WebView2 via a virtual host, so it must live on disk in the output. -->
+    <!-- Endless three.js "rabbit hole" tunnel background (HTML/JS + vendored three.js) and the
+         DtRH browser game (Resources\web\dtrh). Served to a WebView2 via virtual hosts, so they
+         must live on disk in the output. Remove from the default None glob first so a no-copy
+         None item can never suppress the Content copy for new extensions (woff2/json/etc). -->
+    <None Remove="Resources\web\**\*" />
     <Content Include="Resources\web\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
