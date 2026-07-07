@@ -35,7 +35,7 @@ function fmtPlaytime(seconds) {
   return h >= 1 ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
 }
 
-export function createWarren({ hud, bridge, getMeta, runSetup, onDescend, onExit }) {
+export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, onDescend, onExit }) {
   const root = document.createElement('div');
   root.className = 'wr-root';
   root.hidden = true;
@@ -925,6 +925,20 @@ export function createWarren({ hud, bridge, getMeta, runSetup, onDescend, onExit
       setup.enabledVariants = roll;
       rerender();
     }, presets);
+
+    // ---- preset honesty note (codec UX): the host's manifest reported files it
+    // can't hand the browser (wmv/avi/mkv...) or a sampled-down huge preset.
+    const ms = getMediaStats ? getMediaStats() : null;
+    if (ms && (ms.skipped > 0 || ms.truncated)) {
+      const bits = [];
+      if (ms.skipped > 0) {
+        bits.push(`${nfmt(ms.skipped)} file${ms.skipped === 1 ? '' : 's'} in your preset can't swim in here (old video formats) - they still fire as desktop effects`);
+      }
+      if (ms.truncated) {
+        bits.push(`your preset is huge, so she deals a fresh random ${nfmt(ms.images + ms.videos)}-piece sample each visit`);
+      }
+      el('wr-card-sub', poolCard, '🎞 ' + bits.join(' · '));
+    }
 
     // ---- toggles + intensity ----
     const optCard = el('wr-card', panel);

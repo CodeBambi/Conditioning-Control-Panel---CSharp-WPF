@@ -47,6 +47,7 @@ export const hostState = {
   meta: null, metaRev: -1,          // latest chaos_meta snapshot from C#
   payloadCover: false,              // a native video is covering the page
   lastPayout: null,                 // last payout-result
+  mediaStats: null,                 // manifest counts {images, videos, skipped, truncated}
 };
 
 const scenePromise = import('./engine/scene.js'); // download while init/manifest arrive
@@ -94,7 +95,17 @@ bridge.on('init', (m) => {
   if (m.m2Test) import('./m2test.js').then((t) => t.run(bridge, hostState)).catch((e) => bridge.log('m2test load failed: ' + e));
   maybeStart();
 });
-bridge.on('manifest', (m) => { media.setManifest(m); haveManifest = true; maybeStart(); });
+bridge.on('manifest', (m) => {
+  media.setManifest(m);
+  hostState.mediaStats = {
+    images: (m.images && m.images.length) | 0,
+    videos: (m.videos && m.videos.length) | 0,
+    skipped: m.skipped | 0,
+    truncated: !!m.truncated,
+  };
+  haveManifest = true;
+  maybeStart();
+});
 bridge.on('meta', (m) => {
   hostState.meta = m.state;
   hostState.metaRev = m.rev;

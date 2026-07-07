@@ -1638,6 +1638,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       warren = createWarren({
         hud: ctx.hud, bridge,
         getMeta: () => (hostState ? hostState.meta : null),
+        getMediaStats: () => (hostState ? hostState.mediaStats : null),
         runSetup,
         onDescend: (setup) => {
           state = 'requesting';

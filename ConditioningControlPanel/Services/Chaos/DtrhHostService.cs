@@ -40,6 +40,11 @@ internal static class DtrhHostService
 
     public static bool IsActive => _host != null;
 
+    /// <summary>The page reported boot-error (WebGL/GPU init failed) this app session.
+    /// The Lab entry points check this and route to the classic WPF game instead, so a
+    /// machine that can't run the browser game isn't stuck clicking into a black flash.</summary>
+    public static bool BootFailedThisSession { get; private set; }
+
     /// <summary>Launch the game window (idempotent). The page boots into The Fall on the
     /// active preset; the Warren hub becomes the boot target in M5.</summary>
     public static void Launch(bool testMode = false)
@@ -190,8 +195,7 @@ internal static class DtrhHostService
                 _lastHeartbeatUtc = DateTime.UtcNow;
                 break;
             case "boot-error":
-                App.Logger?.Warning("DtrhHost: page boot-error: {Msg} - closing", (string?)o["msg"]);
-                CloseActive();
+                OnBootError((string?)o["msg"]);
                 break;
             case "exit":       // page-initiated (Esc held): it winds itself down, then exit-done
                 _exiting = true;
@@ -483,6 +487,44 @@ internal static class DtrhHostService
         });
     }
 
+    /// <summary>The page's 3D boot failed (a genuine WebGL/GPU failure - the page only
+    /// reports boot-error after the engine import or renderer creation threw). Fall back
+    /// to the classic WPF game for the rest of the session so the user's click still
+    /// lands in a game.</summary>
+    private static void OnBootError(string? msg)
+    {
+        App.Logger?.Warning("DtrhHost: page boot-error: {Msg} - falling back to the classic game this session", msg);
+        BootFailedThisSession = true;
+        bool wasTest = _testMode;
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null) { DisposeAll(); return; }
+        disp.BeginInvoke(() =>
+        {
+            DisposeAll();
+            if (!wasTest) LaunchLegacyFallback();
+        });
+    }
+
+    /// <summary>Mirror of the Lab card's legacy branch (MainWindow.Lab.cs) for the
+    /// boot-error path: scripted first run when fresh, else the WPF hub.</summary>
+    private static void LaunchLegacyFallback()
+    {
+        try
+        {
+            if (App.Chaos == null || App.Chaos.IsRunning) return;
+            if (ChaosMeta.State.RunsCompleted == 0)
+            {
+                App.Chaos.StartRun(ChaosHappyPath.BuildFirstRunConfig());
+                return;
+            }
+            if (ChaosHubWindow.Current != null) { ChaosHubWindow.Current.Activate(); return; }
+            var hub = new ChaosHubWindow();
+            if (Application.Current?.MainWindow is Window mw && mw.IsLoaded) hub.Owner = mw;
+            hub.Show();
+        }
+        catch (Exception ex) { App.Logger?.Error(ex, "DtrhHost: legacy fallback failed"); }
+    }
+
     // ============================ watchdogs / recovery ============================
 
     private static void StartHeartbeatWatch()
@@ -492,12 +534,18 @@ internal static class DtrhHostService
         _heartbeatWatch = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _heartbeatWatch.Tick += (_, _) =>
         {
-            // Only a WEDGED live run warrants the recovery ladder; the hub idling with the
-            // page not yet booted (no heartbeat source) must not trip it.
-            if (!_runActive || _host == null || !_host.IsReady || _exiting) return;
-            if ((DateTime.UtcNow - _lastHeartbeatUtc).TotalSeconds > 10)
+            // Guarded on IsReady: the page only starts beating (rAF, ~2s) after boot, so a
+            // still-loading page can't false-trip. A wedged live RUN gets the fast ladder;
+            // the idling Warren gets a lazier one - but it must exist, because a locked
+            // page main thread also kills the JS Esc-hold exit and would otherwise trap
+            // the user under a fullscreen topmost window (panic key aside).
+            if (_host == null || !_host.IsReady || _exiting) return;
+            double silent = (DateTime.UtcNow - _lastHeartbeatUtc).TotalSeconds;
+            double limit = _runActive ? 10 : 20;
+            if (silent > limit)
             {
-                App.Logger?.Warning("DtrhHost: page heartbeat silent >10s during a run - recovering");
+                App.Logger?.Warning("DtrhHost: page heartbeat silent >{Limit}s ({Where}) - recovering",
+                    limit, _runActive ? "mid-run" : "hub");
                 Recover("heartbeat-silent");
             }
         };

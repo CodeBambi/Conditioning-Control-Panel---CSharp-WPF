@@ -2386,10 +2386,12 @@ namespace ConditioningControlPanel.Models
             set { _chaosTunnelEnabled = value; OnPropertyChanged(); }
         }
 
-        private bool _chaosWebGameEnabled = false;
-        /// <summary>DtRH browser game (beta): the whole Rabbit Hole runs as a three.js game inside a
+        private bool _chaosWebGameEnabled = true;
+        /// <summary>DtRH browser game: the whole Rabbit Hole runs as a three.js game inside a
         /// fullscreen WebView2 window built on The Fall engine, instead of the WPF windows layer.
-        /// Default OFF while the port matures; the legacy path is untouched when off.</summary>
+        /// Default ON since M6 (rollout flip); the classic WPF path stays intact behind the Lab
+        /// toggle for machines where WebGL misbehaves - a boot-error also auto-falls back for
+        /// the session. The legacy code retires one release after the flip.</summary>
         public bool ChaosWebGameEnabled
         {
             get => _chaosWebGameEnabled;
