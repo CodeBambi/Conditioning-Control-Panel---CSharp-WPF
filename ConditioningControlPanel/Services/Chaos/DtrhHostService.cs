@@ -438,6 +438,8 @@ internal static class DtrhHostService
                 case "reveal-flash": bark.NotifyChaosRevealFlash(S("id")); break;
                 case "lesson-complete": bark.NotifyChaosLessonComplete(S("id")); break;
                 case "duo-demo": bark.NotifyChaosDuoDemo(); break;
+                // ---- Wave 2: tunnel pickups (reuse the rabbit-catch voice) ----
+                case "rabbit-caught": bark.NotifyChaosDarterCaught(I("gold"), 0, true); break;
                 default: App.Logger?.Debug("DtrhHost: unrouted bark event '{E}'", (string?)o["event"]); break;
             }
         }
