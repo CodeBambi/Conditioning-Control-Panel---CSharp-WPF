@@ -35,7 +35,7 @@ function fmtPlaytime(seconds) {
   return h >= 1 ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
 }
 
-export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, onDescend, onExit }) {
+export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, onDescend, onExit, onOptions }) {
   const root = document.createElement('div');
   root.className = 'wr-root';
   root.hidden = true;
@@ -318,6 +318,7 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     const fall = btn('wr-menu-btn wr-menu-btn--hero', descending ? 'she opens the hole…' : 'FALL IN', () => beginDescend(), btns);
     fall.disabled = descending;
     btn('wr-menu-btn', 'THE DOLLHOUSE', () => enterDollhouse(), btns);
+    if (onOptions) btn('wr-menu-btn', 'OPTIONS', () => onOptions(), btns);
     btn('wr-menu-btn', 'HOW TO PLAY', () => openHowTo(), btns);
     btn('wr-menu-btn wr-menu-btn--dim', 'wake up (exit)', () => onExit(), btns);
     el('wr-menu-hint', left, v.runs === 0

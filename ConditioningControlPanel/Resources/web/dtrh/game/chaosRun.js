@@ -1835,12 +1835,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     scriptedDraftActive = false;
     clearAmbient();
     weatherNext = rollWeather(null);   // loop 1 flies under an open sky; the weather lands with loop 2
-    // A live run owns the stage: no approach-promoted spotlight video may
-    // hijack it mid-descent (Private Show is the only sanctioned takeover).
-    if (ctx.spawner) {
-      ctx.spawner.setAutoSpotlight(false);
-      if (ctx.spawner.spotlightActive()) ctx.spawner.skipSpotlight();
-    }
+    // Tunnel videos hold in view (the Fall's spotlight) during a descent too, so
+    // a passing video lingers for its 'video spotlight time' (S.spotSeconds)
+    // instead of bolting through. (Was off mid-run; restored by request.)
+    if (ctx.spawner) ctx.spawner.setAutoSpotlight(true);
     buildToys();
     syncPhys();
     // Sticky Fingers capstone: releasing a held card hurls it down the tube;
@@ -2001,6 +1999,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
           bridge.send({ type: 'request-run', setup });
         },
         onExit: () => { if (requestExit) requestExit(); else bridge.send({ type: 'exit' }); },
+        onOptions: ctx.openOptions,
       });
       window.addEventListener('pointerdown', onPointerDownGlobal, true);
       window.addEventListener('pointerdown', onGlobalPointerDownCapture, true);

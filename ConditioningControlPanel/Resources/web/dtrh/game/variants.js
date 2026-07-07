@@ -50,7 +50,7 @@ export const VARIANTS = [
   // The two giants (M4): a long trance, but a mandatory video / gif rain if it goes off.
   { id: 'video',       name: 'Video',       kind: 'live',   payload: { kind: 'video' },
     min: 240, max: 300, motion: MOTION.RainDown,   tint: 'rgb(224,64,77)',   label: '▶',
-    sprite: ART_BASE + 'video.png',         weight: 0.5, minIntensity: 0.50, fuseMin: 5000, fuseMax: 7000 },
+    sprite: ART_BASE + 'video.png',         weight: 0.8, minIntensity: 0.25, fuseMin: 5000, fuseMax: 7000 },
   { id: 'htlink',      name: 'Gif Rain',    kind: 'live',   payload: { kind: 'gifCascade' },
     min: 200, max: 280, motion: MOTION.FloatUp,    tint: 'rgb(255,200,61)',  label: '▼',
     sprite: ART_BASE + 'htlink.png',        weight: 0.45, minIntensity: 0.60, fuseMin: 4500, fuseMax: 6500 },

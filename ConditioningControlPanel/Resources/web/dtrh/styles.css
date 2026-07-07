@@ -781,7 +781,6 @@ img.rh-fx-spiralspin {
 .sf-pause[hidden] { display: none; }
 /* while paused, lift the controls above the pause dim (z 20) so options stay usable */
 .sf-hud.sf-paused .sf-dock,
-.sf-hud.sf-paused .sf-panel,
 .sf-hud.sf-paused .sf-uitoggle { z-index: 21; }
 
 /* ------------- Options panel (gear) ------------- */
@@ -796,7 +795,7 @@ img.rh-fx-spiralspin {
   backdrop-filter: blur(10px);
   transform: translateX(105%);
   transition: transform 0.25s ease;
-  z-index: 30;
+  z-index: 32; /* above the Warren (z30) so options open over the dollhouse too */
 }
 .sf-panel.is-open { transform: none; }
 .sf-panel-head {

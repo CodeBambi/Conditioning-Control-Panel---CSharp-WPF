@@ -63,8 +63,9 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
   // ---- input: scroll throttles the fall, drag to look -----------------------
   function onWheel(e) {
     if (paused) return;
-    // wheel over UI chrome (options panel, overlays) scrolls the UI, not the fall
-    if (e.target instanceof Element && e.target.closest('.sf-panel, .sf-results, .sf-pause')) return;
+    // wheel over UI chrome (options panel, overlays, the Warren/dollhouse) scrolls
+    // the UI, not the fall - otherwise preventDefault() below eats the scroll
+    if (e.target instanceof Element && e.target.closest('.sf-panel, .sf-results, .sf-pause, .wr-root')) return;
     e.preventDefault();
     firstInteract();
     // a downward flick skips the current spotlight video

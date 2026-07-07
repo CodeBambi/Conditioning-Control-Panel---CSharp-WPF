@@ -1442,6 +1442,11 @@ namespace ConditioningControlPanel
             _trayIcon?.ShowNotification("Remote Control", "Session active — minimized to tray.", System.Windows.Forms.ToolTipIcon.Info);
         }
 
+        /// <summary>Tuck the main window into the tray while a Chaos/DtRH descent owns the screen.
+        /// Restored via <see cref="ShowFromTray"/> when the game closes. No notification (the game
+        /// window is the focus); does NOT go through the close handler, so the run keeps running.</summary>
+        public void MinimizeToTrayForChaos() => _trayIcon?.MinimizeToTray();
+
         /// <summary>
         /// Alerts the host that a remote controller just joined. Pops a tray
         /// balloon and flashes the taskbar icon if minimized — does NOT restore

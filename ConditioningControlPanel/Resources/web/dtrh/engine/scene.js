@@ -344,7 +344,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     bubbles.setPaused(true);
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
-    game.attach({ nav, fx, director, hud, canvas, spawner, media, flashBurst: (n) => bubbles.flashBurst(n) });
+    game.attach({ nav, fx, director, hud, canvas, spawner, media, flashBurst: (n) => bubbles.flashBurst(n), openOptions: () => panel.toggle() });
   }
 
   // ---- loop --------------------------------------------------------------------

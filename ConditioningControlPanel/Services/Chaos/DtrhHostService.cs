@@ -34,6 +34,7 @@ internal static class DtrhHostService
     private static DateTime _lastHeartbeatUtc;
     private static bool _exiting;
     private static bool _runActive;
+    private static bool _minimizedMainWindow;   // we tucked the main window to the tray for this session
     private static bool _relaunchedOnce;
     private static bool _testMode;
     private static bool _videoHooked;
@@ -88,6 +89,18 @@ internal static class DtrhHostService
             _host.Show();
             HookVideoEvents(true);
             StartHeartbeatWatch();
+            // Tuck the main CCP window into the tray while the descent owns the screen;
+            // DisposeAll restores it on exit. The game window keeps focus.
+            try
+            {
+                if (Application.Current?.MainWindow is MainWindow mw)
+                {
+                    mw.MinimizeToTrayForChaos();
+                    _minimizedMainWindow = true;
+                    _host.FocusWeb();
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost: minimize main window failed: {E}", ex.Message); }
             App.Logger?.Information("DtrhHostService: launched{T}", testMode ? " (M2 TEST MODE)" : "");
         }
         catch (Exception ex)
@@ -620,6 +633,12 @@ internal static class DtrhHostService
         _host = null;
         _meta = null;
         _exiting = false;
+        // Bring the main CCP window back from the tray if we minimized it at launch.
+        if (_minimizedMainWindow)
+        {
+            _minimizedMainWindow = false;
+            try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch { }
+        }
         App.Logger?.Information("DtrhHostService: closed");
     }
 
