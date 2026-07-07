@@ -253,6 +253,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   let weatherRerollUsed = false; // Mood Ring L3: one reroll per descent
   let staticBoltIn = 0;      // Static weather: seconds until the next bolt
   const weatherSeen = new Set(); // per-run: which skies already explained themselves
+  let condensationIn = 0;    // W4 pickups: seconds until the next wall droplet
+  let rabbitPickupWave = 0;  // W4 pickups: last loop the white rabbit rolled on
 
   // ---- bridge helpers ----
   const sfx = (name, scale) => bridge.send({ type: 'sfx', name, scale });
@@ -756,6 +758,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     st.slowMoRemainingSec = durationSec ?? (SLOWMO_DURATION_SEC + st.slowMoBonusSec);
     pendulumSlowActive = viaPendulum;   // "Focus here..." pays ONLY on the pendulum's own swing
     field.setTimeScale(SLOWMO_FACTOR);
+    if (ctx.spawner) ctx.spawner.setPickupTimeScale(SLOWMO_FACTOR);
     if (st.freezeRemainingSec <= 0) ctx.director.setTimeFactor(0.35);
     if (!slowMoCueOn) sfx('time_slow_in', 0.5);
     slowMoCueOn = true;
@@ -765,6 +768,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     st.slowMoRemainingSec = 0;
     pendulumSlowActive = false;
     field.setTimeScale(1.0);
+    if (ctx.spawner) ctx.spawner.setPickupTimeScale(st.freezeRemainingSec > 0 ? 0 : 1);
     if (st.freezeRemainingSec <= 0 && state === 'running') ctx.director.setTimeFactor(baseTime());
     if (slowMoCueOn) sfx('time_slow_out', 0.45);
     slowMoCueOn = false;
@@ -774,6 +778,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     st.freezeRemainingSec = FREEZE_DURATION_SEC;
     freezeCueOn = true;
     field.setFrozen(true);
+    if (ctx.spawner) ctx.spawner.setPickupTimeScale(0);
     ctx.director.setTimeFactor(0.06);   // P1: visible time dilation - the tunnel all but stops
     sfx('freeze_catch', 0.55);
     hudUi.announce('❄ FREEZE', 'freeze', 1800, { artKey: 'freeze' });
@@ -783,6 +788,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   function endFreeze() {
     st.freezeRemainingSec = 0;
     field.setFrozen(false);
+    if (ctx.spawner) ctx.spawner.setPickupTimeScale(st.slowMoRemainingSec > 0 ? SLOWMO_FACTOR : 1);
     if (state === 'running') ctx.director.setTimeFactor(st.slowMoRemainingSec > 0 ? 0.35 : baseTime());
     if (freezeCueOn) sfx('freeze_shatter', 0.5);
     freezeCueOn = false;
@@ -968,8 +974,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     tiltSins = 0; lustFullSeen = false; weatherZone = null; comboWarp = 0;
     weatherNow = null; weatherNext = null; weatherRerollUsed = false; staticBoltIn = 0;
     weatherSeen.clear();
+    condensationIn = 6 + Math.random() * 6;   // first droplet lands early in the run
+    rabbitPickupWave = 1;                     // no rabbit on the opening loop
     if (hudUi) hudUi.setWeather(null);
     if (!ctx) return;
+    if (ctx.spawner) {
+      ctx.spawner.clearPickups();
+      ctx.spawner.setPickupTimeScale(1);
+    }
     ctx.nav.setRollOffset(0);
     ctx.fx.setTint(null);
     ctx.fx.setDensity(null);
@@ -1025,6 +1037,49 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     applyWeather(w);
   }
 
+  // ---- Wave 2: tunnel pickups (spawner.spawnPickup - clickable 3D objects) ----
+
+  /** Condensation: a golden droplet beads on the tube wall and streaks past;
+   * click it for +2-5 drops into the run's trickle (paid when you surface). */
+  function spawnCondensation() {
+    ctx.spawner.spawnPickup({
+      kind: 'condensation',
+      spriteUrl: 'https://ccp.art/bubbles/gold_droplet.png',
+      w: 1.1, aheadDepth: 45, ttlSec: 14, glowColor: 0xffd700,
+      onClick: () => {
+        if (!st || state !== 'running') return;
+        const n = randInt(2, 5);
+        st.trickleDrops += n;
+        sfx('golden_pop', 0.45);
+        hudUi.toast(`💧 +${n}✦ condensed off the wall`);
+        markDiscovered('pickup:condensation');
+      },
+    });
+  }
+
+  /** The White Rabbit: dashes down the wall faster than you fall; click him
+   * before he outruns the POV for 10-20 gold. Rabbit's Foot raises his odds. */
+  function spawnWhiteRabbit() {
+    sfx('rabbit_spawn', 0.4);
+    ctx.spawner.spawnPickup({
+      kind: 'whiterabbit',
+      spriteUrl: 'https://ccp.art/bubbles/darter.png',
+      w: 1.7, aheadDepth: 26, ttlSec: 9,
+      speed: ctx.nav.getSpeed() + 5,   // always a little quicker than you
+      glowColor: 0xffffff,
+      onClick: () => {
+        if (!st || state !== 'running') return;
+        const gold = goldScaled(randInt(10, 20));
+        bankGold(gold);
+        sfx('golden_pop', 0.55);
+        hudUi.toast(`🐇 caught him — +${gold} 🪙. he's late. you're not.`);
+        bark('rabbit-caught', { gold });
+        markDiscovered('pickup:whiterabbit');
+      },
+      onGone: () => { if (state === 'running') hudUi.toast('🐇 he got away. late, as always'); },
+    });
+  }
+
   /** Mood Ring L3: the HUD chip rerolls the current sky, once per descent. */
   function rerollWeather() {
     if (!st || state !== 'running' || !weatherNow) return;
@@ -1056,6 +1111,23 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     st.elapsedSec += dt;
     st.heat = Math.max(0, st.heat - 0.0015);
     ambientTick();
+
+    // W4 pickups: condensation beads on the wall (rank Tempted+); once per
+    // loop the white rabbit may dash by (Rabbit's Foot raises his odds).
+    if (ctx.spawner && !covered && st.freezeRemainingSec <= 0) {
+      if (cfg.rankIndex >= RANK.Tempted) {
+        condensationIn -= dt;
+        if (condensationIn <= 0) {
+          condensationIn = 12 + Math.random() * 8;
+          spawnCondensation();
+        }
+      }
+      if (st.waveIndex !== rabbitPickupWave) {
+        rabbitPickupWave = st.waveIndex;
+        const foot = st.goldenChanceBase > 0.005 ? 1.5 : 1.0; // Rabbit's Foot worn
+        if (Math.random() < 0.15 * foot) spawnWhiteRabbit();
+      }
+    }
 
     // Static weather: stray current pops a treat FOR you every few seconds;
     // one bolt in ten bites a live fuse down to half instead.
@@ -1886,6 +1958,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       const was = covered;
       covered = !!v;
       syncHeld();
+      // a native payload owns the screen: tunnel pickups stand down
+      if (covered && !was && ctx && ctx.spawner) ctx.spawner.clearPickups();
       if (was && !covered && state === 'running' && lessons) lessons.onVideoEndured();
     },
 

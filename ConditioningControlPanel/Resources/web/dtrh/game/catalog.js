@@ -376,6 +376,11 @@ export const DIARY_CODEX = [
     desc: 'Two of them, one thread. Each costs half a hold — but the second must come down quick, or the one left waiting turns furious: half the trance, half again the speed.' },
   { codex: 'bubble:brittle', name: 'The Brittle', glyph: '◇', tint: '217,239,255',
     desc: 'Thin glass with something live sealed inside. Your cursor brushing it is enough — it shatters, and whatever it held fires. Toys slide around it; a frozen field is safe to cross. Steer wide.' },
+  // ---- tunnel pickups (Wave 2): things you click ON the tube itself ----
+  { codex: 'pickup:condensation', name: 'Condensation', glyph: '💧', tint: '255,215,0',
+    desc: 'Golden droplets bead on the tunnel wall and streak past. Click one before it\'s gone for a few drops, banked when you surface. The walls sweat when you\'re close.' },
+  { codex: 'pickup:whiterabbit', name: 'The White Rabbit (in the walls)', glyph: '🐇', tint: '255,255,255',
+    desc: 'Once in a while he dashes down the tube, faster than you fall. Catch him with a click before he outruns you — he tips 10-20 gold for the trouble. He\'s late. You\'re not.' },
   // ---- the weather (Wave 2): one sky per loop, worn by the tunnel itself ----
   { codex: 'weather:stillness', name: 'Stillness', glyph: '🕯', tint: '255,214,236',
     desc: 'Weather. The deep holds its breath — trances burn 10% slower under it.' },
