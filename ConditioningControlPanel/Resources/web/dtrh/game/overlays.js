@@ -75,9 +75,11 @@ export function createOverlays(hud) {
   }
 
   /** Deal the table: pick a card, take the SKIP (+1 resistance), or reroll
-   * (Taking Chances). Untouched for autoResumeSec -> auto-skip, so an
-   * unattended run never freezes forever. */
-  function showDraft({ wave, options, autoResumeSec = 15, rerollsLeft = 0, onPick, onSkip, onReroll }) {
+   * (Taking Chances). Untouched for autoResumeSec -> auto-resolve, so an
+   * unattended run never freezes forever. allowSkip mirrors the draft_skip
+   * reveal (run 3+): before it, there is no resist button and the timeout
+   * PICKS a card for you instead of banking resistance. */
+  function showDraft({ wave, options, autoResumeSec = 15, rerollsLeft = 0, allowSkip = true, onPick, onSkip, onReroll }) {
     clearDraftTimers();
     dr.innerHTML = '';
     dr.hidden = false;
@@ -130,7 +132,8 @@ export function createOverlays(hud) {
         row.appendChild(c);
       }
     };
-    renderOptions(options);
+    let currentOptions = options;
+    renderOptions(currentOptions);
 
     const btns = document.createElement('div');
     btns.className = 'cf-draft-btns';
@@ -144,19 +147,22 @@ export function createOverlays(hud) {
       rr.addEventListener('click', () => {
         const res = onReroll();
         if (!res) { rr.disabled = true; return; }
-        renderOptions(res.options);
+        currentOptions = res.options;
+        renderOptions(currentOptions);
         rr.textContent = `🎲 reroll (${res.rerollsLeft})`;
         if (res.rerollsLeft <= 0) rr.remove();
       });
       btns.appendChild(rr);
     }
 
-    const skip = document.createElement('button');
-    skip.type = 'button';
-    skip.className = 'sf-btn';
-    skip.textContent = '♥ resist (+1 resistance)';
-    skip.addEventListener('click', () => finish(onSkip, false));
-    btns.appendChild(skip);
+    if (allowSkip) {
+      const skip = document.createElement('button');
+      skip.type = 'button';
+      skip.className = 'sf-btn';
+      skip.textContent = '♥ resist (+1 resistance)';
+      skip.addEventListener('click', () => finish(onSkip, false));
+      btns.appendChild(skip);
+    }
 
     if (autoResumeSec > 0) {
       const auto = document.createElement('div');
@@ -166,7 +172,15 @@ export function createOverlays(hud) {
       auto.textContent = `she chooses for you in ${draftCountdown}s`;
       draftTimer = window.setInterval(() => {
         draftCountdown--;
-        if (draftCountdown <= 0) { finish(onSkip, true); return; }
+        if (draftCountdown <= 0) {
+          // Skip revealed: she banks the resistance. Before that: she PICKS.
+          if (allowSkip) finish(onSkip, true);
+          else {
+            const pick = currentOptions[(Math.random() * currentOptions.length) | 0];
+            finish((b) => onPick(b, true), pick);
+          }
+          return;
+        }
         auto.textContent = `she chooses for you in ${draftCountdown}s`;
       }, 1000);
     }

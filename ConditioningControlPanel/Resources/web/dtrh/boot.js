@@ -7,9 +7,9 @@
  * failure is handled, by reporting boot-error so C# can fall back).
  *
  * Boot order: register bridge handlers -> announceReady() -> host flushes
- * `init` + `manifest` -> start the engine. M1 boots straight into The Fall
- * (the endless descent) on the user's active preset; the Warren hub and the
- * chaos run brain mount here in later milestones.
+ * `init` + `manifest` -> start the engine. M5: the page boots into the WARREN
+ * (the hub over the idling tunnel); each descent's config is dealt on demand
+ * (request-run -> run-config).
  * ==========================================================================*/
 
 import * as bridge from './bridge.js';
@@ -56,11 +56,12 @@ async function maybeStart() {
   started = true;
   try {
     const mod = await scenePromise;
-    // The run brain (M3): countdown -> waves -> recap; it sends its own
-    // run-started at GO! and run-ended -> payout over the bridge.
+    // The game session (M5): boots into the Warren; runs are dealt per-descent
+    // (request-run -> run-config), run-started at GO!, run-ended -> payout.
     game = createChaosGame({
       bridge,
-      runConfig: initMsg.runConfig,
+      hostState,
+      runSetup: initMsg.runSetup,
       requestExit: () => { bridge.send({ type: 'exit' }); shutdown(); },
     });
     engine = await mod.start({
@@ -94,7 +95,12 @@ bridge.on('init', (m) => {
   maybeStart();
 });
 bridge.on('manifest', (m) => { media.setManifest(m); haveManifest = true; maybeStart(); });
-bridge.on('meta', (m) => { hostState.meta = m.state; hostState.metaRev = m.rev; });
+bridge.on('meta', (m) => {
+  hostState.meta = m.state;
+  hostState.metaRev = m.rev;
+  if (game) game.onMeta();   // the Warren re-renders its shelves
+});
+bridge.on('run-config', (m) => { if (game) game.onRunConfig(m); });
 bridge.on('payout-result', (m) => {
   hostState.lastPayout = m;
   if (game) game.onPayout(m);

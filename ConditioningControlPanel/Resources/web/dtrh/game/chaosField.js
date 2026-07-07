@@ -53,7 +53,8 @@ const CHAINABLE = new Set(['treat', 'golden', 'droplet', 'heart']);
 
 export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreezeCaught,
   onDefused, onDetonated, onTreatExpired, onChannelBroken,
-  onDarterCaught, onTeaseTouched, onTeaseDenied, onBrittleShattered, onBoundEnraged }) {
+  onDarterCaught, onTeaseTouched, onTeaseDenied, onBrittleShattered, onBoundEnraged,
+  onRabbitSmacked = null }) {
   const layer = document.createElement('div');
   layer.className = 'cf-layer';
   hud.insertBefore(layer, hud.firstChild); // under HUD chrome, above the canvas + fieldFx
@@ -515,6 +516,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     const sp = Math.max(120, Math.hypot(b.vx, b.vy)) * 1.18;
     b.vx = (dx / d) * sp;
     b.vy = (dy / d) * sp;
+    if (onRabbitSmacked) { try { onRabbitSmacked(!b.smacked); } catch (err) { /* ignore */ } }
     if (!b.smacked) {
       b.smacked = true;
       const grow = Math.min(3.0, phys.spankGrow);

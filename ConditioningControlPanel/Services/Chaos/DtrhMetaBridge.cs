@@ -98,7 +98,13 @@ internal sealed class DtrhMetaBridge
                 {
                     var id = RequireId(o); int cost = Cost(o);
                     if (id != null && S.Sparks >= cost && !S.PurchasedUpgrades.Contains(id))
-                    { S.Sparks -= cost; S.PurchasedUpgrades.Add(id); applied = true; }
+                    {
+                        S.Sparks -= cost;
+                        S.PurchasedUpgrades.Add(id);
+                        // Mirrors ChaosMeta.TryPurchase: the Inescapable door opens at purchase time.
+                        if (id == "extreme_tier") S.ExtremeUnlocked = true;
+                        applied = true;
+                    }
                     break;
                 }
                 case "toggle-upgrade":
@@ -160,6 +166,43 @@ internal sealed class DtrhMetaBridge
                     var id = RequireId(o); int cost = Cost(o);
                     if (id != null && S.Gold >= cost && !S.BenchPurchases.Contains(id))
                     { S.Gold -= cost; S.BenchPurchases.Add(id); applied = true; }
+                    break;
+                }
+                case "bench-buy":
+                {
+                    // The full WPF BenchBuy_Click semantics in one op: spend gold (or HER GIFT -
+                    // the one-time cover of a short balance on the first toy pocket), record the
+                    // purchase, and apply the pocket effect for the pocket rows. The page owns the
+                    // rank/reveal gating UI; affordability + one-time-ness are enforced here.
+                    var id = RequireId(o); int cost = Cost(o);
+                    if (id == null || S.BenchPurchases.Contains(id)) break;
+                    bool paid = false, gift = false;
+                    if (S.Gold >= cost) { S.Gold -= cost; paid = true; }
+                    else if (id == BenchIds.ToyPocket1 && !S.GiftGiven)
+                    { S.GiftGiven = true; S.Gold = 0; paid = true; gift = true; }
+                    if (!paid) break;
+                    S.BenchPurchases.Add(id);
+                    if (id is BenchIds.ToyPocket1 or BenchIds.ToyPocket2)
+                        S.ToyPockets = Math.Min(S.ToyPockets + 1, ChaosMeta.MAX_POCKETS_PER_CATEGORY);
+                    else if (id is BenchIds.AccPocket1 or BenchIds.AccPocket2)
+                        S.AccessoryPockets = Math.Min(S.AccessoryPockets + 1, ChaosMeta.MAX_POCKETS_PER_CATEGORY);
+                    if (gift && !_testMode) { try { App.Bark?.NotifyChaosGiftGiven(); } catch { } }
+                    applied = true;
+                    break;
+                }
+                case "first-time":
+                {
+                    // ChaosFirstTimes.TryAward over the bridge: a one-time drops bonus, the
+                    // amount table C#-owned so the page can't invent values. Bark included
+                    // (mirrors TryAward), skipped in test mode.
+                    var id = RequireId(o);
+                    if (id == null || !ChaosFirstTimes.Amounts.TryGetValue(id, out int amount)) break;
+                    S.FirstTimesAwarded ??= new HashSet<string>();
+                    if (!S.FirstTimesAwarded.Add(id)) break;
+                    S.Sparks += amount;
+                    if (!_testMode) { try { App.Bark?.NotifyChaosFirstTime(id); } catch { } }
+                    App.Logger?.Information("DtrhMetaBridge: first-time {Id} +{Amount} drops", id, amount);
+                    applied = true;
                     break;
                 }
                 case "lesson-progress":
@@ -232,6 +275,10 @@ internal sealed class DtrhMetaBridge
         else if (op != null) App.Logger?.Debug("DtrhMetaBridge: op '{Op}' rejected (shape/affordability)", op);
         return applied;
     }
+
+    /// <summary>Push a fresh snapshot to the page after C#-side mutations that bypass
+    /// <see cref="Handle"/> (run-end reveal sync, award banking).</summary>
+    public void Rebroadcast() => Bump();
 
     /// <summary>Flush any pending debounced save immediately (run end / exit).</summary>
     public void FlushSave()

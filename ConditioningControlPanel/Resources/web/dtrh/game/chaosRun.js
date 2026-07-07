@@ -21,9 +21,12 @@
  * director is a speed/boost presentation adapter. No-lose: detonations cost
  * streak/heat/resistance and fire REAL native payloads over the bridge.
  *
- * NOT ported (deliberately, for now): the happy-path scripted first runs,
- * lessons/first-times, and the Madam narrative - they belong to the Warren
- * milestone (M5). Web runs play as normal unscripted descents.
+ * M5: the page boots into the WARREN (warren.js - the hub over the idling
+ * tunnel). A descent is dealt per-run: request-run -> the host persists the
+ * setup + answers run-config -> countdown. The recap's "wake up" returns to
+ * the Warren. Lessons/first-times (lessons.js) and the happy-path scripted
+ * first descents (happyPath.js) ride the run's seams. The Madam narrative is
+ * NOT ported - Story mode is disabled in the WPF game too (placeholder only).
  * ==========================================================================*/
 
 import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildHeart, buildGoldDroplet,
@@ -39,6 +42,10 @@ import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
 import { createChaosHud } from './chaosHud.js';
 import { createOverlays } from './overlays.js';
+import { createWarren } from './warren.js';
+import { createLessonTracker } from './lessons.js';
+import { createHappyPath } from './happyPath.js';
+import { lessonById } from './catalog.js';
 
 // ---- economy tuning (ChaosTuning.cs / ChaosModeService.cs) ----
 const FOCUS_MAX = 100, FOCUS_START = 50;
@@ -63,49 +70,63 @@ const RANK = { Curious: 0, Tempted: 1, Slipping: 2, Entranced: 3, Devoted: 4, Cl
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));   // inclusive
 
-export function createChaosGame({ bridge, runConfig, requestExit }) {
-  const rc = runConfig || {};
-  const lo = rc.loadout || {};
-  const cfg = {
-    difficulty: rc.difficulty || 'Easy',
-    difficultyMult: rc.difficultyMult ?? 1.0,
-    durationSec: clamp(rc.durationSec ?? 180, 60, 900),
-    waveCount: clamp(rc.waveCount ?? 5, 1, 12),
-    effectIntensity: clamp(rc.effectIntensity ?? 0.85, 0.2, 1.5),
-    enabledVariants: rc.enabledVariants || null,
-    motionOverride: rc.motionOverride && MOTION[rc.motionOverride] ? rc.motionOverride : null,
-    baseMult: rc.baseMult ?? 1.0,
-    sparkGainMult: rc.sparkGainMult ?? 1.0,
-    spawnRateMult: clamp(rc.spawnRateMult ?? 1.0, 0.1, 10.0),
-    colorFlashes: rc.colorFlashes !== false,
-    boonDraftEnabled: rc.boonDraftEnabled !== false,
-    allowCurses: rc.allowCurses !== false,
-    dartersEnabled: rc.dartersEnabled !== false,
-    draftChoices: clamp(rc.draftChoices ?? 3, 2, 4),
-    draftAutoResumeSec: rc.draftAutoResumeSec ?? 15,
-    sinChance: clamp(rc.sinChance ?? 0.5, 0, 1),
-    pendulumSwing: !!rc.pendulumSwing,
-    popupHeart: !!rc.popupHeartEnabled,
-    rankIndex: rc.rankIndex ?? 0,
-    equipment: rc.equipment || [],
-    equippedStartBoon: rc.equippedStartBoon || null,
-    toys: rc.toys || [],
-    toyKeys: rc.toyKeys || ['Q', 'E'],
-    thoughtTexts: (rc.thoughtTexts && rc.thoughtTexts.length ? rc.thoughtTexts : ['GIVE IN']),
-  };
-  // Seen-once flags: a local mutable mirror of chaos_meta (persisted one-way
-  // over the bridge the moment each flips).
-  const flags = Object.assign({
-    seenDefuseTutorial: false, seenFocusTip: false, seenHeatTeach: false, seenRippleTeach: false,
-    seenEcho: false, seenChaperone: false, seenTease: false, seenBound: false, seenBrittle: false,
-    seenGoldFirst: false, seenBarkDefuseFirst: false, seenBarkDefuseNoFocus: false,
-    seenBarkDefuseRelease: false, seenBarkClickDetonate: false,
-  }, rc.flags || {});
+export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
+  // rc/lo/cfg/flags are dealt PER RUN by applyRunConfig (the host's run-config
+  // answer to request-run) - the Warren can change the loadout between runs.
+  let rc = {}, lo = {}, cfg = null, flags = {};
+
+  function applyRunConfig(runConfig) {
+    rc = runConfig || {};
+    lo = rc.loadout || {};
+    cfg = {
+      difficulty: rc.difficulty || 'Easy',
+      difficultyMult: rc.difficultyMult ?? 1.0,
+      durationSec: clamp(rc.durationSec ?? 180, 60, 900),
+      waveCount: clamp(rc.waveCount ?? 5, 1, 12),
+      effectIntensity: clamp(rc.effectIntensity ?? 0.85, 0.2, 1.5),
+      enabledVariants: rc.enabledVariants || null,
+      motionOverride: rc.motionOverride && MOTION[rc.motionOverride] ? rc.motionOverride : null,
+      baseMult: rc.baseMult ?? 1.0,
+      sparkGainMult: rc.sparkGainMult ?? 1.0,
+      spawnRateMult: clamp(rc.spawnRateMult ?? 1.0, 0.1, 10.0),
+      colorFlashes: rc.colorFlashes !== false,
+      boonDraftEnabled: rc.boonDraftEnabled !== false,
+      allowCurses: rc.allowCurses !== false,
+      dartersEnabled: rc.dartersEnabled !== false,
+      draftChoices: clamp(rc.draftChoices ?? 3, 2, 4),
+      draftAutoResumeSec: rc.draftAutoResumeSec ?? 15,
+      sinChance: clamp(rc.sinChance ?? 0.5, 0, 1),
+      pendulumSwing: !!rc.pendulumSwing,
+      popupHeart: !!rc.popupHeartEnabled,
+      rankIndex: rc.rankIndex ?? 0,
+      runsCompleted: rc.runsCompleted ?? 0,
+      scriptedFirstRun: !!rc.scriptedFirstRun,
+      equipment: rc.equipment || [],
+      equippedStartBoon: rc.equippedStartBoon || null,
+      toys: rc.toys || [],
+      toyKeys: rc.toyKeys || ['Q', 'E'],
+      thoughtTexts: (rc.thoughtTexts && rc.thoughtTexts.length ? rc.thoughtTexts : ['GIVE IN']),
+    };
+    bridge.log(`runcfg: diff=${cfg.difficulty} scripted=${cfg.scriptedFirstRun} runs=${cfg.runsCompleted}`
+      + ` variants=${JSON.stringify(cfg.enabledVariants)} draft=${cfg.boonDraftEnabled} sin=${cfg.sinChance}`);
+    // Seen-once flags: a local mutable mirror of chaos_meta (persisted one-way
+    // over the bridge the moment each flips).
+    flags = Object.assign({
+      seenDefuseTutorial: false, seenFocusTip: false, seenHeatTeach: false, seenRippleTeach: false,
+      seenEcho: false, seenChaperone: false, seenTease: false, seenBound: false, seenBrittle: false,
+      seenGoldFirst: false, seenBarkDefuseFirst: false, seenBarkDefuseNoFocus: false,
+      seenBarkDefuseRelease: false, seenBarkClickDetonate: false,
+      seenBraindrain: false, seenFirstSin: false, seenDuoDemo: false,
+    }, rc.flags || {});
+  }
 
   let ctx = null;      // { nav, fx, director, hud, canvas } from scene.start
   let field = null, ffx = null, hudUi = null, overlays = null;
-  let state = 'boot';  // boot -> countdown -> running -> drafting -> recap
+  let warren = null, lessons = null, happy = null;
+  let state = 'boot';  // boot -> warren -> requesting -> countdown -> running -> drafting -> recap
   let paused = false, hidden = false, covered = false, drafting = false;
+  let shortNextCountdown = false;   // "fall again" re-enters with the lone GO flash
+  let scriptedDraftActive = false;  // run 1's mid-run draft: no wave commit
   const heldNow = () => paused || hidden || covered || drafting;
 
   // ---- run state (ChaosRunState + the boon knobs) ----
@@ -230,6 +251,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
     }
     if (isDetonation && spec.variantId === 'braindrain') sfx('fx_drain', 0.45);
     bridge.send({ type: 'fire-payload', ...spec.payload, strength: spec.strength, durationMult });
+    lessons.onPayloadFired(kind);   // blindfold's screen-busy window
   };
   const heavyActive = () => covered || performance.now() < heavyUntil;
   const bankGold = (amount, x, y) => {
@@ -324,6 +346,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
 
   function onDetonated(spec, x, y) {
     if (!st || state !== 'running' || heldNow()) return;
+    lessons.onDetonation();   // silk_touch: this loop is no longer clean
     if (spec.isEcho) {
       spawnEchoChildren(spec, x, y);   // the Echo fires NO payload - it SPLITS
     } else {
@@ -385,6 +408,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
     countRegenPop();
 
     if (spec.kind === 'heart') {
+      lessons.onSpecialPopped();
       st.shields += 1;
       st.focus = clamp(st.focus + FOCUS_PER_HEART, 0, FOCUS_MAX);
       hudUi.announce('💖 +1 resistance', 'powerup', 1600, { artKey: 'resistance' });
@@ -393,6 +417,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
       return;
     }
     if (spec.kind === 'droplet') {
+      lessons.onSpecialPopped();
       st.focus = clamp(st.focus + FOCUS_PER_DROPLET, 0, FOCUS_MAX);
       bankGold(goldScaled(randInt(3, 7)), x, y);
       sfx('golden_pop', 0.35);
@@ -400,6 +425,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
       return;
     }
     if (spec.kind === 'golden') {
+      lessons.onSpecialPopped();
       st.focus = clamp(st.focus + FOCUS_PER_GOLDEN, 0, FOCUS_MAX);
       const gold = goldScaled(randInt(st.goldenPay[0], st.goldenPay[1]));
       bankGold(gold, x, y);
@@ -416,6 +442,8 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
       return;
     }
     if (spec.kind === 'prism') {
+      lessons.onSpecialPopped();
+      lessons.onPrismPopped();
       st.focus = clamp(st.focus + FOCUS_PER_PRISM, 0, FOCUS_MAX);
       firePayload(spec, true);   // the sin: the copied effect fires at full strength
       st.effectsFired++;
@@ -435,6 +463,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
     }
 
     // ---- standard treat (incl. heavies and chaperone escorts) ----
+    lessons.onTreatPopped(spec, x, y);   // vibe window / chains / the_pull / whispers
     firePayload(spec);   // benign pop = a treat: the effect IS the reward
     st.effectsFired++;
     st.combo++;
@@ -500,6 +529,8 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
       if (setFlag('seenBarkDefuseFirst')) bark('defuse-first');
     }
     if (st.defuseInvulnMs > 0) st.invulnUntil = performance.now() + st.defuseInvulnMs;
+    lessons.onDefuseCompleted(fuseSecLeft, viaChannel);   // last_breath / snap_field / blindfold
+    happy.onDefuseCompleted(hpIo);                        // run 1: the whitelist opens
     countRegenPop();
     st.defused++;
     st.combo++;
@@ -541,6 +572,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
 
   function onDarterCaught(spec, quick) {
     if (!st || state !== 'running' || heldNow()) return;
+    lessons.onRabbitCaught();
     firePayload(spec);   // the micro-flash (strength 8)
     const pts = (DARTER_BASE_POINTS + (quick ? DARTER_QUICK_BONUS : 0)) * totalMult();
     st.score += pts;
@@ -561,6 +593,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
 
   function onFreezeCaught(spec) {
     if (!st || state !== 'running' || heldNow()) return;
+    lessons.onFreezeCaught();
     st.score += FREEZE_BASE_POINTS * totalMult();
     st.combo++;
     if (st.combo > st.bestCombo) st.bestCombo = st.combo;
@@ -572,6 +605,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
 
   function onTeaseTouched(spec) {
     if (!st || state !== 'running' || heldNow()) return;
+    lessons.onDetonation();   // a touched tease dirties the loop too
     st.detonated++;
     st.runDetonations++;
     st.waveDetonations++;
@@ -616,6 +650,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
 
   function onBrittleShattered(spec) {
     if (!st || state !== 'running' || heldNow()) return;
+    lessons.onDetonation();
     sfx('glass_shatter', 0.55);
     if (st.shields >= 1) {
       st.shields -= 1;
@@ -790,6 +825,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
           : `⚡ charged — your next ${estimCharges} pops conduct`);
         break;
     }
+    lessons.onToyFired();   // first_play
     hudUi.updateToys(toys, toyStatus());
   }
 
@@ -953,6 +989,9 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
 
     tickToys(dt);
     tickHeartbeat(dt);
+    lessons.sampleCursor();                          // the_pull's rest witness
+    lessons.noteChannelTotal(field.channelSeconds()); // slow_fuses
+    happy.tickRun(hpIo);                             // scripted first-descent beats
 
     if (!st.endingSoonFired && st.runDurationSec - st.elapsedSec <= 10) {
       st.endingSoonFired = true;
@@ -1008,6 +1047,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
   // ============================ waves + the draft table ============================
 
   function beginWaveTransition(newWave) {
+    lessons.onLoopCompleted();   // silk_touch judged + progress flushed per loop
     awardLoopTip();
     bark('wave-escalated', { wave: newWave });
 
@@ -1032,7 +1072,10 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
       options,
       autoResumeSec: cfg.draftAutoResumeSec,
       rerollsLeft: st.rerollsLeft,
-      onPick: (boon) => resolveDraft(boon, false),
+      // The SKIP affordance is reveal-gated until run 3 (draft_skip): before
+      // that the table auto-PICKS on timeout ("she chooses for you").
+      allowSkip: cfg.runsCompleted >= 2,
+      onPick: (boon, auto) => { if (auto) bark('draft-autopick'); resolveDraft(boon, auto); },
       onSkip: (auto) => { if (auto) bark('draft-autopick'); resolveDraft(null, auto); },
       onReroll: () => {
         if (st.rerollsLeft <= 0) return null;
@@ -1052,6 +1095,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
       sinChance: cfg.sinChance,
       equipment: cfg.equipment,
     });
+    happy.rigDraft(options, hpIo);   // run 4's defanged first sin / the duo demo
     for (const o of options) markDiscovered('boon:' + o.id);
     return options;
   }
@@ -1068,15 +1112,21 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
 
   function resolveDraft(boon, auto) {
     if (boon) {
-      const sinShielded = boon.curse && st.maxedBoons.has('surrender') && !st.surrenderShieldUsed;
-      if (sinShielded) st.surrenderShieldUsed = true;
+      lessons.onDraftCardTaken(!!boon.curse);   // draft4 / surrender / first-times
+      // The happy-path rig shields the run-4 demo sin WITHOUT spending
+      // Surrender's own once-per-run candle.
+      const rigShield = boon.curse && happy.shouldShieldSin(boon.id);
+      const surrShield = boon.curse && !rigShield && st.maxedBoons.has('surrender') && !st.surrenderShieldUsed;
+      if (surrShield) st.surrenderShieldUsed = true;
+      const sinShielded = rigShield || surrShield;
       applyBoon(boon, sinShielded);
       if (boon.curse) {
         if (st.sinExtraMult > 0) {
           st.boonMult += st.sinExtraMult;
           hudUi.toast(`🕯 sin embraced (+${st.sinExtraMult.toFixed(2)}x)`);
         }
-        if (sinShielded) hudUi.toast('🕯 the candle took the sting (no drawback)');
+        if (rigShield) hudUi.toast('☠ the first taste is free — no sting, this once');
+        else if (sinShielded) hudUi.toast('🕯 the candle took the sting (no drawback)');
         if (st.maxedBoons.has('surrender')) {
           st.shields += 1;
           hudUi.toast('🕯 you said yes. it gave back (+1 resistance)');
@@ -1095,14 +1145,17 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
       hudUi.announce('+1 RESISTANCE', 'freeze', 2000, { artKey: 'resistance' });
       bark('boon-skipped', { shields: st.shields });
     }
-    commitWave(pendingWave);
+    happy.onDraftResolved(hpIo);   // the run-4 first-sin beat is spent either way
+    const scripted = scriptedDraftActive;
+    scriptedDraftActive = false;
+    if (!scripted) commitWave(pendingWave);   // run 1's mid-run table advances no loop
     // A brief "Ready? -> GO!" beat before the next loop resumes.
     overlays.showReadyGo(() => {
       drafting = false;
       state = 'running';
       syncHeld();
-      if (st.welcomeShower) spawnWelcomeShower();
-      announceFinalLoopIfEntering();
+      if (!scripted && st.welcomeShower) spawnWelcomeShower();
+      if (!scripted) announceFinalLoopIfEntering();
     }, { onTick: (b) => sfx(b === 'GO!' ? 'sink' : 'countdown_tick', 0.45) });
   }
 
@@ -1228,7 +1281,9 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
     const maxConcurrent = Math.round((6 + i * 10) * Math.sqrt(cfg.difficultyMult));
 
     const room = field.count() < maxConcurrent;
-    const behavioralSpawned = room && trySpawnBehavioral(effIntensity);
+    // The scripted first descent: the behavioral menagerie stands down entirely
+    // (the happy path spawns its own scripted threat/darter beats).
+    const behavioralSpawned = room && !cfg.scriptedFirstRun && trySpawnBehavioral(effIntensity);
 
     if (!behavioralSpawned && room) {
       // Be gentle with the tape: no video bubble while a heavy effect runs, and
@@ -1281,7 +1336,7 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
         field.spawn(buildPrism(effIntensity, cfg.effectIntensity, st.prismTreatOnly));
       }
       // The Brittle (Tempted+, half odds on Gentle): a glass mine rides in alongside.
-      if (cfg.rankIndex >= RANK.Tempted
+      if (!cfg.scriptedFirstRun && cfg.rankIndex >= RANK.Tempted
           && Math.random() < BRITTLE_SPAWN_CHANCE * (cfg.difficulty === 'Easy' ? 0.5 : 1.0)) {
         if (!flags.seenBrittle) {
           setFlag('seenBrittle');
@@ -1343,6 +1398,96 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
 
   const onContextMenu = (e) => { e.preventDefault(); };
 
+  // ============================ happy path (scripted first descents) ============================
+
+  /** The beat surface the happy-path director drives (ChaosHappyPath's view of the run). */
+  const hpIo = {
+    log: (m) => bridge.log(m),
+    progress: () => intensity(),
+    combo: () => (st ? st.combo : 0),
+    announce: (text, kind, holdMs) => hudUi && hudUi.announce(text, kind, holdMs),
+    toast: (text) => hudUi && hudUi.toast(text),
+    flags: { has: (k) => !!flags[k], set: (k) => setFlag(k) },
+    variantAllowed: (id) => !cfg.enabledVariants || cfg.enabledVariants.includes(id),
+    joinVariants: (ids) => {
+      if (!cfg.enabledVariants) return;
+      for (const id of ids) if (!cfg.enabledVariants.includes(id)) cfg.enabledVariants.push(id);
+    },
+    get allowCurses() { return cfg.allowCurses; },
+    equipmentHas: (id) => cfg.equipment.includes(id),
+    bark: (event) => bark(event),
+    spawnScriptedThreat(fuseMult) {
+      const pink = VARIANTS.find((v) => v.id === 'pink');
+      if (!pink) return;
+      bridge.log('happy: scripted threat spawns');
+      markDiscovered('bubble:pink');
+      field.spawn(build(pink, intensity(), {
+        fuseTimeMult: st.fuseTimeMult * fuseMult,
+        effectIntensity: cfg.effectIntensity,
+        sizeScale: st.bubbleScale,
+      }));
+    },
+    /** The one scripted draft (drafts are otherwise off this run). Returns false
+     * when the moment is busy (held) so the beat retries next tick. */
+    triggerScriptedDraft(pool) {
+      if (heldNow() || state !== 'running') return false;
+      scriptedDraftActive = true;
+      drafting = true;
+      state = 'drafting';
+      syncHeld();
+      field.clearAll(true);
+      sfx('wave_clear', 0.6);
+      pulse('150,200,255', 0.30);
+      pendingWave = st.waveIndex;
+      for (const o of pool) markDiscovered('boon:' + o.id);
+      overlays.showDraft({
+        wave: st.waveIndex,
+        options: pool,
+        autoResumeSec: cfg.draftAutoResumeSec,
+        rerollsLeft: 0,
+        allowSkip: false,   // no skip on the classroom table - timeout picks for you
+        onPick: (boon, auto) => { if (auto) bark('draft-autopick'); resolveDraft(boon, auto); },
+        onSkip: () => resolveDraft(pool[0], true),   // unreachable with allowSkip false
+      });
+      return true;
+    },
+    spawnDarter() {
+      markDiscovered('bubble:darter');
+      field.spawn(buildDarter(intensity()));
+    },
+    spawnBraindrainDebut() {
+      const v = VARIANTS.find((x) => x.id === 'braindrain');
+      if (!v) return;
+      markDiscovered('bubble:braindrain');
+      field.spawn(build(v, intensity(), {
+        fuseTimeMult: st.fuseTimeMult * DEBUT_FUSE_MULT,
+        effectIntensity: cfg.effectIntensity,
+        sizeScale: st.bubbleScale,
+      }));
+    },
+    spawnGolden() {
+      markDiscovered('bubble:golden');
+      field.spawn(buildGolden());
+      field.playChime(0.30);
+    },
+  };
+
+  /** A lesson completed mid-run: announce the unlocked shelf row (the WPF
+   * mid-run unlock card, sized for the browser HUD) - the bark rode with the
+   * lesson-progress command already. */
+  function onLessonComplete(id) {
+    const def = lessonById(id);
+    if (!def || !hudUi) return;
+    hudUi.announce('LESSON LEARNED', 'powerup', 3200, { artKey: id, subText: 'now for sale in the toybox' });
+    pulse('255,215,0', 0.35);
+  }
+
+  function onFirstTimeAwarded(id, amount, label) {
+    if (!hudUi) return;
+    hudUi.toast(`✨ ${label} — +${amount} ✦ banked`);
+    pulse('255,230,150', 0.20);
+  }
+
   // ============================ lifecycle ============================
 
   function beginCountdown(short) {
@@ -1359,11 +1504,15 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
     vibeRemainingSec = 0; afterglowApplied = false;
     estimCharges = 0; rabbitCallPending = 0; rabbitStormSec = 0; thoughtAccum = 0;
     heartbeatCd = 0;
+    scriptedDraftActive = false;
     buildToys();
     syncPhys();
+    lessons.seed(hostState ? hostState.meta : null, cfg.allowCurses);
+    happy.onRunStarted(cfg.runsCompleted, cfg.scriptedFirstRun);
 
-    // A pre-equipped start boon enters the run already active (before wave 1).
-    if (cfg.equippedStartBoon) {
+    // A pre-equipped start boon enters the run already active (before wave 1) -
+    // except on the scripted first descent, where it stands down (the classroom).
+    if (cfg.equippedStartBoon && !cfg.scriptedFirstRun) {
       const boon = boonById(cfg.equippedStartBoon);
       if (boon) {
         applyBoon(boon);
@@ -1383,8 +1532,9 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
       onGo: () => {
         state = 'running';
         bridge.send({ type: 'run-started', difficulty: cfg.difficulty, mode: 'dtrh-web' });
-        // First descent since the verb changed: one quiet line so the hold isn't a mystery.
-        if (!flags.seenDefuseTutorial) {
+        // First descent since the verb changed: one quiet line so the hold isn't
+        // a mystery. The scripted run 1 lands this at its lone-threat beat instead.
+        if (!flags.seenDefuseTutorial && !cfg.scriptedFirstRun) {
           setFlag('seenDefuseTutorial');
           hudUi.announce('press and HOLD a live one to snap it', 'freeze', 3200);
         }
@@ -1399,6 +1549,8 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
     if (st.freezeRemainingSec > 0) endFreeze();
     if (st.slowMoRemainingSec > 0) endSlowMo();
     field.setVibe(false);
+    lessons.onRunCompleted(st.shields, cfg.difficulty, ranFullCourse);
+    happy.onRunEnded();
     if (ranFullCourse) awardLoopTip();   // the final loop ends at the run clock
     field.clearAll();
     ctx.director.killBoost();
@@ -1431,18 +1583,31 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
       trickleDrops: st.trickleDrops,
     }, {
       onAgain: () => {
+        // Re-request a fresh config (the loadout/settings may have moved, and
+        // run 1 -> run 2 must leave the classroom behind).
         overlays.hideRecap();
-        ctx.director.setTimeFactor(1);
-        ctx.director.reset();
-        ctx.nav.reset();          // fresh plunge
-        beginCountdown(true);     // the WPF RunAgain uses the short GO flash
+        shortNextCountdown = true;
+        state = 'requesting';
+        bridge.send({ type: 'request-run', setup: warren.currentSetup() });
       },
-      onSurface: () => {
-        if (requestExit) requestExit();
-        else bridge.send({ type: 'exit' });
-      },
+      onSurface: () => returnToWarren(),
     });
     hudUi.update(hudState());
+  }
+
+  /** Back to the hub: the recap closes, the tunnel idles, the Warren re-renders
+   * on the freshest snapshot (the payout's rebroadcast usually landed already). */
+  function returnToWarren() {
+    overlays.hideRecap();
+    overlays.hideCountdown();
+    hudUi.setVisible(false);
+    hudUi.setPicks([]);
+    field.clearAll();
+    ctx.director.setTimeFactor(0.3);
+    state = 'warren';
+    drafting = false;
+    syncHeld();
+    warren.show('menu');
   }
 
   function syncHeld() {
@@ -1453,7 +1618,8 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
   // ============================ scene integration ============================
 
   return {
-    /** scene.start calls this once the engine is live. */
+    /** scene.start calls this once the engine is live: mount the WARREN over
+     * the idling tunnel; a descent starts when the host answers request-run. */
     attach(sceneCtx) {
       ctx = sceneCtx;
       ffx = createFieldFx(ctx.hud);
@@ -1462,14 +1628,55 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
         canChannel, onBenignPopped, onFreezeCaught,
         onDefused, onDetonated, onTreatExpired, onChannelBroken,
         onDarterCaught, onTeaseTouched, onTeaseDenied, onBrittleShattered, onBoundEnraged,
+        onRabbitSmacked: (first) => lessons.onRabbitSmacked(first),
       });
       hudUi = createChaosHud(ctx.hud, { onToyUse: (id) => { const t = toys.find((x) => x.id === id); if (t) useToy(t); } });
       overlays = createOverlays(ctx.hud);
+      lessons = createLessonTracker({ bridge, onComplete: onLessonComplete, onFirstTime: onFirstTimeAwarded });
+      lessons.setCoveredProbe(() => covered || heavyActive());
+      happy = createHappyPath();
+      warren = createWarren({
+        hud: ctx.hud, bridge,
+        getMeta: () => (hostState ? hostState.meta : null),
+        runSetup,
+        onDescend: (setup) => {
+          state = 'requesting';
+          bridge.send({ type: 'request-run', setup });
+        },
+        onExit: () => { if (requestExit) requestExit(); else bridge.send({ type: 'exit' }); },
+      });
       window.addEventListener('pointerdown', onPointerDownGlobal, true);
       window.addEventListener('pointerdown', onGlobalPointerDownCapture, true);
       window.addEventListener('contextmenu', onContextMenu);
       window.addEventListener('keydown', onToyKey);
-      beginCountdown(false);
+      hudUi.setVisible(false);
+      ctx.director.setTimeFactor(0.3);   // the tunnel idles at a crawl under the hub
+      state = 'warren';
+      warren.show('menu');
+    },
+
+    /** The host answered request-run: deal the fresh config and drop in. */
+    onRunConfig(m) {
+      if (!m || !m.runConfig || !ctx) return;
+      if (state !== 'requesting' && state !== 'warren') return;   // stale answer mid-run
+      applyRunConfig(m.runConfig);
+      warren.hide();
+      ctx.director.setTimeFactor(1);
+      ctx.director.reset();
+      ctx.nav.reset();          // fresh plunge
+      const short = shortNextCountdown;
+      shortNextCountdown = false;
+      beginCountdown(short);
+    },
+
+    /** A fresh meta snapshot landed - the Warren re-renders its shelves. */
+    onMeta() { if (warren) warren.refresh(); },
+
+    /** Esc routing: the Warren owns the key while it's up (scene skips its pause). */
+    onEsc() {
+      if (state === 'warren') return warren.handleEsc();
+      if (state === 'requesting') return true;   // swallow while the hole opens
+      return false;
     },
 
     /** Called every frame from the scene loop (dt already clamped). */
@@ -1495,8 +1702,14 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
 
     setPaused(v) { paused = !!v; syncHeld(); },
     setHidden(v) { hidden = !!v; syncHeld(); },
-    /** A native payload window (mandatory video) fully covers the page. */
-    setCovered(v) { covered = !!v; syncHeld(); },
+    /** A native payload window (mandatory video) fully covers the page. A cover
+     * that LIFTS while the run lives = a video endured to its end (porn_dvd). */
+    setCovered(v) {
+      const was = covered;
+      covered = !!v;
+      syncHeld();
+      if (was && !covered && state === 'running' && lessons) lessons.onVideoEndured();
+    },
 
     /** M4: tunnel veils fire their wash only while the run is actually falling. */
     allowVeil() { return state === 'running' && !heldNow(); },
@@ -1522,11 +1735,14 @@ export function createChaosGame({ bridge, runConfig, requestExit }) {
       window.removeEventListener('pointerdown', onGlobalPointerDownCapture, true);
       window.removeEventListener('contextmenu', onContextMenu);
       window.removeEventListener('keydown', onToyKey);
+      warren?.dispose();
+      lessons?.dispose();
       overlays?.dispose();
       hudUi?.dispose();
       field?.dispose();
       ffx?.dispose();
       field = null; hudUi = null; overlays = null; ffx = null;
+      warren = null; lessons = null; happy = null;
     },
   };
 }

@@ -260,6 +260,9 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   function onKeyDown(e) {
     if (e.key !== 'Escape') return;
     if (panel.isOpen()) { panel.close(); return; }
+    // M5: while the Warren is up it owns Esc (backs out of the dollhouse /
+    // closes its modals) - the engine pause card belongs to live descents.
+    if (game && game.onEsc && game.onEsc()) return;
     setGamePaused(!gamePaused);
   }
   window.addEventListener('keydown', onKeyDown);

@@ -123,7 +123,10 @@ internal static class DtrhHostService
                 type = "init",
                 protocol = Protocol,
                 settings = new { masterVolume = SafeMasterVolume() },
-                runConfig = BuildRunConfig(),
+                // M5: the page boots into the Warren hub; a run's config is dealt
+                // per-descent by request-run. init carries the SAVED run setup so
+                // the hub's Descent tab opens on the user's own choices.
+                runSetup = BuildRunSetup(),
                 m2Test = _testMode,
             });
             if (_meta != null) _host?.Post(_meta.SnapshotMessage());
@@ -162,6 +165,9 @@ internal static class DtrhHostService
             case "meta-command":
                 _meta?.Handle(o);
                 break;
+            case "request-run":
+                OnRequestRun(o);
+                break;
             case "run-started":
             {
                 _runActive = true;
@@ -198,6 +204,77 @@ internal static class DtrhHostService
                 _lastHeartbeatUtc = DateTime.UtcNow;
                 break;
         }
+    }
+
+    /// <summary>request-run {setup?} -> persist the hub's Descent-tab choices into AppSettings
+    /// (the same fields ChaosHubWindow.SaveToSettings writes, so WPF and web share one setup),
+    /// then deal a fresh run config: the scripted first-descent classroom when RunsCompleted == 0
+    /// (ChaosHappyPath.BuildFirstRunConfig - naked, gentle, treats only), else FromSettings with
+    /// the loadout pre-applied. Answered with {type:'run-config'}.</summary>
+    private static void OnRequestRun(JObject o)
+    {
+        try
+        {
+            if (o["setup"] is JObject setup) PersistRunSetup(setup);
+            bool scripted = !_testMode && ChaosMeta.State.RunsCompleted == 0;
+            var cfg = scripted ? ChaosHappyPath.BuildFirstRunConfig() : ChaosRunConfig.FromSettings();
+            _host?.Post(new { type = "run-config", runConfig = BuildRunConfig(cfg) });
+            App.Logger?.Information("DtrhHost: dealt run config (diff={D}, scripted={S})", cfg.Difficulty, scripted);
+        }
+        catch (Exception ex) { App.Logger?.Warning("DtrhHost.OnRequestRun: {E}", ex.Message); }
+    }
+
+    /// <summary>The web-relevant subset of ChaosHubWindow.SaveToSettings. Absent fields are
+    /// left untouched; the reveal clamps stay C#-side (FromSettings), so a stale page can
+    /// never write itself past a gate.</summary>
+    private static void PersistRunSetup(JObject setup)
+    {
+        var s = App.Settings?.Current;
+        if (s == null) return;
+        if (setup["difficulty"] != null) s.ChaosDifficulty = (string?)setup["difficulty"] ?? s.ChaosDifficulty;
+        if (setup["durationSec"] != null) s.ChaosRunDurationSec = Math.Clamp((int?)setup["durationSec"] ?? 180, 60, 900);
+        if (setup["waveCount"] != null) s.ChaosWaveCount = Math.Clamp((int?)setup["waveCount"] ?? 5, 1, 12);
+        if (setup["motion"] != null) s.ChaosMotionMode = (string?)setup["motion"] ?? s.ChaosMotionMode;
+        if (setup["enabledVariants"] != null)
+        {
+            s.ChaosEnabledVariants = setup["enabledVariants"]!.Type == JTokenType.Null
+                ? null
+                : setup["enabledVariants"]!.ToObject<List<string>>();
+        }
+        if (setup["effectIntensity"] != null) s.ChaosEffectIntensity = Math.Clamp((double?)setup["effectIntensity"] ?? 0.85, 0.2, 1.5);
+        if (setup["colorFlashes"] != null) s.ChaosColorFlashesEnabled = (bool?)setup["colorFlashes"] ?? true;
+        if (setup["boonDraftEnabled"] != null) s.ChaosBoonDraftEnabled = (bool?)setup["boonDraftEnabled"] ?? true;
+        if (setup["allowCurses"] != null) s.ChaosAllowCurses = (bool?)setup["allowCurses"] ?? true;
+        if (setup["dartersEnabled"] != null) s.ChaosDartersEnabled = (bool?)setup["dartersEnabled"] ?? true;
+        if (setup["key1"] != null) s.ChaosAccessoryKey1 = (string?)setup["key1"] ?? s.ChaosAccessoryKey1;
+        if (setup["key2"] != null) s.ChaosAccessoryKey2 = (string?)setup["key2"] ?? s.ChaosAccessoryKey2;
+    }
+
+    /// <summary>The saved Descent-tab choices for the hub's setup UI (raw settings, NOT the
+    /// clamped run values - the hub applies its own reveal gating visually, and FromSettings
+    /// clamps again at deal time).</summary>
+    private static object BuildRunSetup()
+    {
+        try
+        {
+            var s = App.Settings?.Current;
+            return new
+            {
+                difficulty = s?.ChaosDifficulty ?? "Easy",
+                durationSec = s?.ChaosRunDurationSec ?? 180,
+                waveCount = s?.ChaosWaveCount ?? 5,
+                motion = s?.ChaosMotionMode ?? "Mixed",
+                enabledVariants = s?.ChaosEnabledVariants,
+                effectIntensity = s?.ChaosEffectIntensity ?? 0.85,
+                colorFlashes = s?.ChaosColorFlashesEnabled ?? true,
+                boonDraftEnabled = s?.ChaosBoonDraftEnabled ?? true,
+                allowCurses = s?.ChaosAllowCurses ?? true,
+                dartersEnabled = s?.ChaosDartersEnabled ?? true,
+                key1 = s?.ChaosAccessoryKey1 ?? "Q",
+                key2 = s?.ChaosAccessoryKey2 ?? "E",
+            };
+        }
+        catch { return new { difficulty = "Easy", durationSec = 180, waveCount = 5 }; }
     }
 
     /// <summary>fire-payload {kind, overlay?, strength?, durationMult?} -> the real desktop effect.
@@ -288,6 +365,9 @@ internal static class DtrhHostService
                 catch { }
                 try { App.Bark?.NotifyChaosRunCompleted((int)finalXp, diff); } catch { }
                 try { ChaosCrashSentinel.Clear(); } catch { }
+                // RevealService.Sync mutated pendingReveals BEHIND the bridge - push a fresh
+                // snapshot so the Warren's flash pass sees the new pendings on return.
+                try { _meta?.Rebroadcast(); } catch { }
             }
 
             _host?.Post(new
@@ -349,6 +429,11 @@ internal static class DtrhHostService
                 case "tease-denied": bark.NotifyChaosTeaseDenied(I("count")); break;
                 case "tease-denied-streak": bark.NotifyChaosTeaseDeniedStreak(I("count")); break;
                 case "gold-first": bark.NotifyChaosGoldFirst(); break;
+                // ---- M5: Warren hub + lessons + happy path ----
+                case "dollhouse-first-open": bark.NotifyChaosDollhouseFirstOpen(); break;
+                case "reveal-flash": bark.NotifyChaosRevealFlash(S("id")); break;
+                case "lesson-complete": bark.NotifyChaosLessonComplete(S("id")); break;
+                case "duo-demo": bark.NotifyChaosDuoDemo(); break;
                 default: App.Logger?.Debug("DtrhHost: unrouted bark event '{E}'", (string?)o["event"]); break;
             }
         }
@@ -497,11 +582,10 @@ internal static class DtrhHostService
     /// runs over it, then the resulting knob values are snapshotted. The page never
     /// re-implements a boon's Apply lambda, so the math can never drift.
     /// </summary>
-    private static object BuildRunConfig()
+    private static object BuildRunConfig(ChaosRunConfig cfg)
     {
         try
         {
-            var cfg = ChaosRunConfig.FromSettings();
             var state = new ChaosRunState(cfg);
             try { ChaosMeta.ApplyLifetimeBoons(state); }
             catch (Exception ex) { App.Logger?.Debug("DtrhHost loadout apply: {E}", ex.Message); }
@@ -579,6 +663,7 @@ internal static class DtrhHostService
                 draftChoices = cfg.DraftChoices,
                 draftAutoResumeSec = cfg.DraftAutoResumeSec,
                 sinChance = cfg.SinChance,
+                scriptedFirstRun = cfg.ScriptedFirstRun,
                 hitboxScale = cfg.HitboxScale,
                 magnetEnabled = cfg.MagnetEnabled,
                 popupHeartEnabled = cfg.PopupHeartEnabled,
@@ -647,6 +732,10 @@ internal static class DtrhHostService
                     seenBarkDefuseNoFocus = meta.SeenBarkDefuseNoFocus,
                     seenBarkDefuseRelease = meta.SeenBarkDefuseRelease,
                     seenBarkClickDetonate = meta.SeenBarkClickDetonate,
+                    // M5: happy-path beats (run 2 debut + the run-4 rigged first sin + duo demo)
+                    seenBraindrain = meta.SeenBraindrain,
+                    seenFirstSin = meta.SeenFirstSin,
+                    seenDuoDemo = meta.SeenDuoDemo,
                 },
             };
         }
