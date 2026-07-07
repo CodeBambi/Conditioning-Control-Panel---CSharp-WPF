@@ -21,23 +21,34 @@ export async function run(bridge, hostState) {
   bridge.log('M2TEST starting (payloads -> meta commands -> run payout)');
   await wait(3000); // let the engine settle so effects land over a live scene
 
-  // ---- 1. payloads (each is a REAL desktop effect; spaced so they read) ----
+  // ---- 1. payloads: since the 2026-07 cutover every VISUAL effect renders
+  // in-world (payloadFx), so drive them through the page dispatcher exposed at
+  // window.__sfPayloadFx; only audio still rides the native bridge. If a native
+  // WPF overlay window appears during this loop, the cutover regressed. ----
   const payloads = [
     { kind: 'flash', strength: 70 },
     { kind: 'subliminal', strength: 50 },
     { kind: 'overlay', overlay: 'pink_filter', strength: 60 },
     { kind: 'overlay', overlay: 'spiral', strength: 60 },
     { kind: 'overlay', overlay: 'braindrain', strength: 40 },
+    { kind: 'glitch', strength: 55 },
     { kind: 'gifCascade', strength: 60 },
     { kind: 'audio', strength: 50 },
     { kind: 'bambiFreeze', strength: 50 },
     { kind: 'bouncingText', strength: 50 },
   ];
+  const pfx = window.__sfPayloadFx;
+  check('payloadfx-live', !!pfx, pfx ? 'in-world dispatcher present' : 'window.__sfPayloadFx missing');
   for (const p of payloads) {
-    bridge.send({ type: 'fire-payload', ...p });
+    if (p.kind === 'audio' || p.kind === 'video') {
+      bridge.send({ type: 'fire-payload', ...p });   // native path (sfx / mandatory video)
+    } else if (pfx) {
+      pfx.applyPayload({ variantId: 'm2test', strength: p.strength,
+        payload: { kind: p.kind, overlay: p.overlay } }, { durationMult: 1 });
+    }
     await wait(1600);
   }
-  check('payloads-sent', true, `${payloads.length} kinds (video/htLink manual)`);
+  check('payloads-sent', true, `${payloads.length} kinds in-world (video/htLink manual)`);
 
   // ---- 2. meta commands (against a CLONE of the user's REAL save, so every
   // expectation is a DELTA off the starting snapshot, never an absolute) ----

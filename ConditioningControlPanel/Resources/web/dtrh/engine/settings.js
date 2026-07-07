@@ -21,7 +21,8 @@ const DEFAULTS = {
   bubbleDensity: 1,    // 0 - 1.25 population multiplier (0 = bubbles off entirely)
   gifSize: 1,          // 0.5 - 1.6 flash clip (gif) size multiplier
   gifOpacity: 0.95,    // 0.1 - 1  flash clip opacity
-  hydraGen: 2,         // 0 | 1 | 2 generations a popped clip splits into
+  flashCount: 3,       // 1 - 10 flash gifs a flash spawns at once
+  hydraGen: 2,         // 0 - 5 generations a popped clip splits into
   spiralOpacity: 0.3,  // 0 - 1 spiral overlay + spiral veils
   pinkOpacity: 0.25,   // 0 - 1 pink washes + pink veils
   glitch: 1,           // 0 - 1 glitch bubble visual intensity (0 = score only)

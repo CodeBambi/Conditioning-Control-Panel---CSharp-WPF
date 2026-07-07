@@ -22,7 +22,7 @@ const LOOK_MAX_YAW = 0.42;   // ~24 deg
 const LOOK_MAX_PITCH = 0.34;
 const AHEAD = 0.0104;        // look-ahead fraction of the loop (~10 world units)
 const INTRO_TIME = 7;        // seconds of the opening plunge
-const INTRO_SPEED = 22;      // the plunge starts this fast, easing to the game speed
+const INTRO_SPEED = 17;      // the plunge starts this fast, easing to the game speed
 const FOV_PULSE_DECAY = 2.5; // 1/s - effect kicks bleed off
 const SCROLL_BOOST = 3.2;    // speed added per firm wheel notch (device-normalized)
 

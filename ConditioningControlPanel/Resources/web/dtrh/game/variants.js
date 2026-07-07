@@ -46,7 +46,7 @@ export const VARIANTS = [
     sprite: SPRITE_BASE + 'braindrain.png', weight: 1.4, minIntensity: 0.25, fuseMin: 4500, fuseMax: 6500 },
   { id: 'bambifreeze', name: 'Freeze',      kind: 'freeze', payload: null,
     min: 190, max: 250, motion: MOTION.FloatUp,    tint: 'rgb(138,230,255)', label: '❄',
-    sprite: null,                           weight: 0.5, minIntensity: 0.15, fuseMin: 0, fuseMax: 0 },
+    sprite: ART_BASE + 'bambifreeze.png',   weight: 0.5, minIntensity: 0.15, fuseMin: 0, fuseMax: 0 },
   // The two giants (M4): a long trance, but a mandatory video / gif rain if it goes off.
   { id: 'video',       name: 'Video',       kind: 'live',   payload: { kind: 'video' },
     min: 240, max: 300, motion: MOTION.RainDown,   tint: 'rgb(224,64,77)',   label: '▶',

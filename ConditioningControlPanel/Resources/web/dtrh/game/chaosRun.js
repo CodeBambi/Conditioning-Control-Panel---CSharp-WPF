@@ -41,6 +41,7 @@ import { draft as dealDraft, boonById } from './boons.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
 import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
+import { createPayloadFx } from './payloadFx.js';
 import { createChaosHud } from './chaosHud.js';
 import { createOverlays } from './overlays.js';
 import { createWarren } from './warren.js';
@@ -64,7 +65,7 @@ const RIPPLE_TRIGGER_GRACE_PX = 80;
 const RIPPLE_WAVE_GAP_MS = 1000;
 const COMBO_BIG_THRESHOLDS = [25, 50, 100];
 const TICK = 0.25;                  // the C# RunTick period
-const VIDEO_HEAVY_SEC = 18;         // 15s slice + open/close slack
+const VIDEO_HEAVY_SEC = 62;         // in-world video card sits in front of the POV up to 60s + slack
 const CASCADE_BASE_SEC = 6;         // GifCascadePayload.DURATION_SEC (+5 ride-out)
 const RANK = { Curious: 0, Tempted: 1, Slipping: 2, Entranced: 3, Devoted: 4, Claimed: 5 };
 
@@ -122,7 +123,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   }
 
   let ctx = null;      // { nav, fx, director, hud, canvas } from scene.start
-  let field = null, ffx = null, hudUi = null, overlays = null;
+  let field = null, ffx = null, hudUi = null, overlays = null, payloadFx = null;
   let warren = null, lessons = null, happy = null;
   let state = 'boot';  // boot -> warren -> requesting -> countdown -> running -> drafting -> recap
   let paused = false, hidden = false, covered = false, drafting = false;
@@ -292,7 +293,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       sfx(kind === 'video' ? 'trigger' : 'fx_rain_start', 0.45);
     }
     if (isDetonation && spec.variantId === 'braindrain') sfx('fx_drain', 0.45);
-    bridge.send({ type: 'fire-payload', ...spec.payload, strength: spec.strength, durationMult });
+    // Hard cutover (2026-07): every effect renders IN-WORLD (payloadFx) instead
+    // of firing a native WPF layered window over the bridge - those topmost
+    // WS_EX_LAYERED surfaces were the freeze/OOM cluster's root cause, and the
+    // desktop is never visible under the fullscreen game anyway. Even video is
+    // in-world now (a slide-down card in front of the POV, not a native cover).
+    // Only AUDIO still rides the native sfx bridge.
+    if (kind === 'audio') {
+      bridge.send({ type: 'fire-payload', ...spec.payload, strength: spec.strength, durationMult });
+    } else {
+      payloadFx?.applyPayload(spec, { isDetonation, durationMult });
+    }
     lessons.onPayloadFired(kind);   // blindfold's screen-busy window
   };
   const heavyActive = () => covered || performance.now() < heavyUntil;
@@ -1963,6 +1974,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     attach(sceneCtx) {
       ctx = sceneCtx;
       ffx = createFieldFx(ctx.hud);
+      payloadFx = createPayloadFx({ hud: ctx.hud, fx: ctx.fx, media: ctx.media, flashBurst: ctx.flashBurst });
+      try { window.__sfPayloadFx = payloadFx; } catch { /* diagnostics seam (m2test) */ }
       field = createChaosField({
         hud: ctx.hud, fx: ffx,
         canChannel, onBenignPopped, onFreezeCaught,
@@ -2121,7 +2134,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       hudUi?.dispose();
       field?.dispose();
       ffx?.dispose();
-      field = null; hudUi = null; overlays = null; ffx = null;
+      payloadFx?.dispose();
+      try { if (window.__sfPayloadFx === payloadFx) delete window.__sfPayloadFx; } catch { /* seam cleanup */ }
+      field = null; hudUi = null; overlays = null; ffx = null; payloadFx = null;
       warren = null; lessons = null; happy = null;
     },
   };

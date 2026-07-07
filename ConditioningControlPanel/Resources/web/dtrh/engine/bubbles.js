@@ -33,7 +33,7 @@ const DROP_BASE = BASE + 'drops/';
 // runs of non-alphanumerics -> '_', trimmed).
 const dropSlug = (w) => String(w).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 const FLASH_MAX_MS = 5000;   // a clip overlay plays one cycle, hard-capped at 5s
-const FLASH_GEN_CAP = 2;     // hydra hard cap; the live value is S.hydraGen (0-2)
+const FLASH_GEN_CAP = 5;     // hydra hard cap; the live value is S.hydraGen (0-5)
 const FILL_WINDOW = 2800;    // ms a (re)fill trickles its bubbles in over
 const TOPUP_MS = 600;        // cadence of the population top-up tick
 
@@ -248,7 +248,7 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
   // Trigger flash clips at RANDOM positions, CLICKABLE: popping one spawns two
   // more (the hydra) for FLASH_MAX_GEN generations.
   const flashLive = new Set();
-  const FLASH_LIVE_CAP = mobile ? 2 : 8; // cap concurrent flash-clip decoders (each is a cold <video> start; 2 is what a phone absorbs alongside the tunnel + cards)
+  const FLASH_LIVE_CAP = mobile ? 3 : 20; // cap concurrent flash-clip decoders (raised so the 'flash gifs' slider can reach 10 + hydra children; phones stay conservative)
   function spawnFlash(gen) {
     if (flashLive.size >= FLASH_LIVE_CAP) return; // too many decoders live: skip this one
     const v = document.createElement('video');
@@ -417,6 +417,20 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
     if (word) flashDrop(word);   // the snap: whispered drop + flashed word, in sync
   }
 
+  // Fire clickable flash CLIPS (the hydra: popping one spawns two more) without
+  // the veil word/drop - so the DtRH flash-bubble payload gets the same clickable,
+  // multiplying flash the tunnel's flash veils do. Count defaults to the 'flash
+  // gifs' slider (S.flashCount, 1-10); spawnFlash self-caps via FLASH_LIVE_CAP and
+  // the pop-split honours S.hydraGen exactly like a veil clip.
+  function flashBurst(n) {
+    if (frozen || !FLASH_CLIPS.length) return;
+    const count = Math.max(1, (n != null ? n : S.flashCount) | 0);
+    for (let i = 0; i < count; i++) {
+      // stagger cold <video> starts so N decoders don't all land on one frame
+      window.setTimeout(() => { if (!frozen) spawnFlash(0); }, i * (mobile ? 120 : 55));
+    }
+  }
+
   // ---- pop -----------------------------------------------------------------
   function pop(rec, x, y) {
     rec.popped = true;
@@ -549,6 +563,7 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
     setIntensity,
     setRunTime,
     triggerVeil,
+    flashBurst,
     getScore: () => score,
     getCombo: () => combo,
     activeEffects: () => overlays.size + (flashLive.size ? 1 : 0),

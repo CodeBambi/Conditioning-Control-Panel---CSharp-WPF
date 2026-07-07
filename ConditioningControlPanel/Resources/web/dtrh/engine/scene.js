@@ -344,7 +344,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     bubbles.setPaused(true);
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
-    game.attach({ nav, fx, director, hud, canvas, spawner });
+    game.attach({ nav, fx, director, hud, canvas, spawner, media, flashBurst: (n) => bubbles.flashBurst(n) });
   }
 
   // ---- loop --------------------------------------------------------------------
@@ -708,10 +708,11 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
     const fsBtn = document.createElement('button');
     fsBtn.type = 'button';
     fsBtn.className = 'sf-dock-btn sf-fs-btn';
-    fsBtn.textContent = '⛶';
+    fsBtn.textContent = '[ ]';
     const syncFs = () => {
       const on = FS.isActive();
       fsBtn.classList.toggle('is-on', on);
+      fsBtn.textContent = on ? '] [' : '[ ]';
       fsBtn.setAttribute('aria-label', on ? 'exit fullscreen' : 'go fullscreen');
       fsBtn.title = on ? 'exit fullscreen' : 'go fullscreen';
     };
@@ -756,16 +757,8 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
   skipInner.addEventListener('click', (e) => { e.stopPropagation(); if (onSkip) onSkip(); });
   skipBtn.appendChild(skipInner);
 
-  // Quiet way back to the real app - a dim corner link that brightens on hover,
-  // there for the curious without competing with the fall.
-  const explore = document.createElement('a');
-  explore.className = 'sf-explore';
-  explore.href = '/explore.html';
-  explore.textContent = '↗';
-  explore.title = 'explore the app';
-  explore.setAttribute('aria-label', 'explore the app');
-  hud.appendChild(explore);
-  bits.push(explore);
+  // (The site's "explore the app" corner link is intentionally omitted in the
+  // hosted DtRH game - navigation is locked to ccp.game, so it had nowhere to go.)
 
   // Master controls toggle - a small gear top-left (an area you rarely tap
   // mid-fall). All the chrome (dock + explore link + options panel) starts
@@ -855,7 +848,16 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
       results.hidden = false;
     },
     hideResults() { results.hidden = true; },
-    showPause(v) { pause.hidden = !v; },
+    showPause(v) {
+      pause.hidden = !v;
+      // Keep the controls (⚙ options / audio / theme) reachable while paused:
+      // reveal the chrome and (via .sf-paused CSS) lift it above the pause dim.
+      // On resume, restore the player's own show/hide toggle state.
+      hud.classList.toggle('sf-paused', v);
+      if (v) hud.classList.remove('sf-chrome-hidden');
+      else hud.classList.toggle('sf-chrome-hidden', !chromeShown);
+      uiToggle.classList.toggle('is-on', v || chromeShown);
+    },
     setSkipVisible(v) { if (skipBtn.hidden === !v) return; skipBtn.hidden = !v; },
     dispose() { if (fsCleanup) fsCleanup(); for (const b of bits) b.remove(); },
   };

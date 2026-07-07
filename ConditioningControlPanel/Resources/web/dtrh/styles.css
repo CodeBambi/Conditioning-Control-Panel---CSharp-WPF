@@ -779,6 +779,10 @@ img.rh-fx-spiralspin {
   z-index: 20;
 }
 .sf-pause[hidden] { display: none; }
+/* while paused, lift the controls above the pause dim (z 20) so options stay usable */
+.sf-hud.sf-paused .sf-dock,
+.sf-hud.sf-paused .sf-panel,
+.sf-hud.sf-paused .sf-uitoggle { z-index: 21; }
 
 /* ------------- Options panel (gear) ------------- */
 .sf-panel {
@@ -1904,3 +1908,119 @@ img.rh-fx-spiralspin {
   background: linear-gradient(135deg, #e84393, #8b5cf6); color: #fff;
   font-size: 0.95rem; font-weight: 800; cursor: pointer;
 }
+
+/* ============================================================================
+ * payloadFx - in-world bubble-payload effects (see game/payloadFx.js). These
+ * replace the old native WPF overlay windows: every layer is click-through so
+ * gameplay pointer events pass straight to the canvas underneath. The container
+ * is a direct child of #sf-hud, so it must override `.sf-hud > * { auto }`.
+ * ==========================================================================*/
+/* wash/burst layer: BELOW the bubble field (.cf-layer z6) so bubbles stay crisp
+ * and clickable on top of pink/spiral/glitch/braindrain */
+.sf-pfx {
+  position: fixed; inset: 0; z-index: 4; overflow: hidden;
+  pointer-events: none !important;
+}
+.sf-pfx * { pointer-events: none !important; }
+/* front layer: ABOVE the bubbles (below the HUD chrome at z10) - the video card */
+.sf-pfx-front {
+  position: fixed; inset: 0; z-index: 9; overflow: hidden;
+  pointer-events: none !important;
+}
+.sf-pfx-front * { pointer-events: none !important; }
+
+/* the in-world video card: superbig, slides down in front of the POV, retracts up */
+.sf-pfx-videocard {
+  position: fixed; left: 50%; top: 50%;
+  width: min(72vmin, 82vw); max-height: 78vh;
+  border-radius: 16px; overflow: hidden;
+  border: 2px solid rgba(255, 105, 180, 0.9);
+  box-shadow: 0 0 0 3px rgba(255, 20, 147, 0.35), 0 0 46px rgba(255, 20, 147, 0.6), 0 18px 60px rgba(0, 0, 0, 0.6);
+  transform: translate(-50%, -50%) translateY(-150vh);
+  transition: transform 0.62s cubic-bezier(0.2, 0.85, 0.25, 1);
+}
+.sf-pfx-videocard.in { transform: translate(-50%, -50%) translateY(0); }
+.sf-pfx-videocard video { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* sustained holds: one reused element per kind, opacity-eased in/out */
+.sf-pfx-layer { position: fixed; inset: 0; opacity: 0; transition: opacity 0.45s ease; will-change: opacity; }
+
+.sf-pfx-spiral {
+  background: url('/dtrh/assets/bubbles/effects/spiral.png') center / cover no-repeat;
+  mix-blend-mode: screen; animation: sf-pfx-spin 14s linear infinite;
+  transform-origin: 50% 50%; scale: 1.6; /* overscan so rotation never bares a corner */
+}
+.sf-pfx-pink {
+  background: radial-gradient(circle at 50% 45%, rgba(var(--fx-accent-rgb), 0.5) 0%, rgba(255, 20, 147, 0.62) 100%);
+  mix-blend-mode: screen;
+}
+.sf-pfx-drain {
+  background-color: #0a0410; background-position: center; background-size: cover;
+  background-repeat: no-repeat; background-blend-mode: luminosity;
+  backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+}
+.sf-pfx-drain.sf-pfx-glitching { animation: sf-pfx-glitch 0.16s steps(2) infinite; }
+
+/* transient bursts */
+.sf-pfx-flash {
+  position: fixed; left: 50%; top: 50%; max-width: 38vmin; max-height: 38vmin;
+  filter: drop-shadow(0 0 26px rgba(255, 105, 180, 0.85)); border-radius: 10px;
+  animation: sf-pfx-flash var(--pfx-dur, 1400ms) ease forwards;
+}
+.sf-pfx-sub {
+  position: fixed; left: 50%; top: 50%; max-width: 54vmin; max-height: 54vmin;
+  animation: sf-pfx-sub var(--pfx-dur, 420ms) ease forwards;
+}
+.sf-pfx-word {
+  font-weight: 900; font-size: 9vmin; letter-spacing: 0.04em; color: #fff; white-space: nowrap;
+  text-shadow: 0 0 24px rgba(255, 20, 147, 0.95), 0 0 6px rgba(255, 255, 255, 0.9);
+}
+.sf-pfx-freeze {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 190, 225, 0.5), rgba(255, 20, 147, 0.35));
+  animation: sf-pfx-freeze-in 0.25s ease forwards; opacity: 1;
+}
+.sf-pfx-freeze span {
+  font-weight: 900; font-size: 12vmin; color: #fff; letter-spacing: 0.06em;
+  text-shadow: 0 0 40px rgba(255, 20, 147, 1), 0 0 10px #fff; animation: sf-pfx-throb 0.5s ease-in-out infinite alternate;
+}
+.sf-pfx-freeze.sf-pfx-out { opacity: 0; transition: opacity 0.5s ease; }
+
+.sf-pfx-bounce {
+  position: fixed; left: 0; top: 0; font-weight: 900; font-size: 6vmin; letter-spacing: 0.05em;
+  text-shadow: 0 0 22px currentColor; white-space: nowrap; will-change: transform;
+}
+.sf-pfx-bounce.sf-pfx-out { opacity: 0; transition: opacity 0.4s ease; }
+
+.sf-pfx-cascade {
+  position: fixed; top: -25vh; width: 22vmin; border-radius: 8px;
+  filter: drop-shadow(0 0 14px rgba(255, 105, 180, 0.7));
+  animation: sf-pfx-fall var(--pfx-fall, 3s) linear forwards;
+}
+
+@keyframes sf-pfx-spin { to { transform: rotate(360deg); } }
+@keyframes sf-pfx-flash {
+  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(var(--pfx-rot, 0deg)) scale(0.82); }
+  14%  { opacity: 1; transform: translate(-50%, -50%) rotate(var(--pfx-rot, 0deg)) scale(1); }
+  72%  { opacity: 1; transform: translate(-50%, -50%) rotate(var(--pfx-rot, 0deg)) scale(1.01); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--pfx-rot, 0deg)) scale(1.05); }
+}
+@keyframes sf-pfx-sub {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+  22%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  78%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.02); }
+}
+@keyframes sf-pfx-fall {
+  0%   { transform: translateY(0) scale(0.45); opacity: 0; }
+  12%  { opacity: 0.9; }
+  90%  { opacity: 0.9; }
+  100% { transform: translateY(150vh) scale(1); opacity: 0; }
+}
+@keyframes sf-pfx-glitch {
+  0%   { transform: translate(0, 0); filter: none; }
+  50%  { transform: translate(-1.2%, 0); filter: hue-rotate(35deg) saturate(1.5); }
+  100% { transform: translate(1.2%, 0); filter: hue-rotate(-25deg); }
+}
+@keyframes sf-pfx-freeze-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sf-pfx-throb { from { transform: scale(1); } to { transform: scale(1.06); } }

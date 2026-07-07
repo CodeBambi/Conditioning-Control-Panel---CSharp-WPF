@@ -73,6 +73,11 @@ internal static class DtrhHostService
                 },
                 UserDataFolderName = "browser_data_dtrh",
                 InputEnabled = true,
+                // Launch in a normal titled window (Alt-Tab / minimize / move); the dock's [ ]
+                // button toggles borderless fullscreen. All effects are in-world now, so nothing
+                // needs the old topmost fullscreen surface.
+                StartFullscreen = false,
+                WindowTitle = "Down the Rabbit Hole",
                 LogTag = "DtrhHost",
                 // The game's audio bed / drift voice must start without a click.
                 ExtraBrowserArguments = "--autoplay-policy=no-user-gesture-required",
@@ -281,9 +286,13 @@ internal static class DtrhHostService
         catch { return new { difficulty = "Easy", durationSec = 180, waveCount = 5 }; }
     }
 
-    /// <summary>fire-payload {kind, overlay?, strength?, durationMult?} -> the real desktop effect.
-    /// The page decides WHEN; the native services own HOW (they already handle their own z-order,
-    /// which lands payload windows above the game surface - M0-verified).</summary>
+    /// <summary>fire-payload {kind, strength?, durationMult?} -> a native effect.
+    /// Since the 2026-07 hard cutover the browser game renders every VISUAL effect in-world
+    /// (dtrh/game/payloadFx.js) - no more native WPF layered windows over the game surface.
+    /// Only the two non-visual / native-by-necessity kinds still ride this bridge:
+    ///   - video: a mandatory covering video window (in-world port is separate future work)
+    ///   - audio: a one-shot whisper on the native audio path
+    /// Any other kind arriving here means a page/host version mismatch - log and ignore.</summary>
     private static void FirePayload(JObject o)
     {
         try
@@ -292,28 +301,21 @@ internal static class DtrhHostService
             if (string.IsNullOrWhiteSpace(kindStr)) return;
 
             EffectPayload payload;
-            if (string.Equals(kindStr, "overlay", StringComparison.OrdinalIgnoreCase))
-            {
-                // Explicit overlay flavor when given; factory picks randomly otherwise.
-                var flavor = (string?)o["overlay"];
-                payload = flavor is "pink_filter" or "spiral" or "braindrain"
-                    ? new OverlayPayload(flavor)
-                    : EffectPayloadFactory.Build(EffectBubblePayloadKind.Overlay);
-            }
-            else if (Enum.TryParse<EffectBubblePayloadKind>(kindStr, ignoreCase: true, out var kind))
-            {
-                payload = EffectPayloadFactory.Build(kind);
-            }
+            if (string.Equals(kindStr, "video", StringComparison.OrdinalIgnoreCase))
+                payload = EffectPayloadFactory.Build(EffectBubblePayloadKind.Video);
+            else if (string.Equals(kindStr, "audio", StringComparison.OrdinalIgnoreCase))
+                payload = EffectPayloadFactory.Build(EffectBubblePayloadKind.Audio);
             else
             {
-                App.Logger?.Warning("DtrhHost: unknown payload kind '{K}' ignored", kindStr);
+                // Visual effects are in-world now; the page should never send them here.
+                App.Logger?.Warning("DtrhHost: payload kind '{K}' is in-world since the cutover - ignored", kindStr);
                 return;
             }
 
             payload.Strength = Math.Clamp((int?)o["strength"] ?? 60, 0, 100);
             payload.DurationMult = Math.Clamp((double?)o["durationMult"] ?? 1.0, 0.1, 10.0);
             payload.Fire();
-            App.Logger?.Information("DtrhHost: fired payload {K} (strength {S})", payload.DisplayName, payload.Strength);
+            App.Logger?.Information("DtrhHost: fired native payload {K} (strength {S})", payload.DisplayName, payload.Strength);
         }
         catch (Exception ex) { App.Logger?.Warning("DtrhHost.FirePayload: {E}", ex.Message); }
     }
