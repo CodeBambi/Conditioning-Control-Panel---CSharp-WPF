@@ -63,7 +63,11 @@ const FS = (() => {
 const IS_IOS = /iP(hone|od|ad)/.test(navigator.platform)
   || (/Macintosh/.test(navigator.userAgent) && 'ontouchend' in document);
 
-export async function start({ canvas, hud, tier, media, challenge }) {
+// `game` (optional): the DtRH run brain (game/chaosRun.js). When present the
+// engine runs in GAME MODE - the Fall's own bubble field stands down (veil FX
+// still fire), the director takes its intensity from the game, and the game's
+// frame()/pause hooks ride the scene loop. Without it, this is The Fall as-is.
+export async function start({ canvas, hud, tier, media, challenge, game = null }) {
   setQuality(tier); // resolve the Q knobs BEFORE any geometry/material builds
 
   // ---- renderer / scene / camera ------------------------------------------
@@ -118,7 +122,12 @@ export async function start({ canvas, hud, tier, media, challenge }) {
   const offCssTheme = onSettings((key) => { if (typeof key === 'string' && key.startsWith('col')) applyCssTheme(); });
 
   // ---- game brain + audio ---------------------------------------------------
-  const director = createDirector({ challenge });
+  // DtRH demotion: chaosRun owns intensity (elapsed/duration); the director is
+  // reduced to the speed/boost presentation adapter it always was at heart.
+  const director = createDirector({
+    challenge,
+    intensitySource: game ? () => game.moodIntensity() : null,
+  });
 
   // ---- ambient drone bed (copied pattern from rabbit-hole/scene.js) ---------
   let drone = null, droneVol = DRONE_FLOOR, droneStarted = false;
@@ -190,6 +199,9 @@ export async function start({ canvas, hud, tier, media, challenge }) {
     onOptions: () => panel.toggle(),
     onResume: () => setGamePaused(false),
     onSkip: () => spawner.skipSpotlight(),
+    // Game mode: the pause card gains a "surface" exit - the run ends early
+    // but still pays out its recap (the WPF RequestStop contract).
+    onSurface: game ? () => { setGamePaused(false); game.surface(); } : null,
   });
   const offHudMute = onMuteChange(hudBits.syncMute);
   hudBits.syncMute(isMuted());
@@ -226,6 +238,7 @@ export async function start({ canvas, hud, tier, media, challenge }) {
     nav.setPaused(v);
     bubbles.setFrozen(v);
     spawner.setPaused(v);
+    if (game) game.setPaused(v);
     hudBits.showPause(v);
     if (v) drift.stop(); else drift.start();
     if (drone && droneStarted) {
@@ -252,7 +265,7 @@ export async function start({ canvas, hud, tier, media, challenge }) {
     if (e.button != null && e.button !== 0) return; // primary button / touch only
     // clicks on UI chrome or a bubble are not grabs
     if (e.target instanceof Element &&
-        e.target.closest('.sf-dock, .sf-panel, .sf-results, .sf-pause, .sf-skip, .sf-explore, .sf-uitoggle, .sf-fs-tip, .rh-bubble, .rh-fx-flashclip')) return;
+        e.target.closest('.sf-dock, .sf-panel, .sf-results, .sf-pause, .sf-skip, .sf-explore, .sf-uitoggle, .sf-fs-tip, .rh-bubble, .rh-fx-flashclip, .cf-bubble, .cf-hud, .cf-overlay')) return;
     const r = canvas.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
@@ -310,6 +323,17 @@ export async function start({ canvas, hud, tier, media, challenge }) {
   // begin the voice chain (autoplay is unlocked - we got here via the begin click)
   drift.start();
 
+  // ---- DtRH game mode ----------------------------------------------------------
+  if (game) {
+    hud.classList.add('sf-game-mode');   // hides the Fall's own score readout (CSS)
+    startDrone();                        // no gesture gate in the hosted WebView2
+    // The Fall's own bubble field stands down completely - setIntensity(0)
+    // still targets COUNT_MIN, so pause it (clears + stops spawning). Veil
+    // punch-through washes skip while paused; M4 routes veils into the game.
+    bubbles.setPaused(true);
+    game.attach({ nav, fx, director, hud, canvas });
+  }
+
   // ---- loop --------------------------------------------------------------------
   const clock = new THREE.Clock();
   let raf = 0, running = true;
@@ -352,8 +376,14 @@ export async function start({ canvas, hud, tier, media, challenge }) {
 
     director.update(dt);
     director.setHold(spawner.isGrabbing()); // grabbing a card eases the fall (auto-restores on release)
-    bubbles.setIntensity(director.getIntensity());
-    bubbles.setRunTime(director.getRunTime()); // gates which bubble kinds can spawn
+    if (game) {
+      // Game mode: chaosRun owns the field (its own spawner + rAF integrator);
+      // the Fall's bubble game is paused for the whole session.
+      game.frame(dt);
+    } else {
+      bubbles.setIntensity(director.getIntensity());
+      bubbles.setRunTime(director.getRunTime()); // gates which bubble kinds can spawn
+    }
     nav.update(dt);
 
     const depth = nav.getDepth();
@@ -427,6 +457,7 @@ export async function start({ canvas, hud, tier, media, challenge }) {
     resizeTimer = setTimeout(applyResize, 150);
   }
   function onVisibility() {
+    if (game) game.setHidden(document.hidden);
     if (document.hidden) {
       running = false;
       bubbles.setPaused(true);
@@ -434,7 +465,7 @@ export async function start({ canvas, hud, tier, media, challenge }) {
       if (drone) { try { drone.pause(); } catch (e) { /* ignore */ } }
     } else if (!running) {
       running = true;
-      if (!director.isOver()) bubbles.setPaused(false);
+      if (!director.isOver() && !game) bubbles.setPaused(false);   // game mode: field stays down
       if (!gamePaused) spawner.setPaused(false);
       if (drone && droneStarted && !isMuted() && !gamePaused) {
         if (droneCtx && droneCtx.state === 'suspended') { const r = droneCtx.resume(); if (r && r.catch) r.catch(() => {}); }
@@ -457,6 +488,7 @@ export async function start({ canvas, hud, tier, media, challenge }) {
     window.removeEventListener('pointerup', grabPointerUp);
     window.removeEventListener('pointercancel', grabPointerUp);
     document.removeEventListener('visibilitychange', onVisibility);
+    if (game) { try { game.dispose(); } catch (e) { /* ignore */ } }
     panel.dispose();
     fx.dispose();
     nav.dispose();
@@ -503,7 +535,7 @@ export async function start({ canvas, hud, tier, media, challenge }) {
 }
 
 // ---- HUD chrome (score / meters / hearts / dock / hint / results / pause) ----
-function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRestart, onOptions, onResume, onSkip }) {
+function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRestart, onOptions, onResume, onSkip, onSurface = null }) {
   const bits = [];
   const el = (cls, parent) => {
     const d = document.createElement('div');
@@ -757,6 +789,14 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
   pauseBtn.textContent = 'keep falling';
   pauseBtn.addEventListener('click', onResume);
   pauseCard.append(pauseH, pauseP, pauseBtn);
+  if (onSurface) {
+    const surfaceBtn = document.createElement('button');
+    surfaceBtn.type = 'button';
+    surfaceBtn.className = 'sf-btn';
+    surfaceBtn.textContent = 'surface (end run)';
+    surfaceBtn.addEventListener('click', onSurface);
+    pauseCard.appendChild(surfaceBtn);
+  }
   pause.appendChild(pauseCard);
 
   const results = el('sf-results');

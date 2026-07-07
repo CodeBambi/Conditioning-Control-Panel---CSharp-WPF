@@ -112,11 +112,15 @@ internal static class DtrhHostService
         try
         {
             _lastHeartbeatUtc = DateTime.UtcNow;
+            // Keyboard focus does not land in the WebView2 child on a fresh launch until a
+            // click - claim it now so Esc (pause / hold-to-exit) works from the first frame.
+            _host?.FocusWeb();
             _host?.Post(new
             {
                 type = "init",
                 protocol = Protocol,
                 settings = new { masterVolume = SafeMasterVolume() },
+                runConfig = BuildRunConfig(),
                 m2Test = _testMode,
             });
             if (_meta != null) _host?.Post(_meta.SnapshotMessage());
@@ -143,7 +147,10 @@ internal static class DtrhHostService
             {
                 var name = (string?)o["name"];
                 var scale = (float?)o["scale"] ?? 0.6f;
-                if (!string.IsNullOrEmpty(name)) ChaosSfx.Play(name, scale);
+                // Two cues live behind fallback-resolving helpers (no dedicated asset yet).
+                if (name == "wave_clear") ChaosSfx.PlayWaveClear();
+                else if (name == "ripple_cast") ChaosSfx.PlayRippleCast();
+                else if (!string.IsNullOrEmpty(name)) ChaosSfx.Play(name, scale);
                 break;
             }
             case "fire-payload":
@@ -443,6 +450,42 @@ internal static class DtrhHostService
         _meta = null;
         _exiting = false;
         App.Logger?.Information("DtrhHostService: closed");
+    }
+
+    /// <summary>
+    /// The run knobs the page's game brain needs, snapshotted from the SAME
+    /// <see cref="ChaosRunConfig.FromSettings"/> the WPF game uses - so rank clamps
+    /// (difficulty/variants) and owned-upgrade multipliers (fuse/base/spark/spawn-rate)
+    /// carry over and the two games score identically at identical settings.
+    /// M4 widens this with the full boon/toy loadout.
+    /// </summary>
+    private static object BuildRunConfig()
+    {
+        try
+        {
+            var cfg = ChaosRunConfig.FromSettings();
+            return new
+            {
+                difficulty = cfg.Difficulty.ToString(),
+                difficultyMult = cfg.DifficultyMult,
+                durationSec = cfg.DurationSec,
+                waveCount = cfg.WaveCount,
+                effectIntensity = cfg.EffectIntensity,
+                enabledVariants = cfg.EnabledVariants,
+                motionOverride = cfg.MotionOverride?.ToString(),
+                fuseTimeMult = cfg.FuseTimeMult,
+                baseMult = cfg.BaseMult,
+                sparkGainMult = cfg.SparkGainMult,
+                spawnRateMult = cfg.SpawnRateMult,
+                colorFlashes = cfg.ColorFlashesEnabled,
+                screenShake = cfg.ScreenShakeEnabled,
+            };
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("DtrhHost.BuildRunConfig: {E}", ex.Message);
+            return new { difficulty = "Easy", difficultyMult = 1.0, durationSec = 180, waveCount = 5, effectIntensity = 0.85 };
+        }
     }
 
     private static int SafeMasterVolume()

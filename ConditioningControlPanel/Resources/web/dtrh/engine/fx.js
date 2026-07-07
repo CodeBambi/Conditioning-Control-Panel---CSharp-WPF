@@ -204,9 +204,11 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
 
   const _fogC = new THREE.Color(), _lineC = new THREE.Color(), _spiralC = new THREE.Color();
   let currentZone = 'calm';
+  let lastDepth = 0;
 
   function update(depth, dt, t, intensity, rush) {
     rush = rush || 0;
+    lastDepth = depth;
     const zi = Math.floor(depth / ZONE_LEN);
     const u = (depth - zi * ZONE_LEN) / ZONE_LEN;
     const w = smoothstep(0, ZONE_EDGE, u) * (1 - smoothstep(1 - ZONE_EDGE, 1, u));
@@ -320,6 +322,21 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     overrideTimer = setTimeout(() => { overrideTimer = 0; themeOverride = null; applyTheme(); }, ms);
   }
 
+  // ---- DtRH game hooks (M3) ------------------------------------------------
+  // pulseFlash: bump the tunnel shader's uFlash directly (the lightning-strike
+  // light) - used for loop boundaries and ripple shockwaves.
+  function pulseFlash(amount = 0.6) {
+    flash = Math.min(1.3, flash + amount);
+  }
+  // seedZoneAhead: pre-roll the NEXT zone index to a special mood different
+  // from the current one, so every loop boundary is followed by a visible
+  // zone shift (the positional crossfade keeps the transition smooth).
+  function seedZoneAhead() {
+    const zi = Math.floor(lastDepth / ZONE_LEN) + 1;
+    const pool = ZONE_TYPES.filter((t) => t !== currentZone);
+    zoneCache.set(zi, pool[Math.floor(Math.random() * pool.length)]);
+  }
+
   function dispose() {
     offSettings();
     if (overrideTimer) { clearTimeout(overrideTimer); overrideTimer = 0; }
@@ -330,5 +347,5 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     bolts.length = 0;
   }
 
-  return { update, dispose, flashRandomTheme, getZone: () => currentZone };
+  return { update, dispose, flashRandomTheme, pulseFlash, seedZoneAhead, getZone: () => currentZone };
 }

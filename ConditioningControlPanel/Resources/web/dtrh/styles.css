@@ -571,21 +571,21 @@ html, body {
   cursor: pointer;
   will-change: transform;
   animation: rhBubbleSway var(--sway-dur, 4s) ease-in-out infinite alternate;
-  background: center / contain no-repeat url('/assets/bubbles/bubble.png');
+  background: center / contain no-repeat url('/dtrh/assets/bubbles/bubble.png');
   filter: drop-shadow(0 0 7px rgba(255, 120, 195, 0.5));
 }
 @keyframes rhBubbleSway {
   from { transform: translateX(calc(var(--sway, 28px) * -0.5)); }
   to { transform: translateX(calc(var(--sway, 28px) * 0.5)); }
 }
-.rh-bubble--flash { background-image: url('/assets/bubbles/effects/flash.png'); filter: drop-shadow(0 0 9px rgba(255, 240, 200, 0.75)); }
-.rh-bubble--subliminal { background-image: url('/assets/bubbles/effects/subliminal.png'); filter: drop-shadow(0 0 9px rgba(210, 130, 255, 0.75)); }
-.rh-bubble--spiral { background-image: url('/assets/bubbles/effects/spiral.png'); filter: drop-shadow(0 0 9px rgba(110, 225, 255, 0.75)); }
-.rh-bubble--glitch { background-image: url('/assets/bubbles/effects/glitch.png'); filter: drop-shadow(0 0 9px rgba(140, 255, 170, 0.75)); }
-.rh-bubble--braindrain { background-image: url('/assets/bubbles/effects/braindrain.png'); filter: drop-shadow(0 0 9px rgba(180, 150, 255, 0.75)); }
-.rh-bubble--prism { background-image: url('/assets/bubbles/effects/prism.png'); filter: drop-shadow(0 0 10px rgba(255, 200, 245, 0.8)); }
-.rh-bubble--pinkfilter { background-image: url('/assets/bubbles/effects/pinkfilter.png'); filter: drop-shadow(0 0 10px rgba(var(--fx-accent-rgb), 0.85)); }
-.rh-bubble--lucky { background-image: url('/assets/bubbles/effects/golden.png'); filter: drop-shadow(0 0 13px rgba(255, 210, 90, 0.95)); }
+.rh-bubble--flash { background-image: url('/dtrh/assets/bubbles/effects/flash.png'); filter: drop-shadow(0 0 9px rgba(255, 240, 200, 0.75)); }
+.rh-bubble--subliminal { background-image: url('/dtrh/assets/bubbles/effects/subliminal.png'); filter: drop-shadow(0 0 9px rgba(210, 130, 255, 0.75)); }
+.rh-bubble--spiral { background-image: url('/dtrh/assets/bubbles/effects/spiral.png'); filter: drop-shadow(0 0 9px rgba(110, 225, 255, 0.75)); }
+.rh-bubble--glitch { background-image: url('/dtrh/assets/bubbles/effects/glitch.png'); filter: drop-shadow(0 0 9px rgba(140, 255, 170, 0.75)); }
+.rh-bubble--braindrain { background-image: url('/dtrh/assets/bubbles/effects/braindrain.png'); filter: drop-shadow(0 0 9px rgba(180, 150, 255, 0.75)); }
+.rh-bubble--prism { background-image: url('/dtrh/assets/bubbles/effects/prism.png'); filter: drop-shadow(0 0 10px rgba(255, 200, 245, 0.8)); }
+.rh-bubble--pinkfilter { background-image: url('/dtrh/assets/bubbles/effects/pinkfilter.png'); filter: drop-shadow(0 0 10px rgba(var(--fx-accent-rgb), 0.85)); }
+.rh-bubble--lucky { background-image: url('/dtrh/assets/bubbles/effects/golden.png'); filter: drop-shadow(0 0 13px rgba(255, 210, 90, 0.95)); }
 .rh-bubble.is-pop { animation: rhBubblePop 0.3s ease-out forwards; }
 @keyframes rhBubblePop {
   0% { transform: scale(1); opacity: 1; }
@@ -950,3 +950,326 @@ img.rh-fx-spiralspin {
   /* keep the header uncluttered on phones: drop the deep links, keep the app + Discord */
   .sf-nav-links a:nth-child(2), .sf-nav-links a:nth-child(3) { display: none; }
 }
+
+/* ============================================================================
+ * DtRH game mode (M3) - the chaosField bubble layer, run HUD, announcer,
+ * countdown + recap overlays. cf-* namespaced; the Fall's own chrome above
+ * is untouched. Game mode hides the Fall's score readout (chaosHud owns it).
+ * ==========================================================================*/
+
+.sf-game-mode .sf-score { display: none; }
+.sf-game-mode .sf-hint { display: none; }
+
+/* ---- field ---- */
+.cf-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 6; /* above canvas + rh layers, below sf HUD chrome overlays */
+}
+.cf-layer.cf-held { filter: saturate(0.7) brightness(0.85); }
+.cf-layer.cf-frozen .cf-bubble-body {
+  filter: saturate(0.75) brightness(1.15) drop-shadow(0 0 14px rgba(150, 210, 255, 0.9));
+}
+.cf-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  will-change: transform;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.cf-bubble-body {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 10px var(--tint, rgba(255, 105, 180, 0.7)));
+  transition: transform 0.06s linear;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cf-bubble-label {
+  font-size: 1.6rem;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.cf-bubble--freeze .cf-bubble-body {
+  box-shadow: inset 0 0 24px rgba(255, 255, 255, 0.35);
+}
+.cf-bubble.is-brink .cf-bubble-body { animation: cfBreathe 0.5s ease-in-out infinite; }
+@keyframes cfBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
+}
+.cf-bubble.cf-shudder { animation: cfShudder 0.24s linear; }
+@keyframes cfShudder {
+  0% { margin-left: 0; } 25% { margin-left: 4px; } 50% { margin-left: -4px; }
+  75% { margin-left: 3px; } 100% { margin-left: 0; }
+}
+
+/* fuse ring: conic countdown, yellow -> flashing orange -> solid red brink */
+.cf-fuse-ring, .cf-chan-ring {
+  position: absolute;
+  inset: -4%;
+  border-radius: 50%;
+  pointer-events: none;
+  --deg: 360;
+  background: conic-gradient(var(--ringcol, #ffd75e) calc(var(--deg) * 1deg), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
+  opacity: 0.9;
+}
+.cf-fuse-ring.is-flash { --ringcol: #ff8a5e; animation: cfRingFlash 0.4s steps(2, jump-none) infinite; }
+@keyframes cfRingFlash {
+  0% { opacity: 0.9; }
+  100% { opacity: 0.5; }
+}
+.cf-fuse-ring.is-brink { --ringcol: #ff2f4a; opacity: 1; animation: none; }
+.cf-chan-ring {
+  --cdeg: 0;
+  inset: -9%;
+  background: conic-gradient(#7ae0ff calc(var(--cdeg) * 1deg), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+}
+.cf-bubble.is-channeling .cf-bubble-body { filter: brightness(1.25) drop-shadow(0 0 14px #7ae0ff); }
+
+/* pop / detonate / fade exits */
+.cf-bubble.is-pop { animation: cfPop 0.3s ease-out forwards; }
+@keyframes cfPop {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.45); }
+}
+.cf-bubble.is-detonate { animation: cfDetonate 0.42s ease-out forwards; }
+@keyframes cfDetonate {
+  0% { opacity: 1; filter: brightness(1); transform: scale(1); }
+  30% { filter: brightness(2.2) saturate(2); transform: scale(1.2); }
+  100% { opacity: 0; filter: brightness(2.6); transform: scale(1.7); }
+}
+.cf-bubble.is-fade { animation: cfFadeOut 0.7s ease-out forwards; }
+@keyframes cfFadeOut {
+  100% { opacity: 0; transform: scale(0.85); }
+}
+
+/* ---- float text ---- */
+.cf-fx {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 7;
+}
+.cf-pop {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+  color: #ffe9f4;
+  text-shadow: 0 0 10px rgba(255, 105, 180, 0.9), 0 1px 2px rgba(0, 0, 0, 0.7);
+  animation: cfFloat 1.1s ease-out forwards;
+}
+@keyframes cfFloat {
+  0% { opacity: 0; margin-top: 6px; }
+  12% { opacity: 1; }
+  100% { opacity: 0; margin-top: -46px; }
+}
+.cf-pop--gold { color: #ffd700; text-shadow: 0 0 12px rgba(255, 215, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.7); }
+.cf-pop--snap { color: #8affaa; text-shadow: 0 0 10px rgba(90, 255, 150, 0.9), 0 1px 2px rgba(0, 0, 0, 0.7); }
+.cf-pop--bad { color: #ff5468; text-shadow: 0 0 12px rgba(255, 60, 90, 0.95), 0 1px 2px rgba(0, 0, 0, 0.7); font-size: 1.35rem; }
+.cf-pop--freeze { color: #bfe9ff; text-shadow: 0 0 12px rgba(150, 210, 255, 0.95), 0 1px 2px rgba(0, 0, 0, 0.7); }
+.cf-pop--focus { color: #7ae0ff; font-size: 0.95rem; }
+
+/* the Ripple wavefront */
+.cf-ripple {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 3px solid rgba(122, 224, 255, 0.9);
+  box-shadow: 0 0 22px rgba(122, 224, 255, 0.7), inset 0 0 18px rgba(122, 224, 255, 0.4);
+  transform: translate(-50%, -50%);
+  animation: cfRippleGrow var(--life, 520ms) ease-out forwards;
+}
+@keyframes cfRippleGrow {
+  0% { width: 10px; height: 10px; opacity: 1; }
+  100% { width: calc(var(--r, 260px) * 2); height: calc(var(--r, 260px) * 2); opacity: 0; }
+}
+
+/* ---- HUD strip ---- */
+.cf-hud {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  color: #ffdef0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.cf-hud-score { display: flex; align-items: baseline; gap: 10px; }
+.cf-score-val { font-size: 1.7rem; font-weight: 800; letter-spacing: 0.03em; }
+.cf-mult-val { font-size: 1rem; font-weight: 700; color: #ffb3dd; }
+.cf-hud-streak { min-height: 1.1em; font-size: 0.95rem; font-weight: 700; color: #ffcf7a; }
+.cf-hud-focus { display: flex; align-items: center; gap: 8px; }
+.cf-focus-label { font-size: 0.7rem; letter-spacing: 0.2em; opacity: 0.85; }
+.cf-focus-bar {
+  width: 120px;
+  height: 9px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+.cf-focus-fill {
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #7ae0ff, #b0f0ff);
+  transition: width 0.2s ease-out;
+}
+.cf-hud-focus.is-low .cf-focus-fill {
+  background: linear-gradient(90deg, #ff5468, #ff8a5e);
+  animation: cfLowPulse 0.9s ease-in-out infinite;
+}
+@keyframes cfLowPulse { 50% { opacity: 0.45; } }
+.cf-focus-bar.cf-focus-flash { animation: cfFocusFlash 0.5s ease-out; }
+@keyframes cfFocusFlash { 0%, 60% { box-shadow: 0 0 0 2px #ff5468, 0 0 14px #ff5468; } }
+.cf-hud-clock { font-size: 0.85rem; opacity: 0.9; }
+.cf-hud-ripple { font-size: 0.8rem; opacity: 0.75; }
+.cf-hud-ripple.is-ready { opacity: 1; color: #9deaff; }
+
+/* ---- announcer ---- */
+.cf-announce-wrap {
+  position: absolute;
+  top: 22%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 10;
+}
+.cf-announce {
+  font-size: 2.1rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #ffe9f4;
+  text-shadow: 0 0 18px rgba(255, 105, 180, 0.85), 0 2px 4px rgba(0, 0, 0, 0.8);
+  animation: cfAnnounce var(--hold, 2000ms) ease-out forwards;
+}
+@keyframes cfAnnounce {
+  0% { opacity: 0; transform: scale(0.85); }
+  8% { opacity: 1; transform: scale(1.04); }
+  14% { transform: scale(1); }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.02); }
+}
+.cf-announce--streak { color: #ffe082; text-shadow: 0 0 20px rgba(255, 200, 60, 0.9), 0 2px 4px rgba(0, 0, 0, 0.8); }
+.cf-announce--powerup { color: #ffd700; text-shadow: 0 0 20px rgba(255, 215, 0, 0.9), 0 2px 4px rgba(0, 0, 0, 0.8); }
+.cf-announce--freeze { color: #bfe9ff; text-shadow: 0 0 20px rgba(150, 210, 255, 0.95), 0 2px 4px rgba(0, 0, 0, 0.8); }
+.cf-announce--bad { color: #ff5468; text-shadow: 0 0 20px rgba(255, 60, 90, 0.95), 0 2px 4px rgba(0, 0, 0, 0.8); font-size: 1.6rem; }
+.cf-announce--depth { color: #d9b3ff; text-shadow: 0 0 20px rgba(180, 120, 255, 0.9), 0 2px 4px rgba(0, 0, 0, 0.8); }
+
+/* ---- toasts ---- */
+.cf-toast-wrap {
+  position: absolute;
+  left: 16px;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+  z-index: 9;
+  max-width: 42vw;
+}
+.cf-toast {
+  font-size: 0.82rem;
+  color: rgba(255, 222, 240, 0.92);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  animation: cfToastIn 0.25s ease-out;
+  transition: opacity 0.6s ease-out;
+}
+.cf-toast.is-gone { opacity: 0; }
+@keyframes cfToastIn { 0% { opacity: 0; margin-left: -8px; } }
+
+/* ---- full-screen pulse ---- */
+.cf-pulse {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 8;
+  opacity: 0;
+}
+.cf-pulse.is-on { animation: cfPulseFade 0.45s ease-out forwards; }
+@keyframes cfPulseFade {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ---- countdown + recap overlays ---- */
+.cf-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 12;
+  pointer-events: none;
+}
+.cf-countdown-num {
+  font-size: 7rem;
+  font-weight: 900;
+  color: #ffdef0;
+  text-shadow: 0 0 40px rgba(255, 105, 180, 0.9), 0 4px 8px rgba(0, 0, 0, 0.8);
+}
+.cf-countdown-num.is-go { color: #ff69b4; letter-spacing: 0.08em; }
+.cf-countdown-num.is-beat { animation: cfBeat 0.6s ease-out; }
+@keyframes cfBeat {
+  0% { transform: scale(1.5); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+.cf-recap {
+  pointer-events: auto;
+  background: rgba(8, 2, 10, 0.55);
+  backdrop-filter: blur(4px);
+}
+.cf-recap-card {
+  background: rgba(24, 8, 24, 0.92);
+  border: 1px solid rgba(255, 105, 180, 0.35);
+  border-radius: 16px;
+  padding: 28px 40px;
+  text-align: center;
+  color: #ffdef0;
+  box-shadow: 0 0 60px rgba(255, 105, 180, 0.25);
+  max-width: min(520px, 88vw);
+}
+.cf-recap-card h2 { margin: 0 0 12px; font-size: 1.5rem; letter-spacing: 0.06em; }
+.cf-recap-card p { margin: 5px 0; font-size: 0.95rem; opacity: 0.9; }
+.cf-recap-score { font-size: 1.9rem !important; font-weight: 800; opacity: 1 !important; }
+.cf-recap-payout {
+  margin: 14px 0 4px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255, 105, 180, 0.25);
+  border-bottom: 1px solid rgba(255, 105, 180, 0.25);
+  color: #ffe9a0;
+  min-height: 2em;
+}
+.cf-recap-rankup { color: #ffd700; font-weight: 800; letter-spacing: 0.1em; }
+.cf-recap-btns { margin-top: 16px; display: flex; gap: 12px; justify-content: center; }
+
+/* [hidden] must beat the .cf-overlay display:flex rule (UA attribute rule loses to a class) */
+.cf-overlay[hidden] { display: none; }

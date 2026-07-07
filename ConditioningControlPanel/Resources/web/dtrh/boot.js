@@ -15,6 +15,7 @@
 import * as bridge from './bridge.js';
 import { createHostMediaSource } from './hostMedia.js';
 import { detectMode } from './shared/capability.js';
+import { createChaosGame } from './game/chaosRun.js';
 
 const dom = {
   canvas: document.getElementById('sf-canvas'),
@@ -36,6 +37,7 @@ window.addEventListener('unhandledrejection', (e) => {
 
 const media = createHostMediaSource();
 let engine = null;
+let game = null;
 let initMsg = null;
 let haveManifest = false;
 let started = false;
@@ -54,15 +56,23 @@ async function maybeStart() {
   started = true;
   try {
     const mod = await scenePromise;
+    // The run brain (M3): countdown -> waves -> recap; it sends its own
+    // run-started at GO! and run-ended -> payout over the bridge.
+    game = createChaosGame({
+      bridge,
+      runConfig: initMsg.runConfig,
+      requestExit: () => { bridge.send({ type: 'exit' }); shutdown(); },
+    });
     engine = await mod.start({
       canvas: dom.canvas,
       hud: dom.hud,
       tier: detectMode().tier,
       media,
       challenge: false,   // DtRH is no-lose; the Fall's miss-death mode stays off
+      game,
     });
     if (dom.loader) dom.loader.hidden = true;
-    bridge.send({ type: 'run-started', mode: 'fall' });
+    bridge.log('engine live (game mode)');
   } catch (err) {
     bridge.log('3D boot failed: ' + (err && (err.stack || err.message) || err));
     bridge.send({ type: 'boot-error', msg: String(err && err.message || err) });
@@ -74,6 +84,7 @@ async function maybeStart() {
 function shutdown() {
   try { engine && engine.dispose && engine.dispose(); } catch (e) { /* best effort */ }
   engine = null;
+  game = null; // scene.dispose() already disposed it
   bridge.send({ type: 'exit-done' });
 }
 
@@ -84,11 +95,18 @@ bridge.on('init', (m) => {
 });
 bridge.on('manifest', (m) => { media.setManifest(m); haveManifest = true; maybeStart(); });
 bridge.on('meta', (m) => { hostState.meta = m.state; hostState.metaRev = m.rev; });
-bridge.on('payout-result', (m) => { hostState.lastPayout = m; bridge.log(`payout: base=${Math.round(m.baseXp)} final=${Math.round(m.finalXp)} sparks=${m.sparksEarned}${m.dryRun ? ' (dry)' : ''}`); });
+bridge.on('payout-result', (m) => {
+  hostState.lastPayout = m;
+  if (game) game.onPayout(m);
+  bridge.log(`payout: base=${Math.round(m.baseXp)} final=${Math.round(m.finalXp)} sparks=${m.sparksEarned}${m.dryRun ? ' (dry)' : ''}`);
+});
 bridge.on('payload-state', (m) => {
-  hostState.payloadCover = m.kind === 'video' ? !!m.on : hostState.payloadCover;
-  // M3 wires this into the run brain (pause spawns/clock while covered); the engine keeps
-  // rendering for now - occlusion throttling is already disabled by the host's browser args.
+  if (m.kind === 'video') {
+    hostState.payloadCover = !!m.on;
+    // A mandatory video fully covers the page: hold the run (clock + spawns +
+    // motion + input) until it ends; the host reclaims Win32 focus for us.
+    if (game) game.setCovered(!!m.on);
+  }
 });
 bridge.on('end-run', () => shutdown());
 bridge.on('ping', (m) => bridge.send({ type: 'pong', t: m.t }));

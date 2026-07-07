@@ -27,15 +27,23 @@ const MAX_MISSES = 10;
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const smooth = (t) => t * t * (3 - 2 * t);
 
-export function createDirector({ challenge }) {
+// DtRH demotion (M3): when `intensitySource` is provided the director stops
+// being the game brain - chaosRun.js owns intensity (elapsed/duration) and the
+// director is a speed/boost PRESENTATION adapter. `timeFactor` lets the game
+// visibly dilate tunnel time (freeze ~0.06, recap crawl 0.3); killBoost() is
+// the detonation stumble.
+export function createDirector({ challenge, intensitySource = null }) {
   let runTime = 0;
   let boost = 0;
   let misses = 0;
   let bestCombo = 0;
   let over = false;
   let holding = false; // true while the player is grabbing a card
+  let timeFactor = 1;  // game-driven time dilation on the target speed
 
-  const intensity = () => smooth(clamp01(runTime / RAMP_SECONDS));
+  const intensity = () => intensitySource
+    ? smooth(clamp01(intensitySource()))
+    : smooth(clamp01(runTime / RAMP_SECONDS));
 
   return {
     update(dt) {
@@ -54,8 +62,12 @@ export function createDirector({ challenge }) {
     getTargetSpeed() {
       if (over) return 0.15;
       const base = BASE_SPEED_CALM + (BASE_SPEED_HOT - BASE_SPEED_CALM) * intensity();
-      return (base + boost) * (holding ? HOLD_FACTOR : 1);
+      return (base + boost) * (holding ? HOLD_FACTOR : 1) * timeFactor;
     },
+
+    // Game-driven time dilation (freeze / recap idle) + the detonation stumble.
+    setTimeFactor(f) { timeFactor = Math.max(0.02, f); },
+    killBoost() { boost = 0; },
 
     // Grabbing a card eases the fall (restored the instant it is released). The
     // scene sets this every frame from spawner.isGrabbing(), so auto-releases
@@ -90,6 +102,6 @@ export function createDirector({ challenge }) {
     getBestCombo: () => bestCombo,
     isOver: () => over,
 
-    reset() { runTime = 0; boost = 0; misses = 0; bestCombo = 0; over = false; holding = false; },
+    reset() { runTime = 0; boost = 0; misses = 0; bestCombo = 0; over = false; holding = false; timeFactor = 1; },
   };
 }
