@@ -39,6 +39,13 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
   let interacted = false;
   let fovPulse = 0;           // transient FOV kick from popped effects
 
+  // Wave 2 game verbs: camera roll (a static dutch tilt per accepted sin, a
+  // continuous spin for the Spun curse) and a speed-cap multiplier (Freefall).
+  let rollRate = 0;           // deg/s continuous roll
+  let rollSpin = 0;           // accumulated spin angle (deg)
+  let rollOffsetT = 0, rollOffset = 0; // eased static tilt (deg)
+  let capMult = 1;            // multiplies MAX_SPEED
+
   let lookYaw = 0, lookPitch = 0, targetYaw = 0, targetPitch = 0;
   let dragging = false, lastX = 0, lastY = 0, dragType = 'mouse';
   let swipeDY = 0, swipeSkipped = false; // per-touch-gesture: skip a spotlight on a decisive vertical swipe
@@ -140,10 +147,10 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
 
     // desired speed: the director's target scaled by the player trim; during
     // the intro, blend from the plunge speed down into the game speed.
-    let desired = clamp((getTargetSpeed ? getTargetSpeed() : 6) * trim, MIN_SPEED, MAX_SPEED);
+    let desired = clamp((getTargetSpeed ? getTargetSpeed() : 6) * trim, MIN_SPEED, MAX_SPEED * capMult);
     if (introT < 1) desired = INTRO_SPEED + (desired - INTRO_SPEED) * introE;
     speed += (desired - speed) * clamp(dt * ACCEL_LERP, 0, 1);
-    speed = clamp(speed, MIN_SPEED, MAX_SPEED);
+    speed = clamp(speed, MIN_SPEED, MAX_SPEED * capMult);
     depth += speed * dt;
 
     // look easing
@@ -151,6 +158,17 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     lookPitch += (targetPitch - lookPitch) * clamp(dt * LOOK_LERP, 0, 1);
 
     fovPulse *= Math.exp(-FOV_PULSE_DECAY * dt);
+
+    // camera roll: spin while a rate is set; unwind to upright the short way
+    // once it clears (so a run ending never snaps the horizon back)
+    if (rollRate) {
+      rollSpin = (rollSpin + rollRate * dt) % 360;
+    } else if (rollSpin) {
+      let s = ((rollSpin % 360) + 540) % 360 - 180; // -180..180
+      s *= Math.exp(-1.8 * dt);
+      rollSpin = Math.abs(s) < 0.05 ? 0 : s;
+    }
+    rollOffset += (rollOffsetT - rollOffset) * clamp(dt * 1.5, 0, 1);
 
     // place the camera on the loop, looking a little further along it
     const t = depth / layout.loopDepth;
@@ -176,6 +194,10 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
       .addScaledVector(_up, Math.sin(lookPitch) * 6);
     camera.lookAt(_look);
 
+    // dutch roll about the view axis (The Tilt / Spun)
+    const roll = (rollOffset + rollSpin) * (Math.PI / 180);
+    if (roll) camera.rotateZ(roll);
+
     const fov = baseFov + (1 - introE) * 8 + fovPulse; // wide during the plunge + effect kicks
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
   }
@@ -195,9 +217,14 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     getTrim: () => trim,
     fovKick(amount) { fovPulse = Math.min(8, fovPulse + amount); },
     setPaused(p) { paused = !!p; if (p) dragging = false; },
+    // Wave 2 game verbs
+    setRollRate(degPerSec) { rollRate = degPerSec || 0; },
+    setRollOffset(deg) { rollOffsetT = deg || 0; },
+    setSpeedCapMult(f) { capMult = clamp(f || 1, 0.25, 3); },
     reset() {
       depth = 0; speed = INTRO_SPEED; trim = 1; introT = 0; fovPulse = 0;
       lookYaw = lookPitch = targetYaw = targetPitch = 0;
+      rollRate = 0; rollSpin = 0; rollOffsetT = rollOffset = 0; capMult = 1;
     },
     dispose,
   };

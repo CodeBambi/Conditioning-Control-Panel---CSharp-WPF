@@ -206,27 +206,80 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
   let currentZone = 'calm';
   let lastDepth = 0;
 
+  // ---- Wave 2 game-verb state -------------------------------------------------
+  // The run brain drives the tube's look directly: a held zone (weather), a
+  // color pull on the line work (Lust Bleed), re-patterned ring/spiral density
+  // (Heat Warp), forced speed-line heat (Freefall) and a sustained flash floor
+  // (the Wand). Everything eases so a game flip glides like a natural crossfade.
+  let forcedZone = null;
+  const tintC = new THREE.Color(0xff5bb8);
+  let tintTarget = 0, tintEased = 0;
+  let densTarget = null;   // {rings, spiralTurns} or null = engine defaults
+  let densEase = null;     // eased current values, seeded from the live uniforms
+  let rushOverride = 0, rushOverrideEased = 0;
+  let flashHold = 0;
+  const _fogE = new THREE.Color(ZP.calm.fog), _lineE = new THREE.Color(ZP.calm.line),
+    _spiralE = new THREE.Color(ZP.calm.spiral);
+  const _lineF = new THREE.Color(), _spiralF = new THREE.Color();
+  let densityE = FOG_DENSITY;
+
   function update(depth, dt, t, intensity, rush) {
     rush = rush || 0;
     lastDepth = depth;
     const zi = Math.floor(depth / ZONE_LEN);
     const u = (depth - zi * ZONE_LEN) / ZONE_LEN;
     const w = smoothstep(0, ZONE_EDGE, u) * (1 - smoothstep(1 - ZONE_EDGE, 1, u));
-    const type = zoneType(zi, intensity);
+    const type = forcedZone || zoneType(zi, intensity);
     currentZone = type;
     const z = ZP[type], base = ZP.calm;
+
+    // forced speed-line heat: the tube can burn flat-out without actually
+    // accelerating (and it feeds the ribbon/sparkle/strike math below too)
+    rushOverrideEased += (rushOverride - rushOverrideEased) * Math.min(1, dt * 2);
+    if (rushOverrideEased > 0.003) rush = Math.max(rush, rushOverrideEased);
 
     // crossfade fog + shader palette between the base mood and the zone's
     _fogC.copy(base.fogC).lerp(z.fogC, w);
     _lineC.copy(base.lineC).lerp(z.lineC, w);
     _spiralC.copy(base.spiralC).lerp(z.spiralC, w);
     const density = base.density + (z.density - base.density) * w;
-    if (scene.fog) { scene.fog.color.copy(_fogC); scene.fog.density = density; }
+    // temporal ease on top of the positional blend, so a forceZone flip mid-zone
+    // (the weather system) glides in instead of snapping
+    const zk = Math.min(1, dt * 2.2);
+    _fogE.lerp(_fogC, zk);
+    _lineE.lerp(_lineC, zk);
+    _spiralE.lerp(_spiralC, zk);
+    densityE += (density - densityE) * zk;
+    // Lust Bleed: pull the line work toward the game's tint (composed on a
+    // scratch copy so the eased base never accumulates the tint)
+    tintEased += (tintTarget - tintEased) * Math.min(1, dt * 1.6);
+    _lineF.copy(_lineE); _spiralF.copy(_spiralE);
+    if (tintEased > 0.003) { _lineF.lerp(tintC, tintEased); _spiralF.lerp(tintC, tintEased); }
+    if (scene.fog) { scene.fog.color.copy(_fogE); scene.fog.density = densityE; }
     const uni = tunnelMat.uniforms;
-    uni.uFogColor.value.copy(_fogC);
-    uni.uFogDensity.value = density;
-    uni.uLineColor.value.copy(_lineC);
-    uni.uSpiralColor.value.copy(_spiralC);
+    uni.uFogColor.value.copy(_fogE);
+    uni.uFogDensity.value = densityE;
+    uni.uLineColor.value.copy(_lineF);
+    uni.uSpiralColor.value.copy(_spiralF);
+    if (rushOverrideEased > 0.003 && uni.uRush) {
+      uni.uRush.value = Math.max(uni.uRush.value, rushOverrideEased);
+    }
+    // Heat Warp: ease ring/spiral counts toward the game's target, rounding to
+    // integers so the treadmill loop stays seam-free
+    if (uni.uRings && uni.uSpiralTurns) {
+      if (!densEase) {
+        densEase = { r: uni.uRings.value, s: uni.uSpiralTurns.value,
+          r0: uni.uRings.value, s0: uni.uSpiralTurns.value };
+      }
+      const dk = Math.min(1, dt * 1.5);
+      const rT = (densTarget && densTarget.rings != null) ? densTarget.rings : densEase.r0;
+      const sT = (densTarget && densTarget.spiralTurns != null) ? densTarget.spiralTurns : densEase.s0;
+      densEase.r += (rT - densEase.r) * dk;
+      densEase.s += (sT - densEase.s) * dk;
+      const ri = Math.round(densEase.r), si = Math.round(densEase.s);
+      if (uni.uRings.value !== ri) uni.uRings.value = ri;
+      if (uni.uSpiralTurns.value !== si) uni.uSpiralTurns.value = si;
+    }
 
     // ribbons + sparkles: zone blend, plus a slow breath, the intensity ramp,
     // and the speed rush (fast falls burn brighter and shimmer harder)
@@ -260,6 +313,7 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
       }
     }
     flash *= Math.exp(-6 * dt);
+    if (flashHold > 0 && flash < flashHold) flash = flashHold; // sustained glare (the Wand)
     if (uni.uFlash) uni.uFlash.value = flash;
   }
 
@@ -337,6 +391,27 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     zoneCache.set(zi, pool[Math.floor(Math.random() * pool.length)]);
   }
 
+  // ---- Wave 2 game verbs -----------------------------------------------------
+  // strikeNow: crack a bolt across the tube on demand (chain mirror, Static).
+  function strikeNow() { strike(lastDepth); }
+  // forceZone: hold the tunnel in a chosen mood (the weather system); null
+  // releases it back to the organic zone roll.
+  function forceZone(type) { forcedZone = (type && ZP[type]) ? type : null; }
+  // setTint: pull the line/spiral colors toward a color (Lust Bleed).
+  // strength 0..1; null color (or 0) clears.
+  function setTint(color, strength = 0) {
+    if (color != null) tintC.set(color);
+    tintTarget = color == null ? 0 : clamp01(strength);
+  }
+  // setDensity: re-pattern the tube (Heat Warp). null resets to engine defaults.
+  function setDensity(d) {
+    densTarget = d ? { rings: d.rings, spiralTurns: d.spiralTurns } : null;
+  }
+  // holdFlash: a sustained uFlash floor while on (pulseFlash stays transient).
+  function holdFlash(on, amount = 0.55) { flashHold = on ? amount : 0; }
+  // setRushOverride: force the speed-line heat regardless of actual fall speed.
+  function setRushOverride(f) { rushOverride = clamp01(f || 0); }
+
   function dispose() {
     offSettings();
     if (overrideTimer) { clearTimeout(overrideTimer); overrideTimer = 0; }
@@ -347,5 +422,10 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     bolts.length = 0;
   }
 
-  return { update, dispose, flashRandomTheme, pulseFlash, seedZoneAhead, getZone: () => currentZone };
+  return {
+    update, dispose, flashRandomTheme, pulseFlash, seedZoneAhead,
+    getZone: () => currentZone,
+    // Wave 2 game verbs
+    strikeNow, forceZone, setTint, setDensity, holdFlash, setRushOverride,
+  };
 }

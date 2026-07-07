@@ -98,6 +98,8 @@ const IMG_MAX_DIM = Q.tier === 'mobile' ? 1024 : 2048;
 // playing a random cutout (S.spotSeconds long) with full audio; card spawning
 // is suppressed while it holds the stage.
 const GRAB_DIST = 4.6;         // units ahead a grabbed image/gif card hovers (centered like a spotlight)
+const THROW_SPEED = 55;        // u/s a thrown card (Sticky Fingers capstone) rockets down-tube
+const THROW_IMPACT_AT = 50;    // units ahead of the camera where the throw resolves
 const SPOTLIGHT_DIST = 2.8;    // units ahead of the camera it hovers (close = big)
 const SPOTLIGHT_GAP = 130;     // depth units before the next feature is allowed
 const SPOTLIGHT_FADE_S = 1.6;  // audio fade in the clip's final seconds
@@ -420,6 +422,9 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   let spotlight = null;       // the promoted video card, if any
   let grabbed = null;         // an image/gif card the player is holding in front of the POV
   let nextSpotlightOkAt = 60; // camera depth before the next feature may start
+  let autoSpotlightOk = true; // Wave 2: the game turns approach-promotion off mid-run
+  let pickupTimeScale = 1;    // Wave 2: pickups follow the game's freeze/slow-mo clock
+  let throwOnRelease = null;  // Wave 2 (Sticky Fingers capstone): release hurls the card
   const _dir = new THREE.Vector3(), _target = new THREE.Vector3();
   const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
 
@@ -1162,6 +1167,53 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     };
   }
 
+  // ---- pickups (Wave 2) --------------------------------------------------------
+  // Small clickable objects riding the tube wall. A pickup reuses the card
+  // conveyor (live list, despawn, billboard, raycast registration) but is
+  // CONSUMED by a click instead of grabbed. speed > 0 makes it race down-tube
+  // (the White Rabbit); 0 lets the camera stream past it (Condensation).
+  function placePickupGroup(rec) {
+    const fr = layout.frameAtDepth(rec.depth);
+    rec.group.position.copy(fr.pos)
+      .addScaledVector(fr.binormal, rec.side)
+      .addScaledVector(fr.normal, rec.rad);
+  }
+
+  function spawnPickup({ kind = 'pickup', spriteUrl, w = 1.5, aheadDepth = 55, ttlSec = 12,
+    speed = 0, glowColor = 0xffd700, spin = 0, onClick = null, onGone = null }) {
+    const group = new THREE.Group();
+    const glowMat = new THREE.MeshBasicMaterial({
+      map: glowTex, color: new THREE.Color(glowColor), transparent: true,
+      depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    });
+    const glow = new THREE.Mesh(unitPlane, glowMat);
+    glow.scale.set(w * 2.1, w * 2.1, 1);
+    glow.position.z = -0.05;
+    group.add(glow);
+    const mat = new THREE.MeshBasicMaterial({
+      map: loadTexture(spriteUrl), transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(unitPlane, mat);
+    mesh.scale.set(w, w, 1);
+    group.add(mesh);
+    const rec = {
+      group, depth: camDepthNow + aheadDepth, kind, pickup: true, billboard: true,
+      side: (Math.random() < 0.5 ? -1 : 1) * SIDE_OFFSET * rand(0.55, 1),
+      rad: rand(-0.9, 0.9),
+      ttl: ttlSec, pkSpeed: speed, spin,
+      pulseT: Math.random() * 6,
+      onPickupClick: onClick, onPickupGone: onGone,
+      dispose() { rec.dead = true; mat.dispose(); glowMat.dispose(); }, // loadTexture stays cached
+    };
+    placePickupGroup(rec);
+    addCard(rec);
+    return rec;
+  }
+
+  function clearPickups() {
+    for (let i = live.length - 1; i >= 0; i--) if (live[i].pickup) removeCard(i);
+  }
+
   // ---- content selection -----------------------------------------------------
   function spawnSpiceCard(depth) {
     // With no user media loaded the tube stays nearly blank - we ship no default
@@ -1233,7 +1285,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   // Promote an approaching user video card to the stage: seek a random ~30s
   // cutout, ride ahead of the POV at full volume, suppress new cards until done.
   function promoteSpotlight(rec, camera) {
-    if (grabbed) releaseGrab(); // a video taking the stage lets any held card go
+    if (grabbed) releaseGrab(true); // a video taking the stage lets any held card go (never a throw)
     spotlight = rec;
     rec.isSpotlight = true;
     const clipLen = Math.max(10, Math.min(30, S.spotSeconds || 30));
@@ -1287,10 +1339,32 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     for (const r of live) if (r.kind === 'image' && r.group.visible && !r.isGrabbed) out.push(r.group);
     return out;
   }
+  function clickableGroups() {
+    const out = [];
+    for (const r of live) if (r.pickup && !r.dead) out.push(r.group);
+    return out;
+  }
   function grabAtPointer(ndcX, ndcY, camera) {
-    if (grabbed || spotlight) return false; // one at a time; never during a video stage
     _ndc.set(ndcX, ndcY);
     _ray.setFromCamera(_ndc, camera);
+    // pickups first: a small deliberate target beats a grab (and stays
+    // clickable even while a card is held or a spotlight plays)
+    const picks = clickableGroups();
+    if (picks.length) {
+      const ph = _ray.intersectObjects(picks, true);
+      for (const h of ph) {
+        let o = h.object;
+        while (o && !(o.userData && o.userData.rec)) o = o.parent;
+        const rec = o && o.userData.rec;
+        if (rec && rec.pickup && !rec.dead) {
+          const idx = live.indexOf(rec);
+          if (rec.onPickupClick) { try { rec.onPickupClick(rec); } catch (e) { /* ignore */ } }
+          if (idx >= 0) removeCard(idx);
+          return true;
+        }
+      }
+    }
+    if (grabbed || spotlight) return false; // one at a time; never during a video stage
     const hits = _ray.intersectObjects(grabbableGroups(), true);
     for (const h of hits) {
       let o = h.object;
@@ -1309,14 +1383,70 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     _target.copy(camera.position).addScaledVector(_dir, rec.spotDist);
     rec.spotLat = new THREE.Vector3().subVectors(rec.group.position, _target);
   }
-  function releaseGrab() {
+  function releaseGrab(silent) {
     if (!grabbed) return;
+    // Sticky Fingers capstone: a player release hurls the card down the tube
+    // instead of letting it drift (silent releases - spotlight steals, resets -
+    // never throw)
+    if (!silent && throwOnRelease) { throwHeldCard(throwOnRelease); return; }
     const rec = grabbed;
     rec.isGrabbed = false;
     // hand it back to the conveyor just ahead of the camera so it recedes and
     // despawns normally (its world position is frozen; the camera flies past it)
     rec.depth = camDepthNow + Math.max(2, rec.spotDist || GRAB_DIST);
     grabbed = null;
+  }
+
+  // Wave 2 (Sticky Fingers capstone): hurl the held card down the tube; the
+  // impact callback fires once it's flown well ahead, then it despawns.
+  function throwHeldCard(onImpact) {
+    if (!grabbed) return false;
+    const rec = grabbed;
+    grabbed = null;
+    rec.isGrabbed = false;
+    rec.thrown = true;
+    rec.onThrowImpact = onImpact || null;
+    rec.depth = camDepthNow + Math.max(2, rec.spotDist || GRAB_DIST);
+    const fr = layout.frameAtDepth(rec.depth);
+    rec.throwLat = new THREE.Vector3().subVectors(rec.group.position, fr.pos);
+    return true;
+  }
+
+  // Wave 2 (Sticky Fingers): project the held card's content plane to CSS-pixel
+  // screen bounds, so the game can pop the DOM bubbles it sweeps over.
+  const _hc = new THREE.Vector3();
+  function heldCardScreenRect() {
+    if (!grabbed) return null;
+    const mesh = grabbed.group.children[2]; // dressCard order: glow, frame, content
+    if (!mesh) return null;
+    const r = renderer.domElement.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+    for (let cx = -0.5; cx <= 0.5; cx += 1) {
+      for (let cy = -0.5; cy <= 0.5; cy += 1) {
+        _hc.set(cx, cy, 0);
+        mesh.localToWorld(_hc);
+        _hc.project(camera);
+        if (_hc.z > 1) return null; // behind the camera: no rect
+        const px = r.left + ((_hc.x + 1) / 2) * r.width;
+        const py = r.top + ((1 - _hc.y) / 2) * r.height;
+        if (px < minX) minX = px; if (px > maxX) maxX = px;
+        if (py < minY) minY = py; if (py > maxY) maxY = py;
+      }
+    }
+    return { left: minX, top: minY, right: maxX, bottom: maxY };
+  }
+
+  // Wave 2 (Private Show): put a chosen video on the stage RIGHT NOW, bypassing
+  // approach auto-promotion (which the game disables during live runs).
+  function forceSpotlight(url, secs, release) {
+    if (spotlight) return false;
+    const rec = buildVideoCard(camDepthNow + 12, url, { withAudio: true, release });
+    if (!rec) return false;
+    addCard(rec);
+    promoteSpotlight(rec, camera);
+    if (secs) rec.clipLeft = Math.max(6, Math.min(60, secs));
+    return true;
   }
 
   // ---- per-frame update -------------------------------------------------------
@@ -1418,8 +1548,39 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         // fall through: billboard + gif/Ken-Burns keep animating below
       }
 
+      // a thrown card (Sticky Fingers capstone) rockets down the tube's center
+      if (rec.thrown) {
+        rec.depth += THROW_SPEED * dt;
+        const fr = layout.frameAtDepth(rec.depth);
+        rec.throwLat.multiplyScalar(Math.exp(-dt * 2.5));
+        rec.group.position.copy(fr.pos).add(rec.throwLat);
+        if (rec.depth > camDepth + THROW_IMPACT_AT) {
+          const cb = rec.onThrowImpact;
+          removeCard(i);
+          if (cb) { try { cb(); } catch (e) { /* ignore */ } }
+          continue;
+        }
+      }
+
+      // pickups: tick lifetime / dash motion on the game's clock; a spent or
+      // escaped one reports out via onPickupGone (the missed-it case)
+      if (rec.pickup) {
+        const pdt = dt * pickupTimeScale;
+        rec.ttl -= pdt;
+        rec.pulseT += pdt;
+        if (rec.pkSpeed) { rec.depth += rec.pkSpeed * pdt; placePickupGroup(rec); }
+        rec.group.scale.setScalar(1 + 0.08 * Math.sin(rec.pulseT * 3.2));
+        if (rec.ttl <= 0 || rec.depth > camDepth + SPAWN_AHEAD + 30) {
+          if (rec.onPickupGone) { try { rec.onPickupGone(rec); } catch (e) { /* ignore */ } }
+          removeCard(i); continue;
+        }
+      }
+
       // despawn behind the camera
-      if (rec.depth < camDepth - DESPAWN_BEHIND) { removeCard(i); continue; }
+      if (rec.depth < camDepth - DESPAWN_BEHIND) {
+        if (rec.pickup && rec.onPickupGone) { try { rec.onPickupGone(rec); } catch (e) { /* ignore */ } }
+        removeCard(i); continue;
+      }
 
       if (rec.billboard) rec.group.quaternion.copy(camera.quaternion);
       if (rec.spin) rec.group.rotation.z += rec.spin * dt;
@@ -1461,7 +1622,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
       // never-loaded video used to freeze the WHOLE conveyor: an invisible
       // stage whose clipLeft never counts down (it only ticks while playing)
       // suppresses every card spawn until the run ends.
-      if (rec.spotlightable && rec.group.visible && !spotlight && camDepth >= rec.depth - 16 && camDepth >= nextSpotlightOkAt) {
+      if (rec.spotlightable && autoSpotlightOk && rec.group.visible && !spotlight && camDepth >= rec.depth - 16 && camDepth >= nextSpotlightOkAt) {
         promoteSpotlight(rec, camera);
         continue;
       }
@@ -1534,6 +1695,13 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   return {
     update, reset, dispose, setPaused, warm,
     grabAtPointer, releaseGrab,
+    // Wave 2 game verbs
+    spawnPickup, clearPickups,
+    setPickupTimeScale: (f) => { pickupTimeScale = Math.max(0, f == null ? 1 : f); },
+    heldCardScreenRect,
+    setThrowOnRelease: (cb) => { throwOnRelease = cb || null; },
+    forceSpotlight,
+    setAutoSpotlight: (on) => { autoSpotlightOk = !!on; },
     isGrabbing: () => !!grabbed,
     liveCount: () => live.length,
     liveKinds: () => live.map((r) => r.kind),

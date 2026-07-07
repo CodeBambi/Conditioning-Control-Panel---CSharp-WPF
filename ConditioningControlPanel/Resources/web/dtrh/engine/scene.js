@@ -342,7 +342,9 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     // still targets COUNT_MIN, so pause it (clears + stops spawning). Veil
     // punch-through washes skip while paused; M4 routes veils into the game.
     bubbles.setPaused(true);
-    game.attach({ nav, fx, director, hud, canvas });
+    // Wave 2: the game also gets the spawner - pickups, held-card projection,
+    // forced spotlights and the auto-promotion gate all live there.
+    game.attach({ nav, fx, director, hud, canvas, spawner });
   }
 
   // ---- loop --------------------------------------------------------------------
