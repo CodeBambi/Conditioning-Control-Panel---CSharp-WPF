@@ -62,6 +62,9 @@ internal static class DtrhHostService
                     // Allow (not DenyCors): the engine uploads this media to WebGL, which
                     // needs CORS-clean responses (verified in the M0 spike).
                     ("ccp.assets", App.EffectiveAssetsPath, CoreWebView2HostResourceAccessKind.Allow),
+                    // M4: the bundled Chaos art (bubble sprites, boon icons, announcer
+                    // banners) - plain <img> loads, so DenyCors suffices.
+                    ("ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"), CoreWebView2HostResourceAccessKind.DenyCors),
                 },
                 UserDataFolderName = "browser_data_dtrh",
                 InputEnabled = true,
@@ -305,16 +308,47 @@ internal static class DtrhHostService
         catch (Exception ex) { App.Logger?.Warning("DtrhHost.OnRunEnded: {E}", ex.Message); }
     }
 
-    /// <summary>bark {event, ...} -> the matching App.Bark chaos hook (voice stays native).</summary>
+    /// <summary>bark {event, ...} -> the matching App.Bark chaos hook (voice stays native).
+    /// The FULL M4 surface: the page mirrors every WPF Notify* call site; BarkService's
+    /// own cooldown/weighting logic decides what actually speaks.</summary>
     private static void RouteBark(JObject o)
     {
         if (_testMode) return;
         try
         {
+            var bark = App.Bark;
+            if (bark == null) return;
+            string S(string k, string d = "") => (string?)o[k] ?? d;
+            int I(string k) => (int?)o[k] ?? 0;
+            double D(string k) => (double?)o[k] ?? 0;
             switch ((string?)o["event"])
             {
-                case "ending-soon": App.Bark?.NotifyChaosEndingSoon(); break;
-                // The bark surface grows with the gameplay port (M3/M4) - unknown events just log.
+                case "ending-soon": bark.NotifyChaosEndingSoon(); break;
+                case "wave-cleared": bark.NotifyChaosWaveCleared(I("wave")); break;
+                case "wave-escalated": bark.NotifyChaosWaveEscalated(I("wave")); break;
+                case "act-changed": bark.NotifyChaosActChanged(I("act"), I("wave")); break;
+                case "benign-popped": bark.NotifyChaosBenignPopped(S("variant"), S("payload"), I("combo")); break;
+                case "defused": bark.NotifyChaosBubbleDefused(I("combo"), S("variant"), S("difficulty")); break;
+                case "detonated": bark.NotifyChaosBubbleDetonated(S("variant"), D("strength"), D("runDetonations"), I("combo"), S("difficulty")); break;
+                case "detonated-absorbed": bark.NotifyChaosBubbleDetonatedAbsorbed(S("variant"), D("strength"), D("runDetonations"), I("combo"), S("difficulty"), I("shields")); break;
+                case "darter-caught": bark.NotifyChaosDarterCaught(D("points"), I("combo"), (bool?)o["quick"] ?? false); break;
+                case "freeze-caught": bark.NotifyChaosFreezeCaught(D("points"), I("combo")); break;
+                case "combo-milestone": bark.NotifyChaosComboMilestone(I("combo"), S("difficulty")); break;
+                case "combo-big": bark.NotifyChaosComboBig(I("combo"), D("threshold")); break;
+                case "boon-picked": bark.NotifyChaosBoonPicked(S("name")); break;
+                case "curse-picked": bark.NotifyChaosCursePicked(S("name"), S("rarity"), D("mult")); break;
+                case "boon-skipped": bark.NotifyChaosBoonSkipped(I("shields")); break;
+                case "draft-autopick": bark.NotifyChaosDraftAutopick(); break;
+                case "focus-low": bark.NotifyChaosFocusLow(); break;
+                case "defuse-first": bark.NotifyChaosDefuseFirst(); break;
+                case "defuse-nofocus": bark.NotifyChaosDefuseNoFocus(); break;
+                case "defuse-release": bark.NotifyChaosDefuseRelease(); break;
+                case "click-detonate": bark.NotifyChaosClickDetonate(); break;
+                case "tease-debut": bark.NotifyChaosTeaseDebut(); break;
+                case "tease-clicked": bark.NotifyChaosTeaseClicked(); break;
+                case "tease-denied": bark.NotifyChaosTeaseDenied(I("count")); break;
+                case "tease-denied-streak": bark.NotifyChaosTeaseDeniedStreak(I("count")); break;
+                case "gold-first": bark.NotifyChaosGoldFirst(); break;
                 default: App.Logger?.Debug("DtrhHost: unrouted bark event '{E}'", (string?)o["event"]); break;
             }
         }
@@ -457,13 +491,71 @@ internal static class DtrhHostService
     /// <see cref="ChaosRunConfig.FromSettings"/> the WPF game uses - so rank clamps
     /// (difficulty/variants) and owned-upgrade multipliers (fuse/base/spark/spawn-rate)
     /// carry over and the two games score identically at identical settings.
-    /// M4 widens this with the full boon/toy loadout.
+    ///
+    /// M4: the LOADOUT is pre-applied here exactly like the WPF BeginRun - a
+    /// <see cref="ChaosRunState"/> is built and <see cref="ChaosMeta.ApplyLifetimeBoons"/>
+    /// runs over it, then the resulting knob values are snapshotted. The page never
+    /// re-implements a boon's Apply lambda, so the math can never drift.
     /// </summary>
     private static object BuildRunConfig()
     {
         try
         {
             var cfg = ChaosRunConfig.FromSettings();
+            var state = new ChaosRunState(cfg);
+            try { ChaosMeta.ApplyLifetimeBoons(state); }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost loadout apply: {E}", ex.Message); }
+
+            var s = App.Settings?.Current;
+            var meta = ChaosMeta.State;
+
+            // Equipped active-use skills (toys), in catalogue order, capped by sewn pockets -
+            // mirrors ChaosModeService.BuildActiveToys.
+            var toys = new List<object>();
+            int pockets = ChaosMeta.SlotsFor(ChaosBoonCategory.Skill);
+            string[] keys = { s?.ChaosAccessoryKey1 ?? "Q", s?.ChaosAccessoryKey2 ?? "E" };
+            int slot = 0;
+            foreach (var b in ChaosLifetimeBoons.All)
+            {
+                if (slot >= pockets) break;
+                if (!b.IsActiveUse || !ChaosMeta.IsBoonActive(b.Id)) continue;
+                if (!state.ToyPower.TryGetValue(b.Id, out var power)) continue;
+                int lvl = ChaosMeta.BoonLevel(b.Id);
+                toys.Add(new
+                {
+                    id = b.Id,
+                    name = b.Name,
+                    glyph = b.Glyph,
+                    desc = b.Desc,
+                    key = slot < keys.Length ? keys[slot] : "",
+                    cooldownSec = b.UseCooldownSec,
+                    power,
+                    level = lvl,
+                    maxed = lvl >= b.MaxLevel,
+                });
+                slot++;
+            }
+
+            // Everything equipped/trained, for duo/trio draft gating (RequiresAny/All).
+            var equipment = new List<string>();
+            foreach (var id in meta.ActiveLifetimeBoons ?? new HashSet<string>())
+                if (ChaosMeta.IsBoonActive(id)) equipment.Add(id);
+            foreach (var id in meta.PurchasedUpgrades ?? new HashSet<string>())
+                if (ChaosMeta.IsUpgradeActive(id)) equipment.Add(id);
+
+            // Intrusive Thoughts' phrase pool (the user's enabled bouncing-text lines).
+            var thoughts = new List<string>();
+            try
+            {
+                var pool = s?.BouncingTextPool;
+                if (pool != null)
+                    foreach (var kv in pool) if (kv.Value) thoughts.Add(kv.Key);
+            }
+            catch { }
+
+            int rabbitsFootLvl = ChaosMeta.IsBoonActive("rabbits_foot") ? ChaosMeta.BoonLevel("rabbits_foot") : 0;
+            var (gMin, gMax) = ChaosLifetimeBoons.GoldenPayRange(rabbitsFootLvl);
+
             return new
             {
                 difficulty = cfg.Difficulty.ToString(),
@@ -474,11 +566,88 @@ internal static class DtrhHostService
                 enabledVariants = cfg.EnabledVariants,
                 motionOverride = cfg.MotionOverride?.ToString(),
                 fuseTimeMult = cfg.FuseTimeMult,
-                baseMult = cfg.BaseMult,
+                baseMult = cfg.BaseMult,   // golden_touch writes Config.BaseMult during Apply
                 sparkGainMult = cfg.SparkGainMult,
                 spawnRateMult = cfg.SpawnRateMult,
                 colorFlashes = cfg.ColorFlashesEnabled,
                 screenShake = cfg.ScreenShakeEnabled,
+
+                // ---- M4: run-shape knobs ----
+                boonDraftEnabled = cfg.BoonDraftEnabled,
+                allowCurses = cfg.AllowCurses,
+                dartersEnabled = cfg.DartersEnabled,
+                draftChoices = cfg.DraftChoices,
+                draftAutoResumeSec = cfg.DraftAutoResumeSec,
+                sinChance = cfg.SinChance,
+                hitboxScale = cfg.HitboxScale,
+                magnetEnabled = cfg.MagnetEnabled,
+                popupHeartEnabled = cfg.PopupHeartEnabled,
+                pendulumSwing = cfg.PendulumSwing,
+                rankIndex = (int)ChaosMeta.RankIndex,
+                runsCompleted = meta.RunsCompleted,
+                equipment,
+                equippedStartBoon = meta.EquippedStartBoon,
+                toys,
+                toyKeys = keys,
+                thoughtTexts = thoughts,
+
+                // ---- M4: the applied loadout (ChaosMeta.ApplyLifetimeBoons snapshot) ----
+                loadout = new
+                {
+                    shields = state.Shields,
+                    startingShields = cfg.StartingShields,
+                    collarSaves = state.CollarSaves,
+                    fuseTimeMult = state.FuseTimeMult,
+                    benignBaseline = state.BenignBaseline,
+                    blindfoldActive = state.BlindfoldActive,
+                    blindfoldPayMult = state.BlindfoldPayMult,
+                    blindfoldOpacity = state.BlindfoldOpacity,
+                    lastBreathWindowSec = state.LastBreathWindowSec,
+                    lastBreathPayMult = state.LastBreathPayMult,
+                    chanceDoubleOdds = state.ChanceDoubleOdds,
+                    rerollsLeft = state.RerollsLeft,
+                    sinExtraMult = state.SinExtraMult,
+                    goldenChance = state.GoldenChance,
+                    goldenPayRange = new[] { gMin, gMax },
+                    dropPerPop = state.DropPerPop,
+                    dripFeedCap = state.DropPerPop > 0 ? ChaosLifetimeBoons.DripFeedCap(state.DropPerPop) : 0,
+                    shieldRegenPops = state.ShieldRegenPops,
+                    showPopScores = state.ShowPopScores,
+                    showWaveTimer = state.ShowWaveTimer,
+                    rippleRechargeSec = state.RippleRechargeSec,
+                    rippleRadiusPx = state.RippleRadiusPx,
+                    rippleLifeMs = state.RippleLifeMs,
+                    rabbitRateMult = state.RabbitRateMult,
+                    intrusiveThoughtsSec = state.IntrusiveThoughtsSec,
+                    slowMoBonusSec = state.SlowMoBonusSec,
+                    bubbleScale = state.BubbleScale,
+                    chainReactionReach = state.ChainReactionReach,
+                    cursorPullStrength = state.CursorPullStrength,
+                    spankerActive = state.SpankerActive,
+                    spankGrowFactor = state.SpankGrowFactor,
+                    magnetEnabled = state.MagnetEnabled,
+                    hitboxScale = cfg.HitboxScale,
+                    maxedBoons = state.MaxedBoons.ToList(),
+                },
+
+                // ---- M4: seen-once flags (debuts + teaches), mirrored back one-way via set-flag ----
+                flags = new
+                {
+                    seenDefuseTutorial = meta.SeenDefuseTutorial,
+                    seenFocusTip = meta.SeenFocusTip,
+                    seenHeatTeach = meta.SeenHeatTeach,
+                    seenRippleTeach = meta.SeenRippleTeach,
+                    seenEcho = meta.SeenEcho,
+                    seenChaperone = meta.SeenChaperone,
+                    seenTease = meta.SeenTease,
+                    seenBound = meta.SeenBound,
+                    seenBrittle = meta.SeenBrittle,
+                    seenGoldFirst = meta.SeenGoldFirst,
+                    seenBarkDefuseFirst = meta.SeenBarkDefuseFirst,
+                    seenBarkDefuseNoFocus = meta.SeenBarkDefuseNoFocus,
+                    seenBarkDefuseRelease = meta.SeenBarkDefuseRelease,
+                    seenBarkClickDetonate = meta.SeenBarkClickDetonate,
+                },
             };
         }
         catch (Exception ex)

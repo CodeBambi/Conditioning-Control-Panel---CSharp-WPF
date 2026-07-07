@@ -1,9 +1,12 @@
 /* ============================================================================
- * overlays.js - the run's bookend screens: the 3·2·1·GO countdown and the
- * results recap (score breakdown + the payout lines that arrive over the
- * bridge as payout-result). Both render over the live tunnel - the countdown
- * during the opening plunge, the recap while the fall idles at a crawl.
+ * overlays.js - the run's overlay screens: the 3·2·1·GO countdown, the boon
+ * DRAFT table on every loop boundary (pick a mantra / accept a sin / resist
+ * for +1 resistance, with the Taking Chances reroll and the WPF auto-resume
+ * countdown), the post-pick "Ready? -> GO!" beat, and the results recap with
+ * the payout lines that arrive over the bridge as payout-result.
  * ==========================================================================*/
+
+const ART = 'https://ccp.art/';
 
 export function createOverlays(hud) {
   // ---- countdown ----
@@ -38,6 +41,137 @@ export function createOverlays(hud) {
     });
   }
 
+  /** The post-draft beat: "Ready? :3" then a GO! flash, then resume. */
+  function showReadyGo(onResume, { onTick } = {}) {
+    clearCd();
+    cd.hidden = false;
+    cdNum.classList.remove('is-go');
+    cdNum.textContent = 'Ready? :3';
+    cdNum.classList.remove('is-beat');
+    void cdNum.offsetWidth;
+    cdNum.classList.add('is-beat');
+    if (onTick) onTick('ready');
+    cdTimers.push(window.setTimeout(() => {
+      cdNum.textContent = 'GO!';
+      cdNum.classList.add('is-go');
+      cdNum.classList.remove('is-beat');
+      void cdNum.offsetWidth;
+      cdNum.classList.add('is-beat');
+      if (onTick) onTick('GO!');
+      cdTimers.push(window.setTimeout(() => { cd.hidden = true; if (onResume) onResume(); }, 450));
+    }, 900));
+  }
+
+  // ---- boon draft table ----
+  const dr = document.createElement('div');
+  dr.className = 'cf-overlay cf-draft';
+  dr.hidden = true;
+  hud.appendChild(dr);
+  let draftTimer = 0, draftCountdown = 0;
+
+  function clearDraftTimers() {
+    clearInterval(draftTimer);
+    draftTimer = 0;
+  }
+
+  /** Deal the table: pick a card, take the SKIP (+1 resistance), or reroll
+   * (Taking Chances). Untouched for autoResumeSec -> auto-skip, so an
+   * unattended run never freezes forever. */
+  function showDraft({ wave, options, autoResumeSec = 15, rerollsLeft = 0, onPick, onSkip, onReroll }) {
+    clearDraftTimers();
+    dr.innerHTML = '';
+    dr.hidden = false;
+
+    const card = document.createElement('div');
+    card.className = 'cf-draft-card';
+    dr.appendChild(card);
+
+    const h = document.createElement('h2');
+    h.textContent = `loop ${wave} clear — she offers`;
+    card.appendChild(h);
+
+    const row = document.createElement('div');
+    row.className = 'cf-draft-row';
+    card.appendChild(row);
+
+    const finish = (fn, arg) => {
+      clearDraftTimers();
+      dr.hidden = true;
+      if (fn) fn(arg);
+    };
+
+    const renderOptions = (opts) => {
+      row.innerHTML = '';
+      for (const b of opts) {
+        const c = document.createElement('button');
+        c.type = 'button';
+        c.className = 'cf-boon' + (b.curse ? ' cf-boon--sin' : '')
+          + (b.requiresAny || b.requiresAll ? ' cf-boon--duo' : '')
+          + ` cf-boon--${(b.rarity || 'Common').toLowerCase()}`;
+        const img = document.createElement('img');
+        img.className = 'cf-boon-art';
+        img.src = `${ART}boons/${b.id}.png`;
+        img.alt = '';
+        img.addEventListener('error', () => img.remove());
+        const name = document.createElement('div');
+        name.className = 'cf-boon-name';
+        name.textContent = `${b.curse ? '☠ ' : '◈ '}${b.name}`;
+        const desc = document.createElement('div');
+        desc.className = 'cf-boon-desc';
+        desc.textContent = b.desc;
+        const flavor = document.createElement('div');
+        flavor.className = 'cf-boon-flavor';
+        flavor.textContent = b.flavor || '';
+        const tag = document.createElement('div');
+        tag.className = 'cf-boon-tag';
+        tag.textContent = b.curse ? 'a sin' : (b.rarity || '').toLowerCase();
+        c.append(img, name, desc, flavor, tag);
+        c.addEventListener('click', () => finish(onPick, b));
+        row.appendChild(c);
+      }
+    };
+    renderOptions(options);
+
+    const btns = document.createElement('div');
+    btns.className = 'cf-draft-btns';
+    card.appendChild(btns);
+
+    if (rerollsLeft > 0 && onReroll) {
+      const rr = document.createElement('button');
+      rr.type = 'button';
+      rr.className = 'sf-btn';
+      rr.textContent = `🎲 reroll (${rerollsLeft})`;
+      rr.addEventListener('click', () => {
+        const res = onReroll();
+        if (!res) { rr.disabled = true; return; }
+        renderOptions(res.options);
+        rr.textContent = `🎲 reroll (${res.rerollsLeft})`;
+        if (res.rerollsLeft <= 0) rr.remove();
+      });
+      btns.appendChild(rr);
+    }
+
+    const skip = document.createElement('button');
+    skip.type = 'button';
+    skip.className = 'sf-btn';
+    skip.textContent = '♥ resist (+1 resistance)';
+    skip.addEventListener('click', () => finish(onSkip, false));
+    btns.appendChild(skip);
+
+    if (autoResumeSec > 0) {
+      const auto = document.createElement('div');
+      auto.className = 'cf-draft-auto';
+      card.appendChild(auto);
+      draftCountdown = autoResumeSec;
+      auto.textContent = `she chooses for you in ${draftCountdown}s`;
+      draftTimer = window.setInterval(() => {
+        draftCountdown--;
+        if (draftCountdown <= 0) { finish(onSkip, true); return; }
+        auto.textContent = `she chooses for you in ${draftCountdown}s`;
+      }, 1000);
+    }
+  }
+
   // ---- recap ----
   const rc = document.createElement('div');
   rc.className = 'cf-overlay cf-recap';
@@ -70,6 +204,7 @@ export function createOverlays(hud) {
     line('cf-recap-score', `${Math.floor(stats.score).toLocaleString()} pts`);
     line('', `${DIFF_NAMES[stats.difficulty] || stats.difficulty} · ${stats.waveCount} loops · you sank ${Math.round(stats.depth).toLocaleString()} m`);
     line('', `best streak ×${Math.max(1, stats.bestCombo)} · ${stats.defused} snapped · ${stats.detonated} triggered`);
+    if (stats.trickleDrops > 0) line('', `💧 drip feed gathered ${Math.floor(stats.trickleDrops)} ✦`);
     payoutSlot = document.createElement('div');
     payoutSlot.className = 'cf-recap-payout';
     payoutSlot.textContent = 'tallying…';
@@ -118,11 +253,14 @@ export function createOverlays(hud) {
 
   return {
     showCountdown,
+    showReadyGo,
     hideCountdown() { clearCd(); cd.hidden = true; },
+    showDraft,
+    isDraftUp: () => !dr.hidden,
     showRecap,
     showPayout,
     hideRecap() { rc.hidden = true; payoutSlot = null; },
     isRecapUp: () => !rc.hidden,
-    dispose() { clearCd(); cd.remove(); rc.remove(); },
+    dispose() { clearCd(); clearDraftTimers(); cd.remove(); dr.remove(); rc.remove(); },
   };
 }

@@ -182,7 +182,15 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   // the callback only runs once frames are live, so the closure is safe.
   const spawner = createSpawner({
     scene, layout, media, renderer, camera,
-    onVeilPass: (kind) => { try { bubbles.triggerVeil(kind); } catch (e) { /* ignore */ } },
+    // Game mode (M4): the Fall's field is paused for the whole session, so the
+    // wash is forced through; the run brain decides whether the moment allows
+    // it (running + not paused/covered). Without a game the classic path runs.
+    onVeilPass: (kind) => {
+      try {
+        if (game) { if (game.allowVeil()) bubbles.triggerVeil(kind, true); }
+        else bubbles.triggerVeil(kind);
+      } catch (e) { /* ignore */ }
+    },
   });
 
   // the continuous voice layer; depth is sampled at each pick for weighting

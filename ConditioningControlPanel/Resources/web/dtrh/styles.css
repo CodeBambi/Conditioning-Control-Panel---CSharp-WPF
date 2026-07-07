@@ -1273,3 +1273,305 @@ img.rh-fx-spiralspin {
 
 /* [hidden] must beat the .cf-overlay display:flex rule (UA attribute rule loses to a class) */
 .cf-overlay[hidden] { display: none; }
+
+/* ============================================================
+   M4 — the full roguelite: fieldFx canvas, HUD extensions
+   (shields/lust/picks/toy dock), the menagerie's bubble looks,
+   the DVD logo, and the boon draft table.
+   ============================================================ */
+
+/* ---- the 2D FX canvas (tethers / bolts / residue / trails) ---- */
+.cf-fieldfx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5; /* under the bubble layer (6) */
+}
+
+/* ---- HUD: resistance hearts + collar ---- */
+.cf-hud-shields {
+  font-size: 0.95rem;
+  color: #ff9db8;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  min-height: 0;
+}
+.cf-hud-shields:empty { display: none; }
+.cf-hud-shields.cf-shield-flash { animation: cfShieldFlash 0.6s ease-out; }
+@keyframes cfShieldFlash {
+  0%, 40% { color: #ff2b4a; text-shadow: 0 0 14px rgba(255, 40, 70, 0.9); }
+}
+
+/* ---- HUD: lust (heat) bar ---- */
+.cf-hud-heat { display: flex; align-items: center; gap: 6px; }
+.cf-heat-bar {
+  width: 110px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.cf-heat-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #ff9a3d, #ff5a28);
+  transition: width 0.25s linear;
+}
+.cf-heat-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+  opacity: 0;
+  transition: opacity 0.4s ease-out;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 90, 40, 0.55) 100%);
+}
+
+/* ---- the run-pick ribbon (drafted mantras/sins) ---- */
+.cf-picks {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 9;
+}
+.cf-pick {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(156, 232, 160, 0.55);
+  background: rgba(20, 30, 20, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  color: #9ce8a0;
+  overflow: hidden;
+  animation: cfToastIn 0.25s ease-out;
+}
+.cf-pick img { width: 100%; height: 100%; object-fit: cover; }
+.cf-pick--sin { border-color: rgba(255, 138, 138, 0.65); color: #ff8a8a; background: rgba(40, 12, 16, 0.6); }
+
+/* ---- the toy dock (active skills) ---- */
+.cf-toydock {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 9;
+}
+.cf-toydock:empty { display: none; }
+.cf-toy {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 96px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 105, 180, 0.3);
+  background: rgba(20, 8, 20, 0.72);
+  color: rgba(255, 222, 240, 0.55);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, box-shadow 0.2s;
+}
+.cf-toy .cf-toy-glyph { font-size: 1.25rem; line-height: 1.2; }
+.cf-toy .cf-toy-name { font-size: 0.66rem; letter-spacing: 0.06em; text-transform: lowercase; }
+.cf-toy .cf-toy-status { font-size: 0.62rem; opacity: 0.8; }
+.cf-toy.is-ready { color: #ffdef0; border-color: rgba(255, 105, 180, 0.65); }
+.cf-toy.is-ready:hover { box-shadow: 0 0 14px rgba(255, 105, 180, 0.35); }
+.cf-toy.is-active { border-color: #ffd700; color: #ffe9a0; box-shadow: 0 0 16px rgba(255, 215, 0, 0.35); }
+
+/* ---- announcer: banner art + subline ---- */
+.cf-announce { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.cf-announce-art {
+  width: 190px;
+  max-height: 100px;
+  object-fit: contain;
+  border-radius: 10px;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+}
+.cf-announce-sub {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  opacity: 0.85;
+}
+
+/* ---- pop score float (Blank Eyes) ---- */
+.cf-pop--score { color: #ffe9a0; font-size: 0.9rem; text-shadow: 0 0 10px rgba(255, 233, 160, 0.7), 0 1px 3px rgba(0, 0, 0, 0.9); }
+
+/* ---- the menagerie's looks ---- */
+.cf-bubble--darter .cf-bubble-body {
+  box-shadow: 0 0 18px rgba(255, 77, 196, 0.75);
+}
+.cf-bubble--darter.is-telegraph .cf-bubble-body { animation: cfTelegraph 0.4s ease-in-out infinite; }
+@keyframes cfTelegraph {
+  0%, 100% { transform: scale(0.8); filter: brightness(1); }
+  50% { transform: scale(1.15); filter: brightness(1.8); }
+}
+.cf-bubble--sweeper .cf-bubble-body { filter: saturate(1.6) brightness(1.15); box-shadow: 0 0 22px rgba(255, 77, 196, 0.9); }
+
+.cf-bubble--tease .cf-bubble-body { box-shadow: 0 0 20px rgba(255, 20, 60, 0.55); }
+.cf-bubble--tease .cf-bubble-label { animation: cfTeasePulse 0.9s ease-in-out infinite; color: #ff2b4a; }
+@keyframes cfTeasePulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.35); opacity: 1; }
+}
+
+.cf-bubble--brittle .cf-bubble-body { opacity: 0.75; box-shadow: inset 0 0 24px rgba(217, 239, 255, 0.5); }
+.cf-bubble--brittle.is-armed .cf-bubble-body { animation: cfBrittleGlint 2.4s ease-in-out infinite; }
+@keyframes cfBrittleGlint {
+  0%, 88%, 100% { filter: brightness(1); }
+  94% { filter: brightness(1.7); }
+}
+.cf-bubble.is-shatter { animation: cfShatter 0.55s ease-out forwards; }
+@keyframes cfShatter {
+  0% { transform: scale(1); opacity: 1; filter: brightness(2); }
+  100% { transform: scale(1.5) rotate(8deg); opacity: 0; filter: brightness(3) blur(4px); }
+}
+
+.cf-bubble--echo .cf-bubble-body {
+  animation: cfEchoStutter 1.6s steps(2) infinite;
+  box-shadow: 6px 6px 0 -2px rgba(201, 196, 232, 0.25), -6px -6px 0 -2px rgba(201, 196, 232, 0.18);
+  border-radius: 50%;
+}
+@keyframes cfEchoStutter {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(2px, -2px); }
+}
+
+.cf-bubble.is-shielded .cf-bubble-body { box-shadow: 0 0 0 3px rgba(255, 150, 190, 0.55), 0 0 26px rgba(255, 105, 180, 0.5); }
+.cf-bubble.is-shield-bounce { animation: cfShieldBounce 0.3s ease-out; }
+@keyframes cfShieldBounce {
+  0% { filter: brightness(1.8); }
+  50% { filter: brightness(1.2); }
+}
+
+.cf-bubble.is-enraged .cf-bubble-body { animation: cfEnrage 0.5s ease-in-out infinite; box-shadow: 0 0 26px rgba(255, 40, 40, 0.85); }
+@keyframes cfEnrage {
+  0%, 100% { filter: saturate(1.6) brightness(1.1); }
+  50% { filter: saturate(2.2) brightness(1.45); }
+}
+
+.cf-bubble--heart .cf-bubble-body,
+.cf-bubble--droplet .cf-bubble-body { box-shadow: 0 0 14px rgba(255, 200, 120, 0.5); }
+.cf-bubble--prism .cf-bubble-body { animation: cfPrismHue 3s linear infinite; }
+@keyframes cfPrismHue {
+  0% { filter: hue-rotate(0deg) saturate(1.4); }
+  100% { filter: hue-rotate(360deg) saturate(1.4); }
+}
+
+/* ---- the DVD logo ---- */
+.cf-dvd {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(190px * var(--dvdscale, 1));
+  height: calc(90px * var(--dvdscale, 1));
+  pointer-events: none;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 14px rgba(255, 105, 180, 0.6));
+  will-change: transform;
+}
+.cf-dvd img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.cf-dvd--text {
+  font-size: calc(1.5rem * var(--dvdscale, 1));
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #ff8fc8;
+  text-shadow: 0 0 16px rgba(255, 105, 180, 0.9), 0 2px 4px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+}
+
+/* ---- the boon draft table ---- */
+.cf-draft {
+  pointer-events: auto;
+  background: rgba(8, 2, 10, 0.62);
+  backdrop-filter: blur(5px);
+}
+.cf-draft-card {
+  text-align: center;
+  color: #ffdef0;
+  max-width: min(1040px, 94vw);
+}
+.cf-draft-card h2 {
+  margin: 0 0 18px;
+  font-size: 1.3rem;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  text-shadow: 0 0 18px rgba(255, 105, 180, 0.7);
+}
+.cf-draft-row {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.cf-boon {
+  pointer-events: auto;
+  width: 218px;
+  padding: 14px 14px 30px;
+  border-radius: 14px;
+  border: 1px solid rgba(156, 232, 160, 0.45);
+  background: rgba(14, 24, 14, 0.88);
+  color: #e8ffe9;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+  animation: cfBoonIn 0.3s ease-out backwards;
+}
+.cf-boon:nth-child(2) { animation-delay: 0.07s; }
+.cf-boon:nth-child(3) { animation-delay: 0.14s; }
+.cf-boon:nth-child(4) { animation-delay: 0.21s; }
+@keyframes cfBoonIn {
+  0% { opacity: 0; transform: translateY(18px) scale(0.94); }
+}
+.cf-boon:hover { transform: translateY(-4px); box-shadow: 0 8px 30px rgba(156, 232, 160, 0.25); }
+.cf-boon--uncommon { border-color: rgba(120, 200, 255, 0.5); }
+.cf-boon--rare { border-color: rgba(216, 160, 255, 0.6); }
+.cf-boon--sin {
+  border-color: rgba(255, 110, 110, 0.65);
+  background: rgba(34, 8, 12, 0.9);
+  color: #ffe2e2;
+}
+.cf-boon--sin:hover { box-shadow: 0 8px 30px rgba(255, 80, 80, 0.3); }
+.cf-boon--duo { border-color: rgba(255, 215, 0, 0.7); box-shadow: 0 0 18px rgba(255, 215, 0, 0.18); }
+.cf-boon-art {
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 9px;
+  opacity: 0.95;
+}
+.cf-boon-name { font-size: 0.98rem; font-weight: 800; letter-spacing: 0.03em; }
+.cf-boon-desc { font-size: 0.76rem; line-height: 1.35; opacity: 0.92; }
+.cf-boon-flavor { font-size: 0.7rem; font-style: italic; opacity: 0.55; }
+.cf-boon-flavor:empty { display: none; }
+.cf-boon-tag {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+  text-transform: lowercase;
+}
+.cf-draft-btns { margin-top: 18px; display: flex; gap: 12px; justify-content: center; }
+.cf-draft-auto { margin-top: 10px; font-size: 0.78rem; opacity: 0.65; }

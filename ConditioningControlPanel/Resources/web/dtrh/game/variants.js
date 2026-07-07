@@ -1,27 +1,33 @@
 /* ============================================================================
- * variants.js - the DtRH bubble pool as data, ported from ChaosBubbleVariants.cs.
+ * variants.js - the FULL DtRH bubble pool as data, ported from
+ * ChaosBubbleVariants.cs + ChaosTuning.cs (M4). Every number here mirrors the
+ * C# tables - do not retune casually: score parity with the WPF game depends
+ * on the size -> Strength mapping and the spawn odds.
  *
- * M3 subset: the two treats (flash / subliminal), the live trio (pink / spiral /
- * braindrain) and the freeze pickup, plus the lucky golden builder. The video /
- * gif-rain giants, darters, hearts, prisms and the behavioral menagerie arrive
- * with M4. Every number here mirrors the C# table - do not retune casually:
- * score parity with the WPF game depends on the size -> Strength mapping.
+ * The pool: treats (flash/subliminal), lives (pink/spiral/braindrain), the
+ * freeze pickup, the two giants (video / gif rain), plus the specials built by
+ * their own constructors: darters (white rabbits), goldens, hearts, gold
+ * droplets, heavies, prisms, brittles, echoes (+children), teases, bound
+ * pairs, chaperone pairs and sweeper rabbits.
  * ==========================================================================*/
 
 // Global size envelope (SizeMinGlobal/SizeMaxGlobal): normalises any bubble's
-// CLASSIC size into a 0..100 Strength. Strength keys both the native payload
-// power and BasePoints, so it uses the UNSCALED size band.
+// size into a 0..100 Strength. Strength keys both the native payload power and
+// BasePoints, so it uses the UNSCALED size band.
 export const SIZE_MIN_GLOBAL = 150;
 export const SIZE_MAX_GLOBAL = 320;
 // Global field shrink: every bubble renders 25% smaller than its classic band.
 export const GLOBAL_SIZE_SCALE = 0.75;
+// The two giants (video + gif rain) run a further 30% smaller still.
+export const GIANT_SIZE_SCALE = 0.70;
 
 export const MOTION = { FloatUp: 'FloatUp', RainDown: 'RainDown', RoamBounce: 'RoamBounce', SideDrift: 'SideDrift' };
 
 const SPRITE_BASE = '/dtrh/assets/bubbles/effects/';
+const ART_BASE = 'https://ccp.art/bubbles/';   // bundled assets/Chaos/bubbles/{id}.png
 
 // One row per variant: visual band + behaviour + native payload binding.
-// payload() returns the bridge fire-payload shape (minus strength).
+// payload is the bridge fire-payload shape (minus strength).
 export const VARIANTS = [
   { id: 'flash',       name: 'Flash',       kind: 'treat',  payload: { kind: 'flash' },
     min: 150, max: 210, motion: MOTION.FloatUp,    tint: 'rgb(255,208,232)', label: '',
@@ -41,7 +47,17 @@ export const VARIANTS = [
   { id: 'bambifreeze', name: 'Freeze',      kind: 'freeze', payload: null,
     min: 190, max: 250, motion: MOTION.FloatUp,    tint: 'rgb(138,230,255)', label: '❄',
     sprite: null,                           weight: 0.5, minIntensity: 0.15, fuseMin: 0, fuseMax: 0 },
+  // The two giants (M4): a long trance, but a mandatory video / gif rain if it goes off.
+  { id: 'video',       name: 'Video',       kind: 'live',   payload: { kind: 'video' },
+    min: 240, max: 300, motion: MOTION.RainDown,   tint: 'rgb(224,64,77)',   label: '▶',
+    sprite: ART_BASE + 'video.png',         weight: 0.5, minIntensity: 0.50, fuseMin: 5000, fuseMax: 7000 },
+  { id: 'htlink',      name: 'Gif Rain',    kind: 'live',   payload: { kind: 'gifCascade' },
+    min: 200, max: 280, motion: MOTION.FloatUp,    tint: 'rgb(255,200,61)',  label: '▼',
+    sprite: ART_BASE + 'htlink.png',        weight: 0.45, minIntensity: 0.60, fuseMin: 4500, fuseMax: 6500 },
 ];
+
+export const ALL_IDS = VARIANTS.map((v) => v.id);
+const byId = Object.fromEntries(VARIANTS.map((v) => [v.id, v]));
 
 // ---- pace / entry-variety tuning (ChaosTuning.cs) ----
 export const SIDE_DRIFT_CHANCE = 0.30;       // Mixed motion: slice of verticals arriving sideways
@@ -52,8 +68,43 @@ export const FREEZE_MAX_ON_SCREEN = 2;       // hard cap on live freeze pickups
 export const RING_FLASH_FROM_MS = 2400;      // yellow <-> red flashing
 export const RING_BRINK_MS = 800;            // solid red - the brink window
 
+// ---- behavioral-bubble tuning (ChaosTuning.cs) ----
+export const DEBUT_FUSE_MULT = 1.5;          // first-ever encounter: gentler, longer trance
+export const ECHO_SPAWN_CHANCE = 0.05;
+export const ECHO_CHILD_SCALE = 0.6;
+export const ECHO_CHILD_SPEED_MULT = 1.5;
+export const ECHO_CHILD_FUSE_MIN_MS = 2500;
+export const ECHO_CHILD_FUSE_MAX_MS = 3000;
+export const CHAPERONE_SPAWN_CHANCE = 0.04;
+export const CHAPERONE_ORBIT_RADIUS = 80;    // min orbit radius (grows with the pair's sizes)
+export const CHAPERONE_ORBIT_GAP = 18;
+export const CHAPERONE_ORBIT_PERIOD_SEC = 2.5;
+export const TEASE_SPAWN_CHANCE = 0.03;
+export const TEASE_LIFE_MS = 6000;
+export const TEASE_GOLD_MIN = 5, TEASE_GOLD_MAX = 10;
+export const TEASE_DENIED_SCORE = 120;
+export const TEASE_CENTER_PULL = 17;         // px/s toward screen center (C# 0.55 DIP/frame)
+export const BOUND_SPAWN_CHANCE = 0.03;
+export const BOUND_WINDOW_MS = 2500;         // the 2nd defuse must land inside this
+export const BOUND_ENRAGE_SPEED_MULT = 1.4;
+export const BRITTLE_SPAWN_CHANCE = 0.035;
+export const BRITTLE_ARM_MS = 900;           // hover grace while it materialises
+export const BRITTLE_SPEED_MULT = 0.85;
+
+// ---- darter (white rabbit) tuning ----
+export const DARTER_LIFETIME_MS = 8000;      // safety backstop; despawn is 3-bounces-then-exit
+export const DARTER_QUICK_WINDOW_MS = 500;
+export const DARTER_TELEGRAPH_MS = 400;
+export const DARTER_MAX_BOUNCES = 3;
+export const DARTER_SPEED_PXS = 420;         // self-calibrated (C# 9 DIP/frame fixed-step)
+export const DARTER_BASE_POINTS = 120;
+export const DARTER_QUICK_BONUS = 90;
+
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const strengthOf = (classicSize, effectIntensity) => Math.round(clamp(
+  Math.round(clamp((classicSize - SIZE_MIN_GLOBAL) / (SIZE_MAX_GLOBAL - SIZE_MIN_GLOBAL), 0, 1) * 100)
+  * effectIntensity, 0, 100));
 
 /** Short color-coded word flashed at the bubble the instant its effect fires. */
 export function popWordFor(id) {
@@ -64,25 +115,36 @@ export function popWordFor(id) {
     case 'spiral': return 'SPIRAL';
     case 'braindrain': return 'DRAIN';
     case 'bambifreeze': return 'FREEZE';
+    case 'video': return 'WATCH';
+    case 'htlink': return 'RAIN';
     case 'golden': return 'LUCKY';
+    case 'heart': return 'RESIST';
+    case 'gold_droplet': return 'GOLD';
+    case 'prism': return '10x!';
+    case 'brittle': return 'SHATTER';
+    case 'echo': return 'SPLIT';
     default: return '';
   }
 }
+
+export const NAME_OF = Object.fromEntries(VARIANTS.map((v) => [v.id, v.name]));
 
 /**
  * Build one concrete bubble spec from a variant row - the exact C# Build():
  * size random across the band nudged up by intensity, Strength keyed to the
  * CLASSIC size, fuse shortened as the run deepens (min 1200ms), freeze forced
- * off RoamBounce, side-drift entry variety on Mixed motion.
+ * off RoamBounce, side-drift entry variety on Mixed motion, the giants a
+ * further 30% smaller.
  */
 export function build(variant, intensity, {
   fuseTimeMult = 1.0, motionOverride = null, effectIntensity = 1.0,
-  sizeScale = 1.0, sideDriftChance = 0.0,
+  sizeScale = 1.0, sideDriftChance = 0.0, fuseMult = 1.0,
 } = {}) {
   const t = clamp(Math.random() * 0.7 + intensity * 0.45, 0, 1);
   const size = variant.min + (variant.max - variant.min) * t;
-  const strength = Math.round(clamp((size - SIZE_MIN_GLOBAL) / (SIZE_MAX_GLOBAL - SIZE_MIN_GLOBAL), 0, 1) * 100);
-  const visual = size * GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale);
+  const strength = strengthOf(size, effectIntensity);
+  let visual = GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale);
+  if (variant.id === 'video' || variant.id === 'htlink') visual *= GIANT_SIZE_SCALE;
 
   let motion = motionOverride || variant.motion;
   if (variant.kind === 'freeze' && motion === MOTION.RoamBounce) motion = MOTION.FloatUp;
@@ -94,21 +156,22 @@ export function build(variant, intensity, {
   let fuseMs = 0;
   if (variant.kind === 'live') {
     const base = variant.fuseMin + Math.random() * Math.max(1, variant.fuseMax - variant.fuseMin);
-    fuseMs = Math.max(1200, base * (1.0 - intensity * 0.25) * fuseTimeMult);
+    fuseMs = Math.max(1200, base * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult));
   }
 
   return {
     variantId: variant.id,
     kind: variant.kind,
     payload: variant.payload,
-    strength: Math.round(clamp(strength * effectIntensity, 0, 100)),
-    sizePx: visual,
+    strength,
+    sizePx: size * visual,
     tint: variant.tint,
     label: variant.label,
     sprite: variant.sprite,
     motion,
     fuseMs,
     speedMult: 1.0,
+    payMult: 1.0,
     treatLifeMs: variant.kind === 'treat' ? 5000 : 0,
   };
 }
@@ -134,19 +197,249 @@ export function pick(intensity, opts = {}) {
 /** The lucky golden bubble (C# BuildGolden): benign, small, quick, gone fast.
  * No payload - popping it banks real gold on the spot. */
 export function buildGolden() {
-  const size = rand(110, 140);
   return {
     variantId: 'golden',
     kind: 'golden',
     payload: null,
     strength: 0,
-    sizePx: size,                       // goldens never took the global shrink in C# either
+    sizePx: rand(110, 140),               // goldens never took the global shrink in C# either
     tint: 'rgb(255,215,0)',
-    label: '🍀',              // lucky clover
+    label: '🍀',
     sprite: SPRITE_BASE + 'golden.png',
     motion: Math.random() < 0.5 ? MOTION.FloatUp : MOTION.RainDown,
     fuseMs: 0,
     speedMult: 2.8,
+    payMult: 1.0,
     treatLifeMs: 5000,
   };
+}
+
+/** Pop-up Notification heart: a lazy once-per-loop kindness (+1 resistance). */
+export function buildHeart() {
+  return {
+    variantId: 'heart', kind: 'heart', payload: null, strength: 0,
+    sizePx: rand(88, 110), tint: 'rgb(255,77,110)', label: '💖',
+    sprite: ART_BASE + 'heart.png',
+    motion: MOTION.RainDown, fuseMs: 0, speedMult: 0.8, payMult: 1.0, treatLifeMs: 0,
+  };
+}
+
+/** Gold Digger droplet: a gold bead spilled from a popped lucky bubble. */
+export function buildGoldDroplet(atX, atY) {
+  return {
+    variantId: 'gold_droplet', kind: 'droplet', payload: null, strength: 0,
+    sizePx: rand(58, 74), tint: 'rgb(255,215,0)', label: '✧',
+    sprite: ART_BASE + 'gold_droplet.png',
+    motion: MOTION.RainDown, fuseMs: 0, speedMult: 2.2, payMult: 1.0, treatLifeMs: 0,
+    spawnAt: { x: atX, y: atY },
+  };
+}
+
+/** Heavy Drop: every Nth bubble goes giant - x1.55 size, half speed, pays x3. */
+export function buildHeavy(intensity, effectIntensity = 1.0, sizeScale = 1.0) {
+  const variant = VARIANTS[Math.random() < 0.5 ? 0 : 1];   // the flash + subliminal treats
+  const classic = variant.max;                             // top of the band
+  return {
+    variantId: variant.id,
+    kind: 'treat',
+    payload: variant.payload,
+    strength: strengthOf(classic, effectIntensity),
+    sizePx: classic * GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale) * 1.55,
+    tint: variant.tint,
+    label: variant.label,
+    sprite: variant.sprite,
+    motion: MOTION.RainDown,
+    fuseMs: 0,
+    speedMult: 0.45,
+    payMult: 3.0,          // read in onBenignPopped
+    treatLifeMs: 9000,     // slow faller - give it time to be reached
+  };
+}
+
+/** "Look at the bright colors..." prism: pays 10x AND fires the copied effect.
+ * Video + freeze excluded from the mimic pool; treatOnly = the shielded sin. */
+export function buildPrism(intensity, effectIntensity = 1.0, treatOnly = false) {
+  const pool = VARIANTS.filter((v) => v.id !== 'video' && v.kind !== 'freeze'
+    && (!treatOnly || v.kind !== 'live'));
+  const mimic = pool[(Math.random() * pool.length) | 0];
+  const size = rand(165, 215);
+  return {
+    variantId: 'prism', kind: 'prism',
+    payload: mimic.payload,
+    mimicId: mimic.id,
+    strength: strengthOf(size, effectIntensity),
+    sizePx: size * GLOBAL_SIZE_SCALE,
+    tint: 'rgb(200,168,255)', label: '❂',
+    sprite: ART_BASE + 'prism.png',
+    motion: Math.random() < 0.5 ? MOTION.RainDown : MOTION.RoamBounce,
+    fuseMs: 0, speedMult: 0.7, payMult: 1.0, treatLifeMs: 0,
+  };
+}
+
+/** The Brittle: thin glass carrying a random LIVE effect - hovering shatters it. */
+export function buildBrittle(intensity, effectIntensity = 1.0, sizeScale = 1.0, enabledIds = null) {
+  let pool = VARIANTS.filter((v) => v.kind === 'live');
+  // Respect the video/htlink rank clamp: a locked giant can't hide inside the glass.
+  if (enabledIds) {
+    const ok = pool.filter((v) => v.id === 'pink' || v.id === 'spiral' || v.id === 'braindrain'
+      || enabledIds.includes(v.id));
+    if (ok.length) pool = ok;
+  }
+  const mimic = pool[(Math.random() * pool.length) | 0];
+  const size = rand(150, 185);
+  return {
+    variantId: 'brittle', kind: 'brittle',
+    payload: mimic.payload,
+    mimicId: mimic.id,
+    strength: strengthOf(size, effectIntensity),
+    sizePx: size * GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale),
+    tint: 'rgb(217,239,255)', label: '◇',
+    sprite: ART_BASE + 'brittle.png',
+    motion: Math.random() < 0.5 ? MOTION.FloatUp : MOTION.RainDown,
+    fuseMs: 0, speedMult: BRITTLE_SPEED_MULT, payMult: 1.0, treatLifeMs: 0,
+    armMs: BRITTLE_ARM_MS,
+  };
+}
+
+/** The Echo: a live whose payload never fires - triggering it SPLITS it instead. */
+export function buildEcho(intensity, fuseTimeMult = 1.0, sizeScale = 1.0, fuseMult = 1.0) {
+  const t = clamp(Math.random() * 0.7 + intensity * 0.45, 0, 1);
+  const size = 180 + (240 - 180) * t;
+  const baseFuse = 3500 + Math.random() * 1500;
+  return {
+    variantId: 'echo', kind: 'live', isEcho: true,
+    payload: null,                       // never fires - the split IS the trigger
+    strength: 0,
+    sizePx: size * GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale),
+    tint: 'rgb(201,196,232)', label: '◌',
+    sprite: ART_BASE + 'echo.png',
+    motion: MOTION.FloatUp,
+    fuseMs: Math.max(1200, baseFuse * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult)),
+    speedMult: 1.0, payMult: 1.0, treatLifeMs: 0,
+  };
+}
+
+/** One Echo split-child at the parent's pop point: a NORMAL light-trio live,
+ * smaller, faster, short trance. Children never re-split. */
+export function buildEchoChild(parentVisualSizePx, atX, atY, effectIntensity = 1.0) {
+  const v = VARIANTS[2 + ((Math.random() * 3) | 0)];   // pink / spiral / braindrain
+  const size = Math.max(60, parentVisualSizePx * ECHO_CHILD_SCALE);
+  const classicEq = size / GLOBAL_SIZE_SCALE;          // Strength keyed back through the shrink
+  return {
+    variantId: v.id, kind: 'live',
+    payload: v.payload,
+    strength: strengthOf(classicEq, effectIntensity),
+    sizePx: size, tint: v.tint, label: v.label, sprite: v.sprite,
+    motion: MOTION.RoamBounce,
+    fuseMs: ECHO_CHILD_FUSE_MIN_MS + Math.random() * Math.max(1, ECHO_CHILD_FUSE_MAX_MS - ECHO_CHILD_FUSE_MIN_MS),
+    speedMult: ECHO_CHILD_SPEED_MULT, payMult: 1.0, treatLifeMs: 0,
+    spawnAt: { x: atX, y: atY },
+  };
+}
+
+/** The Tease: don't touch it. Any mouse-down triggers it AND halves the streak;
+ * ignored to expiry it pays the DENIED bonus. Video + freeze excluded. */
+export function buildTease(intensity, effectIntensity = 1.0, sizeScale = 1.0) {
+  const pool = VARIANTS.filter((v) => v.id !== 'video' && v.kind !== 'freeze');
+  const v = pool[(Math.random() * pool.length) | 0];
+  const size = rand(170, 210);
+  return {
+    variantId: 'tease', kind: 'tease',
+    payload: v.payload,
+    mimicId: v.id,
+    strength: strengthOf(size, effectIntensity),
+    sizePx: size * GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale),
+    tint: 'rgb(179,14,46)', label: '✖',
+    sprite: ART_BASE + 'tease.png',
+    motion: MOTION.RoamBounce,   // drift handled per-frame (center pull + wiggle)
+    fuseMs: 0, speedMult: 1.0, payMult: 1.0, treatLifeMs: TEASE_LIFE_MS,
+  };
+}
+
+let _nextBoundPairId = 1;
+
+/** The Bound: two tethered lives (light trio) - both must come down quickly. */
+export function buildBoundPair(intensity, fuseTimeMult = 1.0, effectIntensity = 1.0,
+                               sizeScale = 1.0, fuseMult = 1.0) {
+  const pairId = _nextBoundPairId++;
+  const one = () => {
+    const v = VARIANTS[2 + ((Math.random() * 3) | 0)];
+    const t = clamp(Math.random() * 0.7 + intensity * 0.45, 0, 1);
+    const size = v.min + (v.max - v.min) * t;
+    const baseFuse = v.fuseMin + Math.random() * Math.max(1, v.fuseMax - v.fuseMin);
+    return {
+      variantId: v.id, kind: 'live',
+      payload: v.payload,
+      strength: strengthOf(size, effectIntensity),
+      sizePx: size * GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale),
+      tint: v.tint, label: v.label, sprite: v.sprite,
+      motion: MOTION.RoamBounce,
+      fuseMs: Math.max(1200, baseFuse * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult)),
+      speedMult: 1.0, payMult: 1.0, treatLifeMs: 0,
+      boundPairId: pairId,
+    };
+  };
+  return [one(), one()];
+}
+
+/** The Chaperone: a live (light trio) shielded while its escort treat orbits. */
+export function buildChaperonePair(intensity, fuseTimeMult = 1.0, effectIntensity = 1.0,
+                                   sizeScale = 1.0, fuseMult = 1.0) {
+  const v = VARIANTS[2 + ((Math.random() * 3) | 0)];
+  const t = clamp(Math.random() * 0.7 + intensity * 0.45, 0, 1);
+  const size = v.min + (v.max - v.min) * t;
+  const baseFuse = v.fuseMin + Math.random() * Math.max(1, v.fuseMax - v.fuseMin);
+  const live = {
+    variantId: v.id, kind: 'live',
+    payload: v.payload,
+    strength: strengthOf(size, effectIntensity),
+    sizePx: size * GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale),
+    tint: v.tint, label: v.label, sprite: v.sprite,
+    motion: MOTION.RoamBounce,
+    fuseMs: Math.max(1200, baseFuse * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult)),
+    speedMult: 1.0, payMult: 1.0, treatLifeMs: 0,
+    isChaperoneLive: true,
+  };
+  const ev = VARIANTS[Math.random() < 0.5 ? 0 : 1];   // flash / subliminal escort
+  const esize = rand(95, 120);
+  const escort = {
+    variantId: ev.id, kind: 'treat',
+    payload: ev.payload,
+    strength: Math.round(clamp(Math.max(10,
+      Math.round(clamp((esize - SIZE_MIN_GLOBAL) / (SIZE_MAX_GLOBAL - SIZE_MIN_GLOBAL), 0, 1) * 100))
+      * effectIntensity, 0, 100)),
+    sizePx: esize * GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale),
+    tint: ev.tint, label: ev.label, sprite: ev.sprite,
+    motion: MOTION.RoamBounce,   // overridden by the orbit while linked
+    fuseMs: 0, speedMult: 1.0, payMult: 1.0, treatLifeMs: 0,   // escorts never rot
+    isEscort: true,
+  };
+  return [live, escort];
+}
+
+/** Build a darter (white rabbit): benign, fast, telegraphed, self-expiring.
+ * sweeper = GG make more GG: born spanked, never caught, mows what it crosses. */
+export function buildDarter(intensity, { atX = null, atY = null, sweeper = false } = {}) {
+  return {
+    variantId: 'darter', kind: 'darter',
+    payload: { kind: 'flash' },   // a brief micro-flash on catch
+    strength: 8,
+    sizePx: rand(72, 96),
+    tint: 'rgb(255,77,196)', label: '',
+    sprite: ART_BASE + 'darter.png',
+    motion: MOTION.RoamBounce,    // darter path overrides speed
+    fuseMs: 0, speedMult: 1.0, payMult: 1.0, treatLifeMs: 0,
+    isSweeper: sweeper,
+    telegraphMs: sweeper ? 150 : DARTER_TELEGRAPH_MS,
+    lifetimeMs: DARTER_LIFETIME_MS,
+    quickWindowMs: DARTER_QUICK_WINDOW_MS,
+    spawnAt: atX != null ? { x: atX, y: atY } : null,
+  };
+}
+
+/** Per-spawn-tick darter roll (C# RollDarter): density climbs with intensity. */
+export function rollDarter(intensity, rateMult = 1.0) {
+  const chance = (0.0125 + clamp(intensity, 0, 1) * 0.03) * Math.max(0, rateMult);
+  if (Math.random() >= chance) return null;
+  return buildDarter(intensity);
 }

@@ -407,8 +407,11 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
     const drop = SUBLIMINAL_DROPS[dropSlug(word)];
     if (drop) audio.play(DROP_BASE + drop, getLevel('drops'));
   }
-  function triggerVeil(kind) {
-    if (paused || frozen) return;
+  // `force` (game mode): the field is deliberately paused for the whole DtRH
+  // session, but veil punch-throughs should still wash - the run brain gates
+  // them on its own held/running state instead (scene.js onVeilPass).
+  function triggerVeil(kind, force = false) {
+    if ((paused && !force) || frozen) return;
     fireEffect(kind);            // the wash/overlay (+ director boost via onEffect)
     const word = VEIL_WORDS[kind];
     if (word) flashDrop(word);   // the snap: whispered drop + flashed word, in sync
