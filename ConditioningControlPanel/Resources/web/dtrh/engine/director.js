@@ -14,7 +14,7 @@
  * ==========================================================================*/
 
 const RAMP_SECONDS = 360;      // run time to reach full intensity
-const BASE_SPEED_CALM = 5;     // u/s at intensity 0
+const BASE_SPEED_CALM = 3.5;   // u/s at intensity 0 (gentler start; ramps to HOT as the run deepens)
 const BASE_SPEED_HOT = 16;     // u/s at intensity 1
 const BOOST_POP = 0.6;         // + per popped bubble
 const BOOST_LUCKY = 4;         // + per golden jackpot

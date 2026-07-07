@@ -13,7 +13,8 @@ using Newtonsoft.Json.Linq;
 namespace ConditioningControlPanel;
 
 /// <summary>
-/// Reusable fullscreen WebView2 host for local three.js pages served over virtual https origins.
+/// Reusable WebView2 host (windowed or borderless-fullscreen) for local three.js pages served over
+/// virtual https origins.
 /// Extracted from <see cref="ChaosTunnelService"/> so the DtRH browser game (an INPUT-RECEIVING
 /// game surface) and the legacy tunnel (a passive backdrop) share the fiddly plumbing:
 /// environment creation with per-instance user-data folder, the anti-MPO / anti-occlusion browser
@@ -58,6 +59,14 @@ internal sealed class ChaosWebViewHost : IDisposable
         /// <summary>Extra Chromium args appended to the shared anti-MPO/occlusion set
         /// (e.g. "--autoplay-policy=no-user-gesture-required" for the game's audio bed).</summary>
         public string? ExtraBrowserArguments { get; init; }
+
+        /// <summary>true = fill the primary screen borderless at launch (passive tunnel backdrop);
+        /// false = a normal titled, resizable, alt-tabbable window that the page can toggle to
+        /// borderless fullscreen via the dock button (the DtRH game). Default true.</summary>
+        public bool StartFullscreen { get; init; } = true;
+
+        /// <summary>Window title (shown on the taskbar/Alt-Tab in windowed mode).</summary>
+        public string WindowTitle { get; init; } = "Conditioning Control Panel";
     }
 
     private readonly Options _opts;
@@ -66,6 +75,8 @@ internal sealed class ChaosWebViewHost : IDisposable
     private WebView2? _web;
     private bool _initStarted;
     private bool _disposed;
+    private bool _isFullscreen;
+    private double _windowedW, _windowedH;   // remembered windowed size (default 85% of screen)
 
     public bool IsReady { get; private set; }
     public Window? Window => _window;
@@ -88,30 +99,75 @@ internal sealed class ChaosWebViewHost : IDisposable
         var grid = new Grid { Background = Brushes.Black };
         grid.Children.Add(_web);
 
+        // Default windowed size: 85% of the primary screen, centered.
+        _windowedW = SystemParameters.PrimaryScreenWidth * 0.85;
+        _windowedH = SystemParameters.PrimaryScreenHeight * 0.85;
+
         _window = new Window
         {
-            WindowStyle = WindowStyle.None,
             AllowsTransparency = false,   // WebView2 does not paint in a layered window; stay opaque
             Background = Brushes.Black,
-            Topmost = _opts.InputEnabled,
-            ShowInTaskbar = false,
+            Title = _opts.WindowTitle,
+            // Every effect is in-world now, so no native payload window needs to stack over the
+            // page: the host never needs Topmost, which is what let it be Alt-Tabbed / minimized.
+            Topmost = false,
+            ShowInTaskbar = true,
             ShowActivated = _opts.InputEnabled,
             Focusable = _opts.InputEnabled,
-            ResizeMode = ResizeMode.NoResize,
             WindowStartupLocation = WindowStartupLocation.Manual,
-            Left = 0,
-            Top = 0,
-            Width = SystemParameters.PrimaryScreenWidth,
-            Height = SystemParameters.PrimaryScreenHeight,
             Content = grid,
         };
+        ApplyWindowMode(_opts.StartFullscreen);   // sets style / bounds / resize mode
         if (!_opts.InputEnabled)
             _window.SourceInitialized += (_, _) => ApplyPassiveExStyles(_window);
         _window.Show();
         if (_opts.InputEnabled) { try { _window.Activate(); } catch { } }
 
         _ = InitWebAsync();
-        App.Logger?.Information("{Tag}: window up (input={Input}) → {Url}", _opts.LogTag, _opts.InputEnabled, _opts.StartUrl);
+        App.Logger?.Information("{Tag}: window up (input={Input}, fullscreen={FS}) → {Url}",
+            _opts.LogTag, _opts.InputEnabled, _isFullscreen, _opts.StartUrl);
+    }
+
+    /// <summary>Lay the window out as borderless-fullscreen or a normal titled window.</summary>
+    private void ApplyWindowMode(bool fullscreen)
+    {
+        if (_window == null) return;
+        double sw = SystemParameters.PrimaryScreenWidth, sh = SystemParameters.PrimaryScreenHeight;
+        if (fullscreen)
+        {
+            _window.WindowState = WindowState.Normal;   // manual bounds cover the whole screen (taskbar included)
+            _window.WindowStyle = WindowStyle.None;
+            _window.ResizeMode = ResizeMode.NoResize;
+            _window.Left = 0; _window.Top = 0;
+            _window.Width = sw; _window.Height = sh;
+        }
+        else
+        {
+            _window.WindowStyle = WindowStyle.SingleBorderWindow;   // title bar = free Alt-Tab / minimize / move
+            _window.ResizeMode = ResizeMode.CanResize;
+            double w = Math.Min(_windowedW, sw), h = Math.Min(_windowedH, sh);
+            _window.Width = w; _window.Height = h;
+            _window.Left = Math.Max(0, (sw - w) / 2);
+            _window.Top = Math.Max(0, (sh - h) / 2);
+            _window.WindowState = WindowState.Normal;
+        }
+        _isFullscreen = fullscreen;
+    }
+
+    /// <summary>Toggle borderless fullscreen. Driven by the page's Fullscreen API (the dock button)
+    /// via <c>ContainsFullScreenElementChanged</c>, so the JS side and the window stay in sync.</summary>
+    public void SetFullscreen(bool on)
+    {
+        if (_window == null || _isFullscreen == on) return;
+        // Going fullscreen: remember the current windowed size so exit restores it.
+        if (on && _window.WindowState == WindowState.Normal
+            && _window.WindowStyle == WindowStyle.SingleBorderWindow)
+        {
+            if (_window.ActualWidth > 0) _windowedW = _window.ActualWidth;
+            if (_window.ActualHeight > 0) _windowedH = _window.ActualHeight;
+        }
+        ApplyWindowMode(on);
+        if (_opts.InputEnabled) { try { _window.Activate(); } catch { } }
     }
 
     /// <summary>Post a message to the page; queued until the page's 'ready' handshake.</summary>
@@ -188,6 +244,9 @@ internal sealed class ChaosWebViewHost : IDisposable
             core.NavigationStarting += OnNavigationStarting;
             core.WebMessageReceived += OnWebMessageReceived;
             core.ProcessFailed += OnProcessFailed;
+            // The page's Fullscreen API (the dock's [ ] button) drives the WPF window: entering
+            // element-fullscreen borderless-maximizes the host, exiting restores the titled window.
+            core.ContainsFullScreenElementChanged += OnContainsFullScreenElementChanged;
 
             core.Navigate(_opts.StartUrl);
         }
@@ -205,6 +264,18 @@ internal sealed class ChaosWebViewHost : IDisposable
         {
             e.Cancel = true;
         }
+    }
+
+    private void OnContainsFullScreenElementChanged(object? sender, object e)
+    {
+        try
+        {
+            var core = _web?.CoreWebView2;
+            if (core == null) return;
+            bool fs = core.ContainsFullScreenElement;
+            _window?.Dispatcher.Invoke(() => SetFullscreen(fs));
+        }
+        catch (Exception ex) { App.Logger?.Debug("{Tag}.FullScreenChanged: {E}", _opts.LogTag, ex.Message); }
     }
 
     private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
@@ -262,6 +333,7 @@ internal sealed class ChaosWebViewHost : IDisposable
                 _web.CoreWebView2.NavigationStarting -= OnNavigationStarting;
                 _web.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
                 _web.CoreWebView2.ProcessFailed -= OnProcessFailed;
+                _web.CoreWebView2.ContainsFullScreenElementChanged -= OnContainsFullScreenElementChanged;
             }
         }
         catch { }
