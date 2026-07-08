@@ -38,6 +38,7 @@ internal static class DtrhHostService
     private static bool _relaunchedOnce;
     private static bool _testMode;
     private static bool _videoHooked;
+    private static bool _vnSpeaking;   // a VN tutorial beat owns the mix: skip native stingers/barks
 
     public static bool IsActive => _host != null;
 
@@ -175,8 +176,12 @@ internal static class DtrhHostService
     {
         switch ((string?)o["type"])
         {
+            case "vn-speaking":
+                _vnSpeaking = (bool?)o["on"] ?? false;
+                break;
             case "sfx":
             {
+                if (_vnSpeaking) break;   // VN owns the mix - stingers stay silent while she speaks
                 var name = (string?)o["name"];
                 var scale = (float?)o["scale"] ?? 0.6f;
                 // Two cues live behind fallback-resolving helpers (no dedicated asset yet).
@@ -197,6 +202,7 @@ internal static class DtrhHostService
             case "run-started":
             {
                 _runActive = true;
+                _vnSpeaking = false;   // never carry a stale duck into a run
                 var diff = (string?)o["difficulty"] ?? "Gentle";
                 if (!_testMode)
                 {
@@ -210,6 +216,7 @@ internal static class DtrhHostService
                 OnRunEnded(o);
                 break;
             case "bark":
+                if (_vnSpeaking) break;   // don't let a bark talk over her VN line
                 RouteBark(o);
                 break;
             case "heartbeat":
