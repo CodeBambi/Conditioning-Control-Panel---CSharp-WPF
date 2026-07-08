@@ -63,6 +63,7 @@ async function maybeStart() {
       bridge,
       hostState,
       runSetup: initMsg.runSetup,
+      modId: initMsg.modId,   // active persona (Bambi/Sissy/Circe) for the VN portrait
       requestExit: () => { bridge.send({ type: 'exit' }); shutdown(); },
     });
     engine = await mod.start({

@@ -39,7 +39,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildHeart, build
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById } from './boons.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
-import { REGIONS, REGION_COUNT, regionForWave } from './regions.js';
+import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL } from './regions.js';
 import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
 import { createPayloadFx } from './payloadFx.js';
@@ -48,6 +48,7 @@ import { createOverlays } from './overlays.js';
 import { createWarren } from './warren.js';
 import { createLessonTracker } from './lessons.js';
 import { createHappyPath } from './happyPath.js';
+import { createVnPortrait } from './vnPortrait.js';
 import { lessonById } from './catalog.js';
 
 // ---- economy tuning (ChaosTuning.cs / ChaosModeService.cs) ----
@@ -132,7 +133,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   let ctx = null;      // { nav, fx, director, hud, canvas } from scene.start
   let field = null, ffx = null, hudUi = null, overlays = null, payloadFx = null;
-  let warren = null, lessons = null, happy = null;
+  let warren = null, lessons = null, happy = null, vn = null;
   let state = 'boot';  // boot -> warren -> requesting -> countdown -> running -> drafting -> recap
   let paused = false, hidden = false, covered = false, drafting = false;
   let shortNextCountdown = false;   // "fall again" re-enters with the lone GO flash
@@ -1659,8 +1660,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function trySpawnBehavioral(effIntensity) {
     const gentleMult = cfg.difficulty === 'Easy' ? 0.5 : 1.0;
     const rank = cfg.rankIndex;
+    // Four Chambers: the region biases WHICH mechanics show up (pairs in the
+    // Hall, echoes in the Garden, teases in the Court). `behavioral` is a global
+    // scale; the per-mechanic keys ride on top. Neutral (all 1.0) off-region.
+    const prof = cfg.regionMode ? profileForWave(st.waveIndex) : PROFILE_NEUTRAL;
+    const bMult = gentleMult * prof.behavioral;
 
-    if (rank >= RANK.Tempted && Math.random() < ECHO_SPAWN_CHANCE * gentleMult) {
+    if (rank >= RANK.Tempted && Math.random() < ECHO_SPAWN_CHANCE * bMult * prof.echo) {
       const debut = !flags.seenEcho;
       if (debut) {
         setFlag('seenEcho');
@@ -1670,7 +1676,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       field.spawn(buildEcho(effIntensity, st.fuseTimeMult, st.bubbleScale, debut ? DEBUT_FUSE_MULT : 1.0));
       return true;
     }
-    if (rank >= RANK.Tempted && Math.random() < CHAPERONE_SPAWN_CHANCE * gentleMult) {
+    if (rank >= RANK.Tempted && Math.random() < CHAPERONE_SPAWN_CHANCE * bMult * prof.chaperone) {
       const debut = !flags.seenChaperone;
       if (debut) {
         setFlag('seenChaperone');
@@ -1685,7 +1691,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       return true;
     }
     if ((cfg.difficulty === 'Hard' || cfg.difficulty === 'Extreme' || rank >= RANK.Entranced)
-        && Math.random() < BOUND_SPAWN_CHANCE * gentleMult) {
+        && Math.random() < BOUND_SPAWN_CHANCE * bMult * prof.bound) {
       const debut = !flags.seenBound;
       if (debut) {
         setFlag('seenBound');
@@ -1856,6 +1862,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     get allowCurses() { return cfg.allowCurses; },
     equipmentHas: (id) => cfg.equipment.includes(id),
     bark: (event) => bark(event),
+    /** A Visual-Novel portrait beat (scripted descents): the active persona
+     * performs `emote`, freezes, says `line`, holds `hold` ms, fades. Returns a
+     * promise; safe to fire-and-forget. No-op if the VN overlay isn't built. */
+    vnBeat: (emote, line, opts) => (vn ? vn.beat({ emote, line, ...(opts || {}) }) : Promise.resolve(false)),
     spawnScriptedThreat(fuseMult) {
       const pink = VARIANTS.find((v) => v.id === 'pink');
       if (!pink) return;
@@ -2107,6 +2117,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       onWeatherClick: () => rerollWeather(),
     });
       overlays = createOverlays(ctx.hud);
+      vn = createVnPortrait(ctx.hud, { getModId: () => activeModId });
+      try { vn.prime(); } catch (e) { /* manifest warms lazily on first beat */ }
       lessons = createLessonTracker({ bridge, onComplete: onLessonComplete, onFirstTime: onFirstTimeAwarded });
       lessons.setCoveredProbe(() => covered || heavyActive());
       happy = createHappyPath();

@@ -32,6 +32,7 @@ export function createHappyPath() {
 
   // run 1 beats
   let streakTaught, threatSpawned, threatDefuseSeen, variantsJoined, draftFired, darterSpawned;
+  let introStarted;   // the VN welcome plays once, on the first scripted tick
   // run 2 beats
   let braindrainDebuted, goldenSpawned;
   // draft rigging
@@ -43,6 +44,7 @@ export function createHappyPath() {
     scripted = !!isScripted;
     streakTaught = threatSpawned = threatDefuseSeen = variantsJoined = false;
     draftFired = darterSpawned = false;
+    introStarted = false;
     braindrainDebuted = goldenSpawned = false;
     draftsThisRun = 0;
     shieldRigBoonId = null;
@@ -70,6 +72,17 @@ export function createHappyPath() {
   }
 
   function tickFirstRun(io) {
+    // The Visual-Novel welcome: the persona greets, then tells you the one rule.
+    // Fire-and-forget (the beats are async overlays); it plays once per run 1.
+    if (!introStarted && io.vnBeat) {
+      introStarted = true;
+      (async () => {
+        try {
+          await io.vnBeat('sultry', 'well, well… look who finally fell down my rabbit hole.', { hold: 1600 });
+          await io.vnBeat('entrancing', 'just watch the bubbles, and pop them for me. that’s all you have to do… for now.', { hold: 1900 });
+        } catch (e) { /* the run must never wait on the VN */ }
+      })();
+    }
     if (!streakTaught && io.combo() >= R1_STREAK_TEACH_COMBO) {
       streakTaught = true;
       io.announce('pops in a row build a streak. it pays more.', 'streak', 3200);

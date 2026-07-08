@@ -146,6 +146,9 @@ internal static class DtrhHostService
                 type = "init",
                 protocol = Protocol,
                 settings = new { masterVolume = SafeMasterVolume() },
+                // Active persona (builtin-bambisleep / builtin-sissyhypno / builtin-locked):
+                // the page's VN portrait picks the matching portrait set + tint.
+                modId = SafeActiveModId(),
                 // M5: the page boots into the Warren hub; a run's config is dealt
                 // per-descent by request-run. init carries the SAVED run setup so
                 // the hub's Descent tab opens on the user's own choices.
@@ -823,5 +826,13 @@ internal static class DtrhHostService
     {
         try { return App.Settings?.Current?.MasterVolume ?? 100; }
         catch { return 100; }
+    }
+
+    /// <summary>Active persona/mod id for the page's VN portrait. Defaults to the
+    /// Sissy set when no mod is resolvable (that's the only baked portrait set today).</summary>
+    private static string SafeActiveModId()
+    {
+        try { return App.Mods?.ActiveModId ?? "builtin-sissyhypno"; }
+        catch { return "builtin-sissyhypno"; }
     }
 }
