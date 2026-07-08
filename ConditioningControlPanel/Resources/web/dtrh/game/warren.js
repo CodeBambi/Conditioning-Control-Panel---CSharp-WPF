@@ -30,6 +30,26 @@ const ART = 'https://ccp.art/';
 const KEY_OPTS = ['Q', 'E', 'R', 'F', 'Z', 'X', 'C', 'V', '1', '2', '3', '4'];
 const nfmt = (n) => Math.floor(n).toLocaleString();
 
+// A boon's identity colour: its rarity tier, red for a curse, gold once maxed.
+// (Habits keep their branch colour - that's their identity.) Mirrors the loot
+// palette players already read in the mid-descent draft.
+const RARITY_ACC = { Common: '150,162,196', Uncommon: '90,214,150', Rare: '167,120,255' };
+const CURSE_ACC = '255,110,110';
+const GOLD_ACC = '255,215,0';
+function boonAcc(b, maxed) {
+  if (maxed) return GOLD_ACC;
+  if (b && b.curse) return CURSE_ACC;
+  return (b && RARITY_ACC[b.rarity]) || '232,67,147';
+}
+// Ribbon text for a card: skip it on plain Commons so the shelf stays calm and
+// only the notable pieces (uncommon/rare/curse/maxed) wear a badge.
+function rarityTag(b) {
+  if (!b) return null;
+  if (b.curse) return 'curse';
+  if (b.rarity && b.rarity !== 'Common') return b.rarity.toLowerCase();
+  return null;
+}
+
 function fmtPlaytime(seconds) {
   const s = Math.max(0, seconds | 0);
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
@@ -276,7 +296,7 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     };
     rule('🫧', '255,208,232', 'LEFT-CLICK', 'pop the treats. ', 'a click is enough. they feed your streak.');
     rule('◉', '255,210,40', 'PRESS & HOLD', 'hold the burning ones. ', 'press and keep pressing until they snap. let one finish its trance and it goes off.');
-    rule('🌊', '122,224,255', 'RIGHT-CLICK', 'ripple the water. ', 'a right-click near the bubbles sends out a wave — treats pop, trances snap, rabbits go flying. it takes a while to gather another.');
+    rule('🌊', '122,224,255', 'RIGHT-CLICK', 'ripple the water. ', 'a right-click near the bubbles sends out a wave — treats pop, trances snap, rabbits go flying. it spends 30 focus, no cooldown — chain them while your focus holds.');
     rule('🐇', '255,105,180', null, 'follow the white rabbit. ', 'everything else down there is yours to find out.');
     btn('wr-intro-btn', 'i understand. take me down', () => { closeModal(); if (onDone) onDone(); }, card);
   }
@@ -540,14 +560,16 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     const active = v.isBoonActive(b.id);
     const maxed = unlocked && level >= b.levelValues.length;
     const rankLocked = v.isBoonRankLocked(b.id);
-    const accent = '232,67,147';
+    // The shop row wears the same identity colour as its BAG card: rarity tier,
+    // red for a curse, gold once maxed (mystery stays neutral pink).
+    const accent = rankLocked ? '232,67,147' : boonAcc(b, maxed);
     const row = el('wr-row' + (active ? ' is-on' : unlocked ? ' is-owned' : ''));
     row.style.setProperty('--acc', accent);
 
     // Rank-locked = a MYSTERY: keyhole, "???", the depth gate - never the boon's face.
     const icon = rankLocked
-      ? artIcon(`${ART}hub/tile_unknown.png`, '?', accent, 72)
-      : artIcon(`${ART}boons/${b.id}.png`, b.glyph, accent, 72);
+      ? artIcon(`${ART}hub/tile_unknown.png`, '?', accent, 84)
+      : artIcon(`${ART}boons/${b.id}.png`, b.glyph, accent, 84);
     if (!unlocked) icon.style.opacity = rankLocked ? '0.6' : '0.55';
     row.appendChild(icon);
 
@@ -664,6 +686,48 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     return cell;
   }
 
+  /**
+   * A Display-Shelf card - the BAG's collectible. The art is the hero (full-bleed
+   * top), a rarity-coloured frame gives each piece its identity, and one status
+   * corner + a foot line (name / pips / price) says what it is at a glance. Replaces
+   * the old flat bagTile grid that padded itself out with rows of empty keyholes.
+   * state: 'equipped' | 'owned' | 'buyable' | 'mystery' | 'empty'.
+   */
+  function shelfCard({ art, glyph, title, acc, state, corner, ribbon, foot, pips, tipText, onClick }) {
+    const card = el(`wr-shelf is-${state}`);
+    card.style.setProperty('--acc', acc || '232,67,147');
+    const artBox = el('wr-shelf-art', card);
+    if (state === 'mystery') {
+      const img = document.createElement('img');
+      img.className = 'wr-shelf-keyhole'; img.src = `${ART}hub/tile_unknown.png`; img.alt = '';
+      img.addEventListener('error', () => { img.remove(); el('wr-shelf-glyph', artBox, '?'); });
+      artBox.appendChild(img);
+    } else if (art && state !== 'empty') {
+      const img = document.createElement('img');
+      img.src = art; img.alt = '';
+      img.addEventListener('error', () => { img.remove(); el('wr-shelf-glyph', artBox, glyph || '◈'); });
+      artBox.appendChild(img);
+    } else {
+      el('wr-shelf-glyph', artBox, glyph || '◈');
+    }
+    if (ribbon) el('wr-shelf-ribbon', artBox, ribbon);
+    if (corner) el('wr-shelf-corner', artBox, corner);
+    const footEl = el('wr-shelf-foot', card);
+    el('wr-shelf-name', footEl, title);
+    const line = el('wr-shelf-line', footEl);
+    if (pips && pips.max > 0) {
+      const p = el('wr-shelf-pips', line);
+      for (let i = 1; i <= pips.max; i++) el('wr-pip' + (i <= pips.level ? ' is-full' : ''), p, i <= pips.level ? '●' : '○');
+    }
+    if (foot) el('wr-shelf-sub', line, foot);
+    if (onClick) {
+      card.classList.add('is-click');
+      card.addEventListener('click', () => { sfx('ui_click', 0.3); onClick(); });
+    }
+    tip(card, tipText || title);
+    return card;
+  }
+
   // ============================ BAG ============================
 
   function renderBag(panel, v) {
@@ -684,17 +748,20 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
       el('wr-pocket-label', col, label);
       const rowEl = el('wr-pocket-row', col);
       for (const b of equipped) {
-        rowEl.appendChild(bagTile({
-          glyph: b.glyph, title: `${b.name} · L${v.boonLevel(b.id)}`, art: `${ART}boons/${b.id}.png`,
-          state: 'equipped', size: 114,
+        const level = v.boonLevel(b.id);
+        const maxed = level >= b.levelValues.length;
+        rowEl.appendChild(shelfCard({
+          art: `${ART}boons/${b.id}.png`, glyph: b.glyph, title: b.name,
+          acc: boonAcc(b, maxed), state: 'equipped', corner: '✓',
+          pips: { level, max: b.levelValues.length },
+          foot: maxed ? 'MAX' : `L${level}`,
           tipText: `${b.name} — click to unequip`,
           onClick: () => { cmd('set-lifetime-boon', { id: b.id, active: false }); sfx('ui_unequip', 0.45); },
         }));
       }
       for (let i = equipped.length; i < slots; i++) {
-        rowEl.appendChild(bagTile({
-          glyph: '+', title: `empty ${label.toLowerCase()} pocket`, caption: 'empty',
-          state: 'empty', size: 114,
+        rowEl.appendChild(shelfCard({
+          glyph: '＋', title: 'empty', state: 'empty', foot: `${label.toLowerCase()} pocket`,
           tipText: 'pick one from the shelf below, or go shopping in the Toybox.',
           onClick: () => { tab = 'enhance'; rerender(); },
         }));
@@ -703,32 +770,43 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     if (!anyPockets) el('wr-empty-note', pockets, 'no pockets sewn yet.');
 
     // ---- collections (mirror the Toybox reveals: a naked start shows neither) ----
+    // Every real piece is a card - owned, buyable, or a rank-locked mystery (a
+    // teaser, not dead space). No pad-to-grid empties: the shelf only shows things
+    // that exist, so a small collection reads as "young", never "broken".
     const grids = [
       ['toybox_accessories', 'ACCESSORIES', 'accessory'],
       ['toybox_toys', 'TOYS', 'skill'],
     ];
     for (const [gate, label, cat] of grids) {
       if (!reveals.isUnlocked(gate, v)) continue;
+      const boons = boonsInCat(cat);
+      const owned = boons.filter((b) => v.boonLevel(b.id) >= 1).length;
+      const slots = v.slotsFor(cat);
       const card = el('wr-card', panel);
       el('wr-card-h', card, label);
-      el('wr-card-sub', card, `${v.equippedCountIn(cat)}/${v.slotsFor(cat) === Infinity ? '∞' : v.slotsFor(cat)} equipped`);
-      const grid = el('wr-tiles', card);
-      const boons = boonsInCat(cat);
+      el('wr-card-sub', card, `${owned}/${boons.length} collected · ${v.equippedCountIn(cat)}/${slots === Infinity ? '∞' : slots} equipped`);
+      const grid = el('wr-shelf-grid', card);
       for (const b of boons) {
         const level = v.boonLevel(b.id);
         const unlocked = level >= 1;
         const active = v.isBoonActive(b.id);
         const rankLocked = v.isBoonRankLocked(b.id);
-        grid.appendChild(bagTile({
-          glyph: rankLocked ? '?' : b.glyph,
-          title: rankLocked ? '? ? ?' : unlocked ? `${b.name} · L${level}` : b.name,
-          art: rankLocked ? `${ART}hub/tile_unknown.png` : `${ART}boons/${b.id}.png`,
-          state: active ? 'equipped' : unlocked ? 'owned' : 'locked',
+        const maxed = unlocked && level >= b.levelValues.length;
+        grid.appendChild(shelfCard({
+          art: `${ART}boons/${b.id}.png`, glyph: b.glyph,
+          title: rankLocked ? '? ? ?' : b.name,
+          acc: rankLocked ? '232,67,147' : boonAcc(b, maxed),
+          state: rankLocked ? 'mystery' : active ? 'equipped' : unlocked ? 'owned' : 'buyable',
+          corner: active ? '✓' : null,
+          ribbon: rankLocked ? null : (maxed ? 'MAX' : rarityTag(b)),
+          pips: unlocked ? { level, max: b.levelValues.length } : null,
+          foot: rankLocked ? RANKS.name(b.rankFloor)
+            : active ? 'equipped' : unlocked ? `L${level}` : `unlock ${GLYPHS.drops}${b.unlockCost}`,
           tipText: rankLocked ? `${RANKS.lockedTip} ${RANKS.specifics(b.rankFloor, v.runs)}`
             : active ? `${b.name} — click to unequip`
             : unlocked ? `${b.name} — click to equip`
             : `${b.name} — unlock for ${GLYPHS.drops}${b.unlockCost} in the Toybox`,
-          onClick: active
+          onClick: rankLocked ? null : active
             ? () => { cmd('set-lifetime-boon', { id: b.id, active: false }); sfx('ui_unequip', 0.45); }
             : unlocked
               ? () => {
@@ -743,19 +821,12 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
               : () => { tab = 'enhance'; rerender(); },
         }));
       }
-      const target = Math.max(8, Math.ceil(boons.length / 4) * 4);
-      for (let i = boons.length; i < target; i++) {
-        grid.appendChild(bagTile({
-          glyph: '+', title: cat === 'skill' ? 'another toy is being stitched' : 'another accessory is being stitched',
-          state: 'empty', tipText: 'it’ll hang here when it’s ready.',
-        }));
-      }
     }
 
-    // ---- habits 4x4 (trained = on/off toggle; untrained = go train it) ----
+    // ---- habits (trained = on/off toggle; untrained = go train it) ----
     const card = el('wr-card', panel);
     el('wr-card-h', card, 'HABITS');
-    const grid = el('wr-tiles', card);
+    const grid = el('wr-shelf-grid', card);
     let trained = 0, switchedOn = 0, shown = 0;
     for (const u of UPGRADES) {
       if (!v.onShelfNow(u.id)) continue;
@@ -764,9 +835,13 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
       const on = owned && v.isUpgradeActive(u.id);
       if (owned) trained++;
       if (on) switchedOn++;
-      grid.appendChild(bagTile({
-        glyph: u.glyph, title: u.name, art: `${ART}upgrades/${u.id}.png`,
-        state: on ? 'equipped' : owned ? 'owned' : 'locked',
+      grid.appendChild(shelfCard({
+        art: `${ART}upgrades/${u.id}.png`, glyph: u.glyph, title: u.name,
+        acc: on ? GOLD_ACC : (BRANCH_COLOR[u.branch] || '232,67,147'),
+        state: on ? 'equipped' : owned ? 'owned' : 'buyable',
+        corner: on ? '✓' : null,
+        ribbon: BRANCH_LABEL[u.branch] || null,
+        foot: on ? 'ON' : owned ? 'off' : `train ${GLYPHS.drops}${u.cost}`,
         tipText: on ? `${u.name} — click to switch off` : owned ? `${u.name} — click to switch on`
           : `${u.name} — train for ${GLYPHS.drops}${u.cost} in the Toybox`,
         onClick: owned
@@ -780,27 +855,27 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
       const unlocked = v.isBoonUnlocked(b.id);
       const active = v.isBoonActive(b.id);
       const rankLocked = v.isBoonRankLocked(b.id);
+      const level = v.boonLevel(b.id);
+      const maxed = unlocked && level >= b.levelValues.length;
       if (unlocked) trained++;
       if (active) switchedOn++;
-      grid.appendChild(bagTile({
-        glyph: rankLocked ? '?' : b.glyph,
-        title: rankLocked ? '? ? ?' : unlocked ? `${b.name} · L${v.boonLevel(b.id)}` : b.name,
-        art: rankLocked ? `${ART}hub/tile_unknown.png` : `${ART}boons/${b.id}.png`,
-        state: active ? 'equipped' : unlocked ? 'owned' : 'locked',
+      grid.appendChild(shelfCard({
+        art: `${ART}boons/${b.id}.png`, glyph: b.glyph,
+        title: rankLocked ? '? ? ?' : b.name,
+        acc: rankLocked ? '232,67,147' : boonAcc(b, maxed),
+        state: rankLocked ? 'mystery' : active ? 'equipped' : unlocked ? 'owned' : 'buyable',
+        corner: active ? '✓' : null,
+        ribbon: rankLocked ? null : (maxed ? 'MAX' : rarityTag(b)),
+        pips: unlocked ? { level, max: b.levelValues.length } : null,
+        foot: rankLocked ? RANKS.name(b.rankFloor)
+          : active ? 'ON' : unlocked ? 'off' : `unlock ${GLYPHS.drops}${b.unlockCost}`,
         tipText: rankLocked ? RANKS.specifics(b.rankFloor, v.runs)
           : active ? `${b.name} — click to switch off`
           : unlocked ? `${b.name} — click to switch on`
           : `${b.name} — unlock for ${GLYPHS.drops}${b.unlockCost} in the Toybox`,
-        onClick: unlocked
+        onClick: rankLocked ? null : unlocked
           ? () => { cmd('set-lifetime-boon', { id: b.id, active: !active }); sfx(!active ? 'ui_equip' : 'ui_unequip', 0.45); }
           : () => { tab = 'enhance'; rerender(); },
-      }));
-    }
-    const targetN = Math.max(16, Math.ceil(shown / 4) * 4);
-    for (let i = shown; i < targetN; i++) {
-      grid.appendChild(bagTile({
-        glyph: '+', title: 'a habit not yet formed', state: 'empty',
-        tipText: 'more training arrives in a later fitting.',
       }));
     }
     el('wr-card-sub', card, `${switchedOn} on · ${trained}/${shown} trained`);

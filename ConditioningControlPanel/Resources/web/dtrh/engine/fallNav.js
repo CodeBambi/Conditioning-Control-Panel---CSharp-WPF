@@ -21,6 +21,9 @@ const LOOK_LERP = 4.0;
 const LOOK_MAX_YAW = 0.42;   // ~24 deg
 const LOOK_MAX_PITCH = 0.34;
 const AHEAD = 0.0104;        // look-ahead fraction of the loop (~10 world units)
+const LANE_MAX = 2.0;        // junction steering: max lateral strafe off the spine (u) - tube RADIUS is 5.5
+const LANE_LERP = 2.2;       // how fast the camera glides toward the target lane
+const LANE_LEAN = 0.85;      // pre-commit lean fraction while a junction is armed (a felt bias, not a full swerve)
 const INTRO_TIME = 7;        // seconds of the opening plunge
 const INTRO_SPEED = 17;      // the plunge starts this fast, easing to the game speed
 const FOV_PULSE_DECAY = 2.5; // 1/s - effect kicks bleed off
@@ -47,6 +50,16 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
   let capMult = 1;            // multiplies MAX_SPEED
 
   let lookYaw = 0, lookPitch = 0, targetYaw = 0, targetPitch = 0;
+  // junction steering: a persistent lateral strafe off the spine. `laneNow` eases
+  // toward `laneTarget` (set by the junction manager); `laneVote` is the player's
+  // live -1..1 lean, sampled at the fork commit. Only steers while `junctionArmed`.
+  let laneNow = 0, laneTarget = 0, laneVote = 0, junctionArmed = false;
+  // branch detour: while set, `branchFn(depth) -> lateral meters` OVERRIDES the
+  // lane lean and steers the camera down a diverging arm. Sampling it at `depth`
+  // (position) and `depth + look-ahead` (aim) with the arm's OWN binormal at each
+  // makes the forward vector tilt - the camera actually yaws into the turn.
+  let branchFn = null;
+  let branchRoll = 0;         // eased bank (deg) leaning into a branch turn
   let dragging = false, lastX = 0, lastY = 0, dragType = 'mouse';
   let swipeDY = 0, swipeSkipped = false; // per-touch-gesture: skip a spotlight on a decisive vertical swipe
 
@@ -91,6 +104,10 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
       trim = clamp(trim / 1.15, TRIM_MIN, TRIM_MAX); firstInteract(); e.preventDefault();
     } else if (e.key === '0') {
       trim = 1; firstInteract();
+    } else if (junctionArmed && (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A')) {
+      laneVote = clamp(laneVote - 0.5, -1, 1); firstInteract(); e.preventDefault();
+    } else if (junctionArmed && (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D')) {
+      laneVote = clamp(laneVote + 0.5, -1, 1); firstInteract(); e.preventDefault();
     }
   }
   function onPointerDown(e) {
@@ -105,6 +122,12 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     if (!dragging || paused) return;
     const dx = e.clientX - lastX, dy = e.clientY - lastY;
     lastX = e.clientX; lastY = e.clientY;
+    if (junctionArmed) {
+      // a fork is open: horizontal drag/swipe leans you toward a mouth (not a look)
+      laneVote = clamp(laneVote + dx * 0.006, -1, 1);
+      firstInteract();
+      return;
+    }
     if (dragType === 'touch') {
       // during a video stage there is no wheel to skip with - a decisive
       // vertical swipe cuts the clip instead of trimming speed
@@ -175,6 +198,36 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     const t = depth / layout.loopDepth;
     layout.pointAt(t, _pos);
     layout.pointAt(t + AHEAD, _ahead);
+
+    // lateral placement. TWO regimes:
+    //  - branch detour (branchFn set): the camera follows a diverging arm. Sample
+    //    the arm offset at `depth` for position and at `depth + look-ahead` for the
+    //    aim, each with THAT depth's own binormal - the mismatch tilts forward, so
+    //    the POV yaws down the arm (a real turn, not a slide).
+    //  - armed lean (junction telegraph): pre-commit bias toward the player's vote,
+    //    strafing pos + aim by the SAME vector so forward stays parallel (no yaw).
+    const aheadUnits = AHEAD * layout.loopDepth;
+    if (branchFn) {
+      const offHere = branchFn(depth);
+      const offAhead = branchFn(depth + aheadUnits);
+      const frH = layout.frameAtDepth(depth);
+      _pos.addScaledVector(frH.binormal, offHere);
+      const frA = layout.frameAtDepth(depth + aheadUnits);
+      _ahead.addScaledVector(frA.binormal, offAhead);
+      laneNow = offHere; laneTarget = 0;            // hand back smoothly when it clears
+      // bank into the turn: lean proportional to how hard the aim diverges from pos
+      const targetRoll = clamp(-(offAhead - offHere) * 3.5, -8, 8);
+      branchRoll += (targetRoll - branchRoll) * clamp(dt * 4.0, 0, 1);
+    } else {
+      if (junctionArmed) laneTarget = laneVote * LANE_MAX * LANE_LEAN;
+      laneNow += (laneTarget - laneNow) * clamp(dt * LANE_LERP, 0, 1);
+      if (Math.abs(laneNow) > 1e-4) {
+        const fr = layout.frameAtDepth(depth);
+        _pos.addScaledVector(fr.binormal, laneNow);
+        _ahead.addScaledVector(fr.binormal, laneNow);
+      }
+      if (branchRoll) branchRoll *= Math.exp(-4.0 * dt);
+    }
     orientAndPlace(introE);
   }
 
@@ -195,8 +248,8 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
       .addScaledVector(_up, Math.sin(lookPitch) * 6);
     camera.lookAt(_look);
 
-    // dutch roll about the view axis (The Tilt / Spun)
-    const roll = (rollOffset + rollSpin) * (Math.PI / 180);
+    // dutch roll about the view axis (The Tilt / Spun / a bank into a branch)
+    const roll = (rollOffset + rollSpin + branchRoll) * (Math.PI / 180);
     if (roll) camera.rotateZ(roll);
 
     const fov = baseFov + (1 - introE) * 8 + fovPulse; // wide during the plunge + effect kicks
@@ -222,10 +275,21 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     setRollRate(degPerSec) { rollRate = degPerSec || 0; },
     setRollOffset(deg) { rollOffsetT = deg || 0; },
     setSpeedCapMult(f) { capMult = clamp(f || 1, 0.25, 3); },
+    // ---- junction steering (drives the lateral lane; the fork manager owns it) --
+    setLane(x) { laneTarget = clamp(x || 0, -LANE_MAX * 1.2, LANE_MAX * 1.2); },
+    getLane: () => laneNow,
+    getLaneVote: () => laneVote,
+    resetLaneVote() { laneVote = 0; },
+    setJunctionArmed(v) { junctionArmed = !!v; },
+    // active branch detour: fn(depth) -> lateral meters off the spine, or null to
+    // release the camera back onto the rail. The junction manager owns this.
+    setBranchProfile(fn) { branchFn = (typeof fn === 'function') ? fn : null; },
     reset() {
       depth = 0; speed = INTRO_SPEED; trim = 1; introT = 0; fovPulse = 0;
       lookYaw = lookPitch = targetYaw = targetPitch = 0;
       rollRate = 0; rollSpin = 0; rollOffsetT = rollOffset = 0; capMult = 1;
+      laneNow = laneTarget = laneVote = 0; junctionArmed = false;
+      branchFn = null; branchRoll = 0;
     },
     dispose,
   };

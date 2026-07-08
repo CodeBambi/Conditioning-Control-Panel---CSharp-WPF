@@ -18,6 +18,7 @@ import { buildLoopLayout, createTunnel, FOG_COLOR, FOG_DENSITY } from './tunnel.
 import { createFallNav } from './fallNav.js';
 import { createSpawner } from './spawner.js';
 import { createWallPosters } from './wallPosters.js';
+import { createJunctions } from './junctions.js';
 import { createBubbles } from './bubbles.js';
 import { createDirector } from './director.js';
 import { createFx } from './fx.js';
@@ -200,6 +201,10 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   // wall (idle at density 0 until the game's run brain sets a region).
   const wall = createWallPosters({ scene, layout, media, renderer, camera });
 
+  // Branching paths: in-world forks the game arms mid-chamber. The camera glides
+  // through the leaned mouth; the other seals. Idle until a descent arms one.
+  const junctions = createJunctions({ scene, layout, nav });
+
   // the continuous voice layer; depth is sampled at each pick for weighting
   const drift = createDriftChain({ getDepth: () => nav.getDepth() });
 
@@ -252,7 +257,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     gamePaused = v;
     nav.setPaused(v);
     bubbles.setFrozen(v);
-    spawner.setPaused(v);
+    syncSpawner();
     wall.setPaused(v);
     if (game) game.setPaused(v);
     hudBits.showPause(v);
@@ -346,9 +351,18 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
 
   // Game mode: the run brain owns when the whisper + special tube moods turn on.
   // (Called from chaosRun on GO / recap; forces the hub into a calm, quiet idle.)
+  // The tunnel's card/video spawner (proximity clips + spotlight takeovers) runs
+  // ONLY inside a descent in game mode, plus the usual ESC-pause / hidden-tab
+  // parks. One source of truth so the Warren hub never plays video behind it.
+  function syncSpawner() {
+    spawner.setPaused(gamePaused || document.hidden || (game && !runActive));
+  }
+
   function setRunActive(on) {
     runActive = !!on;
     try { fx.forceZone(runActive ? null : 'calm'); } catch (e) { /* ignore */ }
+    try { junctions.setActive(runActive); } catch (e) { /* ignore */ } // forks only inside a descent
+    syncSpawner();                        // park the video conveyor outside a descent
     if (runActive) { if (!voiceSilenced) drift.start(); }
     else drift.stop();
   }
@@ -364,7 +378,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     bubbles.setPaused(true);
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
-    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, flashBurst: (n) => bubbles.flashBurst(n), openOptions: () => panel.toggle(),
+    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, junctions, flashBurst: (n) => bubbles.flashBurst(n), openOptions: () => panel.toggle(),
       // Reveal earned option-panel dials from the meta snapshot (purchased "Dials").
       syncOptionUnlocks: (ids) => panel.setUnlocks(ids),
       silenceVoice: (on) => { voiceSilenced = !!on; },
@@ -427,6 +441,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     const speed = nav.getSpeed();
     spawner.update(camera, depth, dt, clock.elapsedTime);
     wall.update(camera, depth, dt); // region-scaled wall posters (idle at density 0)
+    junctions.update(depth, dt);    // branching-path forks (idle until the game arms one)
 
     // Sidechain the mix: a spotlight video owns the whole foreground (the
     // voice whispers down under it, the bed drops hardest); otherwise a
@@ -499,12 +514,12 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     if (document.hidden) {
       running = false;
       bubbles.setPaused(true);
-      spawner.setPaused(true); // parks card + spotlight videos (no hidden-tab audio)
+      syncSpawner(); // parks card + spotlight videos (no hidden-tab audio)
       if (drone) { try { drone.pause(); } catch (e) { /* ignore */ } }
     } else if (!running) {
       running = true;
       if (!director.isOver() && !game) bubbles.setPaused(false);   // game mode: field stays down
-      if (!gamePaused) spawner.setPaused(false);
+      syncSpawner();
       if (drone && droneStarted && !isMuted() && !gamePaused) {
         if (droneCtx && droneCtx.state === 'suspended') { const r = droneCtx.resume(); if (r && r.catch) r.catch(() => {}); }
         const p = drone.play(); if (p && p.catch) p.catch(() => {});
@@ -532,6 +547,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     nav.dispose();
     spawner.dispose();
     wall.dispose();
+    junctions.dispose();
     bubbles.dispose();
     drift.dispose();
     offDroneMute();

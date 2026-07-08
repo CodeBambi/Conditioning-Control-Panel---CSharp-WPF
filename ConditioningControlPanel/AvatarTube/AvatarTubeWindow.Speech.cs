@@ -1614,7 +1614,9 @@ namespace ConditioningControlPanel
                     try
                     {
                         player.Play();
-                        while (player.PlaybackState == NAudio.Wave.PlaybackState.Playing)
+                        // Loop until Stopped (not "while Playing") so a Pause() during a world-freeze
+                        // holds the clip mid-line instead of tearing it down; Resume() (Play) continues it.
+                        while (player.PlaybackState != NAudio.Wave.PlaybackState.Stopped)
                             System.Threading.Thread.Sleep(40);
                     }
                     catch { /* ignore audio errors */ }
@@ -1646,6 +1648,23 @@ namespace ConditioningControlPanel
             NAudio.Wave.WaveOutEvent? p;
             lock (_spokenLock) { p = _spokenPlayer; }
             try { p?.Stop(); } catch { }
+        }
+
+        /// <summary>Freeze the current spoken line in place (world-freeze). Holds position + the
+        /// speaking wobble; a paused clip survives the play-loop (it exits only on Stop). No-op if idle.</summary>
+        public void PauseSpokenAudio()
+        {
+            NAudio.Wave.WaveOutEvent? p;
+            lock (_spokenLock) { p = _spokenPlayer; }
+            try { if (p?.PlaybackState == NAudio.Wave.PlaybackState.Playing) p.Pause(); } catch { }
+        }
+
+        /// <summary>Resume a line paused by <see cref="PauseSpokenAudio"/>. No-op if idle or already playing.</summary>
+        public void ResumeSpokenAudio()
+        {
+            NAudio.Wave.WaveOutEvent? p;
+            lock (_spokenLock) { p = _spokenPlayer; }
+            try { if (p?.PlaybackState == NAudio.Wave.PlaybackState.Paused) p.Play(); } catch { }
         }
 
         /// <summary>

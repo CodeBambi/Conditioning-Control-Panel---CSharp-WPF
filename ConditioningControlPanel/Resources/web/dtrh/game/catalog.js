@@ -91,7 +91,7 @@ export const LIFETIME_BOONS = [
     capstone: 'no need to hold. while it buzzes, hovering alone pops.',
     activeUse: true, cooldownSec: 20 },
   { id: 'freeze_trigger', cat: 'skill', rankFloor: RANK.Slipping, name: 'Freeze Trigger', glyph: '❄',
-    desc: 'press to freeze the whole field for 3.5s, exactly like a caught freeze bubble. 1/2/3/3 uses per descent, and holds channeled while frozen spend no focus.',
+    desc: 'press to freeze the whole field for 3.5s, exactly like a caught freeze bubble — fuses pause and everything stays poppable. 1/2/3/3 uses per descent.',
     flavor: 'stillness on demand. she lends it, never gives it.',
     unlockCost: 500, upgradeCosts: [800, 1300, 1800], levelValues: [1, 2, 3, 3],
     value: (v) => `${v.toFixed(0)} uses`,
@@ -252,10 +252,10 @@ export const LIFETIME_BOONS = [
     value: (v) => v >= 3 ? 'forecast + x1.5 + reroll' : v >= 2 ? 'forecast + x1.5' : 'forecast',
     capstone: 'click the sky — she changes her mind, once per descent.' },
   { id: 'skipping_stone', cat: 'utility', rankFloor: RANK.Entranced, name: 'Skipping Stone', glyph: '🪨',
-    desc: 'your ripple gathers in 13/11/9/8 seconds by level (15 bare-handed), and each level sends a wider, slower wave.',
+    desc: 'each level makes the ripple cost less focus — 26 / 22 / 18 / 16 a cast by level (30 bare-handed) — and sends a wider, slower wave. cheaper casts mean more ripples per bar.',
     flavor: 'flat stone, still water. she taught you the wrist for it.',
     unlockCost: 220, upgradeCosts: [380, 650, 950], levelValues: [13, 11, 9, 8],
-    value: (v) => `${v.toFixed(0)}s gather`,
+    value: (v) => `${Math.round(v * 2)} focus a cast`,
     capstone: 'the stone skips — every cast sends three waves, a second apart.' },
 ];
 
@@ -352,14 +352,14 @@ export const FIRST_TIMES = {
 // ============================ diary (verbs + codex) ============================
 
 export const DIARY_VERBS = [
-  { glyph: '✋', name: 'hold to snap', desc: 'press and HOLD a live (ringed) bubble about a second to defuse it — costs 30 focus. a quick click, or letting go early, TRIGGERS it instead.' },
+  { glyph: '✋', name: 'hold to snap', desc: 'press and HOLD a live (ringed) bubble about a second to defuse it — free, no focus needed. a quick click, or letting go early, TRIGGERS it instead.' },
   { glyph: '○', name: 'click the treats', desc: 'a tap pops a treat: its payload plays, the streak climbs, and +10 focus flows back (+15 from heavies and rabbits).' },
-  { glyph: '🌊', name: 'right-click · the ripple', desc: 'casts a wave from your cursor (near the bubbles): treats pop fully paid, trances snap clean, rabbits get flung. one charge, gathered back over time — READY on the sidebar means it’s in your hand.' },
-  { glyph: '◌', name: 'focus', desc: 'the defuse fuel: max 100, you fall in with 50, no regen on its own. when the bar runs red you can’t afford a hold — farm treats before touching a live one (pressing one anyway triggers it in your grip).' },
+  { glyph: '🌊', name: 'right-click · the ripple', desc: 'casts a wave from your cursor (near the bubbles): treats pop fully paid, trances snap clean, rabbits get flung. costs 30 focus a cast, no cooldown — chain up to three back to back on a full bar, then farm treats to refill.' },
+  { glyph: '◌', name: 'focus', desc: 'the ripple fuel: max 100, you fall in with 50, no regen on its own. treats refill it (+10 a pop); each ripple spends 30. snapping live bubbles by hand is always free.' },
   { glyph: '🔥', name: 'lust', desc: 'the orange bar. climbs while you perform and pays up to x2 at full burn; an unblocked trigger cools it to zero.' },
   { glyph: '💨', name: 'never let treats rot', desc: 'a treat that fades unpopped HALVES your streak. chase the rewards too, not just the threats.' },
   { glyph: '🐇', name: 'catch the white rabbit', desc: 'everything slows to a crawl for six seconds. with the Spanker worn, you smack it into the field instead.' },
-  { glyph: '❄', name: 'the pickups', desc: 'freeze ❄ holds the whole field 3.5 seconds (still poppable, and snaps cost no focus) · the lucky bubble 🍀 pays gold on the spot.' },
+  { glyph: '❄', name: 'the pickups', desc: 'freeze ❄ holds the whole field 3.5 seconds (fuses pause, everything still poppable) · the lucky bubble 🍀 pays gold on the spot.' },
   { glyph: '⏸', name: 'your panic key', desc: 'one press holds the field mid-fall; pressing it again wakes you up to the recap.' },
 ];
 
@@ -448,7 +448,7 @@ export const HOWTO_CARDS = [
   { title: 'What you do', image: 'howto_2', lines: [
     { emoji: '🫧', color: '255,159,208', lead: 'Left-click', body: 'pop the treats — the soft pink bubbles. One click builds your streak and refills your focus.' },
     { emoji: '◉', color: '255,210,40', lead: 'Press & hold', body: 'the glowing bubbles are live. Keep pressing until they snap — let one finish and it goes off (a flash or video fires).' },
-    { emoji: '🌊', color: '122,224,255', lead: 'Right-click', body: 'the ripple. A wave near the bubbles pops treats, snaps live ones and scatters rabbits. Strong, but slow to gather again.' },
+    { emoji: '🌊', color: '122,224,255', lead: 'Right-click', body: 'the ripple. A wave near the bubbles pops treats, snaps live ones and scatters rabbits. Costs 30 focus a cast — no cooldown, so chain them while the bar holds.' },
     { emoji: '🐇', color: '255,105,180', lead: 'The rabbits', body: 'chase them for little bonuses. Everything else down there is yours to find out.' },
   ] },
   { title: 'The two bars', image: 'howto_3', lines: [

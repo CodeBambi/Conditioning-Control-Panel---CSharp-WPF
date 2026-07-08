@@ -66,6 +66,7 @@ const SLOWMO_FACTOR = 0.12;
 const SLOWMO_DURATION_SEC = 6.0;
 const RIPPLE_TRIGGER_GRACE_PX = 80;
 const RIPPLE_WAVE_GAP_MS = 1000;
+const RIPPLE_FOCUS_COST = 30;   // BASE ripple focus cost (no cooldown; chain while focus lasts). Skipping Stone lowers the per-run cost -> st.rippleFocusCost. FOCUS_MAX 100 = 3 casts at base, more when cheaper.
 const COMBO_BIG_THRESHOLDS = [25, 50, 100];
 const TICK = 0.25;                  // the C# RunTick period
 const PLAIN_BUBBLE_CHANCE = 0.30;   // share of ordinary spawns that are plain, effect-free soap bubbles
@@ -157,6 +158,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       endingSoonFired: false, finalLoopAnnounced: false, finalLandingDone: false,
       lastComboBig: 0, lastActFired: 1,
 
+      // ---- branching paths (junctions.js) ----
+      nextJunctionSec: 45,     // first fork ~45s into the descent
+      branchTint: null,        // { color, strength } - a chosen branch's decaying tube blush
+      brands: {},              // tally of which trigger-word branches you keep taking
+
       // ---- resistance / streak protection ----
       shields: lo.shields ?? 0,
       startShields: lo.shields ?? 0,
@@ -187,9 +193,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       shieldRegenPops: lo.shieldRegenPops ?? 0,
       showPopScores: !!lo.showPopScores,
       showWaveTimer: !!lo.showWaveTimer,
-      rippleRechargeSec: lo.rippleRechargeSec ?? 15,
+      rippleRechargeSec: lo.rippleRechargeSec ?? 15,   // vestigial (no cooldown) - reused below as the focus-cost dial
       rippleRadiusPx: lo.rippleRadiusPx ?? 260,
       rippleLifeMs: lo.rippleLifeMs ?? 520,
+      // Skipping Stone makes the ripple CHEAPER: the boon's old recharge number
+      // (15 bare-handed -> 13/11/9/8 by level, sent from C#) now sets the focus
+      // cost per cast at rechargeSec*2 -> 30 -> 26/22/18/16. Clamped to base/floor.
+      rippleFocusCost: clamp(Math.round((lo.rippleRechargeSec ?? 15) * 2), 15, RIPPLE_FOCUS_COST),
       rabbitRateMult: lo.rabbitRateMult ?? 1.0,
       intrusiveThoughtsSec: lo.intrusiveThoughtsSec ?? 0,
       slowMoBonusSec: lo.slowMoBonusSec ?? 0,
@@ -392,9 +402,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // ============================ field callbacks ============================
 
   function canChannel(spec) {
-    if (!st) return false;
-    const cost = spec.boundPairId != null ? DEFUSE_COST_BOUND : DEFUSE_COST;
-    return st.freezeRemainingSec > 0 || st.focus >= cost;
+    // Defusing a live bubble is always allowed now - the hold is free. Focus is
+    // spent only by the ripple; low focus never leaves you unable to snap a live one.
+    return !!st;
   }
 
   function onChannelBroken(spec, reason) {
@@ -623,13 +633,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   function onDefused(spec, fuseSecLeft, viaChannel, x, y) {
     if (!st || state !== 'running' || heldNow()) return;
-    // The player's hand pays for its defuses; toys, chains and zones never do.
-    // A channel completed during a freeze is free (that's the freeze's reward).
+    // Defusing is free now - the hold costs no focus (focus fuels only the ripple).
     if (viaChannel) {
-      if (st.freezeRemainingSec <= 0) {
-        const cost = spec.boundPairId != null ? DEFUSE_COST_BOUND : DEFUSE_COST;
-        st.focus = clamp(st.focus - cost, 0, FOCUS_MAX);
-      }
       if (setFlag('seenBarkDefuseFirst')) bark('defuse-first');
     }
     if (st.defuseInvulnMs > 0) st.invulnUntil = performance.now() + st.defuseInvulnMs;
@@ -843,6 +848,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     sfx('freeze_catch', 0.55);
     hudUi.announce('❄ FREEZE', 'freeze', 1800, { artKey: 'freeze' });
     pulse('150,210,255', 0.30);
+    // The world stops with the field: ask the host to pause any native voiceline +
+    // covering video for the freeze window (resumed on endFreeze). Idempotent host-side.
+    try { bridge.send({ type: 'freeze-state', on: true }); } catch (e) {}
   }
 
   function endFreeze() {
@@ -852,6 +860,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (state === 'running') ctx.director.setTimeFactor(st.slowMoRemainingSec > 0 ? 0.35 : baseTime());
     if (freezeCueOn) sfx('freeze_shatter', 0.5);
     freezeCueOn = false;
+    try { bridge.send({ type: 'freeze-state', on: false }); } catch (e) {}
   }
 
   // ============================ toys (active skills) ============================
@@ -1204,11 +1213,102 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     applyWeather(rollWeather(weatherNow.id));
   }
 
+  // ---- Branching paths ("The Junction", engine/junctions.js) ----------------
+  // Mid-chamber forks: two branded mouths drift out of the fog; the player leans
+  // (fallNav laneVote) and the camera glides through one while the other seals.
+  // A passive faller is taken by the coaxed mouth. Deeper chambers pre-seal the
+  // resisting mouth more often (the "closing path" - the choice quietly leaves).
+  const JUNCTION_LEAD = 120;          // world units of telegraph before commit
+  const JUNCTION_EVERY = 55;          // rough seconds between forks (+ jitter)
+  const PRESEAL_BY_WAVE = [0, 0, 0.12, 0.4, 0.62]; // indexed by waveIndex (I..IV)
+  // Each fork pairs a coaxed (deeper/surrender) mouth with a resisting one.
+  const JUNCTION_PAIRS = [
+    { coax: { word: 'DEEPER', color: '#c86bff', brand: 'deep' }, resist: { word: 'SLOW',  color: '#7fe0ff', brand: 'slow' } },
+    { coax: { word: 'SINK',   color: '#ff6bd0', brand: 'sink' }, resist: { word: 'FLOAT', color: '#9effc0', brand: 'float' } },
+    { coax: { word: 'OBEY',   color: '#ff5c8a', brand: 'obey' }, resist: { word: 'THINK', color: '#bfc6ff', brand: 'think' } },
+    { coax: { word: 'MELT',   color: '#ff9a5c', brand: 'melt' }, resist: { word: 'HOLD',  color: '#a0ffe6', brand: 'hold' } },
+    { coax: { word: 'GOOD',   color: '#ff6bb0', brand: 'good' }, resist: { word: 'WAIT',  color: '#8fbaff', brand: 'wait' } },
+  ];
+
+  function maybeScheduleJunction() {
+    if (!cfg || !cfg.regionMode || cfg.scriptedFirstRun) return;
+    if (!ctx || !ctx.junctions || ctx.junctions.isBusy()) return;
+    if (heldNow() || covered) return;
+    if (ctx.spawner && ctx.spawner.spotlightActive()) return;
+    if (st.elapsedSec < st.nextJunctionSec) return;
+    // don't collide with the region-boundary boon draft: skip near the edges
+    const waveLen = st.runDurationSec / st.waveCount;
+    const intoRegion = st.elapsedSec - (st.waveIndex - 1) * waveLen;
+    if (intoRegion < 12 || waveLen - intoRegion < 24) { st.nextJunctionSec = st.elapsedSec + 6; return; }
+    st.nextJunctionSec = st.elapsedSec + JUNCTION_EVERY + Math.random() * 16;
+    fireJunction();
+  }
+
+  function fireJunction() {
+    const pair = JUNCTION_PAIRS[Math.floor(Math.random() * JUNCTION_PAIRS.length)];
+    const coaxSide = Math.random() < 0.5 ? 'left' : 'right';
+    const left = coaxSide === 'left' ? pair.coax : pair.resist;
+    const right = coaxSide === 'left' ? pair.resist : pair.coax;
+    const presealChance = PRESEAL_BY_WAVE[Math.min(4, st.waveIndex)] || 0;
+    let preseal = null;
+    if (Math.random() < presealChance) preseal = (coaxSide === 'left') ? 'right' : 'left'; // seal the resisting mouth
+    ctx.junctions.schedule({
+      atDepth: ctx.nav.getDepth() + JUNCTION_LEAD,
+      left, right, coaxSide, preseal,
+    });
+    bark('junction-near');
+  }
+
+  /** The fork committed (engine reports the winning branch). Tally the brand,
+   * blush the tube in the branch's color for a stretch, and mark the choice. */
+  function onJunctionChosen(choice) {
+    if (!st || !choice || !choice.branch) return;
+    const b = choice.branch;
+    st.brands[b.brand] = (st.brands[b.brand] || 0) + 1;
+    st.branchTint = { color: b.color, strength: 0.6 };
+    ctx.fx.pulseFlash(0.5);
+    ctx.nav.fovKick(2.4);
+    sfx(choice.forced ? 'sink' : 'boon_pick', 0.4);
+    hudUi.announce(b.word, 'depth', 1500, {
+      subText: choice.forced ? 'the only way left' : (choice.passive ? 'you let it choose' : ''),
+    });
+    hudUi.toast(choice.forced ? `↳ ${b.word} — the only way left`
+      : choice.passive ? `↳ ${b.word} — you let it choose` : `↳ ${b.word}`);
+    bark(choice.forced ? 'junction-forced' : 'junction-chosen', { word: b.word, brand: b.brand });
+    markDiscovered('junction:' + b.brand);
+  }
+
+  /** The faller has reached the fork mouth: crawl the tunnel so the branch can be
+   * read + chosen (the engine owns the 5s linger + auto-commit), then hand the
+   * speed back on commit/abort. Respects a concurrent freeze/slow-mo on release. */
+  function onJunctionLinger(on) {
+    if (!ctx || !ctx.director) return;
+    if (on) {
+      ctx.director.setTimeFactor(0.16);   // near-hover at the Y so both mouths can be read
+      try { if (hudUi) hudUi.toast('lean to choose ...'); } catch (e) { /* ignore */ }
+    } else if (state === 'running') {
+      // restore whatever the world time-factor should currently be
+      ctx.director.setTimeFactor(
+        st.freezeRemainingSec > 0 ? 0.06
+          : st.slowMoRemainingSec > 0 ? 0.35
+            : baseTime()
+      );
+    }
+  }
+
   /** Per-RunTick: Lust Bleed (the tube blushes with the LUST bar; a held full
    * bar forces pink fog) + Heat Warp (the combo streak re-patterns the rings
    * and burns the speed-lines hotter). Engine-side easing smooths all of it. */
   function ambientTick() {
-    ctx.fx.setTint('#ff4fae', st.heat * 0.6);
+    // A committed branch tints the tube in its color for ~18s (decaying), floored
+    // by / blended with the LUST blush so the fork's identity lingers on the wall.
+    const bt = st.branchTint;
+    if (bt && bt.strength > 0.01) {
+      bt.strength *= 0.965; // ~18s to fade at the 0.25s RunTick
+      ctx.fx.setTint(bt.color, Math.max(st.heat * 0.6, bt.strength));
+    } else {
+      ctx.fx.setTint('#ff4fae', st.heat * 0.6);
+    }
     if (!lustFullSeen && st.heat >= 0.98) { lustFullSeen = true; syncZone(); }
     else if (lustFullSeen && st.heat < 0.5) { lustFullSeen = false; syncZone(); }
     // 25-streak = fully warped (engine defaults: 125 rings / 45 turns)
@@ -1230,6 +1330,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     st.elapsedSec += dt;
     st.heat = Math.max(0, st.heat - 0.0015);
     ambientTick();
+    maybeScheduleJunction();
 
     // W4 pickups: condensation beads on the wall (rank Tempted+); once per
     // loop the white rabbit may dash by (Rabbit's Foot raises his odds).
@@ -1302,28 +1403,24 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // Empty-field rescue: a fast clear shouldn't leave dead air.
     if (st.freezeRemainingSec <= 0 && field.count() === 0) spawnWait = 0;
 
-    if (st.rippleCooldown > 0) {
-      st.rippleCooldown -= dt;
-      if (st.rippleCooldown <= 0) { st.rippleCooldown = 0; sfx('toy_ready', 0.3); }
-    }
-    // The Ripple's once-ever teach line: offered on the ready charge until the first cast.
-    if (!flags.seenRippleTeach && !rippleTeachOffered && st.elapsedSec > 6 && st.rippleCooldown <= 0) {
+    // The Ripple's once-ever teach line: offered once you can afford a cast, until the first one.
+    if (!flags.seenRippleTeach && !rippleTeachOffered && st.elapsedSec > 6 && st.focus >= st.rippleFocusCost) {
       rippleTeachOffered = true;
       hudUi.announce('🌊 THE RIPPLE — right-click near the bubbles', 'powerup', 3200, { artKey: 'ripple_teach' });
     }
-    // Once-ever gentle teach the first time focus dips under a snap's price.
-    if (!flags.seenFocusTip && st.focus < DEFUSE_COST) {
+    // Once-ever gentle teach the first time focus dips under a ripple's price.
+    if (!flags.seenFocusTip && st.focus < st.rippleFocusCost) {
       setFlag('seenFocusTip');
-      hudUi.announce('focus runs low. treats refill it. snaps spend it.', 'depth', 3200);
+      hudUi.announce('focus fuels the ripple. treats refill it. snapping lives is free.', 'depth', 3200);
     }
     // Once-ever heat teach: name the burn the first time it visibly climbs.
     if (!flags.seenHeatTeach && st.heat >= 0.15) {
       setFlag('seenHeatTeach');
       hudUi.announce('lust climbs while you perform. it pays up to x2', 'depth', 3200);
     }
-    // rh_focus_low: a dry spell with live threats hanging -> one bark per run.
+    // rh_focus_low: a sustained dry spell with no ripple in the tank -> one bark per run.
     if (!focusLowBarked) {
-      if (st.focus < DEFUSE_COST && field.minFuseSec() != null) {
+      if (st.focus < st.rippleFocusCost) {
         focusLowAccum += dt;
         if (focusLowAccum >= FOCUS_LOW_BARK_SEC) { focusLowBarked = true; bark('focus-low'); }
       } else focusLowAccum = 0;
@@ -1413,7 +1510,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     score: st.score, totalMult: totalMult(), combo: st.combo,
     focus: st.focus, elapsedSec: st.elapsedSec, runDurationSec: st.runDurationSec,
     waveIndex: st.waveIndex, waveCount: st.waveCount,
-    rippleCooldown: st.rippleCooldown,
+    rippleCost: st.rippleFocusCost,
     shields: st.shields, startingShields: st.startingShields,
     collarSaves: st.collarSaves,
     heat: st.heat,
@@ -1839,13 +1936,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (st.freezeRemainingSec > 0) return;   // a frozen field is already a free-pop window
     const x = e.clientX, y = e.clientY;
     if (!field.nearAny(x, y, st.rippleRadiusPx + RIPPLE_TRIGGER_GRACE_PX)) return;
-    if (st.rippleCooldown > 0) {
-      sfx('toy_denied', 0.45);
-      field.floatText(`gathering… ${Math.ceil(st.rippleCooldown)}s`, x, y - 30, 'cf-pop--focus');
+    if (st.focus < st.rippleFocusCost) {
+      sfx('focus_empty', 0.5);
+      hudUi.flashFocus();
+      field.floatText(`need ${st.rippleFocusCost} focus`, x, y - 30, 'cf-pop--focus');
       return;
     }
-    st.rippleCooldown = st.rippleRechargeSec;
-    if (setFlag('seenRippleTeach')) hudUi.announce('🌊 that\'s the ripple. it gathers back on its own', 'powerup', 2400);
+    st.focus = clamp(st.focus - st.rippleFocusCost, 0, FOCUS_MAX);
+    if (setFlag('seenRippleTeach')) hudUi.announce('🌊 that\'s the ripple. it spends focus — pop treats to refill', 'powerup', 2400);
     const skips = st.maxedBoons.has('skipping_stone');
     castRippleWave(x, y);
     if (skips) {
@@ -2148,6 +2246,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       onToyUse: (id) => { const t = toys.find((x) => x.id === id); if (t) useToy(t); },
       onWeatherClick: () => rerollWeather(),
     });
+      // Branching paths: the engine reports which mouth the faller took, and asks
+      // us to crawl the tunnel while it hovers at the fork so the choice can breathe.
+      if (ctx.junctions) {
+        ctx.junctions.onCommit = onJunctionChosen;
+        ctx.junctions.onLinger = onJunctionLinger;
+      }
       overlays = createOverlays(ctx.hud);
       vn = createVnPortrait(ctx.hud, {
         getModId: () => activeModId,

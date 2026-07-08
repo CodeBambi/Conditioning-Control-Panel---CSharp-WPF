@@ -11,6 +11,7 @@
  * ==========================================================================*/
 
 const DEFUSE_COST = 30; // FOCUS bar low-threshold (ChaosTuning.DEFUSE_COST)
+const RIPPLE_COST = 30; // the ripple spends this much focus per cast (chaosRun RIPPLE_FOCUS_COST)
 const ART = 'https://ccp.art/';
 
 export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
@@ -211,8 +212,10 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
       heatFill.style.width = `${Math.round(st.heat * 100)}%`;
       heatTint.style.opacity = st.heat > 0.3 ? String(((st.heat - 0.3) / 0.7) * 0.30) : '0';
       clockRow.textContent = `${fmtClock(st.elapsedSec)} / ${fmtClock(st.runDurationSec)} · LOOP ${st.waveIndex}/${st.waveCount}`;
-      rippleRow.textContent = st.rippleCooldown <= 0 ? '🌊 ripple READY · right-click' : `🌊 ${Math.ceil(st.rippleCooldown)}s`;
-      rippleRow.classList.toggle('is-ready', st.rippleCooldown <= 0);
+      const rippleCost = st.rippleCost || RIPPLE_COST;
+      const rippleReady = st.focus >= rippleCost;
+      rippleRow.textContent = rippleReady ? '🌊 ripple READY · right-click' : `🌊 ${rippleCost} focus`;
+      rippleRow.classList.toggle('is-ready', rippleReady);
     },
     /** Wave 2: show/hide the weather chip. wx = { glyph, name, desc,
      * forecast: 'glyph NAME' | null, rerollable: bool } or null to hide. */

@@ -39,6 +39,7 @@ internal static class DtrhHostService
     private static bool _testMode;
     private static bool _videoHooked;
     private static bool _vnSpeaking;   // a VN tutorial beat owns the mix: skip native stingers/barks
+    private static bool _worldFrozen;  // an in-world Freeze bubble is holding native video + voice
 
     public static bool IsActive => _host != null;
 
@@ -56,6 +57,7 @@ internal static class DtrhHostService
         {
             _exiting = false;
             _runActive = false;
+            _worldFrozen = false;
             _testMode = testMode;
             _meta = new DtrhMetaBridge(testMode, msg => _host?.Post(msg));
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
@@ -192,6 +194,9 @@ internal static class DtrhHostService
             }
             case "fire-payload":
                 FirePayload(o);
+                break;
+            case "freeze-state":
+                ApplyWorldFreeze((bool?)o["on"] ?? false);
                 break;
             case "meta-command":
                 _meta?.Handle(o);
@@ -471,6 +476,37 @@ internal static class DtrhHostService
         catch (Exception ex) { App.Logger?.Debug("DtrhHost.RouteBark: {E}", ex.Message); }
     }
 
+    // ============================ world freeze ============================
+
+    /// <summary>freeze-state {on} - the in-world Freeze bubble stops the field, so stop the
+    /// REAL world with it: pause any covering video and the currently-playing spoken voiceline
+    /// for the freeze window, resuming both when it lifts. Idempotent (dedup on _worldFrozen);
+    /// also force-resumed on run end / teardown so a clip can never wedge paused.</summary>
+    private static void ApplyWorldFreeze(bool on)
+    {
+        if (on == _worldFrozen) return;
+        _worldFrozen = on;
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null) return;
+        disp.BeginInvoke(() =>
+        {
+            try
+            {
+                if (on)
+                {
+                    App.Video?.PausePrimary();
+                    App.AvatarWindow?.PauseSpokenAudio();
+                }
+                else
+                {
+                    App.Video?.PlayPrimary();
+                    App.AvatarWindow?.ResumeSpokenAudio();
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost.ApplyWorldFreeze: {E}", ex.Message); }
+        });
+    }
+
     // ============================ native payload state ============================
 
     /// <summary>A mandatory video fully covers the game - tell the page (pause/duck) and
@@ -631,6 +667,8 @@ internal static class DtrhHostService
         CancelExitWatchdog();
         StopHeartbeatWatch();
         HookVideoEvents(false);
+        // Never leave a voiceline wedged paused if the window dies mid-freeze.
+        if (_worldFrozen) { _worldFrozen = false; try { App.AvatarWindow?.ResumeSpokenAudio(); } catch { } }
         try { _meta?.FlushSave(); } catch { }
         if (_runActive && !_testMode)
         {

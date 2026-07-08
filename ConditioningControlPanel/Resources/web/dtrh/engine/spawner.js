@@ -57,8 +57,8 @@ const AUDIO_NEAR = 14, AUDIO_FAR = 26; // cubed proximity fade; ceiling is the l
 const VIDEO_PLAY_FAR = 34;   // beyond this, park the video (release the decoder)
 const VIDEO_PLAY_NEAR = 30;  // resume inside this (hysteresis so it can't flap)
 
-const VEIL_GAP_MIN = 90, VEIL_GAP_MAX = 140; // tunnel-spanning translucent veils
-const MAX_LIVE_VEILS = 2;
+const VEIL_GAP_MIN = 180, VEIL_GAP_MAX = 280; // tunnel-spanning translucent veils - kept sparse (you pass THROUGH them to fire an effect)
+const MAX_LIVE_VEILS = 1;
 
 // Decoded-ahead pool: the next few user images/gifs are fully decoded BEFORE
 // their card exists, pumped continuously in the background. Without it, cards
@@ -1466,8 +1466,10 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     // too, so the conveyor restarts with content in hand)
     pumpPrefetch();
     // spawn ahead (budgeted; async media acquires land within a frame or two).
-    // The whole conveyor holds its breath while a spotlight plays.
-    if (!spotlight) {
+    // The whole conveyor holds its breath while a spotlight plays - or while
+    // parked (ESC pause, hidden tab, or the Warren hub idling in game mode: no
+    // new video cards behind the menu).
+    if (!spotlight && !paused) {
       let budget = SPAWN_PER_FRAME;
       while (budget > 0 && nextCardDepth < camDepth + SPAWN_AHEAD &&
              live.length + spawning < MAX_LIVE_CARDS) {
@@ -1632,7 +1634,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
       // never-loaded video used to freeze the WHOLE conveyor: an invisible
       // stage whose clipLeft never counts down (it only ticks while playing)
       // suppresses every card spawn until the run ends.
-      if (rec.spotlightable && autoSpotlightOk && rec.group.visible && !spotlight && camDepth >= rec.depth - 16 && camDepth >= nextSpotlightOkAt) {
+      if (rec.spotlightable && autoSpotlightOk && !paused && rec.group.visible && !spotlight && camDepth >= rec.depth - 16 && camDepth >= nextSpotlightOkAt) {
         promoteSpotlight(rec, camera);
         continue;
       }
@@ -1647,7 +1649,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
           const duck = spotlight ? 0.15 : 1; // the stage owns the mix
           setVideoVolume(rec, isMuted() ? 0 : rec.vol * getLevel('video') * duck);
         }
-        if (kickVideos) manageVideo(rec, dist, t);
+        if (kickVideos && !paused) manageVideo(rec, dist, t);
       }
     }
 

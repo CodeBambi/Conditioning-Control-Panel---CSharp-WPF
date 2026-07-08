@@ -348,20 +348,53 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     detonate(b);
   }
 
-  // Sparkle burst (ported from the WPF BubbleService pop): shards fly outward
-  // from the pop point with a little gravity, shrinking + fading (CSS-driven).
-  function sparkleBurst(x, y, kind) {
+  // Pop explosion (mirrors the WPF ChaosSkiaFxOverlay.EmitBurst): a bright
+  // white-hot flash core + a crisp expanding shockwave ring + radiating shards,
+  // all tinted to the payload colour and additively blended (mix-blend-mode:
+  // screen ~ Skia's Plus) so overlapping pops read hot. CSS-driven; the shards
+  // keep the little-gravity settle of the original WPF sparkle burst.
+  function burstColor(kind) {
+    if (kind === 'live') return '#8affaa';   // a live SNAP: cool green release (WPF SnapColor)
+    if (kind === 'golden' || kind === 'droplet' || kind === 'heart' || kind === 'prism') return '#ffe27a';
+    return '#ff9fd6';
+  }
+  function sparkleBurst(x, y, kind, size = 110) {
     const rich = kind === 'golden' || kind === 'droplet' || kind === 'heart' || kind === 'prism';
+    const snap = kind === 'live';
+    const col = burstColor(kind);
+    // A live snap is a bigger release; rich treats a touch bigger than a plain pop.
+    const scale = snap ? 1.3 : rich ? 1.2 : 1.0;
+
+    // Bright central flash - the "release" (fat, brief, white-hot core).
+    const flash = document.createElement('div');
+    flash.className = 'cf-burst';
+    flash.style.left = `${x}px`;
+    flash.style.top = `${y}px`;
+    flash.style.color = col;
+    flash.style.setProperty('--bsize', `${Math.round(size * 0.95 * scale)}px`);
+    fxLayer.appendChild(flash);
+    flash.addEventListener('animationend', () => flash.remove(), { once: true });
+
+    // Crisp expanding shockwave ring.
+    const ring = document.createElement('div');
+    ring.className = 'cf-shock';
+    ring.style.left = `${x}px`;
+    ring.style.top = `${y}px`;
+    ring.style.color = col;
+    ring.style.setProperty('--rsize', `${Math.round(size * 1.9 * scale)}px`);
+    fxLayer.appendChild(ring);
+    ring.addEventListener('animationend', () => ring.remove(), { once: true });
+
+    // Radiating shards (the original sparkle burst), now tinted to the payload.
     const n = rich ? 13 : 9;
-    const color = rich ? '#ffe27a' : '#ffd9ef';
     for (let i = 0; i < n; i++) {
       const p = document.createElement('div');
       p.className = 'cf-spark';
       const ang = (Math.PI * 2 * i) / n + rand(-0.35, 0.35);
-      const dist = rand(40, 108) * (rich ? 1.25 : 1);
+      const dist = rand(40, 108) * scale;
       p.style.left = `${x}px`;
       p.style.top = `${y}px`;
-      p.style.color = color;
+      p.style.color = col;
       p.style.setProperty('--dx', `${Math.cos(ang) * dist}px`);
       p.style.setProperty('--dy', `${Math.sin(ang) * dist}px`);
       p.style.setProperty('--fall', `${rand(28, 64)}px`);
@@ -388,7 +421,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     unlink(b);
     b.wrap.classList.add('is-pop');
     b.wrap.style.pointerEvents = 'none';
-    sparkleBurst(b.x, b.y, b.spec.kind);
+    sparkleBurst(b.x, b.y, b.spec.kind, b.size);
     playPop(sfxVol);
     b.wrap.addEventListener('animationend', () => b.wrap.remove(), { once: true });
     window.setTimeout(() => b.wrap.remove(), 600); // belt-and-suspenders
