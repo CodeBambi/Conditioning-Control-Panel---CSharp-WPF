@@ -485,6 +485,7 @@ export function metaView(meta) {
   const pending = asSet(m.pendingReveals);
   const seenReveals = asSet(m.seenReveals);
   const firstTimes = asSet(m.firstTimesAwarded);
+  const dials = asSet(m.purchasedDials);
   const runs = m.runsCompleted | 0;
   const rankIndex = RANKS.forRuns(runs);
   const MAX_POCKETS = 2;
@@ -518,6 +519,12 @@ export function metaView(meta) {
       return !!u && !purchased.has(id) && v.sparks >= u.cost;
     },
     isPurchaseRankLocked: (id) => id === 'extreme_tier' && !purchased.has(id) && rankIndex < RANK.Devoted,
+
+    // ---- options-panel "Dials" unlocks (UNLOCK_LADDER; see engine/settings.js) --
+    purchasedDials: [...dials],
+    hasDial: (id) => dials.has(id),
+    canAffordDial: (id, cost) => !dials.has(id) && v.sparks >= (cost | 0),
+    isDialRankLocked: (rankReq) => rankReq != null && rankIndex < rankReq,
 
     boonLevel: (id) => levels[id] | 0,
     isBoonUnlocked: (id) => (levels[id] | 0) >= 1,

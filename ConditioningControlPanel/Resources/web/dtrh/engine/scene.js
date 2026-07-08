@@ -17,6 +17,7 @@ import { disposeTextures } from '../shared/assets.js';
 import { buildLoopLayout, createTunnel, FOG_COLOR, FOG_DENSITY } from './tunnel.js';
 import { createFallNav } from './fallNav.js';
 import { createSpawner } from './spawner.js';
+import { createWallPosters } from './wallPosters.js';
 import { createBubbles } from './bubbles.js';
 import { createDirector } from './director.js';
 import { createFx } from './fx.js';
@@ -133,6 +134,8 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   let drone = null, droneVol = DRONE_FLOOR, droneStarted = false;
   let droneCtx = null, droneGain = null, droneWatch = 0;
   let droneKickTries = 0, droneKickRest = 0, droneDuck = 1, voiceDuck = 1;
+  let voiceSilenced = false;   // VN tutorial: hard-mute the drift voice while the persona speaks
+  let runActive = false;       // game mode: the drift whisper + special tube moods live ONLY inside a descent (the Warren hub idles calm + quiet)
   try { drone = new Audio(DRONE_URL); drone.loop = true; drone.preload = 'auto'; drone.volume = DRONE_FLOOR; } catch (e) { drone = null; }
   function setDroneVolume(v) {
     if (droneGain) droneGain.gain.value = v;
@@ -193,6 +196,10 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     },
   });
 
+  // Four Chambers wall dressing: region-scaled posters plastered on the tube
+  // wall (idle at density 0 until the game's run brain sets a region).
+  const wall = createWallPosters({ scene, layout, media, renderer, camera });
+
   // the continuous voice layer; depth is sampled at each pick for weighting
   const drift = createDriftChain({ getDepth: () => nav.getDepth() });
 
@@ -246,9 +253,10 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     nav.setPaused(v);
     bubbles.setFrozen(v);
     spawner.setPaused(v);
+    wall.setPaused(v);
     if (game) game.setPaused(v);
     hudBits.showPause(v);
-    if (v) drift.stop(); else drift.start();
+    if (v) drift.stop(); else if (!game || runActive) drift.start();
     if (drone && droneStarted) {
       if (v) { try { drone.pause(); } catch (e) { /* ignore */ } }
       else if (!isMuted() && !document.hidden) {
@@ -331,12 +339,24 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   // opening plunge meets finished cards instead of hollow frames.
   await spawner.warm();
 
-  // begin the voice chain (autoplay is unlocked - we got here via the begin click)
-  drift.start();
+  // begin the voice chain (autoplay is unlocked - we got here via the begin click).
+  // Game mode boots into the Warren hub, NOT a descent: the drift whisper stays
+  // silent (and the tube stays calm) until setRunActive(true) opens the hole.
+  if (!game) drift.start();
+
+  // Game mode: the run brain owns when the whisper + special tube moods turn on.
+  // (Called from chaosRun on GO / recap; forces the hub into a calm, quiet idle.)
+  function setRunActive(on) {
+    runActive = !!on;
+    try { fx.forceZone(runActive ? null : 'calm'); } catch (e) { /* ignore */ }
+    if (runActive) { if (!voiceSilenced) drift.start(); }
+    else drift.stop();
+  }
 
   // ---- DtRH game mode ----------------------------------------------------------
   if (game) {
     hud.classList.add('sf-game-mode');   // hides the Fall's own score readout (CSS)
+    setRunActive(false);                 // hub idles: no pink-fog/storm moods, no whisper
     startDrone();                        // no gesture gate in the hosted WebView2
     // The Fall's own bubble field stands down completely - setIntensity(0)
     // still targets COUNT_MIN, so pause it (clears + stops spawning). Veil
@@ -344,7 +364,11 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     bubbles.setPaused(true);
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
-    game.attach({ nav, fx, director, hud, canvas, spawner, media, flashBurst: (n) => bubbles.flashBurst(n), openOptions: () => panel.toggle() });
+    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, flashBurst: (n) => bubbles.flashBurst(n), openOptions: () => panel.toggle(),
+      // Reveal earned option-panel dials from the meta snapshot (purchased "Dials").
+      syncOptionUnlocks: (ids) => panel.setUnlocks(ids),
+      silenceVoice: (on) => { voiceSilenced = !!on; },
+      setRunActive });
   }
 
   // ---- loop --------------------------------------------------------------------
@@ -402,6 +426,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     const depth = nav.getDepth();
     const speed = nav.getSpeed();
     spawner.update(camera, depth, dt, clock.elapsedTime);
+    wall.update(camera, depth, dt); // region-scaled wall posters (idle at density 0)
 
     // Sidechain the mix: a spotlight video owns the whole foreground (the
     // voice whispers down under it, the bed drops hardest); otherwise a
@@ -409,13 +434,13 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     // eases over ~0.5s so nothing pumps.
     const spotOn = spawner.spotlightActive();
     voiceDuck += ((spotOn ? VOICE_DUCK_SPOT : 1) - voiceDuck) * Math.min(1, dt * 2.5);
-    drift.setDuck(voiceDuck);
+    drift.setDuck(voiceSilenced ? 0 : voiceDuck);
 
     // drone: volume follows the fall speed; 1Hz watchdog vs. autoplay killings
     if (drone) {
       const raw = DRONE_FLOOR + (DRONE_MAX - DRONE_FLOOR) * Math.min(1, speed / SPEED_REF);
       droneVol += (raw - droneVol) * Math.min(1, dt * 2);
-      const duckTarget = spotOn ? DRONE_DUCK_SPOT : (drift.isSpeaking() ? DRONE_DUCK : 1);
+      const duckTarget = spotOn ? DRONE_DUCK_SPOT : (!voiceSilenced && drift.isSpeaking() ? DRONE_DUCK : 1);
       droneDuck += (duckTarget - droneDuck) * Math.min(1, dt * 2.5);
       // the 'music' slider is a 0..1 multiplier over the speed-following bed
       setDroneVolume(isMuted() ? 0 : Math.max(0, Math.min(1, droneVol)) * getLevel('music') * droneDuck);
@@ -506,6 +531,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     fx.dispose();
     nav.dispose();
     spawner.dispose();
+    wall.dispose();
     bubbles.dispose();
     drift.dispose();
     offDroneMute();

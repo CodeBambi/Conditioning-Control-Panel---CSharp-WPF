@@ -19,13 +19,14 @@ const KEY = 'sf-settings';
 const DEFAULTS = {
   bubbleSize: 1,       // 0.5 - 2.5 bubble diameter multiplier
   bubbleDensity: 1,    // 0 - 1.25 population multiplier (0 = bubbles off entirely)
-  gifSize: 1,          // 0.5 - 1.6 flash clip (gif) size multiplier
+  gifSize: 0.5,        // 0.5 - 1.6 flash clip (gif) size multiplier (default halved - flashes ran too large)
   gifOpacity: 0.95,    // 0.1 - 1  flash clip opacity
   flashCount: 3,       // 1 - 10 flash gifs a flash spawns at once
   hydraGen: 2,         // 0 - 5 generations a popped clip splits into
   spiralOpacity: 0.3,  // 0 - 1 spiral overlay + spiral veils
   pinkOpacity: 0.25,   // 0 - 1 pink washes + pink veils
   glitch: 1,           // 0 - 1 glitch bubble visual intensity (0 = score only)
+  glitchSeconds: 2.5,  // 1 - 8 s the glitch shudder holds ('glitch timer' dial)
   spotSeconds: 30,     // 10 - 30 s a video holds the spotlight
   wordsOff: [],        // disabled subliminal words (built-in or custom)
   customWords: [],     // user-added subliminal words
@@ -97,6 +98,47 @@ export function onSettings(cb) {
   subs.add(cb);
   return () => subs.delete(cb);
 }
+
+// ---- progression: earning the dials -----------------------------------------
+// The options panel starts almost fully locked - the fall decides. Each rung is
+// bought on the Warren "Dials" board with Sparkle Points; the purchase is an
+// authoritative C# meta-command (`purchase-dial`) that records the rung id into
+// ChaosMetaState.PurchasedDials, so the unlocked set arrives via the meta
+// snapshot - NOT this localStorage store (which the user could trivially edit).
+// This table is the SHARED source of truth for both the panel (gating) and the
+// Warren shop (rows/prices); consumers get the unlocked-id set injected.
+//
+// Ordered gentle -> feral: the two runaway dials (hydra generations, glitch
+// timer) also require meta-rank Entranced (index 3). `keys` are the setting
+// sliders a rung governs; `feature` marks the non-slider sections. STARTER dials
+// (bubbles, reset, diagnostics) are never in the ladder - always available.
+// Prices are a first pass, to be calibrated against the spark economy.
+export const UNLOCK_LADDER = [
+  { id: 'bubbleSize',  label: 'bubble size',           keys: ['bubbleSize'],             price: 40 },
+  { id: 'words',       label: 'subliminal words',      feature: 'words',                 price: 60 },
+  { id: 'spiral',      label: 'spiral opacity',        keys: ['spiralOpacity'],          price: 80 },
+  { id: 'pink',        label: 'pink filter opacity',   keys: ['pinkOpacity'],            price: 100 },
+  { id: 'gifLook',     label: 'gif look',              keys: ['gifSize', 'gifOpacity'],  price: 130 },
+  { id: 'flash',       label: 'flash gifs',            keys: ['flashCount'],             price: 160 },
+  { id: 'custom',      label: 'make it yours',         feature: 'custom',                price: 200 },
+  { id: 'spotlight',   label: 'video spotlight time',  keys: ['spotSeconds'],            price: 240 },
+  { id: 'glitch',      label: 'glitch intensity',      keys: ['glitch'],                 price: 300 },
+  { id: 'hydra',       label: 'gif hydra generations', keys: ['hydraGen'],     price: 400, rankReq: 3 },
+  { id: 'glitchTimer', label: 'glitch timer',          keys: ['glitchSeconds'], price: 520, rankReq: 3 },
+];
+
+// Meta-rank names (mirrors Services/Chaos/ChaosRanks.cs) for lock-hint text.
+export const RANK_NAMES = ['Curious', 'Tempted', 'Slipping', 'Entranced', 'Devoted', 'Claimed'];
+
+// setting-key / feature -> owning rung id (starter controls map to nothing).
+const RUNG_BY_KEY = {};
+const RUNG_BY_FEATURE = {};
+for (const r of UNLOCK_LADDER) {
+  if (r.keys) for (const k of r.keys) RUNG_BY_KEY[k] = r.id;
+  if (r.feature) RUNG_BY_FEATURE[r.feature] = r.id;
+}
+export const rungForKey = (key) => RUNG_BY_KEY[key] || null;
+export const rungForFeature = (feature) => RUNG_BY_FEATURE[feature] || null;
 
 // Restore a set of numeric options to their shipped defaults. Used by the gear
 // panel's "reset to default" button; scoped to the keys the caller passes (the

@@ -24,6 +24,7 @@ import {
 } from './catalog.js';
 import { BOONS } from './boons.js';
 import * as reveals from './reveals.js';
+import { UNLOCK_LADDER, RANK_NAMES } from '../engine/settings.js';
 
 const ART = 'https://ccp.art/';
 const KEY_OPTS = ['Q', 'E', 'R', 'F', 'Z', 'X', 'C', 'V', '1', '2', '3', '4'];
@@ -371,6 +372,7 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
   const TAB_HINTS = {
     loadout: 'click a tile to slip it into a pocket. + takes you where it’s sold.',
     enhance: 'spend your drops. deepen what you like.',
+    dials: 'the fall came pre-set. buy the console back with drops - one dial at a time.',
     run: 'dress up the fall, then FALL IN.',
     improve: 'the bench, the mantras, how far you’ve fallen.',
     diary: 'everything you’ve met down there. click an entry to read it.',
@@ -388,6 +390,15 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
         if (!v.isBoonRankLocked(b.id) && !v.isAccessoryScriptLocked(b.id)
           && !v.isLessonBlocked(b.id, setup.allowCurses) && v.canAffordUnlock(b.id)) n++;
       } else if (lvl < b.levelValues.length && !v.isCapstoneRankLocked(b.id) && v.canAffordDeepen(b.id)) n++;
+    }
+    return n;
+  }
+
+  function countAffordableDials(v) {
+    let n = 0;
+    for (const r of UNLOCK_LADDER) {
+      if (v.hasDial(r.id) || v.isDialRankLocked(r.rankReq)) continue;
+      if (v.canAffordDial(r.id, r.price)) n++;
     }
     return n;
   }
@@ -434,6 +445,7 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     };
     mkTab('loadout', 'BAG');
     mkTab('enhance', 'the Toybox', { badge: countAffordableToybox(v) });
+    mkTab('dials', 'THE DIALS', { badge: countAffordableDials(v) });
     mkTab('run', 'THE DESCENT');
     const lgOpen = reveals.isUnlocked('tab_looking_glass', v);
     const lgTab = mkTab('improve', lgOpen ? 'the Looking Glass' : '??? 🔒', {
@@ -454,6 +466,7 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     const panel = el('wr-panel', wrap);
     if (tab === 'loadout') renderBag(panel, v);
     else if (tab === 'enhance') renderToybox(panel, v);
+    else if (tab === 'dials') renderDials(panel, v);
     else if (tab === 'run') renderDescent(panel, v);
     else if (tab === 'improve') renderLookingGlass(panel, v);
     else if (tab === 'diary') renderDiary(panel, v);
@@ -832,6 +845,39 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
       for (const id of ['toy_pocket_1', 'accessory_pocket_1']) {
         const item = BENCH_ITEMS.find((i) => i.id === id);
         if (item) card.appendChild(benchRow(item, v));
+      }
+    }
+  }
+
+  // ============================ THE DIALS (options-panel unlocks) ============================
+  // The gear-panel controls start locked; each rung here flips one open for
+  // drops (authoritative `purchase-dial` meta-command). The two feral dials
+  // (hydra generations, glitch timer) also need a meta-rank. Mirrors the Toybox
+  // row idiom; the panel reveals the control the moment the snapshot re-broadcasts.
+  function renderDials(panel, v) {
+    const card = el('wr-card', panel);
+    el('wr-card-h', card, 'THE DIALS · take the console back');
+    for (const r of UNLOCK_LADDER) {
+      const owned = v.hasDial(r.id);
+      const rankLocked = !owned && v.isDialRankLocked(r.rankReq);
+      const row = el('wr-row' + (owned ? ' is-owned' : ''), card);
+      row.style.setProperty('--acc', '232,67,147');
+      const mid = el('wr-row-mid', row);
+      el('wr-row-name', mid, r.label);
+      if (r.rankReq != null) el('wr-row-flavor', mid, `a deep dial · opens at ${RANK_NAMES[r.rankReq]}`);
+      const right = el('wr-row-right', row);
+      if (owned) {
+        el('wr-row-state', right, 'YOURS ✓');
+      } else if (rankLocked) {
+        const held = buyBtn(`🔒 ${RANK_NAMES[r.rankReq]}`, false, () => {});
+        tip(held, `${RANKS.lockedTip}\n${RANKS.specifics(r.rankReq, v.runs)}`);
+        right.appendChild(held);
+      } else {
+        right.appendChild(buyBtn(`unlock  ${GLYPHS.drops}${r.price}`, v.canAffordDial(r.id, r.price), () => {
+          cmd('purchase-dial', { id: r.id, cost: r.price });
+          bark('dial-unlocked', { id: r.id });
+          window.setTimeout(() => runRevealFlashes('purchase'), 250);
+        }));
       }
     }
   }

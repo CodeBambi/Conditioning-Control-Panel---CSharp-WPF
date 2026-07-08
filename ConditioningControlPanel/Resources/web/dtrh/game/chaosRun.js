@@ -29,7 +29,7 @@
  * NOT ported - Story mode is disabled in the WPF game too (placeholder only).
  * ==========================================================================*/
 
-import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildHeart, buildGoldDroplet,
+import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, buildHeart, buildGoldDroplet,
   buildHeavy, buildPrism, buildBrittle, buildEcho, buildEchoChild, buildTease,
   buildBoundPair, buildChaperonePair, buildDarter, rollDarter,
   FREEZE_MAX_ON_SCREEN, SIDE_DRIFT_CHANCE, SIDE_DRIFT_GRACE_SPAWNS, MOTION,
@@ -49,6 +49,7 @@ import { createWarren } from './warren.js';
 import { createLessonTracker } from './lessons.js';
 import { createHappyPath } from './happyPath.js';
 import { createVnPortrait } from './vnPortrait.js';
+import { setDucked } from '../shared/audioMute.js';
 import { lessonById } from './catalog.js';
 
 // ---- economy tuning (ChaosTuning.cs / ChaosModeService.cs) ----
@@ -67,6 +68,7 @@ const RIPPLE_TRIGGER_GRACE_PX = 80;
 const RIPPLE_WAVE_GAP_MS = 1000;
 const COMBO_BIG_THRESHOLDS = [25, 50, 100];
 const TICK = 0.25;                  // the C# RunTick period
+const PLAIN_BUBBLE_CHANCE = 0.30;   // share of ordinary spawns that are plain, effect-free soap bubbles
 const VIDEO_HEAVY_SEC = 62;         // in-world video card sits in front of the POV up to 60s + slack
 const CASCADE_BASE_SEC = 6;         // GifCascadePayload.DURATION_SEC (+5 ride-out)
 const RANK = { Curious: 0, Tempted: 1, Slipping: 2, Entranced: 3, Devoted: 4, Claimed: 5 };
@@ -136,9 +138,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let warren = null, lessons = null, happy = null, vn = null;
   let state = 'boot';  // boot -> warren -> requesting -> countdown -> running -> drafting -> recap
   let paused = false, hidden = false, covered = false, drafting = false;
+  let vnHold = false;               // the persona is mid-line: freeze the field (no spawn, no drift, no pop) until she's done
   let shortNextCountdown = false;   // "fall again" re-enters with the lone GO flash
   let scriptedDraftActive = false;  // run 1's mid-run draft: no wave commit
-  const heldNow = () => paused || hidden || covered || drafting;
+  const heldNow = () => paused || hidden || covered || drafting || vnHold;
 
   // ---- run state (ChaosRunState + the boon knobs) ----
   let st = null;
@@ -1143,6 +1146,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (!weatherSeen.has(w.id)) { weatherSeen.add(w.id); hudUi.toast(`${w.glyph} ${w.desc}`); }
       markDiscovered('weather:' + w.id);
     }
+    // Four Chambers wall dressing: the chamber sets how plastered the tube wall
+    // is (I bare -> IV almost wall-to-wall). Scales with the descent.
+    if (ctx && ctx.wall) ctx.wall.setRegion(regionIndex);
   }
 
   // ---- Wave 2: tunnel pickups (spawner.spawnPickup - clickable 3D objects) ----
@@ -1719,13 +1725,20 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   function spawnTick() {
+    // Held (paused / covered / drafting / the persona mid-line): hold the field and
+    // retry shortly. Guards the same-frame case where the empty-field rescue zeroes
+    // spawnWait in tick() just as a VN beat sets the hold.
+    if (heldNow()) { spawnWait = 0.3; return; }
     if (st.freezeRemainingSec > 0) { spawnWait = 0.3; return; }   // frozen: hold the field
     const i = intensity();
     const effIntensity = clamp(i + (cfg.difficultyMult - 1.0) * 0.15, 0, 1);
     // Four Chambers: the region's `density` scales how full the field runs -
     // sparse in the Long Fall, an overgrown tangle in the Mad Garden.
     const prof = cfg.regionMode ? profileForWave(st.waveIndex) : PROFILE_NEUTRAL;
-    const maxConcurrent = Math.max(3, Math.round((6 + i * 10) * Math.sqrt(cfg.difficultyMult) * prof.density));
+    // Population ceiling: kept low through most of the fall and only climbing
+    // hard as intensity peaks in the deep chambers, so the run RAMPS instead of
+    // firing a full field the whole way down. (Was 6 + i*10.)
+    const maxConcurrent = Math.max(3, Math.round((4 + i * 8) * Math.sqrt(cfg.difficultyMult) * prof.density));
 
     const room = field.count() < maxConcurrent;
     // The scripted first descent: the behavioral menagerie stands down entirely
@@ -1747,10 +1760,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       }
 
       let spec;
+      const sideDrift = st.ordinarySpawns < SIDE_DRIFT_GRACE_SPAWNS ? 0 : SIDE_DRIFT_CHANCE;
       if (st.heavyDropEvery > 0 && ++st.spawnSerial % st.heavyDropEvery === 0) {
         spec = buildHeavy(effIntensity, cfg.effectIntensity, st.bubbleScale);
+      } else if (Math.random() < PLAIN_BUBBLE_CHANCE) {
+        // ~30% of ordinary spawns are plain soap bubbles - no effect. They dilute
+        // the effect pool so the fall is a gradual build, not wall-to-wall stimulus.
+        spec = buildPlain(effIntensity, { sizeScale: st.bubbleScale, sideDriftChance: sideDrift });
       } else {
-        const sideDrift = st.ordinarySpawns < SIDE_DRIFT_GRACE_SPAWNS ? 0 : SIDE_DRIFT_CHANCE;
         const opts = {
           enabledIds: enabled,
           fuseTimeMult: st.fuseTimeMult,
@@ -1803,8 +1820,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       }
     }
 
-    // Refill cadence: 1000ms early -> 320ms late (/difficulty), floor 280ms.
-    let interval = (1000 - i * 680) / cfg.difficultyMult;
+    // Refill cadence: 1250ms early -> 360ms late (/difficulty), floor 280ms. The
+    // slower open keeps the shallow chambers calm; it tightens as intensity peaks.
+    let interval = (1250 - i * 890) / cfg.difficultyMult;
     interval /= cfg.spawnRateMult;
     interval /= Math.sqrt(prof.density);   // dense chambers refill a touch faster
     interval /= wxSpawnRate();   // Overstim weather: bubbles come faster
@@ -2008,7 +2026,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       onTick: (b) => sfx(b === 'GO!' ? 'sink' : 'countdown_tick', 0.5),
       onGo: () => {
         state = 'running';
+        // Descent is live: wake the drift whisper + special tube moods (the hub kept them idle).
+        try { ctx.setRunActive && ctx.setRunActive(true); } catch (e) { /* ignore */ }
         bridge.send({ type: 'run-started', difficulty: cfg.difficulty, mode: 'dtrh-web' });
+        // Fresh descent: reset the wall to this chamber's plaster level (Region I
+        // is bare; a non-region run stays bare at 0).
+        if (ctx && ctx.wall) ctx.wall.setRegion(cfg.regionMode ? st.waveIndex : 0);
         // First descent since the verb changed: one quiet line so the hold isn't
         // a mystery. The scripted run 1 lands this at its lone-threat beat instead.
         if (!flags.seenDefuseTutorial && !cfg.scriptedFirstRun) {
@@ -2027,6 +2050,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function endRun(ranFullCourse) {
     if (state !== 'running') return;
     state = 'recap';
+    // Surfaced: hush the drift whisper + calm the tube for the recap/hub idle.
+    try { ctx.setRunActive && ctx.setRunActive(false); } catch (e) { /* ignore */ }
+    if (ctx && ctx.wall) ctx.wall.setRegion(0); // bare the wall for the recap/warren
     if (st.freezeRemainingSec > 0) endFreeze();
     if (st.slowMoRemainingSec > 0) endSlowMo();
     field.setVibe(false);
@@ -2087,6 +2113,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.setPicks([]);
     field.clearAll();
     clearAmbient();
+    try { ctx.setRunActive && ctx.setRunActive(false); } catch (e) { /* ignore */ }
     if (ctx.spawner) ctx.spawner.setAutoSpotlight(true);
     ctx.director.setTimeFactor(0.3);
     state = 'warren';
@@ -2122,7 +2149,22 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       onWeatherClick: () => rerollWeather(),
     });
       overlays = createOverlays(ctx.hud);
-      vn = createVnPortrait(ctx.hud, { getModId: () => activeModId });
+      vn = createVnPortrait(ctx.hud, {
+        getModId: () => activeModId,
+        // VN beats stop the tunnel dead while she talks, then hand it back.
+        haltTunnel: (on) => { try { ctx.director.setTimeFactor(on ? 0 : baseTime()); } catch (e) { /* ignore */ } },
+        // Silence everything but the ambient bed while she talks: web pops/chimes
+        // (audioBus duck) + the drift voice (scene) + native stingers/barks (host skips on vn-speaking).
+        duckAudio: (on) => {
+          try { setDucked(!!on); } catch (e) {}
+          try { ctx.silenceVoice && ctx.silenceVoice(!!on); } catch (e) {}
+          try { bridge.send({ type: 'vn-speaking', on: !!on }); } catch (e) {}
+          // Freeze the whole field while she talks: no new bubbles, existing ones
+          // hold, popping is locked. On the run's opening beat this also means the
+          // bubbles don't start until she's finished - the run "really" begins then.
+          vnHold = !!on; syncHeld();
+        },
+      });
       try { vn.prime(); } catch (e) { /* manifest warms lazily on first beat */ }
       lessons = createLessonTracker({ bridge, onComplete: onLessonComplete, onFirstTime: onFirstTimeAwarded });
       lessons.setCoveredProbe(() => covered || heavyActive());
@@ -2147,6 +2189,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       ctx.director.setTimeFactor(0.3);   // the tunnel idles at a crawl under the hub
       state = 'warren';
       warren.show('menu');
+      // Seed the options panel from whatever snapshot already landed pre-attach.
+      try { ctx.syncOptionUnlocks && ctx.syncOptionUnlocks((hostState && hostState.meta && hostState.meta.purchasedDials) || []); } catch (e) { /* ignore */ }
     },
 
     /** The host answered request-run: deal the fresh config and drop in. */
@@ -2163,8 +2207,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       beginCountdown(short);
     },
 
-    /** A fresh meta snapshot landed - the Warren re-renders its shelves. */
-    onMeta() { if (warren) warren.refresh(); },
+    /** A fresh meta snapshot landed - the Warren re-renders its shelves, and the
+     *  options panel reveals any newly-purchased dials. */
+    onMeta() {
+      if (warren) warren.refresh();
+      try { ctx && ctx.syncOptionUnlocks && ctx.syncOptionUnlocks((hostState && hostState.meta && hostState.meta.purchasedDials) || []); } catch (e) { /* panel not up */ }
+    },
 
     /** Esc routing: the Warren owns the key while it's up (scene skips its pause). */
     onEsc() {

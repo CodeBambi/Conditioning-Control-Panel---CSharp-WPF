@@ -561,8 +561,10 @@ html, body {
   animation: rhBubbleRise var(--rise, 12s) linear forwards;
 }
 @keyframes rhBubbleRise {
-  from { transform: translateY(12vh); }
-  to { transform: translateY(-122vh); }
+  /* Rises, then dissolves in place near the top instead of shooting off-screen. */
+  0% { transform: translateY(12vh); opacity: 1; }
+  50% { transform: translateY(-40vh); opacity: 1; }
+  100% { transform: translateY(-74vh); opacity: 0; }
 }
 .rh-bubble {
   pointer-events: auto;
@@ -586,11 +588,28 @@ html, body {
 .rh-bubble--prism { background-image: url('/dtrh/assets/bubbles/effects/prism.png'); filter: drop-shadow(0 0 10px rgba(255, 200, 245, 0.8)); }
 .rh-bubble--pinkfilter { background-image: url('/dtrh/assets/bubbles/effects/pinkfilter.png'); filter: drop-shadow(0 0 10px rgba(var(--fx-accent-rgb), 0.85)); }
 .rh-bubble--lucky { background-image: url('/dtrh/assets/bubbles/effects/golden.png'); filter: drop-shadow(0 0 13px rgba(255, 210, 90, 0.95)); }
-.rh-bubble.is-pop { animation: rhBubblePop 0.3s ease-out forwards; }
+.rh-bubble.is-pop { animation: rhBubblePop 0.39s ease-out forwards; }
 @keyframes rhBubblePop {
   0% { transform: scale(1); opacity: 1; }
   40% { transform: scale(1.55); opacity: 0.85; }
   100% { transform: scale(2); opacity: 0; }
+}
+
+/* Pop sparkle burst (ported from the WPF BubbleService pop): shards fly outward
+ * with a touch of gravity, shrinking + fading. Position via --dx/--dy/--fall. */
+.rh-spark {
+  position: absolute;
+  width: 9px; height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+  animation: rhSpark 0.62s ease-out forwards;
+}
+@keyframes rhSpark {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), calc(var(--dy) + var(--fall))) scale(0.2); opacity: 0; }
 }
 
 /* Full-screen, non-interactive layer for pop FX. */
@@ -837,6 +856,27 @@ img.rh-fx-spiralspin {
   cursor: pointer;
 }
 
+/* Locked dials: greyed, un-draggable, the readout replaced by a padlock hint. */
+.sf-row.is-locked { opacity: 0.5; }
+.sf-row.is-locked .sf-row-label span:last-child {
+  color: #b9a0c6; font-weight: 600; letter-spacing: 0.02em;
+}
+.sf-row.is-locked input[type="range"] {
+  cursor: not-allowed; accent-color: #6a5878; filter: grayscale(1);
+}
+/* Section padlock stub (word picker / custom media while their rung is unbought). */
+.sf-lockstub {
+  margin: 1.2rem 0 0.4rem;
+  font-family: var(--rh-font);
+  font-size: 0.78rem;
+  color: #9a84a8;
+  background: rgba(20, 12, 28, 0.55);
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  cursor: help;
+}
+
 .sf-words-head { margin-top: 1.2rem; }
 .sf-chips {
   display: flex;
@@ -1058,9 +1098,26 @@ img.rh-fx-spiralspin {
   30% { filter: brightness(2.2) saturate(2); transform: scale(1.2); }
   100% { opacity: 0; filter: brightness(2.6); transform: scale(1.7); }
 }
-.cf-bubble.is-fade { animation: cfFadeOut 0.7s ease-out forwards; }
+.cf-bubble.is-fade { animation: cfFadeOut 0.91s ease-out forwards; }
 @keyframes cfFadeOut {
   100% { opacity: 0; transform: scale(0.85); }
+}
+
+/* Pop sparkle burst (ported from the WPF BubbleService pop): shards fly outward
+ * with a touch of gravity, shrinking + fading. Position via --dx/--dy/--fall. */
+.cf-spark {
+  position: absolute;
+  width: 9px; height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+  animation: cfSpark 0.62s ease-out forwards;
+}
+@keyframes cfSpark {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), calc(var(--dy) + var(--fall))) scale(0.2); opacity: 0; }
 }
 
 /* ---- float text ---- */

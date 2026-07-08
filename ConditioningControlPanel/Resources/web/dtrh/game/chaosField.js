@@ -348,12 +348,47 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     detonate(b);
   }
 
+  // Sparkle burst (ported from the WPF BubbleService pop): shards fly outward
+  // from the pop point with a little gravity, shrinking + fading (CSS-driven).
+  function sparkleBurst(x, y, kind) {
+    const rich = kind === 'golden' || kind === 'droplet' || kind === 'heart' || kind === 'prism';
+    const n = rich ? 13 : 9;
+    const color = rich ? '#ffe27a' : '#ffd9ef';
+    for (let i = 0; i < n; i++) {
+      const p = document.createElement('div');
+      p.className = 'cf-spark';
+      const ang = (Math.PI * 2 * i) / n + rand(-0.35, 0.35);
+      const dist = rand(40, 108) * (rich ? 1.25 : 1);
+      p.style.left = `${x}px`;
+      p.style.top = `${y}px`;
+      p.style.color = color;
+      p.style.setProperty('--dx', `${Math.cos(ang) * dist}px`);
+      p.style.setProperty('--dy', `${Math.sin(ang) * dist}px`);
+      p.style.setProperty('--fall', `${rand(28, 64)}px`);
+      fxLayer.appendChild(p);
+      p.addEventListener('animationend', () => p.remove(), { once: true });
+    }
+  }
+
+  /** Drift-off: fade out in place instead of blinking off the screen edge. No
+   * callbacks (the bubble simply left the field), matched to cfFadeOut's length. */
+  function fadeOut(b) {
+    if (b.state !== 'live') return;
+    b.state = 'popped';
+    live.delete(b);
+    unlink(b);
+    b.wrap.classList.add('is-fade');
+    b.wrap.style.pointerEvents = 'none';
+    window.setTimeout(() => b.wrap.remove(), 1040);
+  }
+
   function popVisual(b, sfxVol = 0.25) {
     b.state = 'popped';
     live.delete(b);
     unlink(b);
     b.wrap.classList.add('is-pop');
     b.wrap.style.pointerEvents = 'none';
+    sparkleBurst(b.x, b.y, b.spec.kind);
     playPop(sfxVol);
     b.wrap.addEventListener('animationend', () => b.wrap.remove(), { once: true });
     window.setTimeout(() => b.wrap.remove(), 600); // belt-and-suspenders
@@ -431,7 +466,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     unlink(b);
     b.wrap.classList.add('is-fade');
     b.wrap.style.pointerEvents = 'none';
-    window.setTimeout(() => b.wrap.remove(), 800);
+    window.setTimeout(() => b.wrap.remove(), 1040);
     try { onTreatExpired(b.spec); } catch (err) { /* ignore */ }
   }
 
@@ -713,7 +748,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
           if (b.spec.kind === 'tease') {
             b.state = 'popped'; live.delete(b);
             b.wrap.classList.add('is-fade');
-            window.setTimeout(() => b.wrap.remove(), 800);
+            window.setTimeout(() => b.wrap.remove(), 1040);
             floatText('DENIED', b.x, b.y - b.size * 0.2, 'cf-pop--gold');
             try { onTeaseDenied(b.spec); } catch (err) { /* ignore */ }
           } else expire(b);
@@ -789,7 +824,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         b.x = b.baseX + Math.sin(b.swayT) * b.swayAmp;
         if ((m === MOTION.FloatUp && b.y < -b.size) || (m === MOTION.RainDown && b.y > h + b.size)) {
           if (k === 'treat' || k === 'golden') expire(b);
-          else vanish(b);   // freeze/live/heart/droplet/brittle drift off harmlessly
+          else fadeOut(b);   // freeze/live/heart/droplet/brittle dissolve, never blink off
           continue;
         }
       } else if (m === MOTION.SideDrift) {
@@ -798,7 +833,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         b.y = b.baseY + Math.sin(b.swayT) * (b.swayAmp * 1.2);
         if (b.x < -b.size || b.x > w + b.size) {
           if (k === 'treat' || k === 'golden') expire(b);
-          else vanish(b);
+          else fadeOut(b);
           continue;
         }
       } else { // RoamBounce

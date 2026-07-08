@@ -432,9 +432,32 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
   }
 
   // ---- pop -----------------------------------------------------------------
+  // Sparkle burst (ported from the WPF BubbleService pop): shards fly outward
+  // from the pop point with a little gravity, shrinking + fading (CSS-driven).
+  function sparkleBurst(x, y, kind) {
+    const lucky = kind === 'lucky';
+    const n = lucky ? 14 : 9;
+    const color = lucky ? '#ffe27a' : '#ffd9ef';
+    for (let i = 0; i < n; i++) {
+      const p = document.createElement('div');
+      p.className = 'rh-spark';
+      const ang = (Math.PI * 2 * i) / n + rand(-0.35, 0.35);
+      const dist = rand(42, 112) * (lucky ? 1.3 : 1);
+      p.style.left = `${x}px`;
+      p.style.top = `${y}px`;
+      p.style.color = color;
+      p.style.setProperty('--dx', `${Math.cos(ang) * dist}px`);
+      p.style.setProperty('--dy', `${Math.sin(ang) * dist}px`);
+      p.style.setProperty('--fall', `${rand(28, 66)}px`);
+      fx.appendChild(p);
+      p.addEventListener('animationend', () => p.remove(), { once: true });
+    }
+  }
+
   function pop(rec, x, y) {
     rec.popped = true;
     rec.bubble.classList.add('is-pop');
+    sparkleBurst(x, y, rec.kind);
 
     const t = now();
     combo = (t - lastPop <= COMBO_WINDOW) ? combo + 1 : 1;
