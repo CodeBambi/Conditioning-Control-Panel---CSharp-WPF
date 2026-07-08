@@ -39,6 +39,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildHeart, build
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById } from './boons.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
+import { REGIONS, REGION_COUNT, regionForWave } from './regions.js';
 import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
 import { createPayloadFx } from './payloadFx.js';
@@ -71,8 +72,11 @@ const RANK = { Curious: 0, Tempted: 1, Slipping: 2, Entranced: 3, Devoted: 4, Cl
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));   // inclusive
+const smoothstep = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); }; // ease-in-out 0..1
 
-export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
+export function createChaosGame({ bridge, hostState, runSetup, requestExit, modId }) {
+  // Active persona (Bambi/Sissy/Circe) - drives the VN portrait set + tint.
+  const activeModId = modId || 'builtin-sissyhypno';
   // rc/lo/cfg/flags are dealt PER RUN by applyRunConfig (the host's run-config
   // answer to request-run) - the Warren can change the loadout between runs.
   let rc = {}, lo = {}, cfg = null, flags = {};
@@ -83,8 +87,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     cfg = {
       difficulty: rc.difficulty || 'Easy',
       difficultyMult: rc.difficultyMult ?? 1.0,
-      durationSec: clamp(rc.durationSec ?? 180, 60, 900),
-      waveCount: clamp(rc.waveCount ?? 5, 1, 12),
+      durationSec: clamp(rc.durationSec ?? 960, 60, 1200),
+      waveCount: clamp(rc.waveCount ?? REGION_COUNT, 1, 12),
+      // The Four Chambers: a fixed I->IV descent, each ending in a boon Landing.
+      // On by default; a legacy non-4-loop run (or an explicit opt-out) falls
+      // back to the old random-weather / monotonic-intensity path.
+      regionMode: rc.regionMode !== false && (rc.waveCount ?? REGION_COUNT) === REGION_COUNT,
       effectIntensity: clamp(rc.effectIntensity ?? 0.85, 0.2, 1.5),
       enabledVariants: rc.enabledVariants || null,
       motionOverride: rc.motionOverride && MOTION[rc.motionOverride] ? rc.motionOverride : null,
@@ -142,7 +150,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       rippleCooldown: 0,
       freezeRemainingSec: 0, slowMoRemainingSec: 0,
       ordinarySpawns: 0, spawnSerial: 0, waveDetonations: 0, runDetonations: 0,
-      endingSoonFired: false, finalLoopAnnounced: false,
+      endingSoonFired: false, finalLoopAnnounced: false, finalLandingDone: false,
       lastComboBig: 0, lastActFired: 1,
 
       // ---- resistance / streak protection ----
@@ -227,11 +235,29 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   /** All LUST gains flow through here so Her Perfume can sweeten them. */
   const addHeat = (x) => { st.heat = Math.min(1.0, st.heat + x * wxHeatGain()); };
   const basePoints = (strength) => 40 + strength * 1.6;
-  const intensity = () => clamp(st ? st.elapsedSec / st.runDurationSec : 0, 0, 1);
+  /** The descent's "how deep are we" signal (0..1), read by spawn cadence, the
+   * bubble build strength, the director mood and the FX ceilings.
+   *
+   * Legacy: a flat monotonic ramp across the whole run.
+   * Four Chambers: a per-region SAWTOOTH. Within a chamber the value eases from
+   * its band.start up to band.peak; the next chamber resets to its (higher)
+   * start, so the descent BREATHES instead of sliding. Bands rise region to
+   * region, so the overall trend still climbs and the Court (IV) is deepest. */
+  const intensity = () => {
+    if (!st) return 0;
+    if (!cfg || !cfg.regionMode || st.waveCount <= 1) {
+      return clamp(st.elapsedSec / st.runDurationSec, 0, 1);
+    }
+    const regionLen = st.runDurationSec / st.waveCount;
+    const region = regionForWave(st.waveIndex);
+    const local = smoothstep((st.elapsedSec - (st.waveIndex - 1) * regionLen) / regionLen);
+    return clamp(region.band.start + (region.band.peak - region.band.start) * local, 0, 1);
+  };
   const chanceFlip = () => st.chanceDoubleOdds > 0 ? (Math.random() < st.chanceDoubleOdds ? 2.0 : 0.5) : 1.0;
   const pendulumFactor = () => (pendulumSlowActive && st.pendulumPayMult > 1) ? st.pendulumPayMult : 1.0;
   const goldScaled = (g) => st.relapseActive ? g * 2 : g;
 
+  let finalLandingActive = false;     // the Court's terminal boon draft is up
   let tickAcc = 0, spawnWait = 0.8;   // the WPF spawn timer opens at 800ms
   let lastNoFocusAnnounce = -10;
   let focusLowAccum = 0, focusLowBarked = false;
@@ -1093,9 +1119,29 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       applyWeather(WEATHER_BY_ID.static, !weatherNow || weatherNow.id !== 'static');
       return;
     }
+    // Four Chambers: the sky is DETERMINISTIC - it's whatever this region wears.
+    if (cfg.regionMode) { applyRegionSky(st.waveIndex); return; }
     const w = weatherNext || rollWeather(weatherNow && weatherNow.id);
     weatherNext = rollWeather(w.id);
     applyWeather(w);
+  }
+
+  /** Dress the tube in region N's fixed sky (null = Region I's open fall) and
+   * pre-set the Mood Ring forecast to the NEXT chamber. Storm Chaser still wins
+   * (handled by advanceWeather before this is reached). */
+  function applyRegionSky(regionIndex) {
+    const region = regionForWave(regionIndex);
+    const w = region.weatherId ? WEATHER_BY_ID[region.weatherId] : null;
+    const nextRegion = regionIndex < REGION_COUNT ? regionForWave(regionIndex + 1) : null;
+    weatherNext = nextRegion && nextRegion.weatherId ? WEATHER_BY_ID[nextRegion.weatherId] : null;
+    // The chamber banner (announceRegion) is the headline, so the sky lands
+    // quietly here - just its persistent HUD chip + a first-sight desc toast,
+    // never its own competing banner.
+    applyWeather(w, false);
+    if (w) {
+      if (!weatherSeen.has(w.id)) { weatherSeen.add(w.id); hudUi.toast(`${w.glyph} ${w.desc}`); }
+      markDiscovered('weather:' + w.id);
+    }
   }
 
   // ---- Wave 2: tunnel pickups (spawner.spawnPickup - clickable 3D objects) ----
@@ -1328,6 +1374,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
         hudUi.announce('☠ RELAPSE — one more loop', 'bad', 2600, { artKey: 'relapse', subText: 'one more loop' });
         sfx('sin_accept', 0.6);
         bark('wave-escalated', { wave: st.waveIndex + 1 });
+      } else if (cfg.regionMode && cfg.boonDraftEnabled && !st.finalLandingDone) {
+        // Four Chambers: the Court (IV) earns its Landing too. The run's other
+        // three drafts fire as you LEAVE a chamber; region IV has no chamber
+        // after it, so its boon is a terminal draft, then the descent ends.
+        st.finalLandingDone = true;
+        beginFinalLanding();
+        return;
       } else { endRun(true); return; }
     }
 
@@ -1392,6 +1445,39 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       rerollsLeft: st.rerollsLeft,
       // The SKIP affordance is reveal-gated until run 3 (draft_skip): before
       // that the table auto-PICKS on timeout ("she chooses for you").
+      allowSkip: cfg.runsCompleted >= 2,
+      onPick: (boon, auto) => { if (auto) bark('draft-autopick'); resolveDraft(boon, auto); },
+      onSkip: (auto) => { if (auto) bark('draft-autopick'); resolveDraft(null, auto); },
+      onReroll: () => {
+        if (st.rerollsLeft <= 0) return null;
+        st.rerollsLeft--;
+        hudUi.toast('🎲 tempted fate again');
+        return { options: dealOptions(), rerollsLeft: st.rerollsLeft };
+      },
+    });
+  }
+
+  /** The Court's Landing: region IV's terminal boon draft. Same table as a wave
+   * transition, but it resolves into endRun (no next chamber to advance to).
+   * The loop tip is left to endRun so it isn't double-paid. */
+  function beginFinalLanding() {
+    lessons.onLoopCompleted();
+    bark('wave-escalated', { wave: st.waveIndex });
+    finalLandingActive = true;
+    drafting = true;
+    state = 'drafting';
+    syncHeld();
+    field.clearAll(true);
+    sfx('wave_clear', 0.6);
+    pulse('150,200,255', 0.30);
+    bark('wave-cleared', { wave: st.waveIndex });
+
+    const options = dealOptions();
+    overlays.showDraft({
+      wave: st.waveIndex,
+      options,
+      autoResumeSec: cfg.draftAutoResumeSec,
+      rerollsLeft: st.rerollsLeft,
       allowSkip: cfg.runsCompleted >= 2,
       onPick: (boon, auto) => { if (auto) bark('draft-autopick'); resolveDraft(boon, auto); },
       onSkip: (auto) => { if (auto) bark('draft-autopick'); resolveDraft(null, auto); },
@@ -1471,6 +1557,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       bark('boon-skipped', { shields: st.shields });
     }
     happy.onDraftResolved(hpIo);   // the run-4 first-sin beat is spent either way
+    // The Court's Landing resolves into the end of the descent, not a next loop.
+    if (finalLandingActive) {
+      finalLandingActive = false;
+      drafting = false;
+      endRun(true);
+      return;
+    }
     const scripted = scriptedDraftActive;
     scriptedDraftActive = false;
     if (!scripted) commitWave(pendingWave);   // run 1's mid-run table advances no loop
@@ -1486,6 +1579,16 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
 
   function commitWave(newWave) {
     st.waveIndex = newWave;
+    // Four Chambers: every loop IS a new chamber, so announce it by name.
+    if (cfg.regionMode) {
+      st.actIndex = Math.min(newWave, REGION_COUNT);
+      st.lastActFired = st.actIndex;
+      announceRegion(newWave);
+      advanceWeather();
+      ctx.fx.pulseFlash(0.6);
+      pulse('150,200,255', 0.30);
+      return;
+    }
     st.actIndex = 1 + Math.floor((newWave - 1) / 5);
     if (st.actIndex > st.lastActFired) {
       st.lastActFired = st.actIndex;
@@ -1504,6 +1607,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     ctx.fx.pulseFlash(0.6);
     pulse('150,200,255', 0.30);
     if (!cfg.boonDraftEnabled) announceFinalLoopIfEntering();
+  }
+
+  /** Four Chambers: the arrival banner for a region (I..IV) - name + descent
+   * beat. Fired on every chamber entry (and Region I at the opening GO). */
+  function announceRegion(regionIndex) {
+    const r = regionForWave(regionIndex);
+    sfx('depth_change', 0.55);
+    hudUi.announce(`CHAMBER ${r.numeral} · ${r.name}`, 'depth', 2600, { artKey: 'depth', subText: r.subtitle });
+    bark('act-changed', { act: Math.min(regionIndex, REGION_COUNT), wave: regionIndex });
   }
 
   function announceFinalLoopIfEntering() {
@@ -1833,8 +1945,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     estimCharges = 0; rabbitCallPending = 0; rabbitStormSec = 0; thoughtAccum = 0;
     heartbeatCd = 0;
     scriptedDraftActive = false;
+    finalLandingActive = false;
     clearAmbient();
-    weatherNext = rollWeather(null);   // loop 1 flies under an open sky; the weather lands with loop 2
+    // Four Chambers: Region I is the open fall; the Mood Ring forecasts the next
+    // chamber's fixed sky. Legacy runs roll a random loop-2 sky instead.
+    weatherNext = cfg.regionMode
+      ? (regionForWave(2).weatherId ? WEATHER_BY_ID[regionForWave(2).weatherId] : null)
+      : rollWeather(null);   // loop 1 flies under an open sky; the weather lands with loop 2
     // Tunnel videos hold in view (the Fall's spotlight) during a descent too, so
     // a passing video lingers for its 'video spotlight time' (S.spotSeconds)
     // instead of bolting through. (Was off mid-run; restored by request.)
@@ -1882,6 +1999,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
         if (!flags.seenDefuseTutorial && !cfg.scriptedFirstRun) {
           setFlag('seenDefuseTutorial');
           hudUi.announce('press and HOLD a live one to snap it', 'freeze', 3200);
+        } else if (cfg.regionMode && !cfg.scriptedFirstRun) {
+          // Chamber I's arrival banner (skipped on the first-ever descent, which
+          // owns the GO beat with the defuse tutorial, and on the scripted run).
+          announceRegion(1);
         }
         if (st.welcomeShower) spawnWelcomeShower();
       },

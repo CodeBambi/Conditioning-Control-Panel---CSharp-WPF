@@ -47,12 +47,19 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
   const setFlag = (key) => cmd('set-flag', { key });
 
   // ---- local run-setup state (seeded from the saved settings in init) ----
+  // Four Chambers: the descent is always 4 regions (I->IV), each ~3-5 min and
+  // ending in a boon Landing. Total run length is 4 x per-chamber minutes.
+  const CHAMBER_TOTALS = [720, 960, 1200];   // 12 / 16 / 20 min (3 / 4 / 5 min per chamber)
   const setup = Object.assign({
-    difficulty: 'Easy', durationSec: 180, waveCount: 5, motion: 'Mixed',
+    difficulty: 'Easy', durationSec: 960, waveCount: 4, motion: 'Mixed',
     enabledVariants: null, effectIntensity: 0.85, colorFlashes: true,
     boonDraftEnabled: true, allowCurses: true, dartersEnabled: true,
     key1: 'Q', key2: 'E',
   }, runSetup || {});
+  // Coerce any stale saved length/loops (e.g. a pre-redesign 180s / 5-loop) into
+  // the chamber model, so the first descent already feels the four-chamber pace.
+  setup.waveCount = 4;
+  if (!CHAMBER_TOTALS.includes(setup.durationSec)) setup.durationSec = 960;
 
   let visible = false;
   let screen = 'menu';       // 'menu' | 'dollhouse'
@@ -864,14 +871,15 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
       if (d.extremeGate) revealEls.set('pill_inescapable', p);
     }
 
-    // ---- length ----
-    const len = pillRow('length', card);
-    for (const secs of [120, 180, 300]) {
+    // ---- length (4 chambers x per-chamber minutes) ----
+    const len = pillRow('descent', card);
+    for (const secs of CHAMBER_TOTALS) {
       btn('wr-seg' + (setup.durationSec === secs ? ' is-on' : ''), `${secs / 60} min`, () => {
         setup.durationSec = secs;
         rerender();
       }, len);
     }
+    tip(len, 'four chambers, always in order. this is the whole descent - each chamber runs about a quarter of it and ends in a boon.');
 
     // ---- motion ----
     const mot = pillRow('motion', card);
@@ -882,11 +890,9 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
       }, mot);
     }
 
-    // ---- loops (waves) ----
-    const waves = pillRow('loops', card);
-    btn('wr-seg', '−', () => { setup.waveCount = Math.max(1, setup.waveCount - 1); rerender(); }, waves);
-    el('wr-waves-n', waves, String(setup.waveCount));
-    btn('wr-seg', '+', () => { setup.waveCount = Math.min(12, setup.waveCount + 1); rerender(); }, waves);
+    // ---- chambers (fixed at 4; the descent's identity, not a dial) ----
+    const waves = pillRow('chambers', card);
+    for (const r of ['I', 'II', 'III', 'IV']) el('wr-seg wr-seg--ghost is-on', waves, r);
 
     // ---- bubble pool ----
     const poolCard = el('wr-card', panel);
@@ -919,7 +925,7 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
       if (reveals.isUnlocked('pill_relentless', v)) diffs.push('Hard');
       if (v.extremeUnlocked) diffs.push('Extreme');
       setup.difficulty = diffs[(Math.random() * diffs.length) | 0];
-      setup.durationSec = [120, 180, 300][(Math.random() * 3) | 0];
+      setup.durationSec = CHAMBER_TOTALS[(Math.random() * CHAMBER_TOTALS.length) | 0];
       setup.motion = ['Mixed', 'FloatUp', 'RainDown', 'RoamBounce'][(Math.random() * 4) | 0];
       const roll = POOL_VARIANTS.filter((pv) => (!pv.revealGate || reveals.isUnlocked(pv.revealGate, v)) && Math.random() < 0.6).map((x) => x.id);
       if (!roll.length) roll.push('flash');

@@ -254,7 +254,7 @@ internal static class DtrhHostService
         var s = App.Settings?.Current;
         if (s == null) return;
         if (setup["difficulty"] != null) s.ChaosDifficulty = (string?)setup["difficulty"] ?? s.ChaosDifficulty;
-        if (setup["durationSec"] != null) s.ChaosRunDurationSec = Math.Clamp((int?)setup["durationSec"] ?? 180, 60, 900);
+        if (setup["durationSec"] != null) s.ChaosRunDurationSec = Math.Clamp((int?)setup["durationSec"] ?? 960, 60, 1200);
         if (setup["waveCount"] != null) s.ChaosWaveCount = Math.Clamp((int?)setup["waveCount"] ?? 5, 1, 12);
         if (setup["motion"] != null) s.ChaosMotionMode = (string?)setup["motion"] ?? s.ChaosMotionMode;
         if (setup["enabledVariants"] != null)
