@@ -1704,7 +1704,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       field.spawn(b);
       return true;
     }
-    if (rank >= RANK.Slipping && Math.random() < TEASE_SPAWN_CHANCE * gentleMult) {
+    if (rank >= RANK.Slipping && Math.random() < TEASE_SPAWN_CHANCE * bMult * prof.tease) {
       const debut = !flags.seenTease;
       if (debut) {
         setFlag('seenTease');
@@ -1722,7 +1722,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (st.freezeRemainingSec > 0) { spawnWait = 0.3; return; }   // frozen: hold the field
     const i = intensity();
     const effIntensity = clamp(i + (cfg.difficultyMult - 1.0) * 0.15, 0, 1);
-    const maxConcurrent = Math.round((6 + i * 10) * Math.sqrt(cfg.difficultyMult));
+    // Four Chambers: the region's `density` scales how full the field runs -
+    // sparse in the Long Fall, an overgrown tangle in the Mad Garden.
+    const prof = cfg.regionMode ? profileForWave(st.waveIndex) : PROFILE_NEUTRAL;
+    const maxConcurrent = Math.max(3, Math.round((6 + i * 10) * Math.sqrt(cfg.difficultyMult) * prof.density));
 
     const room = field.count() < maxConcurrent;
     // The scripted first descent: the behavioral menagerie stands down entirely
@@ -1803,6 +1806,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // Refill cadence: 1000ms early -> 320ms late (/difficulty), floor 280ms.
     let interval = (1000 - i * 680) / cfg.difficultyMult;
     interval /= cfg.spawnRateMult;
+    interval /= Math.sqrt(prof.density);   // dense chambers refill a touch faster
     interval /= wxSpawnRate();   // Overstim weather: bubbles come faster
     if (st.freefallCadence) interval /= 1.25;   // Freefall sin (unshielded half)
     if (st.slowMoRemainingSec > 0) interval /= SLOWMO_FACTOR;   // slow-mo stretches the cadence
