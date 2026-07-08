@@ -93,7 +93,10 @@ function shutdown() {
 
 bridge.on('init', (m) => {
   initMsg = m;
-  if (m.m2Test) import('./m2test.js').then((t) => t.run(bridge, hostState)).catch((e) => bridge.log('m2test load failed: ' + e));
+  if (m.m2Test) {
+    try { window.__dtrhVnTest = true; } catch (e) { /* lets the VN welcome fire on any descent for play-testing */ }
+    import('./m2test.js').then((t) => t.run(bridge, hostState)).catch((e) => bridge.log('m2test load failed: ' + e));
+  }
   maybeStart();
 });
 bridge.on('manifest', (m) => {
