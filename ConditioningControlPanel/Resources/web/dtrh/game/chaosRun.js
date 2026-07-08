@@ -1866,10 +1866,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     get allowCurses() { return cfg.allowCurses; },
     equipmentHas: (id) => cfg.equipment.includes(id),
     bark: (event) => bark(event),
-    /** A Visual-Novel portrait beat (scripted descents): the active persona
-     * performs `emote`, freezes, says `line`, holds `hold` ms, fades. Returns a
-     * promise; safe to fire-and-forget. No-op if the VN overlay isn't built. */
-    vnBeat: (emote, line, opts) => (vn ? vn.beat({ emote, line, ...(opts || {}) }) : Promise.resolve(false)),
+    /** A Visual-Novel portrait beat (scripted descents). `beat` is a manifest beat
+     * id (resolves the active persona's emote + line + voiceover) or an explicit
+     * {emote,line,voUrl}. Returns a promise; safe to fire-and-forget. No-op if the
+     * VN overlay isn't built. */
+    vnBeat: (beat) => (vn ? vn.beat(beat) : Promise.resolve(false)),
     spawnScriptedThreat(fuseMult) {
       const pink = VARIANTS.find((v) => v.id === 'pink');
       if (!pink) return;

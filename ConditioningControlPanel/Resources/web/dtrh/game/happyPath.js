@@ -78,8 +78,8 @@ export function createHappyPath() {
       introStarted = true;
       (async () => {
         try {
-          await io.vnBeat('sultry', 'well, well… look who finally fell down my rabbit hole.', { hold: 1600 });
-          await io.vnBeat('entrancing', 'just watch the bubbles, and pop them for me. that’s all you have to do… for now.', { hold: 1900 });
+          await io.vnBeat('intro1');   // persona greets (emote + line + voice from the manifest)
+          await io.vnBeat('intro2');   // the one rule: watch the bubbles, pop them
         } catch (e) { /* the run must never wait on the VN */ }
       })();
     }

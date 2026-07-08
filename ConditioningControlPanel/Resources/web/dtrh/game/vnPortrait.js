@@ -116,6 +116,33 @@ export function createVnPortrait(hud, opts = {}) {
     preloaded[k] = imgs; return imgs;
   }
 
+  // ---- voice (per-beat mp3 served from the web layer -> drives the reactive aura) ----
+  let actx = null, audioEl = null, analyser = null, vdata = null, voicePlaying = false;
+  function ensureVoiceGraph() {
+    if (actx) return;
+    try {
+      audioEl = new Audio(); audioEl.crossOrigin = 'anonymous';
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = actx.createMediaElementSource(audioEl);
+      analyser = actx.createAnalyser(); analyser.fftSize = 512;
+      vdata = new Uint8Array(analyser.fftSize);
+      src.connect(analyser); analyser.connect(actx.destination);
+      audioEl.addEventListener('ended', () => { voicePlaying = false; });
+    } catch (e) { actx = null; }   // no WebAudio -> aura falls back to idle breath
+  }
+  function startVoice(url) {
+    ensureVoiceGraph(); if (!actx || !url) return;
+    try { if (actx.state === 'suspended') actx.resume(); audioEl.src = url; audioEl.currentTime = 0;
+          audioEl.play().catch(() => {}); voicePlaying = true; } catch (e) { /* ignore */ }
+  }
+  function stopVoice() { voicePlaying = false; try { if (audioEl) audioEl.pause(); } catch (e) {} }
+  function readVoice() {
+    if (!voicePlaying || !analyser) return 0;
+    analyser.getByteTimeDomainData(vdata);
+    let s = 0; for (let i = 0; i < vdata.length; i++) { const v = (vdata[i] - 128) / 128; s += v * v; }
+    return Math.min(1, Math.sqrt(s / vdata.length) * 3.2);
+  }
+
   // ---- FX loop (runs only while a beat is on screen) ----
   let raf = 0, running = false, W = 0, H = 0, parts = [], t0 = 0, tintA = DEFAULT_TINT.a;
   function resize() { W = cv.width = cv.offsetWidth || window.innerWidth; H = cv.height = cv.offsetHeight || window.innerHeight; }
@@ -124,7 +151,8 @@ export function createVnPortrait(hud, opts = {}) {
     const tick = (now) => {
       if (!running) return;
       const ph = (now - t0) / 1000;
-      const glow = 0.12 + Math.sin(ph * 1.6) * 0.06 + Math.sin(ph * 0.7) * 0.03;   // idle breath
+      const idle = 0.12 + Math.sin(ph * 1.6) * 0.06 + Math.sin(ph * 0.7) * 0.03;   // idle breath
+      const glow = Math.max(idle, readVoice());   // her aura breathes with her voice
       root.style.setProperty('--vnG', glow.toFixed(3));
       // ambient motes
       if (Math.random() < 0.4) parts.push({ x: W * 0.5 + (Math.random() - 0.5) * W * 0.3, y: H * 0.92,
@@ -150,15 +178,26 @@ export function createVnPortrait(hud, opts = {}) {
     shim.style.webkitMaskImage = shim.style.maskImage = 'url("' + src + '")';
   }
 
-  /** Play a beat: perform the emote segment, freeze on the last frame, hold, fade out. */
-  async function beat(o) {
-    o = o || {};
-    const token = ++beatToken;
+  /** Resolve a beat id from the manifest into a concrete beat for the active persona. */
+  function resolveBeat(id, modId) {
+    const b = manifest && manifest.beats && manifest.beats[id];
+    if (!b) return { emote: id };   // unknown id -> treat the arg as a raw emote name
+    const line = (b.lines && (b.lines[modId] || b.lines['builtin-sissyhypno'])) || '';
+    const voUrl = b.vo ? ('/dtrh/assets/vn/vo/' + modId + '/' + b.vo) : null;
+    return { emote: b.emote, line, hold: b.hold, voUrl };
+  }
+
+  /** Play a beat: perform the emote segment, freeze on the last frame, hold, fade out.
+   *  `arg` is a beat id (resolved from manifest.beats) or an explicit {emote,line,voUrl}. */
+  async function beat(arg) {
     await ensureManifest();
     const modId = getModId() || 'builtin-sissyhypno';
+    let o = (typeof arg === 'string') ? resolveBeat(arg, modId) : (arg || {});
+    const token = ++beatToken;
     const tint = TINT[modId] || DEFAULT_TINT;
     tintA = tint.a;
     root.style.setProperty('--vnA', tint.a); root.style.setProperty('--vnB', tint.b);
+    if (o.voUrl) startVoice(o.voUrl); else stopVoice();
 
     const { key, def } = setFor(modId);
     const seg = def && def[o.emote];
@@ -199,13 +238,13 @@ export function createVnPortrait(hud, opts = {}) {
   }
 
   async function fadeOut(token) {
-    root.classList.remove('vn-on'); say.classList.remove('vn-on');
+    root.classList.remove('vn-on'); say.classList.remove('vn-on'); stopVoice();
     await sleep(520);
     if (token !== beatToken) return;
     root.hidden = true; stopFx();
   }
 
-  function hide() { beatToken++; root.classList.remove('vn-on'); say.classList.remove('vn-on'); root.hidden = true; stopFx(); }
+  function hide() { beatToken++; stopVoice(); root.classList.remove('vn-on'); say.classList.remove('vn-on'); root.hidden = true; stopFx(); }
   function dispose() { hide(); try { root.remove(); } catch {} window.removeEventListener('resize', resize); }
   window.addEventListener('resize', resize);
 
