@@ -443,7 +443,7 @@ export const DIFF_PILLS = [
 
 export const HOWTO_CARDS = [
   { title: 'What the Rabbit Hole is', image: 'howto_1', lines: [
-    { body: 'Bubbles drift up the screen carrying flashes, videos and overlays. Pop the good ones, snap the dangerous ones before they go off, and ride it deeper. One descent is about **five minutes** — survive the waves, take what she offers, climb out a little more hers.' },
+    { body: 'Bubbles drift up the screen carrying flashes, videos and overlays. Pop the good ones, snap the dangerous ones before they go off, and ride it deeper. A descent is **four chambers, 12 to 20 minutes** — survive them, take what she offers, climb out a little more hers.' },
   ] },
   { title: 'What you do', image: 'howto_2', lines: [
     { emoji: '🫧', color: '255,159,208', lead: 'Left-click', body: 'pop the treats — the soft pink bubbles. One click builds your streak and refills your focus.' },
@@ -456,11 +456,11 @@ export const HOWTO_CARDS = [
     { lead: 'HEAT', body: 'the burn. It climbs every time something triggers. Let it run high and the descent gets harder to resist.' },
   ] },
   { title: 'A descent', image: 'howto_4', lines: [
-    { body: 'Four waves, then it ends. Between waves she offers you a **mantra** — pick one and it bends the rules for that run only. Finish the whole descent for the full reward; slip out early and you forfeit it.' },
+    { body: 'Four chambers, then it ends. Between chambers she offers you a **mantra** — pick one and it bends the rules for that run only. **Power-up cards drift through the tube** as you fall: grab one to keep it — toys dock at the bottom to fire, charms and accessories cling on the moment you touch them. Finish the whole descent for the full reward; slip out early and you forfeit it.' },
   ] },
   { title: 'What you keep', image: 'howto_5', lines: [
-    { body: 'Every descent earns **XP** toward your normal level, plus **Sparks** (gold) you carry back out.' },
-    { body: 'Spend Sparks in **the dollhouse** — accessories at the table by the door, charms, active toys you trigger mid-descent, and the seamstress’s bench for permanent upgrades.' },
+    { body: 'Every descent earns **XP** toward your normal level, plus two purses: **drops ✦** banked when you surface, and **gold 🪙** snatched live during the fall.' },
+    { body: 'Back in **the dollhouse** — the floating stations around the hole — one rule: **gold unlocks** (the DIALS console buys back the options panel one dial at a time), **drops level** (deepen what you’ve grabbed, train habits, sew extra hands at the TOYBOX).' },
     { body: 'The more descents you finish, the higher your **RANK** — curious, tempted, slipping, entranced, devoted… — and the more of the Rabbit Hole opens up to you.' },
   ] },
 ];
