@@ -1864,6 +1864,21 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Random, ready-to-load image paths drawn from the EXACT same enabled pool the flashes
+        /// use: disk images (recursed, honoring the asset manager's disabled set) AND active
+        /// content-pack images. Pack images are decrypted to a temp file on demand and tracked for
+        /// cleanup here, just like a normal flash. Returns fewer than requested only when the
+        /// enabled pool is smaller; empty when nothing is enabled.
+        ///
+        /// This is what lets the Chaos "glitch" wash and "cascade" gif-rain match the user's live
+        /// preset — previously they re-listed the raw images folder (ChaosImagePool), which ignored
+        /// both disabled assets and content packs, so they silently drew nothing for pack/curated
+        /// users while flashes worked. Picks are with replacement (duplicates possible). May do disk
+        /// I/O (pack decrypt) — call OFF the UI thread when requesting more than a couple.
+        /// </summary>
+        public List<string> GetChaosImagePaths(int count) => GetNextImages(Math.Max(0, count));
+
+        /// <summary>
         /// Refreshes both image lists (regular and pack images) from disk cache.
         /// Called when lists are empty or cache has expired.
         /// </summary>

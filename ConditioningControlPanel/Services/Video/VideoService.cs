@@ -23,6 +23,15 @@ using Screen = System.Windows.Forms.Screen;
 
 namespace ConditioningControlPanel.Services
 {
+    /// <summary>Payload for <see cref="VideoService.VideoWatchCredited"/>: the real seconds watched
+    /// of a video and its total length, so consumers can tally watch-time and detect skips.</summary>
+    public sealed class VideoWatchInfoEventArgs : EventArgs
+    {
+        public double WatchedSec { get; set; }
+        public double DurationSec { get; set; }
+        public bool EndedNaturally { get; set; }
+    }
+
     public class VideoService : IDisposable
     {
         private readonly Random _random = new();
@@ -84,6 +93,11 @@ namespace ConditioningControlPanel.Services
         public event EventHandler? VideoAboutToStart; // Fires 1.3s before video
         public event EventHandler? VideoStarted;
         public event EventHandler? VideoEnded;
+        /// <summary>Fires once per video at watch-credit finalize (teardown), carrying the real
+        /// seconds watched + the clip length. Consumers (e.g. DtRH session telemetry) use it to
+        /// tally watch-time and classify a skip (watched well short of the end). Reuses the
+        /// existing interruption-safe credit path (#447) - no new timing.</summary>
+        public event EventHandler<VideoWatchInfoEventArgs>? VideoWatchCredited;
 
         // ---- chaos random-segment mode (one-shot) ----
         // The NEXT triggered video jumps to a random position leaving at least _segmentSec of
@@ -2386,6 +2400,18 @@ namespace ConditioningControlPanel.Services
                 {
                     _creditedWatchSeconds = watchedSec;
                     App.Achievements?.TrackVideoWatched(uncredited);
+                    // Session telemetry: report the full watched seconds + clip length once per
+                    // video so downstream consumers can tally watch-time and detect skips.
+                    try
+                    {
+                        VideoWatchCredited?.Invoke(this, new VideoWatchInfoEventArgs
+                        {
+                            WatchedSec = watchedSec,
+                            DurationSec = _duration,
+                            EndedNaturally = _duration > 0 && watchedSec >= _duration * 0.90,
+                        });
+                    }
+                    catch (Exception ex) { App.Logger?.Debug("VideoWatchCredited handler error: {Error}", ex.Message); }
                 }
             }
             catch (Exception ex) { App.Logger?.Debug("FinalizeWatchCredit error: {Error}", ex.Message); }

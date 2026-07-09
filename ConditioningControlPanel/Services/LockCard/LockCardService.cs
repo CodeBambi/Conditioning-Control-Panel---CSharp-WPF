@@ -111,8 +111,11 @@ namespace ConditioningControlPanel.Services
         {
             DispatcherHelper.RunOnUISync(() =>
             {
-                // Prevent stacking multiple lock cards
-                if (Application.Current.Windows.OfType<LockCardWindow>().Any())
+                // Prevent stacking multiple lock cards.
+                // Gate on the visible set (IsAnyOpen), NOT Application.Current.Windows: since 6.2.10 the
+                // window is keep-alive pooled (dismiss => Hide(), not Close()), so a hidden pooled instance
+                // lingers in Application.Current.Windows forever and would block every card after the first.
+                if (LockCardWindow.IsAnyOpen())
                 {
                     App.Logger?.Information("LockCardService: A lock card is already open. Skipping.");
                     return;
@@ -173,6 +176,11 @@ namespace ConditioningControlPanel.Services
                 catch (Exception ex)
                 {
                     App.Logger?.Error("Failed to show lock card: {Error}", ex.Message);
+                    // If ShowOnAllMonitors threw mid-show a half-registered window can linger in
+                    // LockCardWindow's visible set, leaving IsAnyOpen() permanently true and silently
+                    // skipping every future lock card until the next stop. Force-close clears that set
+                    // so the guard can't stay armed with zero visible cards.
+                    try { LockCardWindow.ForceCloseAll(); } catch { }
                     App.InteractionQueue?.Complete(InteractionQueueService.InteractionType.LockCard);
                 }
             });

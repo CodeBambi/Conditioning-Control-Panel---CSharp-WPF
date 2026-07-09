@@ -14,6 +14,10 @@ public sealed class ChaosMetaState
 
     public int Sparks { get; set; } = 0;
     public HashSet<string> PurchasedUpgrades { get; set; } = new();
+    /// <summary>Options-panel "Dials" the player has bought back with drops (UNLOCK_LADDER
+    /// ids in engine/settings.js). Absent = locked, so old saves start with the fall
+    /// pre-set and the gear panel almost entirely padlocked until earned.</summary>
+    public HashSet<string> PurchasedDials { get; set; } = new();
     /// <summary>Trained habits the player has switched OFF (absent = on, so old saves stay fully active).</summary>
     public HashSet<string> DisabledUpgrades { get; set; } = new();
     public bool ExtremeUnlocked { get; set; } = false;

@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -79,6 +80,25 @@ public class GazeFocusService : IDisposable
     public bool IsActive { get; private set; }
     public int DwellMs { get; set; } = DefaultDwellMs;
 
+    // The explicit Lab "Focus Gaze" toggle. It is now just one of several
+    // "consumers" that want the shared dwell engine alive (the others are the
+    // per-feature Flash gaze-pop / Flash linger / Video gaze-click settings).
+    // The engine runs whenever ANY consumer wants it, so ticking "Flash gaze
+    // pop" in the Flashes tab is enough on its own — the user no longer has to
+    // separately arm this master toggle. See EvaluateDesiredState.
+    private bool _masterEnabled;
+    public bool MasterEnabled
+    {
+        get => _masterEnabled;
+        set
+        {
+            if (_masterEnabled == value) return;
+            _masterEnabled = value;
+            EvaluateDesiredState();
+        }
+    }
+
+
     /// <summary>Fires when IsActive flips, on the UI thread.</summary>
     public event Action<bool>? OnActiveChanged;
 
@@ -93,6 +113,80 @@ public class GazeFocusService : IDisposable
         // KeywordHighlightService.cs:30-31.
         if (Application.Current != null)
             Application.Current.Exit += (_, _) => Stop();
+
+        // Auto-start hook: the shared engine should come alive the moment any
+        // per-feature gaze toggle (Flash gaze-pop / linger, Video gaze-click)
+        // is enabled, not only when the Lab "Focus Gaze" master is armed.
+        var settings = App.Settings?.Current;
+        if (settings != null)
+            settings.PropertyChanged += OnSettingsChanged;
+
+        // ...and it should also come alive/fall away as the shared webcam is
+        // started or stopped by ANY feature (Webcam Triggers, debug cursor,
+        // Blink Trainer). This is what makes "turn the camera on, look at a
+        // flash, it pops" work without separately arming Focus Gaze — the
+        // engine follows the camera rather than powering it.
+        if (App.Webcam != null)
+            App.Webcam.OnTrackingStateChanged += OnWebcamStateChanged;
+    }
+
+    private void OnWebcamStateChanged(WebcamTrackingState _) => EvaluateDesiredState();
+
+    private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(Models.AppSettings.FlashGazePopEnabled):
+            case nameof(Models.AppSettings.FlashGazeLingerEnabled):
+            case nameof(Models.AppSettings.VideoGazeClickEnabled):
+                EvaluateDesiredState();
+                break;
+        }
+    }
+
+    private static bool AnyConsumerOn()
+    {
+        var s = App.Settings?.Current;
+        if (s == null) return false;
+        return s.FlashGazePopEnabled || s.FlashGazeLingerEnabled || s.VideoGazeClickEnabled;
+    }
+
+    /// <summary>
+    /// Single source of truth for whether the shared dwell engine should be
+    /// running. Starts or stops the engine to match. It should run when a
+    /// consumer wants it (the Lab master toggle OR any per-feature gaze flag)
+    /// AND the shared webcam can actually feed it.
+    ///
+    /// Crucially, this NEVER powers the camera on: the per-feature gaze flags
+    /// default to ON, so warming the webcam whenever they're set would
+    /// silently light the camera at startup for any calibrated user. Instead
+    /// we require the camera to already be running (turned on by the master
+    /// toggle's own prewarm, Webcam Triggers, the debug cursor, etc.) and ride
+    /// along — OnWebcamStateChanged re-runs this when the camera comes up or
+    /// goes away, so the engine tracks the camera's lifetime. Auto-start also
+    /// never prompts for consent (the explicit master toggle owns that dialog).
+    /// Idempotent and UI-thread-marshalled (Start spins up a DispatcherTimer).
+    /// </summary>
+    public void EvaluateDesiredState()
+    {
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null) return;
+        if (!disp.CheckAccess()) { disp.BeginInvoke(new Action(EvaluateDesiredState)); return; }
+
+        bool wants = _masterEnabled || AnyConsumerOn();
+        bool canRun = App.Webcam != null
+                      && App.Webcam.IsRunning
+                      && App.Webcam.Calibration != null
+                      && WebcamTrackingService.IsConsentCurrent();
+
+        if (wants && canRun)
+        {
+            if (!IsActive) Start();
+        }
+        else
+        {
+            if (IsActive) Stop();
+        }
     }
 
     /// <summary>
@@ -594,5 +688,11 @@ public class GazeFocusService : IDisposable
         _lastLingerBoostAt = DateTime.MinValue;
     }
 
-    public void Dispose() => Stop();
+    public void Dispose()
+    {
+        var settings = App.Settings?.Current;
+        if (settings != null) settings.PropertyChanged -= OnSettingsChanged;
+        if (App.Webcam != null) App.Webcam.OnTrackingStateChanged -= OnWebcamStateChanged;
+        Stop();
+    }
 }

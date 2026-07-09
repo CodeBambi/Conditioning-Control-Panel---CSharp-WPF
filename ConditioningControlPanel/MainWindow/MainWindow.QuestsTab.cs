@@ -246,6 +246,26 @@ namespace ConditioningControlPanel
                     QuestsTab.BtnRerollWeekly.Content = remainingRerolls > 0 ? $"🔄 Reroll ({remainingRerolls} left)" : "🔄 No rerolls left";
                 }
             }
+            else if (weeklyProgress != null && weeklyProgress.IsCompleted)
+            {
+                // The stored weekly is completed but its definition no longer resolves — the server
+                // rotated the quest pool (ids change on a "20 free + 20 patron" refresh) since it was
+                // done. Without this branch the card kept its XAML defaults ("Loading…" + blank image)
+                // forever, looking broken, and reroll was refused because the quest is completed.
+                // Render a graceful "done for the week" card instead; a fresh weekly generates on the
+                // Monday rollover (IsWeeklyExpired). We do NOT regenerate a completed quest — that
+                // would hand out a second weekly reward after every server refresh. (#496)
+                QuestsTab.TxtWeeklyQuestIcon.Text = "✅";
+                QuestsTab.TxtWeeklyQuestName.Text = "Weekly quest complete!";
+                QuestsTab.TxtWeeklyQuestDesc.Text = "Nice work! Your next weekly quest arrives Monday.";
+                QuestsTab.TxtWeeklyProgress.Text = "";
+                QuestsTab.TxtWeeklyXP.Text = "";
+                QuestsTab.TxtWeeklyStreakBonus.Visibility = Visibility.Collapsed;
+                QuestsTab.TxtWeeklyRerollBonus.Visibility = Visibility.Collapsed;
+                QuestsTab.WeeklyCompletedOverlay.Visibility = Visibility.Visible;
+                QuestsTab.BtnRerollWeekly.IsEnabled = false;
+                QuestsTab.BtnRerollWeekly.Content = Loc.Get("btn_completed");
+            }
 
             // Update statistics
             QuestsTab.TxtTotalDailyCompleted.Text = questService.Progress.TotalDailyQuestsCompleted.ToString();

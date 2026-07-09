@@ -695,12 +695,19 @@ namespace ConditioningControlPanel
                     }
                 }
 
-                if (App.GazeFocus.Start())
+                // Arm the master consumer. The engine is shared now — setting
+                // MasterEnabled runs EvaluateDesiredState, which starts it
+                // (webcam is prewarmed + consent just granted).
+                App.GazeFocus.MasterEnabled = true;
+                if (App.GazeFocus.IsActive)
                 {
                     if (LabTab.TxtFocusGazeStatus != null) LabTab.TxtFocusGazeStatus.Text = Localization.Loc.Get("label_focus_gaze_active");
                 }
                 else
                 {
+                    // Couldn't start (almost always: no calibration). Disarm the
+                    // master so it doesn't silently hold the engine wanted.
+                    App.GazeFocus.MasterEnabled = false;
                     SyncFocusGazeToggle(false);
                     if (LabTab.TxtFocusGazeStatus != null)
                     {
@@ -713,7 +720,10 @@ namespace ConditioningControlPanel
             }
             else
             {
-                App.GazeFocus.Stop();
+                // Release the master consumer. The engine keeps running if a
+                // per-feature gaze toggle (Flash pop / linger, Video click) is
+                // still on — those are self-sufficient now.
+                App.GazeFocus.MasterEnabled = false;
                 if (LabTab.TxtFocusGazeStatus != null) LabTab.TxtFocusGazeStatus.Text = "";
             }
         }

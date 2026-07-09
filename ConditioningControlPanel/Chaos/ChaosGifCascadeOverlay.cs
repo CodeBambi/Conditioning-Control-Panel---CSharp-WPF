@@ -50,7 +50,35 @@ public sealed class ChaosGifCascadeOverlay : Window
     {
         try
         {
-            var files = PickFiles();
+            // Draw the clips from the SAME enabled pool the flashes use (disk + content packs,
+            // honoring the asset manager). Pull a batch sized to the cascade (with a margin) — the
+            // spawner samples it with replacement over the ~6s window. Fetched OFF the UI thread
+            // because pack images decrypt to temp on demand, and a burst of that on the render
+            // thread is exactly what froze earlier cascades.
+            int batch = (int)Math.Clamp(Math.Ceiling(spawnRatePerSec * Math.Max(1.0, durationSec)) + 6, 8, 24);
+            var flash = App.Flash;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                List<string> files;
+                try
+                {
+                    files = flash?.GetChaosImagePaths(batch) ?? new List<string>();
+                    if (files.Count == 0) files = PickFiles();   // fallback: raw folder pool if Flash isn't up
+                }
+                catch { files = new List<string>(); }
+                Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                    ShowWithFiles(files, spawnRatePerSec, durationSec, gifSize, fallSpeed, opacity, startScale)));
+            });
+        }
+        catch (Exception ex) { App.Logger?.Debug("ChaosGifCascadeOverlay.Show: {E}", ex.Message); }
+    }
+
+    /// <summary>UI-thread continuation of <see cref="Show"/> once the image batch has been fetched.</summary>
+    private static void ShowWithFiles(List<string> files, double spawnRatePerSec, double durationSec,
+                                      double gifSize, double fallSpeed, double opacity, double startScale)
+    {
+        try
+        {
             if (files.Count == 0) { App.Logger?.Debug("GifCascade: no images in pool — nothing to rain"); return; }
             if (_active == null) { _active = new ChaosGifCascadeOverlay(); ((Window)_active).Show(); }
             else if (!_active.IsVisible) { try { ((Window)_active).Show(); } catch { } }   // idles hidden between cascades
@@ -70,7 +98,7 @@ public sealed class ChaosGifCascadeOverlay : Window
             App.Logger?.Information("GifCascade: raining (pool={N}, spread=[{L:F0}..{R:F0}], chaos={Chaos})",
                 files.Count, _active._spawnLeft, _active._spawnLeft + _active._spawnWidth, chaosRun);
         }
-        catch (Exception ex) { App.Logger?.Debug("ChaosGifCascadeOverlay.Show: {E}", ex.Message); }
+        catch (Exception ex) { App.Logger?.Debug("ChaosGifCascadeOverlay.ShowWithFiles: {E}", ex.Message); }
     }
 
     /// <summary>Re-stack the live window above a mandatory video (see ChaosWindowZ). UI thread only.</summary>

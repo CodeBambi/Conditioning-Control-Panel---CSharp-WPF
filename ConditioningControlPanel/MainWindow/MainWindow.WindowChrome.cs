@@ -315,8 +315,12 @@ namespace ConditioningControlPanel
                 _trayIcon?.MinimizeToTray();
                 HideAvatarTube();
 
-                // Stop bouncing text when minimizing to tray (user expects app to be "closed")
-                App.BouncingText?.Stop();
+                // NOTE: bouncing/subliminal text is intentionally LEFT RUNNING while in the tray.
+                // It's an unowned, topmost, click-through overlay, so it keeps rendering over the
+                // desktop with MainWindow hidden — which is the point of a background conditioning
+                // tool. This also matches every other minimize-to-tray path (start-minimized,
+                // scheduler auto-start, remote), which never stopped it. (Reported: bounce text
+                // vanished when the app went to tray via the X button.)
             }
 
             // Make sure the Blink Trainer demo timer + live subscription are

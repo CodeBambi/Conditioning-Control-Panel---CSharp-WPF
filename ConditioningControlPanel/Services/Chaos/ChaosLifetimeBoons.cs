@@ -39,6 +39,10 @@ public sealed class ChaosLifetimeBoon
     public bool IsActiveUse;
     /// <summary>Seconds between uses for active-use skills. 0 = charge-based (LevelValues are uses per descent).</summary>
     public double UseCooldownSec;
+    /// <summary>Wave 2: implemented only in the browser game (its mechanic lives in JS).
+    /// The legacy WPF hub filters these out so it never sells an item it can't honor;
+    /// the JS Warren ignores the flag. Dies with the legacy hub (task: legacy retirement).</summary>
+    public bool WebOnly;
     public Action<ChaosRunState, double> Apply = (_, __) => { };
 
     /// <summary>Highest level this boon can reach (length of <see cref="LevelValues"/>).</summary>
@@ -133,8 +137,51 @@ public static class ChaosLifetimeBoons
             IsActiveUse = true, UseCooldownSec = 30,
             Apply = (s, v) => s.ToyPower["e_stim"] = v,
         },
+        new()
+        {
+            // Wave 2 (browser game): a 2.5s cursor beam that pops every treat it sweeps.
+            Id = "the_wand", Category = ChaosBoonCategory.Skill, RankFloor = ChaosRank.Slipping, Name = "The Wand", Glyph = "🪄",
+            Desc = "press: for 2.5s a humming beam rides your cursor and every treat it sweeps pops itself — the whole tunnel glares while it's on. 2/3/4 charges per descent by level.",
+            Flavor = "the wand doesn't ask. it announces.",
+            UnlockCost = 600,
+            UpgradeCosts = new[] { 900, 1400 },                   // levels 2..3
+            LevelValues  = new[] { 2.0, 3, 4 },                   // charges per descent
+            ValueLabel = "{0:0} charges",
+            CapstoneDesc = "the beam takes the sweet specials too — lucky bubbles, hearts, droplets, prisms.",
+            IsActiveUse = true, UseCooldownSec = 0,               // charge-based
+            WebOnly = true,
+            Apply = (s, v) => s.ToyPower["the_wand"] = v,
+        },
+        new()
+        {
+            // Wave 2 (browser game): seconds of treat-only suction, then the arrivals burst.
+            Id = "the_pump", Category = ChaosBoonCategory.Skill, RankFloor = ChaosRank.Slipping, Name = "The Pump", Glyph = "🫙",
+            Desc = "press: for 3/4/5s by level a hard suction drags every treat toward your cursor (live ones never move), then whatever arrived bursts at once. 45s cooldown.",
+            Flavor = "suction does the work. you take the credit.",
+            UnlockCost = 500,
+            UpgradeCosts = new[] { 700, 1100 },                   // levels 2..3
+            LevelValues  = new[] { 3.0, 4, 5 },                   // suction seconds
+            ValueLabel = "{0:0}s suction",
+            IsActiveUse = true, UseCooldownSec = 45,
+            WebOnly = true,
+            Apply = (s, v) => s.ToyPower["the_pump"] = v,
+        },
 
         // ---- Accessories (passives that shape the run) ----
+        new()
+        {
+            // Wave 2 (browser game): the grab-a-card mechanic becomes a paying paddle.
+            Id = "sticky_fingers", Category = ChaosBoonCategory.Accessory, RankFloor = ChaosRank.Tempted, Name = "Sticky Fingers", Glyph = "🍯",
+            Desc = "grab a picture off the tunnel wall (click and hold it) and it becomes a paddle: treats it sweeps over pop at x1.2/x1.4 pay by level; at level 3 they also leak gold droplets.",
+            Flavor = "what you catch, you keep. what you keep, you use.",
+            UnlockCost = 250,
+            UpgradeCosts = new[] { 350, 550 },                    // levels 2..3
+            LevelValues  = new[] { 1.2, 1.4, 1.4 },               // card-pop pay multiplier
+            ValueLabel = "x{0:0.0} card pops",
+            CapstoneDesc = "letting go HURLS the card down the tube — a treat shower follows the impact.",
+            WebOnly = true,
+            Apply = (s, v) => s.StickyFingersLevel = ChaosMeta.BoonLevel("sticky_fingers"),
+        },
         // breast_enlargement moved to Utility 2026-06-10 (it reads as a trained habit, not a
         // pocketed accessory) — same id, levels carry over; Utility pockets are uncapped.
         new()
@@ -375,6 +422,20 @@ public static class ChaosLifetimeBoons
         },
         new()
         {
+            // Wave 2 (browser game): the per-loop weather system's companion charm.
+            Id = "mood_ring", Category = ChaosBoonCategory.Utility, RankFloor = ChaosRank.Tempted, Name = "Mood Ring", Glyph = "💍",
+            Desc = "the sky down there changes every loop. level 1 forecasts the next weather on the HUD; level 2 makes every weather effect hit x1.5; level 3 lets you click the sky to reroll it, once per descent.",
+            Flavor = "she always knows what you're in the mood for.",
+            UnlockCost = 200,
+            UpgradeCosts = new[] { 300, 450 },                    // levels 2..3
+            LevelValues  = new[] { 1.0, 2, 3 },                   // feature tier
+            ValueLabel = "tier {0:0}",
+            CapstoneDesc = "click the sky — she changes her mind, once per descent.",
+            WebOnly = true,
+            Apply = (s, v) => s.MoodRingLevel = (int)v,
+        },
+        new()
+        {
             Id = "pocket_watch", Category = ChaosBoonCategory.Utility, RankFloor = ChaosRank.Tempted, Name = "Pocket Watch", Glyph = "🕰",
             Desc = "the loop countdown hangs top right and the sidebar shows the descent clock. without it, time down here stays a mystery.",
             Flavor = "borrowed from the white rabbit. he knows where you live.",
@@ -426,4 +487,11 @@ public static class ChaosLifetimeBoons
 
     public static IEnumerable<ChaosLifetimeBoon> InCategory(ChaosBoonCategory cat) =>
         All.Where(b => b.Category == cat);
+
+    // The legacy WPF hub's view: WebOnly items (their mechanics live in the browser
+    // game's JS) are hidden so the old hub never sells something it can't honor.
+    public static IEnumerable<ChaosLifetimeBoon> LegacyAll => All.Where(b => !b.WebOnly);
+
+    public static IEnumerable<ChaosLifetimeBoon> LegacyInCategory(ChaosBoonCategory cat) =>
+        InCategory(cat).Where(b => !b.WebOnly);
 }

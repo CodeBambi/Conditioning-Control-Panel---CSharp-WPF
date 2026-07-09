@@ -252,7 +252,7 @@ public partial class ChaosHubWindow : Window
         foreach (var u in ChaosUpgrades.All)
             if (!ChaosMeta.IsOwned(u.Id) && !ChaosMeta.IsPurchaseRankLocked(u.Id)
                 && !ChaosLessons.IsLessonBlocked(u.Id) && ChaosMeta.CanAfford(u.Id)) n++;
-        foreach (var b in ChaosLifetimeBoons.All)
+        foreach (var b in ChaosLifetimeBoons.LegacyAll)
         {
             int level = ChaosMeta.BoonLevel(b.Id);
             if (level <= 0)
@@ -376,7 +376,7 @@ public partial class ChaosHubWindow : Window
         HabitsHost.Children.Clear();
         foreach (var u in ChaosUpgrades.All)
             if (OnShelfNow(u.Id)) HabitsHost.Children.Add(BuildUpgradeRow(u));
-        foreach (var b in ChaosLifetimeBoons.InCategory(ChaosBoonCategory.Utility))
+        foreach (var b in ChaosLifetimeBoons.LegacyInCategory(ChaosBoonCategory.Utility))
             if (OnShelfNow(b.Id)) HabitsHost.Children.Add(BuildLifetimeBoonRow(b));
     }
 
@@ -545,7 +545,7 @@ public partial class ChaosHubWindow : Window
     private void BuildBoonShelf(Panel host, ChaosBoonCategory cat)
     {
         host.Children.Clear();
-        var boons = ChaosLifetimeBoons.InCategory(cat).ToList();
+        var boons = ChaosLifetimeBoons.LegacyInCategory(cat).ToList();
         if (boons.Count == 0)
         {
             host.Children.Add(new Border
@@ -1012,7 +1012,7 @@ public partial class ChaosHubWindow : Window
         }
         // Charms (Utility lifetime boons — Rabbit's Foot etc.) live with the habits:
         // leveled, always-on once worn, toggled exactly like a trained habit.
-        var charms = ChaosLifetimeBoons.InCategory(ChaosBoonCategory.Utility).Where(b => OnShelfNow(b.Id)).ToList();
+        var charms = ChaosLifetimeBoons.LegacyInCategory(ChaosBoonCategory.Utility).Where(b => OnShelfNow(b.Id)).ToList();
         foreach (var b in charms)
         {
             string bid = b.Id;
@@ -1063,7 +1063,7 @@ public partial class ChaosHubWindow : Window
             Margin = new Thickness(0, 0, 0, 6)
         });
         var row = new StackPanel { Orientation = Orientation.Horizontal };
-        var equipped = ChaosLifetimeBoons.InCategory(cat).Where(b => ChaosMeta.IsBoonActive(b.Id)).ToList();
+        var equipped = ChaosLifetimeBoons.LegacyInCategory(cat).Where(b => ChaosMeta.IsBoonActive(b.Id)).ToList();
         foreach (var b in equipped)
         {
             string id = b.Id;
@@ -1092,7 +1092,7 @@ public partial class ChaosHubWindow : Window
     private void FillCategoryTiles(Panel host, ChaosBoonCategory cat, int padTo)
     {
         host.Children.Clear();
-        var boons = ChaosLifetimeBoons.InCategory(cat).ToList();
+        var boons = ChaosLifetimeBoons.LegacyInCategory(cat).ToList();
         foreach (var b in boons)
         {
             string id = b.Id;
@@ -1129,7 +1129,7 @@ public partial class ChaosHubWindow : Window
     {
         if (!ChaosMeta.HasFreePocket(cat))
         {
-            var current = ChaosLifetimeBoons.InCategory(cat).FirstOrDefault(b => ChaosMeta.IsBoonActive(b.Id));
+            var current = ChaosLifetimeBoons.LegacyInCategory(cat).FirstOrDefault(b => ChaosMeta.IsBoonActive(b.Id));
             if (current != null) ChaosMeta.SetBoonActive(current.Id, false);
         }
         ChaosMeta.SetBoonActive(id, true);

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Down the Rabbit Hole</title>
+    <!-- Forked from cclabs-site/fall.html for the in-app DtRH browser game. Served by
+         ChaosWebViewHost from https://ccp.game/dtrh/. No age gate / cookie consent / drop
+         screen: the host app owns consent, and media arrives over the bridge as a manifest
+         of the user's active preset (see boot.js + hostMedia.js). No remote fonts - offline. -->
+    <link rel="stylesheet" href="./styles.css">
+
+    <!-- three.js resolved from the fork's own vendored ESM (no bundler). The legacy tunnel's
+         vendor/three is a DIFFERENT version - this fork ships the one the engine was built on. -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "/dtrh/vendor/three/three.module.min.js",
+        "three/addons/": "/dtrh/vendor/three/addons/"
+      }
+    }
+    </script>
+    <style>
+      /* fall-styles.css asks for Poppins from Google Fonts on the site; offline we ride the
+         system stack instead of shipping the family (M1 - revisit if typography matters). */
+      body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    </style>
+</head>
+<body>
+    <!-- 3D layer -->
+    <canvas id="sf-canvas" aria-hidden="true"></canvas>
+    <div id="sf-hud" class="sf-hud"><!-- score / depth / bubbles injected by scene.js --></div>
+
+    <!-- Loader (covers the page while the engine boots) -->
+    <div id="sf-loader" class="sf-loader">
+        <div class="sf-loader-ring" aria-hidden="true"></div>
+        <p>Opening the hole&#8230;</p>
+    </div>
+
+    <!-- Shown when WebGL can't start (drivers/hardware accel) -->
+    <div id="sf-nope" class="sf-nope" hidden>
+        <div class="sf-drop-card">
+            <h1>down the rabbit hole</h1>
+            <p id="sf-nope-msg">The 3D engine could not start.<br>
+               Check that hardware acceleration is available, or use the classic mode.</p>
+        </div>
+    </div>
+
+    <script type="module" src="./boot.js"></script>
+</body>
+</html>

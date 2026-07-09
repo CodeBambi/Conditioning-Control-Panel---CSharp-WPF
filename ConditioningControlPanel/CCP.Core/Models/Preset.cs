@@ -110,6 +110,13 @@ namespace ConditioningControlPanel.Models
         public bool BubblesEnabled { get; set; } = false;
         public int BubblesFrequency { get; set; } = 5;
 
+        // Trigger Bubbles (ambient bubbles that fire a Chaos effect on pop)
+        public bool BubbleTriggersEnabled { get; set; } = false;
+        public int BubbleTriggerChance { get; set; } = 10;
+        public int BubbleSpeedBoost { get; set; } = 0;
+        public List<string> BubbleTriggerVariants { get; set; } = new() { "flash", "subliminal", "pink", "spiral", "glitch", "htlink", "video" };
+        public bool BubbleAvatarEggEnabled { get; set; } = true;
+
         // Lock Card Settings (Level 35+)
         public bool LockCardEnabled { get; set; } = false;
         public int LockCardFrequency { get; set; } = 2;
@@ -371,6 +378,11 @@ namespace ConditioningControlPanel.Models
             // Bubbles
             settings.BubblesEnabled = BubblesEnabled;
             settings.BubblesFrequency = BubblesFrequency;
+            settings.BubbleTriggersEnabled = BubbleTriggersEnabled;
+            settings.BubbleTriggerChance = BubbleTriggerChance;
+            settings.BubbleSpeedBoost = BubbleSpeedBoost;
+            settings.BubbleTriggerVariants = BubbleTriggerVariants != null ? new List<string>(BubbleTriggerVariants) : new List<string>();
+            settings.BubbleAvatarEggEnabled = BubbleAvatarEggEnabled;
 
             // Lock Card
             settings.LockCardEnabled = LockCardEnabled;
@@ -473,6 +485,11 @@ namespace ConditioningControlPanel.Models
                 // Bubbles
                 BubblesEnabled = settings.BubblesEnabled,
                 BubblesFrequency = settings.BubblesFrequency,
+                BubbleTriggersEnabled = settings.BubbleTriggersEnabled,
+                BubbleTriggerChance = settings.BubbleTriggerChance,
+                BubbleSpeedBoost = settings.BubbleSpeedBoost,
+                BubbleTriggerVariants = settings.BubbleTriggerVariants != null ? new List<string>(settings.BubbleTriggerVariants) : new List<string>(),
+                BubbleAvatarEggEnabled = settings.BubbleAvatarEggEnabled,
 
                 // Lock Card
                 LockCardEnabled = settings.LockCardEnabled,

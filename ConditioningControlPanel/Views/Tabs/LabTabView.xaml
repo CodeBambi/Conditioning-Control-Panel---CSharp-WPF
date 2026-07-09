@@ -134,6 +134,11 @@
                                       Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Cursor="Hand"
                                       HorizontalAlignment="Right" Margin="0,10,0,0"
                                       ToolTip="Flash on-screen subtitle announcements (mantra, resistance, depth, streak) during a descent"/>
+                            <CheckBox Content="3D game (recommended)"
+                                      IsChecked="{Binding Source={x:Static local:App.Settings}, Path=Current.ChaosWebGameEnabled, Mode=TwoWay}"
+                                      Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Cursor="Hand"
+                                      HorizontalAlignment="Right" Margin="0,6,0,0"
+                                      ToolTip="Play inside the 3D rabbit-hole tunnel (browser engine). Untick to use the classic desktop version - e.g. if the 3D one won't start on this machine."/>
                         </StackPanel>
                     </Grid>
                 </Border>
