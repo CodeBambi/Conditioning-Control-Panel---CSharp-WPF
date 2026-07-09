@@ -34,6 +34,7 @@ const BLOCKS_MAX = 8;
 const CLIP_MAX_MS = 25000;      // a lost 'ended' can't stall the chain
 const RETRY_GAP_MS = 600;
 const FAIL_HOLD_MS = 3000;      // reschedule after a failed play (self-heal)
+const WATCHDOG_MS = 4000;       // idle watchdog: guarantees the voice loops forever
 const SENSORY_DEPTH_REF = 4000; // depth where the sensory weighting saturates
 const RATE_BASE_SPEED = 6;      // tube speed at which the voice plays at 1.0x
 const RATE_MAX_SPEED = 30;      // tube speed at which the voice hits its ceiling
@@ -69,6 +70,12 @@ export function createDriftChain({ getDepth }) {
     if (voiceGain) { try { voiceGain.gain.value = v; } catch (e) { /* ignore */ } }
     else { try { el.volume = v; } catch (e) { /* ignore */ } }
   }
+  // The shared context can slip to 'suspended' well after the one-time route
+  // bind (focus loss, autoplay-policy churn). A routed element goes SILENT then
+  // - paused stays false, 'ended' never fires - so the voice needs its own
+  // heartbeat, independent of whether the drone bed happens to be audible.
+  // getAudioCtx() resumes a suspended context as a side effect.
+  function keepCtxAwake() { try { getAudioCtx(); } catch (e) { /* ignore */ } }
   function setDuck(m) {
     m = Math.max(0, Math.min(1, m));
     if (m === duck) return;
@@ -156,6 +163,8 @@ export function createDriftChain({ getDepth }) {
   let disposed = false;
   let gapTimer = null;
   let safetyTimer = null;
+  let stallPos = 0;          // last observed el.currentTime (freeze detector)
+  let stallTicks = 0;        // consecutive watchdog ticks with a frozen clock
 
   function clearGap() { if (gapTimer) { clearTimeout(gapTimer); gapTimer = null; } }
   function clearSafety() { if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; } }
@@ -198,6 +207,8 @@ export function createDriftChain({ getDepth }) {
       el.onended = null;
       el.src = BASE + bark.mod + '/' + bark.file;
       ensureVoiceRoute();
+      keepCtxAwake();          // don't start a clip into a suspended (silent) context
+      stallPos = 0; stallTicks = 0; // fresh clip: reset the freeze detector
       applyVoiceVolume();
       try { el.playbackRate = voiceRate; } catch (e) { /* ignore */ }
       pendingResume = false;
@@ -251,6 +262,40 @@ export function createDriftChain({ getDepth }) {
     }
   }
 
+  // Idle watchdog: the chain is a web of timers + media events, and any single
+  // dropped edge (a playNext() that returned on a transient hidden/mute the
+  // resume handler then missed, a swallowed 'ended', a play() promise that never
+  // settles) would leave the fall's ONLY voice silent for the rest of the dive
+  // with nothing to restart it. This tick guarantees the loop: if the channel is
+  // armed but sitting fully idle - not playing, no gap pending, no safety pending
+  // - while audible and visible, re-arm it. Cheap and completely self-correcting.
+  const watchdog = setInterval(() => {
+    if (!started || disposed || isMuted() || document.hidden) { stallTicks = 0; return; }
+    keepCtxAwake(); // resume the shared context if it has drifted to 'suspended'
+    const idle = el.paused && !pendingResume && !gapTimer && !safetyTimer;
+    if (idle) { stallTicks = 0; scheduleNext(rand(GAP_MIN_MS, GAP_MAX_MS)); return; }
+    // Freeze guard: the element claims to be playing but its clock hasn't moved.
+    // 'ended' will never come and the 25s safety only re-stalls on the same dead
+    // context - so once the clock is confirmed stuck across two ticks (~8s), drop
+    // the wedged clip and start a fresh one (the ctx nudge above already ran).
+    if (!el.paused && !pendingResume) {
+      if (el.currentTime > 0.05 && el.currentTime <= stallPos + 0.05) {
+        if (++stallTicks >= 2) {
+          stallTicks = 0;
+          el.onended = null;
+          clearSafety();
+          scheduleNext(rand(GAP_MIN_MS, GAP_MAX_MS));
+        }
+      } else {
+        stallTicks = 0;
+      }
+      stallPos = el.currentTime;
+    } else {
+      stallTicks = 0;
+      stallPos = 0;
+    }
+  }, WATCHDOG_MS);
+
   const offMute = onMuteChange((m) => { if (m) softPause(); else softResume(); });
 
   // live voice-slider: apply to the clip that's already playing
@@ -276,6 +321,7 @@ export function createDriftChain({ getDepth }) {
   function dispose() {
     stop();
     disposed = true;
+    clearInterval(watchdog);
     offMute();
     offLevels();
     document.removeEventListener('visibilitychange', onVisibility);

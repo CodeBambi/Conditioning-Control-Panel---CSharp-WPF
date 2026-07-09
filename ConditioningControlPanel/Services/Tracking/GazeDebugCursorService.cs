@@ -48,9 +48,11 @@ public class GazeDebugCursorService : IDisposable
     private bool _locked;
 
     private Window? _overlay;
+    private IntPtr _hwnd;
     private SKElement? _sk;
     private bool _rendering;
     private TimeSpan _lastRender = TimeSpan.MinValue;
+    private TimeSpan _lastTopmostAssert = TimeSpan.MinValue;
     private double _dpiX = 1, _dpiY = 1;
 
     private Point _pos;
@@ -140,7 +142,7 @@ public class GazeDebugCursorService : IDisposable
                     Height = Math.Max(1, SystemParameters.VirtualScreenHeight),
                     Content = _sk,
                 };
-                _overlay.SourceInitialized += (_, _) => { MakeClickThrough(_overlay); CacheDpi(); };
+                _overlay.SourceInitialized += (_, _) => { _hwnd = new WindowInteropHelper(_overlay).Handle; MakeClickThrough(_overlay); CacheDpi(); };
                 _overlay.Show();
                 _hasPos = false;
                 _trail.Clear();
@@ -179,6 +181,8 @@ public class GazeDebugCursorService : IDisposable
             try { _overlay.Close(); } catch { }
             _overlay = null;
             _sk = null;
+            _hwnd = IntPtr.Zero;
+            _lastTopmostAssert = TimeSpan.MinValue;
         }
         _trail.Clear();
         _hasPos = false;
@@ -237,6 +241,21 @@ public class GazeDebugCursorService : IDisposable
                 }
                 if (dt <= 0) return;
                 if (dt > 0.1f) dt = 0.1f;
+
+                // Re-assert topmost periodically. The overlay sets Topmost once,
+                // but the video windows (and their attention-check targets) call
+                // SetWindowPos(HWND_TOPMOST) continuously, which shuffles them
+                // above us in the topmost band and buries the debug dot. A light
+                // ~200ms nudge back to the top keeps the cursor visible over
+                // video without high-frequency z-order thrash. SWP_NOACTIVATE so
+                // we never steal focus.
+                if (_hwnd != IntPtr.Zero
+                    && (_lastTopmostAssert == TimeSpan.MinValue
+                        || (r.RenderingTime - _lastTopmostAssert).TotalMilliseconds >= 200))
+                {
+                    _lastTopmostAssert = r.RenderingTime;
+                    try { SetWindowPos(_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE); } catch { }
+                }
             }
 
             // Age + cull trail nodes.
@@ -392,10 +411,17 @@ public class GazeDebugCursorService : IDisposable
     private const int WS_EX_TOOLWINDOW = 0x00000080;
     private const int WS_EX_NOACTIVATE = 0x08000000;
 
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOACTIVATE = 0x0010;
+
     [DllImport("user32.dll")]
     private static extern int GetWindowLong(IntPtr hwnd, int index);
     [DllImport("user32.dll")]
     private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
     public void Dispose()
     {

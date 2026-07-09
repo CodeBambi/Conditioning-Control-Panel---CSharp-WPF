@@ -7,7 +7,8 @@
  * for tuning by eye. ESC closes it (the scene owns that key).
  * ==========================================================================*/
 
-import { S, updateSetting, resetOptions, allWords, activeWords, setWordOn, addCustomWord, setCustomSpiral, getCustomSpiral } from './settings.js';
+import { S, updateSetting, resetOptions, allWords, activeWords, setWordOn, addCustomWord, setCustomSpiral, getCustomSpiral,
+  rungForKey, rungForFeature, UNLOCK_LADDER, RANK_NAMES } from './settings.js';
 import { peekAudioState } from './audioBus.js';
 
 const SLIDERS = [
@@ -20,8 +21,18 @@ const SLIDERS = [
   { key: 'spiralOpacity', label: 'spiral opacity', min: 0, max: 1, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
   { key: 'pinkOpacity', label: 'pink filter opacity', min: 0, max: 1, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
   { key: 'glitch', label: 'glitch intensity', min: 0, max: 1, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
+  { key: 'glitchSeconds', label: 'glitch timer', min: 1, max: 8, step: 0.5, fmt: (v) => `${v}s` },
   { key: 'spotSeconds', label: 'video spotlight time', min: 10, max: 30, step: 1, fmt: (v) => `${v}s` },
 ];
+
+// Spark glyph for the lock hints (matches catalog GLYPHS.drops).
+const SPARK = '✦';
+const lockHint = (r) => r.rankReq != null ? `🔒 ${SPARK}${r.price} · ${RANK_NAMES[r.rankReq]}` : `🔒 ${SPARK}${r.price}`;
+const lockTitle = (r) => {
+  const rank = r.rankReq != null ? ` and reaching rank ${RANK_NAMES[r.rankReq]}` : '';
+  return `Locked — earn it on the Warren's Dials board for ${r.price} sparks${rank}.`;
+};
+const rungById = (id) => UNLOCK_LADDER.find((x) => x.id === id);
 
 export function createPanel(hud) {
   const panel = document.createElement('div');
@@ -38,6 +49,39 @@ export function createPanel(hud) {
   closeBtn.textContent = '×';
   head.append(title, closeBtn);
   panel.appendChild(head);
+
+  // Progression: which ladder rungs the player has bought. Injected from the meta
+  // snapshot via setUnlocks() (authoritative C# state - see settings.js). A dial
+  // whose rung isn't here renders locked. Starter dials map to no rung => always
+  // open. lockRefreshers/featureRefreshers re-skin every gated control when the
+  // set changes (a purchase lands) without rebuilding the panel.
+  const unlockedRungs = new Set();
+  const lockRefreshers = [];
+  const featureRefreshers = [];
+  const keyUnlocked = (key) => { const r = rungForKey(key); return !r || unlockedRungs.has(r); };
+  const featureUnlocked = (feat) => { const r = rungForFeature(feat); return !r || unlockedRungs.has(r); };
+
+  // Gate a whole section: while locked, hide the wrap and show a padlock stub in
+  // its place; reveal the wrap once the owning rung is bought. No-op for ungated
+  // features. Call AFTER the wrap is appended to the panel - the stub is inserted
+  // right after it. `labelText` names the section on the stub.
+  function gateFeature(wrap, feature, labelText) {
+    const rungId = rungForFeature(feature);
+    if (!rungId) return;
+    const r = rungById(rungId);
+    const stub = document.createElement('div');
+    stub.className = 'sf-lockstub';
+    stub.textContent = `🔒 ${labelText} — ${lockHint(r)}`;
+    stub.title = lockTitle(r);
+    wrap.insertAdjacentElement('afterend', stub);
+    const refresh = () => {
+      const locked = !unlockedRungs.has(rungId);
+      wrap.style.display = locked ? 'none' : '';
+      stub.style.display = locked ? '' : 'none';
+    };
+    refresh();
+    featureRefreshers.push(refresh);
+  }
 
   // Reset to default - sits at the top of the option list. Scoped to the sliders
   // below (bubbles/gifs/spiral/glitch/etc.); leaves custom words, custom spiral
@@ -81,20 +125,43 @@ export function createPanel(hud) {
     row.append(lab, input);
     panel.appendChild(row);
     // Re-sync this control's slider position + readout from S (used on reset).
+    // Skip the readout while locked so a reset never overwrites the lock hint.
     sliderRefreshers.push(() => {
       input.value = String(S[def.key]);
-      val.textContent = def.fmt(S[def.key]);
+      if (keyUnlocked(def.key)) val.textContent = def.fmt(S[def.key]);
     });
+
+    // Lock skin: a padlocked, disabled row until its rung is bought. Starter
+    // dials (rungForKey === null) are never locked.
+    const rung = rungForKey(def.key);
+    if (rung) {
+      const refreshLock = () => {
+        const locked = !unlockedRungs.has(rung);
+        row.classList.toggle('is-locked', locked);
+        input.disabled = locked;
+        if (locked) {
+          val.textContent = lockHint(rungById(rung));
+          row.title = lockTitle(rungById(rung));
+        } else {
+          val.textContent = def.fmt(S[def.key]);
+          row.title = '';
+        }
+      };
+      refreshLock();
+      lockRefreshers.push(refreshLock);
+    }
   }
 
   // ---- custom spiral (session-only: blob URLs die with the tab) --------------
+  const customWrap = document.createElement('div');
+  customWrap.className = 'sf-section';
   const spiralHead = document.createElement('div');
   spiralHead.className = 'sf-row-label sf-words-head';
   const spiralName = document.createElement('span');
   spiralName.textContent = 'spiral gif';
   const spiralState = document.createElement('span');
   spiralHead.append(spiralName, spiralState);
-  panel.appendChild(spiralHead);
+  customWrap.appendChild(spiralHead);
 
   const spiralZone = document.createElement('div');
   spiralZone.className = 'sf-spiralzone';
@@ -108,7 +175,9 @@ export function createPanel(hud) {
   spiralInput.type = 'file';
   spiralInput.accept = 'image/*,video/*';
   spiralInput.hidden = true;
-  panel.append(spiralZone, spiralClear, spiralInput);
+  customWrap.append(spiralZone, spiralClear, spiralInput);
+  panel.appendChild(customWrap);
+  gateFeature(customWrap, 'custom', 'custom spiral gif');
 
   function renderSpiral() {
     const c = getCustomSpiral();
@@ -137,17 +206,21 @@ export function createPanel(hud) {
   spiralClear.addEventListener('click', () => { setCustomSpiral(null); renderSpiral(); });
 
   // ---- subliminal word picker ------------------------------------------------
+  const wordsWrap = document.createElement('div');
+  wordsWrap.className = 'sf-section';
   const wordsHead = document.createElement('div');
   wordsHead.className = 'sf-row-label sf-words-head';
   const wordsName = document.createElement('span');
   wordsName.textContent = 'subliminal words';
   const wordsCount = document.createElement('span');
   wordsHead.append(wordsName, wordsCount);
-  panel.appendChild(wordsHead);
+  wordsWrap.appendChild(wordsHead);
 
   const chips = document.createElement('div');
   chips.className = 'sf-chips';
-  panel.appendChild(chips);
+  wordsWrap.appendChild(chips);
+  panel.appendChild(wordsWrap);
+  gateFeature(wordsWrap, 'words', 'subliminal words');
 
   function renderChips() {
     chips.innerHTML = '';
@@ -167,6 +240,8 @@ export function createPanel(hud) {
   }
   renderChips();
 
+  const addWrap = document.createElement('div');
+  addWrap.className = 'sf-section';
   const addRow = document.createElement('div');
   addRow.className = 'sf-wordadd';
   const addInput = document.createElement('input');
@@ -186,7 +261,9 @@ export function createPanel(hud) {
     if (e.key === 'Enter') submitWord();
   });
   addRow.append(addInput, addBtn);
-  panel.appendChild(addRow);
+  addWrap.appendChild(addRow);
+  panel.appendChild(addWrap);
+  gateFeature(addWrap, 'custom', 'add your own words');
 
   // ---- diagnostics -------------------------------------------------------------
   // The on-phone black box: the card pipeline has broken silently on iPhone
@@ -269,6 +346,14 @@ export function createPanel(hud) {
     close,
     toggle() { openState ? close() : open(); },
     isOpen: () => openState,
+    // Push the set of purchased rung ids (from the meta snapshot) - reveals every
+    // dial/section whose rung is now owned. Cheap; safe to call on every snapshot.
+    setUnlocks(ids) {
+      unlockedRungs.clear();
+      for (const id of (ids || [])) unlockedRungs.add(id);
+      lockRefreshers.forEach((fn) => fn());
+      featureRefreshers.forEach((fn) => fn());
+    },
     dispose() { stopDiag(); panel.remove(); },
   };
 }

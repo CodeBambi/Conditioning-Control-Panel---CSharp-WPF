@@ -16,8 +16,10 @@ namespace ConditioningControlPanel;
 /// </summary>
 internal static class ChaosImagePool
 {
+    // Keep this in lockstep with FlashService's flash-pool extension list so glitch/cascade
+    // draw from exactly the images the user sees flashed (FlashService.cs ~1967).
     private static readonly string[] Extensions =
-        { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp" };
+        { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif", ".ico" };
     private static readonly TimeSpan TTL = TimeSpan.FromSeconds(60);
 
     private static List<string> _files = new();
@@ -35,8 +37,11 @@ internal static class ChaosImagePool
             // Stamp BEFORE the walk so a missing/throwing folder isn't re-walked every call.
             _stamp = now;
             _dir = dir;
+            // Recurse subfolders — FlashService scans AllDirectories to support user-organized
+            // category folders, so top-level-only here meant glitch/cascade silently found nothing
+            // for anyone who filed their images into subfolders even though flashes worked.
             _files = Directory.Exists(dir)
-                ? Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly)
+                ? Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories)
                     .Where(f => Extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
                     .ToList()
                 : new List<string>();

@@ -15,7 +15,7 @@
  * only closes it at full teardown via closeAudioBus()).
  * ==========================================================================*/
 
-import { isMuted } from '../shared/audioMute.js';
+import { isMuted, isDucked } from '../shared/audioMute.js';
 
 const GESTURES = ['pointerdown', 'touchstart', 'keydown', 'wheel'];
 
@@ -86,7 +86,7 @@ export function makeSfxPlayer() {
   return {
     preload(srcs) { for (const s of srcs) load(s); },
     play(src, vol = 0.3) {
-      if (isMuted() || vol <= 0.001) return; // a zeroed slider must mean SILENT on every path
+      if (isMuted() || isDucked() || vol <= 0.001) return; // muted, VN-ducked, or a zeroed slider = SILENT
       const buf = buffers.get(src);
       if (buf && buf !== 'pending' && buf !== 'failed') {
         const c = getAudioCtx();

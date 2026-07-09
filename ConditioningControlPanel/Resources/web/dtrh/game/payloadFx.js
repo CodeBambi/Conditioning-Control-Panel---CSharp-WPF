@@ -21,6 +21,8 @@
  * the `sfx` bridge. Everything else lives here.
  * ==========================================================================*/
 
+import { S } from '../engine/settings.js';
+
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const clamp01 = (v) => clamp(v, 0, 1);
 // Strength 0..100 mapped onto [min,max] - the JS twins of EffectPayload.Scale/ScaleD.
@@ -111,9 +113,18 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     showBraindrain(strength, durMult);
     const h = ensureHold('braindrain', 'sf-pfx-drain');
     h.el.classList.add('sf-pfx-glitching');
+    // How long the shudder holds is now the player-earned 'glitch timer' dial
+    // (S.glitchSeconds, 1-8s), still stretched by the bubble's durMult. Capped
+    // so a big detonation can't strobe forever.
+    const glitchMs = Math.min(12000, clamp(S.glitchSeconds || 2.5, 1, 8) * 1000 * durMult);
     clearTimeout(h._glitchTimer);
-    h._glitchTimer = setTimeout(() => { if (!disposed) h.el.classList.remove('sf-pfx-glitching'); },
-      Math.min(2600, scale(600, 1600, strength) * durMult));
+    h._glitchTimer = setTimeout(() => { if (!disposed) h.el.classList.remove('sf-pfx-glitching'); }, glitchMs);
+    // Keep the drain wash underneath alive at least as long as the shudder, so a
+    // long glitch never strobes over an already-faded screen.
+    if (h.hideTimer) {
+      clearTimeout(h.hideTimer);
+      h.hideTimer = setTimeout(() => { if (!disposed) { h.el.style.opacity = '0'; } h.hideTimer = 0; }, glitchMs);
+    }
   }
 
   // ---- transient bursts (flash / subliminal / bambi freeze) ------------------

@@ -25,6 +25,7 @@ export const MOTION = { FloatUp: 'FloatUp', RainDown: 'RainDown', RoamBounce: 'R
 
 const SPRITE_BASE = '/dtrh/assets/bubbles/effects/';
 const ART_BASE = 'https://ccp.art/bubbles/';   // bundled assets/Chaos/bubbles/{id}.png
+const PLAIN_SPRITE = '/dtrh/assets/bubbles/bubble.png'; // the classic dashboard Bubble-Pop soap bubble
 
 // One row per variant: visual band + behaviour + native payload binding.
 // payload is the bridge fire-payload shape (minus strength).
@@ -43,17 +44,17 @@ export const VARIANTS = [
     sprite: SPRITE_BASE + 'spiral.png',     weight: 2.0, minIntensity: 0.15, fuseMin: 3500, fuseMax: 5000 },
   { id: 'braindrain',  name: 'BrainDrain',  kind: 'live',   payload: { kind: 'overlay', overlay: 'braindrain' },
     min: 240, max: 320, motion: MOTION.RoamBounce, tint: 'rgb(64,96,192)',   label: '☁',
-    sprite: SPRITE_BASE + 'braindrain.png', weight: 1.4, minIntensity: 0.25, fuseMin: 4500, fuseMax: 6500 },
+    sprite: SPRITE_BASE + 'braindrain.png', weight: 1.4, minIntensity: 0.40, fuseMin: 4500, fuseMax: 6500 },
   { id: 'bambifreeze', name: 'Freeze',      kind: 'freeze', payload: null,
     min: 190, max: 250, motion: MOTION.FloatUp,    tint: 'rgb(138,230,255)', label: '❄',
     sprite: ART_BASE + 'bambifreeze.png',   weight: 0.5, minIntensity: 0.15, fuseMin: 0, fuseMax: 0 },
   // The two giants (M4): a long trance, but a mandatory video / gif rain if it goes off.
   { id: 'video',       name: 'Video',       kind: 'live',   payload: { kind: 'video' },
     min: 240, max: 300, motion: MOTION.RainDown,   tint: 'rgb(224,64,77)',   label: '▶',
-    sprite: ART_BASE + 'video.png',         weight: 0.5, minIntensity: 0.50, fuseMin: 5000, fuseMax: 7000 },
+    sprite: ART_BASE + 'video.png',         weight: 0.8, minIntensity: 0.55, fuseMin: 5000, fuseMax: 7000 },
   { id: 'htlink',      name: 'Gif Rain',    kind: 'live',   payload: { kind: 'gifCascade' },
     min: 200, max: 280, motion: MOTION.FloatUp,    tint: 'rgb(255,200,61)',  label: '▼',
-    sprite: ART_BASE + 'htlink.png',        weight: 0.45, minIntensity: 0.60, fuseMin: 4500, fuseMax: 6500 },
+    sprite: ART_BASE + 'htlink.png',        weight: 0.45, minIntensity: 0.80, fuseMin: 4500, fuseMax: 6500 },
 ];
 
 export const ALL_IDS = VARIANTS.map((v) => v.id);
@@ -68,13 +69,20 @@ export const FREEZE_MAX_ON_SCREEN = 2;       // hard cap on live freeze pickups
 export const RING_FLASH_FROM_MS = 2400;      // yellow <-> red flashing
 export const RING_BRINK_MS = 800;            // solid red - the brink window
 
+// ---- global pace slowdown: live bubbles carry more fuse, treats linger longer ----
+export const FUSE_GLOBAL_MULT = 1.4;         // every live fuse runs 40% longer (more time to defuse)
+export const FUSE_LIVE_BONUS_MS = 1000;      // flat +1s on EVERY live fuse (added after the floor/mults)
+export const FUSE_FLOOR_MS = 1600;           // deep-run fuse floor (was a hard 1200) so nothing feels twitchy
+export const TREAT_LIFE_MS = 8000;           // how long a plain/treat bubble lingers before it rots (was 5000)
+export const HEAVY_LIFE_MS = 12000;          // the slow giant treats get even longer to be reached (was 9000)
+
 // ---- behavioral-bubble tuning (ChaosTuning.cs) ----
 export const DEBUT_FUSE_MULT = 1.5;          // first-ever encounter: gentler, longer trance
 export const ECHO_SPAWN_CHANCE = 0.05;
 export const ECHO_CHILD_SCALE = 0.6;
 export const ECHO_CHILD_SPEED_MULT = 1.5;
-export const ECHO_CHILD_FUSE_MIN_MS = 2500;
-export const ECHO_CHILD_FUSE_MAX_MS = 3000;
+export const ECHO_CHILD_FUSE_MIN_MS = 3400;
+export const ECHO_CHILD_FUSE_MAX_MS = 4100;
 export const CHAPERONE_SPAWN_CHANCE = 0.04;
 export const CHAPERONE_ORBIT_RADIUS = 80;    // min orbit radius (grows with the pair's sizes)
 export const CHAPERONE_ORBIT_GAP = 18;
@@ -156,7 +164,7 @@ export function build(variant, intensity, {
   let fuseMs = 0;
   if (variant.kind === 'live') {
     const base = variant.fuseMin + Math.random() * Math.max(1, variant.fuseMax - variant.fuseMin);
-    fuseMs = Math.max(1200, base * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult));
+    fuseMs = Math.max(FUSE_FLOOR_MS, base * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult) * FUSE_GLOBAL_MULT) + FUSE_LIVE_BONUS_MS;
   }
 
   return {
@@ -172,7 +180,7 @@ export function build(variant, intensity, {
     fuseMs,
     speedMult: 1.0,
     payMult: 1.0,
-    treatLifeMs: variant.kind === 'treat' ? 5000 : 0,
+    treatLifeMs: variant.kind === 'treat' ? TREAT_LIFE_MS : 0,
   };
 }
 
@@ -214,6 +222,33 @@ export function buildGolden() {
   };
 }
 
+/** A plain soap bubble - no effect, no fuse. A slice of the ordinary field is
+ * these (the classic dashboard Bubble-Pop bubble) so the effect pool is diluted
+ * and the fall breathes instead of firing something on every single pop. It pops
+ * for points like any treat; its null payload simply fires nothing. */
+export function buildPlain(intensity, { sizeScale = 1.0, sideDriftChance = 0.0 } = {}) {
+  const t = clamp(Math.random() * 0.7 + intensity * 0.45, 0, 1);
+  const size = 170 + (250 - 170) * t;
+  const visual = GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale);
+  let motion = Math.random() < 0.5 ? MOTION.FloatUp : MOTION.RainDown;
+  if (sideDriftChance > 0 && Math.random() < sideDriftChance) motion = MOTION.SideDrift;
+  return {
+    variantId: 'plain',
+    kind: 'treat',            // pops instantly for points; isPlain()/scoring already handle 'treat'
+    payload: null,            // firePayload() early-returns on null -> no effect fires
+    strength: strengthOf(size, 1.0),
+    sizePx: size * visual,
+    tint: 'rgb(184,222,255)',
+    label: '',
+    sprite: PLAIN_SPRITE,
+    motion,
+    fuseMs: 0,
+    speedMult: 1.0,
+    payMult: 1.0,
+    treatLifeMs: TREAT_LIFE_MS,
+  };
+}
+
 /** Pop-up Notification heart: a lazy once-per-loop kindness (+1 resistance). */
 export function buildHeart() {
   return {
@@ -252,7 +287,7 @@ export function buildHeavy(intensity, effectIntensity = 1.0, sizeScale = 1.0) {
     fuseMs: 0,
     speedMult: 0.45,
     payMult: 3.0,          // read in onBenignPopped
-    treatLifeMs: 9000,     // slow faller - give it time to be reached
+    treatLifeMs: HEAVY_LIFE_MS,   // slow faller - give it time to be reached
   };
 }
 
@@ -314,7 +349,7 @@ export function buildEcho(intensity, fuseTimeMult = 1.0, sizeScale = 1.0, fuseMu
     tint: 'rgb(201,196,232)', label: '◌',
     sprite: ART_BASE + 'echo.png',
     motion: MOTION.FloatUp,
-    fuseMs: Math.max(1200, baseFuse * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult)),
+    fuseMs: Math.max(FUSE_FLOOR_MS, baseFuse * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult) * FUSE_GLOBAL_MULT) + FUSE_LIVE_BONUS_MS,
     speedMult: 1.0, payMult: 1.0, treatLifeMs: 0,
   };
 }
@@ -331,7 +366,7 @@ export function buildEchoChild(parentVisualSizePx, atX, atY, effectIntensity = 1
     strength: strengthOf(classicEq, effectIntensity),
     sizePx: size, tint: v.tint, label: v.label, sprite: v.sprite,
     motion: MOTION.RoamBounce,
-    fuseMs: ECHO_CHILD_FUSE_MIN_MS + Math.random() * Math.max(1, ECHO_CHILD_FUSE_MAX_MS - ECHO_CHILD_FUSE_MIN_MS),
+    fuseMs: ECHO_CHILD_FUSE_MIN_MS + Math.random() * Math.max(1, ECHO_CHILD_FUSE_MAX_MS - ECHO_CHILD_FUSE_MIN_MS) + FUSE_LIVE_BONUS_MS,
     speedMult: ECHO_CHILD_SPEED_MULT, payMult: 1.0, treatLifeMs: 0,
     spawnAt: { x: atX, y: atY },
   };
@@ -374,7 +409,7 @@ export function buildBoundPair(intensity, fuseTimeMult = 1.0, effectIntensity = 
       sizePx: size * GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale),
       tint: v.tint, label: v.label, sprite: v.sprite,
       motion: MOTION.RoamBounce,
-      fuseMs: Math.max(1200, baseFuse * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult)),
+      fuseMs: Math.max(FUSE_FLOOR_MS, baseFuse * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult) * FUSE_GLOBAL_MULT) + FUSE_LIVE_BONUS_MS,
       speedMult: 1.0, payMult: 1.0, treatLifeMs: 0,
       boundPairId: pairId,
     };
@@ -396,7 +431,7 @@ export function buildChaperonePair(intensity, fuseTimeMult = 1.0, effectIntensit
     sizePx: size * GLOBAL_SIZE_SCALE * Math.max(0.5, sizeScale),
     tint: v.tint, label: v.label, sprite: v.sprite,
     motion: MOTION.RoamBounce,
-    fuseMs: Math.max(1200, baseFuse * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult)),
+    fuseMs: Math.max(FUSE_FLOOR_MS, baseFuse * (1.0 - intensity * 0.25) * fuseTimeMult * Math.max(0.1, fuseMult) * FUSE_GLOBAL_MULT) + FUSE_LIVE_BONUS_MS,
     speedMult: 1.0, payMult: 1.0, treatLifeMs: 0,
     isChaperoneLive: true,
   };

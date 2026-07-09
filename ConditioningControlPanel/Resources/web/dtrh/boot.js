@@ -63,6 +63,7 @@ async function maybeStart() {
       bridge,
       hostState,
       runSetup: initMsg.runSetup,
+      modId: initMsg.modId,   // active persona (Bambi/Sissy/Circe) for the VN portrait
       requestExit: () => { bridge.send({ type: 'exit' }); shutdown(); },
     });
     engine = await mod.start({
@@ -92,7 +93,10 @@ function shutdown() {
 
 bridge.on('init', (m) => {
   initMsg = m;
-  if (m.m2Test) import('./m2test.js').then((t) => t.run(bridge, hostState)).catch((e) => bridge.log('m2test load failed: ' + e));
+  if (m.m2Test) {
+    try { window.__dtrhVnTest = true; } catch (e) { /* lets the VN welcome fire on any descent for play-testing */ }
+    import('./m2test.js').then((t) => t.run(bridge, hostState)).catch((e) => bridge.log('m2test load failed: ' + e));
+  }
   maybeStart();
 });
 bridge.on('manifest', (m) => {

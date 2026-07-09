@@ -29,7 +29,7 @@
  * NOT ported - Story mode is disabled in the WPF game too (placeholder only).
  * ==========================================================================*/
 
-import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildHeart, buildGoldDroplet,
+import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, buildHeart, buildGoldDroplet,
   buildHeavy, buildPrism, buildBrittle, buildEcho, buildEchoChild, buildTease,
   buildBoundPair, buildChaperonePair, buildDarter, rollDarter,
   FREEZE_MAX_ON_SCREEN, SIDE_DRIFT_CHANCE, SIDE_DRIFT_GRACE_SPAWNS, MOTION,
@@ -39,6 +39,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildHeart, build
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById } from './boons.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
+import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL } from './regions.js';
 import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
 import { createPayloadFx } from './payloadFx.js';
@@ -46,7 +47,10 @@ import { createChaosHud } from './chaosHud.js';
 import { createOverlays } from './overlays.js';
 import { createWarren } from './warren.js';
 import { createLessonTracker } from './lessons.js';
+import { createSessionMetrics } from '../engine/sessionMetrics.js';
 import { createHappyPath } from './happyPath.js';
+import { createVnPortrait } from './vnPortrait.js';
+import { setDucked } from '../shared/audioMute.js';
 import { lessonById } from './catalog.js';
 
 // ---- economy tuning (ChaosTuning.cs / ChaosModeService.cs) ----
@@ -63,16 +67,22 @@ const SLOWMO_FACTOR = 0.12;
 const SLOWMO_DURATION_SEC = 6.0;
 const RIPPLE_TRIGGER_GRACE_PX = 80;
 const RIPPLE_WAVE_GAP_MS = 1000;
+const RIPPLE_FOCUS_COST = 30;   // BASE ripple focus cost (no cooldown; chain while focus lasts). Skipping Stone lowers the per-run cost -> st.rippleFocusCost. FOCUS_MAX 100 = 3 casts at base, more when cheaper.
 const COMBO_BIG_THRESHOLDS = [25, 50, 100];
 const TICK = 0.25;                  // the C# RunTick period
+const PLAIN_BUBBLE_CHANCE = 0.30;   // share of ordinary spawns that are plain, effect-free soap bubbles (deep-run baseline)
+const PLAIN_BUBBLE_CHANCE_EARLY = 0.80; // at the top of the run: mostly plain bubbles, effects rare - ramps down to PLAIN_BUBBLE_CHANCE as intensity peaks
 const VIDEO_HEAVY_SEC = 62;         // in-world video card sits in front of the POV up to 60s + slack
 const CASCADE_BASE_SEC = 6;         // GifCascadePayload.DURATION_SEC (+5 ride-out)
 const RANK = { Curious: 0, Tempted: 1, Slipping: 2, Entranced: 3, Devoted: 4, Claimed: 5 };
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));   // inclusive
+const smoothstep = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); }; // ease-in-out 0..1
 
-export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
+export function createChaosGame({ bridge, hostState, runSetup, requestExit, modId }) {
+  // Active persona (Bambi/Sissy/Circe) - drives the VN portrait set + tint.
+  const activeModId = modId || 'builtin-sissyhypno';
   // rc/lo/cfg/flags are dealt PER RUN by applyRunConfig (the host's run-config
   // answer to request-run) - the Warren can change the loadout between runs.
   let rc = {}, lo = {}, cfg = null, flags = {};
@@ -83,8 +93,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     cfg = {
       difficulty: rc.difficulty || 'Easy',
       difficultyMult: rc.difficultyMult ?? 1.0,
-      durationSec: clamp(rc.durationSec ?? 180, 60, 900),
-      waveCount: clamp(rc.waveCount ?? 5, 1, 12),
+      durationSec: clamp(rc.durationSec ?? 960, 60, 1200),
+      waveCount: clamp(rc.waveCount ?? REGION_COUNT, 1, 12),
+      // The Four Chambers: a fixed I->IV descent, each ending in a boon Landing.
+      // On by default; a legacy non-4-loop run (or an explicit opt-out) falls
+      // back to the old random-weather / monotonic-intensity path.
+      regionMode: rc.regionMode !== false && (rc.waveCount ?? REGION_COUNT) === REGION_COUNT,
       effectIntensity: clamp(rc.effectIntensity ?? 0.85, 0.2, 1.5),
       enabledVariants: rc.enabledVariants || null,
       motionOverride: rc.motionOverride && MOTION[rc.motionOverride] ? rc.motionOverride : null,
@@ -124,12 +138,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
 
   let ctx = null;      // { nav, fx, director, hud, canvas } from scene.start
   let field = null, ffx = null, hudUi = null, overlays = null, payloadFx = null;
-  let warren = null, lessons = null, happy = null;
+  let warren = null, lessons = null, happy = null, vn = null;
+  const metrics = createSessionMetrics();   // per-run engagement counters (local-only telemetry)
   let state = 'boot';  // boot -> warren -> requesting -> countdown -> running -> drafting -> recap
   let paused = false, hidden = false, covered = false, drafting = false;
+  let vnHold = false;               // the persona is mid-line: freeze the field (no spawn, no drift, no pop) until she's done
   let shortNextCountdown = false;   // "fall again" re-enters with the lone GO flash
   let scriptedDraftActive = false;  // run 1's mid-run draft: no wave commit
-  const heldNow = () => paused || hidden || covered || drafting;
+  const heldNow = () => paused || hidden || covered || drafting || vnHold;
 
   // ---- run state (ChaosRunState + the boon knobs) ----
   let st = null;
@@ -142,8 +158,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       rippleCooldown: 0,
       freezeRemainingSec: 0, slowMoRemainingSec: 0,
       ordinarySpawns: 0, spawnSerial: 0, waveDetonations: 0, runDetonations: 0,
-      endingSoonFired: false, finalLoopAnnounced: false,
+      endingSoonFired: false, finalLoopAnnounced: false, finalLandingDone: false,
       lastComboBig: 0, lastActFired: 1,
+
+      // ---- branching paths (junctions.js) ----
+      nextJunctionSec: 45,     // first fork ~45s into the descent
+      branchTint: null,        // { color, strength } - a chosen branch's decaying tube blush
+      brands: {},              // tally of which trigger-word branches you keep taking
 
       // ---- resistance / streak protection ----
       shields: lo.shields ?? 0,
@@ -175,9 +196,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       shieldRegenPops: lo.shieldRegenPops ?? 0,
       showPopScores: !!lo.showPopScores,
       showWaveTimer: !!lo.showWaveTimer,
-      rippleRechargeSec: lo.rippleRechargeSec ?? 15,
+      rippleRechargeSec: lo.rippleRechargeSec ?? 15,   // vestigial (no cooldown) - reused below as the focus-cost dial
       rippleRadiusPx: lo.rippleRadiusPx ?? 260,
       rippleLifeMs: lo.rippleLifeMs ?? 520,
+      // Skipping Stone makes the ripple CHEAPER: the boon's old recharge number
+      // (15 bare-handed -> 13/11/9/8 by level, sent from C#) now sets the focus
+      // cost per cast at rechargeSec*2 -> 30 -> 26/22/18/16. Clamped to base/floor.
+      rippleFocusCost: clamp(Math.round((lo.rippleRechargeSec ?? 15) * 2), 15, RIPPLE_FOCUS_COST),
       rabbitRateMult: lo.rabbitRateMult ?? 1.0,
       intrusiveThoughtsSec: lo.intrusiveThoughtsSec ?? 0,
       slowMoBonusSec: lo.slowMoBonusSec ?? 0,
@@ -227,11 +252,29 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   /** All LUST gains flow through here so Her Perfume can sweeten them. */
   const addHeat = (x) => { st.heat = Math.min(1.0, st.heat + x * wxHeatGain()); };
   const basePoints = (strength) => 40 + strength * 1.6;
-  const intensity = () => clamp(st ? st.elapsedSec / st.runDurationSec : 0, 0, 1);
+  /** The descent's "how deep are we" signal (0..1), read by spawn cadence, the
+   * bubble build strength, the director mood and the FX ceilings.
+   *
+   * Legacy: a flat monotonic ramp across the whole run.
+   * Four Chambers: a per-region SAWTOOTH. Within a chamber the value eases from
+   * its band.start up to band.peak; the next chamber resets to its (higher)
+   * start, so the descent BREATHES instead of sliding. Bands rise region to
+   * region, so the overall trend still climbs and the Court (IV) is deepest. */
+  const intensity = () => {
+    if (!st) return 0;
+    if (!cfg || !cfg.regionMode || st.waveCount <= 1) {
+      return clamp(st.elapsedSec / st.runDurationSec, 0, 1);
+    }
+    const regionLen = st.runDurationSec / st.waveCount;
+    const region = regionForWave(st.waveIndex);
+    const local = smoothstep((st.elapsedSec - (st.waveIndex - 1) * regionLen) / regionLen);
+    return clamp(region.band.start + (region.band.peak - region.band.start) * local, 0, 1);
+  };
   const chanceFlip = () => st.chanceDoubleOdds > 0 ? (Math.random() < st.chanceDoubleOdds ? 2.0 : 0.5) : 1.0;
   const pendulumFactor = () => (pendulumSlowActive && st.pendulumPayMult > 1) ? st.pendulumPayMult : 1.0;
   const goldScaled = (g) => st.relapseActive ? g * 2 : g;
 
+  let finalLandingActive = false;     // the Court's terminal boon draft is up
   let tickAcc = 0, spawnWait = 0.8;   // the WPF spawn timer opens at 800ms
   let lastNoFocusAnnounce = -10;
   let focusLowAccum = 0, focusLowBarked = false;
@@ -246,6 +289,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   let rabbitStormSec = 0, rabbitStormAccum = 0;
   let thoughtAccum = 0;
   let heartbeatCd = 0;
+  const STATS_FLUSH_SEC = 15;   // how often the per-asset engagement delta is posted home
+  let statsFlushCd = STATS_FLUSH_SEC;
   let dvdWasActive = false;
   const discovered = new Set();
   let toys = [];
@@ -267,8 +312,24 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   let showActive = false, showDetonationsAt = 0; // W5: Private Show stage tracking
 
   // ---- bridge helpers ----
+  // Drain the spawner's per-asset engagement delta (weighted attention + paddle
+  // interactions) and post it home, where C# sums it into a cumulative store so
+  // future features can bias toward the images the user actually engages with.
+  function flushAssetStats() {
+    if (!ctx.spawner || !ctx.spawner.drainAssetStats) return;
+    const stats = ctx.spawner.drainAssetStats();
+    if (stats && stats.length) bridge.send({ type: 'asset-stats', stats });
+  }
   const sfx = (name, scale) => bridge.send({ type: 'sfx', name, scale });
   const bark = (event, data) => bridge.send({ type: 'bark', event, ...(data || {}) });
+  // The boon draft plays IN the tube (engine/boonPick.js): the fall parks, themed
+  // cards hang ahead, click one to shatter-and-drop-through. Same callback
+  // contract as the old DOM overlay (overlays.showDraft), which stays as a
+  // fallback if the engine didn't attach a boonPick. `sfx` gives the pick "the Pow".
+  const presentDraft = (o) => {
+    if (ctx && ctx.boonPick) ctx.boonPick.open({ ...o, sfx });
+    else overlays.showDraft(o);
+  };
   const setFlag = (key) => {
     if (flags[key]) return false;
     flags[key] = true;
@@ -305,6 +366,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       payloadFx?.applyPayload(spec, { isDetonation, durationMult });
     }
     lessons.onPayloadFired(kind);   // blindfold's screen-busy window
+    metrics.noteEffect(kind);       // session telemetry: effects shown + est. on-screen seconds
   };
   const heavyActive = () => covered || performance.now() < heavyUntil;
   const bankGold = (amount, x, y) => {
@@ -362,9 +424,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   // ============================ field callbacks ============================
 
   function canChannel(spec) {
-    if (!st) return false;
-    const cost = spec.boundPairId != null ? DEFUSE_COST_BOUND : DEFUSE_COST;
-    return st.freezeRemainingSec > 0 || st.focus >= cost;
+    // Defusing a live bubble is always allowed now - the hold is free. Focus is
+    // spent only by the ripple; low focus never leaves you unable to snap a live one.
+    return !!st;
   }
 
   function onChannelBroken(spec, reason) {
@@ -467,6 +529,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   function onBenignPopped(spec, x, y, src) {
     if (!st || state !== 'running' || heldNow()) return;
     countRegenPop();
+    metrics.noteBubblePopped();   // session telemetry: every treat/special popped
 
     if (spec.kind === 'heart') {
       lessons.onSpecialPopped();
@@ -525,6 +588,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
 
     // ---- standard treat (incl. heavies and chaperone escorts) ----
     lessons.onTreatPopped(spec, x, y);   // vibe window / chains / the_pull / whispers
+    if (spec.variantId === 'subliminal') metrics.noteSubliminalShown();
     firePayload(spec);   // benign pop = a treat: the effect IS the reward
     st.effectsFired++;
     st.combo++;
@@ -593,13 +657,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
 
   function onDefused(spec, fuseSecLeft, viaChannel, x, y) {
     if (!st || state !== 'running' || heldNow()) return;
-    // The player's hand pays for its defuses; toys, chains and zones never do.
-    // A channel completed during a freeze is free (that's the freeze's reward).
+    // Defusing is free now - the hold costs no focus (focus fuels only the ripple).
     if (viaChannel) {
-      if (st.freezeRemainingSec <= 0) {
-        const cost = spec.boundPairId != null ? DEFUSE_COST_BOUND : DEFUSE_COST;
-        st.focus = clamp(st.focus - cost, 0, FOCUS_MAX);
-      }
       if (setFlag('seenBarkDefuseFirst')) bark('defuse-first');
     }
     if (st.defuseInvulnMs > 0) st.invulnUntil = performance.now() + st.defuseInvulnMs;
@@ -813,6 +872,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     sfx('freeze_catch', 0.55);
     hudUi.announce('❄ FREEZE', 'freeze', 1800, { artKey: 'freeze' });
     pulse('150,210,255', 0.30);
+    // The world stops with the field: ask the host to pause any native voiceline +
+    // covering video for the freeze window (resumed on endFreeze). Idempotent host-side.
+    try { bridge.send({ type: 'freeze-state', on: true }); } catch (e) {}
   }
 
   function endFreeze() {
@@ -822,6 +884,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     if (state === 'running') ctx.director.setTimeFactor(st.slowMoRemainingSec > 0 ? 0.35 : baseTime());
     if (freezeCueOn) sfx('freeze_shatter', 0.5);
     freezeCueOn = false;
+    try { bridge.send({ type: 'freeze-state', on: false }); } catch (e) {}
   }
 
   // ============================ toys (active skills) ============================
@@ -1093,9 +1156,32 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       applyWeather(WEATHER_BY_ID.static, !weatherNow || weatherNow.id !== 'static');
       return;
     }
+    // Four Chambers: the sky is DETERMINISTIC - it's whatever this region wears.
+    if (cfg.regionMode) { applyRegionSky(st.waveIndex); return; }
     const w = weatherNext || rollWeather(weatherNow && weatherNow.id);
     weatherNext = rollWeather(w.id);
     applyWeather(w);
+  }
+
+  /** Dress the tube in region N's fixed sky (null = Region I's open fall) and
+   * pre-set the Mood Ring forecast to the NEXT chamber. Storm Chaser still wins
+   * (handled by advanceWeather before this is reached). */
+  function applyRegionSky(regionIndex) {
+    const region = regionForWave(regionIndex);
+    const w = region.weatherId ? WEATHER_BY_ID[region.weatherId] : null;
+    const nextRegion = regionIndex < REGION_COUNT ? regionForWave(regionIndex + 1) : null;
+    weatherNext = nextRegion && nextRegion.weatherId ? WEATHER_BY_ID[nextRegion.weatherId] : null;
+    // The chamber banner (announceRegion) is the headline, so the sky lands
+    // quietly here - just its persistent HUD chip + a first-sight desc toast,
+    // never its own competing banner.
+    applyWeather(w, false);
+    if (w) {
+      if (!weatherSeen.has(w.id)) { weatherSeen.add(w.id); hudUi.toast(`${w.glyph} ${w.desc}`); }
+      markDiscovered('weather:' + w.id);
+    }
+    // Four Chambers wall dressing: the chamber sets how plastered the tube wall
+    // is (I bare -> IV almost wall-to-wall). Scales with the descent.
+    if (ctx && ctx.wall) ctx.wall.setRegion(regionIndex);
   }
 
   // ---- Wave 2: tunnel pickups (spawner.spawnPickup - clickable 3D objects) ----
@@ -1151,11 +1237,103 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     applyWeather(rollWeather(weatherNow.id));
   }
 
+  // ---- Branching paths ("The Junction", engine/junctions.js) ----------------
+  // Mid-chamber forks: two branded mouths drift out of the fog; the player leans
+  // (fallNav laneVote) and the camera glides through one while the other seals.
+  // A passive faller is taken by the coaxed mouth. Deeper chambers pre-seal the
+  // resisting mouth more often (the "closing path" - the choice quietly leaves).
+  const JUNCTION_LEAD = 120;          // world units of telegraph before commit
+  const JUNCTION_EVERY = 55;          // rough seconds between forks (+ jitter)
+  const PRESEAL_BY_WAVE = [0, 0, 0.12, 0.4, 0.62]; // indexed by waveIndex (I..IV)
+  // Each fork pairs a coaxed (deeper/surrender) mouth with a resisting one.
+  const JUNCTION_PAIRS = [
+    { coax: { word: 'DEEPER', color: '#c86bff', brand: 'deep' }, resist: { word: 'SLOW',  color: '#7fe0ff', brand: 'slow' } },
+    { coax: { word: 'SINK',   color: '#ff6bd0', brand: 'sink' }, resist: { word: 'FLOAT', color: '#9effc0', brand: 'float' } },
+    { coax: { word: 'OBEY',   color: '#ff5c8a', brand: 'obey' }, resist: { word: 'THINK', color: '#bfc6ff', brand: 'think' } },
+    { coax: { word: 'MELT',   color: '#ff9a5c', brand: 'melt' }, resist: { word: 'HOLD',  color: '#a0ffe6', brand: 'hold' } },
+    { coax: { word: 'GOOD',   color: '#ff6bb0', brand: 'good' }, resist: { word: 'WAIT',  color: '#8fbaff', brand: 'wait' } },
+  ];
+
+  function maybeScheduleJunction() {
+    if (!cfg || !cfg.regionMode || cfg.scriptedFirstRun) return;
+    if (!ctx || !ctx.junctions || ctx.junctions.isBusy()) return;
+    if (heldNow() || covered) return;
+    if (ctx.spawner && ctx.spawner.spotlightActive()) return;
+    if (st.elapsedSec < st.nextJunctionSec) return;
+    // don't collide with the region-boundary boon draft: skip near the edges
+    const waveLen = st.runDurationSec / st.waveCount;
+    const intoRegion = st.elapsedSec - (st.waveIndex - 1) * waveLen;
+    if (intoRegion < 12 || waveLen - intoRegion < 24) { st.nextJunctionSec = st.elapsedSec + 6; return; }
+    st.nextJunctionSec = st.elapsedSec + JUNCTION_EVERY + Math.random() * 16;
+    fireJunction();
+  }
+
+  function fireJunction() {
+    const pair = JUNCTION_PAIRS[Math.floor(Math.random() * JUNCTION_PAIRS.length)];
+    const coaxSide = Math.random() < 0.5 ? 'left' : 'right';
+    const left = coaxSide === 'left' ? pair.coax : pair.resist;
+    const right = coaxSide === 'left' ? pair.resist : pair.coax;
+    const presealChance = PRESEAL_BY_WAVE[Math.min(4, st.waveIndex)] || 0;
+    let preseal = null;
+    if (Math.random() < presealChance) preseal = (coaxSide === 'left') ? 'right' : 'left'; // seal the resisting mouth
+    ctx.junctions.schedule({
+      atDepth: ctx.nav.getDepth() + JUNCTION_LEAD,
+      left, right, coaxSide, preseal,
+    });
+    bark('junction-near');
+  }
+
+  /** The fork committed (engine reports the winning branch). Tally the brand,
+   * blush the tube in the branch's color for a stretch, and mark the choice. */
+  function onJunctionChosen(choice) {
+    if (!st || !choice || !choice.branch) return;
+    const b = choice.branch;
+    st.brands[b.brand] = (st.brands[b.brand] || 0) + 1;
+    st.branchTint = { color: b.color, strength: 0.6 };
+    ctx.fx.pulseFlash(0.5);
+    ctx.nav.fovKick(2.4);
+    sfx(choice.forced ? 'sink' : 'boon_pick', 0.4);
+    hudUi.announce(b.word, 'depth', 1500, {
+      subText: choice.forced ? 'the only way left' : (choice.passive ? 'you let it choose' : ''),
+    });
+    hudUi.toast(choice.forced ? `↳ ${b.word} — the only way left`
+      : choice.passive ? `↳ ${b.word} — you let it choose` : `↳ ${b.word}`);
+    bark(choice.forced ? 'junction-forced' : 'junction-chosen', { word: b.word, brand: b.brand });
+    metrics.noteJunction({ forced: choice.forced, passive: choice.passive });
+    markDiscovered('junction:' + b.brand);
+  }
+
+  /** The faller has reached the fork mouth: crawl the tunnel so the branch can be
+   * read + chosen (the engine owns the 5s linger + auto-commit), then hand the
+   * speed back on commit/abort. Respects a concurrent freeze/slow-mo on release. */
+  function onJunctionLinger(on) {
+    if (!ctx || !ctx.director) return;
+    if (on) {
+      ctx.director.setTimeFactor(0.16);   // near-hover at the Y so both mouths can be read
+      try { if (hudUi) hudUi.toast('lean to choose ...'); } catch (e) { /* ignore */ }
+    } else if (state === 'running') {
+      // restore whatever the world time-factor should currently be
+      ctx.director.setTimeFactor(
+        st.freezeRemainingSec > 0 ? 0.06
+          : st.slowMoRemainingSec > 0 ? 0.35
+            : baseTime()
+      );
+    }
+  }
+
   /** Per-RunTick: Lust Bleed (the tube blushes with the LUST bar; a held full
    * bar forces pink fog) + Heat Warp (the combo streak re-patterns the rings
    * and burns the speed-lines hotter). Engine-side easing smooths all of it. */
   function ambientTick() {
-    ctx.fx.setTint('#ff4fae', st.heat * 0.6);
+    // A committed branch tints the tube in its color for ~18s (decaying), floored
+    // by / blended with the LUST blush so the fork's identity lingers on the wall.
+    const bt = st.branchTint;
+    if (bt && bt.strength > 0.01) {
+      bt.strength *= 0.965; // ~18s to fade at the 0.25s RunTick
+      ctx.fx.setTint(bt.color, Math.max(st.heat * 0.6, bt.strength));
+    } else {
+      ctx.fx.setTint('#ff4fae', st.heat * 0.6);
+    }
     if (!lustFullSeen && st.heat >= 0.98) { lustFullSeen = true; syncZone(); }
     else if (lustFullSeen && st.heat < 0.5) { lustFullSeen = false; syncZone(); }
     // 25-streak = fully warped (engine defaults: 125 rings / 45 turns)
@@ -1177,6 +1355,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     st.elapsedSec += dt;
     st.heat = Math.max(0, st.heat - 0.0015);
     ambientTick();
+    maybeScheduleJunction();
 
     // W4 pickups: condensation beads on the wall (rank Tempted+); once per
     // loop the white rabbit may dash by (Rabbit's Foot raises his odds).
@@ -1249,28 +1428,24 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     // Empty-field rescue: a fast clear shouldn't leave dead air.
     if (st.freezeRemainingSec <= 0 && field.count() === 0) spawnWait = 0;
 
-    if (st.rippleCooldown > 0) {
-      st.rippleCooldown -= dt;
-      if (st.rippleCooldown <= 0) { st.rippleCooldown = 0; sfx('toy_ready', 0.3); }
-    }
-    // The Ripple's once-ever teach line: offered on the ready charge until the first cast.
-    if (!flags.seenRippleTeach && !rippleTeachOffered && st.elapsedSec > 6 && st.rippleCooldown <= 0) {
+    // The Ripple's once-ever teach line: offered once you can afford a cast, until the first one.
+    if (!flags.seenRippleTeach && !rippleTeachOffered && st.elapsedSec > 6 && st.focus >= st.rippleFocusCost) {
       rippleTeachOffered = true;
       hudUi.announce('🌊 THE RIPPLE — right-click near the bubbles', 'powerup', 3200, { artKey: 'ripple_teach' });
     }
-    // Once-ever gentle teach the first time focus dips under a snap's price.
-    if (!flags.seenFocusTip && st.focus < DEFUSE_COST) {
+    // Once-ever gentle teach the first time focus dips under a ripple's price.
+    if (!flags.seenFocusTip && st.focus < st.rippleFocusCost) {
       setFlag('seenFocusTip');
-      hudUi.announce('focus runs low. treats refill it. snaps spend it.', 'depth', 3200);
+      hudUi.announce('focus fuels the ripple. treats refill it. snapping lives is free.', 'depth', 3200);
     }
     // Once-ever heat teach: name the burn the first time it visibly climbs.
     if (!flags.seenHeatTeach && st.heat >= 0.15) {
       setFlag('seenHeatTeach');
       hudUi.announce('lust climbs while you perform. it pays up to x2', 'depth', 3200);
     }
-    // rh_focus_low: a dry spell with live threats hanging -> one bark per run.
+    // rh_focus_low: a sustained dry spell with no ripple in the tank -> one bark per run.
     if (!focusLowBarked) {
-      if (st.focus < DEFUSE_COST && field.minFuseSec() != null) {
+      if (st.focus < st.rippleFocusCost) {
         focusLowAccum += dt;
         if (focusLowAccum >= FOCUS_LOW_BARK_SEC) { focusLowBarked = true; bark('focus-low'); }
       } else focusLowAccum = 0;
@@ -1328,6 +1503,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
         hudUi.announce('☠ RELAPSE — one more loop', 'bad', 2600, { artKey: 'relapse', subText: 'one more loop' });
         sfx('sin_accept', 0.6);
         bark('wave-escalated', { wave: st.waveIndex + 1 });
+      } else if (cfg.regionMode && cfg.boonDraftEnabled && !st.finalLandingDone) {
+        // Four Chambers: the Court (IV) earns its Landing too. The run's other
+        // three drafts fire as you LEAVE a chamber; region IV has no chamber
+        // after it, so its boon is a terminal draft, then the descent ends.
+        st.finalLandingDone = true;
+        beginFinalLanding();
+        return;
       } else { endRun(true); return; }
     }
 
@@ -1353,7 +1535,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     score: st.score, totalMult: totalMult(), combo: st.combo,
     focus: st.focus, elapsedSec: st.elapsedSec, runDurationSec: st.runDurationSec,
     waveIndex: st.waveIndex, waveCount: st.waveCount,
-    rippleCooldown: st.rippleCooldown,
+    rippleCost: st.rippleFocusCost,
     shields: st.shields, startingShields: st.startingShields,
     collarSaves: st.collarSaves,
     heat: st.heat,
@@ -1385,13 +1567,46 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     pendingWave = newWave;
 
     const options = dealOptions();
-    overlays.showDraft({
+    presentDraft({
       wave: st.waveIndex,
       options,
       autoResumeSec: cfg.draftAutoResumeSec,
       rerollsLeft: st.rerollsLeft,
       // The SKIP affordance is reveal-gated until run 3 (draft_skip): before
       // that the table auto-PICKS on timeout ("she chooses for you").
+      allowSkip: cfg.runsCompleted >= 2,
+      onPick: (boon, auto) => { if (auto) bark('draft-autopick'); resolveDraft(boon, auto); },
+      onSkip: (auto) => { if (auto) bark('draft-autopick'); resolveDraft(null, auto); },
+      onReroll: () => {
+        if (st.rerollsLeft <= 0) return null;
+        st.rerollsLeft--;
+        hudUi.toast('🎲 tempted fate again');
+        return { options: dealOptions(), rerollsLeft: st.rerollsLeft };
+      },
+    });
+  }
+
+  /** The Court's Landing: region IV's terminal boon draft. Same table as a wave
+   * transition, but it resolves into endRun (no next chamber to advance to).
+   * The loop tip is left to endRun so it isn't double-paid. */
+  function beginFinalLanding() {
+    lessons.onLoopCompleted();
+    bark('wave-escalated', { wave: st.waveIndex });
+    finalLandingActive = true;
+    drafting = true;
+    state = 'drafting';
+    syncHeld();
+    field.clearAll(true);
+    sfx('wave_clear', 0.6);
+    pulse('150,200,255', 0.30);
+    bark('wave-cleared', { wave: st.waveIndex });
+
+    const options = dealOptions();
+    presentDraft({
+      wave: st.waveIndex,
+      options,
+      autoResumeSec: cfg.draftAutoResumeSec,
+      rerollsLeft: st.rerollsLeft,
       allowSkip: cfg.runsCompleted >= 2,
       onPick: (boon, auto) => { if (auto) bark('draft-autopick'); resolveDraft(boon, auto); },
       onSkip: (auto) => { if (auto) bark('draft-autopick'); resolveDraft(null, auto); },
@@ -1430,6 +1645,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   }
 
   function resolveDraft(boon, auto) {
+    // session telemetry: what the draft yielded + whether the timer had to decide
+    if (auto) metrics.noteAutopick();
+    if (boon) { if (boon.curse) metrics.noteCurse(); else metrics.noteBoon(); }
+    else metrics.noteSkip();
     if (boon) {
       lessons.onDraftCardTaken(!!boon.curse);   // draft4 / surrender / first-times
       // The happy-path rig shields the run-4 demo sin WITHOUT spending
@@ -1468,9 +1687,18 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       st.shields += 1;
       pulse('120,220,160', 0.22);
       hudUi.announce('+1 RESISTANCE', 'freeze', 2000, { artKey: 'resistance' });
+      // fly a shield from screen-centre into the HUD shields slot so the bank reads
+      try { hudUi.flyShieldToSlot && hudUi.flyShieldToSlot(); } catch (e) { /* ignore */ }
       bark('boon-skipped', { shields: st.shields });
     }
     happy.onDraftResolved(hpIo);   // the run-4 first-sin beat is spent either way
+    // The Court's Landing resolves into the end of the descent, not a next loop.
+    if (finalLandingActive) {
+      finalLandingActive = false;
+      drafting = false;
+      endRun(true);
+      return;
+    }
     const scripted = scriptedDraftActive;
     scriptedDraftActive = false;
     if (!scripted) commitWave(pendingWave);   // run 1's mid-run table advances no loop
@@ -1486,6 +1714,16 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
 
   function commitWave(newWave) {
     st.waveIndex = newWave;
+    // Four Chambers: every loop IS a new chamber, so announce it by name.
+    if (cfg.regionMode) {
+      st.actIndex = Math.min(newWave, REGION_COUNT);
+      st.lastActFired = st.actIndex;
+      announceRegion(newWave);
+      advanceWeather();
+      ctx.fx.pulseFlash(0.6);
+      pulse('150,200,255', 0.30);
+      return;
+    }
     st.actIndex = 1 + Math.floor((newWave - 1) / 5);
     if (st.actIndex > st.lastActFired) {
       st.lastActFired = st.actIndex;
@@ -1504,6 +1742,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     ctx.fx.pulseFlash(0.6);
     pulse('150,200,255', 0.30);
     if (!cfg.boonDraftEnabled) announceFinalLoopIfEntering();
+  }
+
+  /** Four Chambers: the arrival banner for a region (I..IV) - name + descent
+   * beat. Fired on every chamber entry (and Region I at the opening GO). */
+  function announceRegion(regionIndex) {
+    const r = regionForWave(regionIndex);
+    sfx('depth_change', 0.55);
+    hudUi.announce(`CHAMBER ${r.numeral} · ${r.name}`, 'depth', 2600, { artKey: 'depth', subText: r.subtitle });
+    bark('act-changed', { act: Math.min(regionIndex, REGION_COUNT), wave: regionIndex });
   }
 
   function announceFinalLoopIfEntering() {
@@ -1547,8 +1794,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   function trySpawnBehavioral(effIntensity) {
     const gentleMult = cfg.difficulty === 'Easy' ? 0.5 : 1.0;
     const rank = cfg.rankIndex;
+    // Four Chambers: the region biases WHICH mechanics show up (pairs in the
+    // Hall, echoes in the Garden, teases in the Court). `behavioral` is a global
+    // scale; the per-mechanic keys ride on top. Neutral (all 1.0) off-region.
+    const prof = cfg.regionMode ? profileForWave(st.waveIndex) : PROFILE_NEUTRAL;
+    const bMult = gentleMult * prof.behavioral;
 
-    if (rank >= RANK.Tempted && Math.random() < ECHO_SPAWN_CHANCE * gentleMult) {
+    if (rank >= RANK.Tempted && Math.random() < ECHO_SPAWN_CHANCE * bMult * prof.echo) {
       const debut = !flags.seenEcho;
       if (debut) {
         setFlag('seenEcho');
@@ -1558,7 +1810,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       field.spawn(buildEcho(effIntensity, st.fuseTimeMult, st.bubbleScale, debut ? DEBUT_FUSE_MULT : 1.0));
       return true;
     }
-    if (rank >= RANK.Tempted && Math.random() < CHAPERONE_SPAWN_CHANCE * gentleMult) {
+    if (rank >= RANK.Tempted && Math.random() < CHAPERONE_SPAWN_CHANCE * bMult * prof.chaperone) {
       const debut = !flags.seenChaperone;
       if (debut) {
         setFlag('seenChaperone');
@@ -1573,7 +1825,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       return true;
     }
     if ((cfg.difficulty === 'Hard' || cfg.difficulty === 'Extreme' || rank >= RANK.Entranced)
-        && Math.random() < BOUND_SPAWN_CHANCE * gentleMult) {
+        && Math.random() < BOUND_SPAWN_CHANCE * bMult * prof.bound) {
       const debut = !flags.seenBound;
       if (debut) {
         setFlag('seenBound');
@@ -1586,7 +1838,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       field.spawn(b);
       return true;
     }
-    if (rank >= RANK.Slipping && Math.random() < TEASE_SPAWN_CHANCE * gentleMult) {
+    if (rank >= RANK.Slipping && Math.random() < TEASE_SPAWN_CHANCE * bMult * prof.tease) {
       const debut = !flags.seenTease;
       if (debut) {
         setFlag('seenTease');
@@ -1601,10 +1853,20 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   }
 
   function spawnTick() {
+    // Held (paused / covered / drafting / the persona mid-line): hold the field and
+    // retry shortly. Guards the same-frame case where the empty-field rescue zeroes
+    // spawnWait in tick() just as a VN beat sets the hold.
+    if (heldNow()) { spawnWait = 0.3; return; }
     if (st.freezeRemainingSec > 0) { spawnWait = 0.3; return; }   // frozen: hold the field
     const i = intensity();
     const effIntensity = clamp(i + (cfg.difficultyMult - 1.0) * 0.15, 0, 1);
-    const maxConcurrent = Math.round((6 + i * 10) * Math.sqrt(cfg.difficultyMult));
+    // Four Chambers: the region's `density` scales how full the field runs -
+    // sparse in the Long Fall, an overgrown tangle in the Mad Garden.
+    const prof = cfg.regionMode ? profileForWave(st.waveIndex) : PROFILE_NEUTRAL;
+    // Population ceiling: kept low through most of the fall and only climbing
+    // hard as intensity peaks in the deep chambers, so the run RAMPS instead of
+    // firing a full field the whole way down. (Was 6 + i*10.)
+    const maxConcurrent = Math.max(3, Math.round((4 + i * 8) * Math.sqrt(cfg.difficultyMult) * prof.density));
 
     const room = field.count() < maxConcurrent;
     // The scripted first descent: the behavioral menagerie stands down entirely
@@ -1626,10 +1888,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       }
 
       let spec;
+      const sideDrift = st.ordinarySpawns < SIDE_DRIFT_GRACE_SPAWNS ? 0 : SIDE_DRIFT_CHANCE;
       if (st.heavyDropEvery > 0 && ++st.spawnSerial % st.heavyDropEvery === 0) {
         spec = buildHeavy(effIntensity, cfg.effectIntensity, st.bubbleScale);
+      } else if (Math.random() < PLAIN_BUBBLE_CHANCE_EARLY + (PLAIN_BUBBLE_CHANCE - PLAIN_BUBBLE_CHANCE_EARLY) * i) {
+        // Plain-bubble share RAMPS with intensity: ~80% plain at the top of the
+        // run (effects stay rare, the fall reads as calm) easing to ~30% deep, so
+        // the stimulus builds gradually instead of firing wall-to-wall up front.
+        spec = buildPlain(effIntensity, { sizeScale: st.bubbleScale, sideDriftChance: sideDrift });
       } else {
-        const sideDrift = st.ordinarySpawns < SIDE_DRIFT_GRACE_SPAWNS ? 0 : SIDE_DRIFT_CHANCE;
         const opts = {
           enabledIds: enabled,
           fuseTimeMult: st.fuseTimeMult,
@@ -1682,9 +1949,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       }
     }
 
-    // Refill cadence: 1000ms early -> 320ms late (/difficulty), floor 280ms.
-    let interval = (1000 - i * 680) / cfg.difficultyMult;
+    // Refill cadence: 1250ms early -> 360ms late (/difficulty), floor 280ms. The
+    // slower open keeps the shallow chambers calm; it tightens as intensity peaks.
+    let interval = (1250 - i * 890) / cfg.difficultyMult;
     interval /= cfg.spawnRateMult;
+    interval /= Math.sqrt(prof.density);   // dense chambers refill a touch faster
     interval /= wxSpawnRate();   // Overstim weather: bubbles come faster
     if (st.freefallCadence) interval /= 1.25;   // Freefall sin (unshielded half)
     if (st.slowMoRemainingSec > 0) interval /= SLOWMO_FACTOR;   // slow-mo stretches the cadence
@@ -1698,14 +1967,19 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     if (state !== 'running' || heldNow() || !st) return;
     if (st.freezeRemainingSec > 0) return;   // a frozen field is already a free-pop window
     const x = e.clientX, y = e.clientY;
-    if (!field.nearAny(x, y, st.rippleRadiusPx + RIPPLE_TRIGGER_GRACE_PX)) return;
-    if (st.rippleCooldown > 0) {
-      sfx('toy_denied', 0.45);
-      field.floatText(`gathering… ${Math.ceil(st.rippleCooldown)}s`, x, y - 30, 'cf-pop--focus');
+    // the ripple fires on bubbles OR on a flash clip under the click - so
+    // right-clicking a flash that's covering the field still triggers (and flings
+    // it), instead of silently no-op'ing when no bubble sits under the cursor.
+    const flashUnder = ctx.flingFlashesNear && ctx.flingFlashesNear(x, y, st.rippleRadiusPx, true);
+    if (!flashUnder && !field.nearAny(x, y, st.rippleRadiusPx + RIPPLE_TRIGGER_GRACE_PX)) return;
+    if (st.focus < st.rippleFocusCost) {
+      sfx('focus_empty', 0.5);
+      hudUi.flashFocus();
+      field.floatText(`need ${st.rippleFocusCost} focus`, x, y - 30, 'cf-pop--focus');
       return;
     }
-    st.rippleCooldown = st.rippleRechargeSec;
-    if (setFlag('seenRippleTeach')) hudUi.announce('🌊 that\'s the ripple. it gathers back on its own', 'powerup', 2400);
+    st.focus = clamp(st.focus - st.rippleFocusCost, 0, FOCUS_MAX);
+    if (setFlag('seenRippleTeach')) hudUi.announce('🌊 that\'s the ripple. it spends focus — pop treats to refill', 'powerup', 2400);
     const skips = st.maxedBoons.has('skipping_stone');
     castRippleWave(x, y);
     if (skips) {
@@ -1719,6 +1993,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   function castRippleWave(x, y) {
     sfx('ripple_cast', 0.6);
     field.castRipple(x, y, st.rippleRadiusPx, st.rippleLifeMs);
+    // the same wave flings the on-screen flash clips (the hydra flashes) off
+    // screen along the angle of the hit, clearing the view onto the bubbles.
+    if (ctx.flingFlashesNear) ctx.flingFlashesNear(x, y, st.rippleRadiusPx);
     // P1: the ripple is a tunnel shockwave too.
     ctx.nav.fovKick(2.5);
     ctx.fx.pulseFlash(0.5);
@@ -1744,6 +2021,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     get allowCurses() { return cfg.allowCurses; },
     equipmentHas: (id) => cfg.equipment.includes(id),
     bark: (event) => bark(event),
+    /** A Visual-Novel portrait beat (scripted descents). `beat` is a manifest beat
+     * id (resolves the active persona's emote + line + voiceover) or an explicit
+     * {emote,line,voUrl}. Returns a promise; safe to fire-and-forget. No-op if the
+     * VN overlay isn't built. */
+    vnBeat: (beat) => (vn ? vn.beat(beat) : Promise.resolve(false)),
     spawnScriptedThreat(fuseMult) {
       const pink = VARIANTS.find((v) => v.id === 'pink');
       if (!pink) return;
@@ -1768,7 +2050,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       pulse('150,200,255', 0.30);
       pendingWave = st.waveIndex;
       for (const o of pool) markDiscovered('boon:' + o.id);
-      overlays.showDraft({
+      presentDraft({
         wave: st.waveIndex,
         options: pool,
         autoResumeSec: cfg.draftAutoResumeSec,
@@ -1832,15 +2114,20 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     vibeRemainingSec = 0; afterglowApplied = false;
     estimCharges = 0; rabbitCallPending = 0; rabbitStormSec = 0; thoughtAccum = 0;
     heartbeatCd = 0;
+    statsFlushCd = STATS_FLUSH_SEC;
     scriptedDraftActive = false;
+    finalLandingActive = false;
+    vnHold = false;   // a run torn down mid-beat must not carry a stuck field-freeze into the next descent
     clearAmbient();
-    weatherNext = rollWeather(null);   // loop 1 flies under an open sky; the weather lands with loop 2
-    // A live run owns the stage: no approach-promoted spotlight video may
-    // hijack it mid-descent (Private Show is the only sanctioned takeover).
-    if (ctx.spawner) {
-      ctx.spawner.setAutoSpotlight(false);
-      if (ctx.spawner.spotlightActive()) ctx.spawner.skipSpotlight();
-    }
+    // Four Chambers: Region I is the open fall; the Mood Ring forecasts the next
+    // chamber's fixed sky. Legacy runs roll a random loop-2 sky instead.
+    weatherNext = cfg.regionMode
+      ? (regionForWave(2).weatherId ? WEATHER_BY_ID[regionForWave(2).weatherId] : null)
+      : rollWeather(null);   // loop 1 flies under an open sky; the weather lands with loop 2
+    // Tunnel videos hold in view (the Fall's spotlight) during a descent too, so
+    // a passing video lingers for its 'video spotlight time' (S.spotSeconds)
+    // instead of bolting through. (Was off mid-run; restored by request.)
+    if (ctx.spawner) ctx.spawner.setAutoSpotlight(true);
     buildToys();
     syncPhys();
     // Sticky Fingers capstone: releasing a held card hurls it down the tube;
@@ -1855,6 +2142,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       });
     }
     lessons.seed(hostState ? hostState.meta : null, cfg.allowCurses);
+    metrics.reset();   // fresh per-run engagement counters
     happy.onRunStarted(cfg.runsCompleted, cfg.scriptedFirstRun);
 
     // A pre-equipped start boon enters the run already active (before wave 1) -
@@ -1878,12 +2166,21 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       onTick: (b) => sfx(b === 'GO!' ? 'sink' : 'countdown_tick', 0.5),
       onGo: () => {
         state = 'running';
+        // Descent is live: wake the drift whisper + special tube moods (the hub kept them idle).
+        try { ctx.setRunActive && ctx.setRunActive(true); } catch (e) { /* ignore */ }
         bridge.send({ type: 'run-started', difficulty: cfg.difficulty, mode: 'dtrh-web' });
+        // Fresh descent: reset the wall to this chamber's plaster level (Region I
+        // is bare; a non-region run stays bare at 0).
+        if (ctx && ctx.wall) ctx.wall.setRegion(cfg.regionMode ? st.waveIndex : 0);
         // First descent since the verb changed: one quiet line so the hold isn't
         // a mystery. The scripted run 1 lands this at its lone-threat beat instead.
         if (!flags.seenDefuseTutorial && !cfg.scriptedFirstRun) {
           setFlag('seenDefuseTutorial');
           hudUi.announce('press and HOLD a live one to snap it', 'freeze', 3200);
+        } else if (cfg.regionMode && !cfg.scriptedFirstRun) {
+          // Chamber I's arrival banner (skipped on the first-ever descent, which
+          // owns the GO beat with the defuse tutorial, and on the scripted run).
+          announceRegion(1);
         }
         if (st.welcomeShower) spawnWelcomeShower();
       },
@@ -1893,6 +2190,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
   function endRun(ranFullCourse) {
     if (state !== 'running') return;
     state = 'recap';
+    // Surfaced: hush the drift whisper + calm the tube for the recap/hub idle.
+    try { ctx.setRunActive && ctx.setRunActive(false); } catch (e) { /* ignore */ }
+    if (ctx && ctx.wall) ctx.wall.setRegion(0); // bare the wall for the recap/warren
     if (st.freezeRemainingSec > 0) endFreeze();
     if (st.slowMoRemainingSec > 0) endSlowMo();
     field.setVibe(false);
@@ -1907,6 +2207,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     sfx('surface', 0.5);
     const channelSec = field.channelSeconds();
     if (channelSec > 0.5) bridge.send({ type: 'meta-command', op: 'add-channel-seconds', seconds: channelSec });
+    flushAssetStats();   // ship the last engagement delta before the recap
+
     bridge.send({
       type: 'run-ended',
       score: st.score,
@@ -1920,6 +2222,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       detonated: st.detonated,
       trickleDrops: st.trickleDrops,
       dripFeedMaxed: st.maxedBoons.has('drip_feed'),
+      // local-only session telemetry: JS-side counters folded with st's own; the
+      // host adds its natively-measured video/voice totals + sums into the store.
+      sessionStats: metrics.snapshot(st, ctx.nav.getDepth()),
     });
     overlays.showRecap({
       score: st.score,
@@ -1953,6 +2258,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
     hudUi.setPicks([]);
     field.clearAll();
     clearAmbient();
+    try { ctx.setRunActive && ctx.setRunActive(false); } catch (e) { /* ignore */ }
     if (ctx.spawner) ctx.spawner.setAutoSpotlight(true);
     ctx.director.setTimeFactor(0.3);
     state = 'warren';
@@ -1976,6 +2282,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       ffx = createFieldFx(ctx.hud);
       payloadFx = createPayloadFx({ hud: ctx.hud, fx: ctx.fx, media: ctx.media, flashBurst: ctx.flashBurst });
       try { window.__sfPayloadFx = payloadFx; } catch { /* diagnostics seam (m2test) */ }
+      try { window.__sfFireJunction = () => fireJunction(); } catch { /* diagnostics seam: force a branch fork */ }
       field = createChaosField({
         hud: ctx.hud, fx: ffx,
         canChannel, onBenignPopped, onFreezeCaught,
@@ -1987,7 +2294,30 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       onToyUse: (id) => { const t = toys.find((x) => x.id === id); if (t) useToy(t); },
       onWeatherClick: () => rerollWeather(),
     });
+      // Branching paths: the engine reports which mouth the faller took, and asks
+      // us to crawl the tunnel while it hovers at the fork so the choice can breathe.
+      if (ctx.junctions) {
+        ctx.junctions.onCommit = onJunctionChosen;
+        ctx.junctions.onLinger = onJunctionLinger;
+      }
       overlays = createOverlays(ctx.hud);
+      vn = createVnPortrait(ctx.hud, {
+        getModId: () => activeModId,
+        // VN beats stop the tunnel dead while she talks, then hand it back.
+        haltTunnel: (on) => { try { ctx.director.setTimeFactor(on ? 0 : baseTime()); } catch (e) { /* ignore */ } },
+        // Silence everything but the ambient bed while she talks: web pops/chimes
+        // (audioBus duck) + the drift voice (scene) + native stingers/barks (host skips on vn-speaking).
+        duckAudio: (on) => {
+          try { setDucked(!!on); } catch (e) {}
+          try { ctx.silenceVoice && ctx.silenceVoice(!!on); } catch (e) {}
+          try { bridge.send({ type: 'vn-speaking', on: !!on }); } catch (e) {}
+          // Freeze the whole field while she talks: no new bubbles, existing ones
+          // hold, popping is locked. On the run's opening beat this also means the
+          // bubbles don't start until she's finished - the run "really" begins then.
+          vnHold = !!on; syncHeld();
+        },
+      });
+      try { vn.prime(); } catch (e) { /* manifest warms lazily on first beat */ }
       lessons = createLessonTracker({ bridge, onComplete: onLessonComplete, onFirstTime: onFirstTimeAwarded });
       lessons.setCoveredProbe(() => covered || heavyActive());
       happy = createHappyPath();
@@ -2001,6 +2331,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
           bridge.send({ type: 'request-run', setup });
         },
         onExit: () => { if (requestExit) requestExit(); else bridge.send({ type: 'exit' }); },
+        onOptions: ctx.openOptions,
       });
       window.addEventListener('pointerdown', onPointerDownGlobal, true);
       window.addEventListener('pointerdown', onGlobalPointerDownCapture, true);
@@ -2010,6 +2341,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       ctx.director.setTimeFactor(0.3);   // the tunnel idles at a crawl under the hub
       state = 'warren';
       warren.show('menu');
+      // Seed the options panel from whatever snapshot already landed pre-attach.
+      try { ctx.syncOptionUnlocks && ctx.syncOptionUnlocks((hostState && hostState.meta && hostState.meta.purchasedDials) || []); } catch (e) { /* ignore */ }
     },
 
     /** The host answered request-run: deal the fresh config and drop in. */
@@ -2026,8 +2359,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       beginCountdown(short);
     },
 
-    /** A fresh meta snapshot landed - the Warren re-renders its shelves. */
-    onMeta() { if (warren) warren.refresh(); },
+    /** A fresh meta snapshot landed - the Warren re-renders its shelves, and the
+     *  options panel reveals any newly-purchased dials. */
+    onMeta() {
+      if (warren) warren.refresh();
+      try { ctx && ctx.syncOptionUnlocks && ctx.syncOptionUnlocks((hostState && hostState.meta && hostState.meta.purchasedDials) || []); } catch (e) { /* panel not up */ }
+    },
 
     /** Esc routing: the Warren owns the key while it's up (scene skips its pause). */
     onEsc() {
@@ -2078,12 +2415,20 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
               if (got > 0) hudUi.toast(`🫧 ${got} arrived at once`);
             }
           }
-          // Sticky Fingers: the held 3D card pops the treats it sweeps over
-          if (st.stickyFingersLevel > 0 && ctx.spawner && ctx.spawner.isGrabbing()) {
+          // The paddle: a grabbed 3D card sweeps the field - pops treats, snap-
+          // defuses lives (rate-capped), flings rabbits. Core mechanic on any
+          // run; Sticky Fingers just pays the pop bonus (see onBenignPopped).
+          if (ctx.spawner && ctx.spawner.isGrabbing()) {
             const rect = ctx.spawner.heldCardScreenRect();
-            if (rect) field.sweepRect(rect);
+            if (rect) {
+              const hit = field.paddleSweep(rect);
+              if (hit.popped || hit.defused || hit.flung) ctx.spawner.notePaddleInteraction(hit);
+            }
           }
         }
+        // periodically post the per-asset engagement delta home (cheap; skips when empty)
+        statsFlushCd -= dt;
+        if (statsFlushCd <= 0) { statsFlushCd = STATS_FLUSH_SEC; flushAssetStats(); }
       }
       field.update(dt);
     },
@@ -2135,9 +2480,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit }) {
       field?.dispose();
       ffx?.dispose();
       payloadFx?.dispose();
+      vn?.dispose();   // closes the VN AudioContext + removes its overlay/listeners (else it leaks per attach and hits Chromium's context ceiling)
       try { if (window.__sfPayloadFx === payloadFx) delete window.__sfPayloadFx; } catch { /* seam cleanup */ }
+      try { delete window.__sfFireJunction; } catch { /* seam cleanup */ }
       field = null; hudUi = null; overlays = null; ffx = null; payloadFx = null;
-      warren = null; lessons = null; happy = null;
+      warren = null; lessons = null; happy = null; vn = null;
     },
   };
 }

@@ -39,7 +39,7 @@ public sealed class ChaosFlashOverlay : Window
         try
         {
             var pick = PickImage();
-            if (pick == null) return;
+            if (pick == null) { App.Logger?.Debug("ChaosFlashOverlay: no images in pool — nothing to wash (glitch)"); return; }
             if (_active == null) { _active = new ChaosFlashOverlay(); ((Window)_active).Show(); }
             else if (!_active.IsVisible) { try { ((Window)_active).Show(); } catch { } }   // idles hidden between washes
             ChaosWindowZ.RaiseAboveVideo(_active);   // un-hiding doesn't re-stack — kick over a playing video
@@ -184,12 +184,17 @@ public sealed class ChaosFlashOverlay : Window
         try { Close(); } catch { }
     }
 
-    /// <summary>Pick a random image file from the flash images folder, or null if none.
-    /// Rides the shared TTL cache — re-walking the folder per wash was UI-thread I/O.</summary>
+    /// <summary>Pick one random image from the SAME enabled pool the flashes draw on (disk +
+    /// content packs, honoring the asset manager's disabled set) — see FlashService.GetChaosImagePaths.
+    /// Falls back to the raw folder listing only if the flash service isn't up yet. Returns null if
+    /// nothing is enabled. One image = at most one pack decrypt, so it's cheap on the UI thread.</summary>
     private static string? PickImage()
     {
         try
         {
+            var picks = App.Flash?.GetChaosImagePaths(1);
+            if (picks != null && picks.Count > 0) return picks[0];
+            // Fallback (Flash service not initialized): raw folder pool.
             var files = ChaosImagePool.GetFiles();
             if (files.Count == 0) return null;
             return files[_rng.Next(files.Count)];

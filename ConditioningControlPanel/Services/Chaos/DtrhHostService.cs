@@ -34,11 +34,29 @@ internal static class DtrhHostService
     private static DateTime _lastHeartbeatUtc;
     private static bool _exiting;
     private static bool _runActive;
+    private static bool _minimizedMainWindow;   // we tucked the main window to the tray for this session
     private static bool _relaunchedOnce;
     private static bool _testMode;
     private static bool _videoHooked;
+    private static bool _vnSpeaking;   // a VN tutorial beat owns the mix: skip native stingers/barks
+    private static bool _worldFrozen;  // an in-world Freeze bubble is holding native video + voice
+
+    // ---- per-run native engagement metrics (local-only session telemetry) ----
+    // Durations only the host can measure (video watch / voiceover / native audio
+    // subliminals) accumulate here between run-started and run-ended, then merge into
+    // the page's sessionStats snapshot and sum into DtrhSessionStatsStore at OnRunEnded.
+    private static double _runVideoWatchSec;
+    private static int _runVideosShown;
+    private static int _runVideosSkipped;
+    private static int _runVoicelines;
+    private static double _runVoiceoverSec;
+    private static int _runSubliminalsHeard;
 
     public static bool IsActive => _host != null;
+
+    /// <summary>A DtRH descent is currently running (between run-started and run-ended). Used to
+    /// cheaply gate optional per-run telemetry off the global bark/audio paths.</summary>
+    public static bool IsRunActive => _runActive;
 
     /// <summary>The page reported boot-error (WebGL/GPU init failed) this app session.
     /// The Lab entry points check this and route to the classic WPF game instead, so a
@@ -54,6 +72,7 @@ internal static class DtrhHostService
         {
             _exiting = false;
             _runActive = false;
+            _worldFrozen = false;
             _testMode = testMode;
             _meta = new DtrhMetaBridge(testMode, msg => _host?.Post(msg));
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Resources", "web");
@@ -68,8 +87,10 @@ internal static class DtrhHostService
                     // needs CORS-clean responses (verified in the M0 spike).
                     ("ccp.assets", App.EffectiveAssetsPath, CoreWebView2HostResourceAccessKind.Allow),
                     // M4: the bundled Chaos art (bubble sprites, boon icons, announcer
-                    // banners) - plain <img> loads, so DenyCors suffices.
-                    ("ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"), CoreWebView2HostResourceAccessKind.DenyCors),
+                    // banners). Allow (not DenyCors): the in-tube boon draft
+                    // (engine/boonPick.js) uploads the boon icons to WebGL, which needs
+                    // CORS-clean responses; plain <img> consumers are unaffected.
+                    ("ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"), CoreWebView2HostResourceAccessKind.Allow),
                 },
                 UserDataFolderName = "browser_data_dtrh",
                 InputEnabled = true,
@@ -88,6 +109,18 @@ internal static class DtrhHostService
             _host.Show();
             HookVideoEvents(true);
             StartHeartbeatWatch();
+            // Tuck the main CCP window into the tray while the descent owns the screen;
+            // DisposeAll restores it on exit. The game window keeps focus.
+            try
+            {
+                if (Application.Current?.MainWindow is MainWindow mw)
+                {
+                    mw.MinimizeToTrayForChaos();
+                    _minimizedMainWindow = true;
+                    _host.FocusWeb();
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost: minimize main window failed: {E}", ex.Message); }
             App.Logger?.Information("DtrhHostService: launched{T}", testMode ? " (M2 TEST MODE)" : "");
         }
         catch (Exception ex)
@@ -133,6 +166,9 @@ internal static class DtrhHostService
                 type = "init",
                 protocol = Protocol,
                 settings = new { masterVolume = SafeMasterVolume() },
+                // Active persona (builtin-bambisleep / builtin-sissyhypno / builtin-locked):
+                // the page's VN portrait picks the matching portrait set + tint.
+                modId = SafeActiveModId(),
                 // M5: the page boots into the Warren hub; a run's config is dealt
                 // per-descent by request-run. init carries the SAVED run setup so
                 // the hub's Descent tab opens on the user's own choices.
@@ -159,8 +195,12 @@ internal static class DtrhHostService
     {
         switch ((string?)o["type"])
         {
+            case "vn-speaking":
+                _vnSpeaking = (bool?)o["on"] ?? false;
+                break;
             case "sfx":
             {
+                if (_vnSpeaking) break;   // VN owns the mix - stingers stay silent while she speaks
                 var name = (string?)o["name"];
                 var scale = (float?)o["scale"] ?? 0.6f;
                 // Two cues live behind fallback-resolving helpers (no dedicated asset yet).
@@ -172,6 +212,9 @@ internal static class DtrhHostService
             case "fire-payload":
                 FirePayload(o);
                 break;
+            case "freeze-state":
+                ApplyWorldFreeze((bool?)o["on"] ?? false);
+                break;
             case "meta-command":
                 _meta?.Handle(o);
                 break;
@@ -181,6 +224,9 @@ internal static class DtrhHostService
             case "run-started":
             {
                 _runActive = true;
+                _vnSpeaking = false;   // never carry a stale duck into a run
+                ApplyWorldFreeze(false);   // a stale freeze from a crashed prior run must not bleed into this descent's dedup state
+                ResetRunMetrics();     // fresh native engagement counters for this descent
                 var diff = (string?)o["difficulty"] ?? "Gentle";
                 if (!_testMode)
                 {
@@ -194,10 +240,16 @@ internal static class DtrhHostService
                 OnRunEnded(o);
                 break;
             case "bark":
+                if (_vnSpeaking) break;   // don't let a bark talk over her VN line
                 RouteBark(o);
                 break;
             case "heartbeat":
                 _lastHeartbeatUtc = DateTime.UtcNow;
+                break;
+            case "asset-stats":
+                // per-asset engagement delta (weighted attention + paddle interactions);
+                // summed into dtrh_asset_stats.json for future media-selection features
+                try { DtrhAssetStatsStore.Merge(o); } catch { }
                 break;
             case "boot-error":
                 OnBootError((string?)o["msg"]);
@@ -241,7 +293,7 @@ internal static class DtrhHostService
         var s = App.Settings?.Current;
         if (s == null) return;
         if (setup["difficulty"] != null) s.ChaosDifficulty = (string?)setup["difficulty"] ?? s.ChaosDifficulty;
-        if (setup["durationSec"] != null) s.ChaosRunDurationSec = Math.Clamp((int?)setup["durationSec"] ?? 180, 60, 900);
+        if (setup["durationSec"] != null) s.ChaosRunDurationSec = Math.Clamp((int?)setup["durationSec"] ?? 960, 60, 1200);
         if (setup["waveCount"] != null) s.ChaosWaveCount = Math.Clamp((int?)setup["waveCount"] ?? 5, 1, 12);
         if (setup["motion"] != null) s.ChaosMotionMode = (string?)setup["motion"] ?? s.ChaosMotionMode;
         if (setup["enabledVariants"] != null)
@@ -304,7 +356,10 @@ internal static class DtrhHostService
             if (string.Equals(kindStr, "video", StringComparison.OrdinalIgnoreCase))
                 payload = EffectPayloadFactory.Build(EffectBubblePayloadKind.Video);
             else if (string.Equals(kindStr, "audio", StringComparison.OrdinalIgnoreCase))
+            {
                 payload = EffectPayloadFactory.Build(EffectBubblePayloadKind.Audio);
+                if (_runActive) _runSubliminalsHeard++;   // native whisper = a subliminal heard
+            }
             else
             {
                 // Visual effects are in-world now; the page should never send them here.
@@ -325,6 +380,7 @@ internal static class DtrhHostService
     private static void OnRunEnded(JObject o)
     {
         _runActive = false;
+        ApplyWorldFreeze(false);   // a run ending mid-freeze must resume native video + voice, not wedge them through the hub
         try
         {
             double score = (double?)o["score"] ?? 0;
@@ -375,6 +431,28 @@ internal static class DtrhHostService
                 // snapshot so the Warren's flash pass sees the new pendings on return.
                 try { _meta?.Rebroadcast(); } catch { }
             }
+
+            // Local-only session telemetry: fold the host-measured natives + payout into the
+            // page's sessionStats snapshot and sum it into the cumulative store. Best-effort,
+            // never sent to the server. (No recap UI reads this yet - that ships with the
+            // unlock-gated recap card later; we just accumulate the data now.)
+            try
+            {
+                var js = o["sessionStats"] as JObject ?? new JObject();
+                js["videoWatchSec"]    = _runVideoWatchSec;
+                js["videosShown"]      = _runVideosShown;
+                js["videosSkipped"]    = _runVideosSkipped;
+                js["voicelinesHeard"]  = _runVoicelines;
+                js["voiceoverSec"]     = _runVoiceoverSec;
+                js["subliminalsHeard"] = _runSubliminalsHeard;
+                js["sparksEarned"]     = sparksEarned;
+                js["xpEarned"]         = finalXp;
+                var life = DtrhSessionStatsStore.Record(js, diff);
+                App.Logger?.Information(
+                    "DtrhHost: session metrics recorded (run #{Runs}): {Bubbles} bubbles, {Boons} boons, {VidSec:0}s video, {VoxSec:0}s voice",
+                    life.Runs, life.BubblesPopped, life.BoonsReceived, life.VideoWatchSec, life.VoiceoverSec);
+            }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost session-metrics record: {E}", ex.Message); }
 
             _host?.Post(new
             {
@@ -448,6 +526,37 @@ internal static class DtrhHostService
         catch (Exception ex) { App.Logger?.Debug("DtrhHost.RouteBark: {E}", ex.Message); }
     }
 
+    // ============================ world freeze ============================
+
+    /// <summary>freeze-state {on} - the in-world Freeze bubble stops the field, so stop the
+    /// REAL world with it: pause any covering video and the currently-playing spoken voiceline
+    /// for the freeze window, resuming both when it lifts. Idempotent (dedup on _worldFrozen);
+    /// also force-resumed on run end / teardown so a clip can never wedge paused.</summary>
+    private static void ApplyWorldFreeze(bool on)
+    {
+        if (on == _worldFrozen) return;
+        _worldFrozen = on;
+        var disp = Application.Current?.Dispatcher;
+        if (disp == null) return;
+        disp.BeginInvoke(() =>
+        {
+            try
+            {
+                if (on)
+                {
+                    App.Video?.PausePrimary();
+                    App.AvatarWindow?.PauseSpokenAudio();
+                }
+                else
+                {
+                    App.Video?.PlayPrimary();
+                    App.AvatarWindow?.ResumeSpokenAudio();
+                }
+            }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost.ApplyWorldFreeze: {E}", ex.Message); }
+        });
+    }
+
     // ============================ native payload state ============================
 
     /// <summary>A mandatory video fully covers the game - tell the page (pause/duck) and
@@ -461,12 +570,14 @@ internal static class DtrhHostService
             {
                 App.Video.VideoStarted += OnVideoStarted;
                 App.Video.VideoEnded += OnVideoEnded;
+                App.Video.VideoWatchCredited += OnVideoWatchCredited;
                 _videoHooked = true;
             }
             else if (!on && _videoHooked)
             {
                 App.Video.VideoStarted -= OnVideoStarted;
                 App.Video.VideoEnded -= OnVideoEnded;
+                App.Video.VideoWatchCredited -= OnVideoWatchCredited;
                 _videoHooked = false;
             }
         }
@@ -475,9 +586,41 @@ internal static class DtrhHostService
 
     private static void OnVideoStarted(object? sender, EventArgs e)
     {
+        if (_runActive) _runVideosShown++;   // session telemetry: a video was shown this run
         var disp = Application.Current?.Dispatcher;
         if (disp == null || _host == null) return;
         disp.BeginInvoke(() => _host?.Post(new { type = "payload-state", kind = "video", on = true }));
+    }
+
+    /// <summary>The video path finished crediting its watched time (fires from VideoService's
+    /// interruption-safe credit finalizer). Accumulate the real watched seconds and, when the
+    /// user bailed well before the end, count it as a skip. Local-only session telemetry.</summary>
+    private static void OnVideoWatchCredited(object? sender, VideoWatchInfoEventArgs e)
+    {
+        if (!_runActive) return;
+        _runVideoWatchSec += Math.Max(0, e.WatchedSec);
+        if (e.DurationSec > 0 && e.WatchedSec / e.DurationSec < 0.90) _runVideosSkipped++;
+    }
+
+    /// <summary>Zero the per-run native engagement counters (called on run-started).</summary>
+    private static void ResetRunMetrics()
+    {
+        _runVideoWatchSec = 0;
+        _runVideosShown = 0;
+        _runVideosSkipped = 0;
+        _runVoicelines = 0;
+        _runVoiceoverSec = 0;
+        _runSubliminalsHeard = 0;
+    }
+
+    /// <summary>A companion voiceline played its audio (called from BarkService.Speak with the
+    /// clip's duration in seconds). No-ops unless a DtRH run is active, so instrumenting the
+    /// global bark path costs nothing off the game. Local-only session telemetry.</summary>
+    public static void NoteVoicelineHeard(double sec)
+    {
+        if (!_runActive) return;
+        _runVoicelines++;
+        if (sec > 0) _runVoiceoverSec += sec;
     }
 
     private static void OnVideoEnded(object? sender, EventArgs e)
@@ -608,6 +751,8 @@ internal static class DtrhHostService
         CancelExitWatchdog();
         StopHeartbeatWatch();
         HookVideoEvents(false);
+        // Never leave a video or voiceline wedged paused if the window dies mid-freeze.
+        if (_worldFrozen) { _worldFrozen = false; try { App.Video?.PlayPrimary(); } catch { } try { App.AvatarWindow?.ResumeSpokenAudio(); } catch { } }
         try { _meta?.FlushSave(); } catch { }
         if (_runActive && !_testMode)
         {
@@ -620,6 +765,12 @@ internal static class DtrhHostService
         _host = null;
         _meta = null;
         _exiting = false;
+        // Bring the main CCP window back from the tray if we minimized it at launch.
+        if (_minimizedMainWindow)
+        {
+            _minimizedMainWindow = false;
+            try { (Application.Current?.MainWindow as MainWindow)?.ShowFromTray(); } catch { }
+        }
         App.Logger?.Information("DtrhHostService: closed");
     }
 
@@ -804,5 +955,13 @@ internal static class DtrhHostService
     {
         try { return App.Settings?.Current?.MasterVolume ?? 100; }
         catch { return 100; }
+    }
+
+    /// <summary>Active persona/mod id for the page's VN portrait. Defaults to the
+    /// Sissy set when no mod is resolvable (that's the only baked portrait set today).</summary>
+    private static string SafeActiveModId()
+    {
+        try { return App.Mods?.ActiveModId ?? "builtin-sissyhypno"; }
+        catch { return "builtin-sissyhypno"; }
     }
 }

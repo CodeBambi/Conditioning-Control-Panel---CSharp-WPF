@@ -16,6 +16,13 @@ const subs = new Set();
 
 export function isMuted() { return muted; }
 
+// Transient "duck the SFX" switch (separate from the user mute): the VN tutorial
+// flips this so pops/chimes/stingers fall silent while the persona speaks, while
+// the ambient bed keeps playing. Not persisted.
+let ducked = false;
+export function isDucked() { return ducked; }
+export function setDucked(v) { ducked = !!v; }
+
 export function setMuted(v) {
   muted = !!v;
   try { localStorage.setItem(KEY, muted ? '1' : '0'); } catch (e) { /* ignore */ }

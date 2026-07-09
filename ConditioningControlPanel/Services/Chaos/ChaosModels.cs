@@ -195,7 +195,7 @@ public sealed class ChaosRunConfig
         if (s == null) { ChaosMeta.ApplyTo(cfg); return cfg; }
         var saved = Enum.TryParse<ChaosDifficulty>(s.ChaosDifficulty, out var d) ? d : ChaosDifficulty.Easy;
         cfg.Difficulty = ClampDifficulty(saved);
-        cfg.DurationSec = Math.Clamp(s.ChaosRunDurationSec, 60, 900);
+        cfg.DurationSec = Math.Clamp(s.ChaosRunDurationSec, 60, 1200);
         cfg.WaveCount = Math.Clamp(s.ChaosWaveCount, 1, 12);
         cfg.MotionOverride = Enum.TryParse<ChaosMotion>(s.ChaosMotionMode, out var m) ? m : (ChaosMotion?)null;
         cfg.EnabledVariants = ClampVariants(s.ChaosEnabledVariants);   // null = all

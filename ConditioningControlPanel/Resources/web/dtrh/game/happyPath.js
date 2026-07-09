@@ -32,6 +32,7 @@ export function createHappyPath() {
 
   // run 1 beats
   let streakTaught, threatSpawned, threatDefuseSeen, variantsJoined, draftFired, darterSpawned;
+  let introStarted;   // the VN welcome plays once, on the first scripted tick
   // run 2 beats
   let braindrainDebuted, goldenSpawned;
   // draft rigging
@@ -43,6 +44,7 @@ export function createHappyPath() {
     scripted = !!isScripted;
     streakTaught = threatSpawned = threatDefuseSeen = variantsJoined = false;
     draftFired = darterSpawned = false;
+    introStarted = false;
     braindrainDebuted = goldenSpawned = false;
     draftsThisRun = 0;
     shieldRigBoonId = null;
@@ -61,7 +63,11 @@ export function createHappyPath() {
     if (!active) return;
     try {
       if (scripted) tickFirstRun(io);
-      else if (runsAtStart === 1) tickSecondRun(io);
+      else {
+        // dev play-test: --dtrh-m2test lets the VN welcome fire on any descent
+        try { if (typeof window !== 'undefined' && window.__dtrhVnTest) maybePlayIntro(io); } catch (e) { /* ignore */ }
+        if (runsAtStart === 1) tickSecondRun(io);
+      }
     } catch (e) {
       // The script must never hurt a run - but a swallowed beat is invisible,
       // so surface it in the host log.
@@ -69,7 +75,23 @@ export function createHappyPath() {
     }
   }
 
+  // The Visual-Novel welcome: the persona greets, then tells you the one rule.
+  // Fire-and-forget (async overlays); once per run. Also reachable in test mode
+  // (window.__dtrhVnTest, set by boot on --dtrh-m2test) so it's play-testable on
+  // any descent without needing a fresh profile.
+  function maybePlayIntro(io) {
+    if (introStarted || !io.vnBeat) return;
+    introStarted = true;
+    (async () => {
+      try {
+        await io.vnBeat('intro1');   // persona greets (emote + line + voice from the manifest)
+        await io.vnBeat('intro2');   // the one rule: watch the bubbles, pop them
+      } catch (e) { /* the run must never wait on the VN */ }
+    })();
+  }
+
   function tickFirstRun(io) {
+    maybePlayIntro(io);
     if (!streakTaught && io.combo() >= R1_STREAK_TEACH_COMBO) {
       streakTaught = true;
       io.announce('pops in a row build a streak. it pays more.', 'streak', 3200);

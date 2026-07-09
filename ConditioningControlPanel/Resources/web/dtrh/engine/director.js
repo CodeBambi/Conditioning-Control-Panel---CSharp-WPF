@@ -21,6 +21,8 @@ const BOOST_LUCKY = 4;         // + per golden jackpot
 const BOOST_EFFECT = 2.2;      // + per fired screen effect (chains compound)
 const BOOST_CAP = 14;
 const BOOST_HALFLIFE = 3.5;    // seconds for a boost to bleed to ~37%
+const EARLY_SLOW_SECONDS = 30; // the fall stays gentle for this long: scroll/pop boost is throttled at the top of the run, then opens fully
+const EARLY_BOOST_FLOOR = 0.2; // how much of the boost lands at t=0 (ramps to 1.0 by EARLY_SLOW_SECONDS) - keeps the plunge slow even under heavy scrolling
 const HOLD_FACTOR = 0.6;       // fall eases to this while a card is grabbed
 const MAX_MISSES = 10;
 
@@ -62,7 +64,11 @@ export function createDirector({ challenge, intensitySource = null }) {
     getTargetSpeed() {
       if (over) return 0.15;
       const base = BASE_SPEED_CALM + (BASE_SPEED_HOT - BASE_SPEED_CALM) * intensity();
-      return (base + boost) * (holding ? HOLD_FACTOR : 1) * timeFactor;
+      // Early-run governor: only a fraction of the scroll/pop boost lands during
+      // the first ~30s, so the top of the fall stays slow no matter how hard you
+      // scroll; the throttle eases to full by EARLY_SLOW_SECONDS.
+      const boostGate = EARLY_BOOST_FLOOR + (1 - EARLY_BOOST_FLOOR) * clamp01(runTime / EARLY_SLOW_SECONDS);
+      return (base + boost * boostGate) * (holding ? HOLD_FACTOR : 1) * timeFactor;
     },
 
     // Game-driven time dilation (freeze / recap idle) + the detonation stumble.

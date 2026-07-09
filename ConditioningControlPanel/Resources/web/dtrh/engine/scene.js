@@ -17,6 +17,9 @@ import { disposeTextures } from '../shared/assets.js';
 import { buildLoopLayout, createTunnel, FOG_COLOR, FOG_DENSITY } from './tunnel.js';
 import { createFallNav } from './fallNav.js';
 import { createSpawner } from './spawner.js';
+import { createWallPosters } from './wallPosters.js';
+import { createJunctions } from './junctions.js';
+import { createBoonPick } from './boonPick.js';
 import { createBubbles } from './bubbles.js';
 import { createDirector } from './director.js';
 import { createFx } from './fx.js';
@@ -133,6 +136,8 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   let drone = null, droneVol = DRONE_FLOOR, droneStarted = false;
   let droneCtx = null, droneGain = null, droneWatch = 0;
   let droneKickTries = 0, droneKickRest = 0, droneDuck = 1, voiceDuck = 1;
+  let voiceSilenced = false;   // VN tutorial: hard-mute the drift voice while the persona speaks
+  let runActive = false;       // game mode: the drift whisper + special tube moods live ONLY inside a descent (the Warren hub idles calm + quiet)
   try { drone = new Audio(DRONE_URL); drone.loop = true; drone.preload = 'auto'; drone.volume = DRONE_FLOOR; } catch (e) { drone = null; }
   function setDroneVolume(v) {
     if (droneGain) droneGain.gain.value = v;
@@ -193,6 +198,66 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     },
   });
 
+  // Four Chambers wall dressing: region-scaled posters plastered on the tube
+  // wall (idle at density 0 until the game's run brain sets a region).
+  const wall = createWallPosters({ scene, layout, media, renderer, camera });
+
+  // Branching paths: in-world forks the game arms mid-chamber. Two diverging
+  // veins are carved into the wall with hanging media cards; clicking a card (or
+  // leaning) dives down it, then the branch becomes the new endless tube (rebase).
+  const junctions = createJunctions({ scene, layout, nav, tunnel, spawner });
+  const _jray = new THREE.Raycaster(), _jndc = new THREE.Vector2();
+
+  // In-tube boon draft: at each loop clear the fall parks and themed boon cards
+  // hang ahead - click one to shatter it and drop through (the old DOM draft).
+  const boonPick = createBoonPick({ scene, camera, layout, nav, fx, hud });
+  const _bray = new THREE.Raycaster(), _bndc = new THREE.Vector2();
+
+  // Wall-poster hold: press-and-hold a wall gif to swing the camera onto it (a
+  // closer look); release swings back. The fall eases to a near-stop meanwhile.
+  const _pray = new THREE.Raycaster(), _pndc = new THREE.Vector2(), _pv = new THREE.Vector3();
+  let _heldPoster = false;
+
+  // ---- rebase: the junction dive handoff -------------------------------------
+  // fallNav rode the chosen vein to its tail and reports the exit frame. Build a
+  // fresh endless loop, rigid-transform it so its entry frame == the vein exit
+  // (coaxial, fog-hidden), mutate `layout` IN PLACE so every captured ref follows,
+  // rebuild the tunnel geometry (same material -> fx/tint bindings survive), hand
+  // the camera back onto the rail, and re-seed the spine-coupled content. The old
+  // trunk + the rejected branch are gone; the chosen branch IS the new tube.
+  const _UP = new THREE.Vector3(0, 1, 0);
+  function rebaseLoop(exit) {
+    if (!exit) return;
+    const nl = buildLoopLayout();
+    const nf = nl.frameAt(0);                        // fresh loop's entry frame (pre-transform)
+    const newM = new THREE.Matrix4().makeBasis(nf.binormal, nf.normal, nf.tangent);
+    // exit basis, built the same way frameAt does (binormal = tangent x UP)
+    const exBin = new THREE.Vector3().crossVectors(exit.tangent, _UP);
+    if (exBin.lengthSq() < 1e-6) exBin.set(1, 0, 0);
+    exBin.normalize();
+    const exNorm = new THREE.Vector3().crossVectors(exBin, exit.tangent).normalize();
+    const exM = new THREE.Matrix4().makeBasis(exBin, exNorm, exit.tangent);
+    const Rq = new THREE.Quaternion().setFromRotationMatrix(exM.multiply(newM.invert()));
+    // rigid-transform the closed spine so its entry lands on (and aims down) the vein exit
+    for (const p of nl.spine.points) p.sub(nf.pos).applyQuaternion(Rq).add(exit.pos);
+    nl.spine.updateArcLengths();
+    // mutate the shared layout object in place (keeps identity for all captured refs)
+    layout.spine = nl.spine;
+    layout.pointAt = nl.pointAt;
+    layout.frameAt = nl.frameAt;
+    layout.frameAtDepth = nl.frameAtDepth;
+    tunnel.rebuild(layout);                          // geometry-only swap
+    // NB: the camera handoff is fallNav's job now - it rides the vein to the tail
+    // and snaps onto this coaxial loop (depth 0 == the vein exit) itself. Calling
+    // rebaseTo here would yank the camera off the vein the instant we build (~vt 0.45).
+    // re-seed spine-coupled content onto the new loop
+    try { spawner.clearLive(); } catch (e) { /* ignore */ }
+    try { if (wall && wall.reset) wall.reset(); } catch (e) { /* ignore */ }
+    try { if (fog && fog.rebase) fog.rebase(layout); } catch (e) { /* ignore */ }
+    try { if (fx && fx.rebase) fx.rebase(); } catch (e) { /* ignore */ }
+  }
+  junctions.onVeinEnd = rebaseLoop;
+
   // the continuous voice layer; depth is sampled at each pick for weighting
   const drift = createDriftChain({ getDepth: () => nav.getDepth() });
 
@@ -245,10 +310,11 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     gamePaused = v;
     nav.setPaused(v);
     bubbles.setFrozen(v);
-    spawner.setPaused(v);
+    syncSpawner();
+    wall.setPaused(v);
     if (game) game.setPaused(v);
     hudBits.showPause(v);
-    if (v) drift.stop(); else drift.start();
+    if (v) drift.stop(); else if (!game || runActive) drift.start();
     if (drone && droneStarted) {
       if (v) { try { drone.pause(); } catch (e) { /* ignore */ } }
       else if (!isMuted() && !document.hidden) {
@@ -281,10 +347,82 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     if (!r.width || !r.height) return;
     const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
     const ny = -((e.clientY - r.top) / r.height) * 2 + 1;
+    // a boon draft is open: a click on a card shatters it + takes the boon
+    if (boonPick && boonPick.isBusy()) {
+      const picks = boonPick.getPickables();
+      if (picks.length) {
+        _bray.setFromCamera(_bndc.set(nx, ny), camera);
+        const hits = _bray.intersectObjects(picks, true);
+        for (const h of hits) {
+          let o = h.object;
+          while (o && !(o.userData && o.userData.type === 'booncard')) o = o.parent;
+          if (o && o.userData && o.userData.type === 'booncard') { boonPick.pickIndex(o.userData.index); return; }
+        }
+      }
+      return; // draft owns the pointer: never fall through to a card grab
+    }
+    // a fork is open: a click on a mouth card/disc dives down that branch
+    if (junctions && junctions.isBusy()) {
+      const picks = junctions.getPickables();
+      if (picks.length) {
+        _jray.setFromCamera(_jndc.set(nx, ny), camera);
+        const hits = _jray.intersectObjects(picks, true);
+        for (const h of hits) {
+          let o = h.object;
+          while (o && !(o.userData && o.userData.type === 'veinmouth')) o = o.parent;
+          if (o && o.userData && o.userData.type === 'veinmouth') { junctions.pickSide(o.userData.side); return; }
+        }
+      }
+      return; // a fork owns the pointer: a missed mouth-click must not fall through to grabbing a wall poster/card mid-fork
+    }
+    // a wall poster: hold it to swing the camera and face it (a closer look)
+    if (wall && wall.getPickables && !nav.isInVein()) {
+      const picks = wall.getPickables();
+      if (picks.length) {
+        _pray.setFromCamera(_pndc.set(nx, ny), camera);
+        const hits = _pray.intersectObjects(picks, false);
+        for (const h of hits) {
+          let o = h.object;
+          while (o && !(o.userData && o.userData.type === 'poster')) o = o.parent;
+          if (o && o.userData && o.userData.type === 'poster') {
+            const rec = wall.grabPoster(o);
+            if (rec) {
+              _heldPoster = true;
+              nav.setFaceTarget(wall.getHeldWorldPos(_pv));
+              if (rec.assetName) spawner.noteLike(rec.assetName, 'image');
+              nav.fovKick(4);       // a little punch on the turn-in
+              return;               // this pointer owns the poster
+            }
+          }
+        }
+      }
+    }
     spawner.grabAtPointer(nx, ny, camera);
   }
-  function grabPointerUp() { spawner.releaseGrab(); }
+  function grabPointerUp() {
+    if (_heldPoster) { wall.releasePoster(); nav.setFaceTarget(null); _heldPoster = false; }
+    spawner.releaseGrab();
+  }
+  // while a boon draft is open, hover-raycast the cards to drive the caption bar
+  function boonAimMove(e) {
+    if (!boonPick || !boonPick.isBusy()) return;
+    const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+    const ny = -((e.clientY - r.top) / r.height) * 2 + 1;
+    const picks = boonPick.getPickables();
+    _bray.setFromCamera(_bndc.set(nx, ny), camera);
+    const hits = picks.length ? _bray.intersectObjects(picks, true) : [];
+    let idx = -1;
+    for (const h of hits) {
+      let o = h.object;
+      while (o && !(o.userData && o.userData.type === 'booncard')) o = o.parent;
+      if (o && o.userData && o.userData.type === 'booncard') { idx = o.userData.index; break; }
+    }
+    boonPick.setAimed(idx);
+  }
   canvas.addEventListener('pointerdown', grabPointerDown);
+  canvas.addEventListener('pointermove', boonAimMove);
   window.addEventListener('pointerup', grabPointerUp);
   window.addEventListener('pointercancel', grabPointerUp);
 
@@ -331,12 +469,33 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   // opening plunge meets finished cards instead of hollow frames.
   await spawner.warm();
 
-  // begin the voice chain (autoplay is unlocked - we got here via the begin click)
-  drift.start();
+  // begin the voice chain (autoplay is unlocked - we got here via the begin click).
+  // Game mode boots into the Warren hub, NOT a descent: the drift whisper stays
+  // silent (and the tube stays calm) until setRunActive(true) opens the hole.
+  if (!game) drift.start();
+
+  // Game mode: the run brain owns when the whisper + special tube moods turn on.
+  // (Called from chaosRun on GO / recap; forces the hub into a calm, quiet idle.)
+  // The tunnel's card/video spawner (proximity clips + spotlight takeovers) runs
+  // ONLY inside a descent in game mode, plus the usual ESC-pause / hidden-tab
+  // parks. One source of truth so the Warren hub never plays video behind it.
+  function syncSpawner() {
+    spawner.setPaused(gamePaused || document.hidden || (game && !runActive));
+  }
+
+  function setRunActive(on) {
+    runActive = !!on;
+    try { fx.forceZone(runActive ? null : 'calm'); } catch (e) { /* ignore */ }
+    try { junctions.setActive(runActive); } catch (e) { /* ignore */ } // forks only inside a descent
+    syncSpawner();                        // park the video conveyor outside a descent
+    if (runActive) { if (!voiceSilenced) drift.start(); }
+    else drift.stop();
+  }
 
   // ---- DtRH game mode ----------------------------------------------------------
   if (game) {
     hud.classList.add('sf-game-mode');   // hides the Fall's own score readout (CSS)
+    setRunActive(false);                 // hub idles: no pink-fog/storm moods, no whisper
     startDrone();                        // no gesture gate in the hosted WebView2
     // The Fall's own bubble field stands down completely - setIntensity(0)
     // still targets COUNT_MIN, so pause it (clears + stops spawning). Veil
@@ -344,7 +503,14 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     bubbles.setPaused(true);
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
-    game.attach({ nav, fx, director, hud, canvas, spawner, media, flashBurst: (n) => bubbles.flashBurst(n) });
+    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, junctions, boonPick, flashBurst: (n) => bubbles.flashBurst(n),
+      // the Ripple flings on-screen flash clips off screen along the hit angle
+      flingFlashesNear: (px, py, r, probe) => bubbles.flingFlashesNear(px, py, r, probe),
+      openOptions: () => panel.toggle(),
+      // Reveal earned option-panel dials from the meta snapshot (purchased "Dials").
+      syncOptionUnlocks: (ids) => panel.setUnlocks(ids),
+      silenceVoice: (on) => { voiceSilenced = !!on; },
+      setRunActive });
   }
 
   // ---- loop --------------------------------------------------------------------
@@ -388,7 +554,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     }
 
     director.update(dt);
-    director.setHold(spawner.isGrabbing()); // grabbing a card eases the fall (auto-restores on release)
+    director.setHold(spawner.isGrabbing() || _heldPoster); // grabbing a card OR facing a wall gif eases the fall
     if (game) {
       // Game mode: chaosRun owns the field (its own spawner + rAF integrator);
       // the Fall's bubble game is paused for the whole session.
@@ -397,11 +563,21 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       bubbles.setIntensity(director.getIntensity());
       bubbles.setRunTime(director.getRunTime()); // gates which bubble kinds can spawn
     }
+    nav.setLookSuppressed(spawner.isGrabbing() || _heldPoster); // a held card paddle / faced poster steers, not drag-look
+    if (_heldPoster) {
+      wall.advanceHeld(nav.getDepth(), dt);         // ride the poster along + swing level with us first
+      nav.setFaceTarget(wall.getHeldWorldPos(_pv)); // then aim at its fresh position
+    }
     nav.update(dt);
 
     const depth = nav.getDepth();
     const speed = nav.getSpeed();
-    spawner.update(camera, depth, dt, clock.elapsedTime);
+    // heat + run time drive the tube-card progression: none until ~18s, then
+    // sparse and thickening as the run deepens.
+    spawner.update(camera, depth, dt, clock.elapsedTime, director.getIntensity(), director.getRunTime());
+    wall.update(camera, depth, dt); // region-scaled wall posters (idle at density 0)
+    junctions.update(depth, dt);    // branching-path forks (idle until the game arms one)
+    boonPick.update(dt, depth);     // in-tube boon draft (idle until a loop clears)
 
     // Sidechain the mix: a spotlight video owns the whole foreground (the
     // voice whispers down under it, the bed drops hardest); otherwise a
@@ -409,13 +585,13 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     // eases over ~0.5s so nothing pumps.
     const spotOn = spawner.spotlightActive();
     voiceDuck += ((spotOn ? VOICE_DUCK_SPOT : 1) - voiceDuck) * Math.min(1, dt * 2.5);
-    drift.setDuck(voiceDuck);
+    drift.setDuck(voiceSilenced ? 0 : voiceDuck);
 
     // drone: volume follows the fall speed; 1Hz watchdog vs. autoplay killings
     if (drone) {
       const raw = DRONE_FLOOR + (DRONE_MAX - DRONE_FLOOR) * Math.min(1, speed / SPEED_REF);
       droneVol += (raw - droneVol) * Math.min(1, dt * 2);
-      const duckTarget = spotOn ? DRONE_DUCK_SPOT : (drift.isSpeaking() ? DRONE_DUCK : 1);
+      const duckTarget = spotOn ? DRONE_DUCK_SPOT : (!voiceSilenced && drift.isSpeaking() ? DRONE_DUCK : 1);
       droneDuck += (duckTarget - droneDuck) * Math.min(1, dt * 2.5);
       // the 'music' slider is a 0..1 multiplier over the speed-following bed
       setDroneVolume(isMuted() ? 0 : Math.max(0, Math.min(1, droneVol)) * getLevel('music') * droneDuck);
@@ -474,12 +650,12 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     if (document.hidden) {
       running = false;
       bubbles.setPaused(true);
-      spawner.setPaused(true); // parks card + spotlight videos (no hidden-tab audio)
+      syncSpawner(); // parks card + spotlight videos (no hidden-tab audio)
       if (drone) { try { drone.pause(); } catch (e) { /* ignore */ } }
     } else if (!running) {
       running = true;
       if (!director.isOver() && !game) bubbles.setPaused(false);   // game mode: field stays down
-      if (!gamePaused) spawner.setPaused(false);
+      syncSpawner();
       if (drone && droneStarted && !isMuted() && !gamePaused) {
         if (droneCtx && droneCtx.state === 'suspended') { const r = droneCtx.resume(); if (r && r.catch) r.catch(() => {}); }
         const p = drone.play(); if (p && p.catch) p.catch(() => {});
@@ -498,6 +674,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     window.removeEventListener('resize', onResize);
     window.removeEventListener('keydown', onKeyDown);
     canvas.removeEventListener('pointerdown', grabPointerDown);
+    canvas.removeEventListener('pointermove', boonAimMove);
     window.removeEventListener('pointerup', grabPointerUp);
     window.removeEventListener('pointercancel', grabPointerUp);
     document.removeEventListener('visibilitychange', onVisibility);
@@ -506,6 +683,9 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     fx.dispose();
     nav.dispose();
     spawner.dispose();
+    wall.dispose();
+    junctions.dispose();
+    boonPick.dispose();
     bubbles.dispose();
     drift.dispose();
     offDroneMute();

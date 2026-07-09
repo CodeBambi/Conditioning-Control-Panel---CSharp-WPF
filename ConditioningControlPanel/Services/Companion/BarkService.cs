@@ -1601,6 +1601,17 @@ namespace ConditioningControlPanel.Services
             // Resolve the variant's voiceline (if any) to a real path under the active mod.
             string? audioPath = ResolveBarkAudio(variant.Audio);
 
+            // DtRH session telemetry (local-only): a spoken bark counts toward the descent's
+            // "voiceover heard". Only read the clip duration when a run is live so the global
+            // bark path pays nothing off the game. No-ops elsewhere.
+            if (audioPath != null && Services.Chaos.DtrhHostService.IsRunActive)
+            {
+                double sec = 0;
+                try { using var r = new NAudio.Wave.AudioFileReader(audioPath); sec = r.TotalTime.TotalSeconds; }
+                catch { /* duration is best-effort */ }
+                Services.Chaos.DtrhHostService.NoteVoicelineHeard(sec);   // still counts the line if sec==0
+            }
+
             // Route by class/priority: non-Normal or high-priority barks preempt (GigglePriority);
             // ordinary barks queue (Giggle). Safety is non-Normal, so it preempts and clears the queue.
             // When a voiceline exists it plays as the bubble's audio (no giggle sound on top).

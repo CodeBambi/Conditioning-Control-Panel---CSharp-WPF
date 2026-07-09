@@ -561,8 +561,10 @@ html, body {
   animation: rhBubbleRise var(--rise, 12s) linear forwards;
 }
 @keyframes rhBubbleRise {
-  from { transform: translateY(12vh); }
-  to { transform: translateY(-122vh); }
+  /* Rises, then dissolves in place near the top instead of shooting off-screen. */
+  0% { transform: translateY(12vh); opacity: 1; }
+  50% { transform: translateY(-40vh); opacity: 1; }
+  100% { transform: translateY(-74vh); opacity: 0; }
 }
 .rh-bubble {
   pointer-events: auto;
@@ -586,11 +588,28 @@ html, body {
 .rh-bubble--prism { background-image: url('/dtrh/assets/bubbles/effects/prism.png'); filter: drop-shadow(0 0 10px rgba(255, 200, 245, 0.8)); }
 .rh-bubble--pinkfilter { background-image: url('/dtrh/assets/bubbles/effects/pinkfilter.png'); filter: drop-shadow(0 0 10px rgba(var(--fx-accent-rgb), 0.85)); }
 .rh-bubble--lucky { background-image: url('/dtrh/assets/bubbles/effects/golden.png'); filter: drop-shadow(0 0 13px rgba(255, 210, 90, 0.95)); }
-.rh-bubble.is-pop { animation: rhBubblePop 0.3s ease-out forwards; }
+.rh-bubble.is-pop { animation: rhBubblePop 0.39s ease-out forwards; }
 @keyframes rhBubblePop {
   0% { transform: scale(1); opacity: 1; }
   40% { transform: scale(1.55); opacity: 0.85; }
   100% { transform: scale(2); opacity: 0; }
+}
+
+/* Pop sparkle burst (ported from the WPF BubbleService pop): shards fly outward
+ * with a touch of gravity, shrinking + fading. Position via --dx/--dy/--fall. */
+.rh-spark {
+  position: absolute;
+  width: 9px; height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+  animation: rhSpark 0.62s ease-out forwards;
+}
+@keyframes rhSpark {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), calc(var(--dy) + var(--fall))) scale(0.2); opacity: 0; }
 }
 
 /* Full-screen, non-interactive layer for pop FX. */
@@ -662,10 +681,10 @@ img.rh-fx-spiralspin {
 
 .rh-fx-flashclip {
   position: absolute;
-  width: var(--w, 34vw);
-  max-width: 560px;
+  width: var(--w, 23.8vw);
+  max-width: 392px;
   height: auto;
-  max-height: 62vh;
+  max-height: 43vh;
   transform: translate(-50%, -50%);
   pointer-events: auto;
   touch-action: manipulation; /* iOS: no double-tap zoom when popping the hydra fast */
@@ -781,7 +800,6 @@ img.rh-fx-spiralspin {
 .sf-pause[hidden] { display: none; }
 /* while paused, lift the controls above the pause dim (z 20) so options stay usable */
 .sf-hud.sf-paused .sf-dock,
-.sf-hud.sf-paused .sf-panel,
 .sf-hud.sf-paused .sf-uitoggle { z-index: 21; }
 
 /* ------------- Options panel (gear) ------------- */
@@ -796,7 +814,7 @@ img.rh-fx-spiralspin {
   backdrop-filter: blur(10px);
   transform: translateX(105%);
   transition: transform 0.25s ease;
-  z-index: 30;
+  z-index: 32; /* above the Warren (z30) so options open over the dollhouse too */
 }
 .sf-panel.is-open { transform: none; }
 .sf-panel-head {
@@ -836,6 +854,27 @@ img.rh-fx-spiralspin {
   width: 100%;
   accent-color: var(--pink);
   cursor: pointer;
+}
+
+/* Locked dials: greyed, un-draggable, the readout replaced by a padlock hint. */
+.sf-row.is-locked { opacity: 0.5; }
+.sf-row.is-locked .sf-row-label span:last-child {
+  color: #b9a0c6; font-weight: 600; letter-spacing: 0.02em;
+}
+.sf-row.is-locked input[type="range"] {
+  cursor: not-allowed; accent-color: #6a5878; filter: grayscale(1);
+}
+/* Section padlock stub (word picker / custom media while their rung is unbought). */
+.sf-lockstub {
+  margin: 1.2rem 0 0.4rem;
+  font-family: var(--rh-font);
+  font-size: 0.78rem;
+  color: #9a84a8;
+  background: rgba(20, 12, 28, 0.55);
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  cursor: help;
 }
 
 .sf-words-head { margin-top: 1.2rem; }
@@ -1059,9 +1098,65 @@ img.rh-fx-spiralspin {
   30% { filter: brightness(2.2) saturate(2); transform: scale(1.2); }
   100% { opacity: 0; filter: brightness(2.6); transform: scale(1.7); }
 }
-.cf-bubble.is-fade { animation: cfFadeOut 0.7s ease-out forwards; }
+.cf-bubble.is-fade { animation: cfFadeOut 0.91s ease-out forwards; }
 @keyframes cfFadeOut {
   100% { opacity: 0; transform: scale(0.85); }
+}
+
+/* Pop sparkle burst (ported from the WPF BubbleService pop): shards fly outward
+ * with a touch of gravity, shrinking + fading. Position via --dx/--dy/--fall. */
+.cf-spark {
+  position: absolute;
+  width: 9px; height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: currentColor;
+  box-shadow: 0 0 7px currentColor;
+  animation: cfSpark 0.62s ease-out forwards;
+}
+@keyframes cfSpark {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), calc(var(--dy) + var(--fall))) scale(0.2); opacity: 0; }
+}
+
+/* Pop explosion core + shockwave (mirrors the WPF ChaosSkiaFxOverlay.EmitBurst):
+ * a brief white-hot flash and a crisp expanding ring, tinted to the payload
+ * colour via `color`. mix-blend-mode:screen approximates Skia's additive (Plus)
+ * blend so overlapping bursts read hot. Sized via --bsize / --rsize. */
+.cf-burst {
+  position: absolute;
+  width: var(--bsize, 96px);
+  height: var(--bsize, 96px);
+  margin-left: calc(var(--bsize, 96px) / -2);
+  margin-top: calc(var(--bsize, 96px) / -2);
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, #fff 0%, currentColor 32%, transparent 70%);
+  mix-blend-mode: screen;
+  animation: cfBurst 0.26s ease-out forwards;
+}
+@keyframes cfBurst {
+  0% { transform: scale(0.35); opacity: 0.95; }
+  60% { opacity: 0.7; }
+  100% { transform: scale(1.2); opacity: 0; }
+}
+.cf-shock {
+  position: absolute;
+  width: var(--rsize, 190px);
+  height: var(--rsize, 190px);
+  margin-left: calc(var(--rsize, 190px) / -2);
+  margin-top: calc(var(--rsize, 190px) / -2);
+  border-radius: 50%;
+  pointer-events: none;
+  border: 3px solid currentColor;
+  box-shadow: 0 0 10px currentColor, inset 0 0 10px currentColor;
+  mix-blend-mode: screen;
+  animation: cfShock 0.36s ease-out forwards;
+}
+@keyframes cfShock {
+  0% { transform: scale(0.16); opacity: 0.9; border-width: 4px; }
+  100% { transform: scale(1); opacity: 0; border-width: 1px; }
 }
 
 /* ---- float text ---- */
@@ -1318,6 +1413,55 @@ img.rh-fx-spiralspin {
 @keyframes cfShieldFlash {
   0%, 40% { color: #ff2b4a; text-shadow: 0 0 14px rgba(255, 40, 70, 0.9); }
 }
+/* the freshly-banked heart pops in when a flying shield lands (boonPick timeout/resist) */
+.cf-hud-shields.cf-shield-bounce { animation: cfShieldBounce 0.5s cubic-bezier(0.3, 1.6, 0.5, 1); transform-origin: left center; }
+@keyframes cfShieldBounce {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.35); }
+  60% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+/* the shield that flies from screen-centre into the HUD slot */
+.cf-shield-fly {
+  position: fixed; z-index: 60; pointer-events: none;
+  font-size: 2.6rem; line-height: 1; will-change: left, top, transform, opacity;
+  filter: drop-shadow(0 0 10px rgba(120, 220, 160, 0.85)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+.cf-shield-fly.is-pop { animation: cfShieldPop 0.42s ease-out; }
+@keyframes cfShieldPop {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+  60% { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+/* ---- in-tube boon draft (engine/boonPick.js): floating labels + caption + buttons ---- */
+.cf-boonpick { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+.cf-boonpick[hidden] { display: none; }
+.cf-boonpick-labels { position: absolute; inset: 0; }
+.cf-boonpick-label {
+  position: absolute; transform: translate(-50%, -100%);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 4px 10px; border-radius: 10px;
+  background: rgba(14, 9, 22, 0.72); border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f4ecff; font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); transition: opacity 0.15s ease;
+}
+.cf-boonpick-label.is-aimed { border-color: rgba(255, 235, 150, 0.8); box-shadow: 0 0 14px rgba(255, 220, 120, 0.45); }
+.cf-boonpick-label.is-sin { color: #ff9db8; border-color: rgba(255, 60, 90, 0.55); }
+.cf-boonpick-label .cf-bp-rar { font-size: 0.62rem; font-weight: 500; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.06em; }
+.cf-boonpick-cap {
+  position: absolute; left: 50%; bottom: 15%; transform: translateX(-50%);
+  max-width: min(680px, 86vw); text-align: center; pointer-events: none;
+  padding: 8px 16px; border-radius: 12px;
+  background: rgba(12, 8, 20, 0.66); border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #efe7ff; font-size: 1.2rem; line-height: 1.4; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.cf-boonpick-btns {
+  position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%);
+  display: flex; gap: 12px; pointer-events: none;
+}
+.cf-boonpick-btns .sf-btn { pointer-events: auto; }
+.cf-boonpick-btns .sf-btn[hidden] { display: none; }
 
 /* ---- HUD: lust (heat) bar ---- */
 .cf-hud-heat { display: flex; align-items: center; gap: 6px; }
@@ -1792,6 +1936,61 @@ img.rh-fx-spiralspin {
 }
 .wr-tile.is-equipped + .wr-tile-label { color: #ffd700; font-weight: 600; }
 .wr-tile.is-locked + .wr-tile-label, .wr-tile.is-empty + .wr-tile-label { color: rgba(184,184,208,0.5); }
+
+/* ---- Display-Shelf cards (BAG collections / habits / pockets) ----
+   Art is the hero, a rarity-coloured frame (--acc) gives each piece its identity.
+   Replaces the flat keyhole grid: bigger images, no dead negative space. */
+.wr-shelf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+.wr-pocket-row .wr-shelf { width: 150px; }
+.wr-shelf {
+  --acc: 232,67,147;
+  position: relative; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column;
+  background: linear-gradient(180deg, rgba(var(--acc),0.16), rgba(20,17,38,0.96));
+  border: 2px solid rgba(var(--acc),0.5);
+  transition: transform 0.12s, box-shadow 0.15s, border-color 0.15s;
+}
+.wr-shelf.is-click { cursor: pointer; }
+.wr-shelf.is-click:hover { transform: translateY(-3px); box-shadow: 0 9px 24px rgba(var(--acc),0.4); border-color: rgba(var(--acc),0.95); }
+.wr-shelf-art {
+  position: relative; height: 132px; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: radial-gradient(120% 100% at 50% 0%, rgba(var(--acc),0.32), rgba(0,0,0,0.28));
+}
+.wr-shelf-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wr-shelf-glyph { font-size: 3.1rem; color: #fff; text-shadow: 0 0 16px rgba(var(--acc),0.9); }
+.wr-shelf-keyhole { width: 46% !important; height: 46% !important; object-fit: contain !important; opacity: 0.4; }
+.wr-shelf-ribbon {
+  position: absolute; top: 8px; left: 8px; font-family: Consolas, monospace;
+  font-size: 0.58rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 999px; color: #fff;
+  background: rgba(var(--acc),0.9); box-shadow: 0 0 12px rgba(var(--acc),0.65);
+}
+.wr-shelf-corner {
+  position: absolute; top: 7px; right: 8px; width: 24px; height: 24px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 0.9rem; font-weight: 900;
+  background: rgba(10,8,20,0.75); color: #ffd700; box-shadow: 0 0 10px rgba(255,215,0,0.5);
+}
+.wr-shelf-foot { padding: 9px 11px 11px; display: flex; flex-direction: column; gap: 5px; }
+.wr-shelf-name {
+  font-size: 0.86rem; font-weight: 700; color: #fff; line-height: 1.2;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wr-shelf-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 16px; }
+.wr-shelf-pips { display: flex; gap: 3px; font-size: 0.72rem; }
+.wr-shelf-sub { font-size: 0.72rem; color: rgba(210,210,232,0.78); white-space: nowrap; }
+/* states */
+.wr-shelf.is-equipped { border-color: rgba(255,215,0,0.9); box-shadow: inset 0 0 0 1px rgba(255,215,0,0.35), 0 0 18px rgba(255,215,0,0.22); }
+.wr-shelf.is-buyable .wr-shelf-art img { filter: saturate(0.45) brightness(0.66); }
+.wr-shelf.is-buyable:hover .wr-shelf-art img { filter: saturate(0.9) brightness(0.9); }
+.wr-shelf.is-buyable .wr-shelf-sub { color: #ffd6ea; font-weight: 800; }
+.wr-shelf.is-mystery {
+  border-style: dashed; border-color: rgba(var(--acc),0.32); cursor: default;
+  background: repeating-linear-gradient(45deg, rgba(30,27,56,0.92), rgba(30,27,56,0.92) 11px, rgba(23,20,46,0.92) 11px, rgba(23,20,46,0.92) 22px);
+}
+.wr-shelf.is-mystery .wr-shelf-name, .wr-shelf.is-mystery .wr-shelf-sub { color: #8a86a8; }
+.wr-shelf.is-empty { border-style: dashed; border-color: rgba(var(--acc),0.4); }
+.wr-shelf.is-empty .wr-shelf-art { background: rgba(255,255,255,0.03); }
+.wr-shelf.is-empty .wr-shelf-glyph { color: rgba(255,255,255,0.4); text-shadow: none; }
+.wr-shelf.is-empty .wr-shelf-name, .wr-shelf.is-empty .wr-shelf-sub { color: rgba(184,184,208,0.55); }
 
 /* ---- run setup ---- */
 .wr-setup-row { display: flex; align-items: center; gap: 14px; margin: 10px 0; flex-wrap: wrap; }

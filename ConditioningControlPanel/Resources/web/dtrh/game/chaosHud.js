@@ -11,6 +11,7 @@
  * ==========================================================================*/
 
 const DEFUSE_COST = 30; // FOCUS bar low-threshold (ChaosTuning.DEFUSE_COST)
+const RIPPLE_COST = 30; // the ripple spends this much focus per cast (chaosRun RIPPLE_FOCUS_COST)
 const ART = 'https://ccp.art/';
 
 export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
@@ -211,8 +212,10 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
       heatFill.style.width = `${Math.round(st.heat * 100)}%`;
       heatTint.style.opacity = st.heat > 0.3 ? String(((st.heat - 0.3) / 0.7) * 0.30) : '0';
       clockRow.textContent = `${fmtClock(st.elapsedSec)} / ${fmtClock(st.runDurationSec)} · LOOP ${st.waveIndex}/${st.waveCount}`;
-      rippleRow.textContent = st.rippleCooldown <= 0 ? '🌊 ripple READY · right-click' : `🌊 ${Math.ceil(st.rippleCooldown)}s`;
-      rippleRow.classList.toggle('is-ready', st.rippleCooldown <= 0);
+      const rippleCost = st.rippleCost || RIPPLE_COST;
+      const rippleReady = st.focus >= rippleCost;
+      rippleRow.textContent = rippleReady ? '🌊 ripple READY · right-click' : `🌊 ${rippleCost} focus`;
+      rippleRow.classList.toggle('is-ready', rippleReady);
     },
     /** Wave 2: show/hide the weather chip. wx = { glyph, name, desc,
      * forecast: 'glyph NAME' | null, rerollable: bool } or null to hide. */
@@ -237,6 +240,42 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
       shieldRow.classList.remove('cf-shield-flash');
       void shieldRow.offsetWidth;
       shieldRow.classList.add('cf-shield-flash');
+    },
+    // A shield emblem pops at screen-centre then flies into the shields slot, so a
+    // banked resistance (a timed-out / resisted draft) reads clearly. On arrival
+    // the row flashes + bounces the freshly-added ♥. Purely cosmetic.
+    flyShieldToSlot() {
+      try {
+        const el = document.createElement('div');
+        el.className = 'cf-shield-fly is-pop';
+        el.textContent = '🛡';
+        el.style.transform = 'translate(-50%,-50%)';
+        document.body.appendChild(el);
+        const sx = window.innerWidth / 2, sy = window.innerHeight * 0.42;
+        el.style.left = sx + 'px'; el.style.top = sy + 'px';
+        const POP = 420, FLY = 720;
+        const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+        let t0 = null;
+        const step = (ts) => {
+          if (t0 == null) t0 = ts;
+          const e = ts - t0;
+          if (e < POP) { requestAnimationFrame(step); return; }
+          el.classList.remove('is-pop');
+          const k = Math.min(1, (e - POP) / FLY);
+          const r = shieldRow.getBoundingClientRect();
+          const tx = r.left + Math.max(8, r.width / 2), ty = r.top + r.height / 2;
+          const kk = ease(k);
+          el.style.left = (sx + (tx - sx) * kk) + 'px';
+          el.style.top = (sy + (ty - sy) * kk) + 'px';
+          el.style.transform = `translate(-50%,-50%) scale(${1 - 0.45 * kk})`;
+          el.style.opacity = String(1 - 0.2 * kk);
+          if (k < 1) { requestAnimationFrame(step); return; }
+          el.remove();
+          shieldRow.classList.remove('cf-shield-flash'); void shieldRow.offsetWidth; shieldRow.classList.add('cf-shield-flash');
+          shieldRow.classList.remove('cf-shield-bounce'); void shieldRow.offsetWidth; shieldRow.classList.add('cf-shield-bounce');
+        };
+        requestAnimationFrame(step);
+      } catch (e) { /* ignore */ }
     },
     setVisible(v) { root.style.display = v ? '' : 'none'; picksWrap.style.display = v ? '' : 'none'; dock.style.display = v ? '' : 'none'; },
     dispose() {

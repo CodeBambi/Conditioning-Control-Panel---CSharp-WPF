@@ -113,6 +113,22 @@ internal sealed class DtrhMetaBridge
                     if (id != null) { applied = on ? S.DisabledUpgrades.Remove(id) : S.DisabledUpgrades.Add(id); }
                     break;
                 }
+                case "purchase-dial":
+                {
+                    // Buy back an options-panel dial (UNLOCK_LADDER in engine/settings.js).
+                    // Cost is client-supplied (same trust model as purchase-upgrade); the
+                    // two feral dials are rank-gated here so the page can't skip the floor.
+                    var id = RequireId(o); int cost = Cost(o);
+                    if (id == null || S.PurchasedDials.Contains(id)) break;
+                    bool rankOk = (id != "hydra" && id != "glitchTimer") || ChaosMeta.RankIndex >= ChaosRank.Entranced;
+                    if (rankOk && S.Sparks >= cost)
+                    {
+                        S.Sparks -= cost;
+                        S.PurchasedDials.Add(id);
+                        applied = true;
+                    }
+                    break;
+                }
                 case "set-lifetime-boon":
                 {
                     var id = RequireId(o);

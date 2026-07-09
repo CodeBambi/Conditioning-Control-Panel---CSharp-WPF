@@ -65,12 +65,20 @@ export function buildLoopLayout() {
   };
 }
 
-// ---- tube shader (copied from scene.js, holes stripped, palette re-tinted) --
+// ---- tube shader --------------------------------------------------------------
+// Branch-hole carving (uHole*) is back: junctions.js hands the main-tube material
+// up to MAX_HOLES branch mouths, and the frag discards wall fragments inside each
+// mouth's cylinder so a diverging vein reads as a real opening cut in the wall
+// (ported from the Explore rabbit-hole scene.js). uHoleCount = 0 => zero overhead.
+const MAX_HOLES = 2;
+
 const TUBE_VERT = `
   varying vec2 vUv;
   varying float vFogDepth;
+  varying vec3 vWorld;
   void main() {
     vUv = uv;
+    vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     vFogDepth = -mv.z;
     gl_Position = projectionMatrix * mv;
@@ -78,16 +86,42 @@ const TUBE_VERT = `
 
 const TUBE_FRAG = `
   precision highp float;
+  #define MAX_HOLES ${MAX_HOLES}
   varying vec2 vUv;
   varying float vFogDepth;
+  varying vec3 vWorld;
   uniform float uTime;
   uniform vec3 uBg1, uBg2, uLineColor, uSpiralColor, uFogColor;
   uniform float uFogDensity, uRings, uSpiralTurns, uArms, uScroll, uFlash, uRush;
+  // 0 near the top of the fall, ramping to 1 the deeper you go: speeds up the
+  // intermittent line-glow flicker so the rays flash slow up top, frantic deep.
+  uniform float uGlowRate;
+  // branch mouths carved into the wall (world space)
+  uniform int uHoleCount;
+  uniform vec3 uHolePos[MAX_HOLES];
+  uniform vec3 uHoleAxis[MAX_HOLES];
+  uniform float uHoleR[MAX_HOLES];
+  uniform float uHoleBack, uHoleFwd;
+  uniform vec3 uRimColor;
+  // forward dead-end cut: erase a stretch of the tube (in vUv.x arc-length space)
+  // just past a fork so the trunk genuinely ENDS there and the only ways on are the
+  // two carved branch mouths (a real bifurcation, not a tube-continues-behind-it).
+  uniform int uCutOn;
+  uniform float uCutLo, uCutHi;   // arc-length window [0..1]; if hi<lo the window wraps the seam
 
-  // 1.0 on the line (integer coord), fading to 0 within half-width w.
+  // 1.0 on the line (integer coord), fading to 0 within half-width w. The edge
+  // is widened to at least ~1.5 screen pixels (fwidth) so a far-off or grazing
+  // (tube-wall side, seen near edge-on) line is never sub-pixel-thin. That
+  // sub-pixel thinness is what makes the rings appear to "skip"/step when the
+  // fall is slow - at speed the per-frame motion hides it, but crawling slowly a
+  // hairline line snaps pixel-to-pixel. Screen-space AA keeps slow motion fluid.
   float lineMask(float coord, float w) {
     float di = 0.5 - abs(fract(coord) - 0.5); // distance to nearest integer
-    return 1.0 - smoothstep(0.0, w, di);
+    // never sharper than the designed width, never so wide the line stops fully
+    // darkening at the midpoint (di maxes at 0.5) - that upper clamp keeps rings
+    // crisp instead of washing to a bright fill at grazing/foreshortened angles.
+    float aa = clamp(1.5 * fwidth(coord), w, 0.5);
+    return 1.0 - smoothstep(0.0, aa, di);
   }
   // sharp periodic pulse (mostly dark, brief bright peaks = intermittent).
   float pulse(float p, float k) { return pow(0.5 + 0.5 * sin(p), k); }
@@ -96,6 +130,13 @@ const TUBE_FRAG = `
     float len = vUv.x;
     float around = vUv.y;
     float scroll = uTime * uScroll;
+
+    // forward dead-end: discard the trunk in the cut window so it truly ends here.
+    if (uCutOn == 1) {
+      bool inCut = (uCutHi >= uCutLo) ? (len > uCutLo && len < uCutHi)
+                                      : (len > uCutLo || len < uCutHi);
+      if (inCut) discard;
+    }
 
     // base: subtle tint variation around the tube
     vec3 base = mix(uBg1, uBg2, 0.5 + 0.5 * sin((around + 0.25) * 6.2831));
@@ -106,10 +147,13 @@ const TUBE_FRAG = `
     float ring = lineMask(ringCoord, 0.06);
     float spiral = lineMask(spiralCoord, 0.05);
 
-    // intermittent glow: travelling pulses down the tube + a global shimmer
-    float globalFlash = pulse(uTime * 0.7, 6.0);
-    float ringGlow   = 0.35 + 1.7 * pulse(ringCoord * 0.5 - uTime * 1.6, 3.0) + 1.1 * globalFlash;
-    float spiralGlow = 0.45 + 2.0 * pulse(spiralCoord * 0.4 - uTime * 2.1, 3.0) + 0.9 * globalFlash;
+    // intermittent glow: travelling pulses down the tube + a global shimmer.
+    // the flicker RATE ramps with depth (uGlowRate): only the time term is
+    // scaled, so the line spacing is unchanged - just how fast they pulse.
+    float gr = 0.1 + 0.35 * uGlowRate;   // slow up top -> fast deep (flicker cut ~3x - lines flash gently)
+    float globalFlash = pulse(uTime * 0.7 * gr, 6.0);
+    float ringGlow   = 0.35 + 1.7 * pulse(ringCoord * 0.5 - uTime * 1.6 * gr, 3.0) + 1.1 * globalFlash;
+    float spiralGlow = 0.45 + 2.0 * pulse(spiralCoord * 0.4 - uTime * 2.1 * gr, 3.0) + 0.9 * globalFlash;
 
     // rush: the faster the fall, the hotter the line work burns, plus streaky
     // longitudinal speed-lines that only exist at velocity
@@ -126,6 +170,23 @@ const TUBE_FRAG = `
 
     // lightning strike: a brief whole-tube glare that favours the line work
     col += uFlash * (0.18 + ring * 1.4 + spiral * 0.9) * vec3(0.95, 0.8, 1.05);
+
+    // branch mouths: discard the wall where a diverging vein pierces it, and light
+    // a glowing rim on the cut boundary so the seam reads as a portal (bloom-fed).
+    float holeEdge = 1e9;
+    for (int i = 0; i < MAX_HOLES; i++) {
+      if (i >= uHoleCount) break;
+      vec3 d = vWorld - uHolePos[i];
+      float al = dot(d, uHoleAxis[i]);
+      vec3 pe = d - al * uHoleAxis[i];
+      float dr = length(pe);
+      if (al > -uHoleBack && al < uHoleFwd) {
+        if (dr < uHoleR[i]) discard;
+        holeEdge = min(holeEdge, dr - uHoleR[i]);
+      }
+    }
+    float holeRim = 1.0 - smoothstep(0.0, 0.9, holeEdge);
+    col += uRimColor * holeRim * (2.4 + 0.6 * sin(uTime * 2.0));
 
     // exp2 fog to match scene.fog
     float f = 1.0 - exp(-uFogDensity * uFogDensity * vFogDepth * vFogDepth);
@@ -153,15 +214,63 @@ export function createTunnel(layout) {
       uScroll: { value: 0.8 },
       uFlash: { value: 0 }, // lightning glare, driven by fx.js
       uRush: { value: 0 },  // speed heat, driven by scene.js (0 calm - 1 flying)
-
+      uGlowRate: { value: 0 }, // ray-flicker rate ramp, driven by fx.js (0 shallow - 1 deep)
+      // branch-hole carving (junctions.js sets these; 0 count => idle/no overhead)
+      uHoleCount: { value: 0 },
+      uHolePos: { value: Array.from({ length: MAX_HOLES }, () => new THREE.Vector3()) },
+      uHoleAxis: { value: Array.from({ length: MAX_HOLES }, () => new THREE.Vector3(0, 0, 1)) },
+      uHoleR: { value: new Array(MAX_HOLES).fill(0) },
+      uHoleBack: { value: RADIUS * 0.35 },
+      uHoleFwd: { value: RADIUS * 1.6 },
+      uRimColor: { value: new THREE.Color(0xff8fd8) },
+      // forward dead-end cut (junctions.js sets this; off => no overhead)
+      uCutOn: { value: 0 },
+      uCutLo: { value: 0 },
+      uCutHi: { value: 0 },
     },
     vertexShader: TUBE_VERT,
     fragmentShader: TUBE_FRAG,
     side: THREE.BackSide,
+    extensions: { derivatives: true }, // fwidth() line AA (core on WebGL2; flag is a WebGL1 safety net)
   });
+  let geoRef = geo;
   const mesh = new THREE.Mesh(geo, mat);
+
+  // junctions.js hands us up to MAX_HOLES branch mouths, each {point, axis, r}
+  // (world space). Writing uHoleCount = 0 restores a solid wall.
+  function setHoles(holes) {
+    const n = Math.min(MAX_HOLES, holes ? holes.length : 0);
+    for (let i = 0; i < n; i++) {
+      mat.uniforms.uHolePos.value[i].copy(holes[i].point);
+      mat.uniforms.uHoleAxis.value[i].copy(holes[i].axis).normalize();
+      mat.uniforms.uHoleR.value[i] = holes[i].r;
+    }
+    mat.uniforms.uHoleCount.value = n;
+  }
+  function clearHoles() { mat.uniforms.uHoleCount.value = 0; }
+  // erase a forward stretch of the trunk in arc-length space [lo,hi] (0..1, wraps
+  // if hi<lo) so a fork reads as a true dead-end. clearCut() restores the wall.
+  function setCut(lo, hi) {
+    mat.uniforms.uCutLo.value = ((lo % 1) + 1) % 1;
+    mat.uniforms.uCutHi.value = ((hi % 1) + 1) % 1;
+    mat.uniforms.uCutOn.value = 1;
+  }
+  function clearCut() { mat.uniforms.uCutOn.value = 0; }
+
   return {
     mesh, material: mat,
-    dispose() { geo.dispose(); mat.dispose(); },
+    setHoles, clearHoles, setCut, clearCut,
+    // Rebase: swap ONLY the geometry onto a fresh loop spine, keeping the same
+    // material so fx.js's tunnelMat binding + all tint/warp uniforms survive.
+    rebuild(newLayout) {
+      const ng = new THREE.TubeGeometry(
+        newLayout.spine, Math.max(400, Math.round(LOOP_DEPTH * Q.tubeSegMult)), RADIUS, Q.tubeRadial, true);
+      mesh.geometry = ng;
+      geoRef.dispose();
+      geoRef = ng;
+      clearHoles();
+      clearCut();  // the cut window was in the OLD arc-length space; the fresh loop is whole
+    },
+    dispose() { geoRef.dispose(); mat.dispose(); },
   };
 }
