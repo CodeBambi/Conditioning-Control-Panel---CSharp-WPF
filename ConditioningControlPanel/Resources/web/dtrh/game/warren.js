@@ -548,16 +548,20 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     ],
   };
 
-  let winLayer = null;          // .wr-wins two-column root (null = no station open)
+  let winLayer = null;          // .wr-wins root: head bar + two-column split (null = no station open)
+  let scrim = null;             // .wr-scrim tunnel dimmer, lives and dies with winLayer
   let cols = null;              // { left, right } column elements
   const openWins = new Map();   // window id -> { def, winEl, bodyEl }
+  const expandedRows = new Set(); // 'boon:<id>' / 'up:<id>' rows whose detail is open
 
   /** Close every open pane. Name kept from the single-sheet era: all close
    * paths (toggle / miss / Esc / dive / hide) call this. */
   function closeSheet() {
     if (winLayer) { winLayer.remove(); winLayer = null; }
+    if (scrim) { scrim.remove(); scrim = null; }
     cols = null;
     openWins.clear();
+    expandedRows.clear();
     if (openId && stations) stations.blur();
     openId = null;
   }
@@ -582,17 +586,24 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     closeSheet();
     openId = id;
     if (stations) stations.focus(id, 0);   // centered: the panes flank both sides
+    scrim = el('wr-scrim', root);          // dims the tunnel, clear at center for the card
     winLayer = el('wr-wins', root);
     winLayer.dataset.station = id;
-    cols = {
-      left: el('wr-wins-col wr-wins-col--left', winLayer),
-      right: el('wr-wins-col wr-wins-col--right', winLayer),
-    };
-    // a slim station head bar tops the right column (title + sub + ✕)
-    const bar = el('wr-wins-head', cols.right);
-    el('wr-sheet-title', bar, STATION_META[id].label);
+    // a slim station head bar spans BOTH columns (glyph + title / sub / ✕)
+    const bar = el('wr-wins-head', winLayer);
+    el('wr-sheet-title', bar, `${STATION_META[id].glyph} ${STATION_META[id].label}`);
     el('wr-sheet-sub', bar, STATION_META[id].sub);
     btn('wr-sheet-close', '✕', () => closeSheet(), bar);
+    const split = el('wr-wins-split', winLayer);
+    cols = {
+      left: el('wr-wins-col wr-wins-col--left', split),
+      right: el('wr-wins-col wr-wins-col--right', split),
+    };
+    // the columns eat pointer events now (they scroll) - clicking their empty
+    // strip must still read as a miss-close, like the canvas fall-through did
+    for (const c of [cols.left, cols.right]) {
+      c.addEventListener('click', (e) => { if (e.target === c) closeSheet(); });
+    }
     let n = 0;
     for (const d of STATION_WINDOWS[id]) {
       if (d.gate && !d.gate(v)) continue;
@@ -624,14 +635,15 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     if (!openId || !winLayer) return;
     const v = view();
     const defs = STATION_WINDOWS[openId];
+    // the COLUMN is the scroller (winLayer covers the <=900px stack) - snapshot
+    // once around the whole pass so an in-place re-render doesn't jump the view
+    const keep = { l: cols.left.scrollTop, r: cols.right.scrollTop, w: winLayer.scrollTop };
     for (const d of defs) {
       const live = openWins.get(d.id);
       const wanted = !d.gate || d.gate(v);
       if (wanted && live) {
-        const scrollTop = live.bodyEl.scrollTop;
         live.bodyEl.innerHTML = '';
         d.render(live.bodyEl, v);
-        live.bodyEl.scrollTop = scrollTop;
       } else if (wanted && !live) {
         const win = buildWindow(d, v, 0);
         placeInOrder(win, d, defs);
@@ -643,6 +655,9 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
         openWins.delete(d.id);   // gates are monotonic; this path is defensive
       }
     }
+    cols.left.scrollTop = keep.l;
+    cols.right.scrollTop = keep.r;
+    winLayer.scrollTop = keep.w;   // no-ops on the desktop (non-scrolling) layer
   }
 
   // ============================ shared row/tile builders ============================
@@ -652,22 +667,35 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     return b;
   }
 
+  /** Make a stack row expandable: caret in the top line, row click (never a
+   * button click) toggles the hidden detail. Open-state survives refreshWins'
+   * innerHTML wipes via the module-level expandedRows set. */
+  function wireExpand(row, key) {
+    el('wr-row-caret', row.querySelector('.wr-row-top'), '▾');
+    row.classList.add('is-expandable');
+    if (expandedRows.has(key)) row.classList.add('is-open');
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      if (row.classList.toggle('is-open')) expandedRows.add(key);
+      else expandedRows.delete(key);
+    });
+  }
+
   /** One Toybox habit row (BuildUpgradeRow). */
   function upgradeRow(u, v) {
     const owned = v.isOwned(u.id);
     const on = owned && v.isUpgradeActive(u.id);
     const accent = BRANCH_COLOR[u.branch] || '232,67,147';
-    const row = el('wr-row' + (on ? ' is-on' : owned ? ' is-owned' : ''));
+    const row = el('wr-row wr-row--stack' + (on ? ' is-on' : owned ? ' is-owned' : ''));
     row.style.setProperty('--acc', accent);
-    const icon = artIcon(`${ART}upgrades/${u.id}.png`, u.glyph, accent, 72);
+    const top = el('wr-row-top', row);
+    const icon = artIcon(`${ART}upgrades/${u.id}.png`, u.glyph, accent, 48);
     if (!owned) icon.style.opacity = '0.55';
-    row.appendChild(icon);
-    const mid = el('wr-row-mid', row);
-    el('wr-row-name', mid, u.name);
-    el('wr-row-desc', mid, u.desc);
-    if (u.flavor) el('wr-row-flavor', mid, u.flavor);
-    el('wr-row-tag', mid, BRANCH_LABEL[u.branch] || '').style.color = `rgba(${accent},0.8)`;
-    const right = el('wr-row-right', row);
+    top.appendChild(icon);
+    const title = el('wr-row-title', top);
+    el('wr-row-name', title, u.name);
+    el('wr-row-tag', title, BRANCH_LABEL[u.branch] || '').style.color = `rgba(${accent},0.8)`;
+    const right = el('wr-row-right', top);
     if (owned) {
       if (on) el('wr-row-state', right, 'ON ✓');
       btn('wr-pill', on ? 'switch off' : 'switch on', () => {
@@ -684,6 +712,10 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       if (rankLocked) tip(b, `${RANKS.lockedTip}\n${RANKS.specifics(RANK.Devoted, v.runs)}`);
       right.appendChild(b);
     }
+    const det = el('wr-row-det', row);
+    el('wr-row-desc', det, u.desc);
+    if (u.flavor) el('wr-row-flavor', det, u.flavor);
+    if (u.flavor || u.desc.length > 100) wireExpand(row, 'up:' + u.id);
     return row;
   }
 
@@ -695,38 +727,28 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     const maxed = unlocked && level >= b.levelValues.length;
     const rankLocked = v.isBoonRankLocked(b.id);
     const accent = !unlocked ? '232,67,147' : boonAcc(b, maxed);
-    const row = el('wr-row' + (unlocked ? ' is-owned' : ''));
+    const row = el('wr-row wr-row--stack' + (unlocked ? ' is-owned' : ''));
     row.style.setProperty('--acc', accent);
+    const top = el('wr-row-top', row);
 
     // Undiscovered = a MYSTERY: keyhole, "???", never the boon's face.
     const icon = unlocked
-      ? artIcon(`${ART}boons/${b.id}.png`, b.glyph, accent, 84)
-      : artIcon(`${ART}hub/tile_unknown.png`, '?', accent, 84);
+      ? artIcon(`${ART}boons/${b.id}.png`, b.glyph, accent, 48)
+      : artIcon(`${ART}hub/tile_unknown.png`, '?', accent, 48);
     if (!unlocked) icon.style.opacity = '0.6';
-    row.appendChild(icon);
+    top.appendChild(icon);
 
-    const mid = el('wr-row-mid', row);
-    el('wr-row-name', mid, unlocked ? `${b.name} · L${level}` : '? ? ?');
-    if (!unlocked) {
-      el('wr-row-flavor', mid, rankLocked
-        ? `${RANKS.lockedTip} ${RANKS.specifics(b.rankFloor, v.runs)}`
-        : 'it waits in the fall. grab it once to keep it — then deepen it here.');
-    } else {
-      el('wr-row-desc', mid, b.desc);
-      if (b.flavor) el('wr-row-flavor', mid, b.flavor);
-      if (b.activeUse) {
-        const useHint = b.cooldownSec > 0 ? `${b.cooldownSec}s cooldown` : 'limited uses';
-        el('wr-row-active', mid, `CONSUMABLE · grab it in the fall, fire from the dock · ${useHint}`);
-      }
-      if (b.capstone) el('wr-row-capstone' + (maxed ? ' is-maxed' : ''), mid, 'max: ' + b.capstone);
-      const pips = el('wr-row-pips', mid);
+    const title = el('wr-row-title', top);
+    el('wr-row-name', title, unlocked ? `${b.name} · L${level}` : '? ? ?');
+    if (unlocked) {
+      const pips = el('wr-row-pips', title);
       for (let i = 1; i <= b.levelValues.length; i++) {
         el('wr-pip' + (i <= level ? ' is-full' : ''), pips, i <= level ? '●' : '○');
       }
       el('wr-pip-value', pips, '  ' + b.value(b.levelValues[level - 1]));
     }
 
-    const right = el('wr-row-right', row);
+    const right = el('wr-row-right', top);
     if (!unlocked) {
       const held = buyBtn(rankLocked ? `🔒 ${RANKS.name(b.rankFloor)}` : '↯ find it below', false, () => {});
       tip(held, rankLocked
@@ -746,6 +768,23 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       });
       if (capLocked) tip(deepen, `${RANKS.capstoneLockedTip}\n${RANKS.specifics(RANK.Devoted, v.runs)}`);
       right.appendChild(deepen);
+    }
+
+    const det = el('wr-row-det', row);
+    if (!unlocked) {
+      // pinned: the mystery hint is the whole row - never folded away
+      el('wr-row-flavor is-pinned', det, rankLocked
+        ? `${RANKS.lockedTip} ${RANKS.specifics(b.rankFloor, v.runs)}`
+        : 'it waits in the fall. grab it once to keep it — then deepen it here.');
+    } else {
+      el('wr-row-desc', det, b.desc);
+      if (b.flavor) el('wr-row-flavor', det, b.flavor);
+      if (b.activeUse) {
+        const useHint = b.cooldownSec > 0 ? `${b.cooldownSec}s cooldown` : 'limited uses';
+        el('wr-row-active', det, `CONSUMABLE · grab it in the fall, fire from the dock · ${useHint}`);
+      }
+      if (b.capstone) el('wr-row-capstone' + (maxed ? ' is-maxed' : ''), det, 'max: ' + b.capstone);
+      if (b.flavor || b.activeUse || b.capstone || b.desc.length > 100) wireExpand(row, 'boon:' + b.id);
     }
     return row;
   }

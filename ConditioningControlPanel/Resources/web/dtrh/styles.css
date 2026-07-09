@@ -1935,7 +1935,7 @@ img.rh-fx-spiralspin {
 .wr-chips { display: flex; gap: 8px; align-items: center; }
 .wr-chip {
   padding: 3px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
-  background: rgba(232,67,147,0.14); border: 1px solid rgba(232,67,147,0.45);
+  background: rgba(20,14,32,0.75); border: 1px solid rgba(232,67,147,0.45);
   color: #ffd6ea; white-space: nowrap;
   text-shadow: 0 1px 4px rgba(0,0,0,0.8);
 }
@@ -1954,12 +1954,15 @@ img.rh-fx-spiralspin {
 /* ---- the FALL IN caption + chips (bottom-center, under the portal) ---- */
 .wr-fall {
   position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 10px 20px 12px; border-radius: 18px;
+  background: radial-gradient(ellipse 100% 100% at 50% 50%, rgba(8,6,18,0.5), rgba(8,6,18,0));
 }
 .wr-fall-cap {
   font-size: 1.15rem; font-weight: 800; letter-spacing: 0.22em; color: #fff;
   text-shadow: 0 0 22px rgba(232,67,147,0.95), 0 0 50px rgba(139,92,246,0.6);
   animation: wrFallBreath 3.4s ease-in-out infinite alternate;
+  margin-bottom: 2px;
 }
 @keyframes wrFallBreath { from { opacity: 0.82; } to { opacity: 1; } }
 .wr-pills--center { justify-content: center; }
@@ -1981,31 +1984,48 @@ img.rh-fx-spiralspin {
 /* ---- bottom hint line ---- */
 .wr-hub-hint {
   position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
-  font-size: 0.74rem; font-style: italic; opacity: 0.55; white-space: nowrap;
+  font-size: 0.74rem; font-style: italic; opacity: 0.72; white-space: nowrap;
   text-shadow: 0 1px 4px rgba(0,0,0,0.8);
 }
 
 /* ---- the station windows: modular glass panes in two columns flanking the
    centered 3D card. Each pane is one concern (toys / accessories / dials…) and
    only exists once its content is unlocked - the hub fills up as you progress.
-   Panes stagger in one by one (--d is set per pane by warren.js). ---- */
+   Panes stagger in one by one (--d is set per pane by warren.js).
+   The COLUMN is the scroller; panes take natural height and never crush. ---- */
+.wr-scrim {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse 46% 52% at 50% 48%, rgba(5,3,12,0) 0%, rgba(5,3,12,0.3) 60%, rgba(5,3,12,0.62) 100%);
+  animation: wrScrimIn 0.35s ease-out both;
+}
+@keyframes wrScrimIn { from { opacity: 0; } to { opacity: 1; } }
 .wr-wins {
-  position: absolute; inset: 64px 24px 84px; pointer-events: none;
+  position: absolute; inset: 52px 20px 24px; pointer-events: none;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.wr-wins-split {
+  flex: 1; min-height: 0; pointer-events: none;
   display: flex; justify-content: space-between; gap: 16px;
 }
-.wr-wins-col { width: min(400px, 33vw); min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.wr-wins-col {
+  width: min(460px, 36vw); min-height: 0; display: flex; flex-direction: column; gap: 12px;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  pointer-events: auto; padding-right: 4px;
+}
+.wr-wins-col::-webkit-scrollbar { width: 8px; }
+.wr-wins-col::-webkit-scrollbar-thumb { background: rgba(232,67,147,0.4); border-radius: 5px; }
 .wr-wins-head {
   pointer-events: auto; flex: none;
   display: flex; align-items: baseline; gap: 10px;
-  padding: 12px 14px 10px;
-  background: linear-gradient(180deg, rgba(16,13,32,0.88), rgba(12,9,26,0.92));
+  padding: 10px 16px 9px;
+  background: linear-gradient(90deg, rgba(16,13,32,0.92) 0%, rgba(16,13,32,0.92) 30%, rgba(16,13,32,0.5) 50%, rgba(16,13,32,0.92) 70%, rgba(16,13,32,0.92) 100%);
   border: 1px solid rgba(232,67,147,0.45); border-radius: 12px;
   box-shadow: 0 0 24px rgba(232,67,147,0.2);
   backdrop-filter: blur(6px);
   animation: wrWinInR 0.3s ease-out both;
 }
 .wr-sheet-title { font-weight: 800; letter-spacing: 0.18em; font-size: 1rem; color: #ff9fd0; }
-.wr-sheet-sub { flex: 1; font-size: 0.72rem; font-style: italic; opacity: 0.55; }
+.wr-sheet-sub { flex: 1; text-align: center; font-size: 0.72rem; font-style: italic; opacity: 0.55; }
 .wr-sheet-close {
   border: none; background: none; color: #cfd0e8; font-size: 0.95rem; cursor: pointer;
   padding: 2px 8px; border-radius: 8px;
@@ -2013,8 +2033,8 @@ img.rh-fx-spiralspin {
 .wr-sheet-close:hover { background: rgba(255,255,255,0.12); color: #fff; }
 .wr-win {
   pointer-events: auto; display: flex; flex-direction: column;
-  flex: 0 1 auto; min-height: 0; max-height: 72vh;   /* hug content; shrink + scroll when the column overflows */
-  background: linear-gradient(180deg, rgba(16,13,32,0.88), rgba(12,9,26,0.92));
+  flex: none;   /* natural height; the COLUMN scrolls, panes never crush */
+  background: linear-gradient(180deg, rgba(16,13,32,0.92), rgba(12,9,26,0.95));
   border: 1px solid rgba(232,67,147,0.45); border-radius: 14px;
   box-shadow: 0 0 24px rgba(232,67,147,0.2), inset 0 0 40px rgba(139,92,246,0.05);
   backdrop-filter: blur(6px);
@@ -2030,9 +2050,7 @@ img.rh-fx-spiralspin {
 }
 .wr-win-title { font-weight: 800; letter-spacing: 0.14em; font-size: 0.82rem; color: #ff9fd0; }
 .wr-win-sub { flex: 1; font-size: 0.68rem; font-style: italic; opacity: 0.55; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wr-win-body { overflow-y: auto; overflow-x: hidden; min-height: 0; padding: 10px 12px; }
-.wr-win-body::-webkit-scrollbar { width: 8px; }
-.wr-win-body::-webkit-scrollbar-thumb { background: rgba(232,67,147,0.4); border-radius: 5px; }
+.wr-win-body { overflow: visible; padding: 10px 12px; }
 .wr-win-body > .wr-card { margin-bottom: 10px; }
 .wr-win-body > .wr-card:last-child { margin-bottom: 0; }
 @media (max-width: 900px) {
@@ -2041,10 +2059,10 @@ img.rh-fx-spiralspin {
     flex-direction: column; justify-content: flex-start; gap: 12px;
     overflow-y: auto; pointer-events: auto;
   }
-  .wr-wins-col { width: auto; flex: none; }
-  .wr-wins-col--right { order: -1; }   /* the head bar (in the right column) leads the stack */
-  .wr-win { max-height: none; flex: none; }
-  .wr-win-body { overflow: visible; }
+  .wr-wins-split { flex-direction: column; flex: none; overflow: visible; }
+  .wr-wins-col { width: auto; flex: none; overflow: visible; padding-right: 0; }
+  .wr-wins-col--right { order: -1; }   /* pane stack order still leads with the right column */
+  .wr-scrim { background: rgba(5,3,12,0.5); }
 }
 
 /* ---- cards / rows ---- */
@@ -2081,6 +2099,28 @@ img.rh-fx-spiralspin {
 .wr-row-right { width: 148px; flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
 .wr-row-state { font-size: 0.72rem; font-weight: 800; color: #ffd700; }
 .wr-row-max { font-size: 0.85rem; font-weight: 800; color: #5ae096; }
+
+/* ---- stack rows (boons / habits): icon + title + action up top, full-width
+   detail below. Collapsed = 2-line desc; flavor/consumable/capstone fold away
+   behind the caret (the maxed gold capstone and mystery hints stay pinned). ---- */
+.wr-row--stack { flex-direction: column; align-items: stretch; gap: 8px; }
+.wr-row-top { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.wr-row-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.wr-row-title .wr-row-tag, .wr-row-title .wr-row-pips { margin-top: 0; }
+.wr-row--stack .wr-row-right { width: auto; flex: none; flex-direction: row; align-items: center; gap: 8px; }
+.wr-row-caret { flex: none; opacity: 0.5; font-size: 0.8rem; transition: transform 0.15s; }
+.wr-row--stack.is-open .wr-row-caret { transform: rotate(180deg); }
+.wr-row--stack.is-expandable { cursor: pointer; }
+.wr-row--stack.is-expandable:hover:not(.is-on) { border-color: rgba(var(--acc),0.5); }
+.wr-row-det { min-width: 0; }
+.wr-row-det > * { margin-top: 0; }
+.wr-row-det > * + * { margin-top: 4px; }
+.wr-row--stack:not(.is-open) .wr-row-det .wr-row-desc {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.wr-row--stack:not(.is-open) .wr-row-det .wr-row-flavor:not(.is-pinned),
+.wr-row--stack:not(.is-open) .wr-row-det .wr-row-active,
+.wr-row--stack:not(.is-open) .wr-row-det .wr-row-capstone:not(.is-maxed) { display: none; }
 
 .wr-icon {
   --acc: 232,67,147;
@@ -2131,7 +2171,15 @@ img.rh-fx-spiralspin {
 .wr-row--codex.is-hazy .wr-row-name { color: #777790; }
 
 /* ---- BAG tiles ---- */
-.wr-pockets { display: flex; gap: 30px; flex-wrap: wrap; }
+.wr-pockets { display: flex; gap: 10px; flex-wrap: wrap; }
+/* compact slot cards so all 4 HANDS fit one row in a 460px pane column
+   (86px + 2px borders each + 3 gaps = 390px inside the ~396px card) */
+.wr-pockets .wr-shelf { width: 86px; }
+.wr-pockets .wr-shelf-art { height: 60px; }
+.wr-pockets .wr-shelf-glyph { font-size: 1.7rem; }
+.wr-pockets .wr-shelf-foot { padding: 6px 8px 8px; gap: 3px; }
+.wr-pockets .wr-shelf-name { font-size: 0.72rem; }
+.wr-pockets .wr-shelf-sub { font-size: 0.64rem; }
 .wr-pocket-col { display: flex; flex-direction: column; gap: 6px; }
 .wr-pocket-label { font-family: Consolas, monospace; font-weight: 700; font-size: 0.7rem; color: #8a86b8; }
 .wr-pocket-row { display: flex; gap: 20px; }
@@ -2221,7 +2269,8 @@ img.rh-fx-spiralspin {
 .wr-pills--wrap { margin-bottom: 10px; }
 .wr-seg {
   padding: 7px 16px; border-radius: 999px; cursor: pointer; font-size: 0.8rem; font-weight: 600;
-  border: 1px solid rgba(232,67,147,0.4); background: rgba(28,26,54,0.7); color: #cfd0e8;
+  border: 1px solid rgba(232,67,147,0.4); background: rgba(24,21,46,0.88); color: #cfd0e8;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
 }
 .wr-seg.is-on { background: rgba(232,67,147,0.35); border-color: #e84393; color: #fff; }
 .wr-seg.is-locked { opacity: 0.45; cursor: default; }
