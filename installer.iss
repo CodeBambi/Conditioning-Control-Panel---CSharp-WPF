@@ -69,6 +69,14 @@ WizardSizePercent=120
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
 
+; Restart Manager: name the app's real single-instance mutex (App.xaml.cs MutexName) so
+; Inno can detect the running app and cleanly close+restart it when files are in use during
+; a silent auto-update. Without this, /CLOSEAPPLICATIONS has nothing registered to close and
+; the in-app updater could race the still-locked exe (#499).
+AppMutex=ConditioningControlPanel_SingleInstance_Mutex
+CloseApplications=yes
+RestartApplications=yes
+
 ; Other settings
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -177,8 +185,10 @@ Filename: "{tmp}\VC_redist.x64.exe"; Parameters: "/install /quiet /norestart"; S
 
 ; Option to launch app after interactive installation (shows checkbox)
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-; Always launch app after silent installation (auto-updates)
-Filename: "{app}\{#MyAppExeName}"; Flags: nowait postinstall skipifnotsilent
+; NOTE: No silent-install self-launch here. The in-app updater's external helper
+; (UpdateService.WriteUpdateHelperScript) owns the relaunch after a silent auto-update, so a
+; second launch here would double-start the app. (The single-instance handshake would dedup
+; it, but we keep exactly one relauncher to avoid a stray window flash.)
 
 [UninstallRun]
 ; Ensure app is closed before uninstall
@@ -484,8 +494,10 @@ begin
   // Detect existing assets
   DetectExistingAssets();
 
-  // Check if already running
-  if CheckForMutexes('{#MyAppName}_Mutex') then
+  // Check if already running. Use the app's REAL single-instance mutex name
+  // (App.xaml.cs MutexName) — the old '{#MyAppName}_Mutex' string never matched, so this
+  // guard was dead and never detected a running app (#499).
+  if CheckForMutexes('ConditioningControlPanel_SingleInstance_Mutex') then
   begin
     if MsgBox('{#MyAppName} is currently running.' + #13#10 + #13#10 +
               'Please close it before continuing installation.' + #13#10 + #13#10 +
