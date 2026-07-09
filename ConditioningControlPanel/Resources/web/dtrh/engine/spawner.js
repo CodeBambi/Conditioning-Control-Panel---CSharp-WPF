@@ -1391,6 +1391,21 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     for (const r of live) if (r.pickup && !r.dead) out.push(r.group);
     return out;
   }
+  // Nearest interactive hit distance (pickups + grabbable cards) WITHOUT acting -
+  // scene.js uses it to arbitrate a junction doorway-card click against a closer
+  // grab target under the same cursor.
+  function probeGrab(ndcX, ndcY, camera) {
+    _ndc.set(ndcX, ndcY);
+    _ray.setFromCamera(_ndc, camera);
+    let best = Infinity;
+    const ph = _ray.intersectObjects(clickableGroups(), true);
+    if (ph.length) best = ph[0].distance;
+    if (!grabbed && !spotlight) {
+      const gh = _ray.intersectObjects(grabbableGroups(), true);
+      if (gh.length && gh[0].distance < best) best = gh[0].distance;
+    }
+    return Number.isFinite(best) ? best : null;
+  }
   function grabAtPointer(ndcX, ndcY, camera) {
     _ndc.set(ndcX, ndcY);
     _ray.setFromCamera(_ndc, camera);
@@ -1510,6 +1525,11 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     return true;
   }
 
+  // junction chamber span (scene.setBlockedSpan): no card/veil spawns inside it -
+  // they'd float in the hidden-trunk cut or hide behind the opaque room, starving
+  // the fork approach of grabbables.
+  let blockedSpan = null;
+
   // ---- per-frame update -------------------------------------------------------
   function update(camera, camDepth, dt, t, heat = 1, runTime = 999) {
     camDepthNow = camDepth;
@@ -1533,6 +1553,9 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         const d = nextCardDepth;
         nextCardDepth += gap + rand(-CARD_GAP_JITTER, CARD_GAP_JITTER);
         budget -= 1;
+        // a junction chamber owns this span - skip it (the stretch short of the
+        // fork keeps its cards, so the approach still has things to grab)
+        if (blockedSpan && d > blockedSpan.lo - 2 && d < blockedSpan.hi) continue;
         spawning += 1;
         Promise.resolve(spawnCardAt(d)).then((rec) => {
           spawning -= 1;
@@ -1547,8 +1570,12 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
       if (runTime < FIRST_VEIL_SEC) {
         nextVeilDepth = Math.max(nextVeilDepth, camDepth + VEIL_GAP_MIN);
       } else if (nextVeilDepth < camDepth + SPAWN_AHEAD && liveVeils < MAX_LIVE_VEILS) {
-        addCard(buildVeil(nextVeilDepth));
-        nextVeilDepth += rand(VEIL_GAP_MIN, VEIL_GAP_MAX) * veilGapMult;
+        if (blockedSpan && nextVeilDepth > blockedSpan.lo - 2 && nextVeilDepth < blockedSpan.hi) {
+          nextVeilDepth = blockedSpan.hi + 5;   // no veils inside the chamber span
+        } else {
+          addCard(buildVeil(nextVeilDepth));
+          nextVeilDepth += rand(VEIL_GAP_MIN, VEIL_GAP_MAX) * veilGapMult;
+        }
       }
     }
 
@@ -1892,7 +1919,8 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
 
   return {
     update, reset, dispose, setPaused, warm,
-    grabAtPointer, releaseGrab,
+    grabAtPointer, releaseGrab, probeGrab,
+    setBlockedSpan: (s) => { blockedSpan = s || null; },
     // junction branch-mouth media cards
     createDetachedCard, clearLive,
     // Wave 2 game verbs

@@ -99,13 +99,17 @@ export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, o
   let card = null;   // at most one live card
 
   // ---- pick which item to offer -------------------------------------------
-  function pickOffer() {
+  // Also exported: junction doorways call this to hang a prize on each card
+  // (excludeIds keeps the two doorways from offering the same item).
+  function pickOffer(excludeIds) {
+    const skip = excludeIds ? new Set(excludeIds) : null;
     const meta = (getMeta && getMeta()) || {};
     const runs = meta.runsCompleted || 0;
     const rankIndex = RANKS.forRuns(runs);
     const levels = meta.lifetimeBoonLevels || {};
     const pool = [];
     for (const def of LIFETIME_BOONS) {
+      if (skip && skip.has(def.id)) continue;                  // already on the other doorway
       if ((def.rankFloor || 0) > rankIndex) continue;          // still rank-locked
       const kind = kindOf(def);
       if (canOffer && !canOffer(def.id, kind)) continue;       // game veto (already grabbed / dock full)
@@ -122,9 +126,9 @@ export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, o
   }
 
   // ---- build one drifting card at a fixed world point ahead ----------------
-  function buildCard(def, kind) {
+  function buildCard(def, kind, depth) {
     const th = themeOf(def);
-    const fr = layout.frameAtDepth(spawnDepth());
+    const fr = layout.frameAtDepth(depth);
     const group = new THREE.Group();
     group.position.copy(fr.pos);
     group.userData = { type: 'powerup', id: def.id, kind };
@@ -156,11 +160,10 @@ export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, o
     }, undefined, () => { /* keep the name panel */ });
 
     scene.add(group);
-    const spawnedAtDepth = spawnDepth();
     let appear = 0, sway = Math.random() * 6, fade = 0;
 
     return {
-      def, kind, group, cardDepth: spawnedAtDepth,
+      def, kind, group, cardDepth: depth,
       update(dt, camDepth, camQuat) {
         appear = Math.min(1, appear + dt * 2.6);
         sway += dt;
@@ -191,18 +194,30 @@ export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, o
   }
 
   let _camDepth = 0;
+  let blocked = null;   // junction chamber span (scene.setBlockedSpan): keep drops out of it
   function spawnDepth() { return _camDepth + AHEAD; }
 
   function trySpawn() {
     if (card) return;
+    // a junction chamber owns the span ahead: a card in there floats in the
+    // hidden-trunk cut or hides behind the opaque room. Drop it just SHORT of
+    // the fork instead, or wait if the camera is already at the gate.
+    let d = spawnDepth();
+    if (blocked && d > blocked.lo && d < blocked.hi) {
+      d = blocked.lo - 4;
+      if (d < _camDepth + 12) { timer = 2; return; }
+    }
     const offer = pickOffer();
     if (!offer) { timer = 6; return; }   // nothing to offer now; retry sooner
-    card = buildCard(offer.def, offer.kind);
+    card = buildCard(offer.def, offer.kind, d);
     timer = MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP);
   }
 
   return {
     setSpawnEnabled(on) { spawnEnabled = !!on; },
+    setBlockedSpan(s) { blocked = s || null; },
+    // junction doorway prizes draw from the same offer pool + veto as the drops
+    pickOffer,
 
     update(dt, camDepth, camQuat) {
       _camDepth = camDepth;

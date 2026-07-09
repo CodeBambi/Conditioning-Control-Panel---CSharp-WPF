@@ -2457,6 +2457,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       happy = createHappyPath();
       warren = createWarren({
         hud: ctx.hud, bridge,
+        stations: ctx.hubStations,
         getMeta: () => (hostState ? hostState.meta : null),
         getMediaStats: () => (hostState ? hostState.mediaStats : null),
         runSetup,
@@ -2506,6 +2507,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (state === 'requesting') return true;   // swallow while the hole opens
       return false;
     },
+
+    /** scene.js hub-station pointer routing (only live while the Warren is up). */
+    onStationPick(id) { if (state === 'warren' && warren) warren.onStationPick(id); },
+    onStationMiss() { if (state === 'warren' && warren) warren.onStationMiss(); },
 
     /** Called every frame from the scene loop (dt already clamped). */
     frame(dt) {

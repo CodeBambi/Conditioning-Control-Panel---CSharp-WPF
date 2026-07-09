@@ -1,16 +1,23 @@
 /* ============================================================================
- * warren.js - the Warren: DtRH's hub, ported from ChaosHubWindow (main menu +
- * "the Dollhouse") as a DOM SPA floating over the idling tunnel. Views:
+ * warren.js - the Warren: DtRH's hub, reworked (2026-07) as an IN-AMBIENT 3D
+ * menu. The old full-screen DOM SPA (menu screen + six dollhouse tabs) is gone:
+ * the idling tube IS the menu. engine/hubStations.js hangs floating stations in
+ * the bore and this module decides what they are and what clicking one means:
  *
- *   MENU        FALL IN · THE DOLLHOUSE · HOW TO PLAY · wake up (exit)
- *   DOLLHOUSE   BAG (pockets + collections + habits grid) · the Toybox
- *               (habits/toys/accessories shelves + her corner) · THE DESCENT
- *               (run setup) · the Looking Glass (bench/mantras/stats) · Diary
+ *   🕳 FALL IN (portal)  dive straight into a descent (difficulty + length
+ *                        chips sit under it - everything else lives in ⚙ options)
+ *   🧸 TOYBOX            level things up with drops ✦ (shelves + habits + hands)
+ *   🎛 THE DIALS         unlock things with gold 🪙 (the options-console ladder)
+ *   📔 VANITY            the mirror: mantra, stats, rank, diary
  *
- * Everything renders from the chaos_meta snapshot through metaView(); all
- * writes are meta-commands (the bridge answers with a fresh snapshot, which
- * re-renders). The reveal framework (reveals.js) keeps the UI naked until
- * each surface's predicate flips - freshly pending surfaces flash once.
+ * Clicking a station swings the camera onto it (hubStations.focus) and opens a
+ * compact DOM sheet beside it; Esc / click-away closes. Persistent chrome is
+ * tiny: currency chips (top-right), a corner dock (options / how to / wake up).
+ *
+ * Everything still renders from the chaos_meta snapshot through metaView();
+ * all writes are meta-commands (the bridge answers with a fresh snapshot,
+ * which re-renders). reveals.js keeps surfaces hidden until earned - freshly
+ * pending STATION reveals flash in 3D (hubStations.flashStation).
  * ==========================================================================*/
 
 import {
@@ -19,7 +26,7 @@ import {
   BENCH_ITEMS, BENCH_RESERVED, BENCH_CLAIMED_RESERVED,
   WALL_TIP, DEEPER_TIP, BOTTOM_TIP,
   RANKS, RANK, GLYPHS,
-  DIARY_VERBS, DIARY_CODEX, POOL_VARIANTS, POOL_PRESETS, DIFF_PILLS,
+  DIARY_VERBS, DIARY_CODEX, DIFF_PILLS,
   HOWTO_CARDS, metaView, MAX_CONSUMABLE_SLOTS,
 } from './catalog.js';
 import { BOONS } from './boons.js';
@@ -27,12 +34,9 @@ import * as reveals from './reveals.js';
 import { UNLOCK_LADDER, RANK_NAMES } from '../engine/settings.js';
 
 const ART = 'https://ccp.art/';
-const KEY_OPTS = ['Q', 'E', 'R', 'F', 'Z', 'X', 'C', 'V', '1', '2', '3', '4'];
 const nfmt = (n) => Math.floor(n).toLocaleString();
 
 // A boon's identity colour: its rarity tier, red for a curse, gold once maxed.
-// (Habits keep their branch colour - that's their identity.) Mirrors the loot
-// palette players already read in the mid-descent draft.
 const RARITY_ACC = { Common: '150,162,196', Uncommon: '90,214,150', Rare: '167,120,255' };
 const CURSE_ACC = '255,110,110';
 const GOLD_ACC = '255,215,0';
@@ -41,8 +45,6 @@ function boonAcc(b, maxed) {
   if (b && b.curse) return CURSE_ACC;
   return (b && RARITY_ACC[b.rarity]) || '232,67,147';
 }
-// Ribbon text for a card: skip it on plain Commons so the shelf stays calm and
-// only the notable pieces (uncommon/rare/curse/maxed) wear a badge.
 function rarityTag(b) {
   if (!b) return null;
   if (b.curse) return 'curse';
@@ -56,7 +58,15 @@ function fmtPlaytime(seconds) {
   return h >= 1 ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
 }
 
-export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, onDescend, onExit, onOptions }) {
+// The stations: what hangs in the tube. TOYBOX/DIALS appear after the first
+// fall (the 'dollhouse' reveal); VANITY keeps the old Looking-Glass gate.
+const STATION_META = {
+  toybox: { label: 'TOYBOX', glyph: '🧸', accent: 0x66e0d0, sub: 'level up · drops ✦' },
+  dials:  { label: 'THE DIALS', glyph: '🎛', accent: 0xe84393, sub: 'unlock · gold 🪙' },
+  vanity: { label: 'VANITY', glyph: '📔', accent: 0xc178ff, sub: 'the mirror' },
+};
+
+export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, runSetup, onDescend, onExit, onOptions }) {
   const root = document.createElement('div');
   root.className = 'wr-root';
   root.hidden = true;
@@ -69,7 +79,8 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
 
   // ---- local run-setup state (seeded from the saved settings in init) ----
   // Four Chambers: the descent is always 4 regions (I->IV), each ~3-5 min and
-  // ending in a boon Landing. Total run length is 4 x per-chamber minutes.
+  // ending in a boon Landing. Only difficulty + length are picked here at the
+  // portal; the rest of the old DESCENT tab lives in ⚙ options now.
   const CHAMBER_TOTALS = [720, 960, 1200];   // 12 / 16 / 20 min (3 / 4 / 5 min per chamber)
   const setup = Object.assign({
     difficulty: 'Easy', durationSec: 960, waveCount: 4, motion: 'Mixed',
@@ -77,17 +88,16 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     boonDraftEnabled: true, allowCurses: true, dartersEnabled: true,
     key1: 'Q', key2: 'E',
   }, runSetup || {});
-  // Coerce any stale saved length/loops (e.g. a pre-redesign 180s / 5-loop) into
-  // the chamber model, so the first descent already feels the four-chamber pace.
   setup.waveCount = 4;
   if (!CHAMBER_TOTALS.includes(setup.durationSec)) setup.durationSec = 960;
 
   let visible = false;
-  let screen = 'menu';       // 'menu' | 'dollhouse'
-  let tab = 'loadout';       // 'loadout' | 'enhance' | 'run' | 'improve' | 'diary'
+  let openId = null;         // station whose sheet is open (null = idle)
   let descending = false;    // a request-run is in flight
   let modal = null;          // open modal element (howto / intro)
-  const revealEls = new Map();   // reveal id -> element to flash
+  const revealEls = new Map();       // reveal id -> DOM element to flash (in-sheet rows)
+  // reveal id -> station to flash in 3D (station-level surfaces)
+  const STATION_REVEALS = { dollhouse: ['toybox', 'dials'], tab_looking_glass: ['vanity'] };
 
   const view = () => metaView(getMeta());
 
@@ -169,17 +179,6 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     }, 4500);
   }
 
-  const cardForBoonUnlock = (id, v) => {
-    const b = boonDefById(id);
-    if (!b) return null;
-    const ribbons = { skill: ['NEW TOY UNLOCKED', '122,255,210'], accessory: ['NEW ACCESSORY UNLOCKED', '255,210,122'], utility: ['NEW CHARM UNLOCKED', '122,224,255'] };
-    const [ribbon, accent] = ribbons[b.cat] || ribbons.utility;
-    const context = b.cat === 'utility' ? 'switched on — it works every descent.'
-      : v.isBoonActive(id) ? 'slipped straight into a pocket — it rides with you next descent.'
-      : v.slotsFor(b.cat) === 0 ? 'no pocket to carry it yet — she sells one at her bench.'
-      : 'your pockets are full — swap it in from the BAG.';
-    return { ribbon, accent, title: b.name, desc: b.desc, flavor: b.flavor, context, glyph: b.glyph, art: `${ART}boons/${id}.png` };
-  };
   const cardForCapstone = (id) => {
     const b = boonDefById(id);
     if (!b || !b.capstone) return null;
@@ -193,13 +192,6 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     return { ribbon: 'HABIT TRAINED', accent: '156,232,160', title: u.name, desc: u.desc, flavor: u.flavor,
       context: 'always on from your next descent — switch it off in the toybox anytime.',
       glyph: u.glyph, art: `${ART}upgrades/${id}.png` };
-  };
-  const cardForPocket = (isToy, label, line, n) => {
-    const kind = isToy ? 'toy' : 'accessory';
-    const desc = n <= 1
-      ? `you can now carry one ${kind} into the descent. unlocked ${kind}s equip from the BAG.`
-      : `you can now carry ${n} ${kind}s into the descent at once. pick yours from the BAG.`;
-    return { ribbon: 'POCKET SEWN', accent: '232,67,147', title: label, desc, flavor: line, glyph: '👝', cue: 'pocket_sewn' };
   };
 
   // ============================ modals (how-to / intro) ============================
@@ -263,7 +255,8 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     render();
   }
 
-  /** "The invitation" - the one-time spoiler-free intro card (first Dollhouse open). */
+  /** "The invitation" - the one-time spoiler-free verb primer. Now fires on the
+   * FIRST portal click (before the first fall), where the verbs actually help. */
   function openIntro(onDone) {
     closeModal();
     modal = el('wr-modal', root);
@@ -311,8 +304,19 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     let stagger = 0;
     let firstFlashed = null;
     for (const id of pending) {
+      const stationIds = STATION_REVEALS[id];
       const elm = revealEls.get(id);
-      if (elm && elm.isConnected && !elm.hidden) {
+      if (stationIds && stations) {
+        // a station-level surface: flash the 3D card(s) instead of a DOM row
+        firstFlashed = firstFlashed || id;
+        const delay = stagger;
+        stagger += 600;
+        window.setTimeout(() => {
+          sfx('reveal_chime', 0.5);
+          for (const sid of stationIds) stations.flashStation(sid);
+        }, delay);
+        reveals.markSeen(id, v, bridge);
+      } else if (elm && elm.isConnected && !elm.hidden) {
         firstFlashed = firstFlashed || id;
         const delay = stagger;
         stagger += 600;
@@ -329,74 +333,7 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     if (firstFlashed) bark('reveal-flash', { id: firstFlashed });
   }
 
-  // ============================ menu screen ============================
-
-  function renderMenu(host) {
-    const v = view();
-    const wrap = el('wr-menu', host);
-    const left = el('wr-menu-left', wrap);
-    el('wr-menu-title', left, 'DOWN THE RABBIT HOLE');
-    el('wr-menu-sub', left, 'the fall is the easy part.');
-    const chips = el('wr-chips', left);
-    el('wr-chip', chips, v.rankName);
-    el('wr-chip', chips, `${GLYPHS.drops} ${nfmt(v.sparks)}`);
-    el('wr-chip', chips, `${GLYPHS.gold} ${nfmt(v.gold)}`);
-
-    const btns = el('wr-menu-btns', left);
-    const fall = btn('wr-menu-btn wr-menu-btn--hero', descending ? 'she opens the hole…' : 'FALL IN', () => beginDescend(), btns);
-    fall.disabled = descending;
-    btn('wr-menu-btn', 'THE DOLLHOUSE', () => enterDollhouse(), btns);
-    if (onOptions) btn('wr-menu-btn', 'OPTIONS', () => onOptions(), btns);
-    btn('wr-menu-btn', 'HOW TO PLAY', () => openHowTo(), btns);
-    btn('wr-menu-btn wr-menu-btn--dim', 'wake up (exit)', () => onExit(), btns);
-    el('wr-menu-hint', left, v.runs === 0
-      ? 'your first descent is a gentle one. she’ll show you the verbs.'
-      : `${v.runs} descents finished · hold ESC to wake up any time`);
-
-    // Character art panel (the WPF menu flipbook's first frame; art-optional).
-    const art = el('wr-menu-art', wrap);
-    const img = document.createElement('img');
-    img.src = `${ART}menu_1.png`;
-    img.alt = '';
-    img.addEventListener('error', () => art.remove());
-    art.appendChild(img);
-  }
-
-  function beginDescend() {
-    if (descending) return;
-    descending = true;
-    onDescend({ ...setup });
-    rerender();
-  }
-
-  function enterDollhouse() {
-    const v = view();
-    screen = 'dollhouse';
-    tab = 'loadout';
-    rerender();
-    const proceed = () => {
-      if (!v.seenDollhouse) {
-        setFlag('seenDollhouse');
-        bark('dollhouse-first-open');
-      }
-      runRevealFlashes('hub_open');
-    };
-    if (!v.seenIntroGuide) {
-      setFlag('seenIntroGuide');
-      openIntro(proceed);
-    } else proceed();
-  }
-
-  // ============================ dollhouse chrome ============================
-
-  const TAB_HINTS = {
-    loadout: 'click a tile to slip it into a pocket. + takes you where it’s sold.',
-    enhance: 'spend your drops. deepen what you like.',
-    dials: 'the fall came pre-set. buy the console back with drops - one dial at a time.',
-    run: 'dress up the fall, then FALL IN.',
-    improve: 'the bench, the mantras, how far you’ve fallen.',
-    diary: 'everything you’ve met down there. click an entry to read it.',
-  };
+  // ============================ affordable-count badges ============================
 
   function countAffordableToybox(v) {
     let n = 0;
@@ -405,9 +342,7 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     }
     for (const b of LIFETIME_BOONS) {
       const lvl = v.boonLevel(b.id);
-      if (lvl <= 0) {
-        if (!v.isBoonRankLocked(b.id) && !v.isAccessoryScriptLocked(b.id) && v.canAffordUnlock(b.id)) n++;
-      } else if (lvl < b.levelValues.length && !v.isCapstoneRankLocked(b.id) && v.canAffordDeepen(b.id)) n++;
+      if (lvl >= 1 && lvl < b.levelValues.length && !v.isCapstoneRankLocked(b.id) && v.canAffordDeepen(b.id)) n++;
     }
     return n;
   }
@@ -432,64 +367,163 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     return n;
   }
 
-  function renderDollhouse(host) {
+  // ============================ the 3D stations ============================
+
+  function buildStationDefs(v) {
+    const defs = [];
+    if (v.runs >= 1) {
+      defs.push({ id: 'toybox', kind: 'station', label: STATION_META.toybox.label,
+        glyph: STATION_META.toybox.glyph, accent: STATION_META.toybox.accent,
+        artUrl: `${ART}hub/station_toybox.png`, badge: countAffordableToybox(v) });
+      defs.push({ id: 'dials', kind: 'station', label: STATION_META.dials.label,
+        glyph: STATION_META.dials.glyph, accent: STATION_META.dials.accent,
+        artUrl: `${ART}hub/station_dials.png`, badge: countAffordableDials(v) });
+    }
+    if (reveals.isUnlocked('tab_looking_glass', v)) {
+      defs.push({ id: 'vanity', kind: 'station', label: STATION_META.vanity.label,
+        glyph: STATION_META.vanity.glyph, accent: STATION_META.vanity.accent,
+        artUrl: `${ART}hub/station_vanity.png`, badge: countAffordableBench(v) });
+    }
+    defs.push({ id: 'portal', kind: 'portal', label: 'FALL IN', glyph: '🕳', accent: 0xe84393 });
+    return defs;
+  }
+
+  function refreshBadges(v) {
+    if (!stations) return;
+    stations.setBadge('toybox', countAffordableToybox(v));
+    stations.setBadge('dials', countAffordableDials(v));
+    stations.setBadge('vanity', countAffordableBench(v));
+  }
+
+  // ============================ persistent chrome ============================
+
+  let chrome = null;   // { chips, fall, hint, dock }
+
+  function renderChrome() {
+    root.innerHTML = '';
+    root.appendChild(cardLayer);
     const v = view();
-    const wrap = el('wr-dollhouse', host);
 
-    // ---- top bar ----
-    const top = el('wr-topbar', wrap);
-    btn('wr-back', '‹ menu', () => { screen = 'menu'; rerender(); }, top);
-    el('wr-topbar-title', top, 'THE DOLLHOUSE');
-    const chips = el('wr-chips', top);
-    el('wr-chip', chips, v.rankName);
-    el('wr-chip', chips, `${GLYPHS.drops} ${nfmt(v.sparks)}`);
-    el('wr-chip', chips, `${GLYPHS.gold} ${nfmt(v.gold)}`);
+    // top-left: a quiet title
+    const title = el('wr-corner-title', root);
+    el('wr-corner-name', title, 'DOWN THE RABBIT HOLE');
+    el('wr-corner-sub', title, 'the fall is the easy part.');
 
-    // ---- tabs ----
-    const tabs = el('wr-tabs', wrap);
-    const mkTab = (id, label, opts = {}) => {
-      const t = btn('wr-tab' + (tab === id ? ' is-on' : ''), label, () => {
-        if (opts.locked) { sfx('ui_denied', 0.4); return; }
-        tab = id;
-        rerender();
-      }, tabs);
-      if (opts.locked) t.classList.add('is-locked');
-      if (opts.badge > 0) {
-        const b = el('wr-badge', t, String(opts.badge));
-        t.appendChild(b);
+    // top-right: rank + currencies
+    const chips = el('wr-chips wr-chips--corner', root);
+
+    // bottom-center: the portal caption + difficulty/length chips
+    const fall = el('wr-fall', root);
+
+    // bottom-left: the corner dock
+    const dock = el('wr-dock', root);
+    if (onOptions) btn('wr-dock-btn', '⚙ options', () => onOptions(), dock);
+    btn('wr-dock-btn', 'how to play', () => openHowTo(), dock);
+    btn('wr-dock-btn wr-dock-btn--dim', 'wake up (exit)', () => onExit(), dock);
+
+    // bottom hint line
+    const hint = el('wr-hub-hint', root);
+
+    chrome = { chips, fall, hint, dock };
+    refreshChrome(v);
+    if (modal) root.appendChild(modal);
+  }
+
+  function refreshChrome(v) {
+    if (!chrome) return;
+    // currency chips
+    chrome.chips.innerHTML = '';
+    el('wr-chip', chrome.chips, v.rankName);
+    el('wr-chip', chrome.chips, `${GLYPHS.drops} ${nfmt(v.sparks)}`);
+    el('wr-chip', chrome.chips, `${GLYPHS.gold} ${nfmt(v.gold)}`);
+
+    // FALL IN caption + chips under the portal
+    chrome.fall.innerHTML = '';
+    el('wr-fall-cap', chrome.fall, descending ? 'she opens the hole…' : 'FALL IN');
+    if (!descending) {
+      const diffRow = el('wr-pills wr-pills--center', chrome.fall);
+      let effDiff = setup.difficulty;
+      const diffAvailable = DIFF_PILLS.filter((d) => (!d.revealGate || reveals.isUnlocked(d.revealGate, v)));
+      if (!diffAvailable.some((d) => d.id === effDiff)) effDiff = 'Easy';
+      if (effDiff === 'Extreme' && !v.extremeUnlocked) effDiff = 'Hard';
+      setup.difficulty = effDiff;
+      for (const d of DIFF_PILLS) {
+        if (d.revealGate && !reveals.isUnlocked(d.revealGate, v)) continue;
+        const locked = d.extremeGate && !v.extremeUnlocked;
+        const p = btn('wr-seg' + (effDiff === d.id ? ' is-on' : '') + (locked ? ' is-locked' : ''),
+          locked ? `${d.label} 🔒` : d.label, () => {
+            if (locked) { sfx('ui_denied', 0.4); return; }
+            setup.difficulty = d.id;
+            refreshChrome(view());
+          }, diffRow);
+        if (locked) {
+          tip(p, `a deeper door. she sells the key in the TOYBOX: finish 10 relentless descents, reach Devoted (${RANKS.thresholds[RANK.Devoted]} descents), then train it for ${GLYPHS.drops}${upgradeById('extreme_tier')?.cost ?? 350}.`);
+        } else tip(p, d.tip);
+        if (d.revealGate) revealEls.set(d.revealGate, p);
+        if (d.extremeGate) revealEls.set('pill_inescapable', p);
       }
-      if (opts.tip) tip(t, opts.tip);
-      return t;
-    };
-    mkTab('loadout', 'BAG');
-    mkTab('enhance', 'the Toybox', { badge: countAffordableToybox(v) });
-    mkTab('dials', 'THE DIALS', { badge: countAffordableDials(v) });
-    mkTab('run', 'THE DESCENT');
-    const lgOpen = reveals.isUnlocked('tab_looking_glass', v);
-    const lgTab = mkTab('improve', lgOpen ? 'the Looking Glass' : '??? 🔒', {
-      locked: !lgOpen,
-      badge: lgOpen ? countAffordableBench(v) : 0,
-      tip: lgOpen ? null : `${WALL_TIP}\n${RANKS.specifics(RANK.Slipping, v.runs)}`,
-    });
-    revealEls.set('tab_looking_glass', lgTab);
-    if (reveals.isUnlocked('diary', v)) {
-      const dTab = mkTab('diary', 'Diary');
-      revealEls.set('diary', dTab);
+      const lenRow = el('wr-pills wr-pills--center', chrome.fall);
+      for (const secs of CHAMBER_TOTALS) {
+        btn('wr-seg wr-seg--small' + (setup.durationSec === secs ? ' is-on' : ''), `${secs / 60} min`, () => {
+          setup.durationSec = secs;
+          refreshChrome(view());
+        }, lenRow);
+      }
+      tip(lenRow, 'four chambers, always in order. each runs about a quarter of the descent and ends in a boon.');
     }
 
-    // a vanished/locked tab can't stay selected
-    if ((tab === 'improve' && !lgOpen) || (tab === 'diary' && !reveals.isUnlocked('diary', v))) tab = 'loadout';
+    // hint
+    chrome.hint.textContent = v.runs === 0
+      ? 'your first descent is a gentle one. she’ll show you the verbs. click the hole to fall.'
+      : `${v.runs} descents finished · click the hole to fall · hold ESC to wake up`;
+  }
 
-    // ---- panel ----
-    const panel = el('wr-panel', wrap);
-    if (tab === 'loadout') renderBag(panel, v);
-    else if (tab === 'enhance') renderToybox(panel, v);
-    else if (tab === 'dials') renderDials(panel, v);
-    else if (tab === 'run') renderDescent(panel, v);
-    else if (tab === 'improve') renderLookingGlass(panel, v);
-    else if (tab === 'diary') renderDiary(panel, v);
+  // ============================ the station sheet ============================
 
-    el('wr-hint', wrap, TAB_HINTS[tab] || '');
+  let sheet = null;
+
+  function closeSheet() {
+    if (sheet) { sheet.remove(); sheet = null; }
+    if (openId && stations) stations.blur();
+    openId = null;
+  }
+
+  function openStation(id) {
+    if (!STATION_META[id]) return;
+    const v = view();
+    closeSheet();
+    openId = id;
+    if (stations) stations.focus(id, 1.7);   // station rests left-of-center; sheet on the right
+    sheet = el('wr-sheet', root);
+    const head = el('wr-sheet-head', sheet);
+    el('wr-sheet-title', head, STATION_META[id].label);
+    el('wr-sheet-sub', head, STATION_META[id].sub);
+    btn('wr-sheet-close', '✕', () => closeSheet(), head);
+    const body = el('wr-sheet-body', sheet);
+    if (id === 'toybox') renderToyboxPanel(body, v);
+    else if (id === 'dials') renderDialsPanel(body, v);
+    else if (id === 'vanity') renderVanityPanel(body, v);
+
+    // first-ever station visit: her welcome + the reveal pass
+    if (!v.seenDollhouse) {
+      setFlag('seenDollhouse');
+      bark('dollhouse-first-open');
+    }
+    runRevealFlashes('hub_open');
+  }
+
+  /** Re-render the open sheet in place (a meta-command answered). */
+  function refreshSheet() {
+    if (!openId || !sheet) return;
+    const v = view();
+    const body = sheet.querySelector('.wr-sheet-body');
+    if (!body) return;
+    const scrollTop = body.scrollTop;
+    body.innerHTML = '';
+    if (openId === 'toybox') renderToyboxPanel(body, v);
+    else if (openId === 'dials') renderDialsPanel(body, v);
+    else if (openId === 'vanity') renderVanityPanel(body, v);
+    body.scrollTop = scrollTop;
   }
 
   // ============================ shared row/tile builders ============================
@@ -534,11 +568,9 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     return row;
   }
 
-  /** One Toybox lifetime-boon row (BuildLifetimeBoonRow). */
+  /** One lifetime-boon row: discovered pieces deepen inline with Sparks; the
+   * undiscovered stay mystery keyholes that only the fall can open. */
   function boonRow(b, v) {
-    // Grab-in-the-tube rework: items are DISCOVERED by grabbing them in the fall, not
-    // bought. Undiscovered (level 0) = a mystery keyhole; once discovered it becomes
-    // level-uppable here with Sparks. Rank still gates when it can first appear in the fall.
     const level = v.boonLevel(b.id);
     const unlocked = level >= 1;                 // discovered
     const maxed = unlocked && level >= b.levelValues.length;
@@ -607,45 +639,7 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     return row;
   }
 
-  /** A BAG tile (LoadoutTile). state: 'equipped' | 'owned' | 'locked' | 'empty'. */
-  function bagTile({ glyph, title, caption, art, state, onClick, tipText, size = 96 }) {
-    const cell = el('wr-tile-cell');
-    const t = el(`wr-tile is-${state}`, cell);
-    t.style.width = t.style.height = `${size}px`;
-    if (art && state !== 'empty') {
-      const img = document.createElement('img');
-      img.src = art;
-      img.alt = '';
-      img.addEventListener('error', () => { img.remove(); el('wr-tile-glyph', t, glyph || '◈'); });
-      t.appendChild(img);
-    } else if (state === 'empty' && caption == null) {
-      const img = document.createElement('img');
-      img.className = 'wr-tile-keyhole';
-      img.src = `${ART}hub/tile_unknown.png`;
-      img.alt = '';
-      img.addEventListener('error', () => { img.remove(); el('wr-tile-glyph', t, '+'); });
-      t.appendChild(img);
-    } else {
-      el('wr-tile-glyph', t, glyph || '◈');
-    }
-    const label = caption != null ? caption
-      : (state === 'locked' || state === 'empty') ? '???' : String(title).split(' · ')[0];
-    el('wr-tile-label', cell, label);
-    if (onClick) {
-      cell.classList.add('is-click');
-      cell.addEventListener('click', () => { sfx('ui_click', 0.3); onClick(); });
-    }
-    tip(cell, tipText || title);
-    return cell;
-  }
-
-  /**
-   * A Display-Shelf card - the BAG's collectible. The art is the hero (full-bleed
-   * top), a rarity-coloured frame gives each piece its identity, and one status
-   * corner + a foot line (name / pips / price) says what it is at a glance. Replaces
-   * the old flat bagTile grid that padded itself out with rows of empty keyholes.
-   * state: 'equipped' | 'owned' | 'buyable' | 'mystery' | 'empty'.
-   */
+  /** A Display-Shelf card (used for the HANDS strip). */
   function shelfCard({ art, glyph, title, acc, state, corner, ribbon, foot, pips, tipText, onClick }) {
     const card = el(`wr-shelf is-${state}`);
     card.style.setProperty('--acc', acc || '232,67,147');
@@ -681,12 +675,10 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     return card;
   }
 
-  // ============================ BAG ============================
+  // ============================ 🧸 TOYBOX (level up · Sparks) ============================
 
-  function renderBag(panel, v) {
+  function renderToyboxPanel(panel, v) {
     // ---- hands (consumable HUD slots) ----
-    // Grab-in-the-tube rework: no loadout pockets. You fall in empty-handed and grab
-    // power-ups live; HANDS is how many consumables (active toys) you can hold at once.
     const handsCard = el('wr-card', panel);
     el('wr-card-h', handsCard, 'HANDS');
     el('wr-card-sub', handsCard, `${v.consumableSlots} consumable slot${v.consumableSlots === 1 ? '' : 's'} · grab toys in the fall and fire them from the dock.`);
@@ -710,128 +702,34 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
       el('wr-card-sub', handsCard, 'both hands and then some — you can hold no more.');
     }
 
-    // ---- collections (discovery-gated: grab in the fall to reveal, deepen with Sparks) ----
-    // Every piece is a card: discovered (level + deepen) or an undiscovered mystery
-    // keyhole (rank-locked ones name the depth gate). Clicking a discovered card jumps
-    // to the Toybox to deepen it; charms live here too now (they're grabbed, not toggled).
-    const grids = [
-      ['toybox_accessories', 'ACCESSORIES', 'accessory'],
-      ['toybox_toys', 'TOYS (consumables)', 'skill'],
-      ['toybox_accessories', 'CHARMS', 'utility'],
+    // ---- the shelves (discovery-gated; deepen inline) ----
+    const shelves = [
+      ['TOYS · you press them mid-descent', 'skill', 'toybox_toys'],
+      ['ACCESSORIES · they shape the whole fall', 'accessory', 'toybox_accessories'],
+      ['CHARMS · they work every descent', 'utility', null],
     ];
-    for (const [gate, label, cat] of grids) {
-      if (cat !== 'utility' && !reveals.isUnlocked(gate, v)) continue;
-      const boons = boonsInCat(cat);
-      const found = boons.filter((b) => v.boonLevel(b.id) >= 1).length;
+    for (const [label, cat, gate] of shelves) {
+      const boons = boonsInCat(cat).filter((b) => v.onShelfNow(b.id));
+      if (!boons.length) continue;
       const card = el('wr-card', panel);
-      el('wr-card-h', card, label);
-      el('wr-card-sub', card, `${found}/${boons.length} discovered`);
-      const grid = el('wr-shelf-grid', card);
-      for (const b of boons) {
-        const level = v.boonLevel(b.id);
-        const found1 = level >= 1;
-        const rankLocked = v.isBoonRankLocked(b.id);
-        const maxed = found1 && level >= b.levelValues.length;
-        grid.appendChild(shelfCard({
-          art: `${ART}boons/${b.id}.png`, glyph: b.glyph,
-          title: found1 ? b.name : '? ? ?',
-          acc: found1 ? boonAcc(b, maxed) : '232,67,147',
-          state: found1 ? 'owned' : 'mystery',
-          ribbon: found1 ? (maxed ? 'MAX' : rarityTag(b)) : null,
-          pips: found1 ? { level, max: b.levelValues.length } : null,
-          foot: found1 ? (maxed ? 'MAX' : `L${level} · deepen`)
-            : rankLocked ? RANKS.name(b.rankFloor) : 'undiscovered',
-          tipText: found1 ? `${b.name} — click to deepen in the Toybox`
-            : rankLocked ? `${RANKS.lockedTip} ${RANKS.specifics(b.rankFloor, v.runs)}`
-            : `${b.name} — grab it in the fall to discover it`,
-          onClick: found1 ? () => { tab = 'enhance'; rerender(); } : null,
-        }));
-      }
+      const hdr = el('wr-card-h', card, label);
+      if (gate) revealEls.set(gate, hdr);
+      const found = boons.filter((b) => v.boonLevel(b.id) >= 1).length;
+      el('wr-card-sub', card, `${found}/${boons.length} discovered · grab the rest in the fall`);
+      for (const b of boons) card.appendChild(boonRow(b, v));
     }
 
-    // ---- habits (still TRAINED here with Sparks; on/off toggle — not grabbed) ----
-    const card = el('wr-card', panel);
-    el('wr-card-h', card, 'HABITS');
-    const grid = el('wr-shelf-grid', card);
-    let trained = 0, switchedOn = 0, shown = 0;
-    for (const u of UPGRADES) {
-      if (!v.onShelfNow(u.id)) continue;
-      shown++;
-      const owned = v.isOwned(u.id);
-      const on = owned && v.isUpgradeActive(u.id);
-      if (owned) trained++;
-      if (on) switchedOn++;
-      grid.appendChild(shelfCard({
-        art: `${ART}upgrades/${u.id}.png`, glyph: u.glyph, title: u.name,
-        acc: on ? GOLD_ACC : (BRANCH_COLOR[u.branch] || '232,67,147'),
-        state: on ? 'equipped' : owned ? 'owned' : 'buyable',
-        corner: on ? '✓' : null,
-        ribbon: BRANCH_LABEL[u.branch] || null,
-        foot: on ? 'ON' : owned ? 'off' : `train ${GLYPHS.drops}${u.cost}`,
-        tipText: on ? `${u.name} — click to switch off` : owned ? `${u.name} — click to switch on`
-          : `${u.name} — train for ${GLYPHS.drops}${u.cost} in the Toybox`,
-        onClick: owned
-          ? () => { cmd('toggle-upgrade', { id: u.id, on: !on }); sfx(!on ? 'ui_equip' : 'ui_unequip', 0.45); }
-          : () => { tab = 'enhance'; rerender(); },
-      }));
-    }
-    el('wr-card-sub', card, `${switchedOn} on · ${trained}/${shown} trained`);
-  }
-
-  // ============================ Toybox ============================
-
-  function renderToybox(panel, v) {
-    // ---- habits (the trainable passives + utility charms) ----
+    // ---- habits (trained here with Sparks; on/off toggle — not grabbed) ----
     const habits = el('wr-card', panel);
     el('wr-card-h', habits, 'HABITS · train them once, wear them always');
     for (const u of UPGRADES) if (v.onShelfNow(u.id)) habits.appendChild(upgradeRow(u, v));
-    for (const b of boonsInCat('utility')) if (v.onShelfNow(b.id)) habits.appendChild(boonRow(b, v));
-
-    // ---- toys (reveal: first toy pocket) ----
-    if (reveals.isUnlocked('toybox_toys', v)) {
-      const card = el('wr-card', panel);
-      const hdr = el('wr-card-h', card, 'TOYS · you press them mid-descent');
-      revealEls.set('toybox_toys', hdr);
-      for (const b of boonsInCat('skill')) card.appendChild(boonRow(b, v));
-    } else {
-      const stub = hazyRow('???', `${WALL_TIP} opens with your first toy pocket. she sews pockets for gold (her corner, later her bench).`);
-      panel.appendChild(stub);
-    }
-
-    // ---- accessories (reveal: first accessory pocket) ----
-    if (reveals.isUnlocked('toybox_accessories', v)) {
-      const card = el('wr-card', panel);
-      const hdr = el('wr-card-h', card, 'ACCESSORIES · they shape the whole fall');
-      revealEls.set('toybox_accessories', hdr);
-      for (const b of boonsInCat('accessory')) card.appendChild(boonRow(b, v));
-    } else {
-      panel.appendChild(hazyRow('???', `${WALL_TIP} opens with your first accessory pocket. she sews pockets for gold (her corner, later her bench).`));
-    }
-
-    // ---- more hands (grab-in-the-tube: Sparks sew consumable slots; pockets retired) ----
-    if (reveals.isUnlocked('toybox_her_corner', v)) {
-      const card = el('wr-card', panel);
-      const hdr = el('wr-card-h', card, 'MORE HANDS · hold more at once');
-      revealEls.set('toybox_her_corner', hdr);
-      el('wr-card-sub', card, `${v.consumableSlots}/${MAX_CONSUMABLE_SLOTS} consumable slots. grabbed toys wait in these to be fired.`);
-      const slotCost = v.nextConsumableSlotCost();
-      if (slotCost != null) {
-        card.appendChild(buyBtn(`sew a hand  ${GLYPHS.drops}${slotCost}`, v.canBuyConsumableSlot(), () => {
-          cmd('buy-consumable-slot', { cost: slotCost });
-          sfx('ui_deepen', 0.5);
-        }));
-      } else {
-        el('wr-card-sub', card, 'you can hold no more.');
-      }
-    }
   }
 
-  // ============================ THE DIALS (options-panel unlocks) ============================
-  // The gear-panel controls start locked; each rung here flips one open for
-  // drops (authoritative `purchase-dial` meta-command). The two feral dials
-  // (hydra generations, glitch timer) also need a meta-rank. Mirrors the Toybox
-  // row idiom; the panel reveals the control the moment the snapshot re-broadcasts.
-  function renderDials(panel, v) {
+  // ============================ 🎛 THE DIALS (unlock · gold) ============================
+  // The gear-panel controls start locked; each rung here flips one open. The two
+  // feral dials (hydra generations, glitch timer) also need a meta-rank. The
+  // panel reveals the control the moment the snapshot re-broadcasts.
+  function renderDialsPanel(panel, v) {
     const card = el('wr-card', panel);
     el('wr-card-h', card, 'THE DIALS · take the console back');
     for (const r of UNLOCK_LADDER) {
@@ -859,155 +757,7 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     }
   }
 
-  // ============================ THE DESCENT (run setup) ============================
-
-  function renderDescent(panel, v) {
-    const card = el('wr-card', panel);
-    el('wr-card-h', card, 'DRESS UP THE FALL');
-
-    const pillRow = (label, parent) => {
-      const box = el('wr-setup-row', parent);
-      el('wr-setup-label', box, label);
-      return el('wr-pills', box);
-    };
-
-    // ---- difficulty (reveal-gated pills; Inescapable keeps its own lock) ----
-    const diff = pillRow('difficulty', card);
-    let effDiff = setup.difficulty;
-    const diffAvailable = DIFF_PILLS.filter((d) =>
-      (!d.revealGate || reveals.isUnlocked(d.revealGate, v)));
-    if (!diffAvailable.some((d) => d.id === effDiff)) effDiff = 'Easy';
-    if (effDiff === 'Extreme' && !v.extremeUnlocked) effDiff = 'Hard';
-    for (const d of DIFF_PILLS) {
-      if (d.revealGate && !reveals.isUnlocked(d.revealGate, v)) continue;
-      const locked = d.extremeGate && !v.extremeUnlocked;
-      const p = btn('wr-seg' + (effDiff === d.id ? ' is-on' : '') + (locked ? ' is-locked' : ''),
-        locked ? `${d.label} 🔒` : d.label, () => {
-          if (locked) { sfx('ui_denied', 0.4); return; }
-          setup.difficulty = d.id;
-          rerender();
-        }, diff);
-      if (locked) {
-        tip(p, `a deeper door. she sells the key in the Toybox: finish 10 relentless descents, reach Devoted (${RANKS.thresholds[RANK.Devoted]} descents), then train it for ${GLYPHS.drops}${upgradeById('extreme_tier')?.cost ?? 350}.`);
-      } else tip(p, d.tip);
-      if (d.revealGate) revealEls.set(d.revealGate, p);
-      if (d.extremeGate) revealEls.set('pill_inescapable', p);
-    }
-
-    // ---- length (4 chambers x per-chamber minutes) ----
-    const len = pillRow('descent', card);
-    for (const secs of CHAMBER_TOTALS) {
-      btn('wr-seg' + (setup.durationSec === secs ? ' is-on' : ''), `${secs / 60} min`, () => {
-        setup.durationSec = secs;
-        rerender();
-      }, len);
-    }
-    tip(len, 'four chambers, always in order. this is the whole descent - each chamber runs about a quarter of it and ends in a boon.');
-
-    // ---- motion ----
-    const mot = pillRow('motion', card);
-    for (const m of ['Mixed', 'FloatUp', 'RainDown', 'RoamBounce']) {
-      btn('wr-seg' + (setup.motion === m ? ' is-on' : ''), m === 'FloatUp' ? 'Float Up' : m === 'RainDown' ? 'Rain Down' : m === 'RoamBounce' ? 'Roam' : m, () => {
-        setup.motion = m;
-        rerender();
-      }, mot);
-    }
-
-    // ---- chambers (fixed at 4; the descent's identity, not a dial) ----
-    const waves = pillRow('chambers', card);
-    for (const r of ['I', 'II', 'III', 'IV']) el('wr-seg wr-seg--ghost is-on', waves, r);
-
-    // ---- bubble pool ----
-    const poolCard = el('wr-card', panel);
-    el('wr-card-h', poolCard, 'THE BUBBLE POOL');
-    const enabled = new Set(setup.enabledVariants || POOL_VARIANTS.map((x) => x.id));
-    const pool = el('wr-pills wr-pills--wrap', poolCard);
-    for (const pv of POOL_VARIANTS) {
-      const gateLocked = pv.revealGate && !reveals.isUnlocked(pv.revealGate, v);
-      const on = enabled.has(pv.id);
-      const p = btn('wr-seg' + (on && !gateLocked ? ' is-on' : '') + (gateLocked ? ' is-locked' : ''),
-        gateLocked ? '???' : pv.name, () => {
-          if (gateLocked) { sfx('ui_denied', 0.4); return; }
-          if (on) enabled.delete(pv.id); else enabled.add(pv.id);
-          if (enabled.size === 0) enabled.add('flash');
-          setup.enabledVariants = enabled.size === POOL_VARIANTS.length ? null : [...enabled];
-          rerender();
-        }, pool);
-      if (gateLocked) { tip(p, `${WALL_TIP} ${RANKS.specifics(RANK.Entranced, v.runs)}`); revealEls.set(pv.revealGate, p); }
-    }
-    const presets = el('wr-pills', poolCard);
-    for (const pr of POOL_PRESETS) {
-      btn('wr-seg wr-seg--ghost', pr.name, () => {
-        setup.enabledVariants = pr.ids.length === POOL_VARIANTS.length ? null : [...pr.ids];
-        rerender();
-      }, presets);
-    }
-    btn('wr-seg wr-seg--ghost', '🎲 randomize', () => {
-      const diffs = ['Easy'];
-      if (reveals.isUnlocked('pill_teasing', v)) diffs.push('Medium');
-      if (reveals.isUnlocked('pill_relentless', v)) diffs.push('Hard');
-      if (v.extremeUnlocked) diffs.push('Extreme');
-      setup.difficulty = diffs[(Math.random() * diffs.length) | 0];
-      setup.durationSec = CHAMBER_TOTALS[(Math.random() * CHAMBER_TOTALS.length) | 0];
-      setup.motion = ['Mixed', 'FloatUp', 'RainDown', 'RoamBounce'][(Math.random() * 4) | 0];
-      const roll = POOL_VARIANTS.filter((pv) => (!pv.revealGate || reveals.isUnlocked(pv.revealGate, v)) && Math.random() < 0.6).map((x) => x.id);
-      if (!roll.length) roll.push('flash');
-      setup.enabledVariants = roll;
-      rerender();
-    }, presets);
-
-    // ---- preset honesty note (codec UX): the host's manifest reported files it
-    // can't hand the browser (wmv/avi/mkv...) or a sampled-down huge preset.
-    const ms = getMediaStats ? getMediaStats() : null;
-    if (ms && (ms.skipped > 0 || ms.truncated)) {
-      const bits = [];
-      if (ms.skipped > 0) {
-        bits.push(`${nfmt(ms.skipped)} file${ms.skipped === 1 ? '' : 's'} in your preset can't swim in here (old video formats) - they still fire as desktop effects`);
-      }
-      if (ms.truncated) {
-        bits.push(`your preset is huge, so she deals a fresh random ${nfmt(ms.images + ms.videos)}-piece sample each visit`);
-      }
-      el('wr-card-sub', poolCard, '🎞 ' + bits.join(' · '));
-    }
-
-    // ---- toggles + intensity ----
-    const optCard = el('wr-card', panel);
-    el('wr-card-h', optCard, 'THE MOOD');
-    const check = (label, key) => {
-      const rowEl = el('wr-check' + (setup[key] ? ' is-on' : ''), optCard);
-      rowEl.textContent = `${setup[key] ? '☑' : '☐'}  ${label}`;
-      rowEl.addEventListener('click', () => { sfx('ui_click', 0.3); setup[key] = !setup[key]; rerender(); });
-    };
-    check('color flashes on the edges', 'colorFlashes');
-    check('mantra drafts between loops', 'boonDraftEnabled');
-    check('sins on the table', 'allowCurses');
-    check('white rabbits', 'dartersEnabled');
-    const intRow = el('wr-setup-row', optCard);
-    el('wr-setup-label', intRow, `effect intensity · ${Math.round(setup.effectIntensity * 100)}%`);
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = '20'; slider.max = '150'; slider.step = '5';
-    slider.value = String(Math.round(setup.effectIntensity * 100));
-    slider.className = 'wr-slider';
-    slider.addEventListener('input', () => {
-      setup.effectIntensity = Number(slider.value) / 100;
-      intRow.querySelector('.wr-setup-label').textContent = `effect intensity · ${slider.value}%`;
-    });
-    intRow.appendChild(slider);
-
-    // ---- how consumables fire (grab-in-the-tube: no pre-bound keys) ----
-    {
-      const kc = el('wr-card', panel);
-      el('wr-card-h', kc, 'YOUR HANDS');
-      el('wr-card-sub', kc, `you fall in empty-handed. grab power-up cards as you fall — toys dock at the bottom (${v.consumableSlots} slot${v.consumableSlots === 1 ? '' : 's'}) and fire on their number key or a click; charms & accessories apply the instant you grab them.`);
-    }
-
-    // ---- FALL IN ----
-    const go = btn('wr-fallin', descending ? 'she opens the hole…' : 'FALL IN', () => beginDescend(), panel);
-    go.disabled = descending;
-  }
-
-  // ============================ Looking Glass ============================
+  // ============================ 📔 VANITY (the mirror) ============================
 
   function benchRow(item, v) {
     const revealed = !item.revealGate || reveals.isUnlocked(item.revealGate, v);
@@ -1028,28 +778,23 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
       tip(row, `${DEEPER_TIP}\n${RANKS.specifics(item.rankNeed, v.runs)}`);
     } else {
       const afford = v.gold >= item.cost;
-      // Stays clickable when short - her one gift rides on a short first-pocket buy.
-      const clickable = afford || (item.id === 'toy_pocket_1' && !v.giftGiven);
-      const b = btn('wr-buy wr-buy--gold' + (afford ? '' : ' is-short'), `buy  ${GLYPHS.gold} ${nfmt(item.cost)}`, () => {
-        if (!clickable) { sfx('ui_denied', 0.45); return; }
+      const b = btn('wr-buy wr-buy--gold' + (afford ? '' : ' is-short is-off'), `buy  ${GLYPHS.gold} ${nfmt(item.cost)}`, () => {
+        if (!afford) { sfx('ui_denied', 0.45); return; }
         cmd('bench-buy', { id: item.id, cost: item.cost });
         window.setTimeout(() => {
           const nv = view();
           if (!nv.bench.has(item.id)) { sfx('ui_denied', 0.45); return; }
-          if (item.pocket) {
-            const n = item.pocket === 'toy' ? nv.toyPockets : nv.accessoryPockets;
-            showUnlockCard(cardForPocket(item.pocket === 'toy', item.label, item.line, n));
-          } else sfx('ui_unlock', 0.55);
+          sfx('ui_unlock', 0.55);
           runRevealFlashes('purchase');
         }, 300);
       }, right);
-      if (!clickable) b.classList.add('is-off');
     }
     return row;
   }
 
-  function renderLookingGlass(panel, v) {
-    // ---- her bench (the gold shop) ----
+  function renderVanityPanel(panel, v) {
+    // ---- her bench (gold comforts; folds into the DIALS console in the
+    //      gold-economy cutover - parked here meanwhile) ----
     const benchCard = el('wr-card', panel);
     el('wr-card-h', benchCard, 'HER BENCH · gold buys comfort, never power');
     el('wr-gold-line', benchCard, `you’re carrying ${GLYPHS.gold} ${nfmt(v.gold)}`);
@@ -1116,82 +861,116 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     if (nextIdx < RANKS.thresholds.length) {
       el('wr-rank-next', rankCard, `${RANKS.thresholds[nextIdx] - v.runs} descents until she calls you ${RANKS.lower[nextIdx]}.`);
     }
-  }
 
-  // ============================ Diary ============================
-
-  function renderDiary(panel, v) {
-    const verbs = el('wr-card', panel);
-    el('wr-card-h', verbs, 'VERBS · how to play down there');
-    for (const verb of DIARY_VERBS) {
-      const row = el('wr-row wr-row--verb', verbs);
-      el('wr-verb-glyph', row, verb.glyph);
-      const mid = el('wr-row-mid', row);
-      el('wr-row-name', mid, verb.name);
-      el('wr-row-desc', mid, verb.desc);
-    }
-    const met = el('wr-card', panel);
-    el('wr-card-h', met, 'WHAT YOU’VE MET');
-    for (const c of DIARY_CODEX) {
-      const seen = v.isDiscovered(c.codex);
-      const row = el('wr-row wr-row--codex' + (seen ? '' : ' is-hazy'), met);
-      row.style.setProperty('--acc', c.tint);
-      if (seen) {
-        const icon = artIcon(`${ART}bubbles/${c.codex.split(':')[1]}.png`, c.glyph, c.tint, 39);
-        row.appendChild(icon);
-      } else {
-        el('wr-verb-glyph', row, '?');
+    // ---- diary (reveal-gated; verbs + codex) ----
+    if (reveals.isUnlocked('diary', v)) {
+      const verbs = el('wr-card', panel);
+      const hdr = el('wr-card-h', verbs, 'VERBS · how to play down there');
+      revealEls.set('diary', hdr);
+      for (const verb of DIARY_VERBS) {
+        const row = el('wr-row wr-row--verb', verbs);
+        el('wr-verb-glyph', row, verb.glyph);
+        const mid = el('wr-row-mid', row);
+        el('wr-row-name', mid, verb.name);
+        el('wr-row-desc', mid, verb.desc);
       }
-      const mid = el('wr-row-mid', row);
-      el('wr-row-name', mid, seen ? c.name : '???');
-      el('wr-row-desc', mid, seen ? c.desc : 'hazy. go back down and look closer.');
+      const met = el('wr-card', panel);
+      el('wr-card-h', met, 'WHAT YOU’VE MET');
+      for (const c of DIARY_CODEX) {
+        const seen = v.isDiscovered(c.codex);
+        const row = el('wr-row wr-row--codex' + (seen ? '' : ' is-hazy'), met);
+        row.style.setProperty('--acc', c.tint);
+        if (seen) {
+          const icon = artIcon(`${ART}bubbles/${c.codex.split(':')[1]}.png`, c.glyph, c.tint, 39);
+          row.appendChild(icon);
+        } else {
+          el('wr-verb-glyph', row, '?');
+        }
+        const mid = el('wr-row-mid', row);
+        el('wr-row-name', mid, seen ? c.name : '???');
+        el('wr-row-desc', mid, seen ? c.desc : 'hazy. go back down and look closer.');
+      }
     }
   }
 
-  // ============================ render root ============================
+  // ============================ descend ============================
 
-  function rerender() {
-    if (!visible) return;
-    revealEls.clear();
-    root.innerHTML = '';
-    root.appendChild(cardLayer);
-    const host = el('wr-screen', root);
-    if (screen === 'menu') renderMenu(host);
-    else renderDollhouse(host);
-    // An open modal survives re-renders (every meta-command answers with a
-    // snapshot -> refresh -> rerender, which must not eat the invitation).
-    if (modal) root.appendChild(modal);
+  function beginDescend() {
+    if (descending) return;
+    descending = true;
+    closeSheet();
+    if (stations) stations.portalDive('portal');
+    onDescend({ ...setup });
+    refreshChrome(view());
+  }
+
+  function portalClicked() {
+    if (descending) return;
+    const v = view();
+    if (!v.seenIntroGuide) {
+      // the invitation: the one-time verb primer, right before the first fall
+      setFlag('seenIntroGuide');
+      openIntro(() => beginDescend());
+    } else beginDescend();
   }
 
   // ============================ public surface ============================
 
   return {
-    show(which) {
+    show() {
       visible = true;
       root.hidden = false;
       descending = false;
-      if (which) screen = which;
-      rerender();
-      if (screen === 'dollhouse') runRevealFlashes('hub_open');
-      else { const v = view(); reveals.sync(v, bridge, 'hub_open'); }
+      openId = null;
+      revealEls.clear();
+      renderChrome();
+      if (stations) stations.show(buildStationDefs(view()));
+      runRevealFlashes('hub_open');
     },
     hide() {
       visible = false;
       root.hidden = true;
+      closeSheet();
       closeModal();
+      if (stations) stations.hide();
     },
-    /** The meta snapshot moved (a command was answered) - re-render in place. */
-    refresh() { if (visible) rerender(); },
-    /** The descend request failed / was superseded - re-arm the buttons. */
-    descendFailed() { descending = false; rerender(); },
+    /** The meta snapshot moved (a command was answered) - refresh in place. */
+    refresh() {
+      if (!visible) return;
+      const v = view();
+      refreshChrome(v);
+      refreshBadges(v);
+      refreshSheet();
+    },
+    /** The descend request failed / was superseded - re-arm the hub. */
+    descendFailed() {
+      descending = false;
+      if (!visible) return;
+      if (stations) stations.show(buildStationDefs(view()));   // rebuild the shattered portal
+      refreshChrome(view());
+    },
+    /** scene.js pointer routing: a station (or the portal) was clicked. */
+    onStationPick(id) {
+      if (!visible || descending) return;
+      if (id === 'portal') { sfx('ui_click', 0.35); portalClicked(); return; }
+      if (openId === id) { closeSheet(); return; }   // toggle
+      sfx('ui_click', 0.3);
+      openStation(id);
+    },
+    /** scene.js pointer routing: a click on empty tube - close what's open. */
+    onStationMiss() {
+      if (!visible) return;
+      if (modal) return;          // modals own their own dismissal
+      if (openId) closeSheet();
+    },
     isVisible: () => visible,
     currentSetup: () => ({ ...setup }),
-    /** Esc: close modal -> back out of the dollhouse -> not consumed (menu). */
+    /** Esc: close modal -> close the open sheet -> swallow (hold-to-exit works). */
     handleEsc() {
       if (!visible) return false;
       if (modal) { closeModal(); return true; }
-      if (screen === 'dollhouse') { screen = 'menu'; rerender(); return true; }
-      return true;   // at the menu: swallow the tap (hold-to-exit still works)
+      if (openId) { closeSheet(); return true; }
+      return true;
     },
     dispose() { root.remove(); },
   };

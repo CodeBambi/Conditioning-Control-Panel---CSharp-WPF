@@ -260,6 +260,17 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
   let paused = false;
   function setPaused(v) { paused = !!v; }
 
+  // Junction chamber ahead (scene.setBlockedSpan): a poster placed in its span
+  // floats in the hidden-trunk cut or hides behind the opaque room - which
+  // starved the whole fork approach of wall gifs. Re-aim throws just short of
+  // the fork; report null when the camera is already at the gate (no room).
+  let blocked = null;
+  function setBlockedSpan(s) { blocked = s || null; }
+  function safeDepth(d, camDepth) {
+    if (blocked && d > blocked.lo && d < blocked.hi) d = blocked.lo - rand(0.5, 6);
+    return d > camDepth + 3 ? d : null;
+  }
+
   // Rebase (junction dive): the loop was rebuilt onto the chosen branch, so every
   // placed slot sits on the OLD spine. Retire them all; update() re-places fresh
   // ones ahead on the new spine via layout.frameAtDepth as the fall continues.
@@ -318,10 +329,14 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
     if (liveCount < targetCount && pool.length && addCooldown <= 0) {
       const slot = slots.find((s) => !s.active) || makeSlot();
       slot.active = true;
-      if (place(slot, camDepth + rand(AHEAD_MIN, AHEAD_MAX))) {
+      const d = safeDepth(camDepth + rand(AHEAD_MIN, AHEAD_MAX), camDepth);
+      if (d != null && place(slot, d)) {
         liveCount += 1;
         addCooldown = 0.06; // ~16 posters/sec fill-in - brisk but not a pop-in wall
-      } else { slot.active = false; }
+      } else {
+        slot.active = false;
+        if (d == null) addCooldown = 0.25; // parked at a fork gate: don't spin every frame
+      }
     }
 
     // recycle / retire
@@ -335,7 +350,14 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
           slot.mat.map = null;
           liveCount -= 1;
         } else {                                 // re-throw ahead into the fog
-          place(slot, camDepth + rand(AHEAD_MAX * 0.6, AHEAD_MAX));
+          const d = safeDepth(camDepth + rand(AHEAD_MAX * 0.6, AHEAD_MAX), camDepth);
+          if (d != null) place(slot, d);
+          else {                                 // fork gate: retire; fill-in re-adds after
+            slot.active = false;
+            slot.mesh.visible = false;
+            slot.mat.map = null;
+            liveCount -= 1;
+          }
         }
       }
     }
@@ -356,5 +378,5 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
     unit.dispose();
   }
 
-  return { setRegion, setPaused, update, dispose, reset, getPickables, grabPoster, releasePoster, advanceHeld, getHeldWorldPos };
+  return { setRegion, setPaused, setBlockedSpan, update, dispose, reset, getPickables, grabPoster, releasePoster, advanceHeld, getHeldWorldPos };
 }

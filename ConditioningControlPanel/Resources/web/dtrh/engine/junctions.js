@@ -19,11 +19,14 @@
  *     chamber's opaque far interior wall or a vein interior.
  *
  * Flow: 1. TELEGRAPH - the chamber + doorways fade up out of the fog on
- * approach. 2. CHOOSE - the camera glides in and parks mid-chamber; a media
- * card fills ~85% of each doorway. ONLY a direct click on a card (raycast ->
- * pickSide) shatters it and dives - looking around and grabbing stay free the
- * whole linger; doing nothing hovers, then a 5s timeout takes the coaxed
- * doorway (surrender; arrow keys can cast a preference). 3. DIVE - the chosen vein's
+ * approach. 2. CHOOSE - the camera glides in and parks just inside the entry;
+ * a media card fills ~85% of each doorway, each wearing its PRIZE (a power-up
+ * nameplate the game supplies via desc.reward). ONLY a direct click on a card
+ * (raycast -> pickSide) shatters it and dives - looking around and grabbing
+ * stay free the whole linger; doing nothing just hovers. Only ~1 fork in 10 is
+ * a surrender fork whose 5s timeout takes the coaxed doorway (arrow keys steer
+ * it); every other fork waits for the click (long failsafe so a fork with no
+ * loadable card can never wedge the run). 3. DIVE - the chosen vein's
  * ride-curve is handed to fallNav.enterVein; the loser vein + card are
  * disposed at once and its doorway bricks up. 4. REBASE - at the vein's tail
  * fallNav fires onVeinEnd -> the scene builds a FRESH endless loop aligned to
@@ -64,19 +67,57 @@ const ENTRY_HOLE_COS = Math.sqrt(1 - Math.pow((RADIUS * 0.96) / ROOM_R, 2));
 const VEIN_HOLE_COS = Math.sqrt(1 - Math.pow((VEIN_RADIUS * 0.97) / ROOM_R, 2));
 
 const STOP_BACK = 24;        // the glide-in engages this far short of the fork...
-const STOP_IN = 8;           // ...and eases to a stop THIS far past it: parked mid-chamber, both
-                             //   doorways (and their cards) ~40 deg off-axis in comfortable view
+const STOP_IN = 2;           // ...and eases to a stop just INSIDE the entry ring - a step back
+                             //   from the old mid-chamber park (8), which put the cards so close
+                             //   they filled the view; from the threshold both doorways sit
+                             //   comfortably framed ahead
 const LEAD = 120;            // units of approach over which the doorways fade up out of the fog
 const CARD_INTO = 1.6;       // how far into the doorway the media card sits (framed by the collar)
 const CARD_SCALE = 3.2;      // content is ~2.5u wide at scale 1; x3.2 spans ~8u of the ~9.4u opening
 
-const LINGER_TIMEOUT = 5.0;  // seconds hovering at the mouth before the fork auto-commits
+const LINGER_TIMEOUT = 5.0;  // (surrender forks + presealed forks only) hover this long and the
+                             //   tube chooses for you
+const AUTO_PICK_CHANCE = 0.10; // ~1 fork in 10 is a surrender fork; the other 9 wait for the
+                             //   player's click (the choice is theirs - the tube picking felt
+                             //   like it "triggered often" when EVERY fork auto-committed at 5s)
+const LINGER_FAILSAFE = 30;  // hard cap on any linger: a fork whose cards never loaded (no user
+                             //   media, decode failure) must still commit or the run wedges
 const VOTE_PICK = 0.08;      // |laneVote| (arrow keys) past this steers the TIMEOUT choice only -
                              //   there is no lean-to-commit: entering a branch is click-on-card
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const deg2rad = (d) => d * Math.PI / 180;
 const sstep = (a, b, x) => { x = clamp((x - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
+
+// nameplate chip for a doorway prize: glyph + name on a dark pill, rimmed in the
+// item kind's color (teal consumable / violet passive - powerupDrops' palette).
+// Overlaid ON the media card so the choice reads as "this road pays THIS".
+function makeRewardBadgeTex(reward) {
+  const w = 512, h = 128, c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  const col = reward.kind === 'consumable' ? '#66e0d0' : '#c178ff';
+  const r = 30;
+  x.beginPath();
+  x.moveTo(r, 6);
+  x.arcTo(w - 6, 6, w - 6, h - 6, r);
+  x.arcTo(w - 6, h - 6, 6, h - 6, r);
+  x.arcTo(6, h - 6, 6, 6, r);
+  x.arcTo(6, 6, w - 6, 6, r);
+  x.closePath();
+  x.fillStyle = 'rgba(14,8,20,0.82)'; x.fill();
+  x.strokeStyle = col; x.lineWidth = 5; x.stroke();
+  x.textBaseline = 'middle';
+  x.textAlign = 'left';
+  x.font = '56px "Segoe UI Emoji", "Segoe UI", sans-serif';
+  x.fillStyle = 'rgba(255,255,255,0.95)';
+  x.fillText(reward.glyph || '◈', 26, h / 2 + 2);
+  x.font = 'bold 44px "Segoe UI", sans-serif';
+  x.fillStyle = col;
+  let name = String(reward.name || '');
+  if (name.length > 16) name = name.slice(0, 15) + '…';
+  x.fillText(name, 104, h / 2 + 2);
+  return new THREE.CanvasTexture(c);
+}
 
 // ---- vein material: a glowing corridor off the chamber wall ------------------
 // Kept visually close to the main tube (pink scrolling rings) so it reads as
@@ -399,11 +440,28 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       }
     }
 
+    // the doorway's PRIZE, overlaid on the card: a nameplate chip near its lower
+    // edge (the game hands the offer in via desc.reward - id/kind/name/glyph).
+    // A child of the card group so it sways with it and is a click-to-dive
+    // target like the card face; its geometry/material go through destroyBadge.
+    let badge = null, badgeGeo = null, badgeMat = null;
+    if (desc.reward && card && card.group) {
+      badgeGeo = new THREE.PlaneGeometry(2.3, 0.575);
+      badgeMat = new THREE.MeshBasicMaterial({
+        map: makeRewardBadgeTex(desc.reward),
+        transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      });
+      badge = new THREE.Mesh(badgeGeo, badgeMat);
+      badge.position.set(0, -0.9, 0.15);   // lower-center of the card face, a hair proud
+      card.group.add(badge);
+    }
+
     return {
       side, desc, curve, dir: dir.clone(), mouth: mouth.clone(),
       tube, mat, tubeGeo, seal, sealGeo, sealMat,
       endDisc, endDiscGeo, endDiscMat, endRing, endRingGeo, endRingMat,
-      card, cardQuat, sealed: false, dying: false, swayT: Math.random() * 6,
+      card, cardQuat, badge, badgeGeo, badgeMat,
+      sealed: false, dying: false, swayT: Math.random() * 6,
     };
   }
 
@@ -412,9 +470,22 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     vein.mat.uniforms.uOpacity.value = a;
   }
 
+  // the prize nameplate rides the card's group but owns its own geo/mat/canvas
+  // texture - shed it separately (the card shatter keeps the card texture alive,
+  // and a presealed mouth drops its card before the vein is destroyed).
+  function destroyBadge(vein) {
+    if (!vein.badge) return;
+    if (vein.badge.parent) vein.badge.parent.remove(vein.badge);
+    vein.badgeGeo.dispose();
+    if (vein.badgeMat.map) vein.badgeMat.map.dispose();
+    vein.badgeMat.dispose();
+    vein.badge = null;
+  }
+
   function destroyVein(vein) {
     if (vein.destroyed) return;   // loser is killed at commit, then teardown sweeps both
     vein.destroyed = true;
+    destroyBadge(vein);
     scene.remove(vein.tube); scene.remove(vein.seal);
     vein.tubeGeo.dispose(); vein.mat.dispose();
     vein.sealGeo.dispose(); vein.sealMat.dispose();
@@ -480,6 +551,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
 
   // ---- shatter: fracture the chosen card into shards that fly out + fade ------
   function spawnShatter(vein) {
+    destroyBadge(vein);   // the nameplate doesn't shatter - the prize flies to the HUD instead
     const content = vein.card && vein.card.getContent && vein.card.getContent();
     if (!content || !content.material || !content.material.map) return;
     const tex = content.material.map;
@@ -649,7 +721,11 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       if (J.preseal === 'left' && nav.getLaneVote() < 0) nav.resetLaneVote();
       else if (J.preseal === 'right' && nav.getLaneVote() > 0) nav.resetLaneVote();
       J.lingerT += dt;
-      if (J.lingerT >= LINGER_TIMEOUT) commit('timeout');
+      // surrender forks (~1 in 10) + presealed forks (no real choice anyway)
+      // auto-commit at 5s; every other fork waits for the player's click, with
+      // a long failsafe so a fork whose cards never loaded can't wedge the run.
+      const wait = (J.preseal || J.autoPick) ? LINGER_TIMEOUT : LINGER_FAILSAFE;
+      if (J.lingerT >= wait) commit('timeout');
     } else if (J.phase === 'handoff') {
       // the scene has rebased (fresh loop built coaxially at the exit); keep the
       // winner vein ENCLOSING the camera until fallNav hands off onto that loop
@@ -674,12 +750,13 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       const R = buildVein(1, right, fr, C);
       J = {
         phase: 'approach', atDepth, coaxSide, preseal, winner: null, lingerT: 0,
+        autoPick: Math.random() < AUTO_PICK_CHANCE,   // the rare surrender fork (5s and the tube chooses)
         left: L, right: R,
         room: buildRoom(C, fr.tangent.clone().negate(), L, R),
       };
       applyCut(atDepth);   // hide the trunk through the chamber's span
-      if (preseal === 'left') { J.left.sealed = true; J.left.sealMat.opacity = 0.9; if (J.left.card) { J.left.card.dispose(); J.left.card = null; } }
-      else if (preseal === 'right') { J.right.sealed = true; J.right.sealMat.opacity = 0.9; if (J.right.card) { J.right.card.dispose(); J.right.card = null; } }
+      if (preseal === 'left') { J.left.sealed = true; J.left.sealMat.opacity = 0.9; if (J.left.card) { destroyBadge(J.left); J.left.card.dispose(); J.left.card = null; } }
+      else if (preseal === 'right') { J.right.sealed = true; J.right.sealMat.opacity = 0.9; if (J.right.card) { destroyBadge(J.right); J.right.card.dispose(); J.right.card = null; } }
       try { nav.resetLaneVote(); nav.setJunctionArmed(true); } catch (e) { /* ignore */ }
     },
     update,
@@ -691,16 +768,29 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       commit('click', side);
       return true;
     },
-    /** meshes the scene raycasts against while a fork is open: the doorway media
-     * CARDS only - clicking anywhere else must never commit (it looks/grabs). */
+    /** meshes the scene raycasts against while a fork is open: each doorway
+     * card's CONTENT plane + its prize nameplate - NOT the whole card group,
+     * whose oversized glow plane (~1.7x the card) was still stealing clicks
+     * aimed at grabbables beside the doorway. Clicking anywhere else must never
+     * commit (it looks/grabs). */
     getPickables() {
       if (!J || J.phase !== 'linger') return [];
       const out = [];
       for (const m of [J.left, J.right]) {
         if (m.dying || m.sealed) continue;
-        if (m.card && m.card.group) out.push(m.card.group);
+        const c = m.card && m.card.getContent && m.card.getContent();
+        if (c) out.push(c);
+        if (m.badge) out.push(m.badge);
       }
       return out;
+    },
+    /** While a fork is alive, the depth span the chamber owns. Content spawned
+     * in here floats in the hidden-trunk cut or hides behind the opaque room -
+     * that starved the whole approach of grabbables (posters/cards/power-ups
+     * all spawn AHEAD of the camera, straight into this span). The spawners
+     * clamp their throws short of it / skip it. */
+    getBlockedSpan() {
+      return J ? { lo: J.atDepth - 4, hi: J.atDepth + CUT_END } : null;
     },
     setActive(on) {
       active = !!on;

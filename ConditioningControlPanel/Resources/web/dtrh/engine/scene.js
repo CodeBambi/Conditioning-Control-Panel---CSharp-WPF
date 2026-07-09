@@ -21,6 +21,7 @@ import { createWallPosters } from './wallPosters.js';
 import { createJunctions } from './junctions.js';
 import { createBoonPick } from './boonPick.js';
 import { createPowerupDrops } from './powerupDrops.js';
+import { createHubStations } from './hubStations.js';
 import { createBubbles } from './bubbles.js';
 import { createDirector } from './director.js';
 import { createFx } from './fx.js';
@@ -225,6 +226,12 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   });
   const _uray = new THREE.Raycaster(), _undc = new THREE.Vector2();
 
+  // The Dollhouse as an in-ambient menu: floating hub stations + the FALL IN
+  // portal, shown while the Warren is up. The game layer (warren.js) owns the
+  // defs + what a pick means; this is just the 3D presenter + pointer routing.
+  const hubStations = createHubStations({ scene, camera, layout, nav, fx, hud });
+  const _hray = new THREE.Raycaster(), _hndc = new THREE.Vector2();
+
   // Wall-poster hold: press-and-hold a wall gif to swing the camera onto it (a
   // closer look); release swings back. The fall eases to a near-stop meanwhile.
   const _pray = new THREE.Raycaster(), _pndc = new THREE.Vector2(), _pv = new THREE.Vector3();
@@ -370,6 +377,26 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     if (!r.width || !r.height) return;
     const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
     const ny = -((e.clientY - r.top) / r.height) * 2 + 1;
+    // the hub menu is up: a click on a station opens/dives it, a click on empty
+    // tube is a "miss" (the game blurs the focused station / closes its panel).
+    // The hub owns the pointer entirely - no fall-through to grabs.
+    if (hubStations.isBusy()) {
+      const picks = hubStations.getPickables();
+      if (picks.length) {
+        _hray.setFromCamera(_hndc.set(nx, ny), camera);
+        const hits = _hray.intersectObjects(picks, true);
+        for (const h of hits) {
+          let o = h.object;
+          while (o && !(o.userData && o.userData.type === 'hubstation')) o = o.parent;
+          if (o && o.userData && o.userData.type === 'hubstation') {
+            if (game && game.onStationPick) game.onStationPick(o.userData.id);
+            return;
+          }
+        }
+      }
+      if (game && game.onStationMiss) game.onStationMiss();
+      return;
+    }
     // a boon draft is open: a click on a card shatters it + takes the boon
     if (boonPick && boonPick.isBusy()) {
       const picks = boonPick.getPickables();
@@ -385,18 +412,37 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       return; // draft owns the pointer: never fall through to a card grab
     }
     // a fork is open: ONLY a direct click on a doorway card dives down that
-    // branch. Anything else falls through - the player stays free to look around
-    // and to grab posters / power-ups / falling cards all around a junction
-    // (getPickables is empty outside the linger, so approach + ride cost nothing).
+    // branch - and only when that card is the CLOSEST interactive thing under
+    // the cursor (a gif / power-up / poster drifting in front of a doorway must
+    // grab, not dive). Anything else falls through - the player stays free to
+    // look around and grab all around a junction (getPickables is empty outside
+    // the linger, so approach + ride cost nothing).
     if (junctions && junctions.isBusy()) {
       const picks = junctions.getPickables();
       if (picks.length) {
         _jray.setFromCamera(_jndc.set(nx, ny), camera);
         const hits = _jray.intersectObjects(picks, true);
+        let jDist = Infinity, jSide = null;
         for (const h of hits) {
           let o = h.object;
           while (o && !(o.userData && o.userData.type === 'veinmouth')) o = o.parent;
-          if (o && o.userData && o.userData.type === 'veinmouth') { junctions.pickSide(o.userData.side); return; }
+          if (o && o.userData && o.userData.type === 'veinmouth') { jDist = h.distance; jSide = o.userData.side; break; }
+        }
+        if (jSide != null) {
+          let dOther = Infinity;
+          if (powerupDrops) {
+            const uh = _jray.intersectObjects(powerupDrops.getPickables(), true);
+            if (uh.length) dOther = Math.min(dOther, uh[0].distance);
+          }
+          if (wall && wall.getPickables && !nav.isInVein()) {
+            const ph = _jray.intersectObjects(wall.getPickables(), false);
+            if (ph.length) dOther = Math.min(dOther, ph[0].distance);
+          }
+          if (spawner.probeGrab) {
+            const ds = spawner.probeGrab(nx, ny, camera);
+            if (ds != null) dOther = Math.min(dOther, ds);
+          }
+          if (jDist <= dOther) { junctions.pickSide(jSide); return; }
         }
       }
     }
@@ -443,7 +489,28 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     spawner.releaseGrab();
   }
   // while a boon draft is open, hover-raycast the cards to drive the caption bar
+  // (and while the hub menu is up, hover-lift the aimed station + cursor)
   function boonAimMove(e) {
+    if (hubStations.isBusy()) {
+      const r0 = canvas.getBoundingClientRect();
+      if (!r0.width || !r0.height) return;
+      const hx = ((e.clientX - r0.left) / r0.width) * 2 - 1;
+      const hy = -((e.clientY - r0.top) / r0.height) * 2 + 1;
+      const picks = hubStations.getPickables();
+      let aimed = null;
+      if (picks.length) {
+        _hray.setFromCamera(_hndc.set(hx, hy), camera);
+        const hits = _hray.intersectObjects(picks, true);
+        for (const h of hits) {
+          let o = h.object;
+          while (o && !(o.userData && o.userData.type === 'hubstation')) o = o.parent;
+          if (o && o.userData && o.userData.type === 'hubstation') { aimed = o.userData.id; break; }
+        }
+      }
+      hubStations.setAimed(aimed);
+      canvas.style.cursor = aimed ? 'pointer' : '';
+      return;
+    }
     if (!boonPick || !boonPick.isBusy()) return;
     const r = canvas.getBoundingClientRect();
     if (!r.width || !r.height) return;
@@ -542,7 +609,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     bubbles.setPaused(true);
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
-    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, junctions, boonPick, powerupDrops, flashBurst: (n) => bubbles.flashBurst(n),
+    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, junctions, boonPick, powerupDrops, hubStations, flashBurst: (n) => bubbles.flashBurst(n),
       // the Ripple flings on-screen flash clips off screen along the hit angle
       flingFlashesNear: (px, py, r, probe) => bubbles.flingFlashesNear(px, py, r, probe),
       openOptions: () => panel.toggle(),
@@ -611,6 +678,13 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
 
     const depth = nav.getDepth();
     const speed = nav.getSpeed();
+    // while a fork is alive, the content spawners keep out of the chamber's depth
+    // span - anything placed in there floats in the trunk cut or hides behind the
+    // opaque room, which starved the fork approach of grabbables.
+    const jspan = junctions.getBlockedSpan ? junctions.getBlockedSpan() : null;
+    spawner.setBlockedSpan(jspan);
+    wall.setBlockedSpan(jspan);
+    powerupDrops.setBlockedSpan(jspan);
     // heat + run time drive the tube-card progression: none until ~18s, then
     // sparse and thickening as the run deepens.
     spawner.update(camera, depth, dt, clock.elapsedTime, director.getIntensity(), director.getRunTime());
@@ -618,6 +692,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     junctions.update(depth, dt);    // branching-path forks (idle until the game arms one)
     boonPick.update(dt, depth);     // in-tube boon draft (idle until a loop clears)
     powerupDrops.update(dt, depth, camera.quaternion);   // floating grab-in-the-tube power-ups
+    hubStations.update(dt);         // the Dollhouse stations (idle unless the Warren is up)
 
     // Sidechain the mix: a spotlight video owns the whole foreground (the
     // voice whispers down under it, the bed drops hardest); otherwise a
@@ -714,6 +789,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     window.removeEventListener('resize', onResize);
     window.removeEventListener('keydown', onKeyDown);
     powerupDrops.dispose();
+    hubStations.dispose();
     canvas.removeEventListener('pointerdown', grabPointerDown);
     canvas.removeEventListener('pointermove', boonAimMove);
     window.removeEventListener('pointerup', grabPointerUp);
