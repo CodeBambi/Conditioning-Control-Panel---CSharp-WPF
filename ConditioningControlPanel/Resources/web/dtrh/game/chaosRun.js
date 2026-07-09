@@ -1550,21 +1550,26 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // road you take is the power-up you get, the other one is gone - so choosing
     // matters. Same offer pool + veto as the drifting drops; two distinct items.
     // A starved pool (low rank / everything grabbed this run / dock full) falls
-    // back to a pouch of gold so an open doorway is never prizeless.
-    const goldPrize = () => {
-      const amount = randInt(8, 12) * 10;
-      return { kind: 'gold', amount, name: `${amount} Gold`, glyph: '🪙',
-        desc: 'a pouch of gold, no questions asked. spend it at the dollhouse.',
-        frameCol: 0xf2c14e, capCol: '#f2c14e' };   // warm gold card, not the relic violet
-    };
-    try {
-      if (ctx.powerupDrops && ctx.powerupDrops.pickOffer) {
-        const a = ctx.powerupDrops.pickOffer();
-        const b = ctx.powerupDrops.pickOffer(a ? [a.def.id] : null);
-        left.reward = a ? { id: a.def.id, kind: a.kind, name: a.def.name, glyph: a.def.glyph || '◈', desc: a.def.desc || '' } : goldPrize();
-        right.reward = b ? { id: b.def.id, kind: b.kind, name: b.def.name, glyph: b.def.glyph || '◈', desc: b.def.desc || '' } : goldPrize();
+    // back to a flat 100-gold pouch so an open doorway is never prizeless.
+    // Per-door try/catch (2026-07): the old single try around BOTH assignments
+    // meant one bad offer silently stripped BOTH doors - the "empty room" bug.
+    // junctions.buildVein carries the same 100-gold fallback as the last line
+    // of defense, so even a failure HERE can't produce a bare entrance.
+    const goldPrize = () => ({ kind: 'gold', amount: 100, name: '100 Gold', glyph: '🪙',
+      desc: 'a pouch of gold, no questions asked. spend it at the dollhouse.',
+      frameCol: 0xf2c14e, capCol: '#f2c14e' });   // warm gold card, not the relic violet
+    const offer = (excludeIds) => {
+      try {
+        return ctx.powerupDrops && ctx.powerupDrops.pickOffer ? ctx.powerupDrops.pickOffer(excludeIds) : null;
+      } catch (e) {
+        console.warn('[dtrh] junction prize offer failed - gold pouch takes the doorway:', e);
+        return null;
       }
-    } catch (e) { /* no prizes this fork - the doorways still work bare */ }
+    };
+    const a = offer(null);
+    const b = offer(a ? [a.def.id] : null);
+    left.reward = a ? { id: a.def.id, kind: a.kind, name: a.def.name, glyph: a.def.glyph || '◈', desc: a.def.desc || '' } : goldPrize();
+    right.reward = b ? { id: b.def.id, kind: b.kind, name: b.def.name, glyph: b.def.glyph || '◈', desc: b.def.desc || '' } : goldPrize();
     const presealChance = PRESEAL_BY_WAVE[Math.min(4, st.waveIndex)] || 0;
     let presealIndex = null;
     if (Math.random() < presealChance) presealIndex = (coaxSide === 'left') ? 1 : 0; // seal the resisting mouth
@@ -1772,6 +1777,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     draftRoomSkip = false;
     if (skipped) { resolveDraft(null, false); return; }
     if (choice && choice.timedOut) { bark('draft-autopick'); resolveDraft(null, true); return; }
+    // the engine's empty-entrance fallback (junctions.buildVein): a door that
+    // couldn't carry a boon card carries a 100-gold pouch instead - bank it
+    if (!b.boon && b.reward && b.reward.kind === 'gold') {
+      const gold = goldScaled(b.reward.amount || 100);
+      bankGold(gold, window.innerWidth / 2, window.innerHeight / 2);
+      hudUi.announce(`🪙 +${gold} gold`, 'powerup', 1600);
+      sfx('golden_pop', 0.55);
+    }
     resolveDraft(b.boon || null, false);
   }
 
@@ -2419,6 +2432,23 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     return false;
   }
 
+  /** The giants live in the deep (replaces the old Entranced rank clamp):
+   * chambers I-II never deal video/gif rain, chamber III deals them at half
+   * presence (an independent roll per giant per spawn), chamber IV at the full
+   * (still rare) pool weight. Feeds both the main spawn roll and the Brittle,
+   * so a giant can't hide in the glass shallower than it's allowed to swim. */
+  function gateGiants(enabled) {
+    if (!cfg.regionMode) return enabled;
+    const giantShare = st.waveIndex >= 4 ? 1 : st.waveIndex === 3 ? 0.5 : 0;
+    if (giantShare >= 1) return enabled;
+    for (const id of ['video', 'htlink']) {
+      if ((!enabled || enabled.includes(id)) && (giantShare === 0 || Math.random() >= giantShare)) {
+        enabled = (enabled || ALL_IDS).filter((x) => x !== id);
+      }
+    }
+    return enabled;
+  }
+
   function spawnTick() {
     // Held (paused / covered / drafting / the persona mid-line): hold the field and
     // retry shortly. Guards the same-frame case where the empty-field rescue zeroes
@@ -2443,20 +2473,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (!behavioralSpawned && room) {
       // Be gentle with the tape: no video bubble while a heavy effect runs, and
       // none when the loop/run is too close to its end for the fuse + 15s slice.
-      let enabled = cfg.enabledVariants;
-      // The giants live in the deep (replaces the old Entranced rank clamp):
-      // chambers I-II never deal video/gif rain, chamber III deals them at half
-      // presence, chamber IV at the full (still rare) pool weight.
-      if (cfg.regionMode) {
-        const giantShare = st.waveIndex >= 4 ? 1 : st.waveIndex === 3 ? 0.5 : 0;
-        if (giantShare < 1) {
-          for (const id of ['video', 'htlink']) {
-            if ((!enabled || enabled.includes(id)) && (giantShare === 0 || Math.random() >= giantShare)) {
-              enabled = (enabled || ALL_IDS).filter((x) => x !== id);
-            }
-          }
-        }
-      }
+      let enabled = gateGiants(cfg.enabledVariants);
       const waveLen = st.runDurationSec / st.waveCount;
       const waveLeft = waveLen - (st.elapsedSec % waveLen);
       const runLeft = st.runDurationSec - st.elapsedSec;
@@ -2513,7 +2530,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           && Math.random() < BRITTLE_SPAWN_CHANCE * (cfg.difficulty === 'Easy' ? 0.5 : 1.0)) {
         if (!flags.seenBrittle) setFlag('seenBrittle');   // (fuse gate parity); the teach is markDiscovered's card
         markDiscovered('bubble:brittle');
-        field.spawn(buildBrittle(effIntensity, cfg.effectIntensity, st.bubbleScale, cfg.enabledVariants));
+        field.spawn(buildBrittle(effIntensity, cfg.effectIntensity, st.bubbleScale, gateGiants(cfg.enabledVariants)));
       }
     }
 

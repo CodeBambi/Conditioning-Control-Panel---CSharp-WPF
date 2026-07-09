@@ -22,6 +22,7 @@
  * ==========================================================================*/
 
 import { S } from '../engine/settings.js';
+import { isMuted, onMuteChange } from '../shared/audioMute.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const clamp01 = (v) => clamp(v, 0, 1);
@@ -270,7 +271,11 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     frame.className = 'sf-pfx-vidframe';
     const vid = document.createElement('video');
     vid.src = got.url;
-    vid.loop = true; vid.playsInline = true; vid.autoplay = true; vid.muted = false;
+    // the master mute is PARAMOUNT: the card is born muted when the HUD mute is
+    // on, and it tracks live flips for its whole 15s hold (audioMute.js also
+    // runs a page-level enforcer, but the card should behave on its own)
+    vid.loop = true; vid.playsInline = true; vid.autoplay = true; vid.muted = isMuted();
+    const offMute = onMuteChange((m) => { try { vid.muted = m; } catch { /* ignore */ } });
     frame.appendChild(vid);
     card.appendChild(frame);
     front.appendChild(card);
@@ -282,6 +287,7 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     let removed = false;
     const remove = () => {
       if (removed) return; removed = true;
+      offMute();
       card.classList.remove('in');            // recede back into the deep
       try { vid.pause(); } catch { /* ignore */ }
       // explicit unload: Chromium's per-page media-player cap counts a merely

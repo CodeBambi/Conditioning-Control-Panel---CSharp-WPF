@@ -552,13 +552,27 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
     let card = null;
     if (desc.reward) {
-      card = buildRewardCard(desc.reward, cardPos, cardQuat, index);
+      try { card = buildRewardCard(desc.reward, cardPos, cardQuat, index); }
+      catch (e) { console.warn('[dtrh] doorway prize card build failed:', e); card = null; }
     } else if (spawner && spawner.createDetachedCard) {
       card = spawner.createDetachedCard({ pos: cardPos, quat: cardQuat, scale: CARD_SCALE });
       if (card && card.group) {
         card.group.userData = { type: 'veinmouth', index };
         scene.add(card.group);   // the handle doesn't self-attach; the mouth owns it
       }
+    }
+    // LAST line of defense (2026-07): a doorway must NEVER stand empty. If the
+    // game hung no prize on this branch (an upstream offer failed silently) or
+    // the media-card fallback had nothing to give, a flat 100-gold pouch takes
+    // the entrance - desc.reward is set so the commit path banks it like any
+    // other doorway prize.
+    if (!card) {
+      console.warn(`[dtrh] doorway "${desc.word || '?'}" had no card - 100-gold pouch takes the entrance`);
+      desc.reward = { kind: 'gold', amount: 100, name: '100 Gold', glyph: '🪙',
+        desc: 'a pouch of gold, no questions asked. spend it at the dollhouse.',
+        frameCol: 0xf2c14e, capCol: '#f2c14e' };
+      try { card = buildRewardCard(desc.reward, cardPos, cardQuat, index); }
+      catch (e) { console.warn('[dtrh] gold fallback card build failed too:', e); card = null; }
     }
 
     return {

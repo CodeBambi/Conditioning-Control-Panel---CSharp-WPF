@@ -318,8 +318,11 @@ export function buildPrism(intensity, effectIntensity = 1.0, treatOnly = false) 
 
 /** The Brittle: thin glass carrying a random LIVE effect - hovering shatters it. */
 export function buildBrittle(intensity, effectIntensity = 1.0, sizeScale = 1.0, enabledIds = null) {
-  let pool = VARIANTS.filter((v) => v.kind === 'live');
-  // Respect the video/htlink rank clamp: a locked giant can't hide inside the glass.
+  // the mandatory video NEVER hides inside the glass: a shatter is a hover-level
+  // accident, and the payload is a 15s unskippable in-face card (2026-07).
+  let pool = VARIANTS.filter((v) => v.kind === 'live' && v.id !== 'video');
+  // Respect the caller's enabled clamp (the spawner passes its chamber-gated
+  // list, so gif rain can't ride the glass shallower than it's allowed to swim).
   if (enabledIds) {
     const ok = pool.filter((v) => v.id === 'pink' || v.id === 'spiral' || v.id === 'braindrain'
       || enabledIds.includes(v.id));
