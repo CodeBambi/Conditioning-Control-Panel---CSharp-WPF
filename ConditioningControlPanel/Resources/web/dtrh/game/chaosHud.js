@@ -455,6 +455,7 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
         requestAnimationFrame(step);
       } catch (e) { /* ignore */ }
     },
+    resetCombo() { prevCombo = null; },   // fresh run without a hide (recap "Again"): no phantom break
     setVisible(v) {
       root.style.display = v ? '' : 'none';
       picksWrap.style.display = v ? '' : 'none';

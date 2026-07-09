@@ -230,11 +230,9 @@ export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, s
       _camDepth = camDepth;
       if (card) {
         const done = card.update(dt, camDepth, camQuat || camera.quaternion);
-        // cull: faded out, or the fall has carried us past it
-        if ((done && card.isFading()) || camDepth > card.cardDepth + CULL_BEHIND) {
-          if (!card.isFading() && camDepth > card.cardDepth + CULL_BEHIND) { card.startFade(); }
-          else { card.dispose(); card = null; }
-        }
+        // cull: start the fade when the fall carries us past it, dispose only once faded
+        if (done && card.isFading()) { card.dispose(); card = null; }
+        else if (!card.isFading() && camDepth > card.cardDepth + CULL_BEHIND) { card.startFade(); }
       }
       if (!spawnEnabled) return;
       if (!card) {
@@ -250,8 +248,10 @@ export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, s
     grab(group) {
       if (!card || card.group !== group || card.isFading()) return false;
       const pos = card.screenPos();
-      const g = card; card = null;   // detach so a second pointer can't double-grab
-      try { if (onGrab) onGrab(g.def.id, g.kind, pos); } catch (e) { /* ignore */ }
+      let taken = true;
+      try { if (onGrab) taken = onGrab(card.def.id, card.kind, pos) !== false; } catch (e) { /* ignore */ }
+      if (!taken) return false;   // the game declined (draft room / recap): the card stays live
+      const g = card; card = null;
       g.dispose();
       return true;
     },

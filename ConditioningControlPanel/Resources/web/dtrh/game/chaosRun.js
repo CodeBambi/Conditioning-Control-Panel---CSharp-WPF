@@ -2768,6 +2768,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       }
     }
 
+    hudUi.resetCombo();   // "Again" reruns never hide the badge - clear its baseline first
     hudUi.update(hudState());
     hudUi.updateToys(toys, toyStatus());
     hudUi.setPicks(st.runPicks);
@@ -3165,8 +3166,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     /** A card was grabbed: unlock-on-discovery (free), then dock (consumable) or
      *  apply (passive), with the art flying from the tube point to its HUD slot. */
     onPowerupGrabbed(id, kind, screenPos) {
-      if (!st || state !== 'running') return;
+      if (!st || state !== 'running') return false;   // declined: the card stays in the tube
       handlePowerupGrab(id, kind, screenPos);
+      return true;
     },
 
     /** "surface" from the pause menu: the descent ends early - recap still pays. */
@@ -3195,6 +3197,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       draftDom = null; draftRoomActive = false;
       warren?.dispose();
       lessons?.dispose();
+      lessonCardUi?.dispose();   // removes its capture keydown + hud node
+      hubGuide?.dispose();       // cancels any pending teach-queue timeout
       overlays?.dispose();
       hudUi?.dispose();
       field?.dispose();

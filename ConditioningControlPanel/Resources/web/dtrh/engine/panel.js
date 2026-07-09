@@ -443,9 +443,9 @@ export function createPanel(hud) {
       // second click: do it. Close the drawer so the welcome doesn't play under it.
       clearTimeout(lessonsRevert);
       lessonsRevert = 0;
+      close();   // close FIRST - the reset snapshot can land within ~700ms and start the welcome under the drawer
       hooks.resetOnboarding();
-      lessonsBtn.textContent = 'she will start over ✓';
-      window.setTimeout(() => { lessonsIdle(); close(); }, 700);
+      lessonsIdle();
       return;
     }
     lessonsBtn.textContent = 'sure? every lesson replays — progress stays';
