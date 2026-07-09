@@ -123,30 +123,32 @@ export function onSettings(cb) {
 
 // ---- progression: earning the dials -----------------------------------------
 // The options panel starts almost fully locked - the fall decides. Each rung is
-// bought on the Warren "Dials" board with Sparkle Points; the purchase is an
-// authoritative C# meta-command (`purchase-dial`) that records the rung id into
+// bought on the Dollhouse DIALS console with GOLD 🪙 (the gold cutover: gold
+// unlocks things, drops ✦ level things); the purchase is an authoritative C#
+// meta-command (`purchase-dial`) that records the rung id into
 // ChaosMetaState.PurchasedDials, so the unlocked set arrives via the meta
 // snapshot - NOT this localStorage store (which the user could trivially edit).
 // This table is the SHARED source of truth for both the panel (gating) and the
-// Warren shop (rows/prices); consumers get the unlocked-id set injected.
+// Dollhouse console (rows/prices); consumers get the unlocked-id set injected.
 //
 // Ordered gentle -> feral: the two runaway dials (hydra generations, glitch
 // timer) also require meta-rank Entranced (index 3). `keys` are the setting
 // sliders a rung governs; `feature` marks the non-slider sections. STARTER dials
 // (bubbles, reset, diagnostics) are never in the ladder - always available.
-// Prices are a first pass, to be calibrated against the spark economy.
+// Prices sized to gold income (~40-80/run early, 90-150 mid, 200-350 late):
+// the whole console (incl. the 3 CONSOLE_EXTRAS) lands around 25-35 runs.
 export const UNLOCK_LADDER = [
-  { id: 'bubbleSize',  label: 'bubble size',           keys: ['bubbleSize'],             price: 40 },
-  { id: 'words',       label: 'subliminal words',      feature: 'words',                 price: 60 },
-  { id: 'spiral',      label: 'spiral opacity',        keys: ['spiralOpacity'],          price: 80 },
+  { id: 'bubbleSize',  label: 'bubble size',           keys: ['bubbleSize'],             price: 25 },
+  { id: 'words',       label: 'subliminal words',      feature: 'words',                 price: 50 },
+  { id: 'spiral',      label: 'spiral opacity',        keys: ['spiralOpacity'],          price: 75 },
   { id: 'pink',        label: 'pink filter opacity',   keys: ['pinkOpacity'],            price: 100 },
-  { id: 'gifLook',     label: 'gif look',              keys: ['gifSize', 'gifOpacity'],  price: 130 },
-  { id: 'flash',       label: 'flash gifs',            keys: ['flashCount'],             price: 160 },
-  { id: 'custom',      label: 'make it yours',         feature: 'custom',                price: 200 },
-  { id: 'spotlight',   label: 'video spotlight time',  keys: ['spotSeconds'],            price: 240 },
-  { id: 'glitch',      label: 'glitch intensity',      keys: ['glitch'],                 price: 300 },
-  { id: 'hydra',       label: 'gif hydra generations', keys: ['hydraGen'],     price: 400, rankReq: 3 },
-  { id: 'glitchTimer', label: 'glitch timer',          keys: ['glitchSeconds'], price: 520, rankReq: 3 },
+  { id: 'gifLook',     label: 'gif look',              keys: ['gifSize', 'gifOpacity'],  price: 150 },
+  { id: 'flash',       label: 'flash gifs',            keys: ['flashCount'],             price: 200 },
+  { id: 'custom',      label: 'make it yours',         feature: 'custom',                price: 250 },
+  { id: 'spotlight',   label: 'video spotlight time',  keys: ['spotSeconds'],            price: 325 },
+  { id: 'glitch',      label: 'glitch intensity',      keys: ['glitch'],                 price: 400 },
+  { id: 'hydra',       label: 'gif hydra generations', keys: ['hydraGen'],     price: 550, rankReq: 3 },
+  { id: 'glitchTimer', label: 'glitch timer',          keys: ['glitchSeconds'], price: 700, rankReq: 3 },
 ];
 
 // Meta-rank names (mirrors Services/Chaos/ChaosRanks.cs) for lock-hint text.

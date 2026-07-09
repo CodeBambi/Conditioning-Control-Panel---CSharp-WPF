@@ -31,12 +31,12 @@ const SLIDERS = [
   { key: 'spotSeconds', label: 'video spotlight time', min: 10, max: 30, step: 1, fmt: (v) => `${v}s` },
 ];
 
-// Spark glyph for the lock hints (matches catalog GLYPHS.drops).
-const SPARK = '✦';
-const lockHint = (r) => r.rankReq != null ? `🔒 ${SPARK}${r.price} · ${RANK_NAMES[r.rankReq]}` : `🔒 ${SPARK}${r.price}`;
+// Gold glyph for the lock hints (matches catalog GLYPHS.gold - gold unlocks dials).
+const GOLD = '🪙';
+const lockHint = (r) => r.rankReq != null ? `🔒 ${GOLD}${r.price} · ${RANK_NAMES[r.rankReq]}` : `🔒 ${GOLD}${r.price}`;
 const lockTitle = (r) => {
   const rank = r.rankReq != null ? ` and reaching rank ${RANK_NAMES[r.rankReq]}` : '';
-  return `Locked — earn it on the Warren's Dials board for ${r.price} sparks${rank}.`;
+  return `Locked — buy it at the Dollhouse DIALS console for ${r.price} gold${rank}.`;
 };
 const rungById = (id) => UNLOCK_LADDER.find((x) => x.id === id);
 

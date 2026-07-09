@@ -22,7 +22,8 @@ export const REVEAL_PREDS = {
   // The collection shelves open from the first descent so you can see what's discoverable.
   toybox_toys:          (v) => v.runs >= 1,
   toybox_accessories:   (v) => v.runs >= 1,
-  toybox_her_corner:    (v) => v.runs >= 2 && v.rankIndex < RANK.Slipping,
+  // gold cutover: pockets (toybox_her_corner, bench_*_pocket_2) retired -
+  // ids pruned here AND from ChaosRevealService.cs + the v3 save migration.
   pill_teasing:         (v) => v.rankIndex >= RANK.Tempted,
   pill_relentless:      (v) => v.rankIndex >= RANK.Entranced,
   pill_inescapable:     (v) => v.extremeUnlocked,
@@ -30,8 +31,6 @@ export const REVEAL_PREDS = {
   start_picker:         (v) => v.bench.has('start_mantra'),
   diary:                (v) => v.bench.has('diary'),
   stats_panel:          (v) => v.bench.has('stats_panel'),
-  bench_toy_pocket_2:   (v) => v.rankIndex >= RANK.Devoted,
-  bench_acc_pocket_2:   (v) => v.rankIndex >= RANK.Devoted,
   variant_video:        (v) => v.rankIndex >= RANK.Entranced,
   variant_htlink:       (v) => v.rankIndex >= RANK.Entranced,
   capstones:            (v) => v.rankIndex >= RANK.Devoted,

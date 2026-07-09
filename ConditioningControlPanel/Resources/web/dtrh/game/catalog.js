@@ -270,33 +270,25 @@ export function consumableSlotCost(current) {
 }
 export const boonsInCat = (cat) => LIFETIME_BOONS.filter((b) => b.cat === cat);
 
-// ============================ her bench (ChaosHubWindow.Bench.cs) ============================
+// ============================ the gold console (ex Her Bench) ============================
+// Gold cutover (2026-07): pockets are retired (grab-in-the-tube holds via HANDS),
+// and Her Bench folds into THE DIALS console - one gold shop, one rule:
+// gold 🪙 unlocks, drops ✦ level. Ids persist in BenchPurchases unchanged, so
+// old saves keep what they bought. Purchases still ride the bench-buy op.
 
-export const BENCH_ITEMS = [
-  { id: 'toy_pocket_1', glyph: '👝', label: 'first toy pocket',
-    line: 'she sews you a pocket.', cost: 50, pocket: 'toy' },
-  { id: 'accessory_pocket_1', glyph: '👝', label: 'first accessory pocket',
-    line: 'she only has two hands. she found a third.', cost: 150, pocket: 'accessory' },
-  { id: 'start_mantra', glyph: '◈', label: 'the starting mantra',
-    line: 'fall in holding something.', cost: 200 },
-  { id: 'diary', glyph: '📓', label: 'the diary',
-    line: 'she keeps notes on what you meet down there.', cost: 150 },
+export const CONSOLE_EXTRAS = [
   { id: 'stats_panel', glyph: '🕰', label: 'the stats panel',
-    line: 'the numbers, if you want them.', cost: 100 },
-  { id: 'toy_pocket_2', glyph: '👝', label: 'second toy pocket',
-    line: 'she found room for one more.', cost: 2000,
-    rankNeed: RANK.Devoted, revealGate: 'bench_toy_pocket_2', pocket: 'toy' },
-  { id: 'accessory_pocket_2', glyph: '👝', label: 'second accessory pocket',
-    line: 'a fourth hand. don’t ask.', cost: 2500,
-    rankNeed: RANK.Devoted, revealGate: 'bench_acc_pocket_2', pocket: 'accessory' },
+    line: 'the numbers, if you want them.', cost: 60 },
+  { id: 'diary', glyph: '📓', label: 'the diary',
+    line: 'she keeps notes on what you meet down there.', cost: 100 },
+  { id: 'start_mantra', glyph: '◈', label: 'the starting mantra',
+    line: 'fall in holding something.', cost: 175 },
 ];
 
-export const BENCH_RESERVED = [
-  'the clocks', 'descent ledger', 'payout eyes', 'the fine print',
-  'fall right in', 'held breath', 'soft landing', 'no countdown',
-  'dollhouse wallpapers', 'recap frames', 'a chattier companion', 'the pact',
+export const CONSOLE_RESERVED = [
+  'the clocks', 'payout eyes', 'soft landing', 'no countdown', 'the pact',
 ];
-export const BENCH_CLAIMED_RESERVED = ['daily descent', 'leaderboard', 'prestige'];
+export const CONSOLE_CLAIMED_RESERVED = ['daily descent', 'leaderboard', 'prestige'];
 
 export const WALL_TIP = 'there’s a wall here that isn’t quite a wall.';
 export const DEEPER_TIP = 'she’ll sell this to someone deeper.';
@@ -496,7 +488,6 @@ export function metaView(meta) {
   const dials = asSet(m.purchasedDials);
   const runs = m.runsCompleted | 0;
   const rankIndex = RANKS.forRuns(runs);
-  const MAX_POCKETS = 2;
 
   const v = {
     raw: m,
@@ -508,8 +499,6 @@ export function metaView(meta) {
     extremeUnlocked: !!m.extremeUnlocked,
     giftGiven: !!m.giftGiven,
     equippedStartBoon: m.equippedStartBoon || null,
-    toyPockets: Math.min(m.toyPockets | 0, MAX_POCKETS),
-    accessoryPockets: Math.min(m.accessoryPockets | 0, MAX_POCKETS),
     // grab-in-the-tube: consumable (active-toy) HUD slots held per fall; starts at 1,
     // the dollhouse sews more with Sparks up to MAX_CONSUMABLE_SLOTS.
     consumableSlots: Math.max(1, m.consumableSlots | 0),
@@ -538,23 +527,18 @@ export function metaView(meta) {
     isPurchaseRankLocked: (id) => id === 'extreme_tier' && !purchased.has(id) && rankIndex < RANK.Devoted,
 
     // ---- options-panel "Dials" unlocks (UNLOCK_LADDER; see engine/settings.js) --
+    // Gold cutover: dials are bought with GOLD 🪙 now (gold unlocks, drops level).
     purchasedDials: [...dials],
+    dialsOwned: dials.size,
     hasDial: (id) => dials.has(id),
-    canAffordDial: (id, cost) => !dials.has(id) && v.sparks >= (cost | 0),
+    canAffordDial: (id, cost) => !dials.has(id) && v.gold >= (cost | 0),
     isDialRankLocked: (rankReq) => rankReq != null && rankIndex < rankReq,
+    // her one gift: covers ONE short gold purchase, on your very first dial
+    dialGiftEligible: () => !v.giftGiven && dials.size === 0,
 
     boonLevel: (id) => levels[id] | 0,
     isBoonUnlocked: (id) => (levels[id] | 0) >= 1,
     isBoonActive: (id) => active.has(id) && (levels[id] | 0) >= 1,
-    slotsFor: (cat) => (cat === 'utility' ? Infinity
-      : cat === 'skill' ? Math.min(m.toyPockets | 0, MAX_POCKETS)
-      : Math.min(m.accessoryPockets | 0, MAX_POCKETS)),
-    equippedCountIn: (cat) => boonsInCat(cat).filter((b) => v.isBoonActive(b.id)).length,
-    hasFreePocket: (cat) => v.equippedCountIn(cat) < v.slotsFor(cat),
-    unlockCostOf(id) {
-      const b = boonDefById(id);
-      return !b || v.isBoonUnlocked(id) ? null : b.unlockCost;
-    },
     nextUpgradeCostOf(id) {
       const b = boonDefById(id);
       if (!b) return null;
@@ -562,7 +546,6 @@ export function metaView(meta) {
       if (lvl < 1 || lvl >= b.levelValues.length) return null;
       return b.upgradeCosts[lvl - 1] ?? null;
     },
-    canAffordUnlock(id) { const c = v.unlockCostOf(id); return c != null && v.sparks >= c; },
     canAffordDeepen(id) { const c = v.nextUpgradeCostOf(id); return c != null && v.sparks >= c; },
     isBoonRankLocked(id) {
       const b = boonDefById(id);

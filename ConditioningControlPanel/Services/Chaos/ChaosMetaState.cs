@@ -10,13 +10,15 @@ namespace ConditioningControlPanel.Services.Chaos;
 /// </summary>
 public sealed class ChaosMetaState
 {
-    public int SchemaVersion { get; set; } = 2;   // v2: added narrative-line persistence (additive, no migration)
+    // v2: added narrative-line persistence (additive, no migration)
+    // v3: gold cutover - dials cost gold, pockets retired + refunded (ChaosMetaStore migration)
+    public int SchemaVersion { get; set; } = 3;
 
     public int Sparks { get; set; } = 0;
     public HashSet<string> PurchasedUpgrades { get; set; } = new();
-    /// <summary>Options-panel "Dials" the player has bought back with drops (UNLOCK_LADDER
-    /// ids in engine/settings.js). Absent = locked, so old saves start with the fall
-    /// pre-set and the gear panel almost entirely padlocked until earned.</summary>
+    /// <summary>Options-panel "Dials" the player has bought back with GOLD (UNLOCK_LADDER
+    /// ids in engine/settings.js; drops until the v3 gold cutover). Absent = locked, so old
+    /// saves start with the fall pre-set and the gear panel almost entirely padlocked.</summary>
     public HashSet<string> PurchasedDials { get; set; } = new();
     /// <summary>Trained habits the player has switched OFF (absent = on, so old saves stay fully active).</summary>
     public HashSet<string> DisabledUpgrades { get; set; } = new();
@@ -50,11 +52,13 @@ public sealed class ChaosMetaState
     /// <summary>Braindrain's happy-path debut on the second descent (spawn alone + announce).</summary>
     public bool SeenBraindrain { get; set; } = false;
 
-    // ---- two-currency split (2026-06-11): Sparks (code name frozen) is the DROPS balance,
-    // banked end-of-run; Gold is the instant in-run balance, spent only at her bench ----
+    // ---- two-currency split (v3 gold cutover): Sparks (code name frozen) is the DROPS
+    // balance banked end-of-run - it LEVELS things (deepen/train/hands). Gold is the
+    // instant in-run balance - it UNLOCKS things (dials + console extras) ----
     public int Gold { get; set; } = 0;
 
-    // ---- pockets are purchase-driven now: counts start at zero, her bench sews more ----
+    // ---- RETIRED (v3): loadout pockets. Kept for schema compat; migration zeroes
+    // them and refunds their gold. Do not read in new code ----
     public int ToyPockets { get; set; } = 0;
     public int AccessoryPockets { get; set; } = 0;
 

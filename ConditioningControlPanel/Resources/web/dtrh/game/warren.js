@@ -23,8 +23,8 @@
 import {
   UPGRADES, upgradeById, BRANCH_LABEL, BRANCH_COLOR,
   LIFETIME_BOONS, boonDefById, boonsInCat,
-  BENCH_ITEMS, BENCH_RESERVED, BENCH_CLAIMED_RESERVED,
-  WALL_TIP, DEEPER_TIP, BOTTOM_TIP,
+  CONSOLE_EXTRAS, CONSOLE_RESERVED, CONSOLE_CLAIMED_RESERVED,
+  WALL_TIP, BOTTOM_TIP,
   RANKS, RANK, GLYPHS,
   DIARY_VERBS, DIARY_CODEX, POOL_VARIANTS, DIFF_PILLS,
   HOWTO_CARDS, metaView, MAX_CONSUMABLE_SLOTS,
@@ -381,21 +381,17 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
 
   function countAffordableDials(v) {
     let n = 0;
+    let unownedDials = 0;
     for (const r of UNLOCK_LADDER) {
       if (v.hasDial(r.id) || v.isDialRankLocked(r.rankReq)) continue;
+      unownedDials++;
       if (v.canAffordDial(r.id, r.price)) n++;
     }
-    return n;
-  }
-
-  function countAffordableBench(v) {
-    let n = 0;
-    for (const item of BENCH_ITEMS) {
-      if (v.bench.has(item.id)) continue;
-      if (item.rankNeed != null && !v.atLeast(item.rankNeed)) continue;
-      if (item.revealGate && !reveals.isUnlocked(item.revealGate, v)) continue;
-      if (v.gold >= item.cost) n++;
+    for (const item of CONSOLE_EXTRAS) {
+      if (!v.bench.has(item.id) && v.gold >= item.cost) n++;
     }
+    // her gift covers a short first dial - the console always has one buy waiting
+    if (n === 0 && unownedDials > 0 && v.dialGiftEligible()) n = 1;
     return n;
   }
 
@@ -414,7 +410,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     if (reveals.isUnlocked('tab_looking_glass', v)) {
       defs.push({ id: 'vanity', kind: 'station', label: STATION_META.vanity.label,
         glyph: STATION_META.vanity.glyph, accent: STATION_META.vanity.accent,
-        artUrl: `${ART}hub/station_vanity.png`, badge: countAffordableBench(v) });
+        artUrl: `${ART}hub/station_vanity.png` });
     }
     defs.push({ id: 'portal', kind: 'portal', label: 'FALL IN', glyph: '🕳', accent: 0xe84393 });
     return defs;
@@ -424,7 +420,6 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     if (!stations) return;
     stations.setBadge('toybox', countAffordableToybox(v));
     stations.setBadge('dials', countAffordableDials(v));
-    stations.setBadge('vanity', countAffordableBench(v));
   }
 
   // ============================ persistent chrome ============================
@@ -757,18 +752,21 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     for (const u of UPGRADES) if (v.onShelfNow(u.id)) habits.appendChild(upgradeRow(u, v));
   }
 
-  // ============================ 🎛 THE DIALS (unlock · gold) ============================
-  // The gear-panel controls start locked; each rung here flips one open. The two
-  // feral dials (hydra generations, glitch timer) also need a meta-rank. The
-  // panel reveals the control the moment the snapshot re-broadcasts.
+  // ============================ 🎛 THE DIALS (unlock · gold 🪙) ============================
+  // ONE gold console: the gear-panel dial ladder + the comfort extras that used
+  // to live at Her Bench (stats / diary / starting mantra). Gold unlocks, drops
+  // level - one rule each. The two feral dials (hydra generations, glitch timer)
+  // also need a meta-rank. Her one gift covers a short FIRST dial. The options
+  // panel reveals a bought control the moment the snapshot re-broadcasts.
   function renderDialsPanel(panel, v) {
     const card = el('wr-card', panel);
     el('wr-card-h', card, 'THE DIALS · take the console back');
+    el('wr-gold-line', card, `you’re carrying ${GLYPHS.gold} ${nfmt(v.gold)}`);
     for (const r of UNLOCK_LADDER) {
       const owned = v.hasDial(r.id);
       const rankLocked = !owned && v.isDialRankLocked(r.rankReq);
       const row = el('wr-row' + (owned ? ' is-owned' : ''), card);
-      row.style.setProperty('--acc', '232,67,147');
+      row.style.setProperty('--acc', '255,215,0');
       const mid = el('wr-row-mid', row);
       el('wr-row-name', mid, r.label);
       if (r.rankReq != null) el('wr-row-flavor', mid, `a deep dial · opens at ${RANK_NAMES[r.rankReq]}`);
@@ -780,24 +778,34 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
         tip(held, `${RANKS.lockedTip}\n${RANKS.specifics(r.rankReq, v.runs)}`);
         right.appendChild(held);
       } else {
-        right.appendChild(buyBtn(`unlock  ${GLYPHS.drops}${r.price}`, v.canAffordDial(r.id, r.price), () => {
+        const afford = v.canAffordDial(r.id, r.price);
+        // her one gift: a short balance still buys your very first dial
+        const clickable = afford || v.dialGiftEligible();
+        const b = btn('wr-buy wr-buy--gold' + (afford ? '' : ' is-short'), `unlock  ${GLYPHS.gold} ${r.price}`, () => {
+          if (!clickable) { sfx('ui_denied', 0.45); return; }
           cmd('purchase-dial', { id: r.id, cost: r.price });
           bark('dial-unlocked', { id: r.id });
           window.setTimeout(() => runRevealFlashes('purchase'), 250);
-        }));
+        }, right);
+        if (!clickable) b.classList.add('is-off');
+        else if (!afford) tip(b, 'you can’t afford it. she doesn’t seem to mind.');
       }
+    }
+
+    // ---- the console extras (ex Her Bench: comfort, never power) ----
+    const extras = el('wr-card', panel);
+    el('wr-card-h', extras, 'HER TOUCHES · comfort, never power');
+    for (const item of CONSOLE_EXTRAS) extras.appendChild(consoleRow(item, v));
+    for (const name of CONSOLE_RESERVED) extras.appendChild(hazyRow(name, WALL_TIP));
+    if (v.atLeast(RANK.Devoted)) {
+      for (const name of CONSOLE_CLAIMED_RESERVED) extras.appendChild(hazyRow(name, BOTTOM_TIP));
     }
   }
 
-  // ============================ 📔 VANITY (the mirror) ============================
-
-  function benchRow(item, v) {
-    const revealed = !item.revealGate || reveals.isUnlocked(item.revealGate, v);
-    if (!revealed) return hazyRow('???', WALL_TIP);
+  /** One console-extra row (ex benchRow, pockets retired): a gold one-time buy. */
+  function consoleRow(item, v) {
     const owned = v.bench.has(item.id);
-    const rankShort = item.rankNeed != null && !v.atLeast(item.rankNeed);
-    const row = el('wr-row wr-row--bench' + (rankShort ? ' is-dim' : ''));
-    if (item.revealGate) revealEls.set(item.revealGate, row);
+    const row = el('wr-row wr-row--bench');
     el('wr-bench-glyph', row, item.glyph);
     const mid = el('wr-row-mid', row);
     el('wr-row-name', mid, item.label);
@@ -805,9 +813,6 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     const right = el('wr-row-right', row);
     if (owned) {
       el('wr-row-max', right, 'sewn ✓');
-    } else if (rankShort) {
-      el('wr-row-state', right, '🔒');
-      tip(row, `${DEEPER_TIP}\n${RANKS.specifics(item.rankNeed, v.runs)}`);
     } else {
       const afford = v.gold >= item.cost;
       const b = btn('wr-buy wr-buy--gold' + (afford ? '' : ' is-short is-off'), `buy  ${GLYPHS.gold} ${nfmt(item.cost)}`, () => {
@@ -824,19 +829,16 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     return row;
   }
 
+  // ============================ 📔 VANITY (the mirror) ============================
+
   function renderVanityPanel(panel, v) {
-    // ---- her bench (gold comforts; folds into the DIALS console in the
-    //      gold-economy cutover - parked here meanwhile) ----
-    const benchCard = el('wr-card', panel);
-    el('wr-card-h', benchCard, 'HER BENCH · gold buys comfort, never power');
-    el('wr-gold-line', benchCard, `you’re carrying ${GLYPHS.gold} ${nfmt(v.gold)}`);
-    for (const item of BENCH_ITEMS) benchCard.appendChild(benchRow(item, v));
-    for (const name of BENCH_RESERVED) benchCard.appendChild(hazyRow(name, WALL_TIP));
-    if (v.atLeast(RANK.Devoted)) {
-      for (const name of BENCH_CLAIMED_RESERVED) benchCard.appendChild(hazyRow(name, BOTTOM_TIP));
+    // the mirror starts near-empty: her touches (stats / diary / mantra) are
+    // bought at the DIALS console and appear here once sewn
+    if (!reveals.isUnlocked('start_picker', v) && !reveals.isUnlocked('stats_panel', v) && !reveals.isUnlocked('diary', v)) {
+      panel.appendChild(hazyRow('an almost-empty mirror', 'her touches are sold at the DIALS console - what you buy there appears here.'));
     }
 
-    // ---- the starting mantra (bench purchase reveals it) ----
+    // ---- the starting mantra (console purchase reveals it) ----
     if (reveals.isUnlocked('start_picker', v)) {
       const card = el('wr-card', panel);
       const hdr = el('wr-card-h', card, 'THE STARTING MANTRA · whispered on the way down');

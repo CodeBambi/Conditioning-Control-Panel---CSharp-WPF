@@ -116,15 +116,27 @@ internal sealed class DtrhMetaBridge
                 case "purchase-dial":
                 {
                     // Buy back an options-panel dial (UNLOCK_LADDER in engine/settings.js).
-                    // Cost is client-supplied (same trust model as purchase-upgrade); the
-                    // two feral dials are rank-gated here so the page can't skip the floor.
+                    // Gold cutover: dials cost GOLD (gold unlocks, drops level). Cost is
+                    // client-supplied (same trust model as purchase-upgrade); the two feral
+                    // dials are rank-gated here so the page can't skip the floor. HER GIFT
+                    // (the one-time short-balance cover, repointed from the retired first
+                    // toy pocket) lands on your very first dial.
                     var id = RequireId(o); int cost = Cost(o);
                     if (id == null || S.PurchasedDials.Contains(id)) break;
                     bool rankOk = (id != "hydra" && id != "glitchTimer") || ChaosMeta.RankIndex >= ChaosRank.Entranced;
-                    if (rankOk && S.Sparks >= cost)
+                    if (!rankOk) break;
+                    if (S.Gold >= cost)
                     {
-                        S.Sparks -= cost;
+                        S.Gold -= cost;
                         S.PurchasedDials.Add(id);
+                        applied = true;
+                    }
+                    else if (!S.GiftGiven && S.PurchasedDials.Count == 0)
+                    {
+                        S.GiftGiven = true;
+                        S.Gold = 0;
+                        S.PurchasedDials.Add(id);
+                        if (!_testMode) { try { App.Bark?.NotifyChaosGiftGiven(); } catch { } }
                         applied = true;
                     }
                     break;
@@ -167,16 +179,6 @@ internal sealed class DtrhMetaBridge
                     if (amount > 0 && S.Gold >= amount) { S.Gold -= amount; applied = true; }
                     break;
                 }
-                case "buy-pocket":
-                {
-                    var kind = (string?)o["kind"]; int cost = Cost(o);
-                    if (S.Gold < cost) break;
-                    if (kind == "toy" && S.ToyPockets < ChaosMeta.MAX_POCKETS_PER_CATEGORY)
-                    { S.Gold -= cost; S.ToyPockets++; applied = true; }
-                    else if (kind == "accessory" && S.AccessoryPockets < ChaosMeta.MAX_POCKETS_PER_CATEGORY)
-                    { S.Gold -= cost; S.AccessoryPockets++; applied = true; }
-                    break;
-                }
                 case "buy-consumable-slot":
                 {
                     // Grab-in-the-tube rework: sew another consumable HUD slot with Sparks (the
@@ -186,32 +188,17 @@ internal sealed class DtrhMetaBridge
                     { S.Sparks -= cost; S.ConsumableSlots++; applied = true; }
                     break;
                 }
-                case "bench-purchase":
-                {
-                    var id = RequireId(o); int cost = Cost(o);
-                    if (id != null && S.Gold >= cost && !S.BenchPurchases.Contains(id))
-                    { S.Gold -= cost; S.BenchPurchases.Add(id); applied = true; }
-                    break;
-                }
                 case "bench-buy":
                 {
-                    // The full WPF BenchBuy_Click semantics in one op: spend gold (or HER GIFT -
-                    // the one-time cover of a short balance on the first toy pocket), record the
-                    // purchase, and apply the pocket effect for the pocket rows. The page owns the
-                    // rank/reveal gating UI; affordability + one-time-ness are enforced here.
+                    // Gold cutover: the bench is gone; this op survives only for the three
+                    // console extras (stats / diary / starting mantra) sold at the DIALS
+                    // console. Whitelisted so a stale page can't resurrect pocket ids.
+                    // Her gift moved to purchase-dial (the first dial), so gold-or-nothing here.
                     var id = RequireId(o); int cost = Cost(o);
-                    if (id == null || S.BenchPurchases.Contains(id)) break;
-                    bool paid = false, gift = false;
-                    if (S.Gold >= cost) { S.Gold -= cost; paid = true; }
-                    else if (id == BenchIds.ToyPocket1 && !S.GiftGiven)
-                    { S.GiftGiven = true; S.Gold = 0; paid = true; gift = true; }
-                    if (!paid) break;
+                    if (id is not (BenchIds.StartMantra or BenchIds.Diary or BenchIds.StatsPanel)) break;
+                    if (S.BenchPurchases.Contains(id) || S.Gold < cost) break;
+                    S.Gold -= cost;
                     S.BenchPurchases.Add(id);
-                    if (id is BenchIds.ToyPocket1 or BenchIds.ToyPocket2)
-                        S.ToyPockets = Math.Min(S.ToyPockets + 1, ChaosMeta.MAX_POCKETS_PER_CATEGORY);
-                    else if (id is BenchIds.AccPocket1 or BenchIds.AccPocket2)
-                        S.AccessoryPockets = Math.Min(S.AccessoryPockets + 1, ChaosMeta.MAX_POCKETS_PER_CATEGORY);
-                    if (gift && !_testMode) { try { App.Bark?.NotifyChaosGiftGiven(); } catch { } }
                     applied = true;
                     break;
                 }
