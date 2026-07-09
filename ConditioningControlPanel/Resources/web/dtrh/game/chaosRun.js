@@ -690,14 +690,31 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     rollCamGirlTip(x, y);
 
     // E-Stim: a charged click discharges into the neighbours (nothing in reach = the charge keeps).
+    let estimArced = false;
     if (estimCharges > 0 && src === 'pointer') {
       const struck = field.dischargeAt(x, y, { maxTargets: 3, reach: 600, chain: estimMaxed });
       if (struck > 0) {
+        estimArced = true;
         estimCharges--;
         sfx('estim_zap', 0.6);
         pulse('156,92,255', 0.25);
         ctx.fx.strikeNow(); // Chain Mirror: the tunnel feels the current too
         hudUi.toast(estimCharges > 0 ? `⚡ the current arcs (${estimCharges} left)` : '⚡ the charge is spent');
+      }
+    }
+    // E-Stim passive: even uncharged, the toy sometimes arcs on its own when you pop.
+    // Chance scales with its level (10/15/20%) and jumps to 30% once maxed. Only your
+    // own clicks roll it - automated pops (estim/chain/dvd/wand/...) would loop or spam.
+    if (!estimArced && src === 'pointer') {
+      const est = toys.find((t) => t.id === 'e_stim');
+      if (est) {
+        const chance = est.maxed ? 0.30 : [0.10, 0.15, 0.20][Math.min(est.level, 3) - 1] || 0.10;
+        if (Math.random() < chance) {
+          field.dischargeAt(x, y, { maxTargets: 3, reach: 600, chain: est.maxed });
+          sfx('estim_zap', 0.5);
+          pulse('156,92,255', 0.20);
+          ctx.fx.strikeNow();
+        }
       }
     }
     // Electrified Rabbits: a mowed bubble discharges free arcs.
@@ -762,7 +779,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     }
     // Size Queen: every snap rings outward and pops the treats it touches.
     if (st.snapRing) field.castRipple(x, y, 215, 420, { treatsOnly: true });
-    sfx('defuse_hiss', 0.5);
+    sfx('defuse_hiss', 0.28);
     if (lastBreath > 1) {
       hudUi.announce(`⏱ last breath x${Math.round(lastBreath)}`, 'powerup', 1800);
       pulse('255,215,0', 0.40);

@@ -119,7 +119,7 @@ export const LIFETIME_BOONS = [
     capstone: 'each whistle also calls a storm — eight more rabbits over the next ten seconds.',
     activeUse: true, cooldownSec: 45 },
   { id: 'e_stim', cat: 'skill', rankFloor: RANK.Curious, name: 'E-Stim', glyph: '⚡',
-    desc: 'press to charge your next 3/4/5 clicks by level. a charged pop arcs lightning into up to 3 bubbles within 600px, snapping any live ones. nothing in reach? the charge keeps. 30s cooldown.',
+    desc: 'press to charge your next 3/4/5 clicks by level. a charged pop arcs lightning into up to 3 bubbles within 600px, snapping any live ones. nothing in reach? the charge keeps. 30s cooldown. even uncharged, every pop has a 10/15/20% chance (30% maxed) to arc on its own.',
     flavor: 'the current knows exactly where you’re tender.',
     unlockCost: 600, upgradeCosts: [900, 1300], levelValues: [3, 4, 5],
     value: (v) => `${v.toFixed(0)} charged pops`,

@@ -30,6 +30,7 @@ const CARD_W = 2.4, CARD_H = 3.05;     // card content size (portrait, like the 
 const ROW_SPREAD = 3.35;               // centre-to-centre for a 3-across row
 const GRID_X = 1.9, GRID_Y = 2.0;      // 2x2 half-offsets
 const GRID_SCALE = 0.82;               // 2x2 cards a touch smaller so they clear the bore
+const STEER_HOLD_SEC = 1.4;            // after a pick, how long the fall strafes + aims through the chosen card before easing back onto the spine
 
 // theme -> palette + which extra FX the card wears
 const THEMES = {
@@ -149,10 +150,12 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
   let opts = null;            // the open() options (callback contract)
   let autoT = 0, autoLimit = 0;
   let aimIndex = -1;
+  let steerHold = 0;          // >0 while the fall is being steered through a just-picked card
   const shatters = [];        // shard bursts, ticked even after resolve
   const _q = new THREE.Quaternion();
   const _euler = new THREE.Euler();
   const _wp = new THREE.Vector3();
+  const _tmp = new THREE.Vector3();
 
   // ---- DOM chrome (caption + labels + buttons), created lazily --------------
   let dom = null;
@@ -502,6 +505,19 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
     // the Pow: a bright flash + a dive cue, then shatter the chosen card
     try { fx && fx.pulseFlash && fx.pulseFlash(0.7); } catch (e) { /* ignore */ }
     try { opts && opts.sfx && opts.sfx('dive', 0.6); } catch (e) { /* ignore */ }
+    // Dive THROUGH the chosen card, not straight past it: strafe the fall toward
+    // the card's lateral offset and aim the camera at it so the Pow drops through
+    // the exact card you picked. Off-centre cards used to fall down the spine and
+    // leave the shatter behind ("the Pow goes ahead instead of through the card").
+    // Both the lane strafe and the aim ease back once steerHold expires.
+    try {
+      chosen.group.getWorldPosition(_wp);
+      const fr = layout.frameAtDepth(nav.getDepth() + CARD_AHEAD);
+      const lane = _tmp.subVectors(_wp, fr.pos).dot(fr.binormal);
+      nav.setLane(lane);
+      nav.setFaceTarget(_wp);          // setFaceTarget copies the vector, so reusing _wp after is safe
+      steerHold = STEER_HOLD_SEC;
+    } catch (e) { /* ignore */ }
     cards.splice(index, 1);           // ownership moves to the shatter
     spawnShatter(chosen);
     for (const c of cards) c.startFade();   // the losers fade
@@ -527,6 +543,13 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
   // ---- per-frame -------------------------------------------------------------
   function update(dt, depth) {
     tickShatters(dt);
+    // ease the post-pick "dive through the card" steer back onto the spine once it
+    // expires. Runs before the idle bail so it keeps ticking after teardown (the
+    // dive outlives the shatter), driven by scene.js calling update() every frame.
+    if (steerHold > 0) {
+      steerHold -= dt;
+      if (steerHold <= 0) { try { nav.setLane(0); nav.setFaceTarget(null); } catch (e) { /* ignore */ } }
+    }
     if (state === 'idle') return;
 
     // billboard + FX; drop cards that have finished fading out
@@ -582,6 +605,8 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
     },
     dispose() {
       teardown();
+      steerHold = 0;
+      try { nav.setLane(0); nav.setFaceTarget(null); } catch (e) { /* ignore */ }
       for (let i = shatters.length - 1; i >= 0; i--) {
         for (const sh of shatters[i].shards) { sh.geo.dispose(); sh.mat.dispose(); }
         scene.remove(shatters[i].grp);
