@@ -41,7 +41,22 @@ internal static class DtrhHostService
     private static bool _vnSpeaking;   // a VN tutorial beat owns the mix: skip native stingers/barks
     private static bool _worldFrozen;  // an in-world Freeze bubble is holding native video + voice
 
+    // ---- per-run native engagement metrics (local-only session telemetry) ----
+    // Durations only the host can measure (video watch / voiceover / native audio
+    // subliminals) accumulate here between run-started and run-ended, then merge into
+    // the page's sessionStats snapshot and sum into DtrhSessionStatsStore at OnRunEnded.
+    private static double _runVideoWatchSec;
+    private static int _runVideosShown;
+    private static int _runVideosSkipped;
+    private static int _runVoicelines;
+    private static double _runVoiceoverSec;
+    private static int _runSubliminalsHeard;
+
     public static bool IsActive => _host != null;
+
+    /// <summary>A DtRH descent is currently running (between run-started and run-ended). Used to
+    /// cheaply gate optional per-run telemetry off the global bark/audio paths.</summary>
+    public static bool IsRunActive => _runActive;
 
     /// <summary>The page reported boot-error (WebGL/GPU init failed) this app session.
     /// The Lab entry points check this and route to the classic WPF game instead, so a
@@ -210,6 +225,7 @@ internal static class DtrhHostService
             {
                 _runActive = true;
                 _vnSpeaking = false;   // never carry a stale duck into a run
+                ResetRunMetrics();     // fresh native engagement counters for this descent
                 var diff = (string?)o["difficulty"] ?? "Gentle";
                 if (!_testMode)
                 {
@@ -339,7 +355,10 @@ internal static class DtrhHostService
             if (string.Equals(kindStr, "video", StringComparison.OrdinalIgnoreCase))
                 payload = EffectPayloadFactory.Build(EffectBubblePayloadKind.Video);
             else if (string.Equals(kindStr, "audio", StringComparison.OrdinalIgnoreCase))
+            {
                 payload = EffectPayloadFactory.Build(EffectBubblePayloadKind.Audio);
+                if (_runActive) _runSubliminalsHeard++;   // native whisper = a subliminal heard
+            }
             else
             {
                 // Visual effects are in-world now; the page should never send them here.
@@ -410,6 +429,28 @@ internal static class DtrhHostService
                 // snapshot so the Warren's flash pass sees the new pendings on return.
                 try { _meta?.Rebroadcast(); } catch { }
             }
+
+            // Local-only session telemetry: fold the host-measured natives + payout into the
+            // page's sessionStats snapshot and sum it into the cumulative store. Best-effort,
+            // never sent to the server. (No recap UI reads this yet - that ships with the
+            // unlock-gated recap card later; we just accumulate the data now.)
+            try
+            {
+                var js = o["sessionStats"] as JObject ?? new JObject();
+                js["videoWatchSec"]    = _runVideoWatchSec;
+                js["videosShown"]      = _runVideosShown;
+                js["videosSkipped"]    = _runVideosSkipped;
+                js["voicelinesHeard"]  = _runVoicelines;
+                js["voiceoverSec"]     = _runVoiceoverSec;
+                js["subliminalsHeard"] = _runSubliminalsHeard;
+                js["sparksEarned"]     = sparksEarned;
+                js["xpEarned"]         = finalXp;
+                var life = DtrhSessionStatsStore.Record(js, diff);
+                App.Logger?.Information(
+                    "DtrhHost: session metrics recorded (run #{Runs}): {Bubbles} bubbles, {Boons} boons, {VidSec:0}s video, {VoxSec:0}s voice",
+                    life.Runs, life.BubblesPopped, life.BoonsReceived, life.VideoWatchSec, life.VoiceoverSec);
+            }
+            catch (Exception ex) { App.Logger?.Debug("DtrhHost session-metrics record: {E}", ex.Message); }
 
             _host?.Post(new
             {
@@ -527,12 +568,14 @@ internal static class DtrhHostService
             {
                 App.Video.VideoStarted += OnVideoStarted;
                 App.Video.VideoEnded += OnVideoEnded;
+                App.Video.VideoWatchCredited += OnVideoWatchCredited;
                 _videoHooked = true;
             }
             else if (!on && _videoHooked)
             {
                 App.Video.VideoStarted -= OnVideoStarted;
                 App.Video.VideoEnded -= OnVideoEnded;
+                App.Video.VideoWatchCredited -= OnVideoWatchCredited;
                 _videoHooked = false;
             }
         }
@@ -541,9 +584,41 @@ internal static class DtrhHostService
 
     private static void OnVideoStarted(object? sender, EventArgs e)
     {
+        if (_runActive) _runVideosShown++;   // session telemetry: a video was shown this run
         var disp = Application.Current?.Dispatcher;
         if (disp == null || _host == null) return;
         disp.BeginInvoke(() => _host?.Post(new { type = "payload-state", kind = "video", on = true }));
+    }
+
+    /// <summary>The video path finished crediting its watched time (fires from VideoService's
+    /// interruption-safe credit finalizer). Accumulate the real watched seconds and, when the
+    /// user bailed well before the end, count it as a skip. Local-only session telemetry.</summary>
+    private static void OnVideoWatchCredited(object? sender, VideoWatchInfoEventArgs e)
+    {
+        if (!_runActive) return;
+        _runVideoWatchSec += Math.Max(0, e.WatchedSec);
+        if (e.DurationSec > 0 && e.WatchedSec / e.DurationSec < 0.90) _runVideosSkipped++;
+    }
+
+    /// <summary>Zero the per-run native engagement counters (called on run-started).</summary>
+    private static void ResetRunMetrics()
+    {
+        _runVideoWatchSec = 0;
+        _runVideosShown = 0;
+        _runVideosSkipped = 0;
+        _runVoicelines = 0;
+        _runVoiceoverSec = 0;
+        _runSubliminalsHeard = 0;
+    }
+
+    /// <summary>A companion voiceline played its audio (called from BarkService.Speak with the
+    /// clip's duration in seconds). No-ops unless a DtRH run is active, so instrumenting the
+    /// global bark path costs nothing off the game. Local-only session telemetry.</summary>
+    public static void NoteVoicelineHeard(double sec)
+    {
+        if (!_runActive) return;
+        _runVoicelines++;
+        if (sec > 0) _runVoiceoverSec += sec;
     }
 
     private static void OnVideoEnded(object? sender, EventArgs e)

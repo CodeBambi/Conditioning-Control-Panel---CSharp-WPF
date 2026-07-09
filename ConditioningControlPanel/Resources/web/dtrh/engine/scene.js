@@ -213,6 +213,11 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   const boonPick = createBoonPick({ scene, camera, layout, nav, fx, hud });
   const _bray = new THREE.Raycaster(), _bndc = new THREE.Vector2();
 
+  // Wall-poster hold: press-and-hold a wall gif to swing the camera onto it (a
+  // closer look); release swings back. The fall eases to a near-stop meanwhile.
+  const _pray = new THREE.Raycaster(), _pndc = new THREE.Vector2(), _pv = new THREE.Vector3();
+  let _heldPoster = false;
+
   // ---- rebase: the junction dive handoff -------------------------------------
   // fallNav rode the chosen vein to its tail and reports the exit frame. Build a
   // fresh endless loop, rigid-transform it so its entry frame == the vein exit
@@ -369,9 +374,34 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
         }
       }
     }
+    // a wall poster: hold it to swing the camera and face it (a closer look)
+    if (wall && wall.getPickables && !nav.isInVein()) {
+      const picks = wall.getPickables();
+      if (picks.length) {
+        _pray.setFromCamera(_pndc.set(nx, ny), camera);
+        const hits = _pray.intersectObjects(picks, false);
+        for (const h of hits) {
+          let o = h.object;
+          while (o && !(o.userData && o.userData.type === 'poster')) o = o.parent;
+          if (o && o.userData && o.userData.type === 'poster') {
+            const rec = wall.grabPoster(o);
+            if (rec) {
+              _heldPoster = true;
+              nav.setFaceTarget(wall.getHeldWorldPos(_pv));
+              if (rec.assetName) spawner.noteLike(rec.assetName, 'image');
+              nav.fovKick(4);       // a little punch on the turn-in
+              return;               // this pointer owns the poster
+            }
+          }
+        }
+      }
+    }
     spawner.grabAtPointer(nx, ny, camera);
   }
-  function grabPointerUp() { spawner.releaseGrab(); }
+  function grabPointerUp() {
+    if (_heldPoster) { wall.releasePoster(); nav.setFaceTarget(null); _heldPoster = false; }
+    spawner.releaseGrab();
+  }
   // while a boon draft is open, hover-raycast the cards to drive the caption bar
   function boonAimMove(e) {
     if (!boonPick || !boonPick.isBusy()) return;
@@ -472,7 +502,10 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     bubbles.setPaused(true);
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
-    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, junctions, boonPick, flashBurst: (n) => bubbles.flashBurst(n), openOptions: () => panel.toggle(),
+    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, junctions, boonPick, flashBurst: (n) => bubbles.flashBurst(n),
+      // the Ripple flings on-screen flash clips off screen along the hit angle
+      flingFlashesNear: (px, py, r, probe) => bubbles.flingFlashesNear(px, py, r, probe),
+      openOptions: () => panel.toggle(),
       // Reveal earned option-panel dials from the meta snapshot (purchased "Dials").
       syncOptionUnlocks: (ids) => panel.setUnlocks(ids),
       silenceVoice: (on) => { voiceSilenced = !!on; },
@@ -520,7 +553,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     }
 
     director.update(dt);
-    director.setHold(spawner.isGrabbing()); // grabbing a card eases the fall (auto-restores on release)
+    director.setHold(spawner.isGrabbing() || _heldPoster); // grabbing a card OR facing a wall gif eases the fall
     if (game) {
       // Game mode: chaosRun owns the field (its own spawner + rAF integrator);
       // the Fall's bubble game is paused for the whole session.
@@ -529,7 +562,11 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       bubbles.setIntensity(director.getIntensity());
       bubbles.setRunTime(director.getRunTime()); // gates which bubble kinds can spawn
     }
-    nav.setLookSuppressed(spawner.isGrabbing()); // a held card paddle steers by cursor, not look
+    nav.setLookSuppressed(spawner.isGrabbing() || _heldPoster); // a held card paddle / faced poster steers, not drag-look
+    if (_heldPoster) {
+      wall.advanceHeld(nav.getDepth(), dt);         // ride the poster along + swing level with us first
+      nav.setFaceTarget(wall.getHeldWorldPos(_pv)); // then aim at its fresh position
+    }
     nav.update(dt);
 
     const depth = nav.getDepth();

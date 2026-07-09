@@ -34,6 +34,7 @@ const DROP_BASE = BASE + 'drops/';
 const dropSlug = (w) => String(w).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 const FLASH_MAX_MS = 5000;   // a clip overlay plays one cycle, hard-capped at 5s
 const FLASH_GEN_CAP = 5;     // hydra hard cap; the live value is S.hydraGen (0-5)
+const FLASH_FLING_MULT = 1.6;// the ripple flings flash clips over a wider bite than it pops bubbles
 const FILL_WINDOW = 2800;    // ms a (re)fill trickles its bubbles in over
 const TOPUP_MS = 600;        // cadence of the population top-up tick
 
@@ -263,8 +264,9 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
     fx.appendChild(v);
     flashLive.add(v);
 
-    let timer = 0;
-    const finish = () => { window.clearTimeout(timer); releasePlayer(v); v.remove(); flashLive.delete(v); };
+    let timer = 0, done = false;
+    const finish = () => { if (done) return; done = true; window.clearTimeout(timer); releasePlayer(v); v.remove(); flashLive.delete(v); };
+    v._flashFinish = finish;   // the ripple's fling reuses this exact teardown
     v.addEventListener('ended', finish, { once: true });
     timer = window.setTimeout(finish, FLASH_MAX_MS);
     v.addEventListener('pointerdown', (e) => {
@@ -431,6 +433,55 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
     }
   }
 
+  // The Ripple's shove: every live flash clip whose centre falls within a
+  // ripple's bite of the viewport-px point (px,py) is hurled off screen ALONG
+  // THE ANGLE of the hit (straight away from the ripple), spinning + fading as
+  // it goes, then torn down. probeOnly = don't fling, just report whether any
+  // clip is under the point (so the ripple can fire on a bare flash covering
+  // the field, not silently no-op when no bubble sits under the cursor).
+  function flingFlashesNear(px, py, radiusPx, probeOnly) {
+    if (frozen) return probeOnly ? false : 0;
+    const reach = Math.max(0, radiusPx || 0) * FLASH_FLING_MULT;
+    let n = 0;
+    for (const v of flashLive) {
+      if (v._flung) continue;
+      const rect = v.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+      const dpx = cx - px, dpy = cy - py;
+      const dist = Math.hypot(dpx, dpy);
+      if (dist > reach) continue;
+      if (probeOnly) return true;
+      // fly away from the ripple point; a near dead-centre hit picks a random spoke
+      let nx, ny;
+      if (dist > 4) { nx = dpx / dist; ny = dpy / dist; }
+      else { const a = rand(0, Math.PI * 2); nx = Math.cos(a); ny = Math.sin(a); }
+      const travel = Math.max(window.innerWidth, window.innerHeight) * 1.25; // clears the viewport
+      const rot = rand(-140, 140);
+      v._flung = true;
+      v.style.pointerEvents = 'none';    // can't pop it mid-flight
+      const teardown = v._flashFinish;
+      // Drive the fling with the Web Animations API, NOT a CSS transition: the
+      // clip's base rule is opacity:0 and it's only visible because its CSS
+      // `animation` holds it there, so killing that animation would blink it out
+      // instantly. A script animation out-ranks the CSS animation for
+      // transform+opacity and keyframes a real from->off-screen slide instead.
+      const startOp = getComputedStyle(v).opacity || '1';
+      try {
+        const anim = v.animate([
+          { transform: 'translate(-50%, -50%) translate(0px, 0px) rotate(0deg) scale(1)', opacity: startOp },
+          { transform: `translate(-50%, -50%) translate(${(nx * travel).toFixed(0)}px, ${(ny * travel).toFixed(0)}px) rotate(${rot.toFixed(0)}deg) scale(0.55)`, opacity: 0 },
+        ], { duration: 500, easing: 'cubic-bezier(0.2, 0.6, 0.3, 1)', fill: 'forwards' });
+        anim.onfinish = () => { if (teardown) teardown(); };
+        anim.oncancel = () => { if (teardown) teardown(); };
+      } catch (e) {
+        if (teardown) teardown();   // no WAAPI: just clear it
+      }
+      n++;
+    }
+    return probeOnly ? false : n;
+  }
+
   // ---- pop -----------------------------------------------------------------
   // Sparkle burst (ported from the WPF BubbleService pop): shards fly outward
   // from the pop point with a little gravity, shrinking + fading (CSS-driven).
@@ -587,6 +638,7 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
     setRunTime,
     triggerVeil,
     flashBurst,
+    flingFlashesNear,
     getScore: () => score,
     getCombo: () => combo,
     activeEffects: () => overlays.size + (flashLive.size ? 1 : 0),

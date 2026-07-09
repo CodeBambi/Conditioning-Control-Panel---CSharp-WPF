@@ -47,6 +47,7 @@ import { createChaosHud } from './chaosHud.js';
 import { createOverlays } from './overlays.js';
 import { createWarren } from './warren.js';
 import { createLessonTracker } from './lessons.js';
+import { createSessionMetrics } from '../engine/sessionMetrics.js';
 import { createHappyPath } from './happyPath.js';
 import { createVnPortrait } from './vnPortrait.js';
 import { setDucked } from '../shared/audioMute.js';
@@ -138,6 +139,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let ctx = null;      // { nav, fx, director, hud, canvas } from scene.start
   let field = null, ffx = null, hudUi = null, overlays = null, payloadFx = null;
   let warren = null, lessons = null, happy = null, vn = null;
+  const metrics = createSessionMetrics();   // per-run engagement counters (local-only telemetry)
   let state = 'boot';  // boot -> warren -> requesting -> countdown -> running -> drafting -> recap
   let paused = false, hidden = false, covered = false, drafting = false;
   let vnHold = false;               // the persona is mid-line: freeze the field (no spawn, no drift, no pop) until she's done
@@ -364,6 +366,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       payloadFx?.applyPayload(spec, { isDetonation, durationMult });
     }
     lessons.onPayloadFired(kind);   // blindfold's screen-busy window
+    metrics.noteEffect(kind);       // session telemetry: effects shown + est. on-screen seconds
   };
   const heavyActive = () => covered || performance.now() < heavyUntil;
   const bankGold = (amount, x, y) => {
@@ -526,6 +529,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function onBenignPopped(spec, x, y, src) {
     if (!st || state !== 'running' || heldNow()) return;
     countRegenPop();
+    metrics.noteBubblePopped();   // session telemetry: every treat/special popped
 
     if (spec.kind === 'heart') {
       lessons.onSpecialPopped();
@@ -584,6 +588,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
     // ---- standard treat (incl. heavies and chaperone escorts) ----
     lessons.onTreatPopped(spec, x, y);   // vibe window / chains / the_pull / whispers
+    if (spec.variantId === 'subliminal') metrics.noteSubliminalShown();
     firePayload(spec);   // benign pop = a treat: the effect IS the reward
     st.effectsFired++;
     st.combo++;
@@ -1294,6 +1299,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.toast(choice.forced ? `↳ ${b.word} — the only way left`
       : choice.passive ? `↳ ${b.word} — you let it choose` : `↳ ${b.word}`);
     bark(choice.forced ? 'junction-forced' : 'junction-chosen', { word: b.word, brand: b.brand });
+    metrics.noteJunction({ forced: choice.forced, passive: choice.passive });
     markDiscovered('junction:' + b.brand);
   }
 
@@ -1639,6 +1645,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   function resolveDraft(boon, auto) {
+    // session telemetry: what the draft yielded + whether the timer had to decide
+    if (auto) metrics.noteAutopick();
+    if (boon) { if (boon.curse) metrics.noteCurse(); else metrics.noteBoon(); }
+    else metrics.noteSkip();
     if (boon) {
       lessons.onDraftCardTaken(!!boon.curse);   // draft4 / surrender / first-times
       // The happy-path rig shields the run-4 demo sin WITHOUT spending
@@ -1957,7 +1967,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (state !== 'running' || heldNow() || !st) return;
     if (st.freezeRemainingSec > 0) return;   // a frozen field is already a free-pop window
     const x = e.clientX, y = e.clientY;
-    if (!field.nearAny(x, y, st.rippleRadiusPx + RIPPLE_TRIGGER_GRACE_PX)) return;
+    // the ripple fires on bubbles OR on a flash clip under the click - so
+    // right-clicking a flash that's covering the field still triggers (and flings
+    // it), instead of silently no-op'ing when no bubble sits under the cursor.
+    const flashUnder = ctx.flingFlashesNear && ctx.flingFlashesNear(x, y, st.rippleRadiusPx, true);
+    if (!flashUnder && !field.nearAny(x, y, st.rippleRadiusPx + RIPPLE_TRIGGER_GRACE_PX)) return;
     if (st.focus < st.rippleFocusCost) {
       sfx('focus_empty', 0.5);
       hudUi.flashFocus();
@@ -1979,6 +1993,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function castRippleWave(x, y) {
     sfx('ripple_cast', 0.6);
     field.castRipple(x, y, st.rippleRadiusPx, st.rippleLifeMs);
+    // the same wave flings the on-screen flash clips (the hydra flashes) off
+    // screen along the angle of the hit, clearing the view onto the bubbles.
+    if (ctx.flingFlashesNear) ctx.flingFlashesNear(x, y, st.rippleRadiusPx);
     // P1: the ripple is a tunnel shockwave too.
     ctx.nav.fovKick(2.5);
     ctx.fx.pulseFlash(0.5);
@@ -2124,6 +2141,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       });
     }
     lessons.seed(hostState ? hostState.meta : null, cfg.allowCurses);
+    metrics.reset();   // fresh per-run engagement counters
     happy.onRunStarted(cfg.runsCompleted, cfg.scriptedFirstRun);
 
     // A pre-equipped start boon enters the run already active (before wave 1) -
@@ -2203,6 +2221,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       detonated: st.detonated,
       trickleDrops: st.trickleDrops,
       dripFeedMaxed: st.maxedBoons.has('drip_feed'),
+      // local-only session telemetry: JS-side counters folded with st's own; the
+      // host adds its natively-measured video/voice totals + sums into the store.
+      sessionStats: metrics.snapshot(st, ctx.nav.getDepth()),
     });
     overlays.showRecap({
       score: st.score,

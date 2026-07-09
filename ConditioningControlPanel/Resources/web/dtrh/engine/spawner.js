@@ -108,6 +108,8 @@ const IMG_MAX_DIM = Q.tier === 'mobile' ? 1024 : 2048;
 const GRAB_DIST = 4.6;         // units ahead a grabbed image/gif card hovers (centered like a spotlight)
 const THROW_SPEED = 55;        // u/s a thrown card (Sticky Fingers capstone) rockets down-tube
 const THROW_IMPACT_AT = 50;    // units ahead of the camera where the throw resolves
+const SWIRL_RAMP_SEC = 300;    // seconds of run time to reach full hypnotic twirl on wall cards
+const SWIRL_MAX_RATE = 0.34;   // rad/s peak swirl (~18s per revolution - dreamy, not dizzying)
 const SPOTLIGHT_DIST = 2.8;    // units ahead of the camera it hovers (close = big)
 const SPOTLIGHT_GAP = 130;     // depth units before the next feature is allowed
 const SPOTLIGHT_FADE_S = 1.6;  // audio fade in the clip's final seconds
@@ -1554,6 +1556,12 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     const kickVideos = videoWatch >= 1;
     if (kickVideos) videoWatch = 0;
 
+    // progressive hypnotic twirl: the deeper into the run, the more the user's
+    // photo/gif wall cards slowly rotate in place. Ease-in so it barely stirs
+    // early and builds into a lazy swirl - never the held card or a video.
+    const swirlEase = Math.min(1, runTime / SWIRL_RAMP_SEC);
+    const swirlRate = SWIRL_MAX_RATE * swirlEase * swirlEase;
+
     for (let i = live.length - 1; i >= 0; i--) {
       const rec = live[i];
 
@@ -1655,6 +1663,16 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
       }
 
       if (rec.billboard) rec.group.quaternion.copy(camera.quaternion);
+      // hypnotic swirl on the user's photo/gif wall cards - accumulates a twist
+      // about the card's own axis, applied AFTER the billboard reset so it reads
+      // as an absolute rotation. Each card gets its own sense + speed so the
+      // wall churns organically. Skipped for the held card (obviously) and for
+      // video/spotlight cards.
+      if (swirlRate > 0 && rec.billboard && rec.assetName && rec.assetKind !== 'video' && !rec.isGrabbed) {
+        if (rec.twirlDir === undefined) rec.twirlDir = (Math.random() < 0.5 ? -1 : 1) * rand(0.7, 1.3);
+        rec.twirlAng = (rec.twirlAng || 0) + rec.twirlDir * swirlRate * dt;
+        rec.group.rotateZ(rec.twirlAng);
+      }
       if (rec.spin) rec.group.rotation.z += rec.spin * dt;
 
       // engagement: bank weighted on-screen time for the user asset this card
@@ -1889,6 +1907,9 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     },
     drainAssetStats: () => tracker.drain(),
     hasAssetStats: () => tracker.hasPending(),
+    // a wall-poster hold is the same deliberate "like" as grabbing a card, routed
+    // through the same tracker so it drains home on the existing path.
+    noteLike: (name, kind) => { if (name) tracker.noteGrab(name, kind || 'image'); },
     setThrowOnRelease: (cb) => { throwOnRelease = cb || null; },
     forceSpotlight,
     setAutoSpotlight: (on) => { autoSpotlightOk = !!on; },

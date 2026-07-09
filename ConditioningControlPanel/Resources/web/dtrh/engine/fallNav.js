@@ -96,6 +96,14 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
   const _fwd = new THREE.Vector3(), _right = new THREE.Vector3();
   const _up = new THREE.Vector3(), _look = new THREE.Vector3();
 
+  // "face a wall point": while set, the aim eases off the tube-forward look onto
+  // an external world target (a held wall poster) and back on release. faceW is
+  // the 0..1 eased weight; _faceTgt is an internal copy so we never alias the
+  // caller's reused scratch vector.
+  let _faceTarget = null, _faceWant = false, faceW = 0;
+  const FACE_LERP = 4.0;
+  const _faceTgt = new THREE.Vector3();
+
   function firstInteract() {
     if (!interacted) { interacted = true; onFirstInteract && onFirstInteract(); }
   }
@@ -211,6 +219,12 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     lookYaw += (targetYaw - lookYaw) * clamp(dt * LOOK_LERP, 0, 1);
     lookPitch += (targetPitch - lookPitch) * clamp(dt * LOOK_LERP, 0, 1);
 
+    // face-a-wall-point easing: ease toward 1 while a poster is held, back to 0
+    // on release. Keep _faceTarget alive through the ease-OUT so the camera pans
+    // back the same way it came (not a snap); drop it once the weight settles.
+    faceW += ((_faceWant ? 1 : 0) - faceW) * clamp(dt * FACE_LERP, 0, 1);
+    if (!_faceWant && faceW < 0.001) { faceW = 0; _faceTarget = null; }
+
     fovPulse *= Math.exp(-FOV_PULSE_DECAY * dt);
 
     // camera roll: spin while a rate is set; unwind to upright the short way
@@ -312,6 +326,8 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     _look.copy(_ahead)
       .addScaledVector(_right, Math.sin(lookYaw) * 6)
       .addScaledVector(_up, Math.sin(lookPitch) * 6);
+    // swing the aim onto a held wall poster (any tube angle) and back on release
+    if (faceW > 0.001 && _faceTarget) _look.lerp(_faceTarget, easeInOutCubic(faceW));
     camera.lookAt(_look);
 
     // dutch roll about the view axis (The Tilt / Spun / a bank into a branch)
@@ -355,6 +371,14 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     // while a card paddle is held, freeze the look at center so the mouse only
     // moves the card (called every frame from scene.js off spawner.isGrabbing())
     setLookSuppressed(v) { lookSuppressed = !!v; if (v) { targetYaw = 0; targetPitch = 0; } },
+    // aim the camera at a world point (a held wall poster) and ease back to the
+    // tube-forward look when passed null. Copies into an internal scratch; on
+    // release we keep the last target through the ease-out so the pan reverses
+    // smoothly (the drop happens in update once faceW settles at 0).
+    setFaceTarget(v) {
+      if (v) { _faceTgt.copy(v); _faceTarget = _faceTgt; _faceWant = true; }
+      else { _faceWant = false; }
+    },
     // ---- junction steering (drives the lateral lane; the fork manager owns it) --
     setLane(x) { laneTarget = clamp(x || 0, -LANE_MAX * 1.2, LANE_MAX * 1.2); },
     getLane: () => laneNow,
@@ -401,6 +425,7 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
       track = 'fall'; veinCurve = null; vt = 0; veinEndFired = false; veinBuilt = false;
       forwardHold = false;
       blendDur = 0; blendT = 0;
+      _faceTarget = null; _faceWant = false; faceW = 0;
     },
     dispose,
   };
