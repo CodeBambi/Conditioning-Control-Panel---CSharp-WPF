@@ -109,10 +109,16 @@ const TUBE_FRAG = `
   uniform int uCutOn;
   uniform float uCutLo, uCutHi;   // arc-length window [0..1]; if hi<lo the window wraps the seam
 
-  // 1.0 on the line (integer coord), fading to 0 within half-width w.
+  // 1.0 on the line (integer coord), fading to 0 within half-width w. The edge
+  // is widened to at least ~1.5 screen pixels (fwidth) so a far-off or grazing
+  // (tube-wall side, seen near edge-on) line is never sub-pixel-thin. That
+  // sub-pixel thinness is what makes the rings appear to "skip"/step when the
+  // fall is slow - at speed the per-frame motion hides it, but crawling slowly a
+  // hairline line snaps pixel-to-pixel. Screen-space AA keeps slow motion fluid.
   float lineMask(float coord, float w) {
     float di = 0.5 - abs(fract(coord) - 0.5); // distance to nearest integer
-    return 1.0 - smoothstep(0.0, w, di);
+    float aa = max(w, 1.5 * fwidth(coord));   // never sharper than a soft pixel
+    return 1.0 - smoothstep(0.0, aa, di);
   }
   // sharp periodic pulse (mostly dark, brief bright peaks = intermittent).
   float pulse(float p, float k) { return pow(0.5 + 0.5 * sin(p), k); }
@@ -222,6 +228,7 @@ export function createTunnel(layout) {
     vertexShader: TUBE_VERT,
     fragmentShader: TUBE_FRAG,
     side: THREE.BackSide,
+    extensions: { derivatives: true }, // fwidth() line AA (core on WebGL2; flag is a WebGL1 safety net)
   });
   let geoRef = geo;
   const mesh = new THREE.Mesh(geo, mat);

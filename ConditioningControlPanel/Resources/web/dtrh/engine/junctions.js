@@ -79,7 +79,8 @@ const VEIN_FRAG = `
 
   float lineMask(float coord, float w) {
     float di = 0.5 - abs(fract(coord) - 0.5);
-    return 1.0 - smoothstep(0.0, w, di);
+    float aa = max(w, 1.5 * fwidth(coord)); // screen-space AA: no sub-pixel line crawl when the fall hovers at a fork
+    return 1.0 - smoothstep(0.0, aa, di);
   }
 
   void main() {
@@ -239,6 +240,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       transparent: true,
       side: THREE.DoubleSide,
       depthWrite: false,
+      extensions: { derivatives: true }, // fwidth() line AA (core on WebGL2)
     });
     const tube = new THREE.Mesh(tubeGeo, mat);
     scene.add(tube);
