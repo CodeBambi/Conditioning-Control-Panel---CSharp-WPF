@@ -1,5 +1,11 @@
 # Parity Re-Verification Triage (DoD #5) — STARTED 2026-07-05
 
+> **Update 2026-07-09 (post-crash reconciliation):** there is **NO active co-agent and NO "do-not-touch"
+> lane** — a PC crash ended the parallel agents; the UCE/compositor/video/bubble lane has SETTLED and its
+> work is committed on `feat/crossplatform`. Wherever this doc says "co-agent's active UCE lane" or
+> "defer until that lane settles," read it as **available now**; the remaining blocker on those rows is
+> runtime/human-eyes exercise, not a claimed lane.
+
 **Scope:** `docs/skia-rebuild-goal.md` DoD item 5 — "every parity-matrix item re-verified `[x]` after
 WS1-3." This triage is the honest precursor to earning `[x]`: it maps each unchecked matrix row to
 its verification path so a headed/runtime pass (human or headed session) can execute efficiently.
@@ -18,8 +24,8 @@ its verification path so a headed/runtime pass (human or headed session) can exe
    lacked.
 3. **Runtime exercise cannot be automated headlessly for non-compositor rows.** The only automated
    verification harnesses (`--verify-layers`, `--verify-video`, `--verify-spiral`, `--benchmark`)
-   exercise the compositor/video — currently the co-agent's active UCE lane (do-not-touch per owner,
-   2026-07-05). For all other surfaces there is no harness; earning `[x]` needs a **headed session**
+   exercise the compositor/video — that UCE lane has SETTLED (work committed; no active claim as of
+   2026-07-09). For all other surfaces there is no harness; earning `[x]` needs a **headed session**
    exercising each feature side-by-side with the WPF head.
 4. **Implication:** DoD #5 completion is fundamentally a **headed/manual verification effort**, not a
    headless-agent task. This triage makes it tractable by stating, per row: the lot that verified the
@@ -29,7 +35,7 @@ its verification path so a headed/runtime pass (human or headed session) can exe
 
 - **CODE✓** — code-level parity confirmed (lot citation + spot check); runtime exercise pending.
 - **GAP?** — code-parity surfaced a *possible* divergence; runtime check must confirm whether it's a bug.
-- **BLOCKED** — in the co-agent's UCE/bubble/video lane; defer until that lane settles.
+- **BLOCKED** — was in the (now-settled) UCE/bubble/video lane; as of 2026-07-09 available for a headed runtime pass, no longer claim-blocked.
 - **NEEDS-ENV** — needs accounts / hardware / Linux / human-eyes not available headless.
 
 ## Section: Main-sync deltas ("ported from WPF 6.1.7; re-verify against current main")
