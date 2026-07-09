@@ -216,7 +216,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   const _bray = new THREE.Raycaster(), _bndc = new THREE.Vector2();
 
   // Grab-in-the-tube power-ups: a floating card drifts through the tube every
-  // ~20-30s; grabbing it flies the item to the HUD (consumable dock / relic strip).
+  // ~60-90s; grabbing it flies the item to the HUD (consumable dock / relic strip).
   // The game (chaosRun) supplies the offer veto + the grab handler via attach().
   const powerupDrops = createPowerupDrops({
     scene, camera, layout,
@@ -412,13 +412,13 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       if (picks.length) {
         _jray.setFromCamera(_jndc.set(nx, ny), camera);
         const hits = _jray.intersectObjects(picks, true);
-        let jDist = Infinity, jSide = null;
+        let jDist = Infinity, jIdx = null;
         for (const h of hits) {
           let o = h.object;
           while (o && !(o.userData && o.userData.type === 'veinmouth')) o = o.parent;
-          if (o && o.userData && o.userData.type === 'veinmouth') { jDist = h.distance; jSide = o.userData.side; break; }
+          if (o && o.userData && o.userData.type === 'veinmouth') { jDist = h.distance; jIdx = o.userData.index; break; }
         }
-        if (jSide != null) {
+        if (jIdx != null) {
           let dOther = Infinity;
           if (powerupDrops) {
             const uh = _jray.intersectObjects(powerupDrops.getPickables(), true);
@@ -432,7 +432,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
             const ds = spawner.probeGrab(nx, ny, camera);
             if (ds != null) dOther = Math.min(dOther, ds);
           }
-          if (jDist <= dOther) { junctions.pickSide(jSide); return; }
+          if (jDist <= dOther) { junctions.pickIndex(jIdx); return; }
         }
       }
     }

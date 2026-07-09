@@ -36,6 +36,7 @@ const CHIME_SFX = ['chime1.mp3', 'chime2.mp3', 'chime3.mp3'];
 const DEFUSE_HOLD_MS = 1000;     // hold this long over a live one to snap it
 const CLICK_THRESHOLD_MS = 180;  // a faster press+release reads as a CLICK
 const CHANNEL_MIN_SCALE = 0.55;  // visual shrink floor while channeling
+const VIBE_BRUSH_PX = 14;        // extra brush reach around a bubble's radius for the vibe sweep
 
 // ---- motion tuning (self-calibrated for the browser field) ----
 const CROSS_SEC_MIN = 8, CROSS_SEC_MAX = 13;   // vertical travellers: screen-cross time
@@ -103,7 +104,6 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
   window.addEventListener('pointermove', onPointerMove, { passive: true });
   function onPointerMove(e) {
     curX = e.clientX; curY = e.clientY;
-    if (vibeOn) fx.vibePoint(curX, curY);
   }
 
   // ---- float text -----------------------------------------------------------
@@ -251,16 +251,13 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     wrap.addEventListener('pointerup', () => endChannel(b, false));
     wrap.addEventListener('pointercancel', () => endChannel(b, false));
     wrap.addEventListener('pointerleave', () => endChannel(b, false));
-    // Hover verbs: the Brittle shatters at a touch of the cursor; a running
-    // vibe buzz pops everything brushed.
+    // Hover verb: the Brittle shatters at a touch of the cursor. (The vibe sweep
+    // is NOT event-driven: fallNav's canvas pointer-capture retargets every
+    // enter/move during a mouse hold, so the buzz runs as a per-frame proximity
+    // sweep in update() instead - same pattern as the Wand's beam.)
     wrap.addEventListener('pointerenter', () => {
       if (b.state !== 'live' || held || inputLocked) return;
-      if (b.spec.kind === 'brittle') { tryShatter(b); return; }
-      if (vibeOn && (vibeHover || anyButtonDown)) sweepPop(b, 'vibe');
-    });
-    wrap.addEventListener('pointermove', () => {
-      if (vibeOn && b.state === 'live' && !held && !inputLocked
-          && b.spec.kind !== 'brittle' && (vibeHover || anyButtonDown)) sweepPop(b, 'vibe');
+      if (b.spec.kind === 'brittle') tryShatter(b);
     });
 
     live.add(b);
@@ -754,6 +751,12 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     const ts = dt * timeScale;
     const w = W(), h = H();
     const tethers = [];
+    // VibePopping: a live buzz trails the cursor, and while the hand commits
+    // (any button held - or hovering alone at the capstone) the sweep runs on
+    // proximity, popping whatever the cursor brushes even if the bubble is the
+    // one doing the moving.
+    const vibeSweeping = vibeOn && !inputLocked && (vibeHover || anyButtonDown);
+    if (vibeOn) fx.vibePoint(curX, curY);
 
     for (const b of Array.from(live)) {
       // channel runs on REAL time (a frozen field still channels - that's the
@@ -809,6 +812,13 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         if (b.spec.kind === 'live') { defuse(b, false); continue; }
         popBenign(b, b.x, b.y, 'zone');
         continue;
+      }
+
+      // VibePopping brush: treats pop, lives snap clean (sweepPop guards the
+      // toy-immune kinds + shields itself).
+      if (vibeSweeping && Math.hypot(b.x - curX, b.y - curY) <= b.size / 2 + VIBE_BRUSH_PX) {
+        sweepPop(b, 'vibe');
+        if (b.state !== 'live') continue;
       }
 
       // ---- motion ----

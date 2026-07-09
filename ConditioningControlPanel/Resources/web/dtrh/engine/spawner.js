@@ -1544,6 +1544,16 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   // ---- per-frame update -------------------------------------------------------
   function update(camera, camDepth, dt, t, heat = 1, runTime = 999) {
     camDepthNow = camDepth;
+    // Junction rebase: fallNav zeroes its depth at the vein tail (the chosen
+    // branch becomes a FRESH loop), but these cursors were minted on the OLD
+    // loop's depths. Left alone they sit past the spawn window for the rest of
+    // the run - no wall cards, no veils, no spotlights ever again (the "later
+    // chambers have no gif cards" bug). A cursor stranded beyond any depth the
+    // conveyor could legitimately have minted can only mean the camera jumped
+    // backwards - reel it back in.
+    if (nextCardDepth > camDepth + SPAWN_AHEAD + CARD_GAP_FAR + CARD_GAP_JITTER) nextCardDepth = camDepth + 30;
+    if (nextVeilDepth > camDepth + SPAWN_AHEAD + VEIL_GAP_MAX * VEIL_GAP_EARLY_MULT) nextVeilDepth = camDepth + 70;
+    if (nextSpotlightOkAt > camDepth + SPOTLIGHT_GAP) nextSpotlightOkAt = camDepth + 60;
     // keep the next few seconds of user media decoded (runs during spotlights
     // too, so the conveyor restarts with content in hand)
     pumpPrefetch();

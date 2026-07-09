@@ -3,7 +3,7 @@
  *
  * The loadout is gone: toys/accessories/charms are DISCOVERED and GRABBED during
  * the fall. This module floats a single power-up card through the tube every
- * ~20-30s; grab it (pointer raycast, dispatched from scene.grabPointerDown) and
+ * ~60-90s; grab it (pointer raycast, dispatched from scene.grabPointerDown) and
  * it flies to the HUD - a consumable icon (bottom dock) for an active toy, or a
  * relic (top strip) for a passive accessory/charm. The card VISUAL mirrors
  * engine/boonPick.js (glow + tinted frame + CDN art w/ name-panel fallback,
@@ -22,7 +22,7 @@ const ART = 'https://ccp.art/';          // matches boonPick.js / overlays.js
 const CARD_W = 2.4, CARD_H = 3.05;       // portrait, like the boon cards
 const AHEAD = 42;                        // depth lead: spawn this far ahead of the camera
 const CULL_BEHIND = 3;                   // cull once the camera has fallen this far past it
-const MIN_GAP = 20, MAX_GAP = 30;        // seconds between drops (jittered)
+const MIN_GAP = 60, MAX_GAP = 90;        // seconds between drops (jittered) - a treat, not a stream; doorway prizes cover the rest
 
 // rarity -> palette (mirror boonPick THEMES, keyed by category since these aren't drafted boons)
 const CAT_THEME = {
@@ -34,7 +34,9 @@ const themeOf = (def) => CAT_THEME[def.cat] || CAT_THEME.utility;
 const kindOf = (def) => (def.activeUse ? 'consumable' : 'passive');
 
 // ---- shared textures (built once) ------------------------------------------
-function makeGlowTex() {
+// (glow/frame/name-panel makers are exported: junctions.js reuses them so a
+// doorway prize card looks exactly like a drifting drop card)
+export function makeGlowTex() {
   const s = 128, c = document.createElement('canvas'); c.width = c.height = s;
   const x = c.getContext('2d');
   const g = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
@@ -44,7 +46,7 @@ function makeGlowTex() {
   x.fillStyle = g; x.fillRect(0, 0, s, s);
   return new THREE.CanvasTexture(c);
 }
-function makeFrameTex() {
+export function makeFrameTex() {
   const w = 256, h = 320, c = document.createElement('canvas'); c.width = w; c.height = h;
   const x = c.getContext('2d');
   const r = 26, pad = 8, lw = 12;
@@ -59,7 +61,7 @@ function makeFrameTex() {
   return new THREE.CanvasTexture(c);
 }
 // canvas name-panel fallback (glyph + name), tinted per category - no CORS taint
-function makeNamePanelTex(def, hexFrame) {
+export function makeNamePanelTex(def, hexFrame) {
   const w = 256, h = 320, c = document.createElement('canvas'); c.width = w; c.height = h;
   const x = c.getContext('2d');
   const col = '#' + ('000000' + (hexFrame >>> 0).toString(16)).slice(-6);
