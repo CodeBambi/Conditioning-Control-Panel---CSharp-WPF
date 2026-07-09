@@ -222,6 +222,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     scene, camera, layout,
     getMeta: () => (game && game.getMeta ? game.getMeta() : null),
     canOffer: (id, kind) => (game && game.canOfferPowerup ? game.canOfferPowerup(id, kind) : false),
+    synergyBoost: (id) => (game && game.powerupSynergyBoost ? game.powerupSynergyBoost(id) : 1),
     onGrab: (id, kind, screenPos) => { if (game && game.onPowerupGrabbed) game.onPowerupGrabbed(id, kind, screenPos); },
   });
   const _uray = new THREE.Raycaster(), _undc = new THREE.Vector2();

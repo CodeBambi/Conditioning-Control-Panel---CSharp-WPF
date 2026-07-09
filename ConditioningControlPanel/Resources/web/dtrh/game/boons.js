@@ -217,6 +217,39 @@ export function boonTheme(b) {
 }
 
 /**
+ * How much a lifetime item (toy/accessory/charm id) matters to the duo pool
+ * RIGHT NOW, given what's already equipped this run:
+ *   2 = grabbing it UNLOCKS at least one still-available duo/trio draft
+ *       (a requiresAny hit, or the last missing piece of a requiresAll),
+ *   1 = it progresses a requiresAll set that would still be missing more,
+ *   0 = no synergy card cares about it.
+ * The drop/doorway offer picker uses this to bait the partner items in early.
+ */
+export function duoPartnerScore(id, equipment = [], takenIds = null) {
+  if (equipment.includes(id)) return 0;
+  let score = 0;
+  for (const b of BOONS) {
+    if (b.curse || (!b.requiresAny && !b.requiresAll)) continue;
+    if (b.unique && takenIds && takenIds.has(b.id)) continue;   // already drafted this run
+    if (b.requiresAny) {
+      if (!b.requiresAny.includes(id)) continue;
+      if (b.requiresAny.some((x) => equipment.includes(x))) continue;   // already unlocked
+      return 2;
+    }
+    if (!b.requiresAll.includes(id)) continue;
+    const missing = b.requiresAll.filter((x) => !equipment.includes(x));
+    if (missing.length === 1) return 2;         // this grab completes the set
+    score = 1;                                  // first piece of a pair - still worth nudging
+  }
+  return score;
+}
+
+// When the loadout has EARNED a synergy card, it should actually show up in the
+// hand - not drown in the ~20-card commons pool. Chance to pull one eligible
+// duo/trio to the front of the shuffled deck (guaranteeing it a seat).
+const DUO_FAVOR = 0.75;
+
+/**
  * Deal a draft (C# ChaosBoonPool.Draft): mostly mantras + a dedicated sin slot
  * (sinChance roll, or guaranteed by the Surrender capstone). Duo/trio cards
  * need their partner equipped; unique cards already taken sit the run out.
@@ -233,6 +266,13 @@ export function draft({ allowCurses = true, choices = 3, guaranteeCurse = false,
   const shuffle = (arr) => arr.map((v) => [Math.random(), v]).sort((a, z) => a[0] - z[0]).map((p) => p[1]);
   const boons = shuffle(BOONS.filter((b) => !b.curse && draftable(b)));
   const curses = shuffle(BOONS.filter((b) => b.curse && draftable(b)));
+
+  // Duo favoring (2026-07): the shuffle is uniform, so the first duo it left in
+  // the deck is a uniformly-random pick among the eligible ones - promote it.
+  const duoIdx = boons.findIndex((b) => b.requiresAny || b.requiresAll);
+  if (duoIdx > 0 && Math.random() < DUO_FAVOR) {
+    boons.unshift(boons.splice(duoIdx, 1)[0]);
+  }
 
   const out = [];
   const includeCurse = allowCurses && (guaranteeCurse || Math.random() < sinChance) && curses.length > 0;

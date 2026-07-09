@@ -90,7 +90,7 @@ export function makeNamePanelTex(def, hexFrame) {
   return new THREE.CanvasTexture(c);
 }
 
-export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, onGrab }) {
+export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, synergyBoost, onGrab }) {
   const unitPlane = new THREE.PlaneGeometry(1, 1);
   const glowTex = makeGlowTex();
   const frameTex = makeFrameTex();
@@ -117,7 +117,12 @@ export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, o
       if (canOffer && !canOffer(def.id, kind)) continue;       // game veto (already grabbed / dock full)
       // weight undiscovered higher - discovery is the reward loop
       const discovered = (levels[def.id] | 0) >= 1;
-      const weight = discovered ? 1 : 3;
+      let weight = discovered ? 1 : 3;
+      // duo bait: the game layer multiplies up items whose grab would unlock or
+      // progress a still-draftable synergy boon (bigger nudge in early chambers)
+      if (synergyBoost) {
+        try { weight *= Math.max(0.1, synergyBoost(def.id) || 1); } catch (e) { /* neutral on failure */ }
+      }
       pool.push({ def, kind, weight });
     }
     if (!pool.length) return null;

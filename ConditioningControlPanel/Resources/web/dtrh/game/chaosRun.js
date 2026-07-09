@@ -37,7 +37,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   BOUND_SPAWN_CHANCE, BRITTLE_SPAWN_CHANCE,
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
-import { draft as dealDraft, boonById, boonTheme } from './boons.js';
+import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boons.js';
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
 import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL } from './regions.js';
@@ -250,7 +250,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
       // ---- grab-in-the-tube run kit (grown live as you fall) ----
       takenPassiveIds: new Set(),   // double-grab guard (multiplicative passives esp.)
-      runEquipment: new Set(),      // every id grabbed this run; feeds duo/trio draft gating
+      // every id grabbed this run; feeds duo/trio draft gating. The pendulum is a
+      // HABIT (cfg flag), not a grabbable - seed it so "Focus here..." can draft.
+      runEquipment: new Set(rc.pendulumSwing ? ['pendulum_swing'] : []),
       consumableSlots: cfg.consumableSlots,   // dock cap; live dock is the module `toys` array
 
       // ---- drafted mantra/sin knobs (boons.js apply() writes these) ----
@@ -3090,6 +3092,18 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (st.runEquipment.has(id)) return false;
       if (kind === 'consumable') return toys.length < st.consumableSlots;
       return true;
+    },
+    /** Duo bait: multiply an offer's weight when grabbing that item would unlock
+     *  (score 2) or progress (score 1) a still-draftable duo/trio boon. The nudge
+     *  is strongest in the early chambers - there are still drafts left to cash
+     *  the synergy in - and fades to its floor by chamber IV. */
+    powerupSynergyBoost(id) {
+      if (state !== 'running' || !st) return 1;
+      const score = duoPartnerScore(id, [...st.runEquipment], st.takenBoonIds);
+      if (!score) return 1;
+      const early = Math.max(0, Math.min(1, (4 - st.waveIndex) / 3));   // I=1 .. IV=0 (waveIndex 1-based)
+      return score >= 2 ? 2.5 + 2.5 * early    // completes/unlocks a duo: x5 -> x2.5
+                        : 1.6 + 1.4 * early;   // first half of a pair:    x3 -> x1.6
     },
     /** A card was grabbed: unlock-on-discovery (free), then dock (consumable) or
      *  apply (passive), with the art flying from the tube point to its HUD slot. */
