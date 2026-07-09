@@ -102,6 +102,15 @@ public sealed class ChaosMetaState
     /// <summary>Once-ever line the first time heat climbs — names the orange bar and its x2.</summary>
     public bool SeenHeatTeach { get; set; } = false;
 
+    // ---- guided FTUE (2026-07): the Warren hub hand-holding beats ----
+    /// <summary>The hub welcome beats + portal guide card, shown once on the first-ever Warren open.</summary>
+    public bool SeenWarrenWelcome { get; set; } = false;
+    /// <summary>The first-return beats + TOYBOX/DIALS guide cards, shown once after run 1.</summary>
+    public bool SeenFirstReturn { get; set; } = false;
+    /// <summary>One-shot: the NEXT descent deals the scripted classroom config regardless of
+    /// RunsCompleted (set by reset-onboarding, consumed + cleared at request-run deal time).</summary>
+    public bool ForceScriptedRun { get; set; } = false;
+
     /// <summary>First-contact verb hints (ChaosBubbleHints): interaction archetypes the player
     /// has performed correctly once — their over-bubble hint text never shows again.</summary>
     public HashSet<string> BubbleHintsLearned { get; set; } = new();

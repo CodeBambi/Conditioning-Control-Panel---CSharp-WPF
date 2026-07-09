@@ -415,6 +415,46 @@ export function createPanel(hud) {
   panel.appendChild(addWrap);
   gateFeature(addWrap, 'custom', 'add your own words');
 
+  // ---- the lessons (guided FTUE replay) ---------------------------------------
+  // Hidden until the game wires setGameHooks (the standalone Fall has no meta
+  // bridge, so it never shows the row). Two-step inline confirm - this re-arms
+  // every tutorial card and the next descent becomes the classroom again.
+  let hooks = null;
+  let lessonsRevert = 0;
+  const lessonsWrap = document.createElement('div');
+  lessonsWrap.className = 'sf-section';
+  lessonsWrap.style.display = 'none';
+  const lessonsHead = document.createElement('div');
+  lessonsHead.className = 'sf-row-label sf-words-head';
+  const lessonsName = document.createElement('span');
+  lessonsName.textContent = 'the lessons';
+  lessonsHead.appendChild(lessonsName);
+  const lessonsBtn = document.createElement('button');
+  lessonsBtn.type = 'button';
+  lessonsBtn.className = 'sf-chip sf-chip--wide';
+  const lessonsIdle = () => {
+    lessonsBtn.textContent = '↺ replay her lessons';
+    lessonsBtn.classList.remove('is-on');
+  };
+  lessonsIdle();
+  lessonsBtn.addEventListener('click', () => {
+    if (!hooks) return;
+    if (lessonsRevert) {
+      // second click: do it. Close the drawer so the welcome doesn't play under it.
+      clearTimeout(lessonsRevert);
+      lessonsRevert = 0;
+      hooks.resetOnboarding();
+      lessonsBtn.textContent = 'she will start over ✓';
+      window.setTimeout(() => { lessonsIdle(); close(); }, 700);
+      return;
+    }
+    lessonsBtn.textContent = 'sure? every lesson replays — progress stays';
+    lessonsBtn.classList.add('is-on');
+    lessonsRevert = window.setTimeout(() => { lessonsRevert = 0; lessonsIdle(); }, 4000);
+  });
+  lessonsWrap.append(lessonsHead, lessonsBtn);
+  panel.appendChild(lessonsWrap);
+
   // ---- diagnostics -------------------------------------------------------------
   // The on-phone black box: the card pipeline has broken silently on iPhone
   // more than once, and there are no devtools there. This mirrors the console
@@ -507,6 +547,12 @@ export function createPanel(hud) {
     // Kept as a no-op seam: the deep-variant rank lock is gone (the giants are
     // chamber-gated in-run now), but scene still calls this on every snapshot.
     setProgress() {},
+    // Game-only actions (reset-onboarding lives on the meta bridge). Passing
+    // hooks reveals the lessons row; null hides it again.
+    setGameHooks(h) {
+      hooks = h || null;
+      lessonsWrap.style.display = hooks ? '' : 'none';
+    },
     dispose() { stopDiag(); panel.remove(); },
   };
 }

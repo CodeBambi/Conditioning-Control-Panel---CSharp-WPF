@@ -277,8 +277,18 @@ internal static class DtrhHostService
         try
         {
             if (o["setup"] is JObject setup) PersistRunSetup(setup);
-            bool scripted = !_testMode && ChaosMeta.State.RunsCompleted == 0;
+            bool force = !_testMode && ChaosMeta.State.ForceScriptedRun;
+            bool scripted = !_testMode && (ChaosMeta.State.RunsCompleted == 0 || force);
             var cfg = scripted ? ChaosHappyPath.BuildFirstRunConfig() : ChaosRunConfig.FromSettings();
+            if (force)
+            {
+                // One-shot spent at DEAL time: the recap's "fall again" re-requests a config,
+                // and a run-end clear has too many exit paths (watchdog, crash) - any missed
+                // one would deal a second classroom. Persist + rebroadcast so JS agrees.
+                ChaosMeta.State.ForceScriptedRun = false;
+                ChaosMeta.Save();
+                try { _meta?.Rebroadcast(); } catch { }
+            }
             _host?.Post(new { type = "run-config", runConfig = BuildRunConfig(cfg) });
             App.Logger?.Information("DtrhHost: dealt run config (diff={D}, scripted={S})", cfg.Difficulty, scripted);
         }

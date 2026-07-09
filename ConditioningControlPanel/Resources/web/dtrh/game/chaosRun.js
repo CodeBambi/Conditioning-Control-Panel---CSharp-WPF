@@ -52,6 +52,7 @@ import { createSessionMetrics } from '../engine/sessionMetrics.js';
 import { createHappyPath } from './happyPath.js';
 import { createVnPortrait } from './vnPortrait.js';
 import { createLessonCard } from './lessonCard.js';
+import { createHubGuide } from './hubGuide.js';
 import { setDucked } from '../shared/audioMute.js';
 import { lessonById, boonDefById, DIARY_CODEX, DIARY_VERBS, RANKS } from './catalog.js';
 
@@ -93,6 +94,21 @@ const VIDEO_HEAVY_SEC = 17;         // the stuck POV video holds 15s (payloadFx 
 const CASCADE_BASE_SEC = 6;         // GifCascadePayload.DURATION_SEC (+5 ride-out)
 const RANK = { Curious: 0, Tempted: 1, Slipping: 2, Entranced: 3, Devoted: 4, Claimed: 5 };
 
+// Difficulty PACE profiles (recalibrated 2026-07). difficultyMult used to drive
+// the spawner directly, which pinned Gentle at what Inescapable should feel like;
+// it is now a PAYOUT scalar only (x1.0/1.3/1.7/2.2) and pace lives here.
+//   spawn   - divides the refill interval (Inescapable ~= the old Gentle pace)
+//   density - scales the concurrent-bubble ceiling
+//   surge   - flat offset on effIntensity (fuse length / variant strength deep in the run)
+//   strange - scales every behavioral roll (echo/chaperone/bound/tease/brittle)
+//   fuse    - baseline trance length (multiplies rc.fuseTimeMult; >1 = longer, kinder)
+const DIFF_PACE = {
+  Easy:    { spawn: 0.55, density: 0.65, surge: -0.15, strange: 0.35, fuse: 1.35 },
+  Medium:  { spawn: 0.75, density: 0.82, surge: -0.07, strange: 0.60, fuse: 1.15 },
+  Hard:    { spawn: 0.90, density: 0.92, surge: 0.00,  strange: 0.85, fuse: 1.05 },
+  Extreme: { spawn: 1.05, density: 1.00, surge: 0.05,  strange: 1.10, fuse: 0.95 },
+};
+
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));   // inclusive
 const smoothstep = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); }; // ease-in-out 0..1
@@ -108,7 +124,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     rc = runConfig || {};
     cfg = {
       difficulty: rc.difficulty || 'Easy',
-      difficultyMult: rc.difficultyMult ?? 1.0,
+      difficultyMult: rc.difficultyMult ?? 1.0,   // payout scalar ONLY - pace comes from DIFF_PACE
+      pace: DIFF_PACE[rc.difficulty] || DIFF_PACE.Easy,
       durationSec: clamp(rc.durationSec ?? 960, 60, 1200),
       waveCount: clamp(rc.waveCount ?? REGION_COUNT, 1, 12),
       // The Four Chambers: a fixed I->IV descent, each ending in a boon Landing.
@@ -149,6 +166,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // otherwise fresh per app-session and markDiscovered would re-fire on each launch).
     discovered.clear();
     (rc.discoveredCodexIds || []).forEach((id) => discovered.add(id));
+    rippleCastCount = 0;
     bridge.log(`runcfg: diff=${cfg.difficulty} scripted=${cfg.scriptedFirstRun} runs=${cfg.runsCompleted}`
       + ` variants=${JSON.stringify(cfg.enabledVariants)} draft=${cfg.boonDraftEnabled} sin=${cfg.sinChance}`);
     // Seen-once flags: a local mutable mirror of chaos_meta (persisted one-way
@@ -164,7 +182,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   let ctx = null;      // { nav, fx, director, hud, canvas } from scene.start
   let field = null, ffx = null, hudUi = null, overlays = null, payloadFx = null;
-  let warren = null, lessons = null, happy = null, vn = null, lessonCardUi = null;
+  let warren = null, lessons = null, happy = null, vn = null, lessonCardUi = null, hubGuide = null;
+  let rippleCastCount = 0;   // per-run: feeds the classroom's "try the ripple" prompt
   const metrics = createSessionMetrics();   // per-run engagement counters (local-only telemetry)
   let state = 'boot';  // boot -> warren -> requesting -> countdown -> running -> drafting -> recap
   let paused = false, hidden = false, covered = false, drafting = false;
@@ -205,8 +224,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
       // ---- accessory/charm knobs (base defaults; boonPassives.js writes these on grab) ----
       baseMult: cfg.baseMult,
-      fuseTimeMult: rc.fuseTimeMult ?? 1.0,       // slow_fuses habit is cfg-level -> keep rc.*
-      fuseTimeMultBase: rc.fuseTimeMult ?? 1.0,   // weather re-derives fuseTimeMult from this
+      fuseTimeMult: (rc.fuseTimeMult ?? 1.0) * cfg.pace.fuse,       // slow_fuses habit (rc.*) x difficulty trance length
+      fuseTimeMultBase: (rc.fuseTimeMult ?? 1.0) * cfg.pace.fuse,   // weather re-derives fuseTimeMult from this
       benignBaseline: 0.4,
       blindfoldPayMult: 1.0,
       lastBreathWindowSec: 0,
@@ -639,6 +658,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.toast(`💥 ${NAME_OF[spec.variantId] || spec.variantId} triggered!`);
     hudUi.flashShields();
     bark('detonated', { variant: spec.variantId, strength: spec.strength, runDetonations: st.runDetonations, combo: comboBefore, difficulty: diff });
+    hudNow();
   }
 
   function onBenignPopped(spec, x, y, src) {
@@ -949,6 +969,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     hudUi.toast(`✖ you touched it. it laughs — streak halves to ×${st.combo}`);
     pulse('255,61,90', 0.38);
     bark('tease-clicked');
+    hudNow();
   }
 
   let teaseDeniedThisRun = 0, teaseDeniedStreakBarked = false;
@@ -1005,9 +1026,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       hudUi.toast(`💨 ${name} faded away`);
     }
     pulse('150,150,175', 0.10);
+    hudNow();
   }
 
   function checkComboMilestone() {
+    hudNow(); // the badge punch should land with the pop SFX, not on the next 250ms tick
     const combo = st.combo;
     if (combo <= 0) return;
     for (const t of COMBO_BIG_THRESHOLDS) {
@@ -1885,6 +1908,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         if (st.combo > st.bestCombo) st.bestCombo = st.combo;
         hudUi.announce('💋 eyes stayed on her — STREAK DOUBLED', 'powerup', 2600);
         sfx('streak_milestone', 0.6);
+        hudNow();
       } else {
         hudUi.toast('💋 the show cost you the streak');
       }
@@ -2024,6 +2048,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     sfx('heartbeat', 0.5);
   }
 
+  // A combo just moved - repaint the HUD immediately so the badge punch/break
+  // lands with the moment instead of up to TICK (250ms) later.
+  const hudNow = () => { if (hudUi && st) hudUi.update(hudState()); };
+
   const hudState = () => ({
     score: st.score, totalMult: totalMult(), combo: st.combo,
     focus: st.focus, elapsedSec: st.elapsedSec, runDurationSec: st.runDurationSec,
@@ -2145,7 +2173,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     else boon.apply(st);
     st.boonMult += boon.mult;
     st.takenBoonIds.add(boon.id);
-    st.runPicks.push({ id: boon.id, name: boon.name, curse: boon.curse });
+    st.runPicks.push({ id: boon.id, name: boon.name, curse: boon.curse, desc: boon.desc, flavor: boon.flavor, rarity: boon.rarity });
     hudUi.setPicks(st.runPicks);
     syncPhys();   // drafted knobs that live in field physics (tail-plug, aftermath, cam girl)
   }
@@ -2167,7 +2195,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     try { PASSIVE_APPLY[id](st, level, v, { wireStickyFingers }); }
     catch (e) { bridge.log('grab-passive ' + id + ' failed: ' + e.message); }
     if (level >= def.levelValues.length) st.maxedBoons.add(id);   // arm capstone gates
-    st.runPicks.push({ id, name: def.name, curse: false });
+    st.runPicks.push({ id, name: def.name, curse: false, desc: def.desc, flavor: def.flavor, glyph: def.glyph, relic: true });
     hudUi.setPicks(st.runPicks);
     syncPhys();
     return level;
@@ -2384,10 +2412,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // ============================ spawn cadence ============================
 
   /** Behavioral bubbles: each rolls to REPLACE the ordinary spawn slot. Gating
-   * is by RANK, not difficulty; Gentle halves every roll. Debuts spawn alone
-   * with a gentler trance and announce themselves. */
+   * is by RANK, not difficulty; the difficulty's `strange` pace scalar rides
+   * every roll (Gentle barely sees them, Inescapable gets the full menagerie).
+   * Debuts spawn alone with a gentler trance and announce themselves. */
   function trySpawnBehavioral(effIntensity) {
-    const gentleMult = cfg.difficulty === 'Easy' ? 0.5 : 1.0;
+    const gentleMult = cfg.pace.strange;
     const rank = cfg.rankIndex;
     // Four Chambers: the region biases WHICH mechanics show up (pairs in the
     // Hall, echoes in the Garden, teases in the Court). `behavioral` is a global
@@ -2458,14 +2487,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (heldNow()) { spawnWait = 0.3; return; }
     if (st.freezeRemainingSec > 0) { spawnWait = 0.3; return; }   // frozen: hold the field
     const i = intensity();
-    const effIntensity = clamp(i + (cfg.difficultyMult - 1.0) * 0.15, 0, 1);
+    const effIntensity = clamp(i + cfg.pace.surge, 0, 1);
     // Four Chambers: the region's `density` scales how full the field runs -
     // sparse in the Long Fall, an overgrown tangle in the Mad Garden.
     const prof = cfg.regionMode ? profileForWave(st.waveIndex) : PROFILE_NEUTRAL;
     // Population ceiling: kept low through most of the fall and only climbing
     // hard as intensity peaks in the deep chambers, so the run RAMPS instead of
     // firing a full field the whole way down. (Was 6 + i*10.)
-    const maxConcurrent = Math.max(3, Math.round((4 + i * 8) * Math.sqrt(cfg.difficultyMult) * prof.density));
+    const maxConcurrent = Math.max(3, Math.round((4 + i * 8) * cfg.pace.density * prof.density));
 
     const room = field.count() < maxConcurrent;
     // The scripted first descent: the behavioral menagerie stands down entirely
@@ -2527,9 +2556,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         markDiscovered('bubble:prism');
         field.spawn(buildPrism(effIntensity, cfg.effectIntensity, st.prismTreatOnly));
       }
-      // The Brittle (Tempted+, half odds on Gentle): a glass mine rides in alongside.
+      // The Brittle (Tempted+, scaled by the difficulty's strange rate): a glass mine rides in alongside.
       if (!cfg.scriptedFirstRun && cfg.rankIndex >= RANK.Tempted
-          && Math.random() < BRITTLE_SPAWN_CHANCE * (cfg.difficulty === 'Easy' ? 0.5 : 1.0)) {
+          && Math.random() < BRITTLE_SPAWN_CHANCE * cfg.pace.strange) {
         if (!flags.seenBrittle) setFlag('seenBrittle');   // (fuse gate parity); the teach is markDiscovered's card
         markDiscovered('bubble:brittle');
         field.spawn(buildBrittle(effIntensity, cfg.effectIntensity, st.bubbleScale, gateGiants(cfg.enabledVariants)));
@@ -2545,9 +2574,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       }
     }
 
-    // Refill cadence: 1250ms early -> 360ms late (/difficulty), floor 280ms. The
+    // Refill cadence: 1250ms early -> 360ms late (/pace.spawn), floor 280ms. The
     // slower open keeps the shallow chambers calm; it tightens as intensity peaks.
-    let interval = (1250 - i * 890) / cfg.difficultyMult;
+    let interval = (1250 - i * 890) / cfg.pace.spawn;
     interval /= cfg.spawnRateMult;
     interval /= Math.sqrt(prof.density);   // dense chambers refill a touch faster
     interval /= wxSpawnRate();   // Overstim weather: bubbles come faster
@@ -2587,6 +2616,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   function castRippleWave(x, y) {
+    rippleCastCount++;
     sfx('ripple_cast', 0.6);
     field.castRipple(x, y, st.rippleRadiusPx, st.rippleLifeMs);
     // the same wave flings the on-screen flash clips (the hydra flashes) off
@@ -2605,6 +2635,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     log: (m) => bridge.log(m),
     progress: () => intensity(),
     combo: () => (st ? st.combo : 0),
+    ripplesCast: () => rippleCastCount,
+    focusFull: () => !!st && st.focus >= st.rippleFocusCost,
     announce: (text, kind, holdMs) => hudUi && hudUi.announce(text, kind, holdMs),
     toast: (text) => hudUi && hudUi.toast(text),
     flags: { has: (k) => !!flags[k], set: (k) => setFlag(k) },
@@ -2907,6 +2939,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       hudUi = createChaosHud(ctx.hud, {
       onToyUse: (id) => { const t = toys.find((x) => x.id === id); if (t) useToy(t); },
       onWeatherClick: () => rerollWeather(),
+      // hover tooltips stand down whenever something else holds the world
+      // (pause / drafts / lesson cards / VN beats / junction rooms / recap)
+      isSuppressed: () => state !== 'running' || heldNow() || !!(ctx && ctx.junctions && ctx.junctions.isBusy()),
     });
       // Branching paths: the engine reports which mouth the faller took, and asks
       // us to crawl the tunnel while it hovers at the fork so the choice can
@@ -2920,7 +2955,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // freeze the run the SAME way, so a discovery can't fire under a VN beat and
       // vice-versa (both set vnHold -> heldNow() gates every spawn/input/tick).
       // haltTunnel stops the tunnel dead; duckAudio silences everything but the bed.
-      const haltTunnel = (on) => { try { ctx.director.setTimeFactor(on ? 0 : baseTime()); } catch (e) { /* ignore */ } };
+      // Restore is state-aware: hub beats must hand back the 0.3 idle crawl, not run speed.
+      const haltTunnel = (on) => { try { ctx.director.setTimeFactor(on ? 0 : (state === 'warren' ? 0.3 : baseTime())); } catch (e) { /* ignore */ } };
       const duckAudio = (on) => {
         try { setDucked(!!on); } catch (e) {}
         try { ctx.silenceVoice && ctx.silenceVoice(!!on); } catch (e) {}
@@ -2937,6 +2973,18 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       lessons = createLessonTracker({ bridge, onComplete: onLessonComplete, onFirstTime: onFirstTimeAwarded });
       lessons.setCoveredProbe(() => covered || heavyActive());
       happy = createHappyPath();
+      // The Warren's FTUE director: welcome beats on the first-ever hub open, guided
+      // spend on the first return. Reads flags from the metaView warren hands it per
+      // call; persists via a direct set-flag (NOT the per-run `flags` mirror, which
+      // doesn't carry hub flags).
+      hubGuide = createHubGuide({
+        vnBeat: (b) => (vn ? vn.beat(b) : Promise.resolve(false)),
+        vnCancel: () => { try { if (vn) vn.hide(); } catch (e) { /* ignore */ } },
+        teach,
+        teachBusy: () => !!(lessonCardUi && lessonCardUi.isBusy()),
+        setFlag: (k) => bridge.send({ type: 'meta-command', op: 'set-flag', key: k }),
+        log: (m) => bridge.log(m),
+      });
       warren = createWarren({
         hud: ctx.hud, bridge,
         stations: ctx.hubStations,
@@ -2949,6 +2997,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         },
         onExit: () => { if (requestExit) requestExit(); else bridge.send({ type: 'exit' }); },
         onOptions: ctx.openOptions,
+        guide: hubGuide,
       });
       window.addEventListener('pointerdown', onPointerDownGlobal, true);
       window.addEventListener('pointerdown', onGlobalPointerDownCapture, true);
@@ -2983,6 +3032,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (warren) warren.refresh();
       try { ctx && ctx.syncOptionUnlocks && ctx.syncOptionUnlocks((hostState && hostState.meta && hostState.meta.purchasedDials) || []); } catch (e) { /* panel not up */ }
       try { ctx && ctx.setOptionProgress && ctx.setOptionProgress({ rankIndex: RANKS.forRuns((hostState && hostState.meta && hostState.meta.runsCompleted) | 0) }); } catch (e) { /* panel not up */ }
+    },
+
+    /** Options-drawer "replay her lessons": re-arms every guide/teach flag + the
+     *  lesson-card ledger C#-side and forces the next descent to deal the scripted
+     *  classroom. The snapshot rebroadcast re-fires the hub welcome live. */
+    resetOnboarding() {
+      bridge.send({ type: 'meta-command', op: 'reset-onboarding' });
+      sfx('ui_unlock', 0.55);
     },
 
     /** Esc routing: the Warren owns the key while it's up (scene skips its pause). */

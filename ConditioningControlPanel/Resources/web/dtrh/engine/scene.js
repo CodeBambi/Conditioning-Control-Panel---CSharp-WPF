@@ -606,6 +606,9 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       // strength). No-ops gracefully on the mobile tier (no bloom pass).
       setBloomStrength: (mult) => { if (bloomPass) bloomPass.strength = BLOOM_BASE * (mult || 1); },
       setRunActive });
+    // The lessons row (guided FTUE replay) only exists in game mode - the reset
+    // op lives on the meta bridge the standalone Fall doesn't have.
+    panel.setGameHooks({ resetOnboarding: () => game.resetOnboarding() });
   }
 
   // ---- loop --------------------------------------------------------------------

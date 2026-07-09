@@ -363,6 +363,21 @@ export const DIARY_VERBS = [
   { glyph: '⏸', name: 'your panic key', desc: 'one press holds the field mid-fall; pressing it again wakes you up to the recap.' },
 ];
 
+// HUD hover tooltips: one entry per mechanic readout on the run HUD. Reuses the
+// diary verbs verbatim where one fits so the game only ever explains a mechanic
+// in one voice; the rest are written new here (catalog.js stays the single
+// source of player copy).
+const diaryVerb = (n) => DIARY_VERBS.find((v) => v.name === n);
+export const HUD_TIPS = {
+  score: { glyph: '✦', name: 'score', desc: 'what the fall pays. every pop banks points × your total multiplier — streak, lust, mantras, chamber depth, all of it compounds.' },
+  mult: { glyph: '×', name: 'the multiplier', desc: 'your total run multiplier: drafted mantras × streak × lust. the streak climbs +1 a pop and catches fire at 15 / 25 / 50 / 100. a treat left to rot HALVES it; a trigger landing in your face breaks it to zero.' },
+  shields: { glyph: '♥', name: 'resistance', desc: 'each ♥ eats one unblocked trigger for you. out of hearts, the payload lands. 📿 is the collar — it steps in on its own that many more times.' },
+  focus: diaryVerb('focus'),
+  lust: diaryVerb('lust'),
+  ripple: diaryVerb('right-click · the ripple'),
+  clock: { glyph: '⏱', name: 'the descent clock', desc: "time fallen / the full descent, and which loop of this chamber you're on. drafts, cards and forks hold the clock — lingering costs no run time." },
+};
+
 /** Codex rows in WPF diary order: the weighted pool first, then the specials. */
 export const DIARY_CODEX = [
   { codex: 'bubble:flash', name: 'Flash', glyph: '●', tint: '255,208,232',
@@ -435,10 +450,10 @@ export const POOL_PRESETS = [
 ];
 
 export const DIFF_PILLS = [
-  { id: 'Easy', label: 'Gentle', tip: 'x1.0 pay. the calmest fall: baseline spawn pace, the longest trances, and the strange bubbles roll half as often.' },
-  { id: 'Medium', label: 'Teasing', revealGate: 'pill_teasing', tip: 'x1.3 on every payout. bubbles surface ~30% faster and the field holds ~14% more of them at once.' },
-  { id: 'Hard', label: 'Relentless', revealGate: 'pill_relentless', tip: 'x1.7 on every payout. ~70% faster spawns, ~30% more on screen, shorter trances — and the Bound hunts here on any rank.' },
-  { id: 'Extreme', label: 'Inescapable', extremeGate: true, tip: 'x2.2 on every payout. spawns at more than double pace, ~48% more on screen. the deepest the hole goes.' },
+  { id: 'Easy', label: 'Gentle', tip: 'x1.0 pay. the softest fall: a slow, sparse drift, long dreamy trances, and the strange bubbles mostly leave you alone.' },
+  { id: 'Medium', label: 'Teasing', revealGate: 'pill_teasing', tip: 'x1.3 on every payout. the middle ground: a fuller field, quicker fuses, and the menagerie starts to visit.' },
+  { id: 'Hard', label: 'Relentless', revealGate: 'pill_relentless', tip: 'x1.7 on every payout. dense and quick, trances run short — and the Bound hunts here on any rank.' },
+  { id: 'Extreme', label: 'Inescapable', extremeGate: true, tip: 'x2.2 on every payout. the hole at full hunger: peak pace, the whole menagerie loose, the shortest trances. the deepest it goes.' },
 ];
 
 // ============================ how to play (ChaosHubWindow._howToCards) ============================
@@ -518,6 +533,8 @@ export function metaView(meta) {
     totalChannelSeconds: m.totalChannelSeconds || 0,
     seenIntroGuide: !!m.seenIntroGuide,
     seenDollhouse: !!m.seenDollhouse,
+    seenWarrenWelcome: !!m.seenWarrenWelcome,
+    seenFirstReturn: !!m.seenFirstReturn,
 
     atLeast: (r) => rankIndex >= r,
     isOwned: (id) => purchased.has(id),

@@ -10,9 +10,12 @@
  *   🎛 THE DIALS         unlock things with gold 🪙 (the options-console ladder)
  *   📔 VANITY            the mirror: mantra, stats, rank, diary
  *
- * Clicking a station swings the camera onto it (hubStations.focus) and opens a
- * compact DOM sheet beside it; Esc / click-away closes. Persistent chrome is
- * tiny: currency chips (top-right), a corner dock (options / how to / wake up).
+ * Clicking a station centers the camera onto it (hubStations.focus) and opens
+ * its SET of modular glass panes in two columns flanking the card - each pane
+ * one concern (toys / accessories / dials…), each existing only once unlocked,
+ * so the hub fills up with progression. Esc / click-away closes. Persistent
+ * chrome is tiny: currency chips (top-right), a corner dock (options / how to /
+ * wake up).
  *
  * Everything still renders from the chaos_meta snapshot through metaView();
  * all writes are meta-commands (the bridge answers with a fresh snapshot,
@@ -66,7 +69,7 @@ const STATION_META = {
   vanity: { label: 'VANITY', glyph: '📔', accent: 0xc178ff, sub: 'the mirror' },
 };
 
-export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, runSetup, onDescend, onExit, onOptions }) {
+export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, runSetup, onDescend, onExit, onOptions, guide }) {
   const root = document.createElement('div');
   root.className = 'wr-root';
   root.hidden = true;
@@ -90,6 +93,9 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     key2: (runSetup && runSetup.key2) || 'E',
   };
   if (!CHAMBER_TOTALS.includes(setup.durationSec)) setup.durationSec = 960;
+  // FTUE pacing: until the player has two descents behind them (and hasn't touched
+  // the chip), the portal preselects the 12-min fall so run 2 fits the guided hour.
+  let lengthTouched = false;
 
   // One-time migration: the host's saved runSetup carried the old DESCENT-tab
   // choices; copy them into the settings store (their new home in ⚙ options).
@@ -124,10 +130,10 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   }
 
   let visible = false;
-  let openId = null;         // station whose sheet is open (null = idle)
+  let openId = null;         // station whose panes are open (null = idle)
   let descending = false;    // a request-run is in flight
   let modal = null;          // open modal element (howto / intro)
-  const revealEls = new Map();       // reveal id -> DOM element to flash (in-sheet rows)
+  const revealEls = new Map();       // reveal id -> DOM element to flash (rows or whole panes)
   // reveal id -> station to flash in 3D (station-level surfaces)
   const STATION_REVEALS = { dollhouse: ['toybox', 'dials'], tab_looking_glass: ['vanity'] };
 
@@ -493,6 +499,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       for (const secs of CHAMBER_TOTALS) {
         btn('wr-seg wr-seg--small' + (setup.durationSec === secs ? ' is-on' : ''), `${secs / 60} min`, () => {
           setup.durationSec = secs;
+          lengthTouched = true;
           refreshChrome(view());
         }, lenRow);
       }
@@ -505,14 +512,68 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       : `${v.runs} descents finished · click the hole to fall · hold ESC to wake up`;
   }
 
-  // ============================ the station sheet ============================
+  // ============================ the station windows ============================
+  // A station opens a SET of small glass panes split across two columns that
+  // flank the (now centered) 3D card. A pane only exists once its gate is true,
+  // so the hub literally fills up as things get unlocked. `reveal` names the
+  // reveal id whose pending flash should pulse the whole pane.
 
-  let sheet = null;
+  const catHasDiscovery = (v, cat) => boonsInCat(cat).some((b) => v.boonLevel(b.id) >= 1);
 
+  const STATION_WINDOWS = {
+    toybox: [
+      { id: 'hands',  side: 'left',  title: 'HANDS', sub: 'grab toys in the fall, fire from the dock', render: renderHandsWin },
+      { id: 'toys',   side: 'left',  title: 'TOYS', sub: 'you press them mid-descent', reveal: 'toybox_toys',
+        gate: (v) => catHasDiscovery(v, 'skill'), render: shelfWin('skill') },
+      { id: 'accs',   side: 'right', title: 'ACCESSORIES', sub: 'they shape the whole fall', reveal: 'toybox_accessories',
+        gate: (v) => catHasDiscovery(v, 'accessory'), render: shelfWin('accessory') },
+      { id: 'charms', side: 'right', title: 'CHARMS', sub: 'they work every descent',
+        gate: (v) => catHasDiscovery(v, 'utility'), render: shelfWin('utility') },
+      { id: 'habits', side: 'right', title: 'HABITS', sub: 'train them once, wear them always',
+        gate: (v) => UPGRADES.some((u) => v.onShelfNow(u.id)), render: renderHabitsWin },
+    ],
+    dials: [
+      { id: 'ladder',  side: 'left',  title: 'THE DIALS', sub: 'take the console back', render: renderDialLadderWin },
+      { id: 'touches', side: 'right', title: 'HER TOUCHES', sub: 'comfort, never power',
+        gate: (v) => UNLOCK_LADDER.some((r) => v.hasDial(r.id)), render: renderTouchesWin },
+    ],
+    vanity: [
+      { id: 'rank',   side: 'left',  title: 'HOW FAR YOU’VE FALLEN', sub: 'the mirror looks back', render: renderRankWin },
+      { id: 'mantra', side: 'left',  title: 'THE STARTING MANTRA', sub: 'whispered on the way down', reveal: 'start_picker',
+        gate: (v) => reveals.isUnlocked('start_picker', v), render: renderMantraWin },
+      { id: 'stats',  side: 'right', title: 'THE NUMBERS', sub: 'she counts everything', reveal: 'stats_panel',
+        gate: (v) => reveals.isUnlocked('stats_panel', v), render: renderStatsWin },
+      { id: 'diary',  side: 'right', title: 'DIARY', sub: 'verbs & what you’ve met', reveal: 'diary',
+        gate: (v) => reveals.isUnlocked('diary', v), render: renderDiaryWin },
+    ],
+  };
+
+  let winLayer = null;          // .wr-wins two-column root (null = no station open)
+  let cols = null;              // { left, right } column elements
+  const openWins = new Map();   // window id -> { def, winEl, bodyEl }
+
+  /** Close every open pane. Name kept from the single-sheet era: all close
+   * paths (toggle / miss / Esc / dive / hide) call this. */
   function closeSheet() {
-    if (sheet) { sheet.remove(); sheet = null; }
+    if (winLayer) { winLayer.remove(); winLayer = null; }
+    cols = null;
+    openWins.clear();
     if (openId && stations) stations.blur();
     openId = null;
+  }
+
+  function buildWindow(def, v, idx) {
+    const win = el('wr-win', cols[def.side]);
+    win.style.setProperty('--d', `${idx * 80}ms`);   // the fill-up stagger
+    win.dataset.win = def.id;
+    const head = el('wr-win-head', win);
+    el('wr-win-title', head, def.title);
+    if (def.sub) el('wr-win-sub', head, def.sub);
+    const body = el('wr-win-body', win);
+    def.render(body, v);
+    if (def.reveal) revealEls.set(def.reveal, win);  // the flash pulses the whole pane
+    openWins.set(def.id, { def, winEl: win, bodyEl: body });
+    return win;
   }
 
   function openStation(id) {
@@ -520,16 +581,23 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     const v = view();
     closeSheet();
     openId = id;
-    if (stations) stations.focus(id, 1.7);   // station rests left-of-center; sheet on the right
-    sheet = el('wr-sheet', root);
-    const head = el('wr-sheet-head', sheet);
-    el('wr-sheet-title', head, STATION_META[id].label);
-    el('wr-sheet-sub', head, STATION_META[id].sub);
-    btn('wr-sheet-close', '✕', () => closeSheet(), head);
-    const body = el('wr-sheet-body', sheet);
-    if (id === 'toybox') renderToyboxPanel(body, v);
-    else if (id === 'dials') renderDialsPanel(body, v);
-    else if (id === 'vanity') renderVanityPanel(body, v);
+    if (stations) stations.focus(id, 0);   // centered: the panes flank both sides
+    winLayer = el('wr-wins', root);
+    winLayer.dataset.station = id;
+    cols = {
+      left: el('wr-wins-col wr-wins-col--left', winLayer),
+      right: el('wr-wins-col wr-wins-col--right', winLayer),
+    };
+    // a slim station head bar tops the right column (title + sub + ✕)
+    const bar = el('wr-wins-head', cols.right);
+    el('wr-sheet-title', bar, STATION_META[id].label);
+    el('wr-sheet-sub', bar, STATION_META[id].sub);
+    btn('wr-sheet-close', '✕', () => closeSheet(), bar);
+    let n = 0;
+    for (const d of STATION_WINDOWS[id]) {
+      if (d.gate && !d.gate(v)) continue;
+      buildWindow(d, v, n++);
+    }
 
     // first-ever station visit: her welcome + the reveal pass
     if (!v.seenDollhouse) {
@@ -539,18 +607,42 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     runRevealFlashes('hub_open');
   }
 
-  /** Re-render the open sheet in place (a meta-command answered). */
-  function refreshSheet() {
-    if (!openId || !sheet) return;
+  /** A freshly-gated-in pane lands at its def-order spot in its column. */
+  function placeInOrder(win, def, defs) {
+    for (const d of defs.slice(defs.indexOf(def) + 1)) {
+      if (d.side !== def.side) continue;
+      const live = openWins.get(d.id);
+      if (live) { cols[def.side].insertBefore(win, live.winEl); return; }
+    }
+    cols[def.side].appendChild(win);
+  }
+
+  /** Re-render every open pane in place (a meta-command answered). A pane whose
+   * gate just flipped true slides in live - buying your first dial makes
+   * HER TOUCHES appear mid-session, with a pulse so the eye finds it. */
+  function refreshWins() {
+    if (!openId || !winLayer) return;
     const v = view();
-    const body = sheet.querySelector('.wr-sheet-body');
-    if (!body) return;
-    const scrollTop = body.scrollTop;
-    body.innerHTML = '';
-    if (openId === 'toybox') renderToyboxPanel(body, v);
-    else if (openId === 'dials') renderDialsPanel(body, v);
-    else if (openId === 'vanity') renderVanityPanel(body, v);
-    body.scrollTop = scrollTop;
+    const defs = STATION_WINDOWS[openId];
+    for (const d of defs) {
+      const live = openWins.get(d.id);
+      const wanted = !d.gate || d.gate(v);
+      if (wanted && live) {
+        const scrollTop = live.bodyEl.scrollTop;
+        live.bodyEl.innerHTML = '';
+        d.render(live.bodyEl, v);
+        live.bodyEl.scrollTop = scrollTop;
+      } else if (wanted && !live) {
+        const win = buildWindow(d, v, 0);
+        placeInOrder(win, d, defs);
+        win.classList.add('wr-reveal-flash');
+        window.setTimeout(() => win.classList.remove('wr-reveal-flash'), 3100);
+        sfx('reveal_chime', 0.5);
+      } else if (!wanted && live) {
+        live.winEl.remove();
+        openWins.delete(d.id);   // gates are monotonic; this path is defensive
+      }
+    }
   }
 
   // ============================ shared row/tile builders ============================
@@ -704,10 +796,9 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
 
   // ============================ 🧸 TOYBOX (level up · Sparks) ============================
 
-  function renderToyboxPanel(panel, v) {
-    // ---- hands (consumable HUD slots) ----
-    const handsCard = el('wr-card', panel);
-    el('wr-card-h', handsCard, 'HANDS');
+  /** HANDS pane: consumable HUD slots. */
+  function renderHandsWin(body, v) {
+    const handsCard = el('wr-card', body);
     el('wr-card-sub', handsCard, `${v.consumableSlots} consumable slot${v.consumableSlots === 1 ? '' : 's'} · grab toys in the fall and fire them from the dock.`);
     const handsRow = el('wr-pockets', handsCard);
     for (let i = 0; i < MAX_CONSUMABLE_SLOTS; i++) {
@@ -728,28 +819,24 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     } else {
       el('wr-card-sub', handsCard, 'both hands and then some — you can hold no more.');
     }
+  }
 
-    // ---- the shelves (discovery-gated; deepen inline) ----
-    const shelves = [
-      ['TOYS · you press them mid-descent', 'skill', 'toybox_toys'],
-      ['ACCESSORIES · they shape the whole fall', 'accessory', 'toybox_accessories'],
-      ['CHARMS · they work every descent', 'utility', null],
-    ];
-    for (const [label, cat, gate] of shelves) {
-      const boons = boonsInCat(cat).filter((b) => v.onShelfNow(b.id));
-      if (!boons.length) continue;
-      const card = el('wr-card', panel);
-      const hdr = el('wr-card-h', card, label);
-      if (gate) revealEls.set(gate, hdr);
+  /** One shelf pane body (TOYS / ACCESSORIES / CHARMS); discovery deepens inline.
+   * A discovered boon always shows, even before the shelves formally open. */
+  function shelfWin(cat) {
+    return (body, v) => {
+      const boons = boonsInCat(cat).filter((b) => v.onShelfNow(b.id) || v.boonLevel(b.id) >= 1);
+      const card = el('wr-card', body);
       const found = boons.filter((b) => v.boonLevel(b.id) >= 1).length;
       el('wr-card-sub', card, `${found}/${boons.length} discovered · grab the rest in the fall`);
       for (const b of boons) card.appendChild(boonRow(b, v));
-    }
+    };
+  }
 
-    // ---- habits (trained here with Sparks; on/off toggle — not grabbed) ----
-    const habits = el('wr-card', panel);
-    el('wr-card-h', habits, 'HABITS · train them once, wear them always');
-    for (const u of UPGRADES) if (v.onShelfNow(u.id)) habits.appendChild(upgradeRow(u, v));
+  /** HABITS pane: trained here with Sparks; on/off toggle — not grabbed. */
+  function renderHabitsWin(body, v) {
+    const card = el('wr-card', body);
+    for (const u of UPGRADES) if (v.onShelfNow(u.id)) card.appendChild(upgradeRow(u, v));
   }
 
   // ============================ 🎛 THE DIALS (unlock · gold 🪙) ============================
@@ -758,9 +845,8 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   // level - one rule each. The two feral dials (hydra generations, glitch timer)
   // also need a meta-rank. Her one gift covers a short FIRST dial. The options
   // panel reveals a bought control the moment the snapshot re-broadcasts.
-  function renderDialsPanel(panel, v) {
-    const card = el('wr-card', panel);
-    el('wr-card-h', card, 'THE DIALS · take the console back');
+  function renderDialLadderWin(body, v) {
+    const card = el('wr-card', body);
     el('wr-gold-line', card, `you’re carrying ${GLYPHS.gold} ${nfmt(v.gold)}`);
     for (const r of UNLOCK_LADDER) {
       const owned = v.hasDial(r.id);
@@ -791,10 +877,11 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
         else if (!afford) tip(b, 'you can’t afford it. she doesn’t seem to mind.');
       }
     }
+  }
 
-    // ---- the console extras (ex Her Bench: comfort, never power) ----
-    const extras = el('wr-card', panel);
-    el('wr-card-h', extras, 'HER TOUCHES · comfort, never power');
+  /** HER TOUCHES pane: the console extras (ex Her Bench: comfort, never power). */
+  function renderTouchesWin(body, v) {
+    const extras = el('wr-card', body);
     for (const item of CONSOLE_EXTRAS) extras.appendChild(consoleRow(item, v));
     for (const name of CONSOLE_RESERVED) extras.appendChild(hazyRow(name, WALL_TIP));
     if (v.atLeast(RANK.Devoted)) {
@@ -831,63 +918,10 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
 
   // ============================ 📔 VANITY (the mirror) ============================
 
-  function renderVanityPanel(panel, v) {
-    // the mirror starts near-empty: her touches (stats / diary / mantra) are
-    // bought at the DIALS console and appear here once sewn
-    if (!reveals.isUnlocked('start_picker', v) && !reveals.isUnlocked('stats_panel', v) && !reveals.isUnlocked('diary', v)) {
-      panel.appendChild(hazyRow('an almost-empty mirror', 'her touches are sold at the DIALS console - what you buy there appears here.'));
-    }
-
-    // ---- the starting mantra (console purchase reveals it) ----
-    if (reveals.isUnlocked('start_picker', v)) {
-      const card = el('wr-card', panel);
-      const hdr = el('wr-card-h', card, 'THE STARTING MANTRA · whispered on the way down');
-      revealEls.set('start_picker', hdr);
-      for (const b of BOONS) {
-        const seen = v.isDiscovered('boon:' + b.id);
-        const isStart = v.equippedStartBoon === b.id;
-        const pickable = seen && !b.curse;
-        const row = el('wr-mantra' + (isStart ? ' is-start' : '') + (b.curse ? ' is-sin' : '') + (seen ? '' : ' is-hazy'), card);
-        el('wr-mantra-glyph', row, seen ? (b.curse ? '☠' : '◈') : '?');
-        const mid = el('wr-row-mid', row);
-        el('wr-row-name', mid, seen ? b.name : '???');
-        el('wr-row-desc', mid, seen ? b.desc : 'hazy. go back down and look closer.');
-        if (seen && b.flavor) el('wr-row-flavor', mid, b.flavor);
-        if (seen) {
-          el('wr-mantra-badge', row, isStart ? 'start ★' : b.curse ? 'taken, never chosen' : 'set start');
-        }
-        if (pickable) {
-          row.classList.add('is-click');
-          row.addEventListener('click', () => {
-            sfx('ui_click', 0.3);
-            cmd('equip-boon', { id: isStart ? null : b.id });
-          });
-        }
-      }
-    }
-
-    // ---- stats (bench purchase reveals it) ----
-    if (reveals.isUnlocked('stats_panel', v)) {
-      const card = el('wr-card', panel);
-      const hdr = el('wr-card-h', card, 'THE NUMBERS');
-      revealEls.set('stats_panel', hdr);
-      const grid = el('wr-stats', card);
-      const stat = (label, val) => {
-        const s = el('wr-stat', grid);
-        el('wr-stat-v', s, val);
-        el('wr-stat-l', s, label);
-      };
-      stat('drops carried', nfmt(v.sparks));
-      stat('descents finished', nfmt(v.runs));
-      stat('time under', fmtPlaytime(v.totalRunSeconds));
-      stat('best score', nfmt(v.bestScore));
-      stat('best streak', '×' + nfmt(v.bestCombo));
-      stat('trances snapped', nfmt(v.totalDefused));
-      stat('time holding on', fmtPlaytime(v.totalChannelSeconds));
-    }
-
-    // ---- how far you've fallen ----
-    const rankCard = el('wr-card wr-card--rank', panel);
+  /** RANK pane: how far you've fallen. When the mirror is otherwise empty it
+   * carries the pointer to the DIALS console (her touches are sold there). */
+  function renderRankWin(body, v) {
+    const rankCard = el('wr-card wr-card--rank', body);
     el('wr-rank-word', rankCard, RANKS.lower[v.rankIndex]);
     const line = RANKS.line(v.rankIndex);
     if (line) el('wr-rank-line', rankCard, line);
@@ -895,35 +929,81 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     if (nextIdx < RANKS.thresholds.length) {
       el('wr-rank-next', rankCard, `${RANKS.thresholds[nextIdx] - v.runs} descents until she calls you ${RANKS.lower[nextIdx]}.`);
     }
+    if (!reveals.isUnlocked('start_picker', v) && !reveals.isUnlocked('stats_panel', v) && !reveals.isUnlocked('diary', v)) {
+      body.appendChild(hazyRow('an almost-empty mirror', 'her touches are sold at the DIALS console - what you buy there appears here.'));
+    }
+  }
 
-    // ---- diary (reveal-gated; verbs + codex) ----
-    if (reveals.isUnlocked('diary', v)) {
-      const verbs = el('wr-card', panel);
-      const hdr = el('wr-card-h', verbs, 'VERBS · how to play down there');
-      revealEls.set('diary', hdr);
-      for (const verb of DIARY_VERBS) {
-        const row = el('wr-row wr-row--verb', verbs);
-        el('wr-verb-glyph', row, verb.glyph);
-        const mid = el('wr-row-mid', row);
-        el('wr-row-name', mid, verb.name);
-        el('wr-row-desc', mid, verb.desc);
+  /** THE STARTING MANTRA pane (console purchase reveals it). */
+  function renderMantraWin(body, v) {
+    const card = el('wr-card', body);
+    for (const b of BOONS) {
+      const seen = v.isDiscovered('boon:' + b.id);
+      const isStart = v.equippedStartBoon === b.id;
+      const pickable = seen && !b.curse;
+      const row = el('wr-mantra' + (isStart ? ' is-start' : '') + (b.curse ? ' is-sin' : '') + (seen ? '' : ' is-hazy'), card);
+      el('wr-mantra-glyph', row, seen ? (b.curse ? '☠' : '◈') : '?');
+      const mid = el('wr-row-mid', row);
+      el('wr-row-name', mid, seen ? b.name : '???');
+      el('wr-row-desc', mid, seen ? b.desc : 'hazy. go back down and look closer.');
+      if (seen && b.flavor) el('wr-row-flavor', mid, b.flavor);
+      if (seen) {
+        el('wr-mantra-badge', row, isStart ? 'start ★' : b.curse ? 'taken, never chosen' : 'set start');
       }
-      const met = el('wr-card', panel);
-      el('wr-card-h', met, 'WHAT YOU’VE MET');
-      for (const c of DIARY_CODEX) {
-        const seen = v.isDiscovered(c.codex);
-        const row = el('wr-row wr-row--codex' + (seen ? '' : ' is-hazy'), met);
-        row.style.setProperty('--acc', c.tint);
-        if (seen) {
-          const icon = artIcon(`${ART}bubbles/${c.codex.split(':')[1]}.png`, c.glyph, c.tint, 39);
-          row.appendChild(icon);
-        } else {
-          el('wr-verb-glyph', row, '?');
-        }
-        const mid = el('wr-row-mid', row);
-        el('wr-row-name', mid, seen ? c.name : '???');
-        el('wr-row-desc', mid, seen ? c.desc : 'hazy. go back down and look closer.');
+      if (pickable) {
+        row.classList.add('is-click');
+        row.addEventListener('click', () => {
+          sfx('ui_click', 0.3);
+          cmd('equip-boon', { id: isStart ? null : b.id });
+        });
       }
+    }
+  }
+
+  /** THE NUMBERS pane (bench purchase reveals it). */
+  function renderStatsWin(body, v) {
+    const card = el('wr-card', body);
+    const grid = el('wr-stats', card);
+    const stat = (label, val) => {
+      const s = el('wr-stat', grid);
+      el('wr-stat-v', s, val);
+      el('wr-stat-l', s, label);
+    };
+    stat('drops carried', nfmt(v.sparks));
+    stat('descents finished', nfmt(v.runs));
+    stat('time under', fmtPlaytime(v.totalRunSeconds));
+    stat('best score', nfmt(v.bestScore));
+    stat('best streak', '×' + nfmt(v.bestCombo));
+    stat('trances snapped', nfmt(v.totalDefused));
+    stat('time holding on', fmtPlaytime(v.totalChannelSeconds));
+  }
+
+  /** DIARY pane (reveal-gated): verbs + codex. */
+  function renderDiaryWin(body, v) {
+    const verbs = el('wr-card', body);
+    el('wr-card-h', verbs, 'VERBS · how to play down there');
+    for (const verb of DIARY_VERBS) {
+      const row = el('wr-row wr-row--verb', verbs);
+      el('wr-verb-glyph', row, verb.glyph);
+      const mid = el('wr-row-mid', row);
+      el('wr-row-name', mid, verb.name);
+      el('wr-row-desc', mid, verb.desc);
+    }
+    const met = el('wr-card', body);
+    el('wr-card-h', met, 'WHAT YOU’VE MET');
+    for (const c of DIARY_CODEX) {
+      const seen = v.isDiscovered(c.codex);
+      const row = el('wr-row wr-row--codex' + (seen ? '' : ' is-hazy'), met);
+      row.style.setProperty('--acc', c.tint);
+      if (seen) {
+        const icon = artIcon(`${ART}bubbles/${c.codex.split(':')[1]}.png`, c.glyph, c.tint, 39);
+        row.appendChild(icon);
+      } else {
+        el('wr-verb-glyph', row, '?');
+      }
+      const mid = el('wr-row-mid', row);
+      el('wr-row-name', mid, seen ? c.name : '???');
+      el('wr-row-desc', mid, seen ? c.desc : 'hazy. go back down and look closer.');
     }
   }
 
@@ -954,16 +1034,24 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     show() {
       visible = true;
       root.hidden = false;
+      hud.classList.add('wr-open'); // hides the scene's score/meters under the hub chrome
       descending = false;
       openId = null;
       revealEls.clear();
+      const v = view();
+      if (!lengthTouched && v.runs < 2) setup.durationSec = 720;
       renderChrome();
-      if (stations) stations.show(buildStationDefs(view()));
-      runRevealFlashes('hub_open');
+      if (stations) stations.show(buildStationDefs(v));
+      // The FTUE guide may own this render's reveal-flash pass (it orders the
+      // flashes after its beat); otherwise the pass runs as always.
+      const flashPass = () => runRevealFlashes('hub_open');
+      if (!(guide && guide.maybeStart(view(), { flashPass }))) flashPass();
     },
     hide() {
       visible = false;
       root.hidden = true;
+      hud.classList.remove('wr-open');
+      if (guide) guide.onInterrupt();   // a descend/teardown drops any pending beats
       closeSheet();
       closeModal();
       if (stations) stations.hide();
@@ -974,7 +1062,11 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       const v = view();
       refreshChrome(v);
       refreshBadges(v);
-      refreshSheet();
+      refreshWins();
+      // Live re-arm path: a reset-onboarding rebroadcast lands here, and the fresh
+      // snapshot's cleared flags let the welcome replay without an app restart.
+      const flashPass = () => runRevealFlashes('hub_refresh');
+      if (guide && guide.maybeStart(v, { flashPass })) { /* guide runs the pass */ }
     },
     /** The descend request failed / was superseded - re-arm the hub. */
     descendFailed() {
@@ -986,6 +1078,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     /** scene.js pointer routing: a station (or the portal) was clicked. */
     onStationPick(id) {
       if (!visible || descending) return;
+      if (guide) guide.onInterrupt();   // a real click outranks the remaining guide beats
       if (id === 'portal') { sfx('ui_click', 0.35); portalClicked(); return; }
       if (openId === id) { closeSheet(); return; }   // toggle
       sfx('ui_click', 0.3);
@@ -999,13 +1092,14 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     },
     isVisible: () => visible,
     currentSetup: () => buildSetup(),
-    /** Esc: close modal -> close the open sheet -> swallow (hold-to-exit works). */
+    /** Esc: guide beats -> modal -> the open panes -> swallow (hold-to-exit works). */
     handleEsc() {
       if (!visible) return false;
+      if (guide && guide.isBusy()) { guide.onInterrupt(); return true; }
       if (modal) { closeModal(); return true; }
       if (openId) { closeSheet(); return true; }
       return true;
     },
-    dispose() { root.remove(); },
+    dispose() { hud.classList.remove('wr-open'); root.remove(); },
   };
 }
