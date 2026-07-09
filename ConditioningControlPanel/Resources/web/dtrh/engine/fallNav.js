@@ -31,9 +31,21 @@ const SCROLL_BOOST = 3.2;    // speed added per firm wheel notch (device-normali
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+// Branch dive ("vein" rail): when a junction commits, the camera leaves the
+// treadmill and rides a diverging vein's ride-curve. Ported from the Explore
+// rabbit-hole navigation.js dive: a scalar `vt` walks the curve while the pose
+// eases (position lerp + quaternion slerp) from the pre-dive snapshot.
+const VEIN_AHEAD = 0.03;     // look-ahead fraction of the vein for aim (POV re-aims down it)
+const DIVE_BLEND_IN = 0.85;  // seconds to ease into the corridor
+const REBASE_BLEND = 0.6;    // seconds to settle back onto the fresh loop after handoff
+const VEIN_BUILD_AT = 0.45;  // vt at which the scene builds the fresh loop COAXIALLY ahead
+                             // (still fog-hidden) so the corridor telescopes into it - no void
+const VEIN_END_AT = 0.985;   // vt at which the camera hands off onto that already-built loop
 
 export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstInteract,
-  onScrollBoost, isSpotlightActive, onSkipSpotlight }) {
+  onScrollBoost, isSpotlightActive, onSkipSpotlight, onVeinEnd }) {
   let depth = 0;
   let speed = INTRO_SPEED;
   let trim = 1;               // player comfort factor, 0.5x-1.5x
@@ -60,6 +72,20 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
   // makes the forward vector tilt - the camera actually yaws into the turn.
   let branchFn = null;
   let branchRoll = 0;         // eased bank (deg) leaning into a branch turn
+
+  // vein dive rail (see constants above). `track` is 'fall' on the treadmill,
+  // 'vein' while riding a committed branch's ride-curve.
+  let track = 'fall';
+  let veinCurve = null, veinLen = 100, vt = 0, veinEndFired = false, veinBuilt = false;
+  // junction hold: while a fork is open the fall PARKS at the fork depth (the
+  // camera glides to a stop between the two mouths) instead of drifting past it
+  // out of bounds. The junction manager sets it on linger, clears it on commit.
+  let forwardHold = false, holdDepth = 0;
+  let veinEndCb = onVeinEnd || null;
+  // dive pose blend: ease from the snapshot (pre-dive) into each frame's target
+  let blendT = 0, blendDur = 0;
+  const _blendPos = new THREE.Vector3(), _blendQuat = new THREE.Quaternion(), _tgtQuat = new THREE.Quaternion();
+  function startBlend(dur) { _blendPos.copy(camera.position); _blendQuat.copy(camera.quaternion); blendT = 0; blendDur = dur; }
   let dragging = false, lastX = 0, lastY = 0, dragType = 'mouse';
   let swipeDY = 0, swipeSkipped = false; // per-touch-gesture: skip a spotlight on a decisive vertical swipe
 
@@ -175,7 +201,7 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     if (introT < 1) desired = INTRO_SPEED + (desired - INTRO_SPEED) * introE;
     speed += (desired - speed) * clamp(dt * ACCEL_LERP, 0, 1);
     speed = clamp(speed, MIN_SPEED, MAX_SPEED * capMult);
-    depth += speed * dt;
+    if (blendDur > 0) blendT += dt;
 
     // look easing
     lookYaw += (targetYaw - lookYaw) * clamp(dt * LOOK_LERP, 0, 1);
@@ -193,6 +219,42 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
       rollSpin = Math.abs(s) < 0.05 ? 0 : s;
     }
     rollOffset += (rollOffsetT - rollOffset) * clamp(dt * 1.5, 0, 1);
+
+    // vein dive: ride the committed branch's ride-curve instead of the treadmill.
+    // vt advances by the fall speed (the fall carries you down the vein, so the
+    // player trim still applies). At the tail the vein hands off to a freshly
+    // rebased loop via onVeinEnd -> scene rebuilds the tunnel -> rebaseTo().
+    if (track === 'vein' && veinCurve) {
+      vt = clamp(vt + (speed * dt) / Math.max(1, veinLen), 0, 1);
+      veinCurve.getPoint(vt, _pos);
+      veinCurve.getPoint(Math.min(1, vt + VEIN_AHEAD), _ahead);
+      orientAndPlace(introE);
+      // stage 1 (mid-ride): tell the scene to build the fresh loop coaxially at the
+      // vein exit. It's ~half a vein ahead, still buried in fog, so the corridor now
+      // telescopes into a real tube instead of ending in a black void.
+      if (!veinBuilt && vt >= VEIN_BUILD_AT) {
+        veinBuilt = true;
+        if (veinEndCb) { try { veinEndCb(); } catch (e) { /* ignore */ } }
+      }
+      // stage 2 (tail): hand the camera off onto that already-built coaxial loop at
+      // depth 0 (== the vein exit frame). The blend hides any hairline mismatch.
+      if (!veinEndFired && vt >= VEIN_END_AT) {
+        veinEndFired = true;
+        track = 'fall';
+        depth = 0;
+        veinCurve = null;
+        startBlend(REBASE_BLEND);
+      }
+      return;
+    }
+
+    // junction hold: park at the fork instead of advancing past it. Ease the
+    // remaining creep to a stop so the camera settles between the two mouths.
+    if (forwardHold) {
+      depth += (holdDepth - depth) * clamp(dt * 3.0, 0, 1);
+    } else {
+      depth += speed * dt;
+    }
 
     // place the camera on the loop, looking a little further along it
     const t = depth / layout.loopDepth;
@@ -254,6 +316,17 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
 
     const fov = baseFov + (1 - introE) * 8 + fovPulse; // wide during the plunge + effect kicks
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
+
+    // dive blend: ease the pose from the pre-dive snapshot into this frame's
+    // freshly-computed target (position lerp + quaternion slerp). The slerp is
+    // what re-aims the camera down the new corridor without a one-frame snap.
+    if (blendDur > 0) {
+      const k = easeInOutCubic(clamp(blendT / blendDur, 0, 1));
+      _tgtQuat.copy(camera.quaternion);
+      camera.position.lerpVectors(_blendPos, _pos, k);
+      camera.quaternion.slerpQuaternions(_blendQuat, _tgtQuat, k);
+      if (blendT >= blendDur) blendDur = 0;
+    }
   }
 
   function dispose() {
@@ -281,15 +354,46 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     getLaneVote: () => laneVote,
     resetLaneVote() { laneVote = 0; },
     setJunctionArmed(v) { junctionArmed = !!v; },
+    // park the fall at `atDepth` (glide to a stop at the fork) until released.
+    setForwardHold(v, atDepth) { forwardHold = !!v; if (v && atDepth != null) holdDepth = atDepth; },
     // active branch detour: fn(depth) -> lateral meters off the spine, or null to
     // release the camera back onto the rail. The junction manager owns this.
     setBranchProfile(fn) { branchFn = (typeof fn === 'function') ? fn : null; },
+    // ---- vein dive rail (junction commit rides a diverging branch) -----------
+    // Ride `rideCurve` (world-space CatmullRom, seeded at the spine at the fork).
+    // opts.length = the vein's world length (scales how fast vt advances).
+    enterVein(rideCurve, opts = {}) {
+      if (!rideCurve) return;
+      track = 'vein';
+      veinCurve = rideCurve;
+      veinLen = opts.length || 100;
+      vt = 0; veinEndFired = false; veinBuilt = false;
+      forwardHold = false;                                    // release the fork park; the vein carries us now
+      targetYaw = targetPitch = lookYaw = lookPitch = 0;      // recenter the look for the dive
+      laneNow = laneTarget = laneVote = 0; junctionArmed = false; branchFn = null;
+      startBlend(DIVE_BLEND_IN);
+      firstInteract();
+    },
+    // Hand the camera back onto a freshly rebased loop at world depth `depth0`
+    // (the scene rebuilds tunnel geometry so this depth == the vein exit frame).
+    rebaseTo(depth0) {
+      depth = depth0 || 0;
+      track = 'fall';
+      veinCurve = null; vt = 0; veinEndFired = false;
+      startBlend(REBASE_BLEND);
+    },
+    setOnVeinEnd(fn) { veinEndCb = fn || null; },
+    isInVein: () => track === 'vein',
+    getVeinT: () => vt,
     reset() {
       depth = 0; speed = INTRO_SPEED; trim = 1; introT = 0; fovPulse = 0;
       lookYaw = lookPitch = targetYaw = targetPitch = 0;
       rollRate = 0; rollSpin = 0; rollOffsetT = rollOffset = 0; capMult = 1;
       laneNow = laneTarget = laneVote = 0; junctionArmed = false;
       branchFn = null; branchRoll = 0;
+      track = 'fall'; veinCurve = null; vt = 0; veinEndFired = false; veinBuilt = false;
+      forwardHold = false;
+      blendDur = 0; blendT = 0;
     },
     dispose,
   };

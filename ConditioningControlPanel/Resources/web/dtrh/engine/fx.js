@@ -87,6 +87,26 @@ function makeDotTexture() {
   return new THREE.CanvasTexture(c);
 }
 
+// A 1D strip of soft bright bands (dark between) tiled along each ribbon's
+// length. Scrolling its offset makes light appear to CORKSCREW along the helix -
+// the ribbon "swirl". Additive blending drops the dark gaps to nothing.
+function makeFlowTexture() {
+  const w = 256, c = document.createElement('canvas');
+  c.width = w; c.height = 1;
+  const x = c.getContext('2d');
+  const img = x.createImageData(w, 1);
+  for (let i = 0; i < w; i++) {
+    // two soft bands per tile; pow sharpens them so the gaps stay dark
+    const v = Math.pow(0.5 + 0.5 * Math.sin((i / w) * Math.PI * 4), 3);
+    const b = Math.round(v * 255);
+    img.data[i * 4] = b; img.data[i * 4 + 1] = b; img.data[i * 4 + 2] = b; img.data[i * 4 + 3] = 255;
+  }
+  x.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
 export function createFx({ scene, layout, tunnelMat, particleFog }) {
   const seed = Math.random() * 997;
 
@@ -115,13 +135,18 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     }
     const curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
     const geo = new THREE.TubeGeometry(curve, 1000, 0.045, 5, true);
+    // per-ribbon flow texture (shares the image, own offset) so the bands on
+    // each strand drift independently
+    const flow = makeFlowTexture();
+    flow.repeat.set(52, 1);
+    flow.offset.x = ribbons.length * 0.37;
     const mat = new THREE.MeshBasicMaterial({
-      color: spec.color, transparent: true, opacity: 0.2,
+      color: spec.color, map: flow, transparent: true, opacity: 0.2,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
     const mesh = new THREE.Mesh(geo, mat);
     scene.add(mesh);
-    ribbons.push({ mesh, geo, mat });
+    ribbons.push({ mesh, geo, mat, flow });
   }
 
   // ---- sparkles ----------------------------------------------------------------
@@ -264,6 +289,8 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     if (rushOverrideEased > 0.003 && uni.uRush) {
       uni.uRush.value = Math.max(uni.uRush.value, rushOverrideEased);
     }
+    // ray-flicker rate: slow up top, frantic deep (a fast fall hurries it too)
+    if (uni.uGlowRate) uni.uGlowRate.value = clamp01(intensity + rush * 0.4);
     // Heat Warp: ease ring/spiral counts toward the game's target, rounding to
     // integers so the treadmill loop stays seam-free
     if (uni.uRings && uni.uSpiralTurns) {
@@ -284,8 +311,12 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     // ribbons + sparkles: zone blend, plus a slow breath, the intensity ramp,
     // and the speed rush (fast falls burn brighter and shimmer harder)
     const ribbonOp = ((base.ribbon + (z.ribbon - base.ribbon) * w) + 0.22 * intensity) * (1 + rush * 0.9);
+    // swirl: scroll the flow-bands along each strand. Rate ramps with depth so
+    // the ribbons corkscrew lazily up top and race the deeper you fall.
+    const flowRate = 0.03 + 0.28 * intensity + rush * 0.35;
     for (let i = 0; i < ribbons.length; i++) {
       ribbons[i].mat.opacity = ribbonOp * (0.8 + 0.2 * Math.sin(t * (0.7 + rush * 1.6) + i * 2.1));
+      if (ribbons[i].flow) ribbons[i].flow.offset.x -= dt * flowRate * (1 + i * 0.18);
     }
     const sparkleOp = (base.sparkle + (z.sparkle - base.sparkle) * w) + 0.1 * intensity + 0.18 * rush;
     sparkMat.opacity = sparkleOp * (0.7 + 0.3 * Math.sin(t * (2.3 + rush * 3)));
@@ -416,10 +447,39 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     offSettings();
     if (overrideTimer) { clearTimeout(overrideTimer); overrideTimer = 0; }
     themeOverride = null;
-    for (const r of ribbons) { scene.remove(r.mesh); r.geo.dispose(); r.mat.dispose(); }
+    for (const r of ribbons) { scene.remove(r.mesh); r.geo.dispose(); r.mat.dispose(); if (r.flow) r.flow.dispose(); }
     scene.remove(sparks); sparkGeo.dispose(); sparkMat.dispose(); dotTex.dispose();
     for (const b of bolts) { scene.remove(b.line); b.geo.dispose(); b.mat.dispose(); }
     bolts.length = 0;
+  }
+
+  // Rebase (junction dive): the loop was rebuilt onto the chosen branch, so the
+  // spine-following ribbons + sparkles must re-lay along the new `layout` (which
+  // was mutated in place, so layout.frameAt here reads the fresh spine). Bolts
+  // are spawned live at camDepth, so they adapt on their own.
+  function rebase() {
+    for (const r of ribbons) {
+      const spec = RIBBONS[ribbons.indexOf(r)] || RIBBONS[0];
+      const phase = Math.random() * Math.PI * 2, N = 240, pts = [];
+      for (let k = 0; k < N; k++) {
+        const tt = k / N;
+        const fr = layout.frameAt(tt);
+        const a = tt * Math.PI * 2 * spec.twist + phase;
+        pts.push(fr.pos.clone()
+          .addScaledVector(fr.normal, Math.cos(a) * spec.r)
+          .addScaledVector(fr.binormal, Math.sin(a) * spec.r));
+      }
+      const curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
+      const ng = new THREE.TubeGeometry(curve, 1000, 0.045, 5, true);
+      r.mesh.geometry = ng; r.geo.dispose(); r.geo = ng;
+    }
+    for (let i = 0; i < SPARKLE_COUNT; i++) {
+      const fr = layout.frameAt(Math.random());
+      const a = Math.random() * Math.PI * 2, rr = rand(1.2, 4.4);
+      _v.copy(fr.pos).addScaledVector(fr.normal, Math.cos(a) * rr).addScaledVector(fr.binormal, Math.sin(a) * rr);
+      sparkPos[i * 3] = _v.x; sparkPos[i * 3 + 1] = _v.y; sparkPos[i * 3 + 2] = _v.z;
+    }
+    sparkGeo.attributes.position.needsUpdate = true;
   }
 
   return {
@@ -427,5 +487,6 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     getZone: () => currentZone,
     // Wave 2 game verbs
     strikeNow, forceZone, setTint, setDensity, holdFlash, setRushOverride,
+    rebase,
   };
 }

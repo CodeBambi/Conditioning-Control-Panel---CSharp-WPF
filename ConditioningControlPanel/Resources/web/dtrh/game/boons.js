@@ -33,7 +33,7 @@ export const BOONS = [
     desc: 'every 10th bubble is a giant: x1.55 size, drifts at half speed, lives 9s, pays x3.',
     flavor: 'some things are worth waiting under.',
     apply: (s) => { s.heavyDropEvery = 10; } },
-  { id: 'gg_rabbits', name: 'GG make more GG', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+  { id: 'gg_rabbits', name: 'GG make more GG', rarity: 'Rare', curse: false, mult: 0.0, unique: true, fxTheme: 'rabbit',
     desc: '15% of popped treats burst into 3 wild rabbits that mow down everything in their path. they can\'t be caught, only smacked along.',
     flavor: 'good girls multiply.',
     apply: (s) => { s.ggRabbitChance = 0.15; } },
@@ -45,18 +45,18 @@ export const BOONS = [
     desc: 'snap a live bubble in its final 1.5s and the spot crackles for 2s: a 170px zone where anything drifting through pops itself.',
     flavor: 'you can still feel it after. that\'s the point.',
     apply: (s) => { s.aftermath = true; } },
-  { id: 'focus_here', name: 'Focus here...', rarity: 'Uncommon', curse: false, mult: 0.0, unique: true,
+  { id: 'focus_here', name: 'Focus here...', rarity: 'Uncommon', curse: false, mult: 0.0, unique: true, fxTheme: 'rabbit',
     requiresAny: ['pendulum_swing'],
     desc: 'the pendulum swings once per loop. pops during its 2.5s slow swing pay x3.',
     flavor: 'watch the watch. everything else can wait.',
     apply: (s) => { s.pendulumPayMult = 3.0; } },
-  { id: 'storm_chaser', name: 'Storm Chaser', rarity: 'Uncommon', curse: false, mult: 0.0, unique: true,
+  { id: 'storm_chaser', name: 'Storm Chaser', rarity: 'Uncommon', curse: false, mult: 0.0, unique: true, fxTheme: 'electric',
     desc: 'the weather locks to STATIC for the rest of the descent, and every detonation arcs lightning into up to 4 bubbles within 440px.',
     flavor: 'you taste the metal before it hits.',
     apply: (s) => { s.stormChaser = true; } },
 
   // ---- synergy duos: only drafted when the partner is equipped (gold frame) ----
-  { id: 'overload', name: 'Overload', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+  { id: 'overload', name: 'Overload', rarity: 'Rare', curse: false, mult: 0.0, unique: true, fxTheme: 'electric',
     requiresAny: ['e_stim'],
     desc: 'the e-stim runs double charges per press: 6/8/10 charged pops by toy level.',
     flavor: 'more than the dial was built for.',
@@ -71,7 +71,7 @@ export const BOONS = [
     desc: 'the logo splits on its first two bounces: one becomes two, then four.',
     flavor: 'everyone starts somewhere.',
     apply: (s) => { s.dvdSplitBounces = 2; } },
-  { id: 'tail_plug', name: 'Tail-Plug', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+  { id: 'tail_plug', name: 'Tail-Plug', rarity: 'Rare', curse: false, mult: 0.0, unique: true, fxTheme: 'rabbit',
     requiresAny: ['rabbit_caller', 'the_pull', 'the_spanker'],
     desc: 'every rabbit drags a sparkling trail for 2s that pops anything within 46px of it.',
     flavor: 'you\'ll know exactly where they\'ve been.',
@@ -81,17 +81,17 @@ export const BOONS = [
     desc: 'each time the collar saves your streak, a golden shockwave snaps every live bubble on screen for full pay.',
     flavor: 'held tight, then let go all at once.',
     apply: (s) => { s.unleashed = true; } },
-  { id: 'electrified_rabbits', name: 'Electrified Rabbits', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+  { id: 'electrified_rabbits', name: 'Electrified Rabbits', rarity: 'Rare', curse: false, mult: 0.0, unique: true, fxTheme: 'electric',
     requiresAll: ['the_spanker', 'e_stim'],
     desc: 'every bubble a spanked rabbit mows down discharges, arcing lightning into up to 3 bubbles within 620px.',
     flavor: 'you wired the paddle. of course you did.',
     apply: (s) => { s.electrifiedRabbits = true; } },
-  { id: 'body_buzz', name: 'Body Buzz', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+  { id: 'body_buzz', name: 'Body Buzz', rarity: 'Rare', curse: false, mult: 0.0, unique: true, fxTheme: 'electric',
     requiresAll: ['chain_reaction', 'e_stim'],
     desc: '1 treat pop in 8 fires a 440px shockwave, arcing lightning into up to 8 bubbles caught inside it.',
     flavor: 'it hums under your skin between pops.',
     apply: (s) => { s.estimShockwaveChance = 0.125; } },
-  { id: 'tesla_coil', name: 'Tesla Coil', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+  { id: 'tesla_coil', name: 'Tesla Coil', rarity: 'Rare', curse: false, mult: 0.0, unique: true, fxTheme: 'electric',
     requiresAll: ['e_stim', 'the_wand'],
     desc: 'while the wand hums, every treat its beam takes arcs lightning onward into up to 3 bubbles within 400px.',
     flavor: 'two currents, one body.',
@@ -148,6 +148,18 @@ export const BOONS = [
 ];
 
 export const boonById = (id) => BOONS.find((b) => b.id === id) || null;
+
+// Visual identity key for the 3D pick (engine/boonPick.js): sins read from the
+// `curse` flag; a handful of boons carry an explicit `fxTheme` (electric / rabbit);
+// synergy duos/trios get a gold accent; everything else themes by rarity.
+const RARITY_THEME = { Common: 'common', Uncommon: 'uncommon', Rare: 'rare' };
+export function boonTheme(b) {
+  if (!b) return 'common';
+  if (b.curse) return 'sin';
+  if (b.fxTheme) return b.fxTheme;                 // explicit look wins over the duo frame
+  if (b.requiresAny || b.requiresAll) return 'duo';
+  return RARITY_THEME[b.rarity] || 'common';
+}
 
 /**
  * Deal a draft (C# ChaosBoonPool.Draft): mostly mantras + a dedicated sin slot

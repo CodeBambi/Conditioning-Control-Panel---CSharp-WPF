@@ -681,10 +681,10 @@ img.rh-fx-spiralspin {
 
 .rh-fx-flashclip {
   position: absolute;
-  width: var(--w, 34vw);
-  max-width: 560px;
+  width: var(--w, 23.8vw);
+  max-width: 392px;
   height: auto;
-  max-height: 62vh;
+  max-height: 43vh;
   transform: translate(-50%, -50%);
   pointer-events: auto;
   touch-action: manipulation; /* iOS: no double-tap zoom when popping the hydra fast */
@@ -1413,6 +1413,55 @@ img.rh-fx-spiralspin {
 @keyframes cfShieldFlash {
   0%, 40% { color: #ff2b4a; text-shadow: 0 0 14px rgba(255, 40, 70, 0.9); }
 }
+/* the freshly-banked heart pops in when a flying shield lands (boonPick timeout/resist) */
+.cf-hud-shields.cf-shield-bounce { animation: cfShieldBounce 0.5s cubic-bezier(0.3, 1.6, 0.5, 1); transform-origin: left center; }
+@keyframes cfShieldBounce {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.35); }
+  60% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+/* the shield that flies from screen-centre into the HUD slot */
+.cf-shield-fly {
+  position: fixed; z-index: 60; pointer-events: none;
+  font-size: 2.6rem; line-height: 1; will-change: left, top, transform, opacity;
+  filter: drop-shadow(0 0 10px rgba(120, 220, 160, 0.85)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+.cf-shield-fly.is-pop { animation: cfShieldPop 0.42s ease-out; }
+@keyframes cfShieldPop {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+  60% { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+/* ---- in-tube boon draft (engine/boonPick.js): floating labels + caption + buttons ---- */
+.cf-boonpick { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+.cf-boonpick[hidden] { display: none; }
+.cf-boonpick-labels { position: absolute; inset: 0; }
+.cf-boonpick-label {
+  position: absolute; transform: translate(-50%, -100%);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 4px 10px; border-radius: 10px;
+  background: rgba(14, 9, 22, 0.72); border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f4ecff; font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9); transition: opacity 0.15s ease;
+}
+.cf-boonpick-label.is-aimed { border-color: rgba(255, 235, 150, 0.8); box-shadow: 0 0 14px rgba(255, 220, 120, 0.45); }
+.cf-boonpick-label.is-sin { color: #ff9db8; border-color: rgba(255, 60, 90, 0.55); }
+.cf-boonpick-label .cf-bp-rar { font-size: 0.62rem; font-weight: 500; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.06em; }
+.cf-boonpick-cap {
+  position: absolute; left: 50%; bottom: 15%; transform: translateX(-50%);
+  max-width: min(680px, 86vw); text-align: center; pointer-events: none;
+  padding: 8px 16px; border-radius: 12px;
+  background: rgba(12, 8, 20, 0.66); border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #efe7ff; font-size: 0.92rem; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.cf-boonpick-btns {
+  position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%);
+  display: flex; gap: 12px; pointer-events: none;
+}
+.cf-boonpick-btns .sf-btn { pointer-events: auto; }
+.cf-boonpick-btns .sf-btn[hidden] { display: none; }
 
 /* ---- HUD: lust (heat) bar ---- */
 .cf-hud-heat { display: flex; align-items: center; gap: 6px; }

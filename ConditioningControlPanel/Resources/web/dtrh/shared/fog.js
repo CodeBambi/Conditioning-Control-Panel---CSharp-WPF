@@ -180,6 +180,26 @@ export function createFog({ layout, cardCenters, titleCenters, colorA, colorB })
   return {
     mesh: points,
     update(t) { mat.uniforms.uTime.value = t; },
+    // Rebase (junction dive): re-scatter the ambient particles along the fresh
+    // spine (`nl` = the rebased layout) so the new tube is fogged near the camera
+    // instead of leaving the cloud behind on the old loop. Particle identity is
+    // noise, so a re-randomize along the new frames is seamless.
+    rebase(nl) {
+      const arr = geo.attributes.position.array;
+      const n = arr.length / 3;
+      for (let i = 0; i < n; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const rad = Math.sqrt(Math.random()) * nl.RADIUS * 0.95;
+        if (nl.frameAt) {
+          const fr = nl.frameAt(Math.random());
+          const p = fr.pos
+            .addScaledVector(fr.binormal, Math.cos(ang) * rad)
+            .addScaledVector(fr.normal, Math.sin(ang) * rad * 0.9);
+          arr[i * 3] = p.x; arr[i * 3 + 1] = p.y; arr[i * 3 + 2] = p.z;
+        }
+      }
+      geo.attributes.position.needsUpdate = true;
+    },
     dispose() { geo.dispose(); mat.dispose(); },
   };
 }

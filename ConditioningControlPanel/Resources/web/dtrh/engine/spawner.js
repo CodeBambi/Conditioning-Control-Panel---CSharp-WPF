@@ -30,10 +30,15 @@ import { S, activeWords } from './settings.js';
 
 const SPAWN_AHEAD = 120;     // spawn cards this far ahead of the camera
 const DESPAWN_BEHIND = 30;   // free cards this far behind it
-const CARD_GAP = 14;         // depth between cards, +/- jitter
+const CARD_GAP = 14;         // depth between cards, +/- jitter (deep-run baseline)
 const CARD_GAP_JITTER = 4;
-const CARD_W = 4.2;          // card bounding width (height follows aspect)
-const CARD_MAX_H = 4.2;
+// Progression: the tube starts almost empty and fills in. No cards until
+// FIRST_CARD_SEC, then they trickle in at CARD_GAP_FAR spacing and thicken to
+// CARD_GAP as the run heats up.
+const FIRST_CARD_SEC = 18;   // hold every tube card until the run is this old
+const CARD_GAP_FAR = 46;     // depth between cards at heat 0 (sparse, early) -> lerps to CARD_GAP deep
+const CARD_W = 2.52;         // card bounding width (height follows aspect) - 40% smaller default
+const CARD_MAX_H = 2.52;
 const FRAME_SCALE = 1.04;    // metal frame plane vs content (slim border)
 const SIDE_OFFSET = 2.4;     // how far off the spine a card sits
 const SPAWN_PER_FRAME = Q.tier === 'mobile' ? 1 : 2; // spawn budget per frame - one at a time on mobile so a card mount (new VideoTexture / decoder) never doubles up on a single frame
@@ -59,6 +64,8 @@ const VIDEO_PLAY_NEAR = 30;  // resume inside this (hysteresis so it can't flap)
 
 const VEIL_GAP_MIN = 180, VEIL_GAP_MAX = 280; // tunnel-spanning translucent veils - kept sparse (you pass THROUGH them to fire an effect)
 const MAX_LIVE_VEILS = 1;
+const FIRST_VEIL_SEC = 32;   // hold the effect-firing veils until the run is this old (later than the cards)
+const VEIL_GAP_EARLY_MULT = 1.8; // spacing between veils is this much wider at heat 0 (sparser early) -> 1.0 deep
 
 // Decoded-ahead pool: the next few user images/gifs are fully decoded BEFORE
 // their card exists, pumped continuously in the background. Without it, cards
@@ -427,6 +434,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   let throwOnRelease = null;  // Wave 2 (Sticky Fingers capstone): release hurls the card
   const _dir = new THREE.Vector3(), _target = new THREE.Vector3();
   const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
+  const detached = new Set(); // junction-mouth cards: pixels-only, off the conveyor
 
   // group + glow + frame around a content plane, billboarded in update()
   function dressCard(group, contentMesh, w, h, accent) {
@@ -1460,7 +1468,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   }
 
   // ---- per-frame update -------------------------------------------------------
-  function update(camera, camDepth, dt, t) {
+  function update(camera, camDepth, dt, t, heat = 1, runTime = 999) {
     camDepthNow = camDepth;
     // keep the next few seconds of user media decoded (runs during spotlights
     // too, so the conveyor restarts with content in hand)
@@ -1470,11 +1478,17 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     // parked (ESC pause, hidden tab, or the Warren hub idling in game mode: no
     // new video cards behind the menu).
     if (!spotlight && !paused) {
-      let budget = SPAWN_PER_FRAME;
+      // Progression gap: wide (sparse) at heat 0, tightening to CARD_GAP deep.
+      const gap = CARD_GAP_FAR + (CARD_GAP - CARD_GAP_FAR) * Math.min(1, Math.max(0, heat));
+      // Hold the conveyor at the top of the run: keep nextCardDepth pinned just
+      // ahead of the camera so opening the gate later doesn't dump a catch-up
+      // burst of everything that "should" have spawned during the quiet spell.
+      if (runTime < FIRST_CARD_SEC) nextCardDepth = Math.max(nextCardDepth, camDepth + gap);
+      let budget = runTime < FIRST_CARD_SEC ? 0 : SPAWN_PER_FRAME;
       while (budget > 0 && nextCardDepth < camDepth + SPAWN_AHEAD &&
              live.length + spawning < MAX_LIVE_CARDS) {
         const d = nextCardDepth;
-        nextCardDepth += CARD_GAP + rand(-CARD_GAP_JITTER, CARD_GAP_JITTER);
+        nextCardDepth += gap + rand(-CARD_GAP_JITTER, CARD_GAP_JITTER);
         budget -= 1;
         spawning += 1;
         Promise.resolve(spawnCardAt(d)).then((rec) => {
@@ -1483,10 +1497,15 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
           else if (rec) { try { rec.dispose(); } catch (e) { /* ignore */ } }
         }).catch(() => { spawning -= 1; });
       }
-      // veils on their own, sparser cadence
-      if (nextVeilDepth < camDepth + SPAWN_AHEAD && liveVeils < MAX_LIVE_VEILS) {
+      // veils on their own, sparser cadence - and held back even further than the
+      // cards: none until FIRST_VEIL_SEC, and wider spacing early (heat 0) that
+      // eases to the baseline gap deep.
+      const veilGapMult = VEIL_GAP_EARLY_MULT + (1 - VEIL_GAP_EARLY_MULT) * Math.min(1, Math.max(0, heat));
+      if (runTime < FIRST_VEIL_SEC) {
+        nextVeilDepth = Math.max(nextVeilDepth, camDepth + VEIL_GAP_MIN);
+      } else if (nextVeilDepth < camDepth + SPAWN_AHEAD && liveVeils < MAX_LIVE_VEILS) {
         addCard(buildVeil(nextVeilDepth));
-        nextVeilDepth += rand(VEIL_GAP_MIN, VEIL_GAP_MAX);
+        nextVeilDepth += rand(VEIL_GAP_MIN, VEIL_GAP_MAX) * veilGapMult;
       }
     }
 
@@ -1662,6 +1681,100 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
       gifRotate = (gifRotate + n) % 1024;
       dueGifs.length = 0;
     }
+
+    tickDetached(dt); // branch-mouth cards keep animating off the conveyor
+  }
+
+  // ---- detached cards (junctions.js hangs one at each branch mouth) ----------
+  // A standalone media card that is NOT on the spawn conveyor: the caller owns
+  // its transform/parenting (a branch mouth), and the spawner only keeps its
+  // pixels animating (gif frames / video texture / Ken Burns) via the detached
+  // tick in update(). No despawn, no billboard, no spotlight promotion.
+  async function acquireDetachedItem() {
+    if (!media.hasUserMedia()) return null;
+    // prefer a video so a mouth shows live motion, else gif, else photo
+    let entry = (media.drawKind && media.drawKind('video')) || media.draw();
+    if (!entry) return null;
+    const acquired = await entry.acquire();
+    if (!acquired) return null;
+    if (entry.kind === 'video') return prefetchVideo(acquired);
+    if (/\.gif$/i.test(entry.name || '')) return prefetchGifAny(acquired);
+    return prefetchImage(acquired);
+  }
+
+  // opts: { pos:Vector3, quat:Quaternion, scale:number }. Returns a handle the
+  // caller parents into the scene; content lands async under handle.group.
+  function createDetachedCard(opts = {}) {
+    const handle = { group: new THREE.Group(), ready: false, inner: null };
+    let disposed = false;
+    const applyTransform = () => {
+      if (opts.pos) handle.group.position.copy(opts.pos);
+      if (opts.quat) handle.group.quaternion.copy(opts.quat);
+      handle.group.scale.setScalar(opts.scale || 1);
+    };
+    applyTransform();
+    acquireDetachedItem().then((item) => {
+      if (disposed || !item) { if (item && item.dispose) item.dispose(); return; }
+      let built = null;
+      if (item.kind === 'video') {
+        built = buildVideoCard(camDepthNow, null, { withAudio: false, release: item.release, videoEl: item.videoEl, vtex: item.vtex });
+      } else if (item.kind === 'gif') {
+        built = buildGifCard(camDepthNow, item);
+      } else {
+        built = buildImageCard(camDepthNow, item);
+      }
+      if (!built) { if (item.dispose) item.dispose(); return; }
+      built.billboard = false;
+      built.group.position.set(0, 0, 0);   // the builder placed it in the tube; re-home under our group
+      built.group.quaternion.identity();
+      handle.group.add(built.group);
+      detached.add(built);
+      handle.inner = built;
+      handle.ready = true;
+    }).catch(() => { /* ignore: mouth just shows no card */ });
+    handle.setTransform = (pos, quat) => { if (pos) opts.pos = pos; if (quat) opts.quat = quat; applyTransform(); };
+    // the content plane (dressCard order: glow[0], frame[1], content[2]) - used
+    // by the junction shatter to sample the live texture + size.
+    handle.getContent = () => (handle.inner && handle.inner.group && handle.inner.group.children[2]) || null;
+    handle.hide = () => { handle.group.visible = false; };
+    handle.dispose = () => {
+      disposed = true;
+      if (handle.inner) { detached.delete(handle.inner); try { handle.inner.dispose(); } catch (e) { /* ignore */ } }
+      if (handle.group.parent) handle.group.parent.remove(handle.group);
+    };
+    return handle;
+  }
+
+  // Keep detached-card pixels flowing (called from update()): video-texture
+  // uploads + gif frame advance + Ken Burns, with none of the conveyor logic.
+  function tickDetached(dt) {
+    if (paused || document.hidden) return;
+    for (const rec of detached) {
+      if (rec.vtex && rec.videoEl && !rec.videoEl.paused) {
+        rec.texAcc += dt;
+        if (rec.texAcc >= VIDEO_TEX_INTERVAL) { rec.texAcc = 0; rec.vtex.needsUpdate = true; }
+      }
+      if (rec.gifAnim && gifDue(rec.gifAnim)) advanceGif(rec);
+      if (rec.kb) {
+        const kb = rec.kb;
+        kb.life += dt;
+        const u = Math.min(1, kb.life / kb.dur);
+        const e = u * u * (3 - 2 * u);
+        const s = kb.s0 + (kb.s1 - kb.s0) * e;
+        kb.tex.repeat.set(s, s);
+        kb.tex.offset.set(
+          (kb.ax0 + (kb.ax1 - kb.ax0) * e) * (1 - s),
+          (kb.ay0 + (kb.ay1 - kb.ay0) * e) * (1 - s));
+      }
+    }
+  }
+
+  // Clear the conveyor cards (rebase: content was placed on the old spine) while
+  // leaving the prefetch pool + junction-owned detached cards intact.
+  function clearLive() {
+    for (let i = live.length - 1; i >= 0; i--) removeCard(i);
+    spotlight = null;
+    if (grabbed) { grabbed.isGrabbed = false; grabbed = null; }
   }
 
   function reset(camDepth) {
@@ -1707,6 +1820,8 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   return {
     update, reset, dispose, setPaused, warm,
     grabAtPointer, releaseGrab,
+    // junction branch-mouth media cards
+    createDetachedCard, clearLive,
     // Wave 2 game verbs
     spawnPickup, clearPickups,
     setPickupTimeScale: (f) => { pickupTimeScale = Math.max(0, f == null ? 1 : f); },

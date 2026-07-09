@@ -186,6 +186,15 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
   let paused = false;
   function setPaused(v) { paused = !!v; }
 
+  // Rebase (junction dive): the loop was rebuilt onto the chosen branch, so every
+  // placed slot sits on the OLD spine. Retire them all; update() re-places fresh
+  // ones ahead on the new spine via layout.frameAtDepth as the fall continues.
+  function reset() {
+    for (const s of slots) { s.active = false; s.mesh.visible = false; }
+    liveCount = 0;
+    addCooldown = 0;
+  }
+
   function update(cam, camDepth, dt) {
     if (paused) return;
     // ease the live count toward the region ceiling: add posters gradually (in
@@ -225,5 +234,5 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
     unit.dispose();
   }
 
-  return { setRegion, setPaused, update, dispose };
+  return { setRegion, setPaused, update, dispose, reset };
 }

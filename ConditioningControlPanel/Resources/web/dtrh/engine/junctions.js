@@ -1,340 +1,485 @@
 /* ============================================================================
- * junctions.js - branching paths on the tube ("The Junction").
+ * junctions.js - branching paths on the tube ("The Junction"), v4.
  *
- * The tunnel is a single closed-loop treadmill (tunnel.js), so we can't fork the
- * baked spine. Instead a fork is staged as REAL divergent geometry laid over it:
+ * The old fork (v3) overlaid two TubeGeometry "arms" that were just lateral
+ * OFFSETS of the same closed-loop spine - they swung out then eased back to 0 so
+ * the winner re-merged with the treadmill "unseen". They sat INSIDE the bore
+ * (tube-in-tube) and, because both returned to the spine, the branches
+ * RECONNECTED. It read as fake and looked bad.
  *
- *   1. TELEGRAPH - the tube splits AHEAD into two actual TubeGeometry corridors
- *      that peel off the spine left + right (a proper Y-throat), each branded with
- *      a trigger word, receding into the fog.
- *   2. STEER     - the player leans (fallNav laneVote: horizontal drag / A-D /
- *      arrows). The lean biases which mouth the camera drifts toward.
- *   3. COMMIT    - at the crossroad the chosen arm wins: the camera is handed a
- *      branch PROFILE (nav.setBranchProfile) that drives it down that corridor's
- *      centerline - and because the profile is sampled with a look-ahead, the POV
- *      genuinely YAWS into the turn. The loser corridor darkens, its throat irises
- *      shut, and it slides out of frame as you turn away. It dies.
- *      Do nothing and the coaxed mouth takes you (passivity is surrender).
+ * v4 clones the Explore "Deeper hole" technique and makes the branches real:
  *
- * Each arm is a lateral offset OF the spine (offset 0 at the throat, swinging out
- * to SWING at mid-arm, back to 0 by the far end deep in fog) - so the winner's
- * centerline re-merges with the treadmill unseen and the fall continues.
+ *   1. TELEGRAPH - two mouths are CARVED INTO THE TUBE WALL. Each mouth feeds a
+ *      `hole` to the main-tube shader (tunnel.setHoles) which discards the wall
+ *      inside the mouth cylinder + lights a glowing rim, so a genuine opening
+ *      appears. A diverging vein (its own TubeGeometry, trimmed flush to the
+ *      bore by a clip shader) plunges away from each mouth and NEVER returns.
+ *   2. CHOOSE   - a GIF/video card hangs in each mouth. Click one (raycast ->
+ *      pickSide) to shatter it and dive; a decisive lean also commits; doing
+ *      nothing hovers, then a 5s timeout takes the coaxed mouth (surrender).
+ *   3. DIVE     - the chosen vein's ride-curve is handed to fallNav.enterVein:
+ *      the camera leaves the treadmill and rides down the corridor (position
+ *      lerp + quaternion slerp). The loser vein + its card are disposed AT ONCE.
+ *   4. REBASE   - at the vein's tail fallNav fires onVeinEnd -> the scene builds
+ *      a FRESH endless loop aligned to the vein exit (coaxial, fog-hidden) and
+ *      rebases the treadmill onto it. The chosen branch has BECOME the new tube;
+ *      the old trunk is gone. onVeinEnd(exitFrame) is the scene's job.
  *
- * This module owns the geometry, the steer, and the commit; it reports the choice
- * via onCommit({side, branch, forced, passive}). The meaning (re-skin, brand
- * tally) is the game's job.
- *
- * "Closing path": a fork can be born with one mouth pre-SEALED (the run decides,
- * more often the deeper it gets) - the conditioning quietly removes the choice.
+ * Reports the choice via onCommit({side, branch, forced, passive}) (unchanged
+ * tally contract) and hands the scene the exit frame via onVeinEnd(frame).
  * ==========================================================================*/
 
 import * as THREE from 'three';
+import { RADIUS, FOG_COLOR, FOG_DENSITY } from './tunnel.js';
 
-const ARM_LEN = 96;       // world units each diverging corridor runs before it re-merges (in fog)
-const ARM_RADIUS = 5.5;   // matches the main tube RADIUS so the split reads as one tube parting
-// A REAL bifurcation: each arm peels off the spine at a FIXED angle (half of the
-// ~65-deg included fork) across the near field you actually see - a proper Y - then
-// curves gently back onto the spine deep in the fog so the winner re-merges with the
-// closed-loop treadmill unseen. DIVERGE_TAN is the lateral gain per world unit fallen.
-const DIVERGE_DEG = 32.5;                                    // half of the ~65-deg fork
-const DIVERGE_TAN = Math.tan(DIVERGE_DEG * Math.PI / 180);   // ~0.637 u out per u down
-const RAMP_LEN = 34;      // world units the arm holds the full angle (the visible V) before it eases back
-const PEAK_OFF = DIVERGE_TAN * RAMP_LEN;   // peak lateral offset (~21.7u) at the top of the ramp
-const LEAD = 120;         // units of approach over which the mouths fade up out of the fog
-const THROAT_U = 0.12;    // where along the arm the labelled hoop sits (a bit into the mouth)
-const BEAT_US = [0.30, 0.46, 0.62];  // fainter hoops receding down each arm - the "first few beats" that sell a real corridor
+const VEIN_LEN = 150;        // world units each diverging corridor runs (the "first few chunks")
+const VEIN_RADIUS = RADIUS;  // match the main bore so the rebase handoff is coaxial/seamless
+const DIVERGE_DEG = 60;      // peel angle off the spine tangent - ~120 deg between the two arms (a true bifurcation, not a shallow split)
+const CUT_LEN = 170;         // world units of trunk ERASED past the fork (a true dead-end; the
+                             //   only ways on are the two branch mouths). Long enough that the
+                             //   loop reappears deep in fog beyond it.
+const STOP_BACK = 24;        // units short of the fork the fall parks, so the whole Y is seen ahead
+const HOLE_R = Math.min(VEIN_RADIUS * 1.06, RADIUS * 0.94); // mouth radius carved in the wall
+const LEAD = 120;            // units of approach over which the mouths fade up out of the fog
+const CARD_INTO = 3.2;       // how far into the mouth the media card hangs
 
-// Linger: at the fork mouth the fall crawls (the game slows the tunnel via onLinger)
-// so the choice can breathe. A decisive lean commits at once; else a 5s timer takes
-// the passive / coaxed mouth (do nothing and the tube chooses for you).
-const LINGER_TIMEOUT = 5.0;   // seconds to hover at the mouth before the fork auto-commits
-const DECIDE_VOTE = 0.55;     // |laneVote| this firm commits immediately (a deliberate lean)
+const LINGER_TIMEOUT = 5.0;  // seconds hovering at the mouth before the fork auto-commits
+const DECIDE_VOTE = 0.55;    // |laneVote| this firm commits immediately (a deliberate lean)
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-const smoothstep = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
-// world-unit lateral offset of an arm centerline at fraction u (0 = throat/split,
-// 1 = far end, back on the spine): a linear ramp (the felt 65-deg angle) that eases
-// back to zero across the fog tail so the winner re-merges with the treadmill unseen.
-function armOff(u) {
-  const s = clamp(u, 0, 1) * ARM_LEN;
-  if (s <= RAMP_LEN) return DIVERGE_TAN * s;              // the real 65-deg V you see
-  const k = (s - RAMP_LEN) / (ARM_LEN - RAMP_LEN);       // 0..1 across the fog tail
-  return PEAK_OFF * (1 - smoothstep(k));                 // curve back onto the spine, unseen
-}
+const deg2rad = (d) => d * Math.PI / 180;
 
-// A word rendered onto a small canvas -> additive texture. Cached by "word|color"
-// so a repeated trigger word doesn't re-rasterize.
-const _labelCache = new Map();
-function labelTexture(word, colorHex) {
-  const key = word + '|' + colorHex;
-  let tex = _labelCache.get(key);
-  if (tex) return tex;
-  const c = document.createElement('canvas');
-  c.width = 512; c.height = 256;
-  const g = c.getContext('2d');
-  g.clearRect(0, 0, c.width, c.height);
-  g.font = '700 150px system-ui, sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.shadowColor = colorHex;
-  g.shadowBlur = 44;
-  g.fillStyle = '#ffffff';
-  g.fillText(word, 256, 138);
-  g.shadowBlur = 0;
-  g.fillStyle = colorHex;
-  g.globalAlpha = 0.5;
-  g.fillText(word, 256, 138);
-  tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  _labelCache.set(key, tex);
-  return tex;
-}
+// ---- vein material: a glowing corridor, trimmed flush to the artery bore -----
+// uClip* discards vein fragments still inside the main tube (so the vein emerges
+// from the wall surface, not poking into the bore); a rim lights the cut. Kept
+// visually close to the main tube (pink scrolling rings) so it reads as tube.
+const VEIN_VERT = `
+  varying vec2 vUv;
+  varying vec3 vWorld;
+  varying float vFogDepth;
+  void main() {
+    vUv = uv;
+    vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vFogDepth = -mv.z;
+    gl_Position = projectionMatrix * mv;
+  }`;
 
-export function createJunctions({ scene, layout, nav }) {
-  let J = null;           // the live fork, or null when idle
-  let active = false;     // only telegraph forks during a real descent
-  const _m = new THREE.Matrix4();
-  const api = { onCommit: null, onLinger: null };
+const VEIN_FRAG = `
+  precision highp float;
+  varying vec2 vUv;
+  varying vec3 vWorld;
+  varying float vFogDepth;
+  uniform float uTime, uOpacity, uRings, uScroll;
+  uniform vec3 uColor, uRimColor, uFogColor;
+  uniform float uFogDensity;
+  uniform int uClipOn;
+  uniform vec3 uClipPoint, uClipAxis;
+  uniform float uClipR, uClipReach;
 
-  // sample an arm's world centerline point at fraction u (0 = throat, 1 = far end)
-  function armPoint(side, Dc, u, out) {
-    const fr = layout.frameAtDepth(Dc + u * ARM_LEN);
-    return (out || new THREE.Vector3()).copy(fr.pos)
-      .addScaledVector(fr.binormal, side * armOff(u));
+  float lineMask(float coord, float w) {
+    float di = 0.5 - abs(fract(coord) - 0.5);
+    return 1.0 - smoothstep(0.0, w, di);
   }
 
-  // ---- one arm: a real diverging tube corridor + a labelled throat that seals --
-  function buildArm(side, desc, Dc) {
+  void main() {
+    // flush-trim to the artery bore + rim glow on the cut
+    float edge = 1e9;
+    if (uClipOn == 1) {
+      vec3 d = vWorld - uClipPoint;
+      float al = dot(d, uClipAxis);
+      vec3 pe = d - al * uClipAxis;
+      float dr = length(pe);
+      if (abs(al) < uClipReach) {
+        if (dr < uClipR) discard;
+        edge = min(edge, dr - uClipR);
+      }
+    }
+    float scroll = uTime * uScroll;
+    float ring = lineMask(vUv.x * uRings - scroll, 0.06);
+    float ringGlow = 0.4 + 1.8 * pow(0.5 + 0.5 * sin((vUv.x * uRings - scroll) * 6.2831), 3.0);
+    vec3 col = uColor * 0.5 + uColor * ring * ringGlow;
+    float rim = 1.0 - smoothstep(0.0, 0.9, edge);
+    col += uRimColor * rim * (2.4 + 0.6 * sin(uTime * 2.0));
+    float f = 1.0 - exp(-uFogDensity * uFogDensity * vFogDepth * vFogDepth);
+    col = mix(col, uFogColor, clamp(f, 0.0, 1.0));
+    gl_FragColor = vec4(col, uOpacity);
+  }`;
+
+export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
+  let J = null;           // the live fork, or null when idle
+  let active = false;     // only telegraph forks during a real descent
+  const api = { onCommit: null, onLinger: null, onVeinEnd: null };
+  const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _m = new THREE.Matrix4();
+  const shatters = [];    // live shard bursts (ticked in update)
+
+  // fallNav fires this at the vein tail: hand the scene the exit frame so it can
+  // rebase the loop, then finish the dive (dispose winner, clear holes).
+  if (nav && nav.setOnVeinEnd) nav.setOnVeinEnd(handleVeinEnd);
+
+  // ---- the dead-end cap: wall off the trunk just past the split so the tube does
+  // NOT continue straight ahead. The main tube is a closed loop that keeps going;
+  // this opaque disc across the bore occludes the forward path, so the only exits
+  // are the two carved branch mouths - a real bifurcation, not a 3-way. ----------
+  // the live scene fog color (region-tinted, animated by fx.js). The veins must
+  // fade to THIS, not the static FOG_COLOR - otherwise in a green/other-tinted
+  // region they fade to dark purple and read as a black void against the surround.
+  function fogCol() {
+    return (scene.fog && scene.fog.color) ? scene.fog.color : new THREE.Color(FOG_COLOR);
+  }
+
+  // map a spine PARAMETER fraction (what `depth/loopDepth` is) to the tube's
+  // ARC-LENGTH fraction (what the shader's vUv.x / cut window is in). The two
+  // differ on the wavy loop, so the forward-cut has to be placed in arc space.
+  function arcFrac(tParam) {
+    const lens = layout.spine.getLengths();      // cached cumulative arc lengths, param-uniform
+    const n = lens.length - 1;
+    const total = lens[n] || 1;
+    const x = (((tParam % 1) + 1) % 1) * n;
+    const i = Math.floor(x), f = x - i;
+    const a = lens[i], b = lens[Math.min(i + 1, n)];
+    return (a + (b - a) * f) / total;
+  }
+
+  // erase the trunk from the fork forward CUT_LEN units so the tube truly ends at
+  // the split (no straight-ahead path); the only exits are the two branch mouths.
+  function applyCut(atDepth) {
+    if (!tunnel || !tunnel.setCut) return;
+    const lo = arcFrac(atDepth / layout.loopDepth);
+    const hi = arcFrac((atDepth + CUT_LEN) / layout.loopDepth);
+    tunnel.setCut(lo, hi);
+  }
+
+  // ---- one vein: a real diverging corridor + a carved mouth + a hanging card --
+  function buildVein(side, desc, Dc) {
+    const fr = layout.frameAtDepth(Dc);
     const col = new THREE.Color(desc.color);
-    const group = new THREE.Group(); // arm meshes live in world space (curve is world)
 
-    // the corridor: a tube swept along the arm's offset-of-spine centerline
-    const M = 34, pts = [];
-    for (let i = 0; i <= M; i++) pts.push(armPoint(side, Dc, i / M));
-    const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
-    const tubeGeo = new THREE.TubeGeometry(curve, 140, ARM_RADIUS, 18, false);
-    const tubeMat = new THREE.MeshBasicMaterial({
-      color: col.clone().multiplyScalar(0.55),
-      transparent: true, opacity: 0, side: THREE.BackSide,
-      depthWrite: false, fog: true,
-    });
-    const tube = new THREE.Mesh(tubeGeo, tubeMat);
-    group.add(tube);
+    // peel direction: off the tangent toward this wall, tilted down (Explore's dir)
+    const dir = fr.tangent.clone().multiplyScalar(Math.cos(deg2rad(DIVERGE_DEG)))
+      .addScaledVector(fr.binormal, side * Math.sin(deg2rad(DIVERGE_DEG)))
+      .add(new THREE.Vector3(0, -0.18, 0)).normalize();
+    // the mouth starts a little INSIDE the bore (so the vein bulges out through
+    // the wall); the hole cylinder is what the tube shader discards.
+    const mouth = fr.pos.clone().addScaledVector(dir, RADIUS * 0.30);
+    const hole = { point: mouth.clone(), axis: dir.clone(), r: HOLE_R };
+    // trim the vein flush to the bore only in a SHORT band at the mouth (reach ~1R,
+    // not 2R): past the fork the trunk is erased, so a long clip just carves a void
+    // out of the corridor exactly where the camera enters it on the dive.
+    const clip = { point: fr.pos.clone(), axis: fr.tangent.clone().normalize(), r: RADIUS, reach: RADIUS * 1.0 };
 
-    // the throat: a bright labelled hoop sitting a little way into the mouth,
-    // angled along the arm so it faces the falling camera. A dark seal disc irises
-    // across it when this way closes.
-    const dT = Dc + THROAT_U * ARM_LEN;
-    const frT = layout.frameAtDepth(dT);
-    const throat = new THREE.Group();
-    armPoint(side, Dc, THROAT_U, throat.position);
-    _m.makeBasis(frT.binormal, frT.normal, frT.tangent); // (right, up, forward)
-    throat.quaternion.setFromRotationMatrix(_m);
-
-    const ringGeo = new THREE.RingGeometry(1.55, 2.05, 40);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: col, transparent: true, opacity: 0,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-    });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    throat.add(ring);
-
-    const labGeo = new THREE.PlaneGeometry(3.0, 1.5);
-    const labMat = new THREE.MeshBasicMaterial({
-      map: labelTexture(desc.word, '#' + col.getHexString()),
-      transparent: true, opacity: 0,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-    });
-    const label = new THREE.Mesh(labGeo, labMat);
-    label.position.z = -0.15; // a hair toward the falling camera
-    throat.add(label);
-
-    const sealGeo = new THREE.CircleGeometry(ARM_RADIUS * 0.92, 40);
-    const sealMat = new THREE.MeshBasicMaterial({
-      color: 0x140a16, transparent: true, opacity: 0,
-      depthWrite: false, side: THREE.DoubleSide,
-    });
-    const seal = new THREE.Mesh(sealGeo, sealMat);
-    seal.scale.setScalar(0.02);
-    seal.position.z = 0.05;
-    throat.add(seal);
-
-    group.add(throat);
-
-    // ---- "first few beats": fainter hoops receding down the corridor so the arm
-    // reads as a real path that CONTINUES, not a stub - whichever way you pick, the
-    // way ahead is already there. No labels; pure depth cue, angled along the arm.
-    const beatMats = [], beatGeos = [];
-    const _pA = new THREE.Vector3(), _pB = new THREE.Vector3(), _tan = new THREE.Vector3();
-    const _up = new THREE.Vector3(0, 1, 0), _rt = new THREE.Vector3(), _u2 = new THREE.Vector3();
-    const _bm = new THREE.Matrix4();
-    for (const bu of BEAT_US) {
-      const hoop = new THREE.Group();
-      armPoint(side, Dc, bu, hoop.position);
-      armPoint(side, Dc, Math.max(0, bu - 0.02), _pA);
-      armPoint(side, Dc, Math.min(1, bu + 0.02), _pB);
-      _tan.subVectors(_pB, _pA);
-      if (_tan.lengthSq() < 1e-8) _tan.set(0, 0, 1);
-      _tan.normalize();
-      _rt.crossVectors(_tan, _up);
-      if (_rt.lengthSq() < 1e-8) _rt.set(1, 0, 0);
-      _rt.normalize();
-      _u2.crossVectors(_rt, _tan).normalize();
-      _bm.makeBasis(_rt, _u2, _tan);
-      hoop.quaternion.setFromRotationMatrix(_bm);
-      const bGeo = new THREE.RingGeometry(ARM_RADIUS * 0.62, ARM_RADIUS * 0.82, 32);
-      const bMat = new THREE.MeshBasicMaterial({
-        color: col, transparent: true, opacity: 0,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-      });
-      hoop.add(new THREE.Mesh(bGeo, bMat));
-      group.add(hoop);
-      beatMats.push(bMat); beatGeos.push(bGeo);
+    // the corridor curve: walk a heading that peels off, keeps sinking, and adds
+    // a gentle S-wobble so it reads as a real path that CONTINUES (never re-merges).
+    const STEP = 6, N = Math.ceil(VEIN_LEN / STEP);
+    const head = dir.clone();
+    const pts = [fr.pos.clone()];
+    let p = fr.pos.clone();
+    for (let i = 1; i <= N; i++) {
+      const ph = i / N;
+      const curl = Math.sin(ph * Math.PI * 1.6) * 0.05;   // two soft reversals
+      head.applyAxisAngle(fr.normal, side * curl);
+      head.y -= 0.02;                                      // keep plunging
+      head.normalize();
+      p = p.clone().addScaledVector(head, STEP);
+      pts.push(p.clone());
     }
 
-    scene.add(group);
+    // anti-clip pass (ported from the Explore reference): the corridor snakes and
+    // plunges, so a later bend can wander back into a fold of the (also-winding)
+    // main tube and poke through its wall - which is exactly the "camera flies out
+    // of bounds" you see mid-dive. Sample the artery spine, then push any vein point
+    // that strays within (arteryR + veinR + margin) of it radially back out. The
+    // lead-in near the fork is left alone so the flush junction seam is preserved.
+    {
+      const SN = 200;
+      const arteryPts = [];
+      for (let i = 0; i <= SN; i++) arteryPts.push(layout.spine.getPoint(i / SN));
+      const clearance = RADIUS + VEIN_RADIUS + 2.0;
+      const startIdx = Math.max(2, Math.ceil(pts.length * 0.15));
+      const _d = new THREE.Vector3();
+      for (let pass = 0; pass < 3; pass++) {
+        for (let i = startIdx; i < pts.length; i++) {
+          const pp = pts[i];
+          let best = Infinity, bp = null;
+          for (let j = 0; j < arteryPts.length; j++) {
+            const dd = pp.distanceToSquared(arteryPts[j]);
+            if (dd < best) { best = dd; bp = arteryPts[j]; }
+          }
+          const dist = Math.sqrt(best);
+          if (bp && dist < clearance) {
+            _d.subVectors(pp, bp);
+            if (_d.lengthSq() < 1e-6) _d.set(0, -1, 0);
+            _d.normalize();
+            pp.addScaledVector(_d, (clearance - dist) * 0.6);
+          }
+        }
+      }
+    }
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
+
+    const tubeGeo = new THREE.TubeGeometry(curve, 120, VEIN_RADIUS, 20, false);
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uOpacity: { value: 0 },
+        uRings: { value: Math.round(VEIN_LEN / 8) },
+        uScroll: { value: 1.0 },
+        uColor: { value: col.clone() },
+        uRimColor: { value: col.clone().lerp(new THREE.Color(0xffffff), 0.4) },
+        uFogColor: { value: fogCol().clone() },
+        uFogDensity: { value: FOG_DENSITY },
+        uClipOn: { value: 1 },
+        uClipPoint: { value: clip.point },
+        uClipAxis: { value: clip.axis },
+        uClipR: { value: clip.r },
+        uClipReach: { value: clip.reach },
+      },
+      vertexShader: VEIN_VERT,
+      fragmentShader: VEIN_FRAG,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const tube = new THREE.Mesh(tubeGeo, mat);
+    scene.add(tube);
+
+    // invisible mouth disc: a raycast target spanning the opening (click to dive
+    // even if the card is off to one side). Faces back up-vein toward the camera.
+    const discGeo = new THREE.CircleGeometry(VEIN_RADIUS * 1.05, 24);
+    const discMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+    const disc = new THREE.Mesh(discGeo, discMat);
+    disc.position.copy(mouth);
+    // face back UP THE MAIN TUBE toward the approaching camera (not down the vein):
+    // at a steep fork the mouth is nearly side-on, so aiming it at the POV keeps the
+    // opening clickable and the card readable.
+    disc.lookAt(mouth.clone().addScaledVector(fr.tangent, -1));
+    disc.userData = { type: 'veinmouth', side };
+    scene.add(disc);
+
+    // dark seal disc, shown only when this mouth is born sealed (preseal)
+    const sealGeo = new THREE.CircleGeometry(VEIN_RADIUS * 0.95, 32);
+    const sealMat = new THREE.MeshBasicMaterial({ color: 0x140a16, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+    const seal = new THREE.Mesh(sealGeo, sealMat);
+    seal.position.copy(mouth).addScaledVector(dir, 0.2);
+    seal.quaternion.copy(disc.quaternion);
+    scene.add(seal);
+
+    // the hanging media card: a GIF/video from the active pool, facing back up
+    // the vein. Given a slow pendulum sway in update().
+    const cardPos = mouth.clone().addScaledVector(dir, CARD_INTO);
+    // hang it facing back up the main tube toward the incoming camera (readable +
+    // clickable head-on even though the mouth itself is steeply side-on).
+    _m.lookAt(cardPos, cardPos.clone().addScaledVector(fr.tangent, -1), new THREE.Vector3(0, 1, 0));
+    const cardQuat = new THREE.Quaternion().setFromRotationMatrix(_m);
+    let card = null;
+    if (spawner && spawner.createDetachedCard) {
+      card = spawner.createDetachedCard({ pos: cardPos, quat: cardQuat, scale: 1.0 });
+      if (card && card.group) {
+        card.group.userData = { type: 'veinmouth', side };
+        scene.add(card.group);   // the handle doesn't self-attach; the mouth owns it
+      }
+    }
+
     return {
-      side, desc, group, tube, tubeMat, ring, ringMat, label, labMat, seal, sealMat,
-      tubeGeo, ringGeo, labGeo, sealGeo, beatMats, beatGeos,
-      sealed: false, dying: false, _sealAnim: 0, _flare: 0,
-      spin: (side < 0 ? -1 : 1) * 0.5,
+      side, desc, curve, dir: dir.clone(), mouth: mouth.clone(),
+      tube, mat, tubeGeo, disc, discGeo, discMat, seal, sealGeo, sealMat,
+      card, cardQuat, hole, sealed: false, dying: false, swayT: Math.random() * 6,
     };
   }
 
-  function reveal(arm, a) {
-    if (arm.dying) return;
-    arm.tubeMat.opacity = a * 0.55;
-    arm.ringMat.opacity = a * 0.9;
-    arm.labMat.opacity = a * 0.95;
-    if (arm.beatMats) for (let i = 0; i < arm.beatMats.length; i++)
-      arm.beatMats[i].opacity = a * Math.max(0.06, 0.34 - i * 0.09); // dimmer the deeper the beat
+  function reveal(vein, a) {
+    if (vein.dying) return;
+    vein.mat.uniforms.uOpacity.value = a;
   }
-  // iris the seal shut, darken the corridor: this way is closed now.
-  function sealArm(arm, instant) {
-    arm.sealed = true; arm.dying = true;
-    arm.ringMat.color.multiplyScalar(0.5);
-    if (instant) { arm.seal.scale.setScalar(1); arm.sealMat.opacity = 0.9; arm._sealAnim = 1; }
-    else arm._sealAnim = 0.0001; // >0 => growing in update
-  }
-  function flareArm(arm) { arm._flare = 1; } // punches the winner's ring bright as you pass
 
-  function destroyArm(arm) {
-    scene.remove(arm.group);
-    arm.tubeGeo.dispose(); arm.ringGeo.dispose(); arm.labGeo.dispose(); arm.sealGeo.dispose();
-    arm.tubeMat.dispose(); arm.ringMat.dispose(); arm.labMat.dispose(); arm.sealMat.dispose();
-    if (arm.beatGeos) for (const g of arm.beatGeos) g.dispose();
-    if (arm.beatMats) for (const m of arm.beatMats) m.dispose();
-    // label textures are cached + shared -> not disposed here
+  function destroyVein(vein) {
+    if (vein.destroyed) return;   // loser is killed at commit, then teardown sweeps both
+    vein.destroyed = true;
+    scene.remove(vein.tube); scene.remove(vein.disc); scene.remove(vein.seal);
+    vein.tubeGeo.dispose(); vein.mat.dispose();
+    vein.discGeo.dispose(); vein.discMat.dispose();
+    vein.sealGeo.dispose(); vein.sealMat.dispose();
+    if (vein.card) { try { vein.card.dispose(); } catch (e) { /* ignore */ } }
+  }
+
+  function pushHoles() {
+    if (!tunnel || !tunnel.setHoles || !J) return;
+    const hs = [];
+    if (!J.left.dying) hs.push(J.left.hole);
+    if (!J.right.dying) hs.push(J.right.hole);
+    tunnel.setHoles(hs);
   }
 
   function teardown() {
     if (!J) return;
-    // aborted mid-hover (run ended / setActive(false)): hand the tunnel speed back
     if (J.phase === 'linger' && api.onLinger) { try { api.onLinger(false); } catch (e) { /* ignore */ } }
-    destroyArm(J.left);
-    destroyArm(J.right);
-    try { nav.setBranchProfile(null); nav.setLane(0); nav.setJunctionArmed(false); } catch (e) { /* ignore */ }
+    destroyVein(J.left);
+    destroyVein(J.right);
+    if (tunnel && tunnel.clearHoles) tunnel.clearHoles();
+    if (tunnel && tunnel.clearCut) tunnel.clearCut();
+    try { nav.setLane(0); nav.setJunctionArmed(false); nav.setForwardHold(false); } catch (e) { /* ignore */ }
     J = null;
   }
 
-  function commit(depth) {
-    // the hover is over: hand the tunnel speed back before we ride out the arm
+  // ---- shatter: fracture the chosen card into shards that fly out + fade ------
+  function spawnShatter(vein) {
+    const content = vein.card && vein.card.getContent && vein.card.getContent();
+    if (!content || !content.material || !content.material.map) return;
+    const tex = content.material.map;
+    // card world transform + size
+    content.updateWorldMatrix(true, false);
+    const wm = content.matrixWorld.clone();
+    const sc = new THREE.Vector3(); wm.decompose(new THREE.Vector3(), new THREE.Quaternion(), sc);
+    const w = sc.x, h = sc.y;
+    const grp = new THREE.Group();
+    grp.applyMatrix4(wm);
+    grp.scale.set(1, 1, 1); // shards carry their own sizes; strip the plane scale
+    const N = 4, sw = w / N, sh = h / N;
+    const shards = [];
+    for (let iy = 0; iy < N; iy++) {
+      for (let ix = 0; ix < N; ix++) {
+        const g = new THREE.PlaneGeometry(sw * 0.92, sh * 0.92);
+        const uv = g.attributes.uv;
+        for (let k = 0; k < uv.count; k++) {
+          uv.setXY(k, (ix + uv.getX(k)) / N, (iy + uv.getY(k)) / N);
+        }
+        uv.needsUpdate = true;
+        const m = new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+        const mesh = new THREE.Mesh(g, m);
+        mesh.position.set((ix - (N - 1) / 2) * sw, (iy - (N - 1) / 2) * sh, 0);
+        grp.add(mesh);
+        const vel = new THREE.Vector3((ix - (N - 1) / 2) + (Math.random() - 0.5), (iy - (N - 1) / 2) + (Math.random() - 0.5), (Math.random() - 0.3) * 2)
+          .multiplyScalar(0.9);
+        shards.push({ mesh, mat: m, geo: g, vel, spin: (Math.random() - 0.5) * 8 });
+      }
+    }
+    scene.add(grp);
+    // keep the card texture alive for the shatter, then dispose the whole card
+    shatters.push({ grp, shards, life: 0, dur: 0.6, card: vein.card });
+    if (vein.card && vein.card.hide) vein.card.hide();
+    vein.card = null; // ownership moves to the shatter (disposed when it ends)
+  }
+
+  function tickShatters(dt) {
+    for (let i = shatters.length - 1; i >= 0; i--) {
+      const s = shatters[i];
+      s.life += dt;
+      const k = clamp(s.life / s.dur, 0, 1);
+      for (const sh of s.shards) {
+        sh.mesh.position.addScaledVector(sh.vel, dt * 6);
+        sh.vel.y -= dt * 4;               // gravity
+        sh.mesh.rotation.z += sh.spin * dt;
+        sh.mat.opacity = 1 - k;
+      }
+      if (k >= 1) {
+        for (const sh of s.shards) { sh.geo.dispose(); sh.mat.dispose(); }
+        scene.remove(s.grp);
+        if (s.card && s.card.dispose) { try { s.card.dispose(); } catch (e) { /* ignore */ } }
+        shatters.splice(i, 1);
+      }
+    }
+  }
+
+  // ---- commit: pick a side, dive the winner, kill the loser ------------------
+  function commit(reason, forcedSide) {
+    if (!J || J.phase === 'trail' || J.phase === 'done') return;
     if (api.onLinger) { try { api.onLinger(false); } catch (e) { /* ignore */ } }
-    const Dc = J.atDepth;
-    const vote = nav.getLaneVote();
-    let forced = false, side;
+
+    let side, forced = false, passive = false;
     if (J.preseal === 'left') { side = 'right'; forced = true; }
     else if (J.preseal === 'right') { side = 'left'; forced = true; }
-    else if (vote > 0.08) side = 'right';
-    else if (vote < -0.08) side = 'left';
-    else side = J.coaxSide;            // no lean -> the coaxed mouth takes you
-    const passive = !forced && Math.abs(vote) <= 0.08;
+    else if (forcedSide) { side = forcedSide; }
+    else {
+      const vote = nav.getLaneVote();
+      if (vote > 0.08) side = 'right';
+      else if (vote < -0.08) side = 'left';
+      else { side = J.coaxSide; passive = true; }
+    }
 
     const winner = side === 'left' ? J.left : J.right;
     const loser = side === 'left' ? J.right : J.left;
-    const winSign = side === 'left' ? -1 : 1;
 
-    // hand the camera down the winner's centerline. Sampled at depth (pos) and
-    // depth+lookahead (aim) inside fallNav -> the POV yaws into the corridor. The
-    // lean the player was holding at the crossroad is bled off over the first bit
-    // so entry is smooth, not a snap.
-    const entryLean = nav.getLane();
-    try {
-      nav.setJunctionArmed(false);
-      nav.setBranchProfile((d) => {
-        const u = clamp((d - Dc) / ARM_LEN, 0, 1);
-        const arm = winSign * armOff(u);
-        const lean = entryLean * Math.max(0, 1 - u * 4); // fade the pre-lean over the first quarter
-        return arm + lean;
-      });
-    } catch (e) { /* ignore */ }
+    // the loser stops loading immediately: dispose its vein + card, drop its hole
+    loser.dying = true;
+    destroyVein(loser);
+    pushHoles();                      // only the winner's mouth stays carved
 
-    if (!loser.sealed) sealArm(loser, false);
-    flareArm(winner);
+    spawnShatter(winner);             // the chosen card shatters
+    nav.setJunctionArmed(false);
+    nav.enterVein(winner.curve, { length: VEIN_LEN });
 
     J.phase = 'trail';
     J.winner = winner;
-    J.commitDepth = depth;
-    J.trailEnd = Dc + ARM_LEN;
     if (api.onCommit) { try { api.onCommit({ side, branch: winner.desc, forced, passive }); } catch (e) { /* ignore */ } }
   }
 
-  // reached the fork mouth: hover here (the game crawls the tunnel via onLinger)
-  // while the choice can breathe. Commit on a decisive lean or the 5s timeout.
+  // fallNav reached the vein tail: give the scene the exit frame to rebase the
+  // loop onto, then finish (teardown happens next tick so this frame still has
+  // the vein under the camera).
+  function handleVeinEnd() {
+    if (!J || !J.winner) return;
+    const exit = getExitFrame(J.winner);
+    if (api.onVeinEnd) { try { api.onVeinEnd(exit); } catch (e) { /* ignore */ } }
+    J.phase = 'done';
+  }
+
+  function getExitFrame(vein) {
+    const pos = vein.curve.getPoint(1, new THREE.Vector3());
+    const tangent = vein.curve.getTangent(1, new THREE.Vector3()).normalize();
+    const binormal = _v.crossVectors(tangent, new THREE.Vector3(0, 1, 0));
+    if (binormal.lengthSq() < 1e-5) binormal.set(1, 0, 0);
+    binormal.normalize();
+    const up = _v2.crossVectors(binormal, tangent).normalize().clone();
+    return { pos: pos.clone(), tangent: tangent.clone(), up };
+  }
+
   function enterLinger() {
     J.phase = 'linger';
     J.lingerT = 0;
+    // park the fall a touch SHORT of the fork so the camera stops with the whole Y
+    // ahead of it (not nosed into the mouths) instead of drifting past out of bounds.
+    try { nav.setForwardHold(true, J.atDepth - STOP_BACK); } catch (e) { /* ignore */ }
     if (api.onLinger) { try { api.onLinger(true); } catch (e) { /* ignore */ } }
   }
 
   function update(depth, dt) {
+    tickShatters(dt);
     if (!J) return;
 
-    // live: spin the hoops, grow any sealing iris, decay winner flare
+    // track the live (region-tinted, animated) fog color so the veins fade to the
+    // SAME haze as the surround - no dark-purple void in a tinted region.
+    const fc = fogCol();
+
+    // keep vein rings flowing + card sway alive
     for (const m of [J.left, J.right]) {
-      m.ring.rotation.z += m.spin * dt;
-      if (m._sealAnim > 0 && m._sealAnim < 1) {
-        m._sealAnim = clamp(m._sealAnim + dt * 2.5, 0, 1);
-        m.seal.scale.setScalar(m._sealAnim);
-        m.sealMat.opacity = 0.9 * m._sealAnim;
-        m.tubeMat.color.multiplyScalar(Math.max(0.90, 1 - dt * 1.4)); // corridor goes dark as it dies
-      }
-      if (m._flare > 0) {
-        m._flare = Math.max(0, m._flare - dt * 2.2);
-        m.ringMat.opacity = Math.min(1, m.ringMat.opacity + m._flare * 0.6);
-        m.tubeMat.opacity = Math.min(0.7, m.tubeMat.opacity + m._flare * 0.2);
+      if (m.dying) continue;
+      m.mat.uniforms.uTime.value += dt;
+      m.mat.uniforms.uFogColor.value.copy(fc);
+      if (m.card && m.card.group) {
+        m.swayT += dt;
+        _m.makeRotationZ(Math.sin(m.swayT * 1.1) * 0.05);
+        m.card.group.quaternion.copy(m.cardQuat).multiply(new THREE.Quaternion().setFromRotationMatrix(_m));
       }
     }
 
     if (J.phase === 'approach') {
-      // you can't lean into an already-sealed mouth
-      let vote = nav.getLaneVote();
-      if (J.preseal === 'left' && vote < 0) nav.resetLaneVote();
-      else if (J.preseal === 'right' && vote > 0) nav.resetLaneVote();
-      // fade the corridors up as we close the gap
       const near = clamp((depth - (J.atDepth - LEAD)) / LEAD, 0, 1);
-      reveal(J.left, near);
-      reveal(J.right, near);
-      if (depth >= J.atDepth) enterLinger();
+      reveal(J.left, near); reveal(J.right, near);
+      // park a touch SHORT of the fork so the whole Y is seen ahead, not from inside it
+      if (depth >= J.atDepth - STOP_BACK) enterLinger();
     } else if (J.phase === 'linger') {
-      // hovering at the Y (the tunnel has crawled). Full reveal; a firm deliberate
-      // lean commits at once, otherwise the 5s timer takes the passive/coaxed mouth.
-      reveal(J.left, 1);
-      reveal(J.right, 1);
+      reveal(J.left, 1); reveal(J.right, 1);
       let vote = nav.getLaneVote();
       if (J.preseal === 'left' && vote < 0) { nav.resetLaneVote(); vote = 0; }
       else if (J.preseal === 'right' && vote > 0) { nav.resetLaneVote(); vote = 0; }
       J.lingerT += dt;
-      if (Math.abs(vote) >= DECIDE_VOTE || J.lingerT >= LINGER_TIMEOUT) commit(depth);
-    } else if (J.phase === 'trail') {
-      // the winner keeps drawing bright; the loser fades as it slides out of frame
-      const k = clamp((depth - J.commitDepth) / (J.trailEnd - J.commitDepth), 0, 1);
-      const loser = J.winner === J.left ? J.right : J.left;
-      loser.tubeMat.opacity *= (1 - k * 0.08);
-      loser.ringMat.opacity *= (1 - k * 0.08);
-      loser.labMat.opacity *= (1 - k * 0.08);
-      if (depth >= J.trailEnd) teardown();
+      if (Math.abs(vote) >= DECIDE_VOTE) commit('lean');
+      else if (J.lingerT >= LINGER_TIMEOUT) commit('timeout');
+    } else if (J.phase === 'done') {
+      // the scene has rebased; the winner vein is off-camera now - clean it up
+      teardown();
     }
+    // phase 'trail': fallNav is riding the vein; nothing to do until onVeinEnd
   }
 
   return {
@@ -345,28 +490,54 @@ export function createJunctions({ scene, layout, nav }) {
       if (J) teardown();
       J = {
         phase: 'approach', atDepth, coaxSide, preseal, winner: null, lingerT: 0,
-        left: buildArm(-1, left, atDepth),
-        right: buildArm(1, right, atDepth),
-        commitDepth: 0, trailEnd: 0,
+        left: buildVein(-1, left, atDepth),
+        right: buildVein(1, right, atDepth),
       };
-      if (preseal === 'left') sealArm(J.left, true);
-      else if (preseal === 'right') sealArm(J.right, true);
+      applyCut(atDepth);   // erase the trunk past the fork - a true dead-end split
+      if (preseal === 'left') { J.left.sealed = true; J.left.sealMat.opacity = 0.9; if (J.left.card) { J.left.card.dispose(); J.left.card = null; } }
+      else if (preseal === 'right') { J.right.sealed = true; J.right.sealMat.opacity = 0.9; if (J.right.card) { J.right.card.dispose(); J.right.card = null; } }
+      pushHoles();
       try { nav.resetLaneVote(); nav.setJunctionArmed(true); } catch (e) { /* ignore */ }
     },
     update,
     isBusy: () => !!J,
+    /** raycast (scene.js) calls this when a mouth card/disc is clicked. */
+    pickSide(side) {
+      if (!J || J.phase !== 'linger') return false;
+      if (J.preseal === side) return false; // can't enter a sealed mouth
+      commit('click', side);
+      return true;
+    },
+    /** meshes the scene raycasts against while a fork is open (cards + discs). */
+    getPickables() {
+      if (!J || J.phase !== 'linger') return [];
+      const out = [];
+      for (const m of [J.left, J.right]) {
+        if (m.dying || m.sealed) continue;
+        out.push(m.disc);
+        if (m.card && m.card.group) out.push(m.card.group);
+      }
+      return out;
+    },
     setActive(on) {
       active = !!on;
       if (!active && J) teardown();
     },
     get onCommit() { return api.onCommit; },
     set onCommit(fn) { api.onCommit = fn; },
-    /** onLinger(true) fires when the faller reaches the fork mouth (crawl the tunnel
-     * so the choice can breathe); onLinger(false) on commit/abort (hand speed back). */
     get onLinger() { return api.onLinger; },
     set onLinger(fn) { api.onLinger = fn; },
+    /** onVeinEnd(exitFrame) - the scene rebases the loop onto {pos,tangent,up}. */
+    get onVeinEnd() { return api.onVeinEnd; },
+    set onVeinEnd(fn) { api.onVeinEnd = fn; },
     dispose() {
       teardown();
+      for (let i = shatters.length - 1; i >= 0; i--) {
+        for (const sh of shatters[i].shards) { sh.geo.dispose(); sh.mat.dispose(); }
+        scene.remove(shatters[i].grp);
+        if (shatters[i].card && shatters[i].card.dispose) { try { shatters[i].card.dispose(); } catch (e) { /* ignore */ } }
+      }
+      shatters.length = 0;
     },
   };
 }

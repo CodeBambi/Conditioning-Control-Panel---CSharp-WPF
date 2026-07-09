@@ -255,7 +255,7 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
     v.className = 'rh-fx-flashclip';
     v.src = BASE + 'flash/' + pick(FLASH_CLIPS);
     v.muted = true; v.autoplay = true; v.loop = false; v.playsInline = true;
-    const sizeVw = (gen >= 2 ? 19 : gen === 1 ? 26 : 34) * S.gifSize;
+    const sizeVw = (gen >= 2 ? 19 : gen === 1 ? 26 : 34) * 0.7 * S.gifSize; // 30% smaller base (bubbles + tube-zone flashes)
     v.style.setProperty('--w', `${sizeVw.toFixed(1)}vw`);
     v.style.setProperty('--gifop', String(S.gifOpacity));
     v.style.left = `${rand(16, 84)}%`;

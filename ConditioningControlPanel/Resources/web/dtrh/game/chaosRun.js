@@ -69,7 +69,8 @@ const RIPPLE_WAVE_GAP_MS = 1000;
 const RIPPLE_FOCUS_COST = 30;   // BASE ripple focus cost (no cooldown; chain while focus lasts). Skipping Stone lowers the per-run cost -> st.rippleFocusCost. FOCUS_MAX 100 = 3 casts at base, more when cheaper.
 const COMBO_BIG_THRESHOLDS = [25, 50, 100];
 const TICK = 0.25;                  // the C# RunTick period
-const PLAIN_BUBBLE_CHANCE = 0.30;   // share of ordinary spawns that are plain, effect-free soap bubbles
+const PLAIN_BUBBLE_CHANCE = 0.30;   // share of ordinary spawns that are plain, effect-free soap bubbles (deep-run baseline)
+const PLAIN_BUBBLE_CHANCE_EARLY = 0.80; // at the top of the run: mostly plain bubbles, effects rare - ramps down to PLAIN_BUBBLE_CHANCE as intensity peaks
 const VIDEO_HEAVY_SEC = 62;         // in-world video card sits in front of the POV up to 60s + slack
 const CASCADE_BASE_SEC = 6;         // GifCascadePayload.DURATION_SEC (+5 ride-out)
 const RANK = { Curious: 0, Tempted: 1, Slipping: 2, Entranced: 3, Devoted: 4, Claimed: 5 };
@@ -309,6 +310,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // ---- bridge helpers ----
   const sfx = (name, scale) => bridge.send({ type: 'sfx', name, scale });
   const bark = (event, data) => bridge.send({ type: 'bark', event, ...(data || {}) });
+  // The boon draft plays IN the tube (engine/boonPick.js): the fall parks, themed
+  // cards hang ahead, click one to shatter-and-drop-through. Same callback
+  // contract as the old DOM overlay (overlays.showDraft), which stays as a
+  // fallback if the engine didn't attach a boonPick. `sfx` gives the pick "the Pow".
+  const presentDraft = (o) => {
+    if (ctx && ctx.boonPick) ctx.boonPick.open({ ...o, sfx });
+    else overlays.showDraft(o);
+  };
   const setFlag = (key) => {
     if (flags[key]) return false;
     flags[key] = true;
@@ -1542,7 +1551,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     pendingWave = newWave;
 
     const options = dealOptions();
-    overlays.showDraft({
+    presentDraft({
       wave: st.waveIndex,
       options,
       autoResumeSec: cfg.draftAutoResumeSec,
@@ -1577,7 +1586,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     bark('wave-cleared', { wave: st.waveIndex });
 
     const options = dealOptions();
-    overlays.showDraft({
+    presentDraft({
       wave: st.waveIndex,
       options,
       autoResumeSec: cfg.draftAutoResumeSec,
@@ -1658,6 +1667,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       st.shields += 1;
       pulse('120,220,160', 0.22);
       hudUi.announce('+1 RESISTANCE', 'freeze', 2000, { artKey: 'resistance' });
+      // fly a shield from screen-centre into the HUD shields slot so the bank reads
+      try { hudUi.flyShieldToSlot && hudUi.flyShieldToSlot(); } catch (e) { /* ignore */ }
       bark('boon-skipped', { shields: st.shields });
     }
     happy.onDraftResolved(hpIo);   // the run-4 first-sin beat is spent either way
@@ -1860,9 +1871,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       const sideDrift = st.ordinarySpawns < SIDE_DRIFT_GRACE_SPAWNS ? 0 : SIDE_DRIFT_CHANCE;
       if (st.heavyDropEvery > 0 && ++st.spawnSerial % st.heavyDropEvery === 0) {
         spec = buildHeavy(effIntensity, cfg.effectIntensity, st.bubbleScale);
-      } else if (Math.random() < PLAIN_BUBBLE_CHANCE) {
-        // ~30% of ordinary spawns are plain soap bubbles - no effect. They dilute
-        // the effect pool so the fall is a gradual build, not wall-to-wall stimulus.
+      } else if (Math.random() < PLAIN_BUBBLE_CHANCE_EARLY + (PLAIN_BUBBLE_CHANCE - PLAIN_BUBBLE_CHANCE_EARLY) * i) {
+        // Plain-bubble share RAMPS with intensity: ~80% plain at the top of the
+        // run (effects stay rare, the fall reads as calm) easing to ~30% deep, so
+        // the stimulus builds gradually instead of firing wall-to-wall up front.
         spec = buildPlain(effIntensity, { sizeScale: st.bubbleScale, sideDriftChance: sideDrift });
       } else {
         const opts = {
@@ -2011,7 +2023,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       pulse('150,200,255', 0.30);
       pendingWave = st.waveIndex;
       for (const o of pool) markDiscovered('boon:' + o.id);
-      overlays.showDraft({
+      presentDraft({
         wave: st.waveIndex,
         options: pool,
         autoResumeSec: cfg.draftAutoResumeSec,
@@ -2235,6 +2247,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       ffx = createFieldFx(ctx.hud);
       payloadFx = createPayloadFx({ hud: ctx.hud, fx: ctx.fx, media: ctx.media, flashBurst: ctx.flashBurst });
       try { window.__sfPayloadFx = payloadFx; } catch { /* diagnostics seam (m2test) */ }
+      try { window.__sfFireJunction = () => fireJunction(); } catch { /* diagnostics seam: force a branch fork */ }
       field = createChaosField({
         hud: ctx.hud, fx: ffx,
         canChannel, onBenignPopped, onFreezeCaught,
@@ -2425,6 +2438,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       ffx?.dispose();
       payloadFx?.dispose();
       try { if (window.__sfPayloadFx === payloadFx) delete window.__sfPayloadFx; } catch { /* seam cleanup */ }
+      try { delete window.__sfFireJunction; } catch { /* seam cleanup */ }
       field = null; hudUi = null; overlays = null; ffx = null; payloadFx = null;
       warren = null; lessons = null; happy = null;
     },
