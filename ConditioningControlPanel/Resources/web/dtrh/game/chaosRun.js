@@ -1267,6 +1267,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // Four Chambers wall dressing: the chamber sets how plastered the tube wall
     // is (I bare -> IV almost wall-to-wall). Scales with the descent.
     if (ctx && ctx.wall) ctx.wall.setRegion(regionIndex);
+    // Four Chambers voiceover: the drift chain draws this chamber's region-tagged
+    // lines (universal backbone still plays underneath). Escalates I->IV.
+    if (ctx && ctx.drift) ctx.drift.setRegion(cfg.regionMode ? regionIndex : 0);
     // Four Chambers visual identity: the chamber OWNS the tube. Palette grade
     // crossfades in (~3.2s, landing as the ready-GO beat clears); the ring/
     // spiral/arm cadence snaps ONCE right here, hidden under commitWave's flash
@@ -2366,13 +2369,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         try { ctx.setRunActive && ctx.setRunActive(true); } catch (e) { /* ignore */ }
         bridge.send({ type: 'run-started', difficulty: cfg.difficulty, mode: 'dtrh-web' });
         // Fresh descent: dress the opening chamber. applyRegionSky covers the
-        // wall plaster AND the chamber's visual grade (Region I's warm dusk
-        // fades in over the user-theme hub look during the GO beat) - it runs
-        // on the scripted first run too, just without the banner.
+        // wall plaster, drift voice AND the chamber's visual grade (Region I's
+        // warm dusk fades in over the user-theme hub look during the GO beat) -
+        // it runs on the scripted first run too, just without the banner.
         if (cfg.regionMode) {
           applyRegionSky(st.waveIndex);
-        } else if (ctx && ctx.wall) {
-          ctx.wall.setRegion(0);
+        } else {
+          if (ctx && ctx.wall) ctx.wall.setRegion(0);
+          if (ctx && ctx.drift) ctx.drift.setRegion(0);
         }
         // First descent since the verb changed: one quiet line so the hold isn't
         // a mystery. The scripted run 1 lands this at its lone-threat beat instead.
@@ -2395,6 +2399,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // Surfaced: hush the drift whisper + calm the tube for the recap/hub idle.
     try { ctx.setRunActive && ctx.setRunActive(false); } catch (e) { /* ignore */ }
     if (ctx && ctx.wall) ctx.wall.setRegion(0); // bare the wall for the recap/warren
+    if (ctx && ctx.drift) ctx.drift.setRegion(0); // recap/warren: universal voice only
     if (st.freezeRemainingSec > 0) endFreeze();
     if (st.slowMoRemainingSec > 0) endSlowMo();
     field.setVibe(false);
