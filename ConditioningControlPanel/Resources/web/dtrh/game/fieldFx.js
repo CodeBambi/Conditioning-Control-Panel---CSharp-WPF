@@ -13,11 +13,14 @@
  * 2D canvas with `globalCompositeOperation = 'lighter'` + a pre-baked radial
  * sprite. So that's exactly what this does - additive soft-sprite bloom in the
  * SAME client-pixel space the bubbles live in (no second WebGL context, no
- * coordinate offset, no WASM). Palettes mirror the desktop overlay:
+ * coordinate offset, no WASM). Default palettes mirror the desktop overlay:
  *   E-Stim  electric cyan 0x42DCE6 glow + white-blue 0xBFECFF core
  *   Vibe    warm amber 0xFFB03A + gold 0xFFE9A0 core
  *   Sparkle rabbit pink 0xFF4DC4 + gold core
  *   Residue crackle cyan 0x7AE0FF
+ * Four Chambers: setRegionPalette() overlays a chamber's accent colors
+ * (regions.js style.field) on these defaults; null restores them. The sprite
+ * cache keys by RGB, so tinted sprites bake on demand.
  * ==========================================================================*/
 
 /** hsl -> rgb (0..255), kept for the rabbit sparkles' shifting hue. */
@@ -60,8 +63,22 @@ function spriteFor(r, g, b) {
 }
 const SPR_WHITE = () => spriteFor(255, 255, 255);
 
+// Accent palette (the WPF colors above). A chamber overlay replaces entries;
+// gameplay-signal colors (tether lavender/fray-red) stay fixed on purpose.
+const PAL_DEFAULTS = {
+  bolt: [66, 220, 230], boltCore: [191, 236, 255],
+  vibe: [255, 176, 58], vibeCore: [255, 233, 160],
+  residue: [122, 224, 255], residueCore: [190, 245, 255],
+  sparkleHue: 315,
+};
+
 export function createFieldFx(hud) {
   let disposed = false;
+  let PAL = { ...PAL_DEFAULTS };
+
+  /** Four Chambers: overlay a chamber's accent colors (null = defaults).
+   * Only affects NEW draws/spawns; live buffers fade out in the old color. */
+  function setRegionPalette(field) { PAL = { ...PAL_DEFAULTS, ...(field || {}) }; }
 
   const canvas = document.createElement('canvas');
   canvas.className = 'cf-fieldfx';
@@ -130,7 +147,7 @@ export function createFieldFx(hud) {
 
   function addSparkle(x, y) {
     sparkles.push({ x: x + (Math.random() - 0.5) * 14, y: y + (Math.random() - 0.5) * 14,
-      life: 0.5, hue: 315 + Math.random() * 30 });
+      life: 0.5, hue: PAL.sparkleHue + Math.random() * 30 });
   }
 
   /** The Bound's threads, re-fed every frame by chaosField. */
@@ -231,45 +248,49 @@ export function createFieldFx(hud) {
     }
 
     // --- Residue zones: a soft additive disc + a dashed glowing ring + motes. ---
+    const [zr, zg, zb] = PAL.residue;
     for (const z of residues) {
       const a = 0.32 * (z.life / z.total);
-      dot(z.x, z.y, z.r, a * 0.9, 122, 224, 255);            // soft bloom disc
+      dot(z.x, z.y, z.r, a * 0.9, zr, zg, zb);               // soft bloom disc
       ctx.beginPath();
       ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2);
       ctx.setLineDash([6, 10]);
       ctx.lineWidth = 2;
-      ctx.strokeStyle = `rgba(122,224,255,${a * 1.4})`;
-      ctx.shadowColor = `rgba(122,224,255,${a * 1.4})`;
+      ctx.strokeStyle = `rgba(${zr},${zg},${zb},${a * 1.4})`;
+      ctx.shadowColor = `rgba(${zr},${zg},${zb},${a * 1.4})`;
       ctx.shadowBlur = 8;
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
       if (Math.random() < 0.35) {
         const ang = Math.random() * Math.PI * 2, rr = Math.random() * z.r;
-        dot(z.x + Math.cos(ang) * rr, z.y + Math.sin(ang) * rr, 5, a * 1.5, 190, 245, 255);
+        dot(z.x + Math.cos(ang) * rr, z.y + Math.sin(ang) * rr, 5, a * 1.5,
+          PAL.residueCore[0], PAL.residueCore[1], PAL.residueCore[2]);
       }
     }
 
-    // --- Lightning bolts: blurred cyan glow stroke + white-blue core + flashes + forks. ---
+    // --- Lightning bolts: blurred glow stroke + pale core + flashes + forks. ---
+    const [br, bg, bb] = PAL.bolt, [cr, cg, cb] = PAL.boltCore;
     for (const b of bolts) {
       const t = b.life / b.total;
       const a = t > 0.4 ? 1 : t / 0.4;                       // hold hot, then fade
-      glowLine(b.pts, 6.5, 66, 220, 230, 0.55 * a, 8);       // cyan glow halo
-      for (const fk of b.forks) glowLine(fk, 5, 66, 220, 230, 0.4 * a, 6);
-      glowLine(b.pts, 1.8, 191, 236, 255, 0.95 * a, 0);      // white-blue core
-      for (const fk of b.forks) glowLine(fk, 1.4, 191, 236, 255, 0.62 * a, 0);
+      glowLine(b.pts, 6.5, br, bg, bb, 0.55 * a, 8);         // glow halo
+      for (const fk of b.forks) glowLine(fk, 5, br, bg, bb, 0.4 * a, 6);
+      glowLine(b.pts, 1.8, cr, cg, cb, 0.95 * a, 0);         // pale core
+      for (const fk of b.forks) glowLine(fk, 1.4, cr, cg, cb, 0.62 * a, 0);
       const fr = 16 * a + 6;
-      dot(b.ex, b.ey, fr, 0.8 * a, 66, 220, 230);            // strike flash
-      dot(b.ax, b.ay, fr * 0.7, 0.6 * a, 66, 220, 230);      // source spark
+      dot(b.ex, b.ey, fr, 0.8 * a, br, bg, bb);              // strike flash
+      dot(b.ax, b.ay, fr * 0.7, 0.6 * a, br, bg, bb);        // source spark
     }
 
     // --- Vibe trail: a warm additive ribbon (bloom + gold core) behind the pointer. ---
+    const [vr, vg, vb] = PAL.vibe, [wr, wg, wb] = PAL.vibeCore;
     for (const p of trail) {
       const a = p.life / 0.45;
       const rad = 10 * a + 3;
-      dot(p.x, p.y, rad * 1.8, 0.28 * a, 255, 176, 58);      // bloom
-      dot(p.x, p.y, rad, 0.6 * a, 255, 176, 58);             // body
-      dot(p.x, p.y, rad * 0.5, 0.7 * a, 255, 233, 160);      // gold core
+      dot(p.x, p.y, rad * 1.8, 0.28 * a, vr, vg, vb);        // bloom
+      dot(p.x, p.y, rad, 0.6 * a, vr, vg, vb);               // body
+      dot(p.x, p.y, rad * 0.5, 0.7 * a, wr, wg, wb);         // gold core
     }
 
     // --- Rabbit sparkles (Tail-Plug): pink soft sprite + gold core. ---
@@ -287,6 +308,7 @@ export function createFieldFx(hud) {
 
   return {
     addBolt, addResidue, addSparkle, setTethers, setVibe, vibePoint, inResidue, draw,
+    setRegionPalette,
     clear() {
       bolts.length = 0; residues.length = 0; trail.length = 0; sparkles.length = 0; tethers = [];
       ctx.setTransform(1, 0, 0, 1, 0, 0);

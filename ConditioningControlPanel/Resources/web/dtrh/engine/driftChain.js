@@ -117,10 +117,20 @@ export function createDriftChain({ getDepth }) {
   let lastKey = null;
   const keyOf = (b) => b.mod + '/' + b.file;
 
+  // Region gate (Four Chambers). Entries with no `region` are UNIVERSAL - the
+  // original flat corpus - and stay eligible in every chamber as connective
+  // tissue. Entries tagged `region: 1..4` only play while that chamber is
+  // active. curRegion 0 = no region set (legacy / ASMR / scripted runs) so only
+  // the universal backbone speaks, exactly as before. Fed by setRegion() from
+  // chaosRun.applyRegionSky, mirroring the wallPosters region feed.
+  let curRegion = 0;
+  const inRegion = (b) => !b.region || b.region === curRegion;
+  function setRegion(n) { curRegion = (n | 0) || 0; }
+
   function pick(poolId) {
     const pool = FALL_DRIFT[poolId];
     if (!pool || !pool.length) return null;
-    const eligible = pool.map((_, i) => i).filter((i) => keyOf(pool[i]) !== lastKey);
+    const eligible = pool.map((_, i) => i).filter((i) => inRegion(pool[i]) && keyOf(pool[i]) !== lastKey);
     if (!eligible.length) return null;
     let idx;
     if (eligible.length === 1) {
@@ -333,7 +343,7 @@ export function createDriftChain({ getDepth }) {
   const isSpeaking = () => started && !el.paused;
 
   // read-only state for the ?e2e hook
-  const debugState = () => ({ started, blocksLeft, speaking: !el.paused, routed: !!voiceGain, duck });
+  const debugState = () => ({ started, blocksLeft, region: curRegion, speaking: !el.paused, routed: !!voiceGain, duck });
 
-  return { start, stop, setSpeed, setDuck, isSpeaking, dispose, debugState };
+  return { start, stop, setSpeed, setDuck, setRegion, isSpeaking, dispose, debugState };
 }

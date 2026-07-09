@@ -241,8 +241,35 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
   let tintTarget = 0, tintEased = 0;
   let densTarget = null;   // {rings, spiralTurns} or null = engine defaults
   let densEase = null;     // eased current values, seeded from the live uniforms
+  let arms0 = null;        // engine-default spiral arm count, captured on first override
   let rushOverride = 0, rushOverrideEased = 0;
   let flashHold = 0;
+
+  // ---- Four Chambers region grade ---------------------------------------------
+  // Each chamber OWNS the tube's palette during a region-mode run: a region
+  // style re-seeds the six base colors (below, via CV) and the whole zone/
+  // ribbon/sparkle/fog machinery re-expands from that seed - weather deltas and
+  // game tints ride on top exactly as they do on the user's theme. Nothing here
+  // ever persists to settings; the hub always reverts to the player's colors.
+  const GRADE_KEYS = ['colFog', 'colLine', 'colSpiral', 'colRibbon', 'colSparkle', 'colBg'];
+  const gradeCur = {}, gradeFrom = {}, gradeTarget = {};
+  for (const k of GRADE_KEYS) {
+    gradeCur[k] = new THREE.Color();
+    gradeFrom[k] = new THREE.Color();
+    gradeTarget[k] = new THREE.Color();
+  }
+  let gradeT = 1, gradeDur = 0;
+  let regionBase = null;      // chamber palette (outranked only by the prism)
+  let regionKnobs = null;     // {enter, peak} shader pattern knobs
+  let regionProgress = 0;     // 0..1 position inside the chamber's intensity band
+  let regionFx = null;        // {sparkle, ribbon} additive opacity boosts
+  let strobeScale = 1;        // photosensitivity guard (effect-intensity dial)
+  // chamber pattern knobs -> tunnel uniforms (all ease toward 0 off-region)
+  const KNOBS = [
+    ['breath', 'uBreath'], ['ringDash', 'uRingDash'], ['lineWave', 'uLineWave'],
+    ['ringDouble', 'uRingDouble'], ['spiralDrift', 'uSpiralDrift'],
+    ['throb', 'uThrob'], ['strobe', 'uStrobe'],
+  ];
   const _fogE = new THREE.Color(ZP.calm.fog), _lineE = new THREE.Color(ZP.calm.line),
     _spiralE = new THREE.Color(ZP.calm.spiral);
   const _lineF = new THREE.Color(), _spiralF = new THREE.Color();
@@ -251,6 +278,14 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
   function update(depth, dt, t, intensity, rush) {
     rush = rush || 0;
     lastDepth = depth;
+    // region grade crossfade: while fading, re-seed the whole palette from the
+    // eased six colors each frame (a handful of HSL ops - only during the fade)
+    if (gradeT < 1) {
+      gradeT = Math.min(1, gradeT + dt / Math.max(0.001, gradeDur));
+      const ge = gradeT * gradeT * (3 - 2 * gradeT);
+      for (const k of GRADE_KEYS) gradeCur[k].lerpColors(gradeFrom[k], gradeTarget[k], ge);
+      applyBaseColors(gradeCur);
+    }
     const zi = Math.floor(depth / ZONE_LEN);
     const u = (depth - zi * ZONE_LEN) / ZONE_LEN;
     const w = smoothstep(0, ZONE_EDGE, u) * (1 - smoothstep(1 - ZONE_EDGE, 1, u));
@@ -307,10 +342,27 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
       if (uni.uRings.value !== ri) uni.uRings.value = ri;
       if (uni.uSpiralTurns.value !== si) uni.uSpiralTurns.value = si;
     }
+    // chamber pattern knobs: glide toward this chamber's enter->peak lerp (or
+    // back to 0 off-region). One code path = the transition crossfade AND the
+    // in-chamber escalation, so patterns never pop.
+    for (let i = 0; i < KNOBS.length; i++) {
+      const ku = uni[KNOBS[i][1]];
+      if (!ku) continue;
+      let target = 0;
+      if (regionKnobs) {
+        const key = KNOBS[i][0];
+        const e = regionKnobs.enter[key] || 0;
+        const p = regionKnobs.peak[key] != null ? regionKnobs.peak[key] : e;
+        target = e + (p - e) * regionProgress;
+        if (key === 'strobe') target *= strobeScale;
+      }
+      ku.value += (target - ku.value) * Math.min(1, dt * 0.8);
+    }
 
     // ribbons + sparkles: zone blend, plus a slow breath, the intensity ramp,
     // and the speed rush (fast falls burn brighter and shimmer harder)
-    const ribbonOp = ((base.ribbon + (z.ribbon - base.ribbon) * w) + 0.22 * intensity) * (1 + rush * 0.9);
+    const ribbonOp = ((base.ribbon + (z.ribbon - base.ribbon) * w) + 0.22 * intensity
+      + (regionFx ? regionFx.ribbon : 0)) * (1 + rush * 0.9);
     // swirl: scroll the flow-bands along each strand. Rate ramps with depth so
     // the ribbons corkscrew lazily up top and race the deeper you fall.
     const flowRate = 0.03 + 0.28 * intensity + rush * 0.35;
@@ -318,7 +370,8 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
       ribbons[i].mat.opacity = ribbonOp * (0.8 + 0.2 * Math.sin(t * (0.7 + rush * 1.6) + i * 2.1));
       if (ribbons[i].flow) ribbons[i].flow.offset.x -= dt * flowRate * (1 + i * 0.18);
     }
-    const sparkleOp = (base.sparkle + (z.sparkle - base.sparkle) * w) + 0.1 * intensity + 0.18 * rush;
+    const sparkleOp = (base.sparkle + (z.sparkle - base.sparkle) * w) + 0.1 * intensity + 0.18 * rush
+      + (regionFx ? regionFx.sparkle : 0);
     sparkMat.opacity = sparkleOp * (0.7 + 0.3 * Math.sin(t * (2.3 + rush * 3)));
 
     // storm: strikes while the zone is properly inside its window; a flat-out
@@ -357,34 +410,55 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
   // seconds; CV() prefers it over the saved setting so applyTheme() recolors the
   // whole tube WITHOUT touching (or persisting) the player's chosen theme.
   let themeOverride = null, overrideTimer = 0;
-  const CV = (k) => (themeOverride && themeOverride[k] != null) ? themeOverride[k] : S[k];
-  function applyTheme() {
-    const bFog = hslOf(CV('colFog')), bLine = hslOf(CV('colLine')), bSpiral = hslOf(CV('colSpiral'));
+  // Base-color resolution: prism scramble > chamber grade > user theme. The
+  // chamber layer sits UNDER the prism (a prism pop mid-run re-lands on the
+  // chamber palette when it expires) and never touches saved settings.
+  const CV = (k) => (themeOverride && themeOverride[k] != null) ? themeOverride[k]
+    : (regionBase && regionBase[k] != null) ? regionBase[k] : S[k];
+  // applyBaseColors: re-derive everything from an explicit set of six colors
+  // (THREE.Color or hex). The grade crossfade feeds eased colors through here.
+  function applyBaseColors(c6) {
+    const bFog = hslOf(c6.colFog), bLine = hslOf(c6.colLine), bSpiral = hslOf(c6.colSpiral);
     for (const z of Object.values(ZP)) {
       setHSLDelta(z.fogC, bFog, z._dFog);
       setHSLDelta(z.lineC, bLine, z._dLine);
       setHSLDelta(z.spiralC, bSpiral, z._dSpiral);
     }
-    const bRib = hslOf(CV('colRibbon'));
+    const bRib = hslOf(c6.colRibbon);
     for (let i = 0; i < ribbons.length; i++) setHSLDelta(ribbons[i].mat.color, bRib, ribbonDeltas[i]);
-    sparkMat.color.set(CV('colSparkle'));
+    sparkMat.color.set(c6.colSparkle);
     // lightning: the rings hue, lifted pale so bolts read against the tube
-    const bl = hslOf(CV('colLine'));
-    boltColor.setHSL(bl.h, clamp01(bl.s * 0.55), clamp01(bl.l + 0.4));
+    boltColor.setHSL(bLine.h, clamp01(bLine.s * 0.55), clamp01(bLine.l + 0.4));
     // tunnel background gradient (uBg2 a darker shade of the picked bg)
-    if (tunnelMat.uniforms.uBg1) tunnelMat.uniforms.uBg1.value.set(CV('colBg'));
+    if (tunnelMat.uniforms.uBg1) tunnelMat.uniforms.uBg1.value.set(c6.colBg);
     if (tunnelMat.uniforms.uBg2) {
-      const bg = hslOf(CV('colBg'));
+      const bg = hslOf(c6.colBg);
       tunnelMat.uniforms.uBg2.value.setHSL(bg.h, bg.s, clamp01(bg.l * 0.55));
     }
     // particle fog cloud (two-tone: rings + spiral)
     const pfu = particleFog && particleFog.mesh && particleFog.mesh.material
       && particleFog.mesh.material.uniforms;
     if (pfu) {
-      if (pfu.uColorA) pfu.uColorA.value.set(CV('colLine'));
-      if (pfu.uColorB) pfu.uColorB.value.set(CV('colSpiral'));
+      if (pfu.uColorA) pfu.uColorA.value.set(c6.colLine);
+      if (pfu.uColorB) pfu.uColorB.value.set(c6.colSpiral);
     }
   }
+  // retargetGrade: aim the six-color crossfade at whatever CV() resolves now.
+  // fadeSec 0 = instant (settings changes and the prism keep their snap).
+  function retargetGrade(fadeSec) {
+    for (const k of GRADE_KEYS) {
+      gradeFrom[k].copy(gradeCur[k]);
+      gradeTarget[k].set(CV(k));
+    }
+    if (fadeSec > 0) {
+      gradeT = 0; gradeDur = fadeSec;
+    } else {
+      for (const k of GRADE_KEYS) gradeCur[k].copy(gradeTarget[k]);
+      gradeT = 1;
+      applyBaseColors(gradeCur);
+    }
+  }
+  function applyTheme() { retargetGrade(0); }
   applyTheme();
   const offSettings = onSettings((key) => { if (typeof key === 'string' && key.startsWith('col')) applyTheme(); });
 
@@ -434,10 +508,47 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     if (color != null) tintC.set(color);
     tintTarget = color == null ? 0 : clamp01(strength);
   }
-  // setDensity: re-pattern the tube (Heat Warp). null resets to engine defaults.
-  function setDensity(d) {
+  // setDensity: re-pattern the tube (Heat Warp / chamber cadence). null resets
+  // to engine defaults. opts.snap writes the counts in ONE frame instead of
+  // easing - integer respaces read as a visible "teleport", so chamber changes
+  // snap once at the commit, hidden under the transition flash, never eased.
+  // d.arms additionally re-arms the spiral (chambers only; Heat Warp omits it).
+  function setDensity(d, opts) {
     densTarget = d ? { rings: d.rings, spiralTurns: d.spiralTurns } : null;
+    const uni = tunnelMat.uniforms;
+    if (uni.uArms) {
+      if (arms0 == null) arms0 = uni.uArms.value;
+      if (d && d.arms != null) uni.uArms.value = d.arms;
+      else if (!d) uni.uArms.value = arms0;
+    }
+    if (opts && opts.snap && uni.uRings && uni.uSpiralTurns) {
+      if (!densEase) {
+        densEase = { r: uni.uRings.value, s: uni.uSpiralTurns.value,
+          r0: uni.uRings.value, s0: uni.uSpiralTurns.value };
+      }
+      const rT = (d && d.rings != null) ? d.rings : densEase.r0;
+      const sT = (d && d.spiralTurns != null) ? d.spiralTurns : densEase.s0;
+      densEase.r = rT; densEase.s = sT;
+      uni.uRings.value = Math.round(rT);
+      uni.uSpiralTurns.value = Math.round(sT);
+    }
   }
+  // applyRegionGrade: dress the tube in a chamber's style (regions.js) - the
+  // palette crossfades over fadeSec, the pattern knobs glide in via update().
+  // null reverts to the user's theme (surfacing / run end). opts.strobeScale
+  // scales the Court's metronome by the effect-intensity dial (photosensitivity).
+  function applyRegionGrade(style, fadeSec = 3.2, opts) {
+    regionBase = (style && style.palette) ? { ...style.palette } : null;
+    regionKnobs = (style && style.knobs) ? style.knobs : null;
+    regionFx = style
+      ? { sparkle: style.sparkleBoost || 0, ribbon: style.ribbonBoost || 0 } : null;
+    strobeScale = (opts && opts.strobeScale != null) ? clamp01(opts.strobeScale) : 1;
+    if (!regionBase) regionProgress = 0;
+    retargetGrade(fadeSec);
+  }
+  // setRegionProgress: 0..1 position inside the chamber's intensity band -
+  // drives each pattern knob's enter->peak lerp (the in-chamber escalation).
+  function setRegionProgress(p) { regionProgress = clamp01(p || 0); }
   // holdFlash: a sustained uFlash floor while on (pulseFlash stays transient).
   function holdFlash(on, amount = 0.55) { flashHold = on ? amount : 0; }
   // setRushOverride: force the speed-line heat regardless of actual fall speed.
@@ -487,6 +598,8 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     getZone: () => currentZone,
     // Wave 2 game verbs
     strikeNow, forceZone, setTint, setDensity, holdFlash, setRushOverride,
+    // Four Chambers region grade
+    applyRegionGrade, setRegionProgress,
     rebase,
   };
 }

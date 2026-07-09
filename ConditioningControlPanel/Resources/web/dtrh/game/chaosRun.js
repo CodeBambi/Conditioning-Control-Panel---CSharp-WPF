@@ -1186,10 +1186,16 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     ctx.nav.setRollRate(0);
     ctx.nav.setSpeedCapMult(1);
     ctx.fx.setTint(null);
-    ctx.fx.setDensity(null);
+    ctx.fx.setDensity(null, { snap: true }); // hub cadence lands whole, behind the recap/hub transition
     ctx.fx.setRushOverride(0);
     ctx.fx.holdFlash(false);
     ctx.fx.forceZone(null);
+    // surface from the chambers: the tube hands the palette back to the user's
+    // theme (short fade), knobs glide to 0, bloom and field accents reset
+    if (ctx.fx.applyRegionGrade) ctx.fx.applyRegionGrade(null, 1.5);
+    if (ctx.fx.setRegionProgress) ctx.fx.setRegionProgress(0);
+    if (ffx && ffx.setRegionPalette) ffx.setRegionPalette(null);
+    if (ctx.setBloomStrength) ctx.setBloomStrength(1);
   }
 
   // ---- Wave 2: THE WEATHER (weather.js data; one sky per loop) --------------
@@ -1261,6 +1267,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // Four Chambers wall dressing: the chamber sets how plastered the tube wall
     // is (I bare -> IV almost wall-to-wall). Scales with the descent.
     if (ctx && ctx.wall) ctx.wall.setRegion(regionIndex);
+    // Four Chambers visual identity: the chamber OWNS the tube. Palette grade
+    // crossfades in (~3.2s, landing as the ready-GO beat clears); the ring/
+    // spiral/arm cadence snaps ONCE right here, hidden under commitWave's flash
+    // (eased count changes read as a visible respace); bloom + the 2D field
+    // accents finish the dress. The strobe knob is scaled by the player's
+    // effect-intensity dial (photosensitivity guard).
+    const style = region.style || null;
+    ctx.fx.applyRegionGrade(style, 3.2, { strobeScale: cfg.effectIntensity });
+    if (style && style.density) ctx.fx.setDensity(style.density, { snap: true });
+    if (ffx && ffx.setRegionPalette) ffx.setRegionPalette(style ? style.field : null);
+    if (ctx.setBloomStrength) ctx.setBloomStrength(style && style.bloom ? style.bloom : 1);
   }
 
   // ---- Wave 2: tunnel pickups (spawner.spawnPickup - clickable 3D objects) ----
@@ -1349,6 +1366,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     fireJunction();
   }
 
+  /** Blend a doorway's brand color 35% toward the current chamber's line hue so
+   * the portal veins sit in-chamber while the brand word stays legible. */
+  function chamberBlend(hex) {
+    if (!cfg.regionMode) return hex;
+    const style = regionForWave(st.waveIndex).style;
+    if (!style || !style.palette) return hex;
+    const a = parseInt(hex.slice(1), 16), b = style.palette.colLine, t = 0.35;
+    const mix = (sh) => Math.round(((a >> sh) & 255) + (((b >> sh) & 255) - ((a >> sh) & 255)) * t);
+    return `#${((1 << 24) | (mix(16) << 16) | (mix(8) << 8) | mix(0)).toString(16).slice(1)}`;
+  }
+
   function fireJunction() {
     const pair = JUNCTION_PAIRS[Math.floor(Math.random() * JUNCTION_PAIRS.length)];
     const coaxSide = Math.random() < 0.5 ? 'left' : 'right';
@@ -1356,6 +1384,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // shared JUNCTION_PAIRS catalog entries
     const left = { ...(coaxSide === 'left' ? pair.coax : pair.resist) };
     const right = { ...(coaxSide === 'left' ? pair.resist : pair.coax) };
+    left.color = chamberBlend(left.color);
+    right.color = chamberBlend(right.color);
     // each doorway carries a PRIZE, overlaid on its card (a nameplate chip): the
     // road you take is the power-up you get, the other one is gone - so choosing
     // matters. Same offer pool + veto as the drifting drops; two distinct items.
@@ -1450,6 +1480,17 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // W5 sins that ride the camera: Freefall raises the speed ceiling, Spun rolls
     ctx.nav.setSpeedCapMult(st.freefallActive ? 2 : 1);
     ctx.nav.setRollRate(st.spunRollRate || 0);
+    // Four Chambers escalation: where intensity() sits inside this chamber's
+    // band drives the pattern knobs' enter->peak lerp (fx eases it further).
+    if (ctx.fx.setRegionProgress) {
+      if (cfg.regionMode) {
+        const r = regionForWave(st.waveIndex);
+        const span = Math.max(0.001, r.band.peak - r.band.start);
+        ctx.fx.setRegionProgress(clamp((intensity() - r.band.start) / span, 0, 1));
+      } else {
+        ctx.fx.setRegionProgress(0);
+      }
+    }
   }
 
   // ============================ RunTick (0.25s) ============================
@@ -2324,9 +2365,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         // Descent is live: wake the drift whisper + special tube moods (the hub kept them idle).
         try { ctx.setRunActive && ctx.setRunActive(true); } catch (e) { /* ignore */ }
         bridge.send({ type: 'run-started', difficulty: cfg.difficulty, mode: 'dtrh-web' });
-        // Fresh descent: reset the wall to this chamber's plaster level (Region I
-        // is bare; a non-region run stays bare at 0).
-        if (ctx && ctx.wall) ctx.wall.setRegion(cfg.regionMode ? st.waveIndex : 0);
+        // Fresh descent: dress the opening chamber. applyRegionSky covers the
+        // wall plaster AND the chamber's visual grade (Region I's warm dusk
+        // fades in over the user-theme hub look during the GO beat) - it runs
+        // on the scripted first run too, just without the banner.
+        if (cfg.regionMode) {
+          applyRegionSky(st.waveIndex);
+        } else if (ctx && ctx.wall) {
+          ctx.wall.setRegion(0);
+        }
         // First descent since the verb changed: one quiet line so the hold isn't
         // a mystery. The scripted run 1 lands this at its lone-threat beat instead.
         if (!flags.seenDefuseTutorial && !cfg.scriptedFirstRun) {
@@ -2438,6 +2485,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       payloadFx = createPayloadFx({ hud: ctx.hud, fx: ctx.fx, media: ctx.media, flashBurst: ctx.flashBurst });
       try { window.__sfPayloadFx = payloadFx; } catch { /* diagnostics seam (m2test) */ }
       try { window.__sfFireJunction = () => fireJunction(); } catch { /* diagnostics seam: force a branch fork */ }
+      try {
+        // diagnostics seam: jump straight to chamber N (1..4) through the full
+        // production commit path (banner + grade + density choreography)
+        window.__sfRegion = (n) => {
+          if (state === 'running' && cfg && cfg.regionMode) {
+            commitWave(clamp(Math.round(n || 1), 1, REGION_COUNT));
+          }
+        };
+      } catch { /* diagnostics seam */ }
       field = createChaosField({
         hud: ctx.hud, fx: ffx,
         canChannel, onBenignPopped, onFreezeCaught,
@@ -2666,6 +2722,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       vn?.dispose();   // closes the VN AudioContext + removes its overlay/listeners (else it leaks per attach and hits Chromium's context ceiling)
       try { if (window.__sfPayloadFx === payloadFx) delete window.__sfPayloadFx; } catch { /* seam cleanup */ }
       try { delete window.__sfFireJunction; } catch { /* seam cleanup */ }
+      try { delete window.__sfRegion; } catch { /* seam cleanup */ }
       field = null; hudUi = null; overlays = null; ffx = null; payloadFx = null;
       warren = null; lessons = null; happy = null; vn = null;
     },

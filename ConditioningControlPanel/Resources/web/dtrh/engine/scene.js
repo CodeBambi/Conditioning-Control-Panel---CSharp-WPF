@@ -536,7 +536,8 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   }
 
   // ---- optional bloom (gracefully skipped if addons unavailable) ---------------
-  let composer = null;
+  let composer = null, bloomPass = null;
+  const BLOOM_BASE = 0.42;
   if (Q.bloom) try {
     const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }] = await Promise.all([
       import('three/addons/postprocessing/EffectComposer.js'),
@@ -545,8 +546,9 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     ]);
     composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight), 0.42, 0.5, 0.5));
+    bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight), BLOOM_BASE, 0.5, 0.5);
+    composer.addPass(bloomPass);
     composer.setSize(window.innerWidth, window.innerHeight);
   } catch (err) {
     console.warn('[sissy-fall] bloom unavailable, rendering without it:', err);
@@ -590,7 +592,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     bubbles.setPaused(true);
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
-    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, junctions, boonPick, powerupDrops, hubStations, flashBurst: (n) => bubbles.flashBurst(n),
+    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, drift, junctions, boonPick, powerupDrops, hubStations, flashBurst: (n) => bubbles.flashBurst(n),
       // the Ripple flings on-screen flash clips off screen along the hit angle
       flingFlashesNear: (px, py, r, probe) => bubbles.flingFlashesNear(px, py, r, probe),
       openOptions: () => panel.toggle(),
@@ -599,6 +601,9 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       // Live meta-rank for the panel's DESCENT section (deep pool variants).
       setOptionProgress: (p) => panel.setProgress(p),
       silenceVoice: (on) => { voiceSilenced = !!on; },
+      // Four Chambers: per-chamber bloom weight (multiplier on the base
+      // strength). No-ops gracefully on the mobile tier (no bloom pass).
+      setBloomStrength: (mult) => { if (bloomPass) bloomPass.strength = BLOOM_BASE * (mult || 1); },
       setRunActive });
   }
 

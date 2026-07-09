@@ -96,6 +96,16 @@ const TUBE_FRAG = `
   // 0 near the top of the fall, ramping to 1 the deeper you go: speeds up the
   // intermittent line-glow flicker so the rays flash slow up top, frantic deep.
   uniform float uGlowRate;
+  // chamber pattern knobs (fx.js eases these; ALL 0 = the classic look).
+  // Each of the Four Chambers wears its own subset:
+  //   uBreath      I   - slow ring width+brightness swell (an invitation, not a demand)
+  //   uRingDash    II  - rings segmented into doorframe posts
+  //   uSpiralDrift II  - spiral phase wanders/stalls/reverses + depth shear (compass-loss)
+  //   uLineWave    III - rings undulate around the circumference like vines
+  //   uThrob       III - heartbeat lub-dub swell on the line glow
+  //   uRingDouble  IV  - crisp twin rings (authoritative)
+  //   uStrobe      IV  - hard metronomic neon tick (~1.4Hz, capped - signage, not strobe)
+  uniform float uBreath, uRingDash, uLineWave, uRingDouble, uSpiralDrift, uThrob, uStrobe;
   // branch mouths carved into the wall (world space)
   uniform int uHoleCount;
   uniform vec3 uHolePos[MAX_HOLES];
@@ -156,10 +166,40 @@ const TUBE_FRAG = `
     // base: subtle tint variation around the tube
     vec3 base = mix(uBg1, uBg2, 0.5 + 0.5 * sin((around + 0.25) * 6.2831));
 
+    // ---- chamber pattern knobs (all zero -> the classic coords below) ----
+    // breath (I): slow width/brightness swell, ~8.4s period. The width factor
+    // only scales the designed half-width; the fwidth floor in lineMask keeps AA.
+    float brW = 1.0 + uBreath * 0.5 * sin(uTime * 0.75);
+    float brG = 1.0 + uBreath * 0.3 * sin(uTime * 0.75 - 0.6);
+    // vine wave (III): rings undulate around the circumference. INTEGER
+    // circumference frequencies -> seam-free at the vUv wrap; fwidth() is taken
+    // on the perturbed coord so the wavy line keeps its screen-space AA.
+    float wave = uLineWave * (0.35 * sin(around * 6.2831 * 3.0 + uTime * 0.6)
+                            + 0.2  * sin(around * 6.2831 * 7.0 - uTime * 0.9));
+    // compass-loss (II): BOUNDED spiral phase offsets (never scale scroll - it
+    // grows unbounded). When d(drift)/dt beats the scroll rate the spiral
+    // visibly stalls and runs backwards; shear makes depths disagree about
+    // direction (integer len frequency: wrap-safe).
+    float drift = uSpiralDrift * (10.0 * sin(uTime * 0.16)
+                                 + 3.0 * sin(uTime * 0.041 + 1.7));
+    float shear = uSpiralDrift * 1.5 * sin(len * 6.2831 * 2.0 + uTime * 0.21);
+
     // perpendicular rings + a helical spiral (around + length), both scrolling
-    float ringCoord = len * uRings - scroll;
-    float spiralCoord = around * uArms + len * uSpiralTurns - scroll;
-    float ring = lineMask(ringCoord, 0.06);
+    float ringCoord = len * uRings - scroll + wave;
+    float spiralCoord = around * uArms + len * uSpiralTurns - scroll + drift + shear;
+    // ring: single line, or the Court's crisp twin (offset > AA width so the
+    // pair never fuses); narrower twins = the authoritative look
+    float ringS = lineMask(ringCoord, 0.06 * max(brW, 0.5));
+    float dblOff = 0.10 + 0.06 * uRingDouble;
+    float ringD = max(lineMask(ringCoord - dblOff, 0.035), lineMask(ringCoord + dblOff, 0.035));
+    float ring = mix(ringS, ringD, uRingDouble);
+    // doorframe dash (II): segment rings into door-post arcs. 10 posts
+    // (integer: wrap-safe), 62% duty, own fwidth AA on the segment coord.
+    float segC = around * 10.0;
+    float segD = abs(fract(segC) - 0.5) * 2.0;
+    float dw = clamp(1.5 * fwidth(segC), 0.03, 0.4);
+    float dash = 1.0 - smoothstep(0.62 - dw, 0.62 + dw, segD);
+    ring *= mix(1.0, dash, uRingDash);
     float spiral = lineMask(spiralCoord, 0.05);
 
     // intermittent glow: travelling pulses down the tube + a global shimmer.
@@ -169,6 +209,22 @@ const TUBE_FRAG = `
     float globalFlash = pulse(uTime * 0.7 * gr, 6.0);
     float ringGlow   = 0.35 + 1.7 * pulse(ringCoord * 0.5 - uTime * 1.6 * gr, 3.0) + 1.1 * globalFlash;
     float spiralGlow = 0.45 + 2.0 * pulse(spiralCoord * 0.4 - uTime * 2.1 * gr, 3.0) + 0.9 * globalFlash;
+
+    // breath (I): brightness follows the width swell, slightly lagged
+    ringGlow   *= brG;
+    spiralGlow *= brG;
+    // heartbeat throb (III): lub-dub envelope; the beat rate rides the same
+    // depth ramp as the flicker so the pulse quickens the deeper you fall
+    float hb  = fract(uTime * (1.05 + 0.5 * uGlowRate) * 0.5);
+    float thr = uThrob * (exp(-18.0 * hb) + 0.55 * exp(-18.0 * fract(hb - 0.32)));
+    ringGlow   *= 1.0 + thr * 1.6;
+    spiralGlow *= 1.0 + thr * 1.2;
+    // metronome (IV): hard brief neon ticks at ~84bpm. Amplitude is capped by
+    // the authored knob (<=0.65) and scaled CPU-side by the effect-intensity
+    // dial - it reads as neon signage, never a full-screen strobe.
+    float strobe = uStrobe * pulse(uTime * 6.2831 * 1.4, 12.0);
+    ringGlow   *= 1.0 + strobe * 2.2;
+    spiralGlow *= 1.0 + strobe * 1.6;
 
     // rush: the faster the fall, the hotter the line work burns, plus streaky
     // longitudinal speed-lines that only exist at velocity
@@ -181,7 +237,9 @@ const TUBE_FRAG = `
       + uLineColor   * ring   * ringGlow
       + uSpiralColor * spiral * spiralGlow
       + uLineColor   * streak * uRush * 1.4
-      + uLineColor   * uRush * 0.05;
+      + uLineColor   * uRush * 0.05
+      // faint whole-wall swell on the heartbeat + the Court's whole-tube tick
+      + uLineColor   * (thr * 0.05 + strobe * 0.1);
 
     // lightning strike: a brief whole-tube glare that favours the line work
     col += uFlash * (0.18 + ring * 1.4 + spiral * 0.9) * vec3(0.95, 0.8, 1.05);
@@ -231,6 +289,14 @@ export function createTunnel(layout) {
       uFlash: { value: 0 }, // lightning glare, driven by fx.js
       uRush: { value: 0 },  // speed heat, driven by scene.js (0 calm - 1 flying)
       uGlowRate: { value: 0 }, // ray-flicker rate ramp, driven by fx.js (0 shallow - 1 deep)
+      // chamber pattern knobs, eased by fx.js from the region styles (0 = classic)
+      uBreath: { value: 0 },
+      uRingDash: { value: 0 },
+      uLineWave: { value: 0 },
+      uRingDouble: { value: 0 },
+      uSpiralDrift: { value: 0 },
+      uThrob: { value: 0 },
+      uStrobe: { value: 0 },
       // branch-hole carving (junctions.js sets these; 0 count => idle/no overhead)
       uHoleCount: { value: 0 },
       uHolePos: { value: Array.from({ length: MAX_HOLES }, () => new THREE.Vector3()) },
