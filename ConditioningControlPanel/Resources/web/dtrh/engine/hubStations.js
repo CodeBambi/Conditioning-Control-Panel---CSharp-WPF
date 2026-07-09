@@ -160,7 +160,7 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
   const DEFAULT_SLOTS = {
     toybox:  { x: -3.4, y: 1.4 },
     dials:   { x: 3.4,  y: 1.4 },
-    vanity:  { x: 0,    y: 2.6 },
+    vanity:  { x: 0,    y: 2.15 },   // ducks under the DOM logo marquee
     portal:  { x: 0,    y: -0.4 },
   };
 

@@ -1943,6 +1943,26 @@ img.rh-fx-spiralspin {
 .wr-reveal-flash { animation: wrRevealPulse 1s ease-in-out 3; }
 @keyframes wrRevealPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.22; } }
 
+/* ---- the neon marquee (top-center, floats over the station cards; fades
+   out while a station's panes are open so the head bar owns the top edge) ---- */
+.wr-logo-wrap {
+  position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.wr-logo {
+  width: min(300px, 24vw); height: auto;
+  filter: drop-shadow(0 4px 26px rgba(232,67,147,0.5));
+  animation: wrLogoFloat 5.2s ease-in-out infinite alternate;
+}
+@keyframes wrLogoFloat { from { transform: translateY(0); } to { transform: translateY(5px); } }
+.wr-logo-sub {
+  font-size: 0.74rem; font-style: italic; opacity: 0.6; margin-top: 2px;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
+.wr-station-open .wr-logo-wrap { opacity: 0; transform: translateX(-50%) translateY(-14px); }
+
 /* ---- corner title (top-left, quiet) ---- */
 .wr-corner-title { position: absolute; top: 14px; left: 20px; }
 .wr-corner-name {
@@ -2175,7 +2195,7 @@ img.rh-fx-spiralspin {
 /* compact slot cards so all 4 HANDS fit one row in a 460px pane column
    (86px + 2px borders each + 3 gaps = 390px inside the ~396px card) */
 .wr-pockets .wr-shelf { width: 86px; }
-.wr-pockets .wr-shelf-art { height: 60px; }
+.wr-pockets .wr-shelf-art { height: 84px; }
 .wr-pockets .wr-shelf-glyph { font-size: 1.7rem; }
 .wr-pockets .wr-shelf-foot { padding: 6px 8px 8px; gap: 3px; }
 .wr-pockets .wr-shelf-name { font-size: 0.72rem; }

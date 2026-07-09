@@ -197,10 +197,10 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     card.style.setProperty('--acc', data.accent || '232,67,147');
     el('wr-unlock-ribbon', card, data.ribbon);
     const row = el('wr-unlock-row', card);
-    if (data.art) row.appendChild(artIcon(data.art, data.glyph, data.accent, 64));
+    if (data.art) row.appendChild(artIcon(data.art, data.glyph, data.accent, 84));
     else {
       const g = el('wr-icon', row);
-      g.style.width = g.style.height = '64px';
+      g.style.width = g.style.height = '84px';
       g.style.setProperty('--acc', data.accent || '232,67,147');
       el('wr-icon-glyph', g, data.glyph || '◈');
     }
@@ -437,10 +437,18 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     root.appendChild(cardLayer);
     const v = view();
 
-    // top-left: a quiet title
-    const title = el('wr-corner-title', root);
-    el('wr-corner-name', title, 'DOWN THE RABBIT HOLE');
-    el('wr-corner-sub', title, 'the fall is the easy part.');
+    // top-center: the neon marquee over the cards (text fallback if the art 404s)
+    const marquee = el('wr-logo-wrap', root);
+    const logoImg = document.createElement('img');
+    logoImg.className = 'wr-logo';
+    logoImg.src = `${ART}hub/logo.png`;
+    logoImg.alt = 'DOWN THE RABBIT HOLE';
+    logoImg.addEventListener('error', () => {
+      logoImg.remove();
+      el('wr-corner-name', marquee, 'DOWN THE RABBIT HOLE');
+    });
+    marquee.appendChild(logoImg);
+    el('wr-logo-sub', marquee, 'the fall is the easy part.');
 
     // top-right: rank + currencies
     const chips = el('wr-chips wr-chips--corner', root);
@@ -559,6 +567,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   function closeSheet() {
     if (winLayer) { winLayer.remove(); winLayer = null; }
     if (scrim) { scrim.remove(); scrim = null; }
+    root.classList.remove('wr-station-open');   // the marquee fades back in
     cols = null;
     openWins.clear();
     expandedRows.clear();
@@ -587,6 +596,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     openId = id;
     if (stations) stations.focus(id, 0);   // centered: the panes flank both sides
     scrim = el('wr-scrim', root);          // dims the tunnel, clear at center for the card
+    root.classList.add('wr-station-open'); // the marquee yields to the head bar
     winLayer = el('wr-wins', root);
     winLayer.dataset.station = id;
     // a slim station head bar spans BOTH columns (glyph + title / sub / ✕)
@@ -689,7 +699,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     const row = el('wr-row wr-row--stack' + (on ? ' is-on' : owned ? ' is-owned' : ''));
     row.style.setProperty('--acc', accent);
     const top = el('wr-row-top', row);
-    const icon = artIcon(`${ART}upgrades/${u.id}.png`, u.glyph, accent, 48);
+    const icon = artIcon(`${ART}upgrades/${u.id}.png`, u.glyph, accent, 76);
     if (!owned) icon.style.opacity = '0.55';
     top.appendChild(icon);
     const title = el('wr-row-title', top);
@@ -733,8 +743,8 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
 
     // Undiscovered = a MYSTERY: keyhole, "???", never the boon's face.
     const icon = unlocked
-      ? artIcon(`${ART}boons/${b.id}.png`, b.glyph, accent, 48)
-      : artIcon(`${ART}hub/tile_unknown.png`, '?', accent, 48);
+      ? artIcon(`${ART}boons/${b.id}.png`, b.glyph, accent, 76)
+      : artIcon(`${ART}hub/tile_unknown.png`, '?', accent, 76);
     if (!unlocked) icon.style.opacity = '0.6';
     top.appendChild(icon);
 
@@ -1035,7 +1045,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       const row = el('wr-row wr-row--codex' + (seen ? '' : ' is-hazy'), met);
       row.style.setProperty('--acc', c.tint);
       if (seen) {
-        const icon = artIcon(`${ART}bubbles/${c.codex.split(':')[1]}.png`, c.glyph, c.tint, 39);
+        const icon = artIcon(`${ART}bubbles/${c.codex.split(':')[1]}.png`, c.glyph, c.tint, 56);
         row.appendChild(icon);
       } else {
         el('wr-verb-glyph', row, '?');
