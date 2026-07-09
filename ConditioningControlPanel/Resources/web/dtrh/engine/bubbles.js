@@ -270,6 +270,12 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
     v.addEventListener('ended', finish, { once: true });
     timer = window.setTimeout(finish, FLASH_MAX_MS);
     v.addEventListener('pointerdown', (e) => {
+      // Right-click belongs to the ripple. chaosRun's onPointerDownGlobal is a
+      // window CAPTURE-phase listener, so on a right-click it already fired the
+      // ripple + flung this clip (flingFlashesNear) before this bubble-phase
+      // handler runs. Bail so the fling plays out instead of finish() tearing the
+      // clip away mid-flight. Only a left-click pops the clip by hand (the hydra).
+      if (e.button != null && e.button !== 0) return;
       e.preventDefault(); e.stopPropagation();
       if (frozen) return;
       const x = e.clientX, y = e.clientY;

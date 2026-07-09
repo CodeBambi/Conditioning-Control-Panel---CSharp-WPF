@@ -22,6 +22,7 @@
  * ==========================================================================*/
 
 import { S } from '../engine/settings.js';
+import { isMuted, onMuteChange } from '../shared/audioMute.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const clamp01 = (v) => clamp(v, 0, 1);
@@ -55,8 +56,10 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
   // sustained overlays: one persistent element per kind, opacity-toggled
   const holds = {};   // kind -> { el, hideTimer }
   const loops = new Set();   // active rAF loops (cascade / bouncer) for teardown
+  const cascades = new Set(); // the gif-rain subset of loops (room arrival cuts these)
   let liveFlash = 0, liveCascade = 0;
   let videoCardEl = null;    // the single live video card (one at a time)
+  let videoCardCancel = null; // early-out for the live card (room arrival)
   let disposed = false;
 
   /** Draw a URL from the user's image pool (null when the pool is empty). */
@@ -235,20 +238,23 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     const step = (now) => {
       if (disposed || stop) return;
       while (now >= nextAt && now < endAt) { spawnOne(); nextAt += gapMs; }
-      if (now >= endAt) { loops.delete(handle); return; }
+      if (now >= endAt) { loops.delete(handle); cascades.delete(handle); return; }
       requestAnimationFrame(step);
     };
     const handle = { cancel: () => { stop = true; } };
     loops.add(handle);
+    cascades.add(handle);
     requestAnimationFrame(step);
   }
 
   // ---- video card (front layer) ----------------------------------------------
-  // The in-world port of the mandatory video: a superbig card slides DOWN from
-  // the top, sits in front of the POV while the descent continues, and after up
-  // to VIDEO_MAX_SEC slides back up and away. Only one at a time; the game keeps
-  // running underneath (unlike the old fullscreen native cover).
-  const VIDEO_MAX_SEC = 60;
+  // The in-world port of the mandatory video: the tape RUSHES UP AT THE POV and
+  // STICKS there - dead center, way closer than the tube's seated clips - caged
+  // in a red, electric, vibrating frame (styles.css .sf-pfx-vidframe). It cannot
+  // be clicked away: it holds the full VIDEO_HOLD_SEC and only lets go early
+  // when the fall reaches a room (the junction/draft antechamber calls
+  // cancelHeavy). Only one at a time; the game keeps running underneath.
+  const VIDEO_HOLD_SEC = 15;
   async function videoCard() {
     if (disposed || videoCardEl) return;   // one card at a time
     if (!media || !media.drawKind) return;
@@ -259,10 +265,19 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
 
     const card = document.createElement('div');
     card.className = 'sf-pfx-videocard';
+    // the frame carries the vibration + electric arcs so its jitter animation
+    // never fights the card's zoom-in transform transition
+    const frame = document.createElement('div');
+    frame.className = 'sf-pfx-vidframe';
     const vid = document.createElement('video');
     vid.src = got.url;
-    vid.loop = true; vid.playsInline = true; vid.autoplay = true; vid.muted = false;
-    card.appendChild(vid);
+    // the master mute is PARAMOUNT: the card is born muted when the HUD mute is
+    // on, and it tracks live flips for its whole 15s hold (audioMute.js also
+    // runs a page-level enforcer, but the card should behave on its own)
+    vid.loop = true; vid.playsInline = true; vid.autoplay = true; vid.muted = isMuted();
+    const offMute = onMuteChange((m) => { try { vid.muted = m; } catch { /* ignore */ } });
+    frame.appendChild(vid);
+    card.appendChild(frame);
     front.appendChild(card);
     videoCardEl = card;
     // autoplay-with-sound is allowed by the host flag; fall back to muted if blocked
@@ -272,17 +287,32 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     let removed = false;
     const remove = () => {
       if (removed) return; removed = true;
-      card.classList.remove('in');            // slide back up
+      offMute();
+      card.classList.remove('in');            // recede back into the deep
       try { vid.pause(); } catch { /* ignore */ }
-      setTimeout(() => { try { vid.src = ''; } catch { /* ignore */ } card.remove(); }, 700);
-      if (videoCardEl === card) videoCardEl = null;
+      // explicit unload: Chromium's per-page media-player cap counts a merely
+      // .remove()d element's decoder until GC (same pattern as bubbles.js)
+      setTimeout(() => { try { vid.removeAttribute('src'); vid.load(); } catch { /* ignore */ } card.remove(); }, 700);
+      if (videoCardEl === card) { videoCardEl = null; videoCardCancel = null; }
     };
-    // slide down on the next frame, hold, then retract
+    // rush at the face on the next frame, stick, then recede
     requestAnimationFrame(() => { if (!disposed) card.classList.add('in'); });
-    const life = setTimeout(remove, VIDEO_MAX_SEC * 1000);
+    const life = setTimeout(remove, VIDEO_HOLD_SEC * 1000);
     const handle = { cancel: () => { clearTimeout(life); remove(); } };
+    videoCardCancel = handle.cancel;
     loops.add(handle);
-    setTimeout(() => loops.delete(handle), VIDEO_MAX_SEC * 1000 + 900);
+    setTimeout(() => loops.delete(handle), VIDEO_HOLD_SEC * 1000 + 900);
+  }
+
+  /** Room arrival cuts the heavies short: the stuck video card recedes and any
+   * running gif rain stops spawning (falling gifs finish their slide). Returns
+   * true if anything live was actually cut. */
+  function cancelHeavy() {
+    let cut = false;
+    if (videoCardCancel) { try { videoCardCancel(); } catch { /* ignore */ } cut = true; }
+    for (const c of cascades) { try { c.cancel(); } catch { /* ignore */ } cut = true; }
+    cascades.clear();
+    return cut;
   }
 
   /**
@@ -318,10 +348,12 @@ export function createPayloadFx({ hud, fx, media, flashBurst }) {
     for (const h of Object.values(holds)) { if (h.hideTimer) clearTimeout(h.hideTimer); }
     for (const l of loops) { try { l.cancel(); } catch { /* best effort */ } }
     loops.clear();
+    cascades.clear();
     videoCardEl = null;
+    videoCardCancel = null;
     root.remove();
     front.remove();
   }
 
-  return { applyPayload, dispose };
+  return { applyPayload, cancelHeavy, dispose };
 }

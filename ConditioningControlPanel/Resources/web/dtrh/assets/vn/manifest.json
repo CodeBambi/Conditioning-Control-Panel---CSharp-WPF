@@ -289,6 +289,46 @@
         "builtin-bambisleep": "all you gotta do is watch the pretty bubbles and pop, pop, pop! so easy, even for a sweet empty dolly.",
         "builtin-locked": "you will watch the bubbles, and you will pop every one. do it well, pet… i'm counting."
       }
+    },
+    "welcome1": {
+      "emote": "sultry",
+      "vo": "welcome1.mp3",
+      "hold": 1600,
+      "lines": {
+        "builtin-sissyhypno": "oh… you found the burrow, sweetie. no one finds it. welcome home.",
+        "builtin-bambisleep": "eee! a visitor! bambi never gets visitors down in the burrow~",
+        "builtin-locked": "so. you found your way to my burrow. stand still. let me look at you."
+      }
+    },
+    "welcome2": {
+      "emote": "tease",
+      "vo": "welcome2.mp3",
+      "hold": 1900,
+      "lines": {
+        "builtin-sissyhypno": "everything here is mine — and it grows every time you fall. see that dark little hole below? that's where you go down.",
+        "builtin-bambisleep": "everything sparkly here grew from falling! see the hole down there? that's where good dollies go plop.",
+        "builtin-locked": "everything in this place was earned by falling. the hole below is yours now. use it."
+      }
+    },
+    "return1": {
+      "emote": "entrancing",
+      "vo": "return1.mp3",
+      "hold": 1800,
+      "lines": {
+        "builtin-sissyhypno": "back already, lovely? and look — the burrow grew while you were under. it does that when you bring me things.",
+        "builtin-bambisleep": "you're baaack! and lookie — new toys popped up while you were falling! that's what your sparkles do~",
+        "builtin-locked": "you surfaced. good. the burrow took what you carried and made room for more. look around."
+      }
+    },
+    "outro1": {
+      "emote": "sultry",
+      "vo": "outro1.mp3",
+      "hold": 1500,
+      "lines": {
+        "builtin-sissyhypno": "that's enough for a first taste. up you go — bring what you caught to the burrow, i'll show you where it all goes.",
+        "builtin-bambisleep": "all done for now! float up, up, up — bring your shinies home to bambi's burrow!",
+        "builtin-locked": "enough. surface, and bring your takings to the burrow. i will show you what they buy."
+      }
     }
   }
 }

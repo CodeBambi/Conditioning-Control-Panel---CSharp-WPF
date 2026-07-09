@@ -42,6 +42,14 @@ const CARD_W = 2.52;         // card bounding width (height follows aspect) - 40
 const CARD_MAX_H = 2.52;
 const FRAME_SCALE = 1.04;    // metal frame plane vs content (slim border)
 const SIDE_OFFSET = 2.4;     // how far off the spine a card sits
+// Videos hug the POV: a clip parked out at the wall only lives inside the
+// play/audio radius for a heartbeat as the camera screams past, so it's glanced,
+// never watched. A tighter lateral seat keeps the closest approach small (the
+// card stays big and near-center for the whole VIDEO_PLAY_NEAR window) while a
+// >=1.1u floor keeps the spine clear for the camera and the screen center
+// readable for the bubble field.
+const VIDEO_SIDE_OFFSET = 1.3;
+const VIDEO_NORMAL_JITTER = 0.4;  // vs the +/-0.9 photos get
 const SPAWN_PER_FRAME = Q.tier === 'mobile' ? 1 : 2; // spawn budget per frame - one at a time on mobile so a card mount (new VideoTexture / decoder) never doubles up on a single frame
 
 // Video-texture upload throttle: a VideoTexture re-uploads the current frame to
@@ -479,12 +487,15 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     return [glowMat, frameMat];
   }
 
-  function placeGroup(group, depth) {
+  function placeGroup(group, depth, kind) {
     const fr = layout.frameAtDepth(depth);
     const side = (live.length % 2 === 0 ? 1 : -1) * (Math.random() < 0.2 ? -1 : 1);
+    // videos sit closer to the camera path than photos (see VIDEO_SIDE_OFFSET)
+    const lat = kind === 'video' ? VIDEO_SIDE_OFFSET : SIDE_OFFSET;
+    const vert = kind === 'video' ? VIDEO_NORMAL_JITTER : 0.9;
     group.position.copy(fr.pos)
-      .addScaledVector(fr.binormal, side * SIDE_OFFSET)
-      .addScaledVector(fr.normal, rand(-0.9, 0.9));
+      .addScaledVector(fr.binormal, side * lat)
+      .addScaledVector(fr.normal, rand(-vert, vert));
   }
 
   // ---- user media: decode-ahead pipeline --------------------------------------
@@ -1147,7 +1158,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         if (release) release();
       },
     };
-    placeGroup(group, depth);
+    placeGroup(group, depth, 'video');
     return rec;
   }
 
@@ -1391,6 +1402,21 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     for (const r of live) if (r.pickup && !r.dead) out.push(r.group);
     return out;
   }
+  // Nearest interactive hit distance (pickups + grabbable cards) WITHOUT acting -
+  // scene.js uses it to arbitrate a junction doorway-card click against a closer
+  // grab target under the same cursor.
+  function probeGrab(ndcX, ndcY, camera) {
+    _ndc.set(ndcX, ndcY);
+    _ray.setFromCamera(_ndc, camera);
+    let best = Infinity;
+    const ph = _ray.intersectObjects(clickableGroups(), true);
+    if (ph.length) best = ph[0].distance;
+    if (!grabbed && !spotlight) {
+      const gh = _ray.intersectObjects(grabbableGroups(), true);
+      if (gh.length && gh[0].distance < best) best = gh[0].distance;
+    }
+    return Number.isFinite(best) ? best : null;
+  }
   function grabAtPointer(ndcX, ndcY, camera) {
     _ndc.set(ndcX, ndcY);
     _ray.setFromCamera(_ndc, camera);
@@ -1510,9 +1536,24 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     return true;
   }
 
+  // junction chamber span (scene.setBlockedSpan): no card/veil spawns inside it -
+  // they'd float in the hidden-trunk cut or hide behind the opaque room, starving
+  // the fork approach of grabbables.
+  let blockedSpan = null;
+
   // ---- per-frame update -------------------------------------------------------
   function update(camera, camDepth, dt, t, heat = 1, runTime = 999) {
     camDepthNow = camDepth;
+    // Junction rebase: fallNav zeroes its depth at the vein tail (the chosen
+    // branch becomes a FRESH loop), but these cursors were minted on the OLD
+    // loop's depths. Left alone they sit past the spawn window for the rest of
+    // the run - no wall cards, no veils, no spotlights ever again (the "later
+    // chambers have no gif cards" bug). A cursor stranded beyond any depth the
+    // conveyor could legitimately have minted can only mean the camera jumped
+    // backwards - reel it back in.
+    if (nextCardDepth > camDepth + SPAWN_AHEAD + CARD_GAP_FAR + CARD_GAP_JITTER) nextCardDepth = camDepth + 30;
+    if (nextVeilDepth > camDepth + SPAWN_AHEAD + VEIL_GAP_MAX * VEIL_GAP_EARLY_MULT) nextVeilDepth = camDepth + 70;
+    if (nextSpotlightOkAt > camDepth + SPOTLIGHT_GAP) nextSpotlightOkAt = camDepth + 60;
     // keep the next few seconds of user media decoded (runs during spotlights
     // too, so the conveyor restarts with content in hand)
     pumpPrefetch();
@@ -1533,6 +1574,9 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         const d = nextCardDepth;
         nextCardDepth += gap + rand(-CARD_GAP_JITTER, CARD_GAP_JITTER);
         budget -= 1;
+        // a junction chamber owns this span - skip it (the stretch short of the
+        // fork keeps its cards, so the approach still has things to grab)
+        if (blockedSpan && d > blockedSpan.lo - 2 && d < blockedSpan.hi) continue;
         spawning += 1;
         Promise.resolve(spawnCardAt(d)).then((rec) => {
           spawning -= 1;
@@ -1547,8 +1591,12 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
       if (runTime < FIRST_VEIL_SEC) {
         nextVeilDepth = Math.max(nextVeilDepth, camDepth + VEIL_GAP_MIN);
       } else if (nextVeilDepth < camDepth + SPAWN_AHEAD && liveVeils < MAX_LIVE_VEILS) {
-        addCard(buildVeil(nextVeilDepth));
-        nextVeilDepth += rand(VEIL_GAP_MIN, VEIL_GAP_MAX) * veilGapMult;
+        if (blockedSpan && nextVeilDepth > blockedSpan.lo - 2 && nextVeilDepth < blockedSpan.hi) {
+          nextVeilDepth = blockedSpan.hi + 5;   // no veils inside the chamber span
+        } else {
+          addCard(buildVeil(nextVeilDepth));
+          nextVeilDepth += rand(VEIL_GAP_MIN, VEIL_GAP_MAX) * veilGapMult;
+        }
       }
     }
 
@@ -1892,7 +1940,8 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
 
   return {
     update, reset, dispose, setPaused, warm,
-    grabAtPointer, releaseGrab,
+    grabAtPointer, releaseGrab, probeGrab,
+    setBlockedSpan: (s) => { blockedSpan = s || null; },
     // junction branch-mouth media cards
     createDetachedCard, clearLive,
     // Wave 2 game verbs

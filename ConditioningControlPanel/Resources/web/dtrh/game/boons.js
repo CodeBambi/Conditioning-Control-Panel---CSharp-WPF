@@ -91,11 +91,66 @@ export const BOONS = [
     desc: '1 treat pop in 8 fires a 440px shockwave, arcing lightning into up to 8 bubbles caught inside it.',
     flavor: 'it hums under your skin between pops.',
     apply: (s) => { s.estimShockwaveChance = 0.125; } },
-  { id: 'tesla_coil', name: 'Tesla Coil', rarity: 'Rare', curse: false, mult: 0.0, unique: true, fxTheme: 'electric',
+  { id: 'live_wire', name: 'Live Wire', rarity: 'Rare', curse: false, mult: 0.0, unique: true, fxTheme: 'electric',
     requiresAll: ['e_stim', 'the_wand'],
-    desc: 'while the wand hums, every treat its beam takes arcs lightning onward into up to 3 bubbles within 400px.',
-    flavor: 'two currents, one body.',
-    apply: (s) => { s.teslaCoil = true; } },
+    desc: 'the wand\'s trail runs current: every bubble it takes discharges, arcing lightning onward into up to 3 bubbles within 400px.',
+    flavor: 'you drew it. it\'s live.',
+    apply: (s) => { s.liveWire = true; } },
+  { id: 'hopscotch', name: 'Hopscotch', rarity: 'Rare', curse: false, mult: 0.0, unique: true, fxTheme: 'rabbit',
+    requiresAll: ['the_spanker', 'the_wand'],
+    desc: 'rabbits ricochet off the wand\'s trail instead of crossing it - and every bounce counts as a fresh smack: faster, bigger, mowing down everything in their path.',
+    flavor: 'chalk lines on the floor. they know this game.',
+    apply: (s) => { s.wandBounce = true; } },
+  { id: 'superconductor', name: 'Superconductor', rarity: 'Rare', curse: false, mult: 0.0, unique: true, fxTheme: 'electric',
+    requiresAll: ['freeze_trigger', 'e_stim'],
+    desc: 'a frozen field has zero resistance: while a freeze holds, your pop discharges into the nearest bubbles and the current CHAINS onward - one crawling bolt-cascade across the whole screen.',
+    flavor: 'cold wire carries everything.',
+    apply: (s) => { s.superconductor = true; } },
+  { id: 'autoplay', name: 'Autoplay', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+    requiresAny: ['porn_dvd'],
+    desc: 'when the logo hits a CORNER, the whole screen pays: a shockwave sweeps out from the corner taking everything it touches, and treats rain in after it.',
+    flavor: 'everyone claps. even the hole.',
+    apply: (s) => { s.autoplay = true; } },
+  { id: 'trust_exercise', name: 'Trust Exercise', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+    requiresAny: ['blindfold'],
+    desc: 'every pop rings out a sonar pulse that lights the dimmed bubbles back up for a heartbeat as it passes over them.',
+    flavor: 'you don\'t need eyes. you need rhythm.',
+    apply: (s) => { s.trustExercise = true; } },
+  { id: 'milking_machine', name: 'Milking Machine', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+    requiresAll: ['the_pump', 'the_wand'],
+    desc: 'while the pump\'s suction runs your drawn ink refuses to fade - and when the pump lets go, the whole drawing DETONATES, popping everything along its length.',
+    flavor: 'draw first. then squeeze.',
+    apply: (s) => { s.milkingMachine = true; } },
+  { id: 'skinny_dipping', name: 'Skinny Dipping', rarity: 'Rare', curse: false, mult: 0.0, unique: true, fxTheme: 'electric',
+    requiresAll: ['skipping_stone', 'e_stim'],
+    desc: 'the ripple runs charged: every treat the wave takes arcs lightning onward into up to 2 bubbles within 420px.',
+    flavor: 'you knew the water was live when you slid in.',
+    apply: (s) => { s.chargedRipple = true; } },
+  { id: 'one_track_mind', name: 'One-Track Mind', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+    requiresAll: ['intrusive_thoughts', 'the_pull'],
+    desc: 'intrusive thoughts stop racing past - they ORBIT your cursor for their lifetime, a popping halo mowing down whatever the pull drags in.',
+    flavor: 'now it\'s the only thought you have.',
+    apply: (s) => { s.thoughtOrbit = true; } },
+  { id: 'weather_girl', name: 'Weather Girl', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+    requiresAny: ['mood_ring'],
+    desc: 'every new sky makes an ENTRANCE: static opens with a bolt barrage, perfume with hearts, fool\'s gold with lucky bubbles, stillness with slowed time, overstim with a treat shower.',
+    flavor: 'she reads the forecast on your skin.',
+    apply: (s) => { s.weatherGirl = true; } },
+  { id: 'midas_ricochet', name: 'Midas Ricochet', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+    requiresAny: ['rabbits_foot'],
+    desc: 'a popped lucky bubble GILDS every treat within 340px for 2.5s - each gilded pop tips 2-4 gold on the spot.',
+    flavor: 'the touch spreads.',
+    apply: (s) => { s.midas = true; } },
+  { id: 'loaded_dice', name: 'Loaded Dice', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+    requiresAny: ['taking_chances'],
+    desc: 'three DOUBLED coin-flips in a row hit the jackpot: 8-12 gold droplets rain from the top of the screen.',
+    flavor: 'the house cheats. tonight, so do you.',
+    apply: (s) => { s.loadedDice = true; } },
+  { id: 'echo_chamber', name: 'Echo Chamber', rarity: 'Rare', curse: false, mult: 0.0, unique: true,
+    requiresAny: ['sticky_fingers'],
+    desc: 'a third of the treats your held card takes ECHO - two more bubbles bloom right where they popped. keep sweeping.',
+    flavor: 'say it again. and again.',
+    apply: (s) => { s.echoChamber = true; } },
 
   // ---- sins - risk/reward: visible drawbacks, visible sweetness ----
   { id: 'hair_trigger', name: 'Hair Trigger', rarity: 'Rare', curse: true, mult: 0.40, unique: true,
@@ -162,6 +217,39 @@ export function boonTheme(b) {
 }
 
 /**
+ * How much a lifetime item (toy/accessory/charm id) matters to the duo pool
+ * RIGHT NOW, given what's already equipped this run:
+ *   2 = grabbing it UNLOCKS at least one still-available duo/trio draft
+ *       (a requiresAny hit, or the last missing piece of a requiresAll),
+ *   1 = it progresses a requiresAll set that would still be missing more,
+ *   0 = no synergy card cares about it.
+ * The drop/doorway offer picker uses this to bait the partner items in early.
+ */
+export function duoPartnerScore(id, equipment = [], takenIds = null) {
+  if (equipment.includes(id)) return 0;
+  let score = 0;
+  for (const b of BOONS) {
+    if (b.curse || (!b.requiresAny && !b.requiresAll)) continue;
+    if (b.unique && takenIds && takenIds.has(b.id)) continue;   // already drafted this run
+    if (b.requiresAny) {
+      if (!b.requiresAny.includes(id)) continue;
+      if (b.requiresAny.some((x) => equipment.includes(x))) continue;   // already unlocked
+      return 2;
+    }
+    if (!b.requiresAll.includes(id)) continue;
+    const missing = b.requiresAll.filter((x) => !equipment.includes(x));
+    if (missing.length === 1) return 2;         // this grab completes the set
+    score = 1;                                  // first piece of a pair - still worth nudging
+  }
+  return score;
+}
+
+// When the loadout has EARNED a synergy card, it should actually show up in the
+// hand - not drown in the ~20-card commons pool. Chance to pull one eligible
+// duo/trio to the front of the shuffled deck (guaranteeing it a seat).
+const DUO_FAVOR = 0.75;
+
+/**
  * Deal a draft (C# ChaosBoonPool.Draft): mostly mantras + a dedicated sin slot
  * (sinChance roll, or guaranteed by the Surrender capstone). Duo/trio cards
  * need their partner equipped; unique cards already taken sit the run out.
@@ -178,6 +266,13 @@ export function draft({ allowCurses = true, choices = 3, guaranteeCurse = false,
   const shuffle = (arr) => arr.map((v) => [Math.random(), v]).sort((a, z) => a[0] - z[0]).map((p) => p[1]);
   const boons = shuffle(BOONS.filter((b) => !b.curse && draftable(b)));
   const curses = shuffle(BOONS.filter((b) => b.curse && draftable(b)));
+
+  // Duo favoring (2026-07): the shuffle is uniform, so the first duo it left in
+  // the deck is a uniformly-random pick among the eligible ones - promote it.
+  const duoIdx = boons.findIndex((b) => b.requiresAny || b.requiresAll);
+  if (duoIdx > 0 && Math.random() < DUO_FAVOR) {
+    boons.unshift(boons.splice(duoIdx, 1)[0]);
+  }
 
   const out = [];
   const includeCurse = allowCurses && (guaranteeCurse || Math.random() < sinChance) && curses.length > 0;

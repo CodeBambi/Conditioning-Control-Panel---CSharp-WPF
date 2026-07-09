@@ -20,6 +20,8 @@ import { createSpawner } from './spawner.js';
 import { createWallPosters } from './wallPosters.js';
 import { createJunctions } from './junctions.js';
 import { createBoonPick } from './boonPick.js';
+import { createPowerupDrops } from './powerupDrops.js';
+import { createHubStations } from './hubStations.js';
 import { createBubbles } from './bubbles.js';
 import { createDirector } from './director.js';
 import { createFx } from './fx.js';
@@ -213,6 +215,24 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   const boonPick = createBoonPick({ scene, camera, layout, nav, fx, hud });
   const _bray = new THREE.Raycaster(), _bndc = new THREE.Vector2();
 
+  // Grab-in-the-tube power-ups: a floating card drifts through the tube every
+  // ~60-90s; grabbing it flies the item to the HUD (consumable dock / relic strip).
+  // The game (chaosRun) supplies the offer veto + the grab handler via attach().
+  const powerupDrops = createPowerupDrops({
+    scene, camera, layout,
+    getMeta: () => (game && game.getMeta ? game.getMeta() : null),
+    canOffer: (id, kind) => (game && game.canOfferPowerup ? game.canOfferPowerup(id, kind) : false),
+    synergyBoost: (id) => (game && game.powerupSynergyBoost ? game.powerupSynergyBoost(id) : 1),
+    onGrab: (id, kind, screenPos) => (game && game.onPowerupGrabbed) ? game.onPowerupGrabbed(id, kind, screenPos) : false,
+  });
+  const _uray = new THREE.Raycaster(), _undc = new THREE.Vector2();
+
+  // The Dollhouse as an in-ambient menu: floating hub stations + the FALL IN
+  // portal, shown while the Warren is up. The game layer (warren.js) owns the
+  // defs + what a pick means; this is just the 3D presenter + pointer routing.
+  const hubStations = createHubStations({ scene, camera, layout, nav, fx, hud });
+  const _hray = new THREE.Raycaster(), _hndc = new THREE.Vector2();
+
   // Wall-poster hold: press-and-hold a wall gif to swing the camera onto it (a
   // closer look); release swings back. The fall eases to a near-stop meanwhile.
   const _pray = new THREE.Raycaster(), _pndc = new THREE.Vector2(), _pv = new THREE.Vector3();
@@ -247,6 +267,17 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     layout.frameAt = nl.frameAt;
     layout.frameAtDepth = nl.frameAtDepth;
     tunnel.rebuild(layout);                          // geometry-only swap
+    // the closed ring's incoming tail (arc ~0.85..1.0) converges on this very
+    // entry point (a closed ring must return to where it starts), so its last
+    // stretch lies nearly coaxial with the vein corridor: left solid it z-fights
+    // the vein wall (saw-tooth shimmer) and slices an opaque wall across the ride
+    // path. HIDE it (discard, not fade) - safe because the ridden vein encloses
+    // the camera for the whole ride, and its fog-colored end-annulus masks the
+    // opened region at the seam. The window wraps a hair past 0 so no sliver of
+    // wall survives right at the entry. junctions' handoff teardown clears the
+    // cut the moment the camera is on the new loop, restoring the full ring
+    // behind it.
+    tunnel.setCut(0.85, 0.0005, true);
     // NB: the camera handoff is fallNav's job now - it rides the vein to the tail
     // and snaps onto this coaxial loop (depth 0 == the vein exit) itself. Calling
     // rebaseTo here would yank the camera off the vein the instant we build (~vt 0.45).
@@ -285,11 +316,11 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     onPop: (kind, gain, combo) => {
       director.notePop(kind, gain, combo);
       hudBits.setScore(bubbles.getScore(), combo);
-      if (kind === 'lucky') nav.fovKick(3);
+      if (kind === 'lucky') fx.pulseFlash(0.5);
     },
     onEffect: (kind) => {
       director.noteEffect();
-      nav.fovKick(2.2); // the tube visibly lunges when an effect fires
+      fx.pulseFlash(0.45); // a brightness punch when an effect fires (no position pump)
       if (kind === 'prism') fx.flashRandomTheme(10000); // ~10s tube color scramble
     },
     onMiss: () => {
@@ -347,6 +378,16 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     if (!r.width || !r.height) return;
     const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
     const ny = -((e.clientY - r.top) / r.height) * 2 + 1;
+    // the hub menu is up: a click on a station opens/dives it, a click on empty
+    // tube is a "miss" (the game blurs the focused station / closes its panel).
+    // The hub owns the pointer entirely - no fall-through to grabs.
+    if (hubStations.isBusy()) {
+      _hray.setFromCamera(_hndc.set(nx, ny), camera);
+      const stId = hubStations.pick(_hray);   // owns the rules: cards beat portal, ring-only portal
+      if (stId) { if (game && game.onStationPick) game.onStationPick(stId); }
+      else if (game && game.onStationMiss) game.onStationMiss();
+      return;
+    }
     // a boon draft is open: a click on a card shatters it + takes the boon
     if (boonPick && boonPick.isBusy()) {
       const picks = boonPick.getPickables();
@@ -361,19 +402,54 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       }
       return; // draft owns the pointer: never fall through to a card grab
     }
-    // a fork is open: a click on a mouth card/disc dives down that branch
+    // a fork is open: ONLY a direct click on a doorway card dives down that
+    // branch - and only when that card is the CLOSEST interactive thing under
+    // the cursor (a gif / power-up / poster drifting in front of a doorway must
+    // grab, not dive). Anything else falls through - the player stays free to
+    // look around and grab all around a junction (getPickables is empty outside
+    // the linger, so approach + ride cost nothing).
     if (junctions && junctions.isBusy()) {
       const picks = junctions.getPickables();
       if (picks.length) {
         _jray.setFromCamera(_jndc.set(nx, ny), camera);
         const hits = _jray.intersectObjects(picks, true);
+        let jDist = Infinity, jIdx = null;
         for (const h of hits) {
           let o = h.object;
           while (o && !(o.userData && o.userData.type === 'veinmouth')) o = o.parent;
-          if (o && o.userData && o.userData.type === 'veinmouth') { junctions.pickSide(o.userData.side); return; }
+          if (o && o.userData && o.userData.type === 'veinmouth') { jDist = h.distance; jIdx = o.userData.index; break; }
+        }
+        if (jIdx != null) {
+          let dOther = Infinity;
+          if (powerupDrops) {
+            const uh = _jray.intersectObjects(powerupDrops.getPickables(), true);
+            if (uh.length) dOther = Math.min(dOther, uh[0].distance);
+          }
+          if (wall && wall.getPickables && !nav.isInVein()) {
+            const ph = _jray.intersectObjects(wall.getPickables(), false);
+            if (ph.length) dOther = Math.min(dOther, ph[0].distance);
+          }
+          if (spawner.probeGrab) {
+            const ds = spawner.probeGrab(nx, ny, camera);
+            if (ds != null) dOther = Math.min(dOther, ds);
+          }
+          if (jDist <= dOther) { junctions.pickIndex(jIdx); return; }
         }
       }
-      return; // a fork owns the pointer: a missed mouth-click must not fall through to grabbing a wall poster/card mid-fork
+    }
+    // a power-up card drifting in the tube: grab it (flies to the HUD). Priority over
+    // wall posters / falling cards so a deliberate grab always wins.
+    if (powerupDrops) {
+      const picks = powerupDrops.getPickables();
+      if (picks.length) {
+        _uray.setFromCamera(_undc.set(nx, ny), camera);
+        const hits = _uray.intersectObjects(picks, true);
+        for (const h of hits) {
+          let o = h.object;
+          while (o && !(o.userData && o.userData.type === 'powerup')) o = o.parent;
+          if (o && o.userData && o.userData.type === 'powerup') { if (powerupDrops.grab(o)) return; }
+        }
+      }
     }
     // a wall poster: hold it to swing the camera and face it (a closer look)
     if (wall && wall.getPickables && !nav.isInVein()) {
@@ -390,7 +466,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
               _heldPoster = true;
               nav.setFaceTarget(wall.getHeldWorldPos(_pv));
               if (rec.assetName) spawner.noteLike(rec.assetName, 'image');
-              nav.fovKick(4);       // a little punch on the turn-in
+              fx.pulseFlash(0.4);   // a little punch on the turn-in (brightness, not a zoom)
               return;               // this pointer owns the poster
             }
           }
@@ -404,8 +480,23 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     spawner.releaseGrab();
   }
   // while a boon draft is open, hover-raycast the cards to drive the caption bar
+  // (and while the hub menu is up, hover-lift the aimed station + cursor)
   function boonAimMove(e) {
-    if (!boonPick || !boonPick.isBusy()) return;
+    if (hubStations.isBusy()) {
+      const r0 = canvas.getBoundingClientRect();
+      if (!r0.width || !r0.height) return;
+      const hx = ((e.clientX - r0.left) / r0.width) * 2 - 1;
+      const hy = -((e.clientY - r0.top) / r0.height) * 2 + 1;
+      _hray.setFromCamera(_hndc.set(hx, hy), camera);
+      const aimed = hubStations.pick(_hray);   // same rules as clicking - hover never lies
+      hubStations.setAimed(aimed);
+      canvas.style.cursor = aimed ? 'pointer' : '';
+      return;
+    }
+    if (!boonPick || !boonPick.isBusy()) {
+      if (canvas.style.cursor) canvas.style.cursor = '';   // hub closed mid-hover: drop the hand cursor
+      return;
+    }
     const r = canvas.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
@@ -449,7 +540,8 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   }
 
   // ---- optional bloom (gracefully skipped if addons unavailable) ---------------
-  let composer = null;
+  let composer = null, bloomPass = null;
+  const BLOOM_BASE = 0.42;
   if (Q.bloom) try {
     const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }] = await Promise.all([
       import('three/addons/postprocessing/EffectComposer.js'),
@@ -458,8 +550,9 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     ]);
     composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight), 0.42, 0.5, 0.5));
+    bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight), BLOOM_BASE, 0.5, 0.5);
+    composer.addPass(bloomPass);
     composer.setSize(window.innerWidth, window.innerHeight);
   } catch (err) {
     console.warn('[sissy-fall] bloom unavailable, rendering without it:', err);
@@ -503,14 +596,22 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     bubbles.setPaused(true);
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
-    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, junctions, boonPick, flashBurst: (n) => bubbles.flashBurst(n),
+    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, drift, junctions, boonPick, powerupDrops, hubStations, flashBurst: (n) => bubbles.flashBurst(n),
       // the Ripple flings on-screen flash clips off screen along the hit angle
       flingFlashesNear: (px, py, r, probe) => bubbles.flingFlashesNear(px, py, r, probe),
       openOptions: () => panel.toggle(),
       // Reveal earned option-panel dials from the meta snapshot (purchased "Dials").
       syncOptionUnlocks: (ids) => panel.setUnlocks(ids),
+      // Live meta-rank for the panel's DESCENT section (deep pool variants).
+      setOptionProgress: (p) => panel.setProgress(p),
       silenceVoice: (on) => { voiceSilenced = !!on; },
+      // Four Chambers: per-chamber bloom weight (multiplier on the base
+      // strength). No-ops gracefully on the mobile tier (no bloom pass).
+      setBloomStrength: (mult) => { if (bloomPass) bloomPass.strength = BLOOM_BASE * (mult || 1); },
       setRunActive });
+    // The lessons row (guided FTUE replay) only exists in game mode - the reset
+    // op lives on the meta bridge the standalone Fall doesn't have.
+    panel.setGameHooks({ resetOnboarding: () => game.resetOnboarding() });
   }
 
   // ---- loop --------------------------------------------------------------------
@@ -572,12 +673,21 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
 
     const depth = nav.getDepth();
     const speed = nav.getSpeed();
+    // while a fork is alive, the content spawners keep out of the chamber's depth
+    // span - anything placed in there floats in the trunk cut or hides behind the
+    // opaque room, which starved the fork approach of grabbables.
+    const jspan = junctions.getBlockedSpan ? junctions.getBlockedSpan() : null;
+    spawner.setBlockedSpan(jspan);
+    wall.setBlockedSpan(jspan);
+    powerupDrops.setBlockedSpan(jspan);
     // heat + run time drive the tube-card progression: none until ~18s, then
     // sparse and thickening as the run deepens.
     spawner.update(camera, depth, dt, clock.elapsedTime, director.getIntensity(), director.getRunTime());
     wall.update(camera, depth, dt); // region-scaled wall posters (idle at density 0)
     junctions.update(depth, dt);    // branching-path forks (idle until the game arms one)
     boonPick.update(dt, depth);     // in-tube boon draft (idle until a loop clears)
+    powerupDrops.update(dt, depth, camera.quaternion);   // floating grab-in-the-tube power-ups
+    hubStations.update(dt);         // the Dollhouse stations (idle unless the Warren is up)
 
     // Sidechain the mix: a spotlight video owns the whole foreground (the
     // voice whispers down under it, the bed drops hardest); otherwise a
@@ -673,6 +783,8 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     clearTimeout(resizeTimer);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('keydown', onKeyDown);
+    powerupDrops.dispose();
+    hubStations.dispose();
     canvas.removeEventListener('pointerdown', grabPointerDown);
     canvas.removeEventListener('pointermove', boonAimMove);
     window.removeEventListener('pointerup', grabPointerUp);

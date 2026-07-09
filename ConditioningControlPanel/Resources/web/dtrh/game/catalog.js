@@ -119,18 +119,18 @@ export const LIFETIME_BOONS = [
     capstone: 'each whistle also calls a storm — eight more rabbits over the next ten seconds.',
     activeUse: true, cooldownSec: 45 },
   { id: 'e_stim', cat: 'skill', rankFloor: RANK.Curious, name: 'E-Stim', glyph: '⚡',
-    desc: 'press to charge your next 3/4/5 clicks by level. a charged pop arcs lightning into up to 3 bubbles within 600px, snapping any live ones. nothing in reach? the charge keeps. 30s cooldown.',
+    desc: 'press to charge your next 3/4/5 clicks by level. a charged pop arcs lightning into up to 3 bubbles within 600px, snapping any live ones. nothing in reach? the charge keeps. 30s cooldown. even uncharged, every pop has a 10/15/20% chance (30% maxed) to arc on its own.',
     flavor: 'the current knows exactly where you’re tender.',
     unlockCost: 600, upgradeCosts: [900, 1300], levelValues: [3, 4, 5],
     value: (v) => `${v.toFixed(0)} charged pops`,
     capstone: 'charged pops chain-react — the current leaps on through every bubble close enough, and onward.',
     activeUse: true, cooldownSec: 30 },
   { id: 'the_wand', cat: 'skill', rankFloor: RANK.Slipping, name: 'The Wand', glyph: '🪄', webOnly: true,
-    desc: 'press: for 2.5s a humming beam rides your cursor and every treat it sweeps pops itself — the whole tunnel glares while it\'s on. 2/3/4 charges per descent by level.',
-    flavor: 'the wand doesn\'t ask. it announces.',
+    desc: 'press: for 2s the wand draws wherever your cursor goes — a shimmering trail that lingers 4 more seconds. every treat that touches it pops itself, and live fuses it grazes snap clean. 2/3/4 charges per descent by level.',
+    flavor: 'draw the line. watch them cross it.',
     unlockCost: 600, upgradeCosts: [900, 1400], levelValues: [2, 3, 4],
     value: (v) => `${v.toFixed(0)} charges`,
-    capstone: 'the beam takes the sweet specials too — lucky bubbles, hearts, droplets, prisms.',
+    capstone: 'the trail takes the sweet specials too — lucky bubbles, hearts, droplets, prisms.',
     activeUse: true, cooldownSec: 0 },
   { id: 'the_pump', cat: 'skill', rankFloor: RANK.Slipping, name: 'The Pump', glyph: '🫙', webOnly: true,
     desc: 'press: for 3/4/5s by level a hard suction drags every treat toward your cursor (live ones never move), then whatever arrived bursts at once. 45s cooldown.',
@@ -260,35 +260,35 @@ export const LIFETIME_BOONS = [
 ];
 
 export const boonDefById = (id) => LIFETIME_BOONS.find((b) => b.id === id) || null;
+
+// grab-in-the-tube: consumable HUD slots. Mirrors ChaosMeta.MAX_CONSUMABLE_SLOTS (C#).
+// Sparks cost to sew the NEXT slot from the current count (1->2, 2->3, 3->4).
+export const MAX_CONSUMABLE_SLOTS = 4;
+export function consumableSlotCost(current) {
+  const price = { 1: 300, 2: 600, 3: 1000 };
+  return price[current] ?? null;   // null once maxed
+}
 export const boonsInCat = (cat) => LIFETIME_BOONS.filter((b) => b.cat === cat);
 
-// ============================ her bench (ChaosHubWindow.Bench.cs) ============================
+// ============================ the gold console (ex Her Bench) ============================
+// Gold cutover (2026-07): pockets are retired (grab-in-the-tube holds via HANDS),
+// and Her Bench folds into THE DIALS console - one gold shop, one rule:
+// gold 🪙 unlocks, drops ✦ level. Ids persist in BenchPurchases unchanged, so
+// old saves keep what they bought. Purchases still ride the bench-buy op.
 
-export const BENCH_ITEMS = [
-  { id: 'toy_pocket_1', glyph: '👝', label: 'first toy pocket',
-    line: 'she sews you a pocket.', cost: 50, pocket: 'toy' },
-  { id: 'accessory_pocket_1', glyph: '👝', label: 'first accessory pocket',
-    line: 'she only has two hands. she found a third.', cost: 150, pocket: 'accessory' },
-  { id: 'start_mantra', glyph: '◈', label: 'the starting mantra',
-    line: 'fall in holding something.', cost: 200 },
-  { id: 'diary', glyph: '📓', label: 'the diary',
-    line: 'she keeps notes on what you meet down there.', cost: 150 },
+export const CONSOLE_EXTRAS = [
   { id: 'stats_panel', glyph: '🕰', label: 'the stats panel',
-    line: 'the numbers, if you want them.', cost: 100 },
-  { id: 'toy_pocket_2', glyph: '👝', label: 'second toy pocket',
-    line: 'she found room for one more.', cost: 2000,
-    rankNeed: RANK.Devoted, revealGate: 'bench_toy_pocket_2', pocket: 'toy' },
-  { id: 'accessory_pocket_2', glyph: '👝', label: 'second accessory pocket',
-    line: 'a fourth hand. don’t ask.', cost: 2500,
-    rankNeed: RANK.Devoted, revealGate: 'bench_acc_pocket_2', pocket: 'accessory' },
+    line: 'the numbers, if you want them.', cost: 60 },
+  { id: 'diary', glyph: '📓', label: 'the diary',
+    line: 'she keeps notes on what you meet down there.', cost: 100 },
+  { id: 'start_mantra', glyph: '◈', label: 'the starting mantra',
+    line: 'fall in holding something.', cost: 175 },
 ];
 
-export const BENCH_RESERVED = [
-  'the clocks', 'descent ledger', 'payout eyes', 'the fine print',
-  'fall right in', 'held breath', 'soft landing', 'no countdown',
-  'dollhouse wallpapers', 'recap frames', 'a chattier companion', 'the pact',
+export const CONSOLE_RESERVED = [
+  'the clocks', 'payout eyes', 'soft landing', 'no countdown', 'the pact',
 ];
-export const BENCH_CLAIMED_RESERVED = ['daily descent', 'leaderboard', 'prestige'];
+export const CONSOLE_CLAIMED_RESERVED = ['daily descent', 'leaderboard', 'prestige'];
 
 export const WALL_TIP = 'there’s a wall here that isn’t quite a wall.';
 export const DEEPER_TIP = 'she’ll sell this to someone deeper.';
@@ -363,6 +363,21 @@ export const DIARY_VERBS = [
   { glyph: '⏸', name: 'your panic key', desc: 'one press holds the field mid-fall; pressing it again wakes you up to the recap.' },
 ];
 
+// HUD hover tooltips: one entry per mechanic readout on the run HUD. Reuses the
+// diary verbs verbatim where one fits so the game only ever explains a mechanic
+// in one voice; the rest are written new here (catalog.js stays the single
+// source of player copy).
+const diaryVerb = (n) => DIARY_VERBS.find((v) => v.name === n);
+export const HUD_TIPS = {
+  score: { glyph: '✦', name: 'score', desc: 'what the fall pays. every pop banks points × your total multiplier — streak, lust, mantras, chamber depth, all of it compounds.' },
+  mult: { glyph: '×', name: 'the multiplier', desc: 'your total run multiplier: drafted mantras × streak × lust. the streak climbs +1 a pop and catches fire at 15 / 25 / 50 / 100. a treat left to rot HALVES it; a trigger landing in your face breaks it to zero.' },
+  shields: { glyph: '♥', name: 'resistance', desc: 'each ♥ eats one unblocked trigger for you. out of hearts, the payload lands. 📿 is the collar — it steps in on its own that many more times.' },
+  focus: diaryVerb('focus'),
+  lust: diaryVerb('lust'),
+  ripple: diaryVerb('right-click · the ripple'),
+  clock: { glyph: '⏱', name: 'the descent clock', desc: "time fallen / the full descent, and which loop of this chamber you're on. drafts, cards and forks hold the clock — lingering costs no run time." },
+};
+
 /** Codex rows in WPF diary order: the weighted pool first, then the specials. */
 export const DIARY_CODEX = [
   { codex: 'bubble:flash', name: 'Flash', glyph: '●', tint: '255,208,232',
@@ -378,9 +393,9 @@ export const DIARY_CODEX = [
   { codex: 'bubble:bambifreeze', name: 'Freeze', glyph: '●', tint: '138,230,255',
     desc: 'A good pickup. Catch it to freeze the whole field. Bubbles hold in place and trances pause for a few seconds.' },
   { codex: 'bubble:video', name: 'Video', glyph: '●', tint: '224,64,77',
-    desc: 'Live and rare. A long trance, but it opens a mandatory video if it goes off.' },
+    desc: 'Live and VERY rare — it only stalks chambers III and IV. A long trance, but let it go off and a video sticks right in your face for 15 seconds. No skipping.' },
   { codex: 'bubble:htlink', name: 'Gif Rain', glyph: '●', tint: '255,200,61',
-    desc: 'Live and rare. Snap it or it triggers a rain of gifs sliding down the screen.' },
+    desc: 'Live and rare, a creature of the deep chambers (III–IV). Snap it or it triggers a rain of gifs sliding down the screen.' },
   { codex: 'bubble:darter', name: 'White Rabbit', glyph: '✧', tint: '255,77,196',
     desc: 'A white rabbit. Fast, bouncing, always late. Catch it for points and a micro flash. Harmless if it gets away.' },
   { codex: 'bubble:golden', name: 'Lucky Bubble', glyph: '🍀', tint: '255,215,0',
@@ -422,8 +437,10 @@ export const POOL_VARIANTS = [
   { id: 'spiral', name: 'Spiral' },
   { id: 'braindrain', name: 'BrainDrain' },
   { id: 'bambifreeze', name: 'Freeze' },
-  { id: 'video', name: 'Video', revealGate: 'variant_video' },
-  { id: 'htlink', name: 'Gif Rain', revealGate: 'variant_htlink' },
+  // the giants lost their Entranced reveal gate (2026-07): open from the first
+  // run, but the spawner only deals them in chambers III-IV (chaosRun.js).
+  { id: 'video', name: 'Video' },
+  { id: 'htlink', name: 'Gif Rain' },
 ];
 
 export const POOL_PRESETS = [
@@ -433,17 +450,17 @@ export const POOL_PRESETS = [
 ];
 
 export const DIFF_PILLS = [
-  { id: 'Easy', label: 'Gentle', tip: 'x1.0 pay. the calmest fall: baseline spawn pace, the longest trances, and the strange bubbles roll half as often.' },
-  { id: 'Medium', label: 'Teasing', revealGate: 'pill_teasing', tip: 'x1.3 on every payout. bubbles surface ~30% faster and the field holds ~14% more of them at once.' },
-  { id: 'Hard', label: 'Relentless', revealGate: 'pill_relentless', tip: 'x1.7 on every payout. ~70% faster spawns, ~30% more on screen, shorter trances — and the Bound hunts here on any rank.' },
-  { id: 'Extreme', label: 'Inescapable', extremeGate: true, tip: 'x2.2 on every payout. spawns at more than double pace, ~48% more on screen. the deepest the hole goes.' },
+  { id: 'Easy', label: 'Gentle', tip: 'x1.0 pay. the softest fall: a slow, sparse drift, long dreamy trances, and the strange bubbles mostly leave you alone.' },
+  { id: 'Medium', label: 'Teasing', revealGate: 'pill_teasing', tip: 'x1.3 on every payout. the middle ground: a fuller field, quicker fuses, and the menagerie starts to visit.' },
+  { id: 'Hard', label: 'Relentless', revealGate: 'pill_relentless', tip: 'x1.7 on every payout. dense and quick, trances run short — and the Bound hunts here on any rank.' },
+  { id: 'Extreme', label: 'Inescapable', extremeGate: true, tip: 'x2.2 on every payout. the hole at full hunger: peak pace, the whole menagerie loose, the shortest trances. the deepest it goes.' },
 ];
 
 // ============================ how to play (ChaosHubWindow._howToCards) ============================
 
 export const HOWTO_CARDS = [
   { title: 'What the Rabbit Hole is', image: 'howto_1', lines: [
-    { body: 'Bubbles drift up the screen carrying flashes, videos and overlays. Pop the good ones, snap the dangerous ones before they go off, and ride it deeper. One descent is about **five minutes** — survive the waves, take what she offers, climb out a little more hers.' },
+    { body: 'Bubbles drift up the screen carrying flashes, videos and overlays. Pop the good ones, snap the dangerous ones before they go off, and ride it deeper. A descent is **four chambers, 12 to 20 minutes** — survive them, take what she offers, climb out a little more hers.' },
   ] },
   { title: 'What you do', image: 'howto_2', lines: [
     { emoji: '🫧', color: '255,159,208', lead: 'Left-click', body: 'pop the treats — the soft pink bubbles. One click builds your streak and refills your focus.' },
@@ -456,11 +473,11 @@ export const HOWTO_CARDS = [
     { lead: 'HEAT', body: 'the burn. It climbs every time something triggers. Let it run high and the descent gets harder to resist.' },
   ] },
   { title: 'A descent', image: 'howto_4', lines: [
-    { body: 'Four waves, then it ends. Between waves she offers you a **mantra** — pick one and it bends the rules for that run only. Finish the whole descent for the full reward; slip out early and you forfeit it.' },
+    { body: 'Four chambers, then it ends. Between chambers she offers you a **mantra** — pick one and it bends the rules for that run only. **Power-up cards drift through the tube** as you fall: grab one to keep it — toys dock at the bottom to fire, charms and accessories cling on the moment you touch them. Finish the whole descent for the full reward; slip out early and you forfeit it.' },
   ] },
   { title: 'What you keep', image: 'howto_5', lines: [
-    { body: 'Every descent earns **XP** toward your normal level, plus **Sparks** (gold) you carry back out.' },
-    { body: 'Spend Sparks in **the dollhouse** — accessories at the table by the door, charms, active toys you trigger mid-descent, and the seamstress’s bench for permanent upgrades.' },
+    { body: 'Every descent earns **XP** toward your normal level, plus two purses: **drops ✦** banked when you surface, and **gold 🪙** snatched live during the fall.' },
+    { body: 'Back in **the dollhouse** — the floating stations around the hole — one rule: **gold unlocks** (the DIALS console buys back the options panel one dial at a time), **drops level** (deepen what you’ve grabbed, train habits, sew extra hands at the TOYBOX).' },
     { body: 'The more descents you finish, the higher your **RANK** — curious, tempted, slipping, entranced, devoted… — and the more of the Rabbit Hole opens up to you.' },
   ] },
 ];
@@ -488,7 +505,6 @@ export function metaView(meta) {
   const dials = asSet(m.purchasedDials);
   const runs = m.runsCompleted | 0;
   const rankIndex = RANKS.forRuns(runs);
-  const MAX_POCKETS = 2;
 
   const v = {
     raw: m,
@@ -500,8 +516,15 @@ export function metaView(meta) {
     extremeUnlocked: !!m.extremeUnlocked,
     giftGiven: !!m.giftGiven,
     equippedStartBoon: m.equippedStartBoon || null,
-    toyPockets: Math.min(m.toyPockets | 0, MAX_POCKETS),
-    accessoryPockets: Math.min(m.accessoryPockets | 0, MAX_POCKETS),
+    // grab-in-the-tube: consumable (active-toy) HUD slots held per fall; starts at 1,
+    // the dollhouse sews more with Sparks up to MAX_CONSUMABLE_SLOTS.
+    consumableSlots: Math.max(1, m.consumableSlots | 0),
+    nextConsumableSlotCost: () => consumableSlotCost((m.consumableSlots | 0) || 1),
+    canBuyConsumableSlot() {
+      const cur = Math.max(1, m.consumableSlots | 0);
+      const c = consumableSlotCost(cur);
+      return cur < MAX_CONSUMABLE_SLOTS && c != null && v.sparks >= c;
+    },
     bench, discovered, pending, seenReveals, firstTimes, lessonsDone,
     bestScore: m.bestScore || 0,
     bestCombo: m.bestCombo || 0,
@@ -510,6 +533,8 @@ export function metaView(meta) {
     totalChannelSeconds: m.totalChannelSeconds || 0,
     seenIntroGuide: !!m.seenIntroGuide,
     seenDollhouse: !!m.seenDollhouse,
+    seenWarrenWelcome: !!m.seenWarrenWelcome,
+    seenFirstReturn: !!m.seenFirstReturn,
 
     atLeast: (r) => rankIndex >= r,
     isOwned: (id) => purchased.has(id),
@@ -521,23 +546,18 @@ export function metaView(meta) {
     isPurchaseRankLocked: (id) => id === 'extreme_tier' && !purchased.has(id) && rankIndex < RANK.Devoted,
 
     // ---- options-panel "Dials" unlocks (UNLOCK_LADDER; see engine/settings.js) --
+    // Gold cutover: dials are bought with GOLD 🪙 now (gold unlocks, drops level).
     purchasedDials: [...dials],
+    dialsOwned: dials.size,
     hasDial: (id) => dials.has(id),
-    canAffordDial: (id, cost) => !dials.has(id) && v.sparks >= (cost | 0),
+    canAffordDial: (id, cost) => !dials.has(id) && v.gold >= (cost | 0),
     isDialRankLocked: (rankReq) => rankReq != null && rankIndex < rankReq,
+    // her one gift: covers ONE short gold purchase, on your very first dial
+    dialGiftEligible: () => !v.giftGiven && dials.size === 0,
 
     boonLevel: (id) => levels[id] | 0,
     isBoonUnlocked: (id) => (levels[id] | 0) >= 1,
     isBoonActive: (id) => active.has(id) && (levels[id] | 0) >= 1,
-    slotsFor: (cat) => (cat === 'utility' ? Infinity
-      : cat === 'skill' ? Math.min(m.toyPockets | 0, MAX_POCKETS)
-      : Math.min(m.accessoryPockets | 0, MAX_POCKETS)),
-    equippedCountIn: (cat) => boonsInCat(cat).filter((b) => v.isBoonActive(b.id)).length,
-    hasFreePocket: (cat) => v.equippedCountIn(cat) < v.slotsFor(cat),
-    unlockCostOf(id) {
-      const b = boonDefById(id);
-      return !b || v.isBoonUnlocked(id) ? null : b.unlockCost;
-    },
     nextUpgradeCostOf(id) {
       const b = boonDefById(id);
       if (!b) return null;
@@ -545,7 +565,6 @@ export function metaView(meta) {
       if (lvl < 1 || lvl >= b.levelValues.length) return null;
       return b.upgradeCosts[lvl - 1] ?? null;
     },
-    canAffordUnlock(id) { const c = v.unlockCostOf(id); return c != null && v.sparks >= c; },
     canAffordDeepen(id) { const c = v.nextUpgradeCostOf(id); return c != null && v.sparks >= c; },
     isBoonRankLocked(id) {
       const b = boonDefById(id);
@@ -569,10 +588,10 @@ export function metaView(meta) {
 
     lessonProgress: (id) => lessonProg[id] | 0,
     isLessonComplete: (id) => !lessonById(id) || LESSONLESS.has(id) || lessonsDone.has(id),
-    /** allowCurses = the CURRENT sins toggle (WPF reads the live setting). */
-    isLessonBlocked: (id, allowCurses = true) =>
-      !!lessonById(id) && !LESSONLESS.has(id) && !v.isLessonComplete(id)
-      && !(CURSE_BOUND.has(id) && !allowCurses),
+    // Lesson-proof GATING is retired: items are discovered by grabbing them in the fall,
+    // and discovered items deepen freely with Sparks. Nothing gates on a proof anymore.
+    // (The LESSONS copy lives on only as an explanation-text source.)
+    isLessonBlocked: () => false,
 
     isDiscovered: (codexId) => discovered.has(codexId),
     /** Happy path: run 2+ shows full shelves; before that only the starter trio. */
