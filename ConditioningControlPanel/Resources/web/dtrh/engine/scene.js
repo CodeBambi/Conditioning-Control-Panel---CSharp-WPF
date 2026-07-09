@@ -615,6 +615,8 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       openOptions: () => panel.toggle(),
       // Reveal earned option-panel dials from the meta snapshot (purchased "Dials").
       syncOptionUnlocks: (ids) => panel.setUnlocks(ids),
+      // Live meta-rank for the panel's DESCENT section (deep pool variants).
+      setOptionProgress: (p) => panel.setProgress(p),
       silenceVoice: (on) => { voiceSilenced = !!on; },
       setRunActive });
   }

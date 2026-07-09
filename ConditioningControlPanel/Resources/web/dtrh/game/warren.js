@@ -26,12 +26,12 @@ import {
   BENCH_ITEMS, BENCH_RESERVED, BENCH_CLAIMED_RESERVED,
   WALL_TIP, DEEPER_TIP, BOTTOM_TIP,
   RANKS, RANK, GLYPHS,
-  DIARY_VERBS, DIARY_CODEX, DIFF_PILLS,
+  DIARY_VERBS, DIARY_CODEX, POOL_VARIANTS, DIFF_PILLS,
   HOWTO_CARDS, metaView, MAX_CONSUMABLE_SLOTS,
 } from './catalog.js';
 import { BOONS } from './boons.js';
 import * as reveals from './reveals.js';
-import { UNLOCK_LADDER, RANK_NAMES } from '../engine/settings.js';
+import { S, updateSetting, descentSetup, UNLOCK_LADDER, RANK_NAMES } from '../engine/settings.js';
 
 const ART = 'https://ccp.art/';
 const nfmt = (n) => Math.floor(n).toLocaleString();
@@ -80,16 +80,48 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   // ---- local run-setup state (seeded from the saved settings in init) ----
   // Four Chambers: the descent is always 4 regions (I->IV), each ~3-5 min and
   // ending in a boon Landing. Only difficulty + length are picked here at the
-  // portal; the rest of the old DESCENT tab lives in ⚙ options now.
+  // portal; the rest of the old DESCENT tab lives in ⚙ options now (settings.js
+  // run* keys, edited in panel.js and folded back in by buildSetup()).
   const CHAMBER_TOTALS = [720, 960, 1200];   // 12 / 16 / 20 min (3 / 4 / 5 min per chamber)
-  const setup = Object.assign({
-    difficulty: 'Easy', durationSec: 960, waveCount: 4, motion: 'Mixed',
-    enabledVariants: null, effectIntensity: 0.85, colorFlashes: true,
-    boonDraftEnabled: true, allowCurses: true, dartersEnabled: true,
-    key1: 'Q', key2: 'E',
-  }, runSetup || {});
-  setup.waveCount = 4;
+  const setup = {
+    difficulty: (runSetup && runSetup.difficulty) || 'Easy',
+    durationSec: (runSetup && runSetup.durationSec) || 960,
+    key1: (runSetup && runSetup.key1) || 'Q',
+    key2: (runSetup && runSetup.key2) || 'E',
+  };
   if (!CHAMBER_TOTALS.includes(setup.durationSec)) setup.durationSec = 960;
+
+  // One-time migration: the host's saved runSetup carried the old DESCENT-tab
+  // choices; copy them into the settings store (their new home in ⚙ options).
+  if (!S.runSeeded) {
+    const rs = runSetup || {};
+    if (typeof rs.motion === 'string') updateSetting('runMotion', rs.motion);
+    if (typeof rs.effectIntensity === 'number') updateSetting('runEffectIntensity', rs.effectIntensity);
+    if (typeof rs.colorFlashes === 'boolean') updateSetting('runColorFlashes', rs.colorFlashes);
+    if (typeof rs.boonDraftEnabled === 'boolean') updateSetting('runBoonDraft', rs.boonDraftEnabled);
+    if (typeof rs.allowCurses === 'boolean') updateSetting('runAllowCurses', rs.allowCurses);
+    if (typeof rs.dartersEnabled === 'boolean') updateSetting('runDarters', rs.dartersEnabled);
+    if (Array.isArray(rs.enabledVariants)) {
+      const on = new Set(rs.enabledVariants);
+      updateSetting('runVariantsOff', POOL_VARIANTS.filter((v) => !on.has(v.id)).map((v) => v.id));
+    }
+    updateSetting('runSeeded', 1);
+  }
+
+  /** The wire setup for request-run: portal chips + the ⚙ descent settings.
+   * Same shape the host has always persisted (PersistRunSetup untouched). */
+  function buildSetup() {
+    const d = descentSetup();
+    const off = new Set(d.variantsOff);
+    const enabled = POOL_VARIANTS.filter((v) => !off.has(v.id)).map((v) => v.id);
+    return {
+      difficulty: setup.difficulty, durationSec: setup.durationSec, waveCount: 4,
+      key1: setup.key1, key2: setup.key2,
+      motion: d.motion, effectIntensity: d.effectIntensity, colorFlashes: d.colorFlashes,
+      boonDraftEnabled: d.boonDraftEnabled, allowCurses: d.allowCurses, dartersEnabled: d.dartersEnabled,
+      enabledVariants: off.size === 0 ? null : (enabled.length ? enabled : ['flash']),
+    };
+  }
 
   let visible = false;
   let openId = null;         // station whose sheet is open (null = idle)
@@ -900,7 +932,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     descending = true;
     closeSheet();
     if (stations) stations.portalDive('portal');
-    onDescend({ ...setup });
+    onDescend(buildSetup());
     refreshChrome(view());
   }
 
@@ -964,7 +996,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       if (openId) closeSheet();
     },
     isVisible: () => visible,
-    currentSetup: () => ({ ...setup }),
+    currentSetup: () => buildSetup(),
     /** Esc: close modal -> close the open sheet -> swallow (hold-to-exit works). */
     handleEsc() {
       if (!visible) return false;

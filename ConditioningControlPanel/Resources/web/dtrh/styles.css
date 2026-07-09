@@ -901,6 +901,10 @@ img.rh-fx-spiralspin {
   background: rgba(255, 105, 180, 0.16);
 }
 .sf-chip:hover { border-color: var(--pink); }
+/* THE DESCENT section (panel.js): full-width mood check-chips + locked pool chips */
+.sf-chip--wide { display: block; width: 100%; text-align: left; border-radius: 10px; margin-top: 0.35rem; }
+.sf-chip.is-locked { opacity: 0.45; cursor: default; }
+.sf-chip.is-locked:hover { border-color: rgba(255, 255, 255, 0.14); }
 
 /* reset-to-default: top of the options list, right-aligned above the sliders */
 .sf-reset-row {

@@ -53,7 +53,7 @@ import { createHappyPath } from './happyPath.js';
 import { createVnPortrait } from './vnPortrait.js';
 import { createLessonCard } from './lessonCard.js';
 import { setDucked } from '../shared/audioMute.js';
-import { lessonById, boonDefById, DIARY_CODEX, DIARY_VERBS } from './catalog.js';
+import { lessonById, boonDefById, DIARY_CODEX, DIARY_VERBS, RANKS } from './catalog.js';
 
 // ---- first-discovery lesson copy (catalog is the single source of truth) ----
 // bubbles/pickups/weather: keyed by the codex id markDiscovered() stamps.
@@ -1319,8 +1319,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // ---- Branching paths ("The Junction", engine/junctions.js) ----------------
   // Mid-chamber forks: two branded mouths drift out of the fog; the player CLICKS
   // a doorway card to dive (looking around / grabbing stays free at the fork).
-  // A passive faller is taken by the coaxed mouth. Deeper chambers pre-seal the
-  // resisting mouth more often (the "closing path" - the choice quietly leaves).
+  // Each open doorway wears a power-up prize - the road IS the reward. Only ~1
+  // fork in 10 takes a passive faller (coaxed mouth, 5s); the rest wait for the
+  // click. Deeper chambers pre-seal the resisting mouth more often (the "closing
+  // path" - the choice quietly leaves).
   const JUNCTION_LEAD = 120;          // world units of telegraph before commit
   const JUNCTION_EVERY = 55;          // rough seconds between forks (+ jitter)
   const PRESEAL_BY_WAVE = [0, 0, 0.12, 0.4, 0.62]; // indexed by waveIndex (I..IV)
@@ -1350,8 +1352,21 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function fireJunction() {
     const pair = JUNCTION_PAIRS[Math.floor(Math.random() * JUNCTION_PAIRS.length)];
     const coaxSide = Math.random() < 0.5 ? 'left' : 'right';
-    const left = coaxSide === 'left' ? pair.coax : pair.resist;
-    const right = coaxSide === 'left' ? pair.resist : pair.coax;
+    // clone the branded descs - rewards are per-fork and must never stick to the
+    // shared JUNCTION_PAIRS catalog entries
+    const left = { ...(coaxSide === 'left' ? pair.coax : pair.resist) };
+    const right = { ...(coaxSide === 'left' ? pair.resist : pair.coax) };
+    // each doorway carries a PRIZE, overlaid on its card (a nameplate chip): the
+    // road you take is the power-up you get, the other one is gone - so choosing
+    // matters. Same offer pool + veto as the drifting drops; two distinct items.
+    try {
+      if (ctx.powerupDrops && ctx.powerupDrops.pickOffer) {
+        const a = ctx.powerupDrops.pickOffer();
+        const b = ctx.powerupDrops.pickOffer(a ? [a.def.id] : null);
+        if (a) left.reward = { id: a.def.id, kind: a.kind, name: a.def.name, glyph: a.def.glyph || '◈' };
+        if (b) right.reward = { id: b.def.id, kind: b.kind, name: b.def.name, glyph: b.def.glyph || '◈' };
+      }
+    } catch (e) { /* no prizes this fork - the doorways still work bare */ }
     const presealChance = PRESEAL_BY_WAVE[Math.min(4, st.waveIndex)] || 0;
     let preseal = null;
     if (Math.random() < presealChance) preseal = (coaxSide === 'left') ? 'right' : 'left'; // seal the resisting mouth
@@ -1379,11 +1394,18 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     bark(choice.forced ? 'junction-forced' : 'junction-chosen', { word: b.word, brand: b.brand });
     metrics.noteJunction({ forced: choice.forced, passive: choice.passive });
     markDiscovered('junction:' + b.brand);
+    // the chosen doorway pays its prize: same discovery/dock/apply path as a
+    // grabbed drop (first-ever discovery still fires its pause+explain card).
+    // The card shattered mid-screen, so the HUD art flies from the center.
+    if (b.reward && state === 'running') {
+      handlePowerupGrab(b.reward.id, b.reward.kind, { x: window.innerWidth / 2, y: window.innerHeight / 2 });
+    }
   }
 
   /** The faller has reached the fork mouth: crawl the tunnel so the branch can be
-   * read + chosen (the engine owns the 5s linger + auto-commit), then hand the
-   * speed back on commit/abort. Respects a concurrent freeze/slow-mo on release. */
+   * read + chosen (the engine owns the linger; only ~1 fork in 10 auto-commits at
+   * 5s, the rest wait for the click with a 30s failsafe), then hand the speed
+   * back on commit/abort. Respects a concurrent freeze/slow-mo on release. */
   function onJunctionLinger(on) {
     if (!ctx || !ctx.director) return;
     if (on) {
@@ -2478,6 +2500,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       warren.show('menu');
       // Seed the options panel from whatever snapshot already landed pre-attach.
       try { ctx.syncOptionUnlocks && ctx.syncOptionUnlocks((hostState && hostState.meta && hostState.meta.purchasedDials) || []); } catch (e) { /* ignore */ }
+      try { ctx.setOptionProgress && ctx.setOptionProgress({ rankIndex: RANKS.forRuns((hostState && hostState.meta && hostState.meta.runsCompleted) | 0) }); } catch (e) { /* ignore */ }
     },
 
     /** The host answered request-run: deal the fresh config and drop in. */
@@ -2499,6 +2522,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     onMeta() {
       if (warren) warren.refresh();
       try { ctx && ctx.syncOptionUnlocks && ctx.syncOptionUnlocks((hostState && hostState.meta && hostState.meta.purchasedDials) || []); } catch (e) { /* panel not up */ }
+      try { ctx && ctx.setOptionProgress && ctx.setOptionProgress({ rankIndex: RANKS.forRuns((hostState && hostState.meta && hostState.meta.runsCompleted) | 0) }); } catch (e) { /* panel not up */ }
     },
 
     /** Esc routing: the Warren owns the key while it's up (scene skips its pause). */
