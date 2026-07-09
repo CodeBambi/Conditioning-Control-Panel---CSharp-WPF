@@ -547,35 +547,106 @@ Season: Jelly July";
             // Small delay to ensure processes are terminated
             System.Threading.Thread.Sleep(500);
 
-            // Build Inno Setup silent install arguments
-            // /SILENT = Show progress dialog but no user interaction required
-            // /SUPPRESSMSGBOXES = Don't show any message boxes
-            // /NORESTART = Don't restart after install (we'll handle that)
-            // /DIR="path" = Install to specific directory
-            // /CLOSEAPPLICATIONS = Close running apps that use files being updated
-            // /RESTARTAPPLICATIONS = Restart closed applications after install
-            var installerArgs = $"/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS";
+            // Launching the installer directly and immediately calling Shutdown() is a race:
+            // this app is a single-file self-contained exe, so it holds an exclusive lock on
+            // its own .exe until the process fully exits. The installer's file-copy phase can
+            // reach the locked exe before we're gone, and with /SUPPRESSMSGBOXES that failure
+            // is silent — the app just vanishes on the old version (#499, BUG-DYRJU5AUDM).
+            //
+            // Instead, hand off to a tiny external batch helper that: (1) waits for THIS
+            // process to fully exit (lock released), (2) runs the installer silently and waits
+            // for it, (3) relaunches the app deterministically — never depending on Inno's
+            // /RESTARTAPPLICATIONS (which needs RegisterApplicationRestart, which we never call).
+            // Every step is logged so a failure is diagnosable instead of invisible.
+            var pid = Process.GetCurrentProcess().Id;
 
-            if (!string.IsNullOrEmpty(installPath))
-            {
-                installerArgs += $" /DIR=\"{installPath}\"";
-            }
+            // The freshly-installed exe lands back in the install dir under its known name.
+            var appExe = !string.IsNullOrEmpty(installPath)
+                ? Path.Combine(installPath, "ConditioningControlPanel.exe")
+                : (Process.GetCurrentProcess().MainModule?.FileName ?? "");
 
-            App.Logger?.Information("Installer arguments: {Args}", installerArgs);
+            var logPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ConditioningControlPanel", "logs", "update-helper.log");
 
-            // Start the installer directly - Inno Setup handles closing/restarting the app
+            var helperPath = WriteUpdateHelperScript(installerPath, installPath, pid, appExe, logPath);
+
+            App.Logger?.Information("Launching update helper: {Helper} (pid={Pid}, appExe={AppExe}, log={Log})",
+                helperPath, pid, appExe, logPath);
+
+            // Run the .cmd via cmd.exe (a batch file is not a PE, so UseShellExecute=false
+            // requires an explicit interpreter). CreateNoWindow keeps it fully hidden; the
+            // helper survives our exit because a WPF app doesn't job-object its children.
             var startInfo = new ProcessStartInfo
             {
-                FileName = installerPath,
-                Arguments = installerArgs,
-                UseShellExecute = true,
+                FileName = "cmd.exe",
+                Arguments = $"/c \"{helperPath}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
             };
 
             Process.Start(startInfo);
 
-            // Exit the current application
-            App.Logger?.Information("Exiting application for silent update...");
+            // Exit the current application so the helper's wait-for-exit can proceed.
+            App.Logger?.Information("Exiting application for silent update (helper will install + relaunch)...");
             Application.Current.Shutdown();
+        }
+
+        /// <summary>
+        /// Writes the external update helper batch script and returns its path. The script waits
+        /// for this process (pid) to exit, runs the installer silently, then relaunches appExe.
+        /// Values are baked in as literals (no positional-arg parsing) so paths with spaces are safe.
+        /// </summary>
+        private static string WriteUpdateHelperScript(string installerPath, string? installPath, int pid, string appExe, string logPath)
+        {
+            var helperDir = Path.GetDirectoryName(installerPath) ?? Path.GetTempPath();
+            var helperPath = Path.Combine(helperDir, "update-helper.cmd");
+
+            // Ensure the log directory exists — the first `echo > "%LOG%"` fails otherwise.
+            try { Directory.CreateDirectory(Path.GetDirectoryName(logPath)!); } catch { }
+
+            // For an in-place upgrade Inno remembers the prior dir; passing /DIR keeps it explicit
+            // and guarantees the new files land where we'll relaunch from.
+            var dirArg = string.IsNullOrEmpty(installPath) ? "" : $" /DIR=\"{installPath}\"";
+
+            var lines = new[]
+            {
+                "@echo off",
+                "setlocal enableextensions",
+                $"set \"LOG={logPath}\"",
+                $"set \"APPEXE={appExe}\"",
+                $"set \"INSTALLER={installerPath}\"",
+                $"echo [update-helper] start pid={pid} > \"%LOG%\"",
+                // Wait for the old app to fully exit (release its exe lock). The PID filter is
+                // exact; `find` just detects whether a matching row was returned. Capped at ~30
+                // iterations (~1min) so a reused PID can never hang this forever.
+                "set /a tries=0",
+                ":waitloop",
+                $"tasklist /FI \"PID eq {pid}\" /NH 2>nul | find \"{pid}\" >nul",
+                "if errorlevel 1 goto gone",
+                "set /a tries+=1",
+                "if %tries% GEQ 30 (",
+                "  echo [update-helper] wait timed out, proceeding anyway >> \"%LOG%\"",
+                "  goto gone",
+                ")",
+                "ping 127.0.0.1 -n 2 >nul",
+                "goto waitloop",
+                ":gone",
+                "echo [update-helper] old app exited (tries=%tries%), running installer >> \"%LOG%\"",
+                $"\"%INSTALLER%\" /SILENT /SUPPRESSMSGBOXES /NORESTART{dirArg}",
+                "set RC=%errorlevel%",
+                "echo [update-helper] installer exit=%RC% >> \"%LOG%\"",
+                "echo [update-helper] relaunching app >> \"%LOG%\"",
+                "start \"\" \"%APPEXE%\"",
+                "echo [update-helper] done >> \"%LOG%\"",
+                "endlocal",
+            };
+
+            var script = string.Join("\r\n", lines) + "\r\n";
+            // UTF-8 without BOM — a BOM can break batch parsing of the first line.
+            File.WriteAllText(helperPath, script, new System.Text.UTF8Encoding(false));
+            return helperPath;
         }
 
         /// <summary>
