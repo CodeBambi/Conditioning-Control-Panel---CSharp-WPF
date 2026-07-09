@@ -471,7 +471,7 @@ export function createBubbles({ hud, canvas, onPop, onMiss, onEffect, onCombo })
         const anim = v.animate([
           { transform: 'translate(-50%, -50%) translate(0px, 0px) rotate(0deg) scale(1)', opacity: startOp },
           { transform: `translate(-50%, -50%) translate(${(nx * travel).toFixed(0)}px, ${(ny * travel).toFixed(0)}px) rotate(${rot.toFixed(0)}deg) scale(0.55)`, opacity: 0 },
-        ], { duration: 500, easing: 'cubic-bezier(0.2, 0.6, 0.3, 1)', fill: 'forwards' });
+        ], { duration: 1670, easing: 'cubic-bezier(0.2, 0.6, 0.3, 1)', fill: 'forwards' });
         anim.onfinish = () => { if (teardown) teardown(); };
         anim.oncancel = () => { if (teardown) teardown(); };
       } catch (e) {
