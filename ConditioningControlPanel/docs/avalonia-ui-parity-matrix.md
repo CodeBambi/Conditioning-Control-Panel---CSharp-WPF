@@ -50,7 +50,7 @@ A Linux column/sweep section is added when WS4 starts (goal doc).
 - [ ] **START launches the mode** (session enters Running, effects start, stop returns to Idle)
 - [ ] **Avatar reacts** (click → speech bubble)
 - [ ] **Chaos run economy** end-to-end ("Down the Rabbit Hole": run lifecycle, boons, XP, narrative)
-- [ ] **Overlays are pure passive click-through layers** (pink fill, spiral, subliminal, flash, brain-drain) — RENDER PATH harness-verified 2026-07-04 via `--verify-layers` (UCE plan Phase C, table below): every migrated layer registers at its exact `CompositorLayers` z, activates through its owning service, produces (or, for brain-drain, correctly does NOT produce) a real screen-capture delta, and tears down cleanly. Still needs eyes: click-through input over each effect, and side-by-side WPF timing/opacity/multi-monitor parity.
+- [ ] **Per-region click-through (team review 2026-07-09):** only the **pink/color fill + spiral** regions pass input; **subliminal, flash, brain-drain** now CAPTURE input over their painted region (compositor capture mask + `AvaloniaMouseHook` swallow). RENDER PATH harness-verified 2026-07-04 via `--verify-layers` (UCE plan Phase C, table below): every migrated layer registers at its exact `CompositorLayers` z, activates through its owning service, produces (or, for brain-drain, correctly does NOT produce) a real screen-capture delta, and tears down cleanly — that render evidence still stands; only the INPUT expectation changed. Still needs (impl + eyes): the per-region input mask + hook swallow, and side-by-side WPF timing/opacity/multi-monitor parity.
 - [ ] **Multi-monitor (N screens)** incl. mixed landscape+portrait, per-monitor scale; single-display setting honored
 
 ### UCE layer verification (plan Phase C, `--verify-layers` harness, 2026-07-04)
@@ -233,6 +233,6 @@ lock-card (not a layer yet). Layer bugs found: **none**.
 
 ## Chaos overlays (`Chaos`) & AvatarTube (`AvatarTube`)
 
-- [ ] Chaos overlays render + animate smoothly and are click-through where they should be
+- [ ] Chaos overlays render + animate smoothly; input is per-region (team review 2026-07-09 — only color-filter/spiral regions pass, chaos FX capture over their painted region; open question: full-chaos-run behavior, see task board)
 - [ ] AvatarTube: speech
 - [ ] AvatarTube: AI chat, emotes, drag/scale/attach, reactions, fullscreen detection

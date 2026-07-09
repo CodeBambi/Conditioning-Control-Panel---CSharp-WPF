@@ -624,19 +624,24 @@ Target:
 - Click-through/input passthrough requires platform-specific code on Linux/macOS.
 - DWM tinting is Windows-only; use Avalonia client-side decorations for cross-platform chrome.
 
-**Overlays are PURE PASSIVE LAYERS (REQUIRED — a reported bug).** Color/effect overlays — **pink fill, spiral**,
-subliminal, flash, brain-drain — are *paint-only*: a coloured layer drawn on top of the screen and **nothing
-else**. Think **tinted glass over the monitor** — you *see* it (rendered smoothly), but you can click, type, and
-use your whole PC completely normally underneath it. It must not affect, in any way, the CCP window **or any other
-app/software behind it**. Concretely the overlay window must:
+**Overlays use PER-REGION click-through (team review 2026-07-09 — SUPERSEDES the old "all overlays are pure
+passive click-through" spec).** Only the **theme color filter (pink/color tint)** and the **spiral** are ambient
+*tinted glass*: a screen region covered by **only** those two layers is paint-only — you *see* it (rendered
+smoothly) but can click, type, and use your whole PC normally through it. **Every other active layer** (video,
+flash, subliminal, brain-drain, bouncing text, keyword highlight, bubbles, chaos FX) **captures pointer input over
+the region it paints** while active. The window mechanism is unchanged — the per-monitor CompositorWindow stays
+`WS_EX_TRANSPARENT|WS_EX_LAYERED`; the compositor derives a per-frame **capture mask** = union of the non-ambient
+active layers' painted regions (immutable snapshot), and the global mouse hook **swallows** clicks inside the mask
+and passes the rest. For a region that is ambient-only (color filter and/or spiral), the overlay must:
 - **not capture input** — mouse and keyboard pass straight through to whatever is underneath (the app's own
   buttons *and* other applications);
 - **not steal focus or activate** — the focused window stays focused; the overlay never becomes foreground;
 - **not appear in Alt-Tab / the task switcher**, and not show in the taskbar;
 - **not interfere with the behavior or performance** of apps behind it (no input grabs, no global hooks tied to the
   overlay, minimal GPU/CPU cost — see the perf bar in §1A);
-- **render its own visual smoothly** — animated overlays (e.g. the spiral) spin/pulse at a fluid frame rate while
-  still being fully click-through. "See it smoothly, use your PC normally" is the whole requirement.
+- **render its own visual smoothly** — the ambient layers (spiral, color tint) spin/pulse at a fluid frame rate
+  while their ambient-only regions stay click-through. "See the ambient glass smoothly and use your PC through it;
+  every other effect owns (captures) its painted region" is the requirement.
 
 This needs input-transparency at **both** levels, and the reported bug is shipping only one:
 1. **Avalonia level:** the overlay's content/root must be `IsHitTestVisible="false"` so clicks fall through to the
@@ -1682,9 +1687,10 @@ Concrete things hit during implementation that the original draft did not antici
   did nothing, overlays blocked input. Wire every control to a live `ICommand` → Core/platform service, and
   **exercise each feature in the running app** before calling it done (§13.6). Grep ported lanes for stub/no-op
   commands and `NotImplementedException`.
-- **Overlays must be click-through at BOTH the Avalonia and OS-window level** (`IsHitTestVisible=false` *and*
-  `WS_EX_TRANSPARENT|WS_EX_LAYERED|WS_EX_NOACTIVATE` applied after the handle exists). They must not block the app's
-  own buttons or other apps behind them. Shipping only one level is the pink-fill/spiral bug — see §7.4.
+- **Overlays use per-region click-through (team review 2026-07-09, see §7.4):** only color-filter + spiral regions
+  pass input; every other active layer captures over its painted region via the compositor capture-mask + mouse-hook
+  swallow. The window mechanism is unchanged (`WS_EX_TRANSPARENT|WS_EX_LAYERED|WS_EX_NOACTIVATE` after the handle
+  exists); ambient-only regions must not block the app's own buttons or other apps behind them.
 - **Accent colors are theme-driven — never hard-code them.** The top-left mod switcher re-skins the whole app
   (Sissy = pink, Drone = green, …). Bind to the accent **resource keys via `DynamicResource`**, not literal hex,
   and port the per-mod re-skin path. The current `App.axaml` hard-codes the palette with no re-skin path — see

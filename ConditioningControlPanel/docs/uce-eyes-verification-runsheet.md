@@ -60,9 +60,10 @@ Spiral(60) < PinkTint(70).
 
 | # | Check | Pass? |
 |---|-------|-------|
-| C1 | With spiral + pink tint + bouncing text active: click/type into a browser and an editor underneath — every click lands, no focus steal, cursor normal | [ ] |
+| C1 | With ONLY spiral + pink tint active (no other layer): click/type into a browser and an editor underneath — every click lands through the ambient-only region, no focus steal, cursor normal | [ ] |
+| C1b | Per-region rule (team review 2026-07-09): with bouncing text / subliminal / a flash region active, clicking OVER that painted region is BLOCKED (captured, does not reach the app behind); clicking a region with only spiral/tint still passes through | [ ] |
 | C2 | With flash clickable ON: clicking a flash image pops it (hydra multiplies if on); clicking BESIDE it passes through | [ ] |
-| C3 | Known gap (decide, don't fix here): Avalonia pop clicks also LEAK to the app underneath (hook can't swallow — WP3 decision row) — confirm current behavior and note it | [ ] |
+| C3 | RESOLVED 2026-07-09 (must-fix, not accept): the compositor capture mask + `AvaloniaMouseHook` swallow must stop pop/effect clicks leaking to the app underneath. Verify the swallow works once implemented; WPF hold-to-defuse bubbles still must NOT swallow | [ ] |
 
 ### D. Mixed-DPI placement (100% + 125/150% monitors)
 

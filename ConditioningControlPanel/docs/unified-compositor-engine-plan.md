@@ -10,10 +10,12 @@
 
 ## Goal (north star)
 
-One `CompositorEngine` driving **one full-screen, click-through, topmost `CompositorWindow` per
-monitor**, into which every visual effect renders as an `IAvaloniaLayer` on a single Skia surface:
-video (regular + mandatory), flash, subliminal, bouncing text, bubbles, brain-drain, spiral, pink
-tint, lock card, and (later) chaos overlays.
+One `CompositorEngine` driving **one full-screen, topmost `CompositorWindow` per monitor** with
+**PER-REGION click-through** (team review 2026-07-09: only color-filter/spiral regions pass input;
+every other active layer captures over its painted region — see `overlay-clickthrough`), into which
+every visual effect renders as an `IAvaloniaLayer` on a single Skia surface: video (regular +
+mandatory), flash, subliminal, bouncing text, bubbles, brain-drain, spiral, pink tint, lock card,
+and (later) chaos overlays.
 
 **Done means:**
 1. Every overlay/video effect renders through the UCE with **1:1 behavioral parity** with the WPF head.
@@ -31,7 +33,7 @@ the unified audio mixer (skill Phase 5), Android.
 |---|---|
 | `CompositorEngine` 60 Hz loop + per-monitor windows | ✅ working |
 | `CompositorControl` + `ICustomDrawOperation` render-thread path | ✅ wired (engine invalidates each tick) |
-| Click-through (`WS_EX_TRANSPARENT` + `WM_NCHITTEST` subclass) | ✅ working; `WS_EX_LAYERED` correctly removed |
+| Click-through (`WS_EX_TRANSPARENT` + `WM_NCHITTEST` subclass) | ✅ working; `WS_EX_LAYERED` correctly removed. NOTE 2026-07-09: input is now PER-REGION (compositor capture mask + hook swallow; only color-filter/spiral regions pass) — see `overlay-clickthrough` |
 | Spiral, pink tint, brain-drain layers | ✅ render (spiral full-screen fix landed) |
 | Full-screen coverage (window uses `screen.Bounds`, taskbar incl.) | ✅ landed |
 | **Mandatory / regular video layer** | ✅ renders + performs (Phase A harness-proven; Phase D.1/D.2 perf pass landed 2026-07-04: zero per-frame alloc, engine-driven tick) |

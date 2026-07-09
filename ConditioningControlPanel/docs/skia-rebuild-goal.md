@@ -32,7 +32,7 @@ that this goal applies to **all feature ports, not just the UCE**.
 | Every current feature works end-to-end in the **Avalonia heads** on Windows and Linux | Which library/dependency provides it |
 | At least as fast and smooth as WPF; low-end machines are a hard requirement | Whether the code resembles the WPF code |
 | Windows AND Linux: build, launch, features function | Matching WPF pixel-for-pixel (keep the design language, see `dashboard-design`) |
-| Overlays stay tinted glass: user keeps using the PC while conditioning runs | Keeping legacy per-effect windows |
+| Per-region click-through (team review 2026-07-09): only the color filter + spiral are ambient tinted glass the user works through; every other active layer captures input over its painted region | Keeping legacy per-effect windows |
 | Privacy/security posture never regresses (see Guardrails) | Preserving old workarounds whose reason died |
 
 "Improved" is explicitly allowed and encouraged: if a feature can be made faster, more
@@ -46,7 +46,8 @@ dialogs, dashboard) is therefore already Skia-rendered and stays as Avalonia con
 The doctrine this goal adds:
 
 1. **Every animated or real-time visual effect renders as a compositor layer** in the
-   existing `CompositorEngine` (one topmost click-through window per monitor, z-ordered
+   existing `CompositorEngine` (one topmost window per monitor with PER-REGION click-through
+   — only color-filter/spiral regions pass input, team review 2026-07-09 — z-ordered
    `IAvaloniaLayer`s, one 60Hz tick). No new per-effect `Window`s. Ever.
 2. **Engine mode** (session effects: video, flash, subliminal, bouncing text, spiral,
    brain drain, pink tint, bubbles) and **game mode** (Chaos: field FX, DVD, cascades,
@@ -92,6 +93,23 @@ Avalonia/Core first.
 > the **v6.2.10 sync** row reset to `⬜ todo` (merge + version bump + catalogue are committed & done —
 > `5603442`/`6014fef`/`5997800`; the two #493 ports are NOT started), and the **MainWindow-position** row
 > closed `✅ done` (code committed `3f9c6b17`, only human running-proof pending).
+
+> **Team review decision 2026-07-09 — UCE click-through scoped to color-filter + spiral (PER-REGION):**
+> Reviewed with the team. In the UCE, click-through is PER-REGION, not per-window. Only the theme color filter
+> and the spiral are ambient "tinted glass": a screen region covered by ONLY those two layers passes input to the
+> apps behind. **Every other active layer** (video, flash, subliminal, brain-drain, bouncing text, keyword
+> highlight, bubbles, chaos FX) **captures pointer input over the region it paints.** Mechanism unchanged: the
+> per-monitor CompositorWindow stays `WS_EX_TRANSPARENT|LAYERED`; the compositor exposes a per-frame capture mask
+> = union of non-ambient active layer regions (immutable snapshot), and the global mouse hook SWALLOWS clicks
+> inside the mask, passing the rest. This SUPERSEDES the earlier "all passive overlays are click-through" spec and
+> is a DELIBERATE divergence from the WPF head (WPF keeps subliminal/flash/brain-drain click-through) — a product
+> decision, so the loop-protocol "would diverge from WPF" stop-condition is satisfied. It RESOLVES the long-open
+> `AvaloniaMouseHook` click-swallow question (WS2/WP3): the swallow path is now REQUIRED scope, not optional.
+> Docs reconciled: `crossplatform-rebuild-plan.md` §7.4, the `overlay-clickthrough` + `unified-compositor-engine`
+> skills, `unified-compositor-engine-plan.md`, `avalonia-ui-parity-matrix.md`, `parity-reverify-triage.md`,
+> `uce-coverage-audit.md`, `uce-eyes-verification-runsheet.md` §C. Implementation tracked in the task-board row
+> "Per-region UCE input mask + hook swallow". Open questions recorded there: chaos-run behavior, keyboard vs
+> pointer-only blocking, keyword-highlight capturing over the user's own text.
 
 Exists and TRUSTED (earned, not assumed): the **WS0 review sweep is COMPLETE** — all 11
 lots passed (contract + adversarial rubric + optimality), parity matrix rows 1–11
@@ -255,11 +273,13 @@ authorized a media-engine swap if it wins on merit. Judged sequencing (do NOT re
 Migrate the passive Chaos overlays to layers (field FX, Skia FX, flash, cascades, DVD,
 cursor glow, vibe trail, e-stim glow, banners, wave timer, pop text, announcer).
 Interactive Chaos surfaces (HUD, boon bar, toy button, unlock card, backdrop, bubbles'
-click handling) keep their input model per `overlay-clickthrough` (hook + layer
-hit-testing preferred over interactive windows where feasible). Resolve the hook
-click-swallow gap here: give `AvaloniaMouseHook` a swallow path (WPF semantics,
-including the hold-to-defuse no-swallow exception) or document acceptance. Chaos run
-must hold 60fps target / 30fps floor during heavy activity on a low-end machine.
+click handling) keep their input model per `overlay-clickthrough`. **Per the 2026-07-09
+team review, UCE input is PER-REGION:** the engine unions every non-ambient active layer's
+painted region into a per-frame capture mask and `AvaloniaMouseHook` MUST swallow clicks
+inside it (WPF semantics, including the hold-to-defuse no-swallow exception) — only
+color-filter/spiral regions stay click-through. This RESOLVES the former "swallow gap: fix
+or accept" question (fixing the hook is now required scope). Chaos run must hold 60fps
+target / 30fps floor during heavy activity on a low-end machine.
 
 ### WS3: Windows completion sweep
 `port-audit` over the whole app; every remaining effect-window candidate either becomes
@@ -380,7 +400,11 @@ Per the WS4 section below. X11 click-through first (XShape/XFixes via
 Ditzy Data PRO analytics UI (~832 LOC) · Discord Rich Presence · companion AI +
 CompanionTab full port · chaos run-engine faithful port (unblocks
 `EffectPayload.Ambient`) · calibration 16-point window pipeline (~1300–1500 LOC) ·
-lots 7–11 DEFER rows (see parity matrix / task board).
+lots 7–11 DEFER rows (see parity matrix / task board) · **DTRH "The Fall" web mini-game**
+(v6.2.11 sync epic — Three.js/WebView2 roguelite; BLOCKED on the `IBrowserHost` seam;
+catalogue `docs/v6.2.11-port-catalogue.md`) · **per-region UCE input mask + hook swallow**
+(team review 2026-07-09) · **v6.2.11 verify-set fixes** (lock-card repeat, overlay z-order
+#497, bounce-in-tray, weekly-quest #496; the portable 2b/2c fixes shipped + 2a/2d N-A/done).
 
 ## Loop protocol (how an autonomous session runs this goal)
 
@@ -452,7 +476,7 @@ without re-reading the claimed task-board row and this goal's relevant workstrea
 - [x] WS0 complete: the ENTIRE port reviewed lot by lot (contract + adversarial rubric + optimality), corrections merged, the parity matrix re-earned from a full reset with evidence per row, calibration-port blockage resolved or formally re-scoped. Any lot RE-OPENED by a later merge from main (see the task-board "Sync-from-main" backlogs; merge `5ce70de6` re-opened lots 1/2/3/4/6) must be re-closed before WS0 is done.
   - **STATUS 2026-07-04 (WP1 shipped): all 11 lots PASSED and EVERY merge-`5ce70de6` re-open is RE-CLOSED — the last one, ProfileSync slice 7 (GDPR + live wiring), landed as s7a `4f051ab0` + s7b `80e1442` (parity row 1 re-closed with evidence; gates slnf 0 · WPF 0 · Core 205/205 · smoke baseline · video canary exit 0). WS0 is DONE.** Re-close trail: #462 session-summary (`410bef87`), #462 interaction-race (`4d65e564`, hardened `fb704a6d`), #461 resolved-by-documentation (`648d21ac`), EffectPayload.Ambient dormant (chaos backlog). ProfileSync slices 1–6 of 7 are DONE and UNWIRED (Core 199/199; full sync round-trip + heartbeat + 401 recovery + cloud backup w/ P0 exclusion strip + purchase/oopsie/change-name; each slice independently reviewed or grep-proven — the slice-3 merge got a fresh-context adversarial review, the slice-5 P0 exclusion list is grep-proven 18==18 vs WPF, the slice-6 economy bug was caught+fixed pre-commit). Full history + per-slice evidence: `docs/profilesync-port-plan.md`. Standing deferred workstreams (not re-opens; scheduled after WP1–2): Ditzy Data PRO analytics, Discord Rich Presence, companion AI + CompanionTab, chaos run-engine faithful port, calibration 16-point pipeline.
 - [x] Video, audio controls, and attention checks run through the compositor on Windows; legacy video windows deleted (WS1 Phase E complete). — **DONE 2026-07-05: Phase E E1 `6180efc2` / E2 `ed636a7c` / E3 `8069cfb7`; `AvaloniaMultiMonitorVideoService` grep-confirmed 0 matches; attention-check migrated to `AttentionCheckLayer` (`a315cb0f`, last UCE window gap closed).**
-- [ ] All passive Chaos visuals are compositor layers; a full Chaos run holds the FPS floor; hook swallow gap resolved or explicitly accepted in the task board. — **Layer migration DONE (10 chaos layers; run-engine S1–S9 complete, S8 `f0fea4a0` wired the production callers). FPS-FLOOR BENCHMARK 2026-07-05 (`docs/benchmark-2026-07-05-analysis.md`, @glm5.2, Release `--max-benchmark`): AvgFps 138.7 ≫ 30 floor across a full run incl. a 60s Chaos phase → floor HELD; MinFps=0 is a ≥1s render stall correlated with LibVLC web-video decode failures (a video-path stall, NOT a Skia/UCE regression). "Not-worse than `benchmark-optimized.json`" is environmentally invalidated on this machine (NOT a code regression): Phase 2 is 120s of web video that FAILED to decode (~half the run) — its LibVLC decode-retry loop accounts for BOTH the AvgFps drop and the ~4× CPU; secondary confound is the 180s→240s duration drift (the extra 60s is the heaviest Chaos phase). REMAINING: re-baseline at 240s (or note the 180→240 drift), investigate the video-failure→render-stall (MinFps=0), and resolve the `AvaloniaMouseHook` click-swallow decision (HUMAN+SMART).**
+- [ ] All passive Chaos visuals are compositor layers; a full Chaos run holds the FPS floor; per-region input mask + `AvaloniaMouseHook` swallow path implemented per the 2026-07-09 team review (swallow question RESOLVED — fix required, not optional). — **Layer migration DONE (10 chaos layers; run-engine S1–S9 complete, S8 `f0fea4a0` wired the production callers). FPS-FLOOR BENCHMARK 2026-07-05 (`docs/benchmark-2026-07-05-analysis.md`, @glm5.2, Release `--max-benchmark`): AvgFps 138.7 ≫ 30 floor across a full run incl. a 60s Chaos phase → floor HELD; MinFps=0 is a ≥1s render stall correlated with LibVLC web-video decode failures (a video-path stall, NOT a Skia/UCE regression). "Not-worse than `benchmark-optimized.json`" is environmentally invalidated on this machine (NOT a code regression): Phase 2 is 120s of web video that FAILED to decode (~half the run) — its LibVLC decode-retry loop accounts for BOTH the AvgFps drop and the ~4× CPU; secondary confound is the 180s→240s duration drift (the extra 60s is the heaviest Chaos phase). REMAINING: re-baseline at 240s (or note the 180→240 drift), investigate the video-failure→render-stall (MinFps=0), and resolve the `AvaloniaMouseHook` click-swallow decision (HUMAN+SMART).**
 - [x] No passive effect window remains in `CCP.Avalonia` (audited); interactive windows are justified. — **DONE 2026-07-05 (`docs/uce-coverage-audit.md`): every passive effect renders as a compositor layer (22 registered layers = 9 session + 12 chaos + 1 attention-check, incl. the owner-authorized `ChaosEStimArcLayer` Z=125 + `ChaosVibeTrailLayer` Z=128). The 4 formerly-unwired passive windows (`ChaosEStim`/`EStimGlow`/`VibeTrail`/`SkiaFx`) were DELETED as dead code so they cannot be re-wired; `EStimGlow`'s charge-glow survives only as a DEFERRED FEATURE (the charged-pop mechanic), not a window. Interactive windows justified (audit §C). The window-migration lane is COMPLETE.**
 - [ ] Windows: every parity-matrix item re-verified `[x]` after WS1-3; benchmarks not worse than `benchmark-optimized.json`.
 - [ ] Linux: app builds and launches; every feature works, is improved, or degrades gracefully with a recorded gap; click-through works on X11; parity matrix has a completed Linux sweep.

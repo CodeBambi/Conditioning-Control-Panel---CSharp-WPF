@@ -95,7 +95,9 @@ All 12 harness-verified (`--verify-layers`, `unified-compositor-engine-plan.md` 
 
 ## B. DOES NOT USE UCE — passive effects still rendering as WINDOWS (the gap)
 
-These "just draw" (all click-through / `IsHitTestVisible=false`) yet run as their own
+These "just draw" (historically all click-through / `IsHitTestVisible=false`; NOTE team review
+2026-07-09: UCE input is now PER-REGION — only color-filter/spiral pass, every other layer captures
+over its painted region, see `overlay-clickthrough`) yet run as their own
 top-level `Window`. Per doctrine they should be `IAvaloniaLayer`s. Migration recipe:
 `unified-compositor-engine-plan.md` §"How to migrate a chaos overlay".
 

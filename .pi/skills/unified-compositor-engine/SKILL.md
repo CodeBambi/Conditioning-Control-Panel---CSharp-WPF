@@ -1,6 +1,6 @@
 ---
 name: unified-compositor-engine
-description: "Work on the Unified Compositor Engine (UCE): CCP's single Skia render surface that draws video, flash images, subliminals, bouncing text, spiral, brain drain, pink tint, and bubbles as z-ordered layers inside one topmost click-through window per monitor. The engine ALREADY EXISTS and is partially adopted; use this skill whenever you touch anything under CCP.Avalonia/Compositor/, any *Layer class, video rendering, overlay z-order, overlay flicker/lag, or when finishing the remaining UCE phases (video layer, chaos migration, legacy window removal). Also use it when someone asks why an overlay effect renders wrong, out of order, or not at all in the Avalonia head."
+description: "Work on the Unified Compositor Engine (UCE): CCP's single Skia render surface that draws video, flash images, subliminals, bouncing text, spiral, brain drain, pink tint, and bubbles as z-ordered layers inside one topmost window per monitor with PER-REGION click-through (team review 2026-07-09: only theme-color-filter/spiral regions pass input, every other active layer captures over its painted region; see overlay-clickthrough). The engine ALREADY EXISTS and is partially adopted; use this skill whenever you touch anything under CCP.Avalonia/Compositor/, any *Layer class, video rendering, overlay z-order, overlay flicker/lag, or when finishing the remaining UCE phases (video layer, chaos migration, legacy window removal). Also use it when someone asks why an overlay effect renders wrong, out of order, or not at all in the Avalonia head."
 ---
 
 # unified-compositor-engine
@@ -26,7 +26,7 @@ What still uses separate windows: ~23 Chaos overlay/window classes, AvatarTube, 
 | Piece | Path | Notes |
 |---|---|---|
 | Engine | `ConditioningControlPanel/CCP.Avalonia/Compositor/CompositorEngine.cs` | DI singleton (registered in `ServiceCollectionExtensions.cs`). One topmost transparent `CompositorWindow` per monitor, ~60Hz `DispatcherTimer` (16ms), renders `IAvaloniaLayer`s sorted by `ZIndex`. Window creation is deliberately STAGGERED (~250ms apart) |
-| Window | `Compositor/CompositorWindow.axaml(.cs)` | Per-monitor, click-through via Win32 ex-styles re-applied on Opened/Activated/WindowState change (see `overlay-clickthrough` skill) |
+| Window | `Compositor/CompositorWindow.axaml(.cs)` | Per-monitor, stays `WS_EX_TRANSPARENT\|LAYERED` (re-applied on Opened/Activated/WindowState change). Input is PER-REGION (team review 2026-07-09): the mouse hook swallows clicks inside the compositor's capture mask (union of non-ambient layer regions), passes ambient-only (color-filter/spiral) regions. See `overlay-clickthrough` skill |
 | Draw op | `Compositor/CompositorControl.cs` | `CompositorDrawOp` custom draw operation (Skia lease) |
 | Core seam | `ConditioningControlPanel/CCP.Core/Services/Compositor/ILayer.cs` | Portable: `ZIndex`, `IsActive`, `OnActivated()`, `OnDeactivated()` |
 | Avalonia seam | `Compositor/IAvaloniaLayer.cs` | Adds `Update(TimeSpan)` and `Render(SKCanvas, PixelRect, TimeSpan)` |
@@ -73,7 +73,7 @@ Per `unified-compositor-engine-plan.md`, phases A-E: prove video renders, reach 
 7. **Services own state; layers only render it.** A service tells its layer what to show; the layer holds no business logic. Note the engine is a nullable ctor dependency in effect services: without DI the layer is never created (or, in `AvaloniaOverlayService`'s case, created but never registered) and the effect silently renders nothing.
 8. **Thread safety:** decoded frames arrive on background threads. Hand them over under a lock or queue; never touch `SKCanvas` off the render path.
 9. **Z-order comes from `CompositorLayers` only.** No `Topmost` toggling, no `SetWindowPos` for layer ordering.
-10. **Click-through is the `overlay-clickthrough` skill's domain.** The compositor window must stay always-click-through; interactivity is per-region hit-testing (`FlashLayer.HitTest`, `BubbleLayer.HitTest`) fed by the global mouse hook.
+10. **Click-through is the `overlay-clickthrough` skill's domain.** The compositor window stays always-`WS_EX_TRANSPARENT|LAYERED`, but input is PER-REGION (team review 2026-07-09, polarity flipped from opt-in-capture to opt-out-ambient): the engine unions every non-ambient active layer's painted region into a per-frame **capture mask** (immutable snapshot), and the global mouse hook swallows clicks inside the mask and passes clicks over ambient-only (color-filter/spiral) or bare-desktop regions. Interactive layers (`FlashLayer.HitTest`, `BubbleLayer.HitTest`) still hit-test their geometry for on-click behavior.
 
 ## Verification
 
