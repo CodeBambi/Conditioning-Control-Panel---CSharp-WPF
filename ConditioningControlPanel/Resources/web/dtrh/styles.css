@@ -901,6 +901,10 @@ img.rh-fx-spiralspin {
   background: rgba(255, 105, 180, 0.16);
 }
 .sf-chip:hover { border-color: var(--pink); }
+/* THE DESCENT section (panel.js): full-width mood check-chips + locked pool chips */
+.sf-chip--wide { display: block; width: 100%; text-align: left; border-radius: 10px; margin-top: 0.35rem; }
+.sf-chip.is-locked { opacity: 0.45; cursor: default; }
+.sf-chip.is-locked:hover { border-color: rgba(255, 255, 255, 0.14); }
 
 /* reset-to-default: top of the options list, right-aligned above the sliders */
 .sf-reset-row {
@@ -1202,6 +1206,16 @@ img.rh-fx-spiralspin {
 @keyframes cfRippleGrow {
   0% { width: 10px; height: 10px; opacity: 1; }
   100% { width: calc(var(--r, 260px) * 2); height: calc(var(--r, 260px) * 2); opacity: 0; }
+}
+/* Trust Exercise: the sonar ping - a thin pale ring that reveals, never pops */
+.cf-ripple--sonar {
+  border: 2px solid rgba(235, 245, 255, 0.75);
+  box-shadow: 0 0 16px rgba(200, 225, 255, 0.5), inset 0 0 12px rgba(200, 225, 255, 0.3);
+}
+
+/* Midas Ricochet: gilded treats glow gold until the touch wears off */
+.cf-gilded .cf-bubble-body {
+  filter: saturate(1.5) brightness(1.15) drop-shadow(0 0 14px rgba(255, 215, 0, 0.95));
 }
 
 /* ---- HUD strip ---- */
@@ -1739,21 +1753,22 @@ img.rh-fx-spiralspin {
 .cf-draft-auto { margin-top: 10px; font-size: 0.78rem; opacity: 0.65; }
 
 /* ============================================================================
-   M5 - THE WARREN (warren.js): the hub SPA over the idling tunnel.
+   M5 - THE WARREN (warren.js): the in-ambient hub over the idling tunnel.
+   The tube is the menu now: the root is a TRANSPARENT, pointer-transparent
+   veil (clicks fall through to the canvas / 3D stations); only the sparse
+   chrome (dock, fall chips, sheet, modals) opts back into pointer events.
    Palette mirrors the WPF Dollhouse: #141126 depths, #1C1A36 cards,
    pink #E84393 accent, purple #8B5CF6, gold #FFD700.
    ==========================================================================*/
 
 .wr-root {
   position: absolute; inset: 0; z-index: 30;
-  pointer-events: auto;
+  pointer-events: none;
   color: #e8e8f4;
-  background: linear-gradient(180deg, rgba(10,8,24,0.72), rgba(14,10,32,0.86));
   font-size: 14px;
   overflow: hidden;
 }
 .wr-root[hidden] { display: none !important; }   /* class rules beat the UA [hidden] */
-.wr-screen { position: absolute; inset: 0; display: flex; flex-direction: column; }
 
 /* ---- shared chrome ---- */
 .wr-chips { display: flex; gap: 8px; align-items: center; }
@@ -1761,69 +1776,84 @@ img.rh-fx-spiralspin {
   padding: 3px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
   background: rgba(232,67,147,0.14); border: 1px solid rgba(232,67,147,0.45);
   color: #ffd6ea; white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
 }
+.wr-chips--corner { position: absolute; top: 16px; right: 20px; }
 .wr-reveal-flash { animation: wrRevealPulse 1s ease-in-out 3; }
 @keyframes wrRevealPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.22; } }
 
-/* ---- main menu ---- */
-.wr-menu {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 60px;
-  padding: 40px;
+/* ---- corner title (top-left, quiet) ---- */
+.wr-corner-title { position: absolute; top: 14px; left: 20px; }
+.wr-corner-name {
+  font-size: 1.05rem; font-weight: 800; letter-spacing: 0.12em; color: #fff;
+  text-shadow: 0 0 18px rgba(232,67,147,0.85), 0 0 44px rgba(139,92,246,0.5);
 }
-.wr-menu-left { display: flex; flex-direction: column; gap: 16px; max-width: 460px; }
-.wr-menu-title {
-  font-size: 2.3rem; font-weight: 800; letter-spacing: 0.06em; line-height: 1.1;
-  color: #fff; text-shadow: 0 0 24px rgba(232,67,147,0.85), 0 0 60px rgba(139,92,246,0.5);
-}
-.wr-menu-sub { font-size: 0.9rem; font-style: italic; opacity: 0.6; margin-top: -8px; }
-.wr-menu-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
-.wr-menu-btn {
-  padding: 13px 26px; border-radius: 12px; border: 1px solid rgba(232,67,147,0.5);
-  background: rgba(28,26,54,0.85); color: #fff; font-size: 1rem; font-weight: 700;
-  letter-spacing: 0.08em; cursor: pointer; text-align: left;
-  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
-}
-.wr-menu-btn:hover { background: rgba(60,40,90,0.9); transform: translateX(4px); box-shadow: 0 0 18px rgba(232,67,147,0.35); }
-.wr-menu-btn--hero {
-  background: linear-gradient(135deg, #e84393, #8b5cf6); border: none;
-  box-shadow: 0 0 26px rgba(232,67,147,0.5); font-size: 1.15rem;
-}
-.wr-menu-btn--hero:disabled { opacity: 0.6; cursor: default; transform: none; }
-.wr-menu-btn--dim { opacity: 0.55; font-weight: 500; }
-.wr-menu-hint { font-size: 0.78rem; opacity: 0.5; }
-.wr-menu-art { width: min(420px, 34vw); }
-.wr-menu-art img {
-  width: 100%; border-radius: 22px; border: 2px solid rgba(232,67,147,0.55);
-  box-shadow: 0 0 34px rgba(232,67,147,0.45);
-  animation: wrBreath 6.5s ease-in-out infinite alternate;
-}
-@keyframes wrBreath { from { transform: scale(1) rotate(-0.2deg); } to { transform: scale(1.02) rotate(0.2deg); } }
+.wr-corner-sub { font-size: 0.72rem; font-style: italic; opacity: 0.55; margin-top: 2px; }
 
-/* ---- dollhouse chrome ---- */
-.wr-dollhouse { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 18px 26px 10px; }
-.wr-topbar { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; }
-.wr-topbar-title { font-weight: 800; letter-spacing: 0.2em; font-size: 1.05rem; color: #ff9fd0; flex: 1; }
-.wr-back {
-  padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.25);
-  background: rgba(255,255,255,0.06); color: #cfd0e8; cursor: pointer; font-size: 0.85rem;
+/* ---- the FALL IN caption + chips (bottom-center, under the portal) ---- */
+.wr-fall {
+  position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
-.wr-back:hover { background: rgba(255,255,255,0.14); }
-.wr-tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-.wr-tab {
-  position: relative; padding: 8px 18px; border-radius: 10px; cursor: pointer;
-  border: 1px solid rgba(232,67,147,0.35); background: rgba(28,26,54,0.7);
-  color: #cfd0e8; font-size: 0.88rem; font-weight: 600;
+.wr-fall-cap {
+  font-size: 1.15rem; font-weight: 800; letter-spacing: 0.22em; color: #fff;
+  text-shadow: 0 0 22px rgba(232,67,147,0.95), 0 0 50px rgba(139,92,246,0.6);
+  animation: wrFallBreath 3.4s ease-in-out infinite alternate;
 }
-.wr-tab.is-on { background: rgba(232,67,147,0.28); color: #fff; border-color: rgba(232,67,147,0.9); }
-.wr-tab.is-locked { opacity: 0.4; cursor: default; }
-.wr-badge {
-  display: inline-block; margin-left: 8px; padding: 0 7px; border-radius: 999px;
-  background: #e84393; color: #fff; font-size: 0.68rem; font-weight: 800; vertical-align: 1px;
+@keyframes wrFallBreath { from { opacity: 0.82; } to { opacity: 1; } }
+.wr-pills--center { justify-content: center; }
+.wr-fall .wr-seg { pointer-events: auto; }
+.wr-seg--small { padding: 3px 11px; font-size: 0.72rem; }
+
+/* ---- corner dock (bottom-left: options / how to / wake up) ---- */
+.wr-dock { position: absolute; left: 20px; bottom: 18px; display: flex; gap: 8px; }
+.wr-dock-btn {
+  pointer-events: auto;
+  padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.22); background: rgba(20,17,38,0.72);
+  color: #cfd0e8; font-size: 0.8rem; font-weight: 600;
+  transition: background 0.15s, box-shadow 0.15s;
 }
-.wr-panel { flex: 1; overflow-y: auto; overflow-x: hidden; padding-right: 8px; min-height: 0; }
-.wr-panel::-webkit-scrollbar { width: 9px; }
-.wr-panel::-webkit-scrollbar-thumb { background: rgba(232,67,147,0.4); border-radius: 5px; }
-.wr-hint { padding: 8px 2px 2px; font-size: 0.76rem; font-style: italic; opacity: 0.5; }
+.wr-dock-btn:hover { background: rgba(60,40,90,0.85); box-shadow: 0 0 14px rgba(232,67,147,0.3); }
+.wr-dock-btn--dim { opacity: 0.6; font-weight: 500; }
+
+/* ---- bottom hint line ---- */
+.wr-hub-hint {
+  position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
+  font-size: 0.74rem; font-style: italic; opacity: 0.55; white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
+
+/* ---- the station sheet (a glass panel beside the focused station) ---- */
+.wr-sheet {
+  pointer-events: auto;
+  position: absolute; right: 24px; top: 64px; bottom: 84px;
+  width: min(480px, 46vw);
+  display: flex; flex-direction: column; min-height: 0;
+  background: linear-gradient(180deg, rgba(16,13,32,0.88), rgba(12,9,26,0.92));
+  border: 1px solid rgba(232,67,147,0.45); border-radius: 16px;
+  box-shadow: 0 0 34px rgba(232,67,147,0.25), inset 0 0 60px rgba(139,92,246,0.06);
+  backdrop-filter: blur(6px);
+  animation: wrSheetIn 0.22s ease-out;
+}
+@keyframes wrSheetIn { from { opacity: 0; transform: translateX(22px); } to { opacity: 1; transform: none; } }
+.wr-sheet-head {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 14px 16px 10px; border-bottom: 1px solid rgba(232,67,147,0.25);
+}
+.wr-sheet-title { font-weight: 800; letter-spacing: 0.18em; font-size: 1rem; color: #ff9fd0; }
+.wr-sheet-sub { flex: 1; font-size: 0.72rem; font-style: italic; opacity: 0.55; }
+.wr-sheet-close {
+  border: none; background: none; color: #cfd0e8; font-size: 0.95rem; cursor: pointer;
+  padding: 2px 8px; border-radius: 8px;
+}
+.wr-sheet-close:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.wr-sheet-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px 14px; min-height: 0; }
+.wr-sheet-body::-webkit-scrollbar { width: 9px; }
+.wr-sheet-body::-webkit-scrollbar-thumb { background: rgba(232,67,147,0.4); border-radius: 5px; }
+@media (max-width: 900px) {
+  .wr-sheet { left: 12px; right: 12px; width: auto; top: auto; height: 62vh; bottom: 64px; }
+}
 
 /* ---- cards / rows ---- */
 .wr-card {
@@ -2069,6 +2099,7 @@ img.rh-fx-spiralspin {
 
 /* ---- modals (how-to / the invitation) ---- */
 .wr-modal {
+  pointer-events: auto;   /* the root veil is pointer-transparent; modals opt back in */
   position: absolute; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,0.55);
 }
@@ -2128,18 +2159,53 @@ img.rh-fx-spiralspin {
 }
 .sf-pfx-front * { pointer-events: none !important; }
 
-/* the in-world video card: superbig, slides down in front of the POV, retracts up */
+/* the in-world video card: the mandatory tape RUSHES UP AT THE POV and sticks
+ * there - way closer than the tube's seated clips - caged in a red, electric,
+ * vibrating frame. Unskippable by design: pointer-events stay off (inherited
+ * from .sf-pfx-front) so it can't be clicked away; payloadFx holds it 15s
+ * unless the fall reaches a room. */
 .sf-pfx-videocard {
   position: fixed; left: 50%; top: 50%;
-  width: min(72vmin, 82vw); max-height: 78vh;
-  border-radius: 16px; overflow: hidden;
-  border: 2px solid rgba(255, 105, 180, 0.9);
-  box-shadow: 0 0 0 3px rgba(255, 20, 147, 0.35), 0 0 46px rgba(255, 20, 147, 0.6), 0 18px 60px rgba(0, 0, 0, 0.6);
-  transform: translate(-50%, -50%) translateY(-150vh);
-  transition: transform 0.62s cubic-bezier(0.2, 0.85, 0.25, 1);
+  width: min(84vmin, 92vw);
+  transform: translate(-50%, -50%) scale(0.04);
+  opacity: 0;
+  transition: transform 0.5s cubic-bezier(0.16, 0.9, 0.3, 1), opacity 0.3s ease;
+  will-change: transform, opacity;
 }
-.sf-pfx-videocard.in { transform: translate(-50%, -50%) translateY(0); }
-.sf-pfx-videocard video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.sf-pfx-videocard.in { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+/* the cage carries the shake + arcs so its animation never fights the card's
+ * zoom transition (both target transform) */
+.sf-pfx-vidframe {
+  position: relative; border-radius: 14px; overflow: hidden;
+  border: 3px solid rgba(255, 46, 46, 0.95);
+  box-shadow: 0 0 0 3px rgba(255, 0, 0, 0.35), 0 0 42px rgba(255, 30, 30, 0.75),
+    0 0 96px rgba(255, 0, 40, 0.4), 0 18px 60px rgba(0, 0, 0, 0.6);
+  animation: sf-pfx-vidshake 0.09s steps(2) infinite, sf-pfx-vidarc 0.9s steps(3) infinite;
+}
+.sf-pfx-vidframe::after {
+  /* electric rim: a crackling inner flicker riding the frame */
+  content: ''; position: absolute; inset: 0; border-radius: 11px;
+  box-shadow: inset 0 0 26px rgba(255, 60, 60, 0.55), inset 0 0 5px rgba(255, 230, 230, 0.9);
+  mix-blend-mode: screen;
+  animation: sf-pfx-vidflicker 0.14s steps(2) infinite;
+}
+.sf-pfx-videocard video { display: block; width: 100%; max-height: 82vh; object-fit: cover; }
+@keyframes sf-pfx-vidshake {
+  0%   { transform: translate(1px, -0.8px); }
+  25%  { transform: translate(-1.2px, 0.5px); }
+  50%  { transform: translate(0.7px, 1.1px); }
+  75%  { transform: translate(-0.6px, -1.1px); }
+  100% { transform: translate(1.1px, 0.6px); }
+}
+@keyframes sf-pfx-vidarc {
+  0%, 14%, 26%, 52%, 66%, 100% { border-color: rgba(255, 46, 46, 0.95); }
+  18% { border-color: rgba(255, 214, 214, 1); }
+  58% { border-color: rgba(255, 150, 150, 1); }
+}
+@keyframes sf-pfx-vidflicker {
+  0%, 100% { opacity: 0.5; }
+  45% { opacity: 1; }
+}
 
 /* sustained holds: one reused element per kind, opacity-eased in/out */
 .sf-pfx-layer { position: fixed; inset: 0; opacity: 0; transition: opacity 0.45s ease; will-change: opacity; }

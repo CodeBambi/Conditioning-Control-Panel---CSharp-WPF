@@ -26,7 +26,16 @@ const LANE_LERP = 2.2;       // how fast the camera glides toward the target lan
 const LANE_LEAN = 0.85;      // pre-commit lean fraction while a junction is armed (a felt bias, not a full swerve)
 const INTRO_TIME = 7;        // seconds of the opening plunge
 const INTRO_SPEED = 17;      // the plunge starts this fast, easing to the game speed
-const FOV_PULSE_DECAY = 2.5; // 1/s - effect kicks bleed off
+// Ken Burns drift: a slow, continuous, trigger-INDEPENDENT breathe + sway that
+// keeps the tube alive without the reactive FOV "pump" that used to fire on every
+// pop/effect (that made the rings + purple ribbons visibly jump position on each
+// trigger - super distracting). Incommensurate freqs per axis so it never
+// obviously repeats. Pops now punch via a brightness flash (fx.pulseFlash), not
+// a zoom, so nothing on the wall changes position when an effect fires.
+const KB_FOV_AMP = 0.9;      // deg of slow FOV breathe (the Ken Burns "zoom")
+const KB_FOV_W = 0.16;       // rad/s (~40s period)
+const KB_SWAY = 0.5;         // world-u aim drift on the 6u look scale (the "pan")
+const KB_SWAY_WY = 0.11, KB_SWAY_WP = 0.078; // yaw / pitch drift rates (rad/s)
 const SCROLL_BOOST = 3.2;    // speed added per firm wheel notch (device-normalized)
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -52,7 +61,7 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
   let introT = 0;             // 0..1 over INTRO_TIME
   let paused = false;
   let interacted = false;
-  let fovPulse = 0;           // transient FOV kick from popped effects
+  let driftT = 0;             // Ken Burns drift clock (continuous, trigger-independent)
 
   // Wave 2 game verbs: camera roll (a static dutch tilt per accepted sin, a
   // continuous spin for the Spun curse) and a speed-cap multiplier (Freefall).
@@ -160,12 +169,10 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     // holding a card paddle: the mouse pushes the card through the space, so the
     // drag must NOT also yaw the camera (the spawner reads the raw cursor itself)
     if (lookSuppressed) { firstInteract(); return; }
-    if (junctionArmed) {
-      // a fork is open: horizontal drag/swipe leans you toward a mouth (not a look)
-      laneVote = clamp(laneVote + dx * 0.006, -1, 1);
-      firstInteract();
-      return;
-    }
+    // NOTE: a fork being armed does NOT hijack the drag anymore - the player
+    // stays free to look around the antechamber (and grab posters/cards/power-ups).
+    // Entering a branch is click-on-card only; arrow keys still cast a lane vote
+    // that the 5s timeout reads as a preference.
     if (dragType === 'touch') {
       // during a video stage there is no wheel to skip with - a decisive
       // vertical swipe cuts the clip instead of trimming speed
@@ -200,6 +207,7 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
 
   function update(dt) {
     if (paused) return;
+    driftT += dt;               // advance the Ken Burns drift clock
 
     let introE = 1;
     if (introT < 1) {
@@ -224,8 +232,6 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     // back the same way it came (not a snap); drop it once the weight settles.
     faceW += ((_faceWant ? 1 : 0) - faceW) * clamp(dt * FACE_LERP, 0, 1);
     if (!_faceWant && faceW < 0.001) { faceW = 0; _faceTarget = null; }
-
-    fovPulse *= Math.exp(-FOV_PULSE_DECAY * dt);
 
     // camera roll: spin while a rate is set; unwind to upright the short way
     // once it clears (so a run ending never snaps the horizon back)
@@ -326,6 +332,11 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     _look.copy(_ahead)
       .addScaledVector(_right, Math.sin(lookYaw) * 6)
       .addScaledVector(_up, Math.sin(lookPitch) * 6);
+    // Ken Burns pan: a slow ambient drift of the aim so the tube breathes without
+    // reacting to pops. Applied before the face-poster lerp so holding a poster
+    // still fully wins the aim.
+    _look.addScaledVector(_right, Math.sin(driftT * KB_SWAY_WY) * KB_SWAY)
+         .addScaledVector(_up, Math.sin(driftT * KB_SWAY_WP + 1.3) * KB_SWAY);
     // swing the aim onto a held wall poster (any tube angle) and back on release
     if (faceW > 0.001 && _faceTarget) _look.lerp(_faceTarget, easeInOutCubic(faceW));
     camera.lookAt(_look);
@@ -334,7 +345,9 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     const roll = (rollOffset + rollSpin + branchRoll) * (Math.PI / 180);
     if (roll) camera.rotateZ(roll);
 
-    const fov = baseFov + (1 - introE) * 8 + fovPulse; // wide during the plunge + effect kicks
+    // wide during the opening plunge, then a slow Ken Burns FOV breathe. No
+    // per-trigger pump - pops punch via a brightness flash (fx.pulseFlash) instead.
+    const fov = baseFov + (1 - introE) * 8 + Math.sin(driftT * KB_FOV_W) * KB_FOV_AMP;
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
 
     // dive blend: ease the pose from the pre-dive snapshot into this frame's
@@ -362,7 +375,10 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     getDepth: () => depth,
     getSpeed: () => speed,
     getTrim: () => trim,
-    fovKick(amount) { fovPulse = Math.min(8, fovPulse + amount); },
+    // FOV pumps were removed (they made the tube jump position on every pop/
+    // effect); kept as a no-op so any stray caller can't crash. Pops now punch via
+    // fx.pulseFlash (brightness), and the camera has a continuous Ken Burns drift.
+    fovKick() { /* no-op: replaced by Ken Burns drift + brightness-flash punch */ },
     setPaused(p) { paused = !!p; if (p) dragging = false; },
     // Wave 2 game verbs
     setRollRate(degPerSec) { rollRate = degPerSec || 0; },
@@ -417,7 +433,7 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     isInVein: () => track === 'vein',
     getVeinT: () => vt,
     reset() {
-      depth = 0; speed = INTRO_SPEED; trim = 1; introT = 0; fovPulse = 0;
+      depth = 0; speed = INTRO_SPEED; trim = 1; introT = 0; driftT = 0;
       lookYaw = lookPitch = targetYaw = targetPitch = 0;
       rollRate = 0; rollSpin = 0; rollOffsetT = rollOffset = 0; capMult = 1;
       laneNow = laneTarget = laneVote = 0; junctionArmed = false;

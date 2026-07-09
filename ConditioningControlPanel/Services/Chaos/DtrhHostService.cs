@@ -789,46 +789,12 @@ internal static class DtrhHostService
     {
         try
         {
-            var state = new ChaosRunState(cfg);
-            try { ChaosMeta.ApplyLifetimeBoons(state); }
-            catch (Exception ex) { App.Logger?.Debug("DtrhHost loadout apply: {E}", ex.Message); }
-
+            // Grab-in-the-tube rework: the run no longer ships a pre-applied loadout. Every
+            // accessory/charm/toy is discovered + grabbed in the fall and applied there (JS
+            // game/boonPassives.js), so this only ships each item's current LEVEL + the
+            // consumable-slot count. Habits stay always-on and arrive as cfg.* knobs below.
             var s = App.Settings?.Current;
             var meta = ChaosMeta.State;
-
-            // Equipped active-use skills (toys), in catalogue order, capped by sewn pockets -
-            // mirrors ChaosModeService.BuildActiveToys.
-            var toys = new List<object>();
-            int pockets = ChaosMeta.SlotsFor(ChaosBoonCategory.Skill);
-            string[] keys = { s?.ChaosAccessoryKey1 ?? "Q", s?.ChaosAccessoryKey2 ?? "E" };
-            int slot = 0;
-            foreach (var b in ChaosLifetimeBoons.All)
-            {
-                if (slot >= pockets) break;
-                if (!b.IsActiveUse || !ChaosMeta.IsBoonActive(b.Id)) continue;
-                if (!state.ToyPower.TryGetValue(b.Id, out var power)) continue;
-                int lvl = ChaosMeta.BoonLevel(b.Id);
-                toys.Add(new
-                {
-                    id = b.Id,
-                    name = b.Name,
-                    glyph = b.Glyph,
-                    desc = b.Desc,
-                    key = slot < keys.Length ? keys[slot] : "",
-                    cooldownSec = b.UseCooldownSec,
-                    power,
-                    level = lvl,
-                    maxed = lvl >= b.MaxLevel,
-                });
-                slot++;
-            }
-
-            // Everything equipped/trained, for duo/trio draft gating (RequiresAny/All).
-            var equipment = new List<string>();
-            foreach (var id in meta.ActiveLifetimeBoons ?? new HashSet<string>())
-                if (ChaosMeta.IsBoonActive(id)) equipment.Add(id);
-            foreach (var id in meta.PurchasedUpgrades ?? new HashSet<string>())
-                if (ChaosMeta.IsUpgradeActive(id)) equipment.Add(id);
 
             // Intrusive Thoughts' phrase pool (the user's enabled bouncing-text lines).
             var thoughts = new List<string>();
@@ -839,9 +805,6 @@ internal static class DtrhHostService
                     foreach (var kv in pool) if (kv.Value) thoughts.Add(kv.Key);
             }
             catch { }
-
-            int rabbitsFootLvl = ChaosMeta.IsBoonActive("rabbits_foot") ? ChaosMeta.BoonLevel("rabbits_foot") : 0;
-            var (gMin, gMax) = ChaosLifetimeBoons.GoldenPayRange(rabbitsFootLvl);
 
             return new
             {
@@ -873,52 +836,16 @@ internal static class DtrhHostService
                 pendulumSwing = cfg.PendulumSwing,
                 rankIndex = (int)ChaosMeta.RankIndex,
                 runsCompleted = meta.RunsCompleted,
-                equipment,
                 equippedStartBoon = meta.EquippedStartBoon,
-                toys,
-                toyKeys = keys,
                 thoughtTexts = thoughts,
 
-                // ---- M4: the applied loadout (ChaosMeta.ApplyLifetimeBoons snapshot) ----
-                loadout = new
-                {
-                    shields = state.Shields,
-                    startingShields = cfg.StartingShields,
-                    collarSaves = state.CollarSaves,
-                    fuseTimeMult = state.FuseTimeMult,
-                    benignBaseline = state.BenignBaseline,
-                    blindfoldActive = state.BlindfoldActive,
-                    blindfoldPayMult = state.BlindfoldPayMult,
-                    blindfoldOpacity = state.BlindfoldOpacity,
-                    lastBreathWindowSec = state.LastBreathWindowSec,
-                    lastBreathPayMult = state.LastBreathPayMult,
-                    chanceDoubleOdds = state.ChanceDoubleOdds,
-                    rerollsLeft = state.RerollsLeft,
-                    sinExtraMult = state.SinExtraMult,
-                    goldenChance = state.GoldenChance,
-                    goldenPayRange = new[] { gMin, gMax },
-                    dropPerPop = state.DropPerPop,
-                    dripFeedCap = state.DropPerPop > 0 ? ChaosLifetimeBoons.DripFeedCap(state.DropPerPop) : 0,
-                    shieldRegenPops = state.ShieldRegenPops,
-                    showPopScores = state.ShowPopScores,
-                    showWaveTimer = state.ShowWaveTimer,
-                    rippleRechargeSec = state.RippleRechargeSec,
-                    rippleRadiusPx = state.RippleRadiusPx,
-                    rippleLifeMs = state.RippleLifeMs,
-                    rabbitRateMult = state.RabbitRateMult,
-                    intrusiveThoughtsSec = state.IntrusiveThoughtsSec,
-                    slowMoBonusSec = state.SlowMoBonusSec,
-                    moodRingLevel = state.MoodRingLevel,
-                    stickyFingersLevel = state.StickyFingersLevel,
-                    bubbleScale = state.BubbleScale,
-                    chainReactionReach = state.ChainReactionReach,
-                    cursorPullStrength = state.CursorPullStrength,
-                    spankerActive = state.SpankerActive,
-                    spankGrowFactor = state.SpankGrowFactor,
-                    magnetEnabled = state.MagnetEnabled,
-                    hitboxScale = cfg.HitboxScale,
-                    maxedBoons = state.MaxedBoons.ToList(),
-                },
+                // ---- grab-in-the-tube rework: per-item level + consumable-slot count.
+                // A grab applies the item at its current dollhouse level (min 1). ----
+                levels = meta.LifetimeBoonLevels ?? new Dictionary<string, int>(),
+                consumableSlots = meta.ConsumableSlots,
+                // Seeds the in-run first-discovery ledger so lesson cards fire once EVER,
+                // not once per app-session (the JS `discovered` set is otherwise empty on boot).
+                discoveredCodexIds = (meta.DiscoveredCodexIds ?? new HashSet<string>()).ToList(),
 
                 // ---- M4: seen-once flags (debuts + teaches), mirrored back one-way via set-flag ----
                 flags = new

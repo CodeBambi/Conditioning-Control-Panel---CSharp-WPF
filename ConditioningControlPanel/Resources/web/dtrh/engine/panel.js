@@ -8,7 +8,8 @@
  * ==========================================================================*/
 
 import { S, updateSetting, resetOptions, allWords, activeWords, setWordOn, addCustomWord, setCustomSpiral, getCustomSpiral,
-  rungForKey, rungForFeature, UNLOCK_LADDER, RANK_NAMES } from './settings.js';
+  rungForKey, rungForFeature, UNLOCK_LADDER, RANK_NAMES, MOTIONS } from './settings.js';
+import { POOL_VARIANTS, POOL_PRESETS } from '../game/catalog.js';
 import { peekAudioState } from './audioBus.js';
 
 const SLIDERS = [
@@ -25,12 +26,12 @@ const SLIDERS = [
   { key: 'spotSeconds', label: 'video spotlight time', min: 10, max: 30, step: 1, fmt: (v) => `${v}s` },
 ];
 
-// Spark glyph for the lock hints (matches catalog GLYPHS.drops).
-const SPARK = '✦';
-const lockHint = (r) => r.rankReq != null ? `🔒 ${SPARK}${r.price} · ${RANK_NAMES[r.rankReq]}` : `🔒 ${SPARK}${r.price}`;
+// Gold glyph for the lock hints (matches catalog GLYPHS.gold - gold unlocks dials).
+const GOLD = '🪙';
+const lockHint = (r) => r.rankReq != null ? `🔒 ${GOLD}${r.price} · ${RANK_NAMES[r.rankReq]}` : `🔒 ${GOLD}${r.price}`;
 const lockTitle = (r) => {
   const rank = r.rankReq != null ? ` and reaching rank ${RANK_NAMES[r.rankReq]}` : '';
-  return `Locked — earn it on the Warren's Dials board for ${r.price} sparks${rank}.`;
+  return `Locked — buy it at the Dollhouse DIALS console for ${r.price} gold${rank}.`;
 };
 const rungById = (id) => UNLOCK_LADDER.find((x) => x.id === id);
 
@@ -151,6 +152,155 @@ export function createPanel(hud) {
       lockRefreshers.push(refreshLock);
     }
   }
+
+  // ---- THE DESCENT (the old Warren run-setup tab, now regular options) --------
+  // Motion / effect intensity / moods / bubble pool. These write the run* keys in
+  // settings.js; warren.currentSetup() folds descentSetup() into request-run, so
+  // they take effect on the NEXT descent (not live like the sliders above).
+  const descWrap = document.createElement('div');
+  descWrap.className = 'sf-section';
+  const descHead = document.createElement('div');
+  descHead.className = 'sf-row-label sf-words-head';
+  const descName = document.createElement('span');
+  descName.textContent = 'the descent (next fall)';
+  descHead.appendChild(descName);
+  descWrap.appendChild(descHead);
+
+  // motion pills
+  const motionRow = document.createElement('div');
+  motionRow.className = 'sf-chips';
+  const motionLabel = { Mixed: 'Mixed', FloatUp: 'Float Up', RainDown: 'Rain Down', RoamBounce: 'Roam' };
+  const motionChips = [];
+  for (const m of MOTIONS) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'sf-chip' + (S.runMotion === m ? ' is-on' : '');
+    chip.textContent = motionLabel[m] || m;
+    chip.addEventListener('click', () => {
+      updateSetting('runMotion', m);
+      for (const c of motionChips) c.classList.toggle('is-on', c === chip);
+    });
+    motionChips.push(chip);
+    motionRow.appendChild(chip);
+  }
+  descWrap.appendChild(motionRow);
+
+  // effect intensity slider
+  {
+    const row = document.createElement('div');
+    row.className = 'sf-row';
+    const lab = document.createElement('div');
+    lab.className = 'sf-row-label';
+    const name = document.createElement('span');
+    name.textContent = 'effect intensity';
+    const val = document.createElement('span');
+    val.textContent = `${Math.round(S.runEffectIntensity * 100)}%`;
+    lab.append(name, val);
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = '20'; input.max = '150'; input.step = '5';
+    input.value = String(Math.round(S.runEffectIntensity * 100));
+    input.addEventListener('input', () => {
+      updateSetting('runEffectIntensity', Number(input.value) / 100);
+      val.textContent = `${input.value}%`;
+    });
+    row.append(lab, input);
+    descWrap.appendChild(row);
+  }
+
+  // mood checkboxes
+  const moods = [
+    ['runColorFlashes', 'color flashes on the edges'],
+    ['runBoonDraft', 'mantra drafts between loops'],
+    ['runAllowCurses', 'sins on the table'],
+    ['runDarters', 'white rabbits'],
+  ];
+  for (const [key, label] of moods) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'sf-chip sf-chip--wide' + (S[key] ? ' is-on' : '');
+    row.textContent = `${S[key] ? '☑' : '☐'}  ${label}`;
+    row.addEventListener('click', () => {
+      updateSetting(key, !S[key]);
+      row.classList.toggle('is-on', S[key]);
+      row.textContent = `${S[key] ? '☑' : '☐'}  ${label}`;
+    });
+    descWrap.appendChild(row);
+  }
+
+  // bubble pool: variant chips (toggle OFF into runVariantsOff) + presets.
+  // No rank locks here anymore (2026-07): the giants are open from the first
+  // run; the spawner chamber-gates them (chambers III-IV) in-run instead.
+  const poolHead = document.createElement('div');
+  poolHead.className = 'sf-row-label sf-words-head';
+  const poolName = document.createElement('span');
+  poolName.textContent = 'the bubble pool';
+  poolHead.appendChild(poolName);
+  descWrap.appendChild(poolHead);
+  const poolRow = document.createElement('div');
+  poolRow.className = 'sf-chips';
+  descWrap.appendChild(poolRow);
+  const presetRow = document.createElement('div');
+  presetRow.className = 'sf-chips';
+  descWrap.appendChild(presetRow);
+
+  function setVariantsOff(offIds) {
+    // never let the pool go empty - 'flash' is the floor
+    const valid = new Set(POOL_VARIANTS.map((v) => v.id));
+    let off = offIds.filter((id) => valid.has(id));
+    if (off.length >= POOL_VARIANTS.length) off = off.filter((id) => id !== 'flash');
+    updateSetting('runVariantsOff', off);
+  }
+
+  function renderPool() {
+    poolRow.innerHTML = '';
+    const off = new Set(S.runVariantsOff);
+    for (const pv of POOL_VARIANTS) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'sf-chip' + (!off.has(pv.id) ? ' is-on' : '');
+      chip.textContent = pv.name;
+      chip.addEventListener('click', () => {
+        const next = new Set(S.runVariantsOff);
+        if (next.has(pv.id)) next.delete(pv.id); else next.add(pv.id);
+        setVariantsOff([...next]);
+        renderPool();
+      });
+      poolRow.appendChild(chip);
+    }
+  }
+  renderPool();
+
+  for (const pr of POOL_PRESETS) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'sf-chip';
+    chip.textContent = pr.name;
+    chip.addEventListener('click', () => {
+      const on = new Set(pr.ids);
+      setVariantsOff(POOL_VARIANTS.filter((v) => !on.has(v.id)).map((v) => v.id));
+      renderPool();
+    });
+    presetRow.appendChild(chip);
+  }
+  {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'sf-chip';
+    chip.textContent = '🎲 randomize';
+    chip.addEventListener('click', () => {
+      const roll = POOL_VARIANTS
+        .filter(() => Math.random() < 0.6)
+        .map((v) => v.id);
+      if (!roll.length) roll.push('flash');
+      const on = new Set(roll);
+      setVariantsOff(POOL_VARIANTS.filter((v) => !on.has(v.id)).map((v) => v.id));
+      renderPool();
+    });
+    presetRow.appendChild(chip);
+  }
+
+  panel.appendChild(descWrap);
 
   // ---- custom spiral (session-only: blob URLs die with the tab) --------------
   const customWrap = document.createElement('div');
@@ -354,6 +504,9 @@ export function createPanel(hud) {
       lockRefreshers.forEach((fn) => fn());
       featureRefreshers.forEach((fn) => fn());
     },
+    // Kept as a no-op seam: the deep-variant rank lock is gone (the giants are
+    // chamber-gated in-run now), but scene still calls this on every snapshot.
+    setProgress() {},
     dispose() { stopDiag(); panel.remove(); },
   };
 }

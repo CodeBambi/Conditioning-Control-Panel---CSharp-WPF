@@ -52,15 +52,23 @@ export async function run(bridge, hostState) {
 
   // ---- 2. meta commands (against a CLONE of the user's REAL save, so every
   // expectation is a DELTA off the starting snapshot, never an absolute) ----
+  // Gold cutover: dials cost GOLD; buy-pocket / bench-purchase are retired ops
+  // (must now be ignored); bench-buy is whitelisted to the 3 console extras.
   const m0 = hostState.meta || {};
   const rev0 = hostState.metaRev;
-  const pocketBuyValid = (m0.toyPockets | 0) < 2;
+  const dials0 = m0.purchasedDials || [];
+  const dialBuyValid = !dials0.includes('bubbleSize');          // gold-dial happy path (25🪙 < the +50 above)
+  const giftArmed = m0.giftGiven !== true && dials0.length === 0;
   const flagValid = m0.seenDefuseTutorial !== true;
   const rankValid = (m0.lastRankSeen | 0) < 1;
   const cmds = [
     { op: 'add-gold', amount: 50 },                                   // always applies
     { op: 'spend-gold', amount: 20 },                                 // always (gold >= 50 now)
-    { op: 'buy-pocket', kind: 'toy', cost: 10 },                      // applies iff pockets < 2
+    { op: 'purchase-dial', id: 'bubbleSize', cost: 25 },              // gold dial: applies iff not owned
+    { op: 'purchase-dial', id: 'hydra', cost: 99999999 },             // must be REJECTED (gold short; gift only covers a FIRST dial, and bubbleSize just took it)
+    { op: 'buy-pocket', kind: 'toy', cost: 10 },                      // RETIRED op: must be ignored
+    { op: 'bench-purchase', id: 'stats_panel', cost: 10 },            // RETIRED op: must be ignored
+    { op: 'bench-buy', id: 'toy_pocket_1', cost: 1 },                 // pocket id: must be REJECTED (whitelist)
     { op: 'set-flag', key: 'seenDefuseTutorial' },                    // applies iff still false
     { op: 'add-to-set', set: 'discoveredCodexIds', id: 'bubble:m2test' }, // always (unique id)
     { op: 'lesson-progress', id: 'm2test_lesson', value: 3 },         // always (fresh id)
@@ -69,7 +77,7 @@ export async function run(bridge, hostState) {
     { op: 'spend-gold', amount: 99999999 },                           // must be REJECTED (insufficient)
     { op: 'definitely-not-an-op' },                                   // must be ignored
   ];
-  const expectApplied = 5 + (pocketBuyValid ? 1 : 0) + (flagValid ? 1 : 0) + (rankValid ? 1 : 0);
+  const expectApplied = 5 + (dialBuyValid ? 1 : 0) + (flagValid ? 1 : 0) + (rankValid ? 1 : 0);
   for (const c of cmds) {
     bridge.send({ type: 'meta-command', ...c });
     await wait(120);
@@ -77,12 +85,19 @@ export async function run(bridge, hostState) {
   await wait(1200); // let snapshots flow back
   const applied = hostState.metaRev - rev0;
   check('meta-commands', applied === expectApplied,
-    `rev +${applied} (expected ${expectApplied}; pocket=${pocketBuyValid} flag=${flagValid} rank=${rankValid})`);
+    `rev +${applied} (expected ${expectApplied}; dial=${dialBuyValid} flag=${flagValid} rank=${rankValid})`);
   const s = hostState.meta;
-  const expectGold = (m0.gold | 0) + 50 - 20 - (pocketBuyValid ? 10 : 0);
+  // the dial buy paid 25 gold UNLESS the balance ran short and her gift covered it
+  // (gift zeroes the balance); model both so the check holds on any starting save.
+  const goldAfterSpend = (m0.gold | 0) + 50 - 20;
+  const giftFired = dialBuyValid && giftArmed && goldAfterSpend < 25;
+  const expectGold = !dialBuyValid ? goldAfterSpend : (giftFired ? 0 : goldAfterSpend - 25);
   check('meta-state', !!s && s.gold === expectGold && s.seenDefuseTutorial === true
+    && (!dialBuyValid || (s.purchasedDials || []).includes('bubbleSize'))
+    && !(s.purchasedDials || []).includes('hydra')
+    && !(s.benchPurchases || []).includes('toy_pocket_1')
     && (s.discoveredCodexIds || []).includes('bubble:m2test') && s.equippedStartBoon === 'm2test_boon',
-    s ? `gold=${s.gold}/${expectGold} flag=${s.seenDefuseTutorial} boon=${s.equippedStartBoon}` : 'no snapshot');
+    s ? `gold=${s.gold}/${expectGold} dial=${(s.purchasedDials || []).includes('bubbleSize')} flag=${s.seenDefuseTutorial} boon=${s.equippedStartBoon}` : 'no snapshot');
 
   // ---- 3. run lifecycle + payout round-trip ----
   bridge.send({ type: 'run-started', difficulty: 'Gentle', mode: 'm2test' });
