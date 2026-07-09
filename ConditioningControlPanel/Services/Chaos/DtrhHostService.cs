@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json.Linq;
+using ConditioningControlPanel.Models; // XPSource lives here after the CCP.Core model extraction (was Services.Companion on main)
 
 namespace ConditioningControlPanel.Services.Chaos;
 

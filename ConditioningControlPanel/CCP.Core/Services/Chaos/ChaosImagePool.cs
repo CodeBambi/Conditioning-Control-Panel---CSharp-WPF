@@ -15,8 +15,10 @@ namespace ConditioningControlPanel.Core.Services.Chaos
     /// </summary>
     public static class ChaosImagePool
     {
+        // Keep this in lockstep with the flash-pool extension list (AvaloniaFlashService.IMAGE_EXTENSIONS)
+        // so glitch/cascade draw from exactly the images the user sees flashed.
         private static readonly string[] Extensions =
-            { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp" };
+            { ".png", ".jpg", ".jpeg", ".jpe", ".jfif", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".avif", ".ico" };
         private static readonly TimeSpan TTL = TimeSpan.FromSeconds(60);
 
         private static List<string> _files = new();
@@ -34,8 +36,11 @@ namespace ConditioningControlPanel.Core.Services.Chaos
                 // Stamp BEFORE the walk so a missing/throwing folder isn't re-walked every call.
                 _stamp = now;
                 _dir = dir;
+                // Recurse subfolders — FlashService scans AllDirectories to support user-organized
+                // category folders, so top-level-only here meant glitch/cascade silently found nothing
+                // for anyone who filed their images into subfolders even though flashes worked.
                 _files = Directory.Exists(dir)
-                    ? Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly)
+                    ? Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories)
                         .Where(f => Extensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
                         .ToList()
                     : new List<string>();
