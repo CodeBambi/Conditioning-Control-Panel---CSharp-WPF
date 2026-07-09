@@ -43,6 +43,10 @@ public static class ChaosMetaStore
             }
             state.PurchasedUpgrades ??= new();
             state.DisabledUpgrades ??= new();
+            // Grab-in-the-tube rework: old saves predate ConsumableSlots. Newtonsoft keeps the
+            // initializer default (1) when the field is absent, but clamp to >=1 in case an old
+            // save serialized a literal 0 before the default was in place.
+            if (state.ConsumableSlots < 1) state.ConsumableSlots = 1;
             return state;
         }
         catch (Exception ex)

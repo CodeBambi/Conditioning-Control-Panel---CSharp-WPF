@@ -177,6 +177,15 @@ internal sealed class DtrhMetaBridge
                     { S.Gold -= cost; S.AccessoryPockets++; applied = true; }
                     break;
                 }
+                case "buy-consumable-slot":
+                {
+                    // Grab-in-the-tube rework: sew another consumable HUD slot with Sparks (the
+                    // dollhouse meta-purchase). Starts at 1, capped at MAX_CONSUMABLE_SLOTS.
+                    int cost = Cost(o);
+                    if (S.Sparks >= cost && S.ConsumableSlots < ChaosMeta.MAX_CONSUMABLE_SLOTS)
+                    { S.Sparks -= cost; S.ConsumableSlots++; applied = true; }
+                    break;
+                }
                 case "bench-purchase":
                 {
                     var id = RequireId(o); int cost = Cost(o);

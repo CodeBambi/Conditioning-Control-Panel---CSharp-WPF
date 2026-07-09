@@ -18,8 +18,10 @@ import { RANK } from './catalog.js';
 export const REVEAL_PREDS = {
   dollhouse:            (v) => v.runs >= 1,
   tab_looking_glass:    (v) => v.rankIndex >= RANK.Slipping,
-  toybox_toys:          (v) => v.toyPockets >= 1,
-  toybox_accessories:   (v) => v.accessoryPockets >= 1,
+  // grab-in-the-tube rework: toys/accessories are discovered in the fall, not pocket-gated.
+  // The collection shelves open from the first descent so you can see what's discoverable.
+  toybox_toys:          (v) => v.runs >= 1,
+  toybox_accessories:   (v) => v.runs >= 1,
   toybox_her_corner:    (v) => v.runs >= 2 && v.rankIndex < RANK.Slipping,
   pill_teasing:         (v) => v.rankIndex >= RANK.Tempted,
   pill_relentless:      (v) => v.rankIndex >= RANK.Entranced,

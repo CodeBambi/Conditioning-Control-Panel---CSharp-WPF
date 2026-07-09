@@ -103,10 +103,18 @@ const TUBE_FRAG = `
   uniform float uHoleR[MAX_HOLES];
   uniform float uHoleBack, uHoleFwd;
   uniform vec3 uRimColor;
-  // forward dead-end cut: erase a stretch of the tube (in vUv.x arc-length space)
-  // just past a fork so the trunk genuinely ENDS there and the only ways on are the
-  // two carved branch mouths (a real bifurcation, not a tube-continues-behind-it).
+  // forward dead-end cut: FADE a stretch of the tube (in vUv.x arc-length space)
+  // to the fog color just past a fork so the trunk visually ENDS there in haze and
+  // the only ways on are the two carved branch mouths. The wall is NOT discarded -
+  // it stays an opaque fog-colored enclosure, so no sightline ever leaks the page
+  // background as a black void (the renderer clear is transparent).
+  // uCutHide=1 switches the window to DISCARD instead: used for the fresh loop's
+  // incoming tail arc during a vein ride - that arc converges on the very point
+  // the vein exits at (a closed ring must return to its entry), so left solid it
+  // z-fights the vein wall and slices across the ride corridor. Discarding is
+  // safe THERE because the ridden vein fully encloses the camera meanwhile.
   uniform int uCutOn;
+  uniform int uCutHide;
   uniform float uCutLo, uCutHi;   // arc-length window [0..1]; if hi<lo the window wraps the seam
 
   // 1.0 on the line (integer coord), fading to 0 within half-width w. The edge
@@ -131,11 +139,18 @@ const TUBE_FRAG = `
     float around = vUv.y;
     float scroll = uTime * uScroll;
 
-    // forward dead-end: discard the trunk in the cut window so it truly ends here.
+    // forward dead-end: fade the trunk to fog over the cut window so it reads as
+    // haze/depth (a tube vanishing into mist), not an erased wall showing void.
+    float cutFade = 0.0;
     if (uCutOn == 1) {
-      bool inCut = (uCutHi >= uCutLo) ? (len > uCutLo && len < uCutHi)
-                                      : (len > uCutLo || len < uCutHi);
-      if (inCut) discard;
+      float span = (uCutHi >= uCutLo) ? (uCutHi - uCutLo) : (1.0 - uCutLo + uCutHi);
+      float into = len - uCutLo;
+      if (into < 0.0) into += 1.0;          // wrapped window
+      if (into > 0.0 && into < span) {
+        if (uCutHide == 1) discard;         // loop-tail arc: the vein encloses the camera
+        float e = min(0.02, span * 0.35);   // ~20u ramp on the 1000u loop
+        cutFade = smoothstep(0.0, e, into) * smoothstep(0.0, e, span - into);
+      }
     }
 
     // base: subtle tint variation around the tube
@@ -188,9 +203,10 @@ const TUBE_FRAG = `
     float holeRim = 1.0 - smoothstep(0.0, 0.9, holeEdge);
     col += uRimColor * holeRim * (2.4 + 0.6 * sin(uTime * 2.0));
 
-    // exp2 fog to match scene.fog
+    // exp2 fog to match scene.fog; the dead-end cut fades to the same live fog
+    // color (fx.js region tint), so it blends with distance haze in every region
     float f = 1.0 - exp(-uFogDensity * uFogDensity * vFogDepth * vFogDepth);
-    col = mix(col, uFogColor, clamp(f, 0.0, 1.0));
+    col = mix(col, uFogColor, clamp(max(f, cutFade), 0.0, 1.0));
     gl_FragColor = vec4(col, 1.0);
   }`;
 
@@ -221,10 +237,13 @@ export function createTunnel(layout) {
       uHoleAxis: { value: Array.from({ length: MAX_HOLES }, () => new THREE.Vector3(0, 0, 1)) },
       uHoleR: { value: new Array(MAX_HOLES).fill(0) },
       uHoleBack: { value: RADIUS * 0.35 },
-      uHoleFwd: { value: RADIUS * 1.6 },
+      uHoleFwd: { value: RADIUS * 3.0 }, // a ~45deg vein finishes crossing the wall ~13u along its
+                                         // axis (near lip ~5u, + a tube-width of oblique travel);
+                                         // any shortfall leaves a wall arc slicing across the mouth
       uRimColor: { value: new THREE.Color(0xff8fd8) },
       // forward dead-end cut (junctions.js sets this; off => no overhead)
       uCutOn: { value: 0 },
+      uCutHide: { value: 0 },
       uCutLo: { value: 0 },
       uCutHi: { value: 0 },
     },
@@ -248,14 +267,18 @@ export function createTunnel(layout) {
     mat.uniforms.uHoleCount.value = n;
   }
   function clearHoles() { mat.uniforms.uHoleCount.value = 0; }
-  // erase a forward stretch of the trunk in arc-length space [lo,hi] (0..1, wraps
-  // if hi<lo) so a fork reads as a true dead-end. clearCut() restores the wall.
-  function setCut(lo, hi) {
+  // fade a forward stretch of the trunk to fog in arc-length space [lo,hi] (0..1,
+  // wraps if hi<lo) so a fork reads as a hazy dead-end (the wall stays as an
+  // opaque enclosure - never a black void). clearCut() restores the wall.
+  // hide=true DISCARDS the window instead - only safe while something else
+  // encloses the camera (the ridden vein, during a junction dive).
+  function setCut(lo, hi, hide = false) {
     mat.uniforms.uCutLo.value = ((lo % 1) + 1) % 1;
     mat.uniforms.uCutHi.value = ((hi % 1) + 1) % 1;
+    mat.uniforms.uCutHide.value = hide ? 1 : 0;
     mat.uniforms.uCutOn.value = 1;
   }
-  function clearCut() { mat.uniforms.uCutOn.value = 0; }
+  function clearCut() { mat.uniforms.uCutOn.value = 0; mat.uniforms.uCutHide.value = 0; }
 
   return {
     mesh, material: mat,

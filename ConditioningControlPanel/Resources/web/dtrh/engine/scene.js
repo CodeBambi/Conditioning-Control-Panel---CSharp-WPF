@@ -20,6 +20,7 @@ import { createSpawner } from './spawner.js';
 import { createWallPosters } from './wallPosters.js';
 import { createJunctions } from './junctions.js';
 import { createBoonPick } from './boonPick.js';
+import { createPowerupDrops } from './powerupDrops.js';
 import { createBubbles } from './bubbles.js';
 import { createDirector } from './director.js';
 import { createFx } from './fx.js';
@@ -213,6 +214,17 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
   const boonPick = createBoonPick({ scene, camera, layout, nav, fx, hud });
   const _bray = new THREE.Raycaster(), _bndc = new THREE.Vector2();
 
+  // Grab-in-the-tube power-ups: a floating card drifts through the tube every
+  // ~20-30s; grabbing it flies the item to the HUD (consumable dock / relic strip).
+  // The game (chaosRun) supplies the offer veto + the grab handler via attach().
+  const powerupDrops = createPowerupDrops({
+    scene, camera, layout,
+    getMeta: () => (game && game.getMeta ? game.getMeta() : null),
+    canOffer: (id, kind) => (game && game.canOfferPowerup ? game.canOfferPowerup(id, kind) : false),
+    onGrab: (id, kind, screenPos) => { if (game && game.onPowerupGrabbed) game.onPowerupGrabbed(id, kind, screenPos); },
+  });
+  const _uray = new THREE.Raycaster(), _undc = new THREE.Vector2();
+
   // Wall-poster hold: press-and-hold a wall gif to swing the camera onto it (a
   // closer look); release swings back. The fall eases to a near-stop meanwhile.
   const _pray = new THREE.Raycaster(), _pndc = new THREE.Vector2(), _pv = new THREE.Vector3();
@@ -247,6 +259,17 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     layout.frameAt = nl.frameAt;
     layout.frameAtDepth = nl.frameAtDepth;
     tunnel.rebuild(layout);                          // geometry-only swap
+    // the closed ring's incoming tail (arc ~0.85..1.0) converges on this very
+    // entry point (a closed ring must return to where it starts), so its last
+    // stretch lies nearly coaxial with the vein corridor: left solid it z-fights
+    // the vein wall (saw-tooth shimmer) and slices an opaque wall across the ride
+    // path. HIDE it (discard, not fade) - safe because the ridden vein encloses
+    // the camera for the whole ride, and its fog-colored end-annulus masks the
+    // opened region at the seam. The window wraps a hair past 0 so no sliver of
+    // wall survives right at the entry. junctions' handoff teardown clears the
+    // cut the moment the camera is on the new loop, restoring the full ring
+    // behind it.
+    tunnel.setCut(0.85, 0.0005, true);
     // NB: the camera handoff is fallNav's job now - it rides the vein to the tail
     // and snaps onto this coaxial loop (depth 0 == the vein exit) itself. Calling
     // rebaseTo here would yank the camera off the vein the instant we build (~vt 0.45).
@@ -285,11 +308,11 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     onPop: (kind, gain, combo) => {
       director.notePop(kind, gain, combo);
       hudBits.setScore(bubbles.getScore(), combo);
-      if (kind === 'lucky') nav.fovKick(3);
+      if (kind === 'lucky') fx.pulseFlash(0.5);
     },
     onEffect: (kind) => {
       director.noteEffect();
-      nav.fovKick(2.2); // the tube visibly lunges when an effect fires
+      fx.pulseFlash(0.45); // a brightness punch when an effect fires (no position pump)
       if (kind === 'prism') fx.flashRandomTheme(10000); // ~10s tube color scramble
     },
     onMiss: () => {
@@ -361,7 +384,10 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       }
       return; // draft owns the pointer: never fall through to a card grab
     }
-    // a fork is open: a click on a mouth card/disc dives down that branch
+    // a fork is open: ONLY a direct click on a doorway card dives down that
+    // branch. Anything else falls through - the player stays free to look around
+    // and to grab posters / power-ups / falling cards all around a junction
+    // (getPickables is empty outside the linger, so approach + ride cost nothing).
     if (junctions && junctions.isBusy()) {
       const picks = junctions.getPickables();
       if (picks.length) {
@@ -373,7 +399,20 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
           if (o && o.userData && o.userData.type === 'veinmouth') { junctions.pickSide(o.userData.side); return; }
         }
       }
-      return; // a fork owns the pointer: a missed mouth-click must not fall through to grabbing a wall poster/card mid-fork
+    }
+    // a power-up card drifting in the tube: grab it (flies to the HUD). Priority over
+    // wall posters / falling cards so a deliberate grab always wins.
+    if (powerupDrops) {
+      const picks = powerupDrops.getPickables();
+      if (picks.length) {
+        _uray.setFromCamera(_undc.set(nx, ny), camera);
+        const hits = _uray.intersectObjects(picks, true);
+        for (const h of hits) {
+          let o = h.object;
+          while (o && !(o.userData && o.userData.type === 'powerup')) o = o.parent;
+          if (o && o.userData && o.userData.type === 'powerup') { if (powerupDrops.grab(o)) return; }
+        }
+      }
     }
     // a wall poster: hold it to swing the camera and face it (a closer look)
     if (wall && wall.getPickables && !nav.isInVein()) {
@@ -390,7 +429,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
               _heldPoster = true;
               nav.setFaceTarget(wall.getHeldWorldPos(_pv));
               if (rec.assetName) spawner.noteLike(rec.assetName, 'image');
-              nav.fovKick(4);       // a little punch on the turn-in
+              fx.pulseFlash(0.4);   // a little punch on the turn-in (brightness, not a zoom)
               return;               // this pointer owns the poster
             }
           }
@@ -503,7 +542,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     bubbles.setPaused(true);
     // Wave 2: the game also gets the spawner - pickups, held-card projection,
     // forced spotlights and the auto-promotion gate all live there.
-    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, junctions, boonPick, flashBurst: (n) => bubbles.flashBurst(n),
+    game.attach({ nav, fx, director, hud, canvas, spawner, media, wall, junctions, boonPick, powerupDrops, flashBurst: (n) => bubbles.flashBurst(n),
       // the Ripple flings on-screen flash clips off screen along the hit angle
       flingFlashesNear: (px, py, r, probe) => bubbles.flingFlashesNear(px, py, r, probe),
       openOptions: () => panel.toggle(),
@@ -578,6 +617,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     wall.update(camera, depth, dt); // region-scaled wall posters (idle at density 0)
     junctions.update(depth, dt);    // branching-path forks (idle until the game arms one)
     boonPick.update(dt, depth);     // in-tube boon draft (idle until a loop clears)
+    powerupDrops.update(dt, depth, camera.quaternion);   // floating grab-in-the-tube power-ups
 
     // Sidechain the mix: a spotlight video owns the whole foreground (the
     // voice whispers down under it, the bed drops hardest); otherwise a
@@ -673,6 +713,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     clearTimeout(resizeTimer);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('keydown', onKeyDown);
+    powerupDrops.dispose();
     canvas.removeEventListener('pointerdown', grabPointerDown);
     canvas.removeEventListener('pointermove', boonAimMove);
     window.removeEventListener('pointerup', grabPointerUp);

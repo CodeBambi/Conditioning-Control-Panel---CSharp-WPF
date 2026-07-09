@@ -260,6 +260,14 @@ export const LIFETIME_BOONS = [
 ];
 
 export const boonDefById = (id) => LIFETIME_BOONS.find((b) => b.id === id) || null;
+
+// grab-in-the-tube: consumable HUD slots. Mirrors ChaosMeta.MAX_CONSUMABLE_SLOTS (C#).
+// Sparks cost to sew the NEXT slot from the current count (1->2, 2->3, 3->4).
+export const MAX_CONSUMABLE_SLOTS = 4;
+export function consumableSlotCost(current) {
+  const price = { 1: 300, 2: 600, 3: 1000 };
+  return price[current] ?? null;   // null once maxed
+}
 export const boonsInCat = (cat) => LIFETIME_BOONS.filter((b) => b.cat === cat);
 
 // ============================ her bench (ChaosHubWindow.Bench.cs) ============================
@@ -502,6 +510,15 @@ export function metaView(meta) {
     equippedStartBoon: m.equippedStartBoon || null,
     toyPockets: Math.min(m.toyPockets | 0, MAX_POCKETS),
     accessoryPockets: Math.min(m.accessoryPockets | 0, MAX_POCKETS),
+    // grab-in-the-tube: consumable (active-toy) HUD slots held per fall; starts at 1,
+    // the dollhouse sews more with Sparks up to MAX_CONSUMABLE_SLOTS.
+    consumableSlots: Math.max(1, m.consumableSlots | 0),
+    nextConsumableSlotCost: () => consumableSlotCost((m.consumableSlots | 0) || 1),
+    canBuyConsumableSlot() {
+      const cur = Math.max(1, m.consumableSlots | 0);
+      const c = consumableSlotCost(cur);
+      return cur < MAX_CONSUMABLE_SLOTS && c != null && v.sparks >= c;
+    },
     bench, discovered, pending, seenReveals, firstTimes, lessonsDone,
     bestScore: m.bestScore || 0,
     bestCombo: m.bestCombo || 0,
@@ -569,10 +586,10 @@ export function metaView(meta) {
 
     lessonProgress: (id) => lessonProg[id] | 0,
     isLessonComplete: (id) => !lessonById(id) || LESSONLESS.has(id) || lessonsDone.has(id),
-    /** allowCurses = the CURRENT sins toggle (WPF reads the live setting). */
-    isLessonBlocked: (id, allowCurses = true) =>
-      !!lessonById(id) && !LESSONLESS.has(id) && !v.isLessonComplete(id)
-      && !(CURSE_BOUND.has(id) && !allowCurses),
+    // Lesson-proof GATING is retired: items are discovered by grabbing them in the fall,
+    // and discovered items deepen freely with Sparks. Nothing gates on a proof anymore.
+    // (The LESSONS copy lives on only as an explanation-text source.)
+    isLessonBlocked: () => false,
 
     isDiscovered: (codexId) => discovered.has(codexId),
     /** Happy path: run 2+ shows full shelves; before that only the starter trio. */

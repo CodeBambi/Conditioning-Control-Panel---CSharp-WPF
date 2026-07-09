@@ -11,7 +11,7 @@
  * It is a sibling of engine/junctions.js and reuses the same proven pieces:
  *   - nav.setForwardHold(true, atDepth) parks the fall at the pick (junctions.js)
  *   - a 4x4 shard shatter (ported from junctions.spawnShatter)
- *   - fx.pulseFlash + nav.fovKick = "the Pow" on the dive-through
+ *   - fx.pulseFlash = "the Pow" brightness punch on the dive-through
  *   - additive Points sparkles / jagged LineSegments bolts (fx.js primitives)
  *
  * The game keeps its existing callback contract: open({... onPick, onSkip,
@@ -499,9 +499,8 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
     if (state !== 'active' || !cards[index]) return;
     const chosen = cards[index];
     const boon = chosen.boon;
-    // the Pow: flash + fov lunge + a dive cue, then shatter the chosen card
+    // the Pow: a bright flash + a dive cue, then shatter the chosen card
     try { fx && fx.pulseFlash && fx.pulseFlash(0.7); } catch (e) { /* ignore */ }
-    try { nav && nav.fovKick && nav.fovKick(6); } catch (e) { /* ignore */ }
     try { opts && opts.sfx && opts.sfx('dive', 0.6); } catch (e) { /* ignore */ }
     cards.splice(index, 1);           // ownership moves to the shatter
     spawnShatter(chosen);

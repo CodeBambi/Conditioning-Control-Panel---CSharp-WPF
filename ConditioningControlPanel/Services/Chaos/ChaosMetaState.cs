@@ -58,6 +58,11 @@ public sealed class ChaosMetaState
     public int ToyPockets { get; set; } = 0;
     public int AccessoryPockets { get; set; } = 0;
 
+    /// <summary>Grab-in-the-tube rework (2026-07): consumable (active-toy) HUD slots the player
+    /// can hold at once during a fall. Starts at 1; the dollhouse sews more with Sparks up to
+    /// <see cref="ChaosMeta.MAX_CONSUMABLE_SLOTS"/>. Defaults to 1 so old saves get a working slot.</summary>
+    public int ConsumableSlots { get; set; } = 1;
+
     /// <summary>Gold purchases at her bench (non-power conveniences): id -> owned.</summary>
     public HashSet<string> BenchPurchases { get; set; } = new();
 

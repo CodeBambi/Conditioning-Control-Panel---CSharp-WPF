@@ -18,9 +18,9 @@ import {
   LIFETIME_BOONS, boonDefById, boonsInCat,
   BENCH_ITEMS, BENCH_RESERVED, BENCH_CLAIMED_RESERVED,
   WALL_TIP, DEEPER_TIP, BOTTOM_TIP,
-  lessonById, RANKS, RANK, GLYPHS,
+  RANKS, RANK, GLYPHS,
   DIARY_VERBS, DIARY_CODEX, POOL_VARIANTS, POOL_PRESETS, DIFF_PILLS,
-  HOWTO_CARDS, metaView,
+  HOWTO_CARDS, metaView, MAX_CONSUMABLE_SLOTS,
 } from './catalog.js';
 import { BOONS } from './boons.js';
 import * as reveals from './reveals.js';
@@ -401,14 +401,12 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
   function countAffordableToybox(v) {
     let n = 0;
     for (const u of UPGRADES) {
-      if (!v.isOwned(u.id) && !v.isPurchaseRankLocked(u.id)
-        && !v.isLessonBlocked(u.id, setup.allowCurses) && v.canAffordUpgrade(u.id)) n++;
+      if (!v.isOwned(u.id) && !v.isPurchaseRankLocked(u.id) && v.canAffordUpgrade(u.id)) n++;
     }
     for (const b of LIFETIME_BOONS) {
       const lvl = v.boonLevel(b.id);
       if (lvl <= 0) {
-        if (!v.isBoonRankLocked(b.id) && !v.isAccessoryScriptLocked(b.id)
-          && !v.isLessonBlocked(b.id, setup.allowCurses) && v.canAffordUnlock(b.id)) n++;
+        if (!v.isBoonRankLocked(b.id) && !v.isAccessoryScriptLocked(b.id) && v.canAffordUnlock(b.id)) n++;
       } else if (lvl < b.levelValues.length && !v.isCapstoneRankLocked(b.id) && v.canAffordDeepen(b.id)) n++;
     }
     return n;
@@ -496,21 +494,6 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
 
   // ============================ shared row/tile builders ============================
 
-  function lessonLockPanel(id, accent) {
-    const def = lessonById(id);
-    const panel = el('wr-lesson');
-    if (!def) return panel;
-    const target = Math.max(1, def.target);
-    const progress = Math.max(0, Math.min(target, view().lessonProgress(id)));
-    el('wr-lesson-text', panel, '🔒 ' + def.text).style.color = `rgba(${accent},0.75)`;
-    const bar = el('wr-lesson-bar', panel);
-    const fill = el('wr-lesson-fill', bar);
-    fill.style.width = progress <= 0 ? '0' : `${Math.max(6, (progress / target) * 100)}%`;
-    el('wr-lesson-count', panel, `lesson: ${progress} of ${target}`);
-    tip(panel, def.detail || def.text);
-    return panel;
-  }
-
   function buyBtn(label, enabled, onClick) {
     const b = btn('wr-buy' + (enabled ? '' : ' is-off'), label, () => { if (enabled) onClick(); else sfx('ui_denied', 0.45); });
     return b;
@@ -538,8 +521,6 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
         cmd('toggle-upgrade', { id: u.id, on: !on });
         sfx(!on ? 'ui_equip' : 'ui_unequip', 0.45);
       }, right);
-    } else if (v.isLessonBlocked(u.id, setup.allowCurses)) {
-      right.appendChild(lessonLockPanel(u.id, accent));
     } else {
       const rankLocked = v.isPurchaseRankLocked(u.id);
       const b = buyBtn(`Train  ${GLYPHS.drops}${u.cost}`, v.canAffordUpgrade(u.id) && !rankLocked, () => {
@@ -555,80 +536,52 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
 
   /** One Toybox lifetime-boon row (BuildLifetimeBoonRow). */
   function boonRow(b, v) {
+    // Grab-in-the-tube rework: items are DISCOVERED by grabbing them in the fall, not
+    // bought. Undiscovered (level 0) = a mystery keyhole; once discovered it becomes
+    // level-uppable here with Sparks. Rank still gates when it can first appear in the fall.
     const level = v.boonLevel(b.id);
-    const unlocked = level >= 1;
-    const active = v.isBoonActive(b.id);
+    const unlocked = level >= 1;                 // discovered
     const maxed = unlocked && level >= b.levelValues.length;
     const rankLocked = v.isBoonRankLocked(b.id);
-    // The shop row wears the same identity colour as its BAG card: rarity tier,
-    // red for a curse, gold once maxed (mystery stays neutral pink).
-    const accent = rankLocked ? '232,67,147' : boonAcc(b, maxed);
-    const row = el('wr-row' + (active ? ' is-on' : unlocked ? ' is-owned' : ''));
+    const accent = !unlocked ? '232,67,147' : boonAcc(b, maxed);
+    const row = el('wr-row' + (unlocked ? ' is-owned' : ''));
     row.style.setProperty('--acc', accent);
 
-    // Rank-locked = a MYSTERY: keyhole, "???", the depth gate - never the boon's face.
-    const icon = rankLocked
-      ? artIcon(`${ART}hub/tile_unknown.png`, '?', accent, 84)
-      : artIcon(`${ART}boons/${b.id}.png`, b.glyph, accent, 84);
-    if (!unlocked) icon.style.opacity = rankLocked ? '0.6' : '0.55';
+    // Undiscovered = a MYSTERY: keyhole, "???", never the boon's face.
+    const icon = unlocked
+      ? artIcon(`${ART}boons/${b.id}.png`, b.glyph, accent, 84)
+      : artIcon(`${ART}hub/tile_unknown.png`, '?', accent, 84);
+    if (!unlocked) icon.style.opacity = '0.6';
     row.appendChild(icon);
 
     const mid = el('wr-row-mid', row);
-    el('wr-row-name', mid, rankLocked ? '? ? ?' : unlocked ? `${b.name} · L${level}` : b.name);
-    if (rankLocked) {
-      el('wr-row-flavor', mid, `${RANKS.lockedTip} ${RANKS.specifics(b.rankFloor, v.runs)}`);
+    el('wr-row-name', mid, unlocked ? `${b.name} · L${level}` : '? ? ?');
+    if (!unlocked) {
+      el('wr-row-flavor', mid, rankLocked
+        ? `${RANKS.lockedTip} ${RANKS.specifics(b.rankFloor, v.runs)}`
+        : 'it waits in the fall. grab it once to keep it — then deepen it here.');
     } else {
       el('wr-row-desc', mid, b.desc);
       if (b.flavor) el('wr-row-flavor', mid, b.flavor);
       if (b.activeUse) {
         const useHint = b.cooldownSec > 0 ? `${b.cooldownSec}s cooldown` : 'limited uses';
-        el('wr-row-active', mid, active
-          ? `ACTIVE · fires on ${setup.key1} mid-descent · ${useHint}`
-          : `ACTIVE · fires on your toy key mid-descent · ${useHint}`);
+        el('wr-row-active', mid, `CONSUMABLE · grab it in the fall, fire from the dock · ${useHint}`);
       }
-      if (b.capstone) {
-        const cap = el('wr-row-capstone' + (maxed ? ' is-maxed' : ''), mid, 'max: ' + b.capstone);
-        void cap;
-      }
+      if (b.capstone) el('wr-row-capstone' + (maxed ? ' is-maxed' : ''), mid, 'max: ' + b.capstone);
       const pips = el('wr-row-pips', mid);
       for (let i = 1; i <= b.levelValues.length; i++) {
         el('wr-pip' + (i <= level ? ' is-full' : ''), pips, i <= level ? '●' : '○');
       }
-      el('wr-pip-value', pips, '  ' + (unlocked ? b.value(b.levelValues[level - 1]) : 'locked'));
+      el('wr-pip-value', pips, '  ' + b.value(b.levelValues[level - 1]));
     }
 
     const right = el('wr-row-right', row);
-    const habitVoice = b.cat === 'utility';
-    if (unlocked) {
-      if (active) el('wr-row-state', right, habitVoice ? 'ON ✓' : 'EQUIPPED ✓');
-      const pocketFree = active || v.hasFreePocket(b.cat);
-      const eq = btn('wr-pill', active ? (habitVoice ? 'switch off' : 'Unequip')
-        : pocketFree ? (habitVoice ? 'switch on' : 'Equip') : 'pockets full', () => {
-        if (!active && !pocketFree) return;
-        cmd('set-lifetime-boon', { id: b.id, active: !active });
-        sfx(!active ? 'ui_equip' : 'ui_unequip', 0.45);
-      }, right);
-      eq.disabled = !pocketFree && !active;
-    }
     if (!unlocked) {
-      if (rankLocked) {
-        const held = buyBtn(`🔒 ${RANKS.name(b.rankFloor)}`, false, () => {});
-        tip(held, `${RANKS.lockedTip}\n${RANKS.specifics(b.rankFloor, v.runs)}`);
-        right.appendChild(held);
-      } else if (v.isAccessoryScriptLocked(b.id)) {
-        const held = buyBtn(`Unlock  ${GLYPHS.drops}${b.unlockCost}`, false, () => {});
-        tip(held, 'she sells these in an order of her own.');
-        right.appendChild(held);
-      } else if (v.isLessonBlocked(b.id, setup.allowCurses)) {
-        right.appendChild(lessonLockPanel(b.id, accent));
-      } else {
-        right.appendChild(buyBtn(`Unlock  ${GLYPHS.drops}${b.unlockCost}`, v.canAffordUnlock(b.id), () => {
-          // Level 1 + auto-equip when a pocket is free (TryUnlockBoon semantics).
-          const autoEquip = v.hasFreePocket(b.cat);
-          cmd('set-lifetime-boon', { id: b.id, level: 1, cost: b.unlockCost, ...(autoEquip ? { active: true } : {}) });
-          window.setTimeout(() => { showUnlockCard(cardForBoonUnlock(b.id, view())); runRevealFlashes('purchase'); }, 250);
-        }));
-      }
+      const held = buyBtn(rankLocked ? `🔒 ${RANKS.name(b.rankFloor)}` : '↯ find it below', false, () => {});
+      tip(held, rankLocked
+        ? `${RANKS.lockedTip}\n${RANKS.specifics(b.rankFloor, v.runs)}`
+        : 'grab this card as you fall to discover it.');
+      right.appendChild(held);
     } else if (maxed) {
       el('wr-row-max', right, 'MAX  ✓');
     } else {
@@ -731,99 +684,72 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
   // ============================ BAG ============================
 
   function renderBag(panel, v) {
-    // ---- pockets ----
-    const pocketCard = el('wr-card', panel);
-    el('wr-card-h', pocketCard, 'POCKETS');
-    el('wr-card-sub', pocketCard, v.toyPockets + v.accessoryPockets === 0
-      ? 'you fall in with empty hands, for now.'
-      : 'what you take down with you. choose like it matters.');
-    const pockets = el('wr-pockets', pocketCard);
-    let anyPockets = false;
-    for (const [label, cat] of [['TOY', 'skill'], ['ACCESSORY', 'accessory']]) {
-      const slots = v.slotsFor(cat);
-      const equipped = boonsInCat(cat).filter((b) => v.isBoonActive(b.id));
-      if (slots <= 0 && equipped.length === 0) continue;
-      anyPockets = true;
-      const col = el('wr-pocket-col', pockets);
-      el('wr-pocket-label', col, label);
-      const rowEl = el('wr-pocket-row', col);
-      for (const b of equipped) {
-        const level = v.boonLevel(b.id);
-        const maxed = level >= b.levelValues.length;
-        rowEl.appendChild(shelfCard({
-          art: `${ART}boons/${b.id}.png`, glyph: b.glyph, title: b.name,
-          acc: boonAcc(b, maxed), state: 'equipped', corner: '✓',
-          pips: { level, max: b.levelValues.length },
-          foot: maxed ? 'MAX' : `L${level}`,
-          tipText: `${b.name} — click to unequip`,
-          onClick: () => { cmd('set-lifetime-boon', { id: b.id, active: false }); sfx('ui_unequip', 0.45); },
-        }));
-      }
-      for (let i = equipped.length; i < slots; i++) {
-        rowEl.appendChild(shelfCard({
-          glyph: '＋', title: 'empty', state: 'empty', foot: `${label.toLowerCase()} pocket`,
-          tipText: 'pick one from the shelf below, or go shopping in the Toybox.',
-          onClick: () => { tab = 'enhance'; rerender(); },
-        }));
-      }
+    // ---- hands (consumable HUD slots) ----
+    // Grab-in-the-tube rework: no loadout pockets. You fall in empty-handed and grab
+    // power-ups live; HANDS is how many consumables (active toys) you can hold at once.
+    const handsCard = el('wr-card', panel);
+    el('wr-card-h', handsCard, 'HANDS');
+    el('wr-card-sub', handsCard, `${v.consumableSlots} consumable slot${v.consumableSlots === 1 ? '' : 's'} · grab toys in the fall and fire them from the dock.`);
+    const handsRow = el('wr-pockets', handsCard);
+    for (let i = 0; i < MAX_CONSUMABLE_SLOTS; i++) {
+      const owned = i < v.consumableSlots;
+      handsRow.appendChild(shelfCard({
+        glyph: owned ? '✋' : '＋', title: owned ? `slot ${i + 1}` : 'locked',
+        state: owned ? 'owned' : 'empty', foot: owned ? 'ready' : 'sew below',
+        tipText: owned ? 'a hand free to hold a grabbed toy' : 'buy another hand below',
+      }));
     }
-    if (!anyPockets) el('wr-empty-note', pockets, 'no pockets sewn yet.');
+    const slotCost = v.nextConsumableSlotCost();
+    if (slotCost != null) {
+      const buy = buyBtn(`sew a hand  ${GLYPHS.drops}${slotCost}`, v.canBuyConsumableSlot(), () => {
+        cmd('buy-consumable-slot', { cost: slotCost });
+        sfx('ui_deepen', 0.5);
+      });
+      handsCard.appendChild(buy);
+    } else {
+      el('wr-card-sub', handsCard, 'both hands and then some — you can hold no more.');
+    }
 
-    // ---- collections (mirror the Toybox reveals: a naked start shows neither) ----
-    // Every real piece is a card - owned, buyable, or a rank-locked mystery (a
-    // teaser, not dead space). No pad-to-grid empties: the shelf only shows things
-    // that exist, so a small collection reads as "young", never "broken".
+    // ---- collections (discovery-gated: grab in the fall to reveal, deepen with Sparks) ----
+    // Every piece is a card: discovered (level + deepen) or an undiscovered mystery
+    // keyhole (rank-locked ones name the depth gate). Clicking a discovered card jumps
+    // to the Toybox to deepen it; charms live here too now (they're grabbed, not toggled).
     const grids = [
       ['toybox_accessories', 'ACCESSORIES', 'accessory'],
-      ['toybox_toys', 'TOYS', 'skill'],
+      ['toybox_toys', 'TOYS (consumables)', 'skill'],
+      ['toybox_accessories', 'CHARMS', 'utility'],
     ];
     for (const [gate, label, cat] of grids) {
-      if (!reveals.isUnlocked(gate, v)) continue;
+      if (cat !== 'utility' && !reveals.isUnlocked(gate, v)) continue;
       const boons = boonsInCat(cat);
-      const owned = boons.filter((b) => v.boonLevel(b.id) >= 1).length;
-      const slots = v.slotsFor(cat);
+      const found = boons.filter((b) => v.boonLevel(b.id) >= 1).length;
       const card = el('wr-card', panel);
       el('wr-card-h', card, label);
-      el('wr-card-sub', card, `${owned}/${boons.length} collected · ${v.equippedCountIn(cat)}/${slots === Infinity ? '∞' : slots} equipped`);
+      el('wr-card-sub', card, `${found}/${boons.length} discovered`);
       const grid = el('wr-shelf-grid', card);
       for (const b of boons) {
         const level = v.boonLevel(b.id);
-        const unlocked = level >= 1;
-        const active = v.isBoonActive(b.id);
+        const found1 = level >= 1;
         const rankLocked = v.isBoonRankLocked(b.id);
-        const maxed = unlocked && level >= b.levelValues.length;
+        const maxed = found1 && level >= b.levelValues.length;
         grid.appendChild(shelfCard({
           art: `${ART}boons/${b.id}.png`, glyph: b.glyph,
-          title: rankLocked ? '? ? ?' : b.name,
-          acc: rankLocked ? '232,67,147' : boonAcc(b, maxed),
-          state: rankLocked ? 'mystery' : active ? 'equipped' : unlocked ? 'owned' : 'buyable',
-          corner: active ? '✓' : null,
-          ribbon: rankLocked ? null : (maxed ? 'MAX' : rarityTag(b)),
-          pips: unlocked ? { level, max: b.levelValues.length } : null,
-          foot: rankLocked ? RANKS.name(b.rankFloor)
-            : active ? 'equipped' : unlocked ? `L${level}` : `unlock ${GLYPHS.drops}${b.unlockCost}`,
-          tipText: rankLocked ? `${RANKS.lockedTip} ${RANKS.specifics(b.rankFloor, v.runs)}`
-            : active ? `${b.name} — click to unequip`
-            : unlocked ? `${b.name} — click to equip`
-            : `${b.name} — unlock for ${GLYPHS.drops}${b.unlockCost} in the Toybox`,
-          onClick: rankLocked ? null : active
-            ? () => { cmd('set-lifetime-boon', { id: b.id, active: false }); sfx('ui_unequip', 0.45); }
-            : unlocked
-              ? () => {
-                  // Equip into a full 1-slot pocket by quietly swapping the occupant out.
-                  if (!v.hasFreePocket(cat)) {
-                    const current = boonsInCat(cat).find((x) => v.isBoonActive(x.id));
-                    if (current) cmd('set-lifetime-boon', { id: current.id, active: false });
-                  }
-                  cmd('set-lifetime-boon', { id: b.id, active: true });
-                  sfx('ui_equip', 0.45);
-                }
-              : () => { tab = 'enhance'; rerender(); },
+          title: found1 ? b.name : '? ? ?',
+          acc: found1 ? boonAcc(b, maxed) : '232,67,147',
+          state: found1 ? 'owned' : 'mystery',
+          ribbon: found1 ? (maxed ? 'MAX' : rarityTag(b)) : null,
+          pips: found1 ? { level, max: b.levelValues.length } : null,
+          foot: found1 ? (maxed ? 'MAX' : `L${level} · deepen`)
+            : rankLocked ? RANKS.name(b.rankFloor) : 'undiscovered',
+          tipText: found1 ? `${b.name} — click to deepen in the Toybox`
+            : rankLocked ? `${RANKS.lockedTip} ${RANKS.specifics(b.rankFloor, v.runs)}`
+            : `${b.name} — grab it in the fall to discover it`,
+          onClick: found1 ? () => { tab = 'enhance'; rerender(); } : null,
         }));
       }
     }
 
-    // ---- habits (trained = on/off toggle; untrained = go train it) ----
+    // ---- habits (still TRAINED here with Sparks; on/off toggle — not grabbed) ----
     const card = el('wr-card', panel);
     el('wr-card-h', card, 'HABITS');
     const grid = el('wr-shelf-grid', card);
@@ -846,35 +772,6 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
           : `${u.name} — train for ${GLYPHS.drops}${u.cost} in the Toybox`,
         onClick: owned
           ? () => { cmd('toggle-upgrade', { id: u.id, on: !on }); sfx(!on ? 'ui_equip' : 'ui_unequip', 0.45); }
-          : () => { tab = 'enhance'; rerender(); },
-      }));
-    }
-    for (const b of boonsInCat('utility')) {
-      if (!v.onShelfNow(b.id)) continue;
-      shown++;
-      const unlocked = v.isBoonUnlocked(b.id);
-      const active = v.isBoonActive(b.id);
-      const rankLocked = v.isBoonRankLocked(b.id);
-      const level = v.boonLevel(b.id);
-      const maxed = unlocked && level >= b.levelValues.length;
-      if (unlocked) trained++;
-      if (active) switchedOn++;
-      grid.appendChild(shelfCard({
-        art: `${ART}boons/${b.id}.png`, glyph: b.glyph,
-        title: rankLocked ? '? ? ?' : b.name,
-        acc: rankLocked ? '232,67,147' : boonAcc(b, maxed),
-        state: rankLocked ? 'mystery' : active ? 'equipped' : unlocked ? 'owned' : 'buyable',
-        corner: active ? '✓' : null,
-        ribbon: rankLocked ? null : (maxed ? 'MAX' : rarityTag(b)),
-        pips: unlocked ? { level, max: b.levelValues.length } : null,
-        foot: rankLocked ? RANKS.name(b.rankFloor)
-          : active ? 'ON' : unlocked ? 'off' : `unlock ${GLYPHS.drops}${b.unlockCost}`,
-        tipText: rankLocked ? RANKS.specifics(b.rankFloor, v.runs)
-          : active ? `${b.name} — click to switch off`
-          : unlocked ? `${b.name} — click to switch on`
-          : `${b.name} — unlock for ${GLYPHS.drops}${b.unlockCost} in the Toybox`,
-        onClick: rankLocked ? null : unlocked
-          ? () => { cmd('set-lifetime-boon', { id: b.id, active: !active }); sfx(!active ? 'ui_equip' : 'ui_unequip', 0.45); }
           : () => { tab = 'enhance'; rerender(); },
       }));
     }
@@ -911,15 +808,20 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
       panel.appendChild(hazyRow('???', `${WALL_TIP} opens with your first accessory pocket. she sews pockets for gold (her corner, later her bench).`));
     }
 
-    // ---- her corner (early bench access; the registry closes it at Slipping) ----
+    // ---- more hands (grab-in-the-tube: Sparks sew consumable slots; pockets retired) ----
     if (reveals.isUnlocked('toybox_her_corner', v)) {
       const card = el('wr-card', panel);
-      const hdr = el('wr-card-h', card, 'HER CORNER · a table by the door');
+      const hdr = el('wr-card-h', card, 'MORE HANDS · hold more at once');
       revealEls.set('toybox_her_corner', hdr);
-      el('wr-gold-line', card, `you’re carrying ${GLYPHS.gold} ${nfmt(v.gold)}`);
-      for (const id of ['toy_pocket_1', 'accessory_pocket_1']) {
-        const item = BENCH_ITEMS.find((i) => i.id === id);
-        if (item) card.appendChild(benchRow(item, v));
+      el('wr-card-sub', card, `${v.consumableSlots}/${MAX_CONSUMABLE_SLOTS} consumable slots. grabbed toys wait in these to be fired.`);
+      const slotCost = v.nextConsumableSlotCost();
+      if (slotCost != null) {
+        card.appendChild(buyBtn(`sew a hand  ${GLYPHS.drops}${slotCost}`, v.canBuyConsumableSlot(), () => {
+          cmd('buy-consumable-slot', { cost: slotCost });
+          sfx('ui_deepen', 0.5);
+        }));
+      } else {
+        el('wr-card-sub', card, 'you can hold no more.');
       }
     }
   }
@@ -1093,29 +995,11 @@ export function createWarren({ hud, bridge, getMeta, getMediaStats, runSetup, on
     });
     intRow.appendChild(slider);
 
-    // ---- toy keybinds (mirror the sewn pockets: none = no hints at all) ----
-    if (v.toyPockets >= 1) {
-      const keyCard = el('wr-card', panel);
-      el('wr-card-h', keyCard, 'TOY KEYS');
-      el('wr-card-sub', keyCard, v.toyPockets >= 2
-        ? 'your equipped toys fire on these, mid-descent.'
-        : 'your equipped toy fires on this, mid-descent. the second pocket isn’t sewn yet.');
-      const mkKey = (label, key) => {
-        const rowEl = el('wr-setup-row', keyCard);
-        el('wr-setup-label', rowEl, label);
-        const sel = document.createElement('select');
-        sel.className = 'wr-select';
-        for (const k of KEY_OPTS) {
-          const o = document.createElement('option');
-          o.value = o.textContent = k;
-          if (setup[key] === k) o.selected = true;
-          sel.appendChild(o);
-        }
-        sel.addEventListener('change', () => { setup[key] = sel.value; });
-        rowEl.appendChild(sel);
-      };
-      mkKey('toy pocket 1', 'key1');
-      if (v.toyPockets >= 2) mkKey('toy pocket 2', 'key2');
+    // ---- how consumables fire (grab-in-the-tube: no pre-bound keys) ----
+    {
+      const kc = el('wr-card', panel);
+      el('wr-card-h', kc, 'YOUR HANDS');
+      el('wr-card-sub', kc, `you fall in empty-handed. grab power-up cards as you fall — toys dock at the bottom (${v.consumableSlots} slot${v.consumableSlots === 1 ? '' : 's'}) and fire on their number key or a click; charms & accessories apply the instant you grab them.`);
     }
 
     // ---- FALL IN ----

@@ -11,11 +11,11 @@
  *   snap pts   = BasePoints * lastBreath * slowburn * pendulum * coinFlip
  *                * TotalMult * blindfoldPayMult
  *
- * The LOADOUT (trained habits + equipped charms/accessories/toys) arrives
- * pre-applied from C# in runConfig.loadout - the host builds a ChaosRunState,
- * runs ChaosMeta.ApplyLifetimeBoons over it and snapshots the knobs, so the
- * boon math can never drift from the WPF game. Drafted mantras/sins live in
- * boons.js and mutate this state mid-run exactly like the C# Apply lambdas.
+ * Grab-in-the-tube rework: there is no pre-run loadout. Trained HABITS still
+ * arrive as cfg.* knobs; toys/accessories/charms are DISCOVERED and grabbed in
+ * the fall (engine/powerupDrops.js) and applied live - consumables dock (useToy),
+ * passives run game/boonPassives.js apply(st) exactly like the drafted mantras in
+ * boons.js. runConfig ships only each item's LEVEL + the consumable-slot count.
  *
  * DtRH's RunIntensity (elapsed/duration) OVERRIDES the Fall's 360s ramp; the
  * director is a speed/boost presentation adapter. No-lose: detonations cost
@@ -38,6 +38,7 @@ import { VARIANTS, ALL_IDS, NAME_OF, pick, build, buildGolden, buildPlain, build
   TEASE_GOLD_MIN, TEASE_GOLD_MAX, TEASE_DENIED_SCORE,
   DARTER_BASE_POINTS, DARTER_QUICK_BONUS } from './variants.js';
 import { draft as dealDraft, boonById } from './boons.js';
+import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
 import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL } from './regions.js';
 import { createChaosField } from './chaosField.js';
@@ -50,8 +51,24 @@ import { createLessonTracker } from './lessons.js';
 import { createSessionMetrics } from '../engine/sessionMetrics.js';
 import { createHappyPath } from './happyPath.js';
 import { createVnPortrait } from './vnPortrait.js';
+import { createLessonCard } from './lessonCard.js';
 import { setDucked } from '../shared/audioMute.js';
-import { lessonById } from './catalog.js';
+import { lessonById, boonDefById, DIARY_CODEX, DIARY_VERBS } from './catalog.js';
+
+// ---- first-discovery lesson copy (catalog is the single source of truth) ----
+// bubbles/pickups/weather: keyed by the codex id markDiscovered() stamps.
+const CODEX_COPY = {};
+for (const c of DIARY_CODEX) CODEX_COPY[c.codex] = { glyph: c.glyph, name: c.name, desc: c.desc, accent: c.tint };
+// core verbs: keyed by a teach point, resolved by the diary line's name.
+const VERB_BY_NAME = {};
+for (const v of DIARY_VERBS) VERB_BY_NAME[v.name] = v;
+const VERB_COPY = {
+  snap:   VERB_BY_NAME['hold to snap'],
+  treats: VERB_BY_NAME['click the treats'],
+  ripple: VERB_BY_NAME['right-click · the ripple'],
+  focus:  VERB_BY_NAME['focus'],
+  panic:  VERB_BY_NAME['your panic key'],
+};
 
 // ---- economy tuning (ChaosTuning.cs / ChaosModeService.cs) ----
 const FOCUS_MAX = 100, FOCUS_START = 50;
@@ -85,11 +102,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   const activeModId = modId || 'builtin-sissyhypno';
   // rc/lo/cfg/flags are dealt PER RUN by applyRunConfig (the host's run-config
   // answer to request-run) - the Warren can change the loadout between runs.
-  let rc = {}, lo = {}, cfg = null, flags = {};
+  let rc = {}, cfg = null, flags = {}, levels = {};
 
   function applyRunConfig(runConfig) {
     rc = runConfig || {};
-    lo = rc.loadout || {};
     cfg = {
       difficulty: rc.difficulty || 'Easy',
       difficultyMult: rc.difficultyMult ?? 1.0,
@@ -117,12 +133,22 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       rankIndex: rc.rankIndex ?? 0,
       runsCompleted: rc.runsCompleted ?? 0,
       scriptedFirstRun: !!rc.scriptedFirstRun,
-      equipment: rc.equipment || [],
       equippedStartBoon: rc.equippedStartBoon || null,
-      toys: rc.toys || [],
+      // Grab-in-the-tube rework: no pre-run loadout. Consumables (toys) are grabbed live,
+      // so the toy dock starts empty; each item's dollhouse level (a grab applies at that
+      // level, min 1) and the consumable-slot count come from the run-config.
       toyKeys: rc.toyKeys || ['Q', 'E'],
+      consumableSlots: clamp(rc.consumableSlots ?? 1, 1, 9),
       thoughtTexts: (rc.thoughtTexts && rc.thoughtTexts.length ? rc.thoughtTexts : ['GIVE IN']),
     };
+    // Per-item dollhouse levels: id -> level (>=1 discovered). A grab reads this to know
+    // the strength to apply; absent/0 means "never discovered" (first grab unlocks at L1).
+    levels = rc.levels || {};
+    // First-discovery lessons fire once EVER. Seed the in-run `discovered` ledger from
+    // the persisted set so a returning player doesn't re-see every card (the ledger is
+    // otherwise fresh per app-session and markDiscovered would re-fire on each launch).
+    discovered.clear();
+    (rc.discoveredCodexIds || []).forEach((id) => discovered.add(id));
     bridge.log(`runcfg: diff=${cfg.difficulty} scripted=${cfg.scriptedFirstRun} runs=${cfg.runsCompleted}`
       + ` variants=${JSON.stringify(cfg.enabledVariants)} draft=${cfg.boonDraftEnabled} sin=${cfg.sinChance}`);
     // Seen-once flags: a local mutable mirror of chaos_meta (persisted one-way
@@ -138,7 +164,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   let ctx = null;      // { nav, fx, director, hud, canvas } from scene.start
   let field = null, ffx = null, hudUi = null, overlays = null, payloadFx = null;
-  let warren = null, lessons = null, happy = null, vn = null;
+  let warren = null, lessons = null, happy = null, vn = null, lessonCardUi = null;
   const metrics = createSessionMetrics();   // per-run engagement counters (local-only telemetry)
   let state = 'boot';  // boot -> warren -> requesting -> countdown -> running -> drafting -> recap
   let paused = false, hidden = false, covered = false, drafting = false;
@@ -167,47 +193,65 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       brands: {},              // tally of which trigger-word branches you keep taking
 
       // ---- resistance / streak protection ----
-      shields: lo.shields ?? 0,
-      startShields: lo.shields ?? 0,
-      startingShields: lo.startingShields ?? (lo.shields ?? 0),   // hollow-heart row cap
-      collarSaves: lo.collarSaves ?? 0,
+      // Grab-in-the-tube rework: the run starts NAKED. Every accessory/charm knob below
+      // seeds to its bare-handed base; a grabbed passive (game/boonPassives.js) mutates st
+      // mid-fall. Habit knobs still arrive at cfg level (rc.*) since habits stay always-on.
+      shields: 0,
+      startShields: 0,
+      startingShields: 0,      // hollow-heart row cap (grows when start_resistance is grabbed)
+      collarSaves: 0,
       regenPops: 0,
       invulnUntil: 0,          // Snap Chain window end (performance.now ms)
 
-      // ---- loadout knobs (pre-applied by C# ChaosMeta.ApplyLifetimeBoons) ----
+      // ---- accessory/charm knobs (base defaults; boonPassives.js writes these on grab) ----
       baseMult: cfg.baseMult,
-      fuseTimeMult: lo.fuseTimeMult ?? rc.fuseTimeMult ?? 1.0,
-      fuseTimeMultBase: lo.fuseTimeMult ?? rc.fuseTimeMult ?? 1.0, // weather re-derives fuseTimeMult from this
-      benignBaseline: lo.benignBaseline ?? 0.4,
-      blindfoldPayMult: lo.blindfoldPayMult ?? 1.0,
-      lastBreathWindowSec: lo.lastBreathWindowSec ?? 0,
-      lastBreathPayMult: lo.lastBreathPayMult ?? 1.0,
-      chanceDoubleOdds: lo.chanceDoubleOdds ?? 0,
-      rerollsLeft: lo.rerollsLeft ?? 0,
-      sinExtraMult: lo.sinExtraMult ?? 0,
-      goldenChance: lo.goldenChance ?? 0.005,
-      goldenChanceBase: lo.goldenChance ?? 0.005, // weather re-derives goldenChance from this
-      goldenPay: lo.goldenPayRange || [10, 20],
-      moodRingLevel: lo.moodRingLevel ?? 0,       // 💍 forecast / x1.5 weather / reroll
-      stickyFingersLevel: lo.stickyFingersLevel ?? 0, // 🍯 held-card paddle pay tier
-      dropPerPop: lo.dropPerPop ?? 0,
-      dripFeedCap: lo.dripFeedCap ?? 0,
+      fuseTimeMult: rc.fuseTimeMult ?? 1.0,       // slow_fuses habit is cfg-level -> keep rc.*
+      fuseTimeMultBase: rc.fuseTimeMult ?? 1.0,   // weather re-derives fuseTimeMult from this
+      benignBaseline: 0.4,
+      blindfoldPayMult: 1.0,
+      lastBreathWindowSec: 0,
+      lastBreathPayMult: 1.0,
+      chanceDoubleOdds: 0,
+      rerollsLeft: 0,
+      sinExtraMult: 0,
+      goldenChance: 0.005,
+      goldenChanceBase: 0.005, // weather re-derives goldenChance from this
+      goldenPay: [10, 20],
+      moodRingLevel: 0,        // 💍 forecast / x1.5 weather / reroll
+      stickyFingersLevel: 0,   // 🍯 held-card paddle pay tier
+      dropPerPop: 0,
+      dripFeedCap: 0,
       trickleDrops: 0,
-      shieldRegenPops: lo.shieldRegenPops ?? 0,
-      showPopScores: !!lo.showPopScores,
-      showWaveTimer: !!lo.showWaveTimer,
-      rippleRechargeSec: lo.rippleRechargeSec ?? 15,   // vestigial (no cooldown) - reused below as the focus-cost dial
-      rippleRadiusPx: lo.rippleRadiusPx ?? 260,
-      rippleLifeMs: lo.rippleLifeMs ?? 520,
-      // Skipping Stone makes the ripple CHEAPER: the boon's old recharge number
-      // (15 bare-handed -> 13/11/9/8 by level, sent from C#) now sets the focus
-      // cost per cast at rechargeSec*2 -> 30 -> 26/22/18/16. Clamped to base/floor.
-      rippleFocusCost: clamp(Math.round((lo.rippleRechargeSec ?? 15) * 2), 15, RIPPLE_FOCUS_COST),
-      rabbitRateMult: lo.rabbitRateMult ?? 1.0,
-      intrusiveThoughtsSec: lo.intrusiveThoughtsSec ?? 0,
-      slowMoBonusSec: lo.slowMoBonusSec ?? 0,
-      bubbleScale: lo.bubbleScale ?? 1.0,
-      maxedBoons: new Set(lo.maxedBoons || []),
+      shieldRegenPops: 0,
+      showPopScores: false,
+      showWaveTimer: false,
+      rippleRechargeSec: 15,   // vestigial (no cooldown) - reused below as the focus-cost dial
+      rippleRadiusPx: 260,
+      rippleLifeMs: 520,
+      // Skipping Stone makes the ripple CHEAPER: the boon's recharge number (15 bare-handed
+      // -> 13/11/9/8 by level) sets the focus cost per cast at rechargeSec*2 -> 30 -> 26/22/18/16.
+      // Bare-handed base is 30, clamped to floor/ceiling.
+      rippleFocusCost: clamp(Math.round(15 * 2), 15, RIPPLE_FOCUS_COST),
+      rabbitRateMult: 1.0,
+      intrusiveThoughtsSec: 0,
+      slowMoBonusSec: 0,
+      bubbleScale: 1.0,
+      maxedBoons: new Set(),
+
+      // ---- physics passives (syncPhys pushes these into field.phys; grabs mutate st) ----
+      cursorPullStrength: 0,   // The Pull
+      spankerActive: false,    // The Spanker
+      spankGrowFactor: 1.0,
+      chainReactionReach: 1.0, // Poppers (1.0 = no chain)
+      blindfoldActive: false,  // Blindfold
+      blindfoldOpacity: 1.0,
+      hitboxScale: rc.hitboxScale ?? 1.0,   // silk_touch habit is cfg-level -> keep rc.*
+      magnetEnabled: !!rc.magnetEnabled,    // cfg-level
+
+      // ---- grab-in-the-tube run kit (grown live as you fall) ----
+      takenPassiveIds: new Set(),   // double-grab guard (multiplicative passives esp.)
+      runEquipment: new Set(),      // every id grabbed this run; feeds duo/trio draft gating
+      consumableSlots: cfg.consumableSlots,   // dock cap; live dock is the module `toys` array
 
       // ---- drafted mantra/sin knobs (boons.js apply() writes these) ----
       boonMult: 1.0, urgeMult: 1.0,
@@ -378,10 +422,23 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       bark('gold-first');
     }
   };
+  // Queue one first-discovery explainer. `copy` = { glyph, name, desc, flavor?, accent? }.
+  // No-op if the card layer isn't up yet or the copy is empty. Extra = { kicker?, onDismiss? }.
+  const teach = (copy, extra) => {
+    if (!lessonCardUi || !copy || (!copy.name && !copy.desc)) return;
+    lessonCardUi.enqueue({
+      glyph: copy.glyph, name: copy.name, desc: copy.desc,
+      flavor: copy.flavor || '', accent: copy.accent || copy.tint || null,
+      kicker: extra && extra.kicker, onDismiss: extra && extra.onDismiss,
+    });
+  };
   const markDiscovered = (codexId) => {
     if (discovered.has(codexId)) return;
     discovered.add(codexId);
     bridge.send({ type: 'meta-command', op: 'add-to-set', set: 'discoveredCodexIds', id: codexId });
+    // First time ever: pause + explain (bubbles/pickups/weather). Draft boons are
+    // excluded - the in-tube draft already parks the fall and shows the card + desc.
+    if (!codexId.startsWith('boon:') && CODEX_COPY[codexId]) teach(CODEX_COPY[codexId]);
   };
   const pulse = (rgb, strength) => { if (cfg.colorFlashes) hudUi?.pulse(rgb, strength); };
   const showPopScore = (pts, x, y) => {
@@ -409,17 +466,32 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   /** Cursor pull physics: The Pull minus Cam Girl, DIPs/frame -> px/s (x31). */
   const syncPhys = () => {
-    field.phys.cursorPull = ((lo.cursorPullStrength ?? 0) - st.camGirlFlee) * 31;
-    field.phys.rabbitHoming = (lo.cursorPullStrength ?? 0) > 0;
-    field.phys.spanker = !!lo.spankerActive;
-    field.phys.spankGrow = lo.spankGrowFactor ?? 1.0;
-    field.phys.chainReach = lo.chainReactionReach ?? 1.0;
-    field.phys.hitboxScale = lo.hitboxScale ?? rc.hitboxScale ?? 1.0;
-    field.phys.magnet = !!(lo.magnetEnabled ?? rc.magnetEnabled);
-    field.phys.dimOpacity = lo.blindfoldActive ? (lo.blindfoldOpacity ?? 1.0) : 1.0;
+    field.phys.cursorPull = ((st.cursorPullStrength || 0) - st.camGirlFlee) * 31;
+    field.phys.rabbitHoming = (st.cursorPullStrength || 0) > 0;
+    field.phys.spanker = !!st.spankerActive;
+    field.phys.spankGrow = st.spankGrowFactor ?? 1.0;
+    field.phys.chainReach = st.chainReactionReach ?? 1.0;
+    field.phys.hitboxScale = st.hitboxScale ?? 1.0;
+    field.phys.magnet = !!st.magnetEnabled;
+    field.phys.dimOpacity = st.blindfoldActive ? (st.blindfoldOpacity ?? 1.0) : 1.0;
     field.phys.residueZones = st.aftermath;
     field.phys.rabbitTrailSec = st.rabbitTrailSec;
   };
+
+  // Sticky Fingers capstone: releasing a held card hurls it down the tube; the impact
+  // rains a treat shower. Wired at run-start AND on a mid-fall grab of a maxed sticky_fingers.
+  function wireStickyFingers() {
+    if (!ctx || !ctx.spawner || !st) return;
+    if (st.stickyFingersLevel > 0 && st.maxedBoons.has('sticky_fingers')) {
+      ctx.spawner.setThrowOnRelease(() => {
+        if (state !== 'running') return;
+        ctx.fx.pulseFlash(0.7);
+        sfx('wave_clear', 0.5);
+        hudUi.toast('🍯 delivered — treats follow');
+        spawnWelcomeShower();
+      });
+    }
+  }
 
   // ============================ field callbacks ============================
 
@@ -510,8 +582,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     st.heat = 0;
     sfx('trigger', 0.55);
     pulse('255,50,50', 0.4 + s * 0.35);
-    // P1: the fall STUMBLES - FOV punch + the speed boost dies on the spot.
-    ctx.nav.fovKick(3 + s * 2.5);
+    // P1: the fall STUMBLES - a brightness punch + the speed boost dies on the spot.
+    ctx.fx.pulseFlash(0.5 + s * 0.3);
     ctx.director.killBoost();
     // Heat Warp: a big streak dying while the tube runs hot cracks real lightning
     if (comboWarp >= 0.6 || comboBefore >= 15) ctx.fx.strikeNow();
@@ -753,7 +825,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       firePayload(spec, true);
       st.effectsFired++;
       sfx('trigger', 0.55);
-      ctx.nav.fovKick(2 + s * 2);
+      ctx.fx.pulseFlash(0.45 + s * 0.25);
       hudUi.flashShields();
     }
     st.combo = st.combo > 1 ? Math.floor(st.combo / 2) : 0;
@@ -990,6 +1062,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         break;
     }
     lessons.onToyFired();   // first_play
+    // Grab-in-the-tube: a grabbed toy is single-use. Consume it and renumber the dock
+    // so the remaining consumables keep contiguous 1..N slot keys.
+    if (t.consumable) {
+      const i = toys.indexOf(t);
+      if (i >= 0) toys.splice(i, 1);
+      toys.forEach((x, k) => { x.key = String(k + 1); });
+    }
     hudUi.updateToys(toys, toyStatus());
   }
 
@@ -1238,8 +1317,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   // ---- Branching paths ("The Junction", engine/junctions.js) ----------------
-  // Mid-chamber forks: two branded mouths drift out of the fog; the player leans
-  // (fallNav laneVote) and the camera glides through one while the other seals.
+  // Mid-chamber forks: two branded mouths drift out of the fog; the player CLICKS
+  // a doorway card to dive (looking around / grabbing stays free at the fork).
   // A passive faller is taken by the coaxed mouth. Deeper chambers pre-seal the
   // resisting mouth more often (the "closing path" - the choice quietly leaves).
   const JUNCTION_LEAD = 120;          // world units of telegraph before commit
@@ -1291,7 +1370,6 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     st.brands[b.brand] = (st.brands[b.brand] || 0) + 1;
     st.branchTint = { color: b.color, strength: 0.6 };
     ctx.fx.pulseFlash(0.5);
-    ctx.nav.fovKick(2.4);
     sfx(choice.forced ? 'sink' : 'boon_pick', 0.4);
     hudUi.announce(b.word, 'depth', 1500, {
       subText: choice.forced ? 'the only way left' : (choice.passive ? 'you let it choose' : ''),
@@ -1310,7 +1388,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (!ctx || !ctx.director) return;
     if (on) {
       ctx.director.setTimeFactor(0.16);   // near-hover at the Y so both mouths can be read
-      try { if (hudUi) hudUi.toast('lean to choose ...'); } catch (e) { /* ignore */ }
+      try { if (hudUi) hudUi.toast('click a card to choose ...'); } catch (e) { /* ignore */ }
     } else if (state === 'running') {
       // restore whatever the world time-factor should currently be
       ctx.director.setTimeFactor(
@@ -1336,11 +1414,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     }
     if (!lustFullSeen && st.heat >= 0.98) { lustFullSeen = true; syncZone(); }
     else if (lustFullSeen && st.heat < 0.5) { lustFullSeen = false; syncZone(); }
-    // 25-streak = fully warped (engine defaults: 125 rings / 45 turns)
+    // comboWarp still drives the GLOW heat (speed-line burn below + lightning),
+    // but NOT the ring/spiral COUNT anymore. Those counts must stay integers for
+    // the seam-free loop, so the old combo->count re-pattern snapped uRings by 1 on
+    // almost every pop and re-spaced every ring in a single frame - the tube
+    // "teleported" on each bubble pop (rings and spiral ticking at different combos
+    // made it look random). Heat now reads through color/glow, never geometry, so
+    // the line pattern holds its position. Base counts (125 / 45) stay put.
     comboWarp = Math.min(1, st.combo / 25);
-    ctx.fx.setDensity(comboWarp > 0.02
-      ? { rings: 125 + Math.round(30 * comboWarp), spiralTurns: 45 + Math.round(15 * comboWarp) }
-      : null);
     // speed-line heat: Heat Warp's streak burn, outranked by Freefall's howl
     const heatRush = comboWarp >= 0.6 ? ((comboWarp - 0.6) / 0.4) * 0.8 : 0;
     ctx.fx.setRushOverride(st.freefallActive ? Math.max(0.95, heatRush) : heatRush);
@@ -1428,15 +1509,15 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // Empty-field rescue: a fast clear shouldn't leave dead air.
     if (st.freezeRemainingSec <= 0 && field.count() === 0) spawnWait = 0;
 
-    // The Ripple's once-ever teach line: offered once you can afford a cast, until the first one.
-    if (!flags.seenRippleTeach && !rippleTeachOffered && st.elapsedSec > 6 && st.focus >= st.rippleFocusCost) {
-      rippleTeachOffered = true;
-      hudUi.announce('🌊 THE RIPPLE — right-click near the bubbles', 'powerup', 3200, { artKey: 'ripple_teach' });
+    // The Ripple's once-ever teach: a pause+explain card the moment a cast is affordable.
+    if (!flags.seenRippleTeach && st.elapsedSec > 6 && st.focus >= st.rippleFocusCost) {
+      setFlag('seenRippleTeach');   // also short-circuits the post-cast confirm announce below
+      teach(VERB_COPY.ripple, { kicker: 'a new move' });
     }
-    // Once-ever gentle teach the first time focus dips under a ripple's price.
+    // Once-ever teach the first time focus dips under a ripple's price.
     if (!flags.seenFocusTip && st.focus < st.rippleFocusCost) {
       setFlag('seenFocusTip');
-      hudUi.announce('focus fuels the ripple. treats refill it. snapping lives is free.', 'depth', 3200);
+      teach(VERB_COPY.focus);
     }
     // Once-ever heat teach: name the burn the first time it visibly climbs.
     if (!flags.seenHeatTeach && st.heat >= 0.15) {
@@ -1542,8 +1623,6 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     showClock: true,
   });
 
-  let rippleTeachOffered = false;
-
   // ============================ waves + the draft table ============================
 
   function beginWaveTransition(newWave) {
@@ -1626,7 +1705,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       guaranteeCurse: st.maxedBoons.has('surrender'),
       takenIds: st.takenBoonIds,
       sinChance: cfg.sinChance,
-      equipment: cfg.equipment,
+      // Grab-in-the-tube rework: synergy duo/trio boons gate on what you've grabbed THIS
+      // run (grown live), not a pre-run loadout - a partner card unlocks its synergy draft.
+      equipment: [...st.runEquipment],
       hasVideo: !!(hostState && hostState.mediaStats && hostState.mediaStats.videos > 0),
     });
     happy.rigDraft(options, hpIo);   // run 4's defanged first sin / the duo demo
@@ -1642,6 +1723,90 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     st.runPicks.push({ id: boon.id, name: boon.name, curse: boon.curse });
     hudUi.setPicks(st.runPicks);
     syncPhys();   // drafted knobs that live in field physics (tail-plug, aftermath, cam girl)
+  }
+
+  // Grab-in-the-tube rework: a grabbed accessory/charm applies its effect ONCE, live, at its
+  // current dollhouse level (min 1). Mirrors applyBoon but reads the ported PASSIVE_APPLY table
+  // (game/boonPassives.js) and the C#-authored levelValues. Returns the applied level (0 = no-op).
+  function levelFor(id) { return Math.max(1, (levels && levels[id]) | 0); }
+
+  function applyGrabbedPassive(id) {
+    if (!st || !isGrabbablePassive(id)) return 0;
+    if (st.takenPassiveIds.has(id)) return 0;   // one grab per id per run (esp. multiplicative)
+    const def = boonDefById(id);
+    if (!def || !def.levelValues || !def.levelValues.length) return 0;
+    const level = levelFor(id);
+    const v = def.levelValues[Math.min(level, def.levelValues.length) - 1];
+    st.takenPassiveIds.add(id);
+    st.runEquipment.add(id);
+    try { PASSIVE_APPLY[id](st, level, v, { wireStickyFingers }); }
+    catch (e) { bridge.log('grab-passive ' + id + ' failed: ' + e.message); }
+    if (level >= def.levelValues.length) st.maxedBoons.add(id);   // arm capstone gates
+    st.runPicks.push({ id, name: def.name, curse: false });
+    hudUi.setPicks(st.runPicks);
+    syncPhys();
+    return level;
+  }
+
+  // A grabbed consumable (active toy) docks as a single-use record in the module `toys`
+  // array (the HUD's bottom dock), at its dollhouse level. Number-keyed by slot position.
+  function addConsumable(id, level) {
+    const def = boonDefById(id);
+    if (!def || !def.levelValues || !def.levelValues.length) return;
+    if (toys.length >= st.consumableSlots) return;   // dock full (canOfferPowerup should have vetoed)
+    const lvl = Math.max(1, level | 0);
+    const power = def.levelValues[Math.min(lvl, def.levelValues.length) - 1];
+    toys.push({
+      id, name: def.name, glyph: def.glyph || '◈', desc: def.desc || '',
+      key: String(toys.length + 1),                       // slot 1 -> "1", etc.
+      cooldownSec: def.cooldownSec ?? 0,
+      power, level: lvl, maxed: lvl >= def.levelValues.length,
+      chargesLeft: 1,                                     // consumable: one use, whatever the native model
+      cooldownLeft: 0, effectActive: false, consumable: true,
+    });
+    st.runEquipment.add(id);
+    hudUi.updateToys(toys, toyStatus());
+  }
+
+  // A power-up card was grabbed mid-fall: unlock-on-first-discovery (free), then dock it
+  // (consumable) or apply it (passive), flying the art from the tube point to its HUD slot.
+  // The FIRST time you ever grab an item, a pause+explain card fires and the dock/apply is
+  // DEFERRED until you dismiss it - so the art flies into the HUD after you've read what it is.
+  function handlePowerupGrab(id, kind, screenPos) {
+    const def = boonDefById(id);
+    if (!def) return;
+    const level = levelFor(id);
+    const meta = hostState && hostState.meta;
+    const prev = (meta && meta.lifetimeBoonLevels && (meta.lifetimeBoonLevels[id] | 0)) || 0;
+    const first = prev < 1;
+    if (first) {
+      // free discovery unlock (the bridge accepts level==cur+1 && Sparks>=cost; cost 0)
+      bridge.send({ type: 'meta-command', op: 'set-lifetime-boon', id, level: 1, cost: 0 });
+      try { if (meta) { meta.lifetimeBoonLevels = meta.lifetimeBoonLevels || {}; meta.lifetimeBoonLevels[id] = 1; } } catch (e) { /* mirror only */ }
+    }
+    sfx('dive', 0.5);
+    try { ctx.fx && ctx.fx.pulseFlash && ctx.fx.pulseFlash(0.4); } catch (e) { /* ignore */ }
+
+    const acquire = () => {
+      if (state !== 'running') return;   // card dismissed after the run ended: skip the apply/anim
+      if (kind === 'consumable') {
+        addConsumable(id, level);
+        try { hudUi.flyArtToSlot(id, screenPos, 'consumable'); } catch (e) { /* ignore */ }
+      } else {
+        applyGrabbedPassive(id);
+        try { hudUi.flyArtToSlot(id, screenPos, 'relic'); } catch (e) { /* ignore */ }
+      }
+      hudUi.toast('◈ ' + def.name);
+    };
+
+    if (first) {
+      teach(
+        { glyph: def.glyph || '◈', name: def.name, desc: def.desc || '', flavor: def.flavor || '' },
+        { kicker: kind === 'consumable' ? 'new toy · discovered' : 'new relic · discovered', onDismiss: acquire }
+      );
+    } else {
+      acquire();
+    }
   }
 
   function resolveDraft(boon, auto) {
@@ -1802,20 +1967,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
     if (rank >= RANK.Tempted && Math.random() < ECHO_SPAWN_CHANCE * bMult * prof.echo) {
       const debut = !flags.seenEcho;
-      if (debut) {
-        setFlag('seenEcho');
-        hudUi.announce('◌ THE ECHO — hold it down, or it multiplies', 'powerup', 2800, { artKey: 'echo', subText: 'hold it down, or it multiplies' });
-      }
+      if (debut) setFlag('seenEcho');   // gates the debut fuse-slowdown; the teach is markDiscovered's card
       markDiscovered('bubble:echo');
       field.spawn(buildEcho(effIntensity, st.fuseTimeMult, st.bubbleScale, debut ? DEBUT_FUSE_MULT : 1.0));
       return true;
     }
     if (rank >= RANK.Tempted && Math.random() < CHAPERONE_SPAWN_CHANCE * bMult * prof.chaperone) {
       const debut = !flags.seenChaperone;
-      if (debut) {
-        setFlag('seenChaperone');
-        hudUi.announce('💞 THE CHAPERONE — its little escort first', 'powerup', 2800, { artKey: 'chaperone', subText: 'its little escort first' });
-      }
+      if (debut) setFlag('seenChaperone');   // gates the debut fuse-slowdown; the teach is markDiscovered's card
       const [liveSpec, escortSpec] = buildChaperonePair(effIntensity, st.fuseTimeMult,
         cfg.effectIntensity, st.bubbleScale, debut ? DEBUT_FUSE_MULT : 1.0);
       markDiscovered('bubble:chaperone');
@@ -1827,10 +1986,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if ((cfg.difficulty === 'Hard' || cfg.difficulty === 'Extreme' || rank >= RANK.Entranced)
         && Math.random() < BOUND_SPAWN_CHANCE * bMult * prof.bound) {
       const debut = !flags.seenBound;
-      if (debut) {
-        setFlag('seenBound');
-        hudUi.announce('⛓ THE BOUND — both, and quickly', 'powerup', 2800, { artKey: 'bound', subText: 'both, and quickly' });
-      }
+      if (debut) setFlag('seenBound');   // gates the debut fuse-slowdown; the teach is markDiscovered's card
       const [a, b] = buildBoundPair(effIntensity, st.fuseTimeMult, cfg.effectIntensity,
         st.bubbleScale, debut ? DEBUT_FUSE_MULT : 1.0);
       markDiscovered('bubble:bound');
@@ -1840,11 +1996,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     }
     if (rank >= RANK.Slipping && Math.random() < TEASE_SPAWN_CHANCE * bMult * prof.tease) {
       const debut = !flags.seenTease;
-      if (debut) {
-        setFlag('seenTease');
-        hudUi.announce('✖ THE TEASE — whatever you do, don\'t', 'bad', 2800, { artKey: 'tease', subText: 'whatever you do, don\'t' });
-        bark('tease-debut');
-      }
+      if (debut) { setFlag('seenTease'); bark('tease-debut'); }   // fuse-slowdown gate + bark; the teach is markDiscovered's card
       markDiscovered('bubble:tease');
       field.spawn(buildTease(effIntensity, cfg.effectIntensity, st.bubbleScale));
       return true;
@@ -1931,10 +2083,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // The Brittle (Tempted+, half odds on Gentle): a glass mine rides in alongside.
       if (!cfg.scriptedFirstRun && cfg.rankIndex >= RANK.Tempted
           && Math.random() < BRITTLE_SPAWN_CHANCE * (cfg.difficulty === 'Easy' ? 0.5 : 1.0)) {
-        if (!flags.seenBrittle) {
-          setFlag('seenBrittle');
-          hudUi.announce('◇ THE BRITTLE — don\'t even hover', 'bad', 2800, { artKey: 'brittle', subText: 'don\'t even hover' });
-        }
+        if (!flags.seenBrittle) setFlag('seenBrittle');   // (fuse gate parity); the teach is markDiscovered's card
         markDiscovered('bubble:brittle');
         field.spawn(buildBrittle(effIntensity, cfg.effectIntensity, st.bubbleScale, cfg.enabledVariants));
       }
@@ -1996,8 +2145,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // the same wave flings the on-screen flash clips (the hydra flashes) off
     // screen along the angle of the hit, clearing the view onto the bubbles.
     if (ctx.flingFlashesNear) ctx.flingFlashesNear(x, y, st.rippleRadiusPx);
-    // P1: the ripple is a tunnel shockwave too.
-    ctx.nav.fovKick(2.5);
+    // P1: the ripple is a tunnel shockwave too (brightness flash, not a zoom pump).
     ctx.fx.pulseFlash(0.5);
   }
 
@@ -2019,7 +2167,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       for (const id of ids) if (!cfg.enabledVariants.includes(id)) cfg.enabledVariants.push(id);
     },
     get allowCurses() { return cfg.allowCurses; },
-    equipmentHas: (id) => cfg.equipment.includes(id),
+    equipmentHas: (id) => st ? st.runEquipment.has(id) : false,
     bark: (event) => bark(event),
     /** A Visual-Novel portrait beat (scripted descents). `beat` is a manifest beat
      * id (resolves the active persona's emote + line + voiceover) or an explicit
@@ -2082,15 +2230,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     },
   };
 
-  /** A lesson completed mid-run: announce the unlocked shelf row (the WPF
-   * mid-run unlock card, sized for the browser HUD) - the bark rode with the
-   * lesson-progress command already. */
-  function onLessonComplete(id) {
-    const def = lessonById(id);
-    if (!def || !hudUi) return;
-    hudUi.announce('LESSON LEARNED', 'powerup', 3200, { artKey: id, subText: 'now for sale in the toybox' });
-    pulse('255,215,0', 0.35);
-  }
+  /** Lesson-proof gating is retired (items are grabbed in the fall, not unlocked by
+   * proofs), so a completed lesson no longer puts anything "for sale". The tracker
+   * still runs (first-time Sparks bounties ride it), but this completion callback is
+   * now a no-op - the old "LESSON LEARNED - now for sale" card would be misleading. */
+  function onLessonComplete(_id) { /* retired: nothing unlocks on proof completion */ }
 
   function onFirstTimeAwarded(id, amount, label) {
     if (!hudUi) return;
@@ -2108,7 +2252,6 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     lastNoFocusAnnounce = -10;
     focusLowAccum = 0; focusLowBarked = false;
     teaseDeniedThisRun = 0; teaseDeniedStreakBarked = false;
-    rippleTeachOffered = false;
     heavyUntil = 0;
     pendulumRolledWave = 0; heartRolledWave = 0; heartArmed = false;
     vibeRemainingSec = 0; afterglowApplied = false;
@@ -2130,17 +2273,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (ctx.spawner) ctx.spawner.setAutoSpotlight(true);
     buildToys();
     syncPhys();
-    // Sticky Fingers capstone: releasing a held card hurls it down the tube;
-    // the impact rains a treat shower.
-    if (ctx.spawner && st.stickyFingersLevel > 0 && st.maxedBoons.has('sticky_fingers')) {
-      ctx.spawner.setThrowOnRelease(() => {
-        if (state !== 'running') return;
-        ctx.fx.pulseFlash(0.7);
-        sfx('wave_clear', 0.5);
-        hudUi.toast('🍯 delivered — treats follow');
-        spawnWelcomeShower();
-      });
-    }
+    wireStickyFingers();
     lessons.seed(hostState ? hostState.meta : null, cfg.allowCurses);
     metrics.reset();   // fresh per-run engagement counters
     happy.onRunStarted(cfg.runsCompleted, cfg.scriptedFirstRun);
@@ -2176,7 +2309,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         // a mystery. The scripted run 1 lands this at its lone-threat beat instead.
         if (!flags.seenDefuseTutorial && !cfg.scriptedFirstRun) {
           setFlag('seenDefuseTutorial');
-          hudUi.announce('press and HOLD a live one to snap it', 'freeze', 3200);
+          teach(VERB_COPY.snap);
         } else if (cfg.regionMode && !cfg.scriptedFirstRun) {
           // Chamber I's arrival banner (skipped on the first-ever descent, which
           // owns the GO beat with the defuse tutorial, and on the scripted run).
@@ -2301,23 +2434,24 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         ctx.junctions.onLinger = onJunctionLinger;
       }
       overlays = createOverlays(ctx.hud);
-      vn = createVnPortrait(ctx.hud, {
-        getModId: () => activeModId,
-        // VN beats stop the tunnel dead while she talks, then hand it back.
-        haltTunnel: (on) => { try { ctx.director.setTimeFactor(on ? 0 : baseTime()); } catch (e) { /* ignore */ } },
-        // Silence everything but the ambient bed while she talks: web pops/chimes
-        // (audioBus duck) + the drift voice (scene) + native stingers/barks (host skips on vn-speaking).
-        duckAudio: (on) => {
-          try { setDucked(!!on); } catch (e) {}
-          try { ctx.silenceVoice && ctx.silenceVoice(!!on); } catch (e) {}
-          try { bridge.send({ type: 'vn-speaking', on: !!on }); } catch (e) {}
-          // Freeze the whole field while she talks: no new bubbles, existing ones
-          // hold, popping is locked. On the run's opening beat this also means the
-          // bubbles don't start until she's finished - the run "really" begins then.
-          vnHold = !!on; syncHeld();
-        },
-      });
+      // Shared world-hold contract. The VN portrait AND the in-run lesson cards
+      // freeze the run the SAME way, so a discovery can't fire under a VN beat and
+      // vice-versa (both set vnHold -> heldNow() gates every spawn/input/tick).
+      // haltTunnel stops the tunnel dead; duckAudio silences everything but the bed.
+      const haltTunnel = (on) => { try { ctx.director.setTimeFactor(on ? 0 : baseTime()); } catch (e) { /* ignore */ } };
+      const duckAudio = (on) => {
+        try { setDucked(!!on); } catch (e) {}
+        try { ctx.silenceVoice && ctx.silenceVoice(!!on); } catch (e) {}
+        try { bridge.send({ type: 'vn-speaking', on: !!on }); } catch (e) {}
+        // Freeze the whole field: no new bubbles, existing ones hold, popping locked.
+        // On the run's opening VN beat this also means the bubbles don't start until
+        // she's finished - the run "really" begins then.
+        vnHold = !!on; syncHeld();
+      };
+      vn = createVnPortrait(ctx.hud, { getModId: () => activeModId, haltTunnel, duckAudio });
       try { vn.prime(); } catch (e) { /* manifest warms lazily on first beat */ }
+      // First-discovery explainers: pause the field, show one card, click/any-key to resume.
+      lessonCardUi = createLessonCard(ctx.hud, { haltTunnel, hold: duckAudio });
       lessons = createLessonTracker({ bridge, onComplete: onLessonComplete, onFirstTime: onFirstTimeAwarded });
       lessons.setCoveredProbe(() => covered || heavyActive());
       happy = createHappyPath();
@@ -2430,6 +2564,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         statsFlushCd -= dt;
         if (statsFlushCd <= 0) { statsFlushCd = STATS_FLUSH_SEC; flushAssetStats(); }
       }
+      // Grab-in-the-tube: power-up cards only drift/spawn while actually falling.
+      if (ctx && ctx.powerupDrops) ctx.powerupDrops.setSpawnEnabled(state === 'running' && !heldNow());
       field.update(dt);
     },
 
@@ -2451,6 +2587,24 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
     /** M4: tunnel veils fire their wash only while the run is actually falling. */
     allowVeil() { return state === 'running' && !heldNow(); },
+
+    // ---- grab-in-the-tube power-ups (engine/powerupDrops.js) ----
+    /** The raw meta snapshot the drop picker reads (rank + discovered levels). */
+    getMeta() { return hostState ? hostState.meta : null; },
+    /** Veto an offer: only while running, never re-offer this run, and a consumable
+     *  needs a free dock slot (passives always fit - they pin to the relic strip). */
+    canOfferPowerup(id, kind) {
+      if (state !== 'running' || !st) return false;
+      if (st.runEquipment.has(id)) return false;
+      if (kind === 'consumable') return toys.length < st.consumableSlots;
+      return true;
+    },
+    /** A card was grabbed: unlock-on-discovery (free), then dock (consumable) or
+     *  apply (passive), with the art flying from the tube point to its HUD slot. */
+    onPowerupGrabbed(id, kind, screenPos) {
+      if (!st || state !== 'running') return;
+      handlePowerupGrab(id, kind, screenPos);
+    },
 
     /** "surface" from the pause menu: the descent ends early - recap still pays. */
     surface() {

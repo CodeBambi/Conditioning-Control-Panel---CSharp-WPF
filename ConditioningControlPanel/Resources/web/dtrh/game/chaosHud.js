@@ -97,6 +97,9 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
 
   function updateToys(toys, status) {
     if (!toys.length) { dock.innerHTML = ''; toyEls.clear(); return; }
+    // prune buttons for toys no longer in the dock (a consumable was spent/removed)
+    const live = new Set(toys.map((t) => t.id));
+    for (const [id, el] of toyEls) { if (!live.has(id)) { el.remove(); toyEls.delete(id); } }
     for (const t of toys) {
       let el = toyEls.get(t.id);
       if (!el) {
@@ -109,14 +112,16 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
         g.textContent = t.glyph;
         const n = document.createElement('span');
         n.className = 'cf-toy-name';
-        n.textContent = t.name + (t.key ? ` · ${t.key}` : '');
         const s = document.createElement('span');
         s.className = 'cf-toy-status';
         el.append(g, n, s);
         el._status = s;
+        el._name = n;
         dock.appendChild(el);
         toyEls.set(t.id, el);
       }
+      // refresh the label each frame - a consumable's slot number can shift as the dock drains
+      el._name.textContent = t.name + (t.key ? ` · ${t.key}` : '');
       const ready = t.cooldownLeft <= 0 && t.chargesLeft !== 0;
       el._status.textContent = t.chargesLeft >= 0
         ? (t.chargesLeft === 0 ? 'spent' : `${t.chargesLeft} left`)
@@ -273,6 +278,48 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
           el.remove();
           shieldRow.classList.remove('cf-shield-flash'); void shieldRow.offsetWidth; shieldRow.classList.add('cf-shield-flash');
           shieldRow.classList.remove('cf-shield-bounce'); void shieldRow.offsetWidth; shieldRow.classList.add('cf-shield-bounce');
+        };
+        requestAnimationFrame(step);
+      } catch (e) { /* ignore */ }
+    },
+    // Grab-in-the-tube: a grabbed power-up's art flies from the tube grab point
+    // (screen px) to its HUD slot - the bottom dock for a consumable, the top pick
+    // strip for a relic (passive) - then shrinks in. Purely cosmetic; the item is
+    // already docked/applied by the time this runs.
+    flyArtToSlot(id, fromPos, target = 'relic') {
+      try {
+        const dest = target === 'consumable' ? dock : picksWrap;
+        const el = document.createElement('img');
+        el.src = `${ART}boons/${id}.png`;
+        el.alt = '';
+        el.addEventListener('error', () => { el.remove(); });
+        const S = 108;
+        Object.assign(el.style, {
+          position: 'fixed', width: S + 'px', height: S + 'px', left: '0', top: '0',
+          transform: 'translate(-50%,-50%)', zIndex: '99999', pointerEvents: 'none',
+          borderRadius: '12px', boxShadow: '0 0 22px rgba(220,180,255,0.7)', opacity: '1',
+        });
+        document.body.appendChild(el);
+        const sx = (fromPos && fromPos.x) || window.innerWidth / 2;
+        const sy = (fromPos && fromPos.y) || window.innerHeight / 2;
+        el.style.left = sx + 'px'; el.style.top = sy + 'px';
+        const FLY = 620;
+        const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+        let t0 = null;
+        const step = (ts) => {
+          if (t0 == null) t0 = ts;
+          const k = Math.min(1, (ts - t0) / FLY);
+          const r = dest.getBoundingClientRect();
+          const tx = (r.left || window.innerWidth / 2) + (r.width ? r.width / 2 : 0);
+          const ty = (r.top || window.innerHeight) + (r.height ? r.height / 2 : 0);
+          const kk = ease(k);
+          el.style.left = (sx + (tx - sx) * kk) + 'px';
+          el.style.top = (sy + (ty - sy) * kk) + 'px';
+          el.style.transform = `translate(-50%,-50%) scale(${1 - 0.68 * kk})`;
+          el.style.opacity = String(1 - 0.3 * kk);
+          if (k < 1) { requestAnimationFrame(step); return; }
+          el.remove();
+          dest.classList.remove('cf-slot-flash'); void dest.offsetWidth; dest.classList.add('cf-slot-flash');
         };
         requestAnimationFrame(step);
       } catch (e) { /* ignore */ }

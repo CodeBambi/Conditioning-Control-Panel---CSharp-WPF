@@ -53,8 +53,9 @@ public static class RevealService
     {
         [RevealIds.Dollhouse]          = () => ChaosMeta.State.RunsCompleted >= 1,
         [RevealIds.TabLookingGlass]    = () => ChaosMeta.RankIndex >= ChaosRank.Slipping,
-        [RevealIds.SectionToys]        = () => ChaosMeta.State.ToyPockets >= 1,
-        [RevealIds.SectionAccessories] = () => ChaosMeta.State.AccessoryPockets >= 1,
+        // grab-in-the-tube rework: discovered in the fall, not pocket-gated - open from run 1.
+        [RevealIds.SectionToys]        = () => ChaosMeta.State.RunsCompleted >= 1,
+        [RevealIds.SectionAccessories] = () => ChaosMeta.State.RunsCompleted >= 1,
         [RevealIds.HerCorner]          = () => ChaosMeta.State.RunsCompleted >= 2 && ChaosMeta.RankIndex < ChaosRank.Slipping,
         [RevealIds.PillTeasing]        = () => ChaosMeta.RankIndex >= ChaosRank.Tempted,
         [RevealIds.PillRelentless]     = () => ChaosMeta.RankIndex >= ChaosRank.Entranced,
