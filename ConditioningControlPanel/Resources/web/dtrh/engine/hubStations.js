@@ -31,6 +31,7 @@ const ANCHOR_LERP = 3.2;                 // per-frame re-anchor smoothing
 const FOCUS_SCALE = 1.15;                // focused station lift
 const DIM_SIBLING = 0.35;                // unfocused siblings dim to this
 const FLASH_DUR = 3.0;                   // reveal-flash seconds
+const FOCUS_GLIDE = 0.9;                 // seconds: eased camera pan onto a focused station
 
 // ---- shared canvas textures (built once per instance) -----------------------
 function makeGlowTex() {
@@ -149,6 +150,10 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
   let focusBias = 0;        // screen-right offset of the face target (world units):
                             // the focused card rests LEFT of center, its DOM sheet on the right
   let aimedId = null;       // hover lift
+  // camera pan: the face target eases from where you were looking to the new
+  // station over FOCUS_GLIDE (card-to-card glides too, never a snap)
+  const _faceFrom = new THREE.Vector3(), _faceCur = new THREE.Vector3();
+  let faceT = 1, hasFace = false;
   const shatters = [];      // portal-dive shard bursts (ticked even after hide)
 
   // default cross-section slots (binormal = x, normal = y); defs may override
@@ -175,6 +180,9 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
     const glow = new THREE.Mesh(unitPlane, glowMat);
     glow.scale.set(w * 1.7, h * 1.6, 1); glow.position.z = -0.08; group.add(glow);
+    // the halo bleeds far past the card (the portal's reaches under the side
+    // stations) - it must never catch the pointer, only the card/ring may
+    glow.raycast = () => {};
 
     // frame: rounded border for cards, the swirl ring for the portal
     const frameMat = new THREE.MeshBasicMaterial({
@@ -231,6 +239,7 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
       map: dotTex, color: new THREE.Color(glowCol), size: 0.42, sizeAttenuation: true,
       transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
     const sparks = new THREE.Points(sparkGeo, sparkMat);
+    sparks.raycast = () => {};   // decorative only - Points thresholds give phantom hits
     group.add(sparks);
 
     scene.add(group);
@@ -389,6 +398,7 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
       else for (const s of stations) s.startFade();
       visible = false;
       focused = null; aimedId = null;
+      faceT = 1; hasFace = false;
       try { nav.setFaceTarget(null); } catch (e) { /* ignore */ }
     },
 
@@ -401,7 +411,10 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
         if (done && stations[i].isFading()) { stations[i].dispose(); stations.splice(i, 1); }
       }
       // keep the camera swung onto the focused station as it rides the crawl
-      // (biased screen-right so the card settles left-of-center, clear of the sheet)
+      // (biased screen-right so the card settles left-of-center, clear of the
+      // sheet). The face point PANS: it eases from where you were looking to
+      // the station over FOCUS_GLIDE, then tracks it - nav's own FACE_LERP
+      // smooths on top, so focus and card-to-card both read as a camera glide.
       if (focused) {
         const st = byId(focused);
         if (st) {
@@ -410,7 +423,13 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
             _right.set(1, 0, 0).applyQuaternion(camera.quaternion);
             _wp.addScaledVector(_right, focusBias);
           }
-          nav.setFaceTarget(_wp);
+          if (faceT < 1) {
+            faceT = Math.min(1, faceT + dt / FOCUS_GLIDE);
+            const k = faceT * faceT * (3 - 2 * faceT);   // smoothstep ease in-out
+            _faceCur.lerpVectors(_faceFrom, _wp, k);
+          } else _faceCur.copy(_wp);
+          hasFace = true;
+          nav.setFaceTarget(_faceCur);
         }
       }
     },
@@ -418,17 +437,54 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
     isBusy: () => visible,
     getPickables: () => (visible ? stations.filter((s) => !s.isFading() && !s.def.hazy).map((s) => s.group) : []),
 
+    // Resolve a pointer ray to a station id (or null). Owns the pick rules the
+    // raw raycast can't express: halos/sparkles never hit (raycast no-ops),
+    // CARDS ALWAYS WIN over the portal (their quads can brush the portal frame's
+    // corners near the center), and the portal only counts INSIDE its ring -
+    // its frame quad is square, and a square corner is empty tube, not FALL IN.
+    pick(raycaster) {
+      if (!visible) return null;
+      const picks = this.getPickables();
+      if (!picks.length) return null;
+      const hits = raycaster.intersectObjects(picks, true);
+      let portalId = null;
+      for (const h of hits) {
+        let o = h.object;
+        while (o && !(o.userData && o.userData.type === 'hubstation')) o = o.parent;
+        if (!o) continue;
+        const st = byId(o.userData.id);
+        if (!st) continue;
+        if (st.def.kind === 'portal') {
+          st.worldPos(_tgt);
+          if (!portalId && h.point.distanceTo(_tgt) <= PORTAL_R) portalId = st.id;
+          continue;
+        }
+        return st.id;
+      }
+      return portalId;
+    },
+
     focus(id, bias) {
       const st = byId(id);
       if (!st) return;
+      if (focused === id) { focusBias = bias || 0; return; }
+      // pan start: the current face point when gliding card-to-card, else the
+      // point the camera is looking at right now (at the station's distance)
+      st.worldPos(_tgt);
+      if (hasFace) _faceFrom.copy(_faceCur);
+      else {
+        const dist = _tgt.distanceTo(camera.position);
+        camera.getWorldDirection(_faceFrom).multiplyScalar(dist).add(camera.position);
+      }
       focused = id;
       focusBias = bias || 0;
-      // the per-frame update refreshes the face target from here on
-      try { nav.setFaceTarget(st.worldPos(_wp)); } catch (e) { /* ignore */ }
+      faceT = 0;
+      // the per-frame update eases the face target onto the station from here on
     },
     blur() {
       focused = null;
       focusBias = 0;
+      faceT = 1; hasFace = false;
       try { nav.setFaceTarget(null); } catch (e) { /* ignore */ }
     },
     focusedId: () => focused,
@@ -456,6 +512,7 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
       for (const s of stations) s.startFade();      // the rest of the menu falls away
       visible = false;
       focused = null; aimedId = null;
+      faceT = 1; hasFace = false;
       try { nav.setFaceTarget(null); } catch (e) { /* ignore */ }
     },
 

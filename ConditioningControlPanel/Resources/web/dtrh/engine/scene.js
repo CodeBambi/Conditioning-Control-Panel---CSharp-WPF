@@ -381,20 +381,10 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     // tube is a "miss" (the game blurs the focused station / closes its panel).
     // The hub owns the pointer entirely - no fall-through to grabs.
     if (hubStations.isBusy()) {
-      const picks = hubStations.getPickables();
-      if (picks.length) {
-        _hray.setFromCamera(_hndc.set(nx, ny), camera);
-        const hits = _hray.intersectObjects(picks, true);
-        for (const h of hits) {
-          let o = h.object;
-          while (o && !(o.userData && o.userData.type === 'hubstation')) o = o.parent;
-          if (o && o.userData && o.userData.type === 'hubstation') {
-            if (game && game.onStationPick) game.onStationPick(o.userData.id);
-            return;
-          }
-        }
-      }
-      if (game && game.onStationMiss) game.onStationMiss();
+      _hray.setFromCamera(_hndc.set(nx, ny), camera);
+      const stId = hubStations.pick(_hray);   // owns the rules: cards beat portal, ring-only portal
+      if (stId) { if (game && game.onStationPick) game.onStationPick(stId); }
+      else if (game && game.onStationMiss) game.onStationMiss();
       return;
     }
     // a boon draft is open: a click on a card shatters it + takes the boon
@@ -496,17 +486,8 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       if (!r0.width || !r0.height) return;
       const hx = ((e.clientX - r0.left) / r0.width) * 2 - 1;
       const hy = -((e.clientY - r0.top) / r0.height) * 2 + 1;
-      const picks = hubStations.getPickables();
-      let aimed = null;
-      if (picks.length) {
-        _hray.setFromCamera(_hndc.set(hx, hy), camera);
-        const hits = _hray.intersectObjects(picks, true);
-        for (const h of hits) {
-          let o = h.object;
-          while (o && !(o.userData && o.userData.type === 'hubstation')) o = o.parent;
-          if (o && o.userData && o.userData.type === 'hubstation') { aimed = o.userData.id; break; }
-        }
-      }
+      _hray.setFromCamera(_hndc.set(hx, hy), camera);
+      const aimed = hubStations.pick(_hray);   // same rules as clicking - hover never lies
       hubStations.setAimed(aimed);
       canvas.style.cursor = aimed ? 'pointer' : '';
       return;
