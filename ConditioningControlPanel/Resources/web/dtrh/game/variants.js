@@ -48,13 +48,18 @@ export const VARIANTS = [
   { id: 'bambifreeze', name: 'Freeze',      kind: 'freeze', payload: null,
     min: 190, max: 250, motion: MOTION.FloatUp,    tint: 'rgb(138,230,255)', label: '❄',
     sprite: ART_BASE + 'bambifreeze.png',   weight: 0.5, minIntensity: 0.15, fuseMin: 0, fuseMax: 0 },
-  // The two giants (M4): a long trance, but a mandatory video / gif rain if it goes off.
+  // The two giants (M4): a long trance, but a mandatory video / gif rain if it
+  // goes off. 2026-07 retune (deliberate departure from the C# odds): the video
+  // is the rarest live in the pool - VERY rare - and gif rain merely rare. In
+  // region mode the spawner is the depth authority (chambers III-IV only, half
+  // presence in III - chaosRun.js), so the intensity gates sit just under
+  // chamber III's band start (0.46) and only matter on legacy non-region runs.
   { id: 'video',       name: 'Video',       kind: 'live',   payload: { kind: 'video' },
     min: 240, max: 300, motion: MOTION.RainDown,   tint: 'rgb(224,64,77)',   label: '▶',
-    sprite: ART_BASE + 'video.png',         weight: 0.8, minIntensity: 0.55, fuseMin: 5000, fuseMax: 7000 },
+    sprite: ART_BASE + 'video.png',         weight: 0.35, minIntensity: 0.45, fuseMin: 5000, fuseMax: 7000 },
   { id: 'htlink',      name: 'Gif Rain',    kind: 'live',   payload: { kind: 'gifCascade' },
     min: 200, max: 280, motion: MOTION.FloatUp,    tint: 'rgb(255,200,61)',  label: '▼',
-    sprite: ART_BASE + 'htlink.png',        weight: 0.45, minIntensity: 0.80, fuseMin: 4500, fuseMax: 6500 },
+    sprite: ART_BASE + 'htlink.png',        weight: 0.7, minIntensity: 0.45, fuseMin: 4500, fuseMax: 6500 },
 ];
 
 export const ALL_IDS = VARIANTS.map((v) => v.id);

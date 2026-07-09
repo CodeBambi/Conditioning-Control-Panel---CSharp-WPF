@@ -1207,6 +1207,16 @@ img.rh-fx-spiralspin {
   0% { width: 10px; height: 10px; opacity: 1; }
   100% { width: calc(var(--r, 260px) * 2); height: calc(var(--r, 260px) * 2); opacity: 0; }
 }
+/* Trust Exercise: the sonar ping - a thin pale ring that reveals, never pops */
+.cf-ripple--sonar {
+  border: 2px solid rgba(235, 245, 255, 0.75);
+  box-shadow: 0 0 16px rgba(200, 225, 255, 0.5), inset 0 0 12px rgba(200, 225, 255, 0.3);
+}
+
+/* Midas Ricochet: gilded treats glow gold until the touch wears off */
+.cf-gilded .cf-bubble-body {
+  filter: saturate(1.5) brightness(1.15) drop-shadow(0 0 14px rgba(255, 215, 0, 0.95));
+}
 
 /* ---- HUD strip ---- */
 .cf-hud {
@@ -2149,18 +2159,53 @@ img.rh-fx-spiralspin {
 }
 .sf-pfx-front * { pointer-events: none !important; }
 
-/* the in-world video card: superbig, slides down in front of the POV, retracts up */
+/* the in-world video card: the mandatory tape RUSHES UP AT THE POV and sticks
+ * there - way closer than the tube's seated clips - caged in a red, electric,
+ * vibrating frame. Unskippable by design: pointer-events stay off (inherited
+ * from .sf-pfx-front) so it can't be clicked away; payloadFx holds it 15s
+ * unless the fall reaches a room. */
 .sf-pfx-videocard {
   position: fixed; left: 50%; top: 50%;
-  width: min(72vmin, 82vw); max-height: 78vh;
-  border-radius: 16px; overflow: hidden;
-  border: 2px solid rgba(255, 105, 180, 0.9);
-  box-shadow: 0 0 0 3px rgba(255, 20, 147, 0.35), 0 0 46px rgba(255, 20, 147, 0.6), 0 18px 60px rgba(0, 0, 0, 0.6);
-  transform: translate(-50%, -50%) translateY(-150vh);
-  transition: transform 0.62s cubic-bezier(0.2, 0.85, 0.25, 1);
+  width: min(84vmin, 92vw);
+  transform: translate(-50%, -50%) scale(0.04);
+  opacity: 0;
+  transition: transform 0.5s cubic-bezier(0.16, 0.9, 0.3, 1), opacity 0.3s ease;
+  will-change: transform, opacity;
 }
-.sf-pfx-videocard.in { transform: translate(-50%, -50%) translateY(0); }
-.sf-pfx-videocard video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.sf-pfx-videocard.in { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+/* the cage carries the shake + arcs so its animation never fights the card's
+ * zoom transition (both target transform) */
+.sf-pfx-vidframe {
+  position: relative; border-radius: 14px; overflow: hidden;
+  border: 3px solid rgba(255, 46, 46, 0.95);
+  box-shadow: 0 0 0 3px rgba(255, 0, 0, 0.35), 0 0 42px rgba(255, 30, 30, 0.75),
+    0 0 96px rgba(255, 0, 40, 0.4), 0 18px 60px rgba(0, 0, 0, 0.6);
+  animation: sf-pfx-vidshake 0.09s steps(2) infinite, sf-pfx-vidarc 0.9s steps(3) infinite;
+}
+.sf-pfx-vidframe::after {
+  /* electric rim: a crackling inner flicker riding the frame */
+  content: ''; position: absolute; inset: 0; border-radius: 11px;
+  box-shadow: inset 0 0 26px rgba(255, 60, 60, 0.55), inset 0 0 5px rgba(255, 230, 230, 0.9);
+  mix-blend-mode: screen;
+  animation: sf-pfx-vidflicker 0.14s steps(2) infinite;
+}
+.sf-pfx-videocard video { display: block; width: 100%; max-height: 82vh; object-fit: cover; }
+@keyframes sf-pfx-vidshake {
+  0%   { transform: translate(1px, -0.8px); }
+  25%  { transform: translate(-1.2px, 0.5px); }
+  50%  { transform: translate(0.7px, 1.1px); }
+  75%  { transform: translate(-0.6px, -1.1px); }
+  100% { transform: translate(1.1px, 0.6px); }
+}
+@keyframes sf-pfx-vidarc {
+  0%, 14%, 26%, 52%, 66%, 100% { border-color: rgba(255, 46, 46, 0.95); }
+  18% { border-color: rgba(255, 214, 214, 1); }
+  58% { border-color: rgba(255, 150, 150, 1); }
+}
+@keyframes sf-pfx-vidflicker {
+  0%, 100% { opacity: 0.5; }
+  45% { opacity: 1; }
+}
 
 /* sustained holds: one reused element per kind, opacity-eased in/out */
 .sf-pfx-layer { position: fixed; inset: 0; opacity: 0; transition: opacity 0.45s ease; will-change: opacity; }

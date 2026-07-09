@@ -66,8 +66,12 @@ public static class RevealService
         [RevealIds.StartPicker]        = () => ChaosMeta.State.BenchPurchases.Contains(BenchIds.StartMantra),
         [RevealIds.Diary]              = () => ChaosMeta.State.BenchPurchases.Contains(BenchIds.Diary),
         [RevealIds.StatsPanel]         = () => ChaosMeta.State.BenchPurchases.Contains(BenchIds.StatsPanel),
-        [RevealIds.VariantVideo]       = () => ChaosMeta.RankIndex >= ChaosRank.Entranced,
-        [RevealIds.VariantHtlink]      = () => ChaosMeta.RankIndex >= ChaosRank.Entranced,
+        // 2026-07: the giants are open from the first run (ClampVariants passes
+        // through) - depth-gating moved in-run: the web spawner only deals
+        // video/htlink in chambers III-IV (chaosRun.js). Ids stay so persisted
+        // pending/seen sets keep parsing.
+        [RevealIds.VariantVideo]       = () => true,
+        [RevealIds.VariantHtlink]      = () => true,
         [RevealIds.Capstones]          = () => ChaosMeta.RankIndex >= ChaosRank.Devoted,
         [RevealIds.ExtremeTierRow]     = () => ChaosMeta.RankIndex >= ChaosRank.Devoted,
     };

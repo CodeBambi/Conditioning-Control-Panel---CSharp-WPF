@@ -31,8 +31,11 @@ export const REVEAL_PREDS = {
   start_picker:         (v) => v.bench.has('start_mantra'),
   diary:                (v) => v.bench.has('diary'),
   stats_panel:          (v) => v.bench.has('stats_panel'),
-  variant_video:        (v) => v.rankIndex >= RANK.Entranced,
-  variant_htlink:       (v) => v.rankIndex >= RANK.Entranced,
+  // 2026-07: the giants are open from the first run (the ids stay so persisted
+  // pending/seen sets keep parsing) - depth-gating moved in-run: the spawner
+  // only deals video/htlink in chambers III-IV (chaosRun.js).
+  variant_video:        () => true,
+  variant_htlink:       () => true,
   capstones:            (v) => v.rankIndex >= RANK.Devoted,
   extreme_tier_buyable: (v) => v.rankIndex >= RANK.Devoted,
 };

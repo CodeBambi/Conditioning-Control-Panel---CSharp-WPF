@@ -89,7 +89,7 @@ const COMBO_BIG_THRESHOLDS = [25, 50, 100];
 const TICK = 0.25;                  // the C# RunTick period
 const PLAIN_BUBBLE_CHANCE = 0.30;   // share of ordinary spawns that are plain, effect-free soap bubbles (deep-run baseline)
 const PLAIN_BUBBLE_CHANCE_EARLY = 0.80; // at the top of the run: mostly plain bubbles, effects rare - ramps down to PLAIN_BUBBLE_CHANCE as intensity peaks
-const VIDEO_HEAVY_SEC = 62;         // in-world video card sits in front of the POV up to 60s + slack
+const VIDEO_HEAVY_SEC = 17;         // the stuck POV video holds 15s (payloadFx VIDEO_HOLD_SEC) + slack
 const CASCADE_BASE_SEC = 6;         // GifCascadePayload.DURATION_SEC (+5 ride-out)
 const RANK = { Curious: 0, Tempted: 1, Slipping: 2, Entranced: 3, Devoted: 4, Claimed: 5 };
 
@@ -265,7 +265,18 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       prismChance: 0, prismTreatOnly: false,
       camGirlFlee: 0, camGirlTipChance: 0,
       stormChaser: false,      // the sky locks to Static + detonations arc
-      teslaCoil: false,        // the wand's beam chains e-stim arcs onward
+      liveWire: false,         // Live Wire duo: the wand's ink runs current - trail pops arc onward
+      wandBounce: false,       // Hopscotch duo: rabbits ricochet off the wand's ink (each bounce = a smack)
+      superconductor: false,   // Superconductor duo: pops during a freeze chain-discharge across the field
+      autoplay: false,         // Autoplay duo: a DVD corner hit fires a full-screen shockwave + treat rain
+      trustExercise: false,    // Trust Exercise duo: pops sonar-ping the blindfold's dimmed bubbles
+      milkingMachine: false,   // Milking Machine duo: pump suction holds the ink fresh; pump end detonates it
+      chargedRipple: false,    // Skinny Dipping duo: ripple-wave pops arc lightning onward
+      thoughtOrbit: false,     // One-Track Mind duo: intrusive thoughts orbit the cursor
+      weatherGirl: false,      // Weather Girl duo: every new sky fires a themed entrance event
+      midas: false,            // Midas Ricochet duo: lucky pops gild nearby treats (gilded pops tip gold)
+      loadedDice: false,       // Loaded Dice duo: 3 doubled coin-flips in a row = gold-droplet jackpot
+      echoChamber: false,      // Echo Chamber duo: card pops sometimes bloom two more treats
       freefallActive: false, freefallCadence: false,  // Freefall sin: 2x fall (+25% spawns)
       spunRollRate: 0,         // Spun sin: deg/s of continuous camera roll
       privateShowPending: false, privateShowAt: 0, privateShowPayMult: 1.0,
@@ -314,7 +325,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const local = smoothstep((st.elapsedSec - (st.waveIndex - 1) * regionLen) / regionLen);
     return clamp(region.band.start + (region.band.peak - region.band.start) * local, 0, 1);
   };
-  const chanceFlip = () => st.chanceDoubleOdds > 0 ? (Math.random() < st.chanceDoubleOdds ? 2.0 : 0.5) : 1.0;
+  const chanceFlip = () => {
+    if (st.chanceDoubleOdds <= 0) return 1.0;
+    const win = Math.random() < st.chanceDoubleOdds;
+    noteDiceFlip(win);   // Loaded Dice: three doubles in a row = jackpot
+    return win ? 2.0 : 0.5;
+  };
   const pendulumFactor = () => (pendulumSlowActive && st.pendulumPayMult > 1) ? st.pendulumPayMult : 1.0;
   const goldScaled = (g) => st.relapseActive ? g * 2 : g;
 
@@ -351,9 +367,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   const weatherSeen = new Set(); // per-run: which skies already explained themselves
   let condensationIn = 0;    // W4 pickups: seconds until the next wall droplet
   let rabbitPickupWave = 0;  // W4 pickups: last loop the white rabbit rolled on
-  let wandRemainingSec = 0, wandMaxed = false, wandTeslaCd = 0; // W5: the Wand's beam
+  let wandDrawSec = 0, wandArcCd = 0; // W5: the Wand's draw window + Live Wire arc pacing
   let pumpRemainingSec = 0;  // W5: the Pump's suction window
   let showActive = false, showDetonationsAt = 0; // W5: Private Show stage tracking
+  let diceStreak = 0;        // Loaded Dice: consecutive doubled coin-flips
+  let sonarCd = 0;           // Trust Exercise: paces the sonar rings
+  let rippleArcCd = 0;       // Skinny Dipping: paces the ripple's discharges
+  let autoplayCdUntil = 0;   // Autoplay: corner-shot cooldown (performance.now ms)
+  let weatherGirlPending = null; // Weather Girl: sky id whose entrance fires on the next live tick
 
   // ---- bridge helpers ----
   // Drain the spawner's per-asset engagement delta (weighted attention + paddle
@@ -457,6 +478,21 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (st.camGirlTipChance <= 0 || Math.random() >= st.camGirlTipChance) return;
     bankGold(goldScaled(randInt(2, 4)), x, y);
   };
+  /** Loaded Dice duo: three doubled coin-flips in a row rain a droplet jackpot. */
+  function noteDiceFlip(win) {
+    if (!st.loadedDice) { diceStreak = 0; return; }
+    diceStreak = win ? diceStreak + 1 : 0;
+    if (diceStreak < 3) return;
+    diceStreak = 0;
+    const n = randInt(8, 12);
+    for (let i = 0; i < n; i++) {
+      markDiscovered('bubble:gold_droplet');
+      field.spawn(buildGoldDroplet(randInt(40, Math.max(80, window.innerWidth - 40)), randInt(10, 60)));
+    }
+    sfx('streak_milestone', 0.6);
+    hudUi.announce('🎰 JACKPOT', 'powerup', 2200, { subText: 'the dice came loaded' });
+    pulse('255,215,0', 0.55);
+  }
   const countRegenPop = () => {
     if (st.shieldRegenPops <= 0) return;
     if (st.shields >= st.startShields) { st.regenPops = 0; return; }
@@ -479,6 +515,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     field.phys.dimOpacity = st.blindfoldActive ? (st.blindfoldOpacity ?? 1.0) : 1.0;
     field.phys.residueZones = st.aftermath;
     field.phys.rabbitTrailSec = st.rabbitTrailSec;
+    field.phys.trailBounce = !!st.wandBounce;
+    field.phys.thoughtOrbit = !!st.thoughtOrbit;
   };
 
   // Sticky Fingers capstone: releasing a held card hurls it down the tube; the impact
@@ -606,6 +644,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     countRegenPop();
     metrics.noteBubblePopped();   // session telemetry: every treat/special popped
 
+    // Trust Exercise: every pop sonar-pings the dark - dimmed bubbles light back up.
+    if (st.trustExercise && st.blindfoldActive && sonarCd <= 0) {
+      sonarCd = 0.9;
+      field.sonarAt(x, y, 330);
+    }
+
     if (spec.kind === 'heart') {
       lessons.onSpecialPopped();
       st.shields += 1;
@@ -637,6 +681,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           field.spawn(buildGoldDroplet(x + randInt(-50, 50), y + randInt(-20, 20)));
         }
         hudUi.toast('⛏ gold digger — it spills');
+      }
+      // Midas Ricochet: the luck spreads - nearby treats gild, gilded pops tip gold.
+      if (st.midas) {
+        const gilded = field.gildNear(x, y, 340);
+        if (gilded > 0) {
+          hudUi.toast(`✨ midas — ${gilded} gilded`);
+          pulse('255,215,0', 0.30);
+        }
       }
       return;
     }
@@ -691,6 +743,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     pulse('255,200,235', 0.10);
     if (spec.payMult > 1) hudUi.toast('🪨 heavy drop! x3');
     rollCamGirlTip(x, y);
+    // Midas Ricochet: a gilded treat tips real gold on the spot.
+    if (spec.gilded) bankGold(goldScaled(randInt(2, 4)), x, y);
 
     // E-Stim: a charged click discharges into the neighbours (nothing in reach = the charge keeps).
     let estimArced = false;
@@ -707,7 +761,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     }
     // E-Stim passive: even uncharged, the toy sometimes arcs on its own when you pop.
     // Chance scales with its level (10/15/20%) and jumps to 30% once maxed. Only your
-    // own clicks roll it - automated pops (estim/chain/dvd/wand/...) would loop or spam.
+    // own clicks roll it - automated pops (estim/chain/dvd/ink/...) would loop or spam.
     if (!estimArced && src === 'pointer') {
       const est = toys.find((t) => t.id === 'e_stim');
       if (est) {
@@ -725,6 +779,41 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       field.dischargeAt(x, y, { maxTargets: 3, reach: 620 });
       sfx('estim_zap', 0.45);
       ctx.fx.strikeNow();
+    }
+    // Live Wire: the wand's ink runs current - a trail pop discharges onward.
+    if (st.liveWire && src === 'ink' && wandArcCd <= 0) {
+      wandArcCd = 0.45;
+      field.dischargeAt(x, y, { maxTargets: 3, reach: 400 });
+      sfx('estim_zap', 0.4);
+      ctx.fx.strikeNow();
+    }
+    // Superconductor: a frozen field has zero resistance - your pop chains a
+    // crawling bolt-cascade through everything the freeze is holding.
+    if (st.superconductor && st.freezeRemainingSec > 0 && src === 'pointer') {
+      const struck = field.dischargeAt(x, y, { maxTargets: 5, reach: 800, chain: true });
+      if (struck > 0) {
+        sfx('estim_zap', 0.6);
+        pulse('150,210,255', 0.45);
+        ctx.fx.strikeNow();
+        hudUi.announce('⚡ SUPERCONDUCTOR', 'powerup', 1800);
+      }
+    }
+    // Skinny Dipping: the ripple runs charged - a wave pop arcs lightning onward.
+    if (st.chargedRipple && src === 'ripple' && rippleArcCd <= 0) {
+      rippleArcCd = 0.4;
+      field.dischargeAt(x, y, { maxTargets: 2, reach: 420 });
+      sfx('estim_zap', 0.4);
+      ctx.fx.strikeNow();
+    }
+    // Echo Chamber: treats the held card takes sometimes bloom two more.
+    if (st.echoChamber && src === 'card' && spec.kind === 'treat' && Math.random() < 0.35) {
+      for (let i = 0; i < 2; i++) {
+        const echo = buildPlain(intensity(), { sizeScale: st.bubbleScale });
+        echo.spawnAt = { x: x + randInt(-70, 70), y: y + randInt(-50, 50) };
+        echo.paddleGraceMs = 900;   // let the bloom be seen before the card can take it
+        field.spawn(echo);
+      }
+      pulse('255,200,235', 0.15);
     }
     // Body Buzz: one pop in eight detonates an electric shockwave.
     if (st.estimShockwaveChance > 0 && Math.random() < st.estimShockwaveChance) {
@@ -757,6 +846,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     lessons.onDefuseCompleted(fuseSecLeft, viaChannel);   // last_breath / snap_field / blindfold
     happy.onDefuseCompleted(hpIo);                        // run 1: the whitelist opens
     countRegenPop();
+    // Trust Exercise: a snap pings the dark too.
+    if (st.trustExercise && st.blindfoldActive && sonarCd <= 0) {
+      sonarCd = 0.9;
+      field.sonarAt(x, y, 330);
+    }
     st.defused++;
     st.combo++;
     if (st.combo > st.bestCombo) st.bestCombo = st.combo;
@@ -1058,24 +1152,29 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
           : `⚡ charged — your next ${estimCharges} pops conduct`);
         break;
       case 'the_wand':
-        // Wave 2: 2.5s beam at the cursor - every treat it sweeps pops itself;
-        // the tube glares while it hums. Charge-based like the freeze.
+        // Reworked: 2s of DRAWING - the cursor lays a shimmering ink trail that
+        // lingers 4 more seconds and pops/defuses whatever touches it. The tube
+        // glares while the hand draws. Charge-based like the freeze.
         if (t.chargesLeft <= 0) { sfx('toy_denied', 0.4); return; }
         t.chargesLeft--;
-        wandRemainingSec = 2.5;
-        wandMaxed = t.maxed;
-        wandTeslaCd = 0;
+        wandDrawSec = 2.0;
+        field.wandInkStart(t.maxed);
         ctx.fx.holdFlash(true, 0.5);
         sfx('vibe_buzz', 0.6);
         t.cooldownLeft = 3;   // anti-doubletap between charges
         pulse('255,180,240', 0.25);
-        hudUi.toast('🪄 it announces');
+        hudUi.toast('🪄 draw — the line lingers');
         break;
       case 'the_pump':
         // Wave 2: seconds of hard suction (sweet kinds only), then whatever
         // arrived at the cursor bursts at once.
         pumpRemainingSec = Math.max(1, t.power);
         field.phys.pumpPull = 480;
+        // Milking Machine: while the suction runs, the wand's ink refuses to fade.
+        if (st.milkingMachine) {
+          field.phys.inkFreeze = true;
+          if (field.wandInkActive()) hudUi.toast('🫧 the ink holds its breath');
+        }
         sfx('vibe_buzz', 0.5);
         t.cooldownLeft = t.cooldownSec;
         hudUi.toast('🫧 the pump draws them in');
@@ -1169,7 +1268,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         : t.id === 'porn_dvd' ? field.dvdActive()
         : t.id === 'rabbit_caller' ? (rabbitCallPending > 0 || rabbitStormSec > 0)
         : t.id === 'e_stim' ? estimCharges > 0
-        : t.id === 'the_wand' ? wandRemainingSec > 0
+        : t.id === 'the_wand' ? (wandDrawSec > 0 || field.wandInkActive())
         : t.id === 'the_pump' ? pumpRemainingSec > 0
         : false;
       if (on !== t.effectActive) { t.effectActive = on; changed = true; }
@@ -1193,8 +1292,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     weatherSeen.clear();
     condensationIn = 6 + Math.random() * 6;   // first droplet lands early in the run
     rabbitPickupWave = 1;                     // no rabbit on the opening loop
-    wandRemainingSec = 0; pumpRemainingSec = 0; showActive = false;
-    if (field) field.phys.pumpPull = 0;
+    wandDrawSec = 0; wandArcCd = 0; pumpRemainingSec = 0; showActive = false;
+    diceStreak = 0; sonarCd = 0; rippleArcCd = 0; autoplayCdUntil = 0; weatherGirlPending = null;
+    if (field) { field.phys.pumpPull = 0; field.phys.inkFreeze = false; }
     if (hudUi) hudUi.setWeather(null);
     if (!ctx) return;
     if (ctx.spawner) {
@@ -1205,6 +1305,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     ctx.nav.setRollOffset(0);
     ctx.nav.setRollRate(0);
     ctx.nav.setSpeedCapMult(1);
+    ctx.fx.holdFlash(false);   // a run ended mid-draw must not leave the glare stuck on
     ctx.fx.setTint(null);
     ctx.fx.setDensity(null, { snap: true }); // hub cadence lands whole, behind the recap/hub transition
     ctx.fx.setRushOverride(0);
@@ -1245,6 +1346,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       ctx.director.setTimeFactor(baseTime());
     }
     updateWeatherHud();
+    // Weather Girl duo: every new sky makes an entrance. Deferred to the next
+    // live tick - a chamber boundary applies its sky while the field is still
+    // held/cleared by the draft, so the fanfare waits for the fall to resume.
+    if (st && st.weatherGirl && w) weatherGirlPending = w.id;
     if (w && announceIt) {
       hudUi.announce(`${w.glyph} ${w.name}`, 'depth', 2000);
       if (!weatherSeen.has(w.id)) {
@@ -1344,6 +1449,38 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       },
       onGone: () => { if (state === 'running') hudUi.toast('🐇 he got away. late, as always'); },
     });
+  }
+
+  /** Weather Girl duo: the new sky's themed entrance event (fired from tick,
+   * so the field is live and unheld when the fanfare lands). */
+  function weatherGirlEntrance(id) {
+    hudUi.toast('💍 weather girl — the sky shows off');
+    if (id === 'static') {
+      for (let i = 0; i < 5; i++) {
+        window.setTimeout(() => {
+          if (state !== 'running' || heldNow()) return;
+          const hit = field.stormStrike(false);
+          ffx.addBolt(randInt(0, window.innerWidth), 0,
+            hit ? hit.x : randInt(0, window.innerWidth),
+            hit ? hit.y : randInt(120, Math.max(200, window.innerHeight - 120)));
+          ctx.fx.strikeNow();
+          sfx('estim_zap', 0.35);
+        }, i * 200);
+      }
+    } else if (id === 'perfume') {
+      for (let i = 0; i < 2; i++) { markDiscovered('bubble:heart'); field.spawn(buildHeart()); }
+      field.playChime(0.25);
+      pulse('255,160,215', 0.35);
+    } else if (id === 'foolsgold') {
+      for (let i = 0; i < 2; i++) { markDiscovered('bubble:golden'); field.spawn(buildGolden()); }
+      field.playChime(0.30);
+      pulse('255,215,0', 0.35);
+    } else if (id === 'stillness') {
+      activateSlowMo(2.5);
+      pulse('190,220,255', 0.30);
+    } else if (id === 'overstim') {
+      spawnWelcomeShower();
+    }
   }
 
   /** Mood Ring L3: the HUD chip rerolls the current sky, once per descent. */
@@ -1485,6 +1622,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   function onJunctionLinger(on) {
     if (!ctx || !ctx.director) return;
     if (on) {
+      // reaching a room ends the heavies early: the stuck POV video recedes and
+      // any running gif rain stops, so neither plays over the door read
+      try { if (payloadFx && payloadFx.cancelHeavy && payloadFx.cancelHeavy()) heavyUntil = 0; } catch (e) { /* ignore */ }
       ctx.director.setTimeFactor(0.16);   // near-hover at the Y so both mouths can be read
       try { if (hudUi) hudUi.toast('click a card to choose ...'); } catch (e) { /* ignore */ }
     } else if (state === 'running' || state === 'drafting') {
@@ -1684,6 +1824,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     st.heat = Math.max(0, st.heat - 0.0015);
     ambientTick();
     maybeScheduleJunction();
+
+    // Weather Girl: the sky that arrived while the field was held makes its entrance now.
+    if (weatherGirlPending) {
+      const skyId = weatherGirlPending;
+      weatherGirlPending = null;
+      weatherGirlEntrance(skyId);
+    }
 
     // W4 pickups: condensation beads on the wall (rank Tempted+); once per
     // loop the white rabbit may dash by (Rabbit's Foot raises his odds).
@@ -2297,6 +2444,19 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // Be gentle with the tape: no video bubble while a heavy effect runs, and
       // none when the loop/run is too close to its end for the fuse + 15s slice.
       let enabled = cfg.enabledVariants;
+      // The giants live in the deep (replaces the old Entranced rank clamp):
+      // chambers I-II never deal video/gif rain, chamber III deals them at half
+      // presence, chamber IV at the full (still rare) pool weight.
+      if (cfg.regionMode) {
+        const giantShare = st.waveIndex >= 4 ? 1 : st.waveIndex === 3 ? 0.5 : 0;
+        if (giantShare < 1) {
+          for (const id of ['video', 'htlink']) {
+            if ((!enabled || enabled.includes(id)) && (giantShare === 0 || Math.random() >= giantShare)) {
+              enabled = (enabled || ALL_IDS).filter((x) => x !== id);
+            }
+          }
+        }
+      }
       const waveLen = st.runDurationSec / st.waveCount;
       const waveLeft = waveLen - (st.elapsedSec % waveLen);
       const runLeft = st.runDurationSec - st.elapsedSec;
@@ -2712,6 +2872,18 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         onDefused, onDetonated, onTreatExpired, onChannelBroken,
         onDarterCaught, onTeaseTouched, onTeaseDenied, onBrittleShattered, onBoundEnraged,
         onRabbitSmacked: (first) => lessons.onRabbitSmacked(first),
+        // Autoplay duo: the logo found a corner - the whole screen pays.
+        onDvdCorner: (x, y) => {
+          if (!st || state !== 'running' || heldNow() || !st.autoplay) return;
+          if (performance.now() < autoplayCdUntil) return;
+          autoplayCdUntil = performance.now() + 5000;
+          sfx('streak_milestone', 0.6);
+          hudUi.announce('📀 CORNER SHOT', 'powerup', 2200, { subText: 'the whole screen pays' });
+          pulse('255,215,0', 0.5);
+          ctx.fx.pulseFlash(0.7);
+          field.castRipple(x, y, Math.hypot(window.innerWidth, window.innerHeight), 1100);
+          spawnWelcomeShower();
+        },
       });
       hudUi = createChaosHud(ctx.hud, {
       onToyUse: (id) => { const t = toys.find((x) => x.id === id); if (t) useToy(t); },
@@ -2821,30 +2993,35 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         }
         // ---- Wave 2 toys/accessory on the frame clock ----
         if (state === 'running') {
-          // the Wand: sweep the beam every frame; Tesla Coil arcs off its pops
-          if (wandRemainingSec > 0) {
-            wandRemainingSec -= dt;
-            wandTeslaCd -= dt;
+          // the Wand: while the draw window is open the cursor lays ink; the
+          // trail itself lives (ages, pops, bounces) inside chaosField.
+          if (wandDrawSec > 0) {
+            wandDrawSec -= dt;
             const c = field.cursor();
-            ffx.vibePoint(c.x, c.y);
-            const took = field.wandSweep(c.x, c.y, 140, wandMaxed);
-            if (took > 0 && st.teslaCoil && wandTeslaCd <= 0) {
-              wandTeslaCd = 0.45;
-              field.dischargeAt(c.x, c.y, { maxTargets: 3, reach: 400 });
-              sfx('estim_zap', 0.4);
-              ctx.fx.strikeNow();
-            }
-            if (wandRemainingSec <= 0) ctx.fx.holdFlash(false);
+            field.wandInkAt(c.x, c.y);
+            if (wandDrawSec <= 0) ctx.fx.holdFlash(false);
           }
+          if (wandArcCd > 0) wandArcCd -= dt;   // Live Wire: paces the trail's discharges
+          if (rippleArcCd > 0) rippleArcCd -= dt;   // Skinny Dipping: paces the wave's discharges
+          if (sonarCd > 0) sonarCd -= dt;           // Trust Exercise: paces the sonar rings
           // the Pump: when the suction ends, the arrivals burst at the cursor
           if (pumpRemainingSec > 0) {
             pumpRemainingSec -= dt;
             if (pumpRemainingSec <= 0) {
               field.phys.pumpPull = 0;
+              field.phys.inkFreeze = false;
               const c = field.cursor();
               const got = field.wandSweep(c.x, c.y, 190, true);
               sfx('golden_pop', 0.5);
               if (got > 0) hudUi.toast(`🫧 ${got} arrived at once`);
+              // Milking Machine: the pump lets go and the whole drawing detonates.
+              if (st.milkingMachine && field.wandInkActive()) {
+                const inkGot = field.inkDetonate();
+                sfx('estim_zap', 0.55);
+                ctx.fx.pulseFlash(0.6);
+                pulse('255,180,240', 0.40);
+                hudUi.announce('🪄 MILKED', 'powerup', 1800, { subText: inkGot > 0 ? `the drawing takes ${inkGot}` : 'the drawing lets go' });
+              }
             }
           }
           // The paddle: a grabbed 3D card sweeps the field - pops treats, snap-

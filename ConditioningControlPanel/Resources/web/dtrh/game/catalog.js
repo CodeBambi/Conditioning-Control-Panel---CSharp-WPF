@@ -126,11 +126,11 @@ export const LIFETIME_BOONS = [
     capstone: 'charged pops chain-react — the current leaps on through every bubble close enough, and onward.',
     activeUse: true, cooldownSec: 30 },
   { id: 'the_wand', cat: 'skill', rankFloor: RANK.Slipping, name: 'The Wand', glyph: '🪄', webOnly: true,
-    desc: 'press: for 2.5s a humming beam rides your cursor and every treat it sweeps pops itself — the whole tunnel glares while it\'s on. 2/3/4 charges per descent by level.',
-    flavor: 'the wand doesn\'t ask. it announces.',
+    desc: 'press: for 2s the wand draws wherever your cursor goes — a shimmering trail that lingers 4 more seconds. every treat that touches it pops itself, and live fuses it grazes snap clean. 2/3/4 charges per descent by level.',
+    flavor: 'draw the line. watch them cross it.',
     unlockCost: 600, upgradeCosts: [900, 1400], levelValues: [2, 3, 4],
     value: (v) => `${v.toFixed(0)} charges`,
-    capstone: 'the beam takes the sweet specials too — lucky bubbles, hearts, droplets, prisms.',
+    capstone: 'the trail takes the sweet specials too — lucky bubbles, hearts, droplets, prisms.',
     activeUse: true, cooldownSec: 0 },
   { id: 'the_pump', cat: 'skill', rankFloor: RANK.Slipping, name: 'The Pump', glyph: '🫙', webOnly: true,
     desc: 'press: for 3/4/5s by level a hard suction drags every treat toward your cursor (live ones never move), then whatever arrived bursts at once. 45s cooldown.',
@@ -378,9 +378,9 @@ export const DIARY_CODEX = [
   { codex: 'bubble:bambifreeze', name: 'Freeze', glyph: '●', tint: '138,230,255',
     desc: 'A good pickup. Catch it to freeze the whole field. Bubbles hold in place and trances pause for a few seconds.' },
   { codex: 'bubble:video', name: 'Video', glyph: '●', tint: '224,64,77',
-    desc: 'Live and rare. A long trance, but it opens a mandatory video if it goes off.' },
+    desc: 'Live and VERY rare — it only stalks chambers III and IV. A long trance, but let it go off and a video sticks right in your face for 15 seconds. No skipping.' },
   { codex: 'bubble:htlink', name: 'Gif Rain', glyph: '●', tint: '255,200,61',
-    desc: 'Live and rare. Snap it or it triggers a rain of gifs sliding down the screen.' },
+    desc: 'Live and rare, a creature of the deep chambers (III–IV). Snap it or it triggers a rain of gifs sliding down the screen.' },
   { codex: 'bubble:darter', name: 'White Rabbit', glyph: '✧', tint: '255,77,196',
     desc: 'A white rabbit. Fast, bouncing, always late. Catch it for points and a micro flash. Harmless if it gets away.' },
   { codex: 'bubble:golden', name: 'Lucky Bubble', glyph: '🍀', tint: '255,215,0',
@@ -422,8 +422,10 @@ export const POOL_VARIANTS = [
   { id: 'spiral', name: 'Spiral' },
   { id: 'braindrain', name: 'BrainDrain' },
   { id: 'bambifreeze', name: 'Freeze' },
-  { id: 'video', name: 'Video', revealGate: 'variant_video' },
-  { id: 'htlink', name: 'Gif Rain', revealGate: 'variant_htlink' },
+  // the giants lost their Entranced reveal gate (2026-07): open from the first
+  // run, but the spawner only deals them in chambers III-IV (chaosRun.js).
+  { id: 'video', name: 'Video' },
+  { id: 'htlink', name: 'Gif Rain' },
 ];
 
 export const POOL_PRESETS = [

@@ -12,11 +12,6 @@ import { S, updateSetting, resetOptions, allWords, activeWords, setWordOn, addCu
 import { POOL_VARIANTS, POOL_PRESETS } from '../game/catalog.js';
 import { peekAudioState } from './audioBus.js';
 
-// Deep bubble-pool variants (video takeovers, gif rain) stay locked below this
-// meta-rank - mirrors the reveal predicates (reveals.js: variant_* >= Entranced).
-// setProgress() feeds the live rank; the C# FromSettings clamp is the backstop.
-const VARIANT_RANK_FLOOR = 3;
-
 const SLIDERS = [
   { key: 'bubbleDensity', label: 'bubbles', min: 0, max: 1.25, step: 0.05, fmt: (v) => v <= 0 ? 'off' : `${Math.round(v * 100)}%` },
   { key: 'bubbleSize', label: 'bubble size', min: 0.5, max: 2.5, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
@@ -233,8 +228,9 @@ export function createPanel(hud) {
     descWrap.appendChild(row);
   }
 
-  // bubble pool: variant chips (toggle OFF into runVariantsOff) + presets
-  let rankIndex = 0;   // fed by setProgress() from the meta snapshot
+  // bubble pool: variant chips (toggle OFF into runVariantsOff) + presets.
+  // No rank locks here anymore (2026-07): the giants are open from the first
+  // run; the spawner chamber-gates them (chambers III-IV) in-run instead.
   const poolHead = document.createElement('div');
   poolHead.className = 'sf-row-label sf-words-head';
   const poolName = document.createElement('span');
@@ -260,14 +256,11 @@ export function createPanel(hud) {
     poolRow.innerHTML = '';
     const off = new Set(S.runVariantsOff);
     for (const pv of POOL_VARIANTS) {
-      const rankLocked = pv.revealGate && rankIndex < VARIANT_RANK_FLOOR;
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'sf-chip' + (!off.has(pv.id) && !rankLocked ? ' is-on' : '') + (rankLocked ? ' is-locked' : '');
-      chip.textContent = rankLocked ? '🔒 ???' : pv.name;
-      if (rankLocked) chip.title = `a deeper water. it opens at ${RANK_NAMES[VARIANT_RANK_FLOOR]}.`;
+      chip.className = 'sf-chip' + (!off.has(pv.id) ? ' is-on' : '');
+      chip.textContent = pv.name;
       chip.addEventListener('click', () => {
-        if (rankLocked) return;
         const next = new Set(S.runVariantsOff);
         if (next.has(pv.id)) next.delete(pv.id); else next.add(pv.id);
         setVariantsOff([...next]);
@@ -297,7 +290,7 @@ export function createPanel(hud) {
     chip.textContent = '🎲 randomize';
     chip.addEventListener('click', () => {
       const roll = POOL_VARIANTS
-        .filter((pv) => !(pv.revealGate && rankIndex < VARIANT_RANK_FLOOR) && Math.random() < 0.6)
+        .filter(() => Math.random() < 0.6)
         .map((v) => v.id);
       if (!roll.length) roll.push('flash');
       const on = new Set(roll);
@@ -511,14 +504,9 @@ export function createPanel(hud) {
       lockRefreshers.forEach((fn) => fn());
       featureRefreshers.forEach((fn) => fn());
     },
-    // Live meta-rank (from the snapshot): unlocks the deep bubble-pool variants
-    // at Entranced. Cheap; safe to call on every snapshot.
-    setProgress({ rankIndex: r } = {}) {
-      const next = r | 0;
-      if (next === rankIndex) return;
-      rankIndex = next;
-      renderPool();
-    },
+    // Kept as a no-op seam: the deep-variant rank lock is gone (the giants are
+    // chamber-gated in-run now), but scene still calls this on every snapshot.
+    setProgress() {},
     dispose() { stopDiag(); panel.remove(); },
   };
 }

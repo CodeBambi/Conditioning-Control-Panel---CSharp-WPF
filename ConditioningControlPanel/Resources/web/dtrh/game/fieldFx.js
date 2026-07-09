@@ -69,6 +69,7 @@ const PAL_DEFAULTS = {
   bolt: [66, 220, 230], boltCore: [191, 236, 255],
   vibe: [255, 176, 58], vibeCore: [255, 233, 160],
   residue: [122, 224, 255], residueCore: [190, 245, 255],
+  ink: [255, 130, 225], inkCore: [255, 226, 250],
   sparkleHue: 315,
 };
 
@@ -108,6 +109,8 @@ export function createFieldFx(hud) {
   const trail = [];      // vibe pointer trail: { x, y, life }
   const sparkles = [];   // rabbit tail-plug sparkles: { x, y, life, hue }
   let tethers = [];      // per-frame: [{ ax, ay, bx, by, fraying }]
+  let inkPts = [];       // the Wand's ink: chaosField's live trail, re-fed by reference
+  let inkClock = 0;      // drives the travelling shimmer along the ink
   let vibeOn = false;
 
   // ---- jagged bolt builder (perpendicular midpoint displacement, WPF BuildBolt) ----
@@ -153,6 +156,10 @@ export function createFieldFx(hud) {
   /** The Bound's threads, re-fed every frame by chaosField. */
   function setTethers(list) { tethers = list; }
 
+  /** The Wand's ink, re-fed every frame by chaosField. Points carry lifeMs
+   * (chaosField owns the aging, so a freeze holds the drawing mid-fade). */
+  function setInk(list) { inkPts = list || []; }
+
   function setVibe(on) { vibeOn = !!on; if (!on) trail.length = 0; }
   function vibePoint(x, y) { if (vibeOn) trail.push({ x, y, life: 0.45 }); }
 
@@ -165,8 +172,9 @@ export function createFieldFx(hud) {
     return false;
   }
 
-  /** Age + cull the timed buffers. Tethers are re-fed each frame, not aged. */
+  /** Age + cull the timed buffers. Tethers + ink are re-fed each frame, not aged. */
   function step(dt) {
+    inkClock += dt;
     for (let i = residues.length - 1; i >= 0; i--) { if ((residues[i].life -= dt) <= 0) residues.splice(i, 1); }
     for (let i = bolts.length - 1; i >= 0; i--) {
       const b = bolts[i];
@@ -192,7 +200,7 @@ export function createFieldFx(hud) {
   }
 
   function anyActive() {
-    return bolts.length || residues.length || trail.length || sparkles.length || tethers.length;
+    return bolts.length || residues.length || trail.length || sparkles.length || tethers.length || inkPts.length;
   }
 
   // ---- additive soft-sprite blit (the WPF DrawDot): tinted bloom, `lighter` ----
@@ -293,6 +301,23 @@ export function createFieldFx(hud) {
       dot(p.x, p.y, rad * 0.5, 0.7 * a, wr, wg, wb);         // gold core
     }
 
+    // --- The Wand's ink: a hand-drawn shimmering ribbon that outlives the hand.
+    // lifeMs drives the slow fade over the final 1.4s; a travelling sine along
+    // the point index makes the light crawl down the line. ---
+    const [ir, ig, ib2] = PAL.ink, [kr, kg, kb] = PAL.inkCore;
+    for (let i = 0; i < inkPts.length; i++) {
+      const p = inkPts[i];
+      const a = Math.min(1, (p.lifeMs || 0) / 1400);
+      if (a <= 0) continue;
+      const sh = 0.72 + 0.28 * Math.sin(inkClock * 7 - i * 0.9);
+      dot(p.x, p.y, 26, 0.10 * a, ir, ig, ib2);            // wide bloom
+      dot(p.x, p.y, 13, 0.30 * a * sh, ir, ig, ib2);       // body
+      dot(p.x, p.y, 6.5, 0.55 * a * sh, kr, kg, kb);       // hot core
+      if (Math.random() < 0.03) {                          // stray glints
+        dot(p.x + (Math.random() - 0.5) * 20, p.y + (Math.random() - 0.5) * 20, 3, 0.7 * a, 255, 255, 255);
+      }
+    }
+
     // --- Rabbit sparkles (Tail-Plug): pink soft sprite + gold core. ---
     for (const s of sparkles) {
       const a = s.life / 0.5;
@@ -307,10 +332,10 @@ export function createFieldFx(hud) {
   }
 
   return {
-    addBolt, addResidue, addSparkle, setTethers, setVibe, vibePoint, inResidue, draw,
+    addBolt, addResidue, addSparkle, setTethers, setInk, setVibe, vibePoint, inResidue, draw,
     setRegionPalette,
     clear() {
-      bolts.length = 0; residues.length = 0; trail.length = 0; sparkles.length = 0; tethers = [];
+      bolts.length = 0; residues.length = 0; trail.length = 0; sparkles.length = 0; tethers = []; inkPts = [];
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       canvas._dirty = false;
