@@ -120,23 +120,34 @@ public static class SpeechMatching
         var a = target.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var b = heard.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (a.Length == 0) return b.Length == 0 ? 1 : 0;
+        // Costs are scaled x2 so an "unk" substitution can cost half a word (see
+        // WordEditDistance). Denominator scales to match, keeping the ratio identical
+        // to the old integer distance for phrases with no unknown words.
         int dist = WordEditDistance(a, b);
-        double wordSim = 1.0 - (double)dist / Math.Max(a.Length, b.Length);
+        double wordSim = 1.0 - (double)dist / (2.0 * Math.Max(a.Length, b.Length));
         return Math.Clamp(wordSim, 0, 1);
     }
 
     private static int WordEditDistance(string[] a, string[] b)
     {
+        // All costs scaled x2: match=0, real substitution/indel=2. A heard "unk" token
+        // (Vosk's out-of-vocabulary marker; Normalize strips the brackets from "[unk]")
+        // substitutes for any target word at HALF cost (1). This forgives kink/OOV words
+        // like "cockslut" or "gooning" that the small model can't recognize, without
+        // letting a fully mumbled all-"unk" transcript pass the match threshold (#505).
         var prev = new int[b.Length + 1];
         var cur = new int[b.Length + 1];
-        for (int j = 0; j <= b.Length; j++) prev[j] = j;
+        for (int j = 0; j <= b.Length; j++) prev[j] = j * 2;
         for (int i = 1; i <= a.Length; i++)
         {
-            cur[0] = i;
+            cur[0] = i * 2;
             for (int j = 1; j <= b.Length; j++)
             {
-                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
-                cur[j] = Math.Min(Math.Min(prev[j] + 1, cur[j - 1] + 1), prev[j - 1] + cost);
+                int cost;
+                if (a[i - 1] == b[j - 1]) cost = 0;
+                else if (b[j - 1] == "unk") cost = 1;   // out-of-vocab word heard: half penalty
+                else cost = 2;
+                cur[j] = Math.Min(Math.Min(prev[j] + 2, cur[j - 1] + 2), prev[j - 1] + cost);
             }
             (prev, cur) = (cur, prev);
         }

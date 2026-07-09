@@ -199,14 +199,19 @@ namespace ConditioningControlPanel.Core.Services.Quiz
             char answerLetter = (char)('A' + answerIndex);
 
             string userMsg;
-            if (_currentCategory == QuizCategory.Sissy)
+            // Custom categories (EnumCategory == null) must never fall into the hardcoded
+            // Sissy/Bambi archetype branches — StartQuizAsync collapses their enum to Sissy
+            // for internal bookkeeping, so gate the built-in branches on the definition being
+            // an actual built-in. Otherwise a custom category emits "Sissy Princess" etc. (#501).
+            bool isCustomCategory = _currentCategoryDefinition != null && _currentCategoryDefinition.EnumCategory == null;
+            if (!isCustomCategory && _currentCategory == QuizCategory.Sissy)
             {
                 userMsg = $"I chose {answerLetter} ({points} pts). Final score: {_totalScore}/{MaxPossibleScore}. " +
                     "Quiz over. Based on my score and specific answers, generate my personality profile. " +
                     "Assign one of these archetypes: Curious Newcomer (0-25%), Closet Sissy (26-50%), Sissy in Training (51-70%), Sissy Princess (71-85%), Full Sissy (86-100%). " +
                     "Start with \"You are a [ARCHETYPE].\" then write 2-3 sentences about my specific personality based on which answers I gravitated toward. Be validating, playful, and make me feel seen. End with a teasing one-liner.";
             }
-            else if (_currentCategory == QuizCategory.Bambi)
+            else if (!isCustomCategory && _currentCategory == QuizCategory.Bambi)
             {
                 userMsg = $"I chose {answerLetter} ({points} pts). Final score: {_totalScore}/{MaxPossibleScore}. " +
                     "Quiz over. Based on my score and specific answers, generate my personality profile. " +
