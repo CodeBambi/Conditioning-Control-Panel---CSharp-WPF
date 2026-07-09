@@ -141,7 +141,7 @@ export const LIFETIME_BOONS = [
 
   // ---- Accessories (passives that shape the run) ----
   { id: 'sticky_fingers', cat: 'accessory', rankFloor: RANK.Tempted, name: 'Sticky Fingers', glyph: '🍯', webOnly: true,
-    desc: 'grab a picture off the tunnel wall (click and hold it) and it becomes a paddle: treats it sweeps over pop at x1.2/x1.4 pay by level; at level 3 they also leak gold droplets.',
+    desc: 'you can always grab a picture off the wall (click and hold) to wield it as a paddle - it pops treats, snap-defuses lives and flings rabbits. Sticky Fingers pays a x1.2/x1.4 premium on the treats it sweeps by level; at level 3 they also leak gold droplets.',
     flavor: 'what you catch, you keep. what you keep, you use.',
     unlockCost: 250, upgradeCosts: [350, 550], levelValues: [1.2, 1.4, 1.4],
     value: (v) => `x${v.toFixed(1)} card pops`,

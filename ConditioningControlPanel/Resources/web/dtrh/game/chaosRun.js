@@ -287,6 +287,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let rabbitStormSec = 0, rabbitStormAccum = 0;
   let thoughtAccum = 0;
   let heartbeatCd = 0;
+  const STATS_FLUSH_SEC = 15;   // how often the per-asset engagement delta is posted home
+  let statsFlushCd = STATS_FLUSH_SEC;
   let dvdWasActive = false;
   const discovered = new Set();
   let toys = [];
@@ -308,6 +310,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let showActive = false, showDetonationsAt = 0; // W5: Private Show stage tracking
 
   // ---- bridge helpers ----
+  // Drain the spawner's per-asset engagement delta (weighted attention + paddle
+  // interactions) and post it home, where C# sums it into a cumulative store so
+  // future features can bias toward the images the user actually engages with.
+  function flushAssetStats() {
+    if (!ctx.spawner || !ctx.spawner.drainAssetStats) return;
+    const stats = ctx.spawner.drainAssetStats();
+    if (stats && stats.length) bridge.send({ type: 'asset-stats', stats });
+  }
   const sfx = (name, scale) => bridge.send({ type: 'sfx', name, scale });
   const bark = (event, data) => bridge.send({ type: 'bark', event, ...(data || {}) });
   // The boon draft plays IN the tube (engine/boonPick.js): the fall parks, themed
@@ -2087,6 +2097,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     vibeRemainingSec = 0; afterglowApplied = false;
     estimCharges = 0; rabbitCallPending = 0; rabbitStormSec = 0; thoughtAccum = 0;
     heartbeatCd = 0;
+    statsFlushCd = STATS_FLUSH_SEC;
     scriptedDraftActive = false;
     finalLandingActive = false;
     clearAmbient();
@@ -2177,6 +2188,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     sfx('surface', 0.5);
     const channelSec = field.channelSeconds();
     if (channelSec > 0.5) bridge.send({ type: 'meta-command', op: 'add-channel-seconds', seconds: channelSec });
+    flushAssetStats();   // ship the last engagement delta before the recap
+
     bridge.send({
       type: 'run-ended',
       score: st.score,
@@ -2380,12 +2393,20 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
               if (got > 0) hudUi.toast(`🫧 ${got} arrived at once`);
             }
           }
-          // Sticky Fingers: the held 3D card pops the treats it sweeps over
-          if (st.stickyFingersLevel > 0 && ctx.spawner && ctx.spawner.isGrabbing()) {
+          // The paddle: a grabbed 3D card sweeps the field - pops treats, snap-
+          // defuses lives (rate-capped), flings rabbits. Core mechanic on any
+          // run; Sticky Fingers just pays the pop bonus (see onBenignPopped).
+          if (ctx.spawner && ctx.spawner.isGrabbing()) {
             const rect = ctx.spawner.heldCardScreenRect();
-            if (rect) field.sweepRect(rect);
+            if (rect) {
+              const hit = field.paddleSweep(rect);
+              if (hit.popped || hit.defused || hit.flung) ctx.spawner.notePaddleInteraction(hit);
+            }
           }
         }
+        // periodically post the per-asset engagement delta home (cheap; skips when empty)
+        statsFlushCd -= dt;
+        if (statsFlushCd <= 0) { statsFlushCd = STATS_FLUSH_SEC; flushAssetStats(); }
       }
       field.update(dt);
     },

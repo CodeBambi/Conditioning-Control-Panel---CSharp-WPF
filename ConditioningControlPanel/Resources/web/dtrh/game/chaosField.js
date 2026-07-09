@@ -43,6 +43,11 @@ const SIDE_SEC_MIN = 9, SIDE_SEC_MAX = 14;     // side drifters: width-cross tim
 const ROAM_SPEED_MIN = 90, ROAM_SPEED_MAX = 150; // px/s bouncing drift
 const SWAY_AMP_MIN = 18, SWAY_AMP_MAX = 42;    // px horizontal wobble
 
+// ---- the paddle (a held 3D card sweeping the field) ----
+const PADDLE_IMMUNE_MS = 650;         // per-bubble grace after the card touches it
+const PADDLE_DEFUSE_WINDOW_MS = 1000; // sliding window for the defuse rate cap
+const PADDLE_DEFUSE_CAP = 3;          // max free defuses per window (no cluster-wipe)
+
 const rand = (a, b) => a + Math.random() * (b - a);
 const pickOf = (arr) => arr[(Math.random() * arr.length) | 0];
 
@@ -76,6 +81,8 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
   let held = false;      // pause/draft/video-cover: clock + motion + input all stop
   let inputLocked = false;
   let channelSeconds = 0;   // lifetime "time holding on" (banked to meta at run end)
+  let fieldClockMs = 0;     // monotonic real-time clock for paddle immunity / rate cap
+  const paddleDefuses = []; // fieldClockMs timestamps of recent paddle defuses (rate cap)
 
   // ---- accessory physics knobs (set once by the run brain at attach) ----
   const phys = {
@@ -740,6 +747,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
   // ---- per-frame integration ---------------------------------------------------------
   function update(dt) {
     if (held) { fx.draw(dt); return; }
+    fieldClockMs += dt * 1000;   // real time: paddle immunity expires even while frozen
     const ts = dt * timeScale;
     const w = W(), h = H();
     const tethers = [];
@@ -1077,19 +1085,48 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       }
       return n;
     },
-    /** Wave 2 (Sticky Fingers): pop the treats whose center the held 3D card's
-     * screen rect covers. Returns pops (src 'card' pays the accessory bonus). */
-    sweepRect(rect) {
-      if (!rect) return 0;
-      let n = 0;
+    /** The paddle: the held 3D card sweeps the field. Every live bubble whose
+     * center the card's screen rect covers is acted on by kind -
+     *   benign treats  -> pop (src 'card' pays the Sticky Fingers bonus)
+     *   live (fused)    -> free SNAP defuse, but rate-capped so you can't wipe a cluster
+     *   rabbits/darters -> flung away from the card center (reuses the Spanker)
+     * Each touched bubble gets a short immunity so parking the card doesn't
+     * re-trigger it. Returns { popped, defused, flung } for scoring + per-asset
+     * attribution. */
+    paddleSweep(rect) {
+      const tally = { popped: 0, defused: 0, flung: 0 };
+      if (!rect) return tally;
+      const cx = (rect.left + rect.right) / 2, cy = (rect.top + rect.bottom) / 2;
+      // prune the sliding defuse-rate window
+      while (paddleDefuses.length && paddleDefuses[0] <= fieldClockMs - PADDLE_DEFUSE_WINDOW_MS) paddleDefuses.shift();
       for (const b of [...live]) {
-        if (b.state !== 'live' || TOY_IMMUNE.has(b.spec.kind) || isShielded(b)) continue;
-        if (b.spec.kind !== 'treat') continue;
+        if (b.state !== 'live') continue;
         if (b.x < rect.left || b.x > rect.right || b.y < rect.top || b.y > rect.bottom) continue;
+        if (b.paddleImmuneUntil && fieldClockMs < b.paddleImmuneUntil) continue;
+        const kind = b.spec.kind;
+        // rabbits: fling them away from the card center (not the hand-only rule below)
+        if (kind === 'darter') {
+          if (b.telegraphLeft > 0 || b.sweeper) continue; // not catchable yet / already mowing
+          smack(b, cx, cy);
+          b.paddleImmuneUntil = fieldClockMs + PADDLE_IMMUNE_MS;
+          tally.flung++;
+          continue;
+        }
+        if (TOY_IMMUNE.has(kind) || isShielded(b)) continue; // tease/brittle/freeze: hand-only
+        if (kind === 'live') {
+          if (paddleDefuses.length >= PADDLE_DEFUSE_CAP) continue; // rate cap: no cluster-wipe
+          defuse(b, false);
+          paddleDefuses.push(fieldClockMs);
+          b.paddleImmuneUntil = fieldClockMs + PADDLE_IMMUNE_MS;
+          tally.defused++;
+          continue;
+        }
+        // benign rewards (treat / golden / heart / droplet / prism ...)
         popBenign(b, b.x, b.y, 'card');
-        n++;
+        b.paddleImmuneUntil = fieldClockMs + PADDLE_IMMUNE_MS;
+        tally.popped++;
       }
-      return n;
+      return tally;
     },
     /** Wave 2 (Static weather): a stray bolt pops a random treat FOR the
      * player - or, the sour case, zaps a random live fuse down to half.

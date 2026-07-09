@@ -229,6 +229,11 @@ internal static class DtrhHostService
             case "heartbeat":
                 _lastHeartbeatUtc = DateTime.UtcNow;
                 break;
+            case "asset-stats":
+                // per-asset engagement delta (weighted attention + paddle interactions);
+                // summed into dtrh_asset_stats.json for future media-selection features
+                try { DtrhAssetStatsStore.Merge(o); } catch { }
+                break;
             case "boot-error":
                 OnBootError((string?)o["msg"]);
                 break;

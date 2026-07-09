@@ -87,6 +87,7 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
   const _blendPos = new THREE.Vector3(), _blendQuat = new THREE.Quaternion(), _tgtQuat = new THREE.Quaternion();
   function startBlend(dur) { _blendPos.copy(camera.position); _blendQuat.copy(camera.quaternion); blendT = 0; blendDur = dur; }
   let dragging = false, lastX = 0, lastY = 0, dragType = 'mouse';
+  let lookSuppressed = false; // held while a card paddle is grabbed: the mouse steers the card, not the look
   let swipeDY = 0, swipeSkipped = false; // per-touch-gesture: skip a spotlight on a decisive vertical swipe
 
   const baseFov = camera.fov;
@@ -148,6 +149,9 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     if (!dragging || paused) return;
     const dx = e.clientX - lastX, dy = e.clientY - lastY;
     lastX = e.clientX; lastY = e.clientY;
+    // holding a card paddle: the mouse pushes the card through the space, so the
+    // drag must NOT also yaw the camera (the spawner reads the raw cursor itself)
+    if (lookSuppressed) { firstInteract(); return; }
     if (junctionArmed) {
       // a fork is open: horizontal drag/swipe leans you toward a mouth (not a look)
       laneVote = clamp(laneVote + dx * 0.006, -1, 1);
@@ -348,6 +352,9 @@ export function createFallNav({ camera, canvas, layout, getTargetSpeed, onFirstI
     setRollRate(degPerSec) { rollRate = degPerSec || 0; },
     setRollOffset(deg) { rollOffsetT = deg || 0; },
     setSpeedCapMult(f) { capMult = clamp(f || 1, 0.25, 3); },
+    // while a card paddle is held, freeze the look at center so the mouse only
+    // moves the card (called every frame from scene.js off spawner.isGrabbing())
+    setLookSuppressed(v) { lookSuppressed = !!v; if (v) { targetYaw = 0; targetPitch = 0; } },
     // ---- junction steering (drives the lateral lane; the fork manager owns it) --
     setLane(x) { laneTarget = clamp(x || 0, -LANE_MAX * 1.2, LANE_MAX * 1.2); },
     getLane: () => laneNow,

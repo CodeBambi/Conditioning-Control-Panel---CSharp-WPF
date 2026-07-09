@@ -529,6 +529,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       bubbles.setIntensity(director.getIntensity());
       bubbles.setRunTime(director.getRunTime()); // gates which bubble kinds can spawn
     }
+    nav.setLookSuppressed(spawner.isGrabbing()); // a held card paddle steers by cursor, not look
     nav.update(dt);
 
     const depth = nav.getDepth();
