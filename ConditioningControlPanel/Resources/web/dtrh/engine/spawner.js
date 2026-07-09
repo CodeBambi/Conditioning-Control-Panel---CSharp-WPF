@@ -42,6 +42,14 @@ const CARD_W = 2.52;         // card bounding width (height follows aspect) - 40
 const CARD_MAX_H = 2.52;
 const FRAME_SCALE = 1.04;    // metal frame plane vs content (slim border)
 const SIDE_OFFSET = 2.4;     // how far off the spine a card sits
+// Videos hug the POV: a clip parked out at the wall only lives inside the
+// play/audio radius for a heartbeat as the camera screams past, so it's glanced,
+// never watched. A tighter lateral seat keeps the closest approach small (the
+// card stays big and near-center for the whole VIDEO_PLAY_NEAR window) while a
+// >=1.1u floor keeps the spine clear for the camera and the screen center
+// readable for the bubble field.
+const VIDEO_SIDE_OFFSET = 1.3;
+const VIDEO_NORMAL_JITTER = 0.4;  // vs the +/-0.9 photos get
 const SPAWN_PER_FRAME = Q.tier === 'mobile' ? 1 : 2; // spawn budget per frame - one at a time on mobile so a card mount (new VideoTexture / decoder) never doubles up on a single frame
 
 // Video-texture upload throttle: a VideoTexture re-uploads the current frame to
@@ -479,12 +487,15 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     return [glowMat, frameMat];
   }
 
-  function placeGroup(group, depth) {
+  function placeGroup(group, depth, kind) {
     const fr = layout.frameAtDepth(depth);
     const side = (live.length % 2 === 0 ? 1 : -1) * (Math.random() < 0.2 ? -1 : 1);
+    // videos sit closer to the camera path than photos (see VIDEO_SIDE_OFFSET)
+    const lat = kind === 'video' ? VIDEO_SIDE_OFFSET : SIDE_OFFSET;
+    const vert = kind === 'video' ? VIDEO_NORMAL_JITTER : 0.9;
     group.position.copy(fr.pos)
-      .addScaledVector(fr.binormal, side * SIDE_OFFSET)
-      .addScaledVector(fr.normal, rand(-0.9, 0.9));
+      .addScaledVector(fr.binormal, side * lat)
+      .addScaledVector(fr.normal, rand(-vert, vert));
   }
 
   // ---- user media: decode-ahead pipeline --------------------------------------
@@ -1147,7 +1158,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         if (release) release();
       },
     };
-    placeGroup(group, depth);
+    placeGroup(group, depth, 'video');
     return rec;
   }
 

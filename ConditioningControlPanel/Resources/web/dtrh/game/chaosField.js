@@ -287,8 +287,11 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     }
     if (k === 'brittle') { tryShatter(b); return; }
     if (k === 'darter') {
-      if (b.telegraphLeft > 0 || b.sweeper) return;   // not active yet / sweepers can't be caught
+      if (b.telegraphLeft > 0) return;                // not active yet
+      // The Spanker keeps working after the first hit: a mowing sweeper can be
+      // re-smacked (fresh fling, fresh bounces) as many times as you land it.
       if (phys.spanker) { smack(b, x, y); return; }
+      if (b.sweeper) return;                          // sweepers can't be CAUGHT bare-handed
       const quick = (performance.now() - b.activeAt) <= (b.spec.quickWindowMs || 500);
       popVisual(b, 0.3);
       floatText(quick ? 'QUICK!' : '🐇', x, y, 'cf-pop--freeze');
@@ -1104,9 +1107,11 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         if (b.x < rect.left || b.x > rect.right || b.y < rect.top || b.y > rect.bottom) continue;
         if (b.paddleImmuneUntil && fieldClockMs < b.paddleImmuneUntil) continue;
         const kind = b.spec.kind;
-        // rabbits: fling them away from the card center (not the hand-only rule below)
+        // rabbits: fling them away from the card center (not the hand-only rule
+        // below). Sweepers stay smackable - the paddle can punt a mowing rabbit
+        // again and again (the per-bubble immunity window paces the hits).
         if (kind === 'darter') {
-          if (b.telegraphLeft > 0 || b.sweeper) continue; // not catchable yet / already mowing
+          if (b.telegraphLeft > 0) continue; // not catchable yet
           smack(b, cx, cy);
           b.paddleImmuneUntil = fieldClockMs + PADDLE_IMMUNE_MS;
           tally.flung++;
