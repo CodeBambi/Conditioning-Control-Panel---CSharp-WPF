@@ -373,6 +373,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
           if (o && o.userData && o.userData.type === 'veinmouth') { junctions.pickSide(o.userData.side); return; }
         }
       }
+      return; // a fork owns the pointer: a missed mouth-click must not fall through to grabbing a wall poster/card mid-fork
     }
     // a wall poster: hold it to swing the camera and face it (a closer look)
     if (wall && wall.getPickables && !nav.isInVein()) {

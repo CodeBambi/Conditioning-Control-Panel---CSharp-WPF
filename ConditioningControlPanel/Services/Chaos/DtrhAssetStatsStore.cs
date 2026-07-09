@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -32,6 +33,7 @@ internal static class DtrhAssetStatsStore
     }
 
     private static readonly object _lock = new();
+    private static readonly object _writeLock = new();   // serializes the background disk write so overlapping flushes never interleave
     private static Dictionary<string, AssetStat>? _stats;
 
     private static string FilePath => Path.Combine(App.UserDataPath, "dtrh_asset_stats.json");
@@ -85,11 +87,19 @@ internal static class DtrhAssetStatsStore
 
     private static void SaveNow()
     {
-        // caller holds _lock
-        try
+        // caller holds _lock; serialize here (snapshot) but push the disk write off the UI thread
+        // (OnPageMessage runs on the dispatcher thread, and this fires every ~15s batch + at run end).
+        string json;
+        try { json = JsonConvert.SerializeObject(_stats, Formatting.Indented); }
+        catch (Exception ex) { App.Logger?.Warning("DtrhAssetStatsStore serialize failed: {E}", ex.Message); return; }
+        var path = FilePath;
+        Task.Run(() =>
         {
-            File.WriteAllText(FilePath, JsonConvert.SerializeObject(_stats, Formatting.Indented));
-        }
-        catch (Exception ex) { App.Logger?.Warning("DtrhAssetStatsStore save failed: {E}", ex.Message); }
+            lock (_writeLock)
+            {
+                try { File.WriteAllText(path, json); }
+                catch (Exception ex) { App.Logger?.Warning("DtrhAssetStatsStore save failed: {E}", ex.Message); }
+            }
+        });
     }
 }

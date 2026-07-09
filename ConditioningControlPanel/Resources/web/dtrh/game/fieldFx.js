@@ -297,6 +297,7 @@ export function createFieldFx(hud) {
       disposed = true;
       window.removeEventListener('resize', resize);
       canvas.remove();
+      _spriteCache.clear();   // release the tinted sprite canvases (one field per page; safe to drop the shared module cache on teardown)
     },
   };
 }

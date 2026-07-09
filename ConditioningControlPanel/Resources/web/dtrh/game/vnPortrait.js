@@ -165,7 +165,10 @@ export function createVnPortrait(hud, opts = {}) {
       vdata = new Uint8Array(analyser.fftSize);
       gain = actx.createGain();
       src.connect(analyser); analyser.connect(gain); gain.connect(actx.destination);
-      audioEl.addEventListener('ended', () => { voicePlaying = false; if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); } });
+      const endVoice = () => { voicePlaying = false; if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); } };
+      audioEl.addEventListener('ended', endVoice);
+      // a missing/blocked mp3 must unblock the beat immediately, not stall on waitVoice's timeout
+      audioEl.addEventListener('error', endVoice);
     } catch (e) { actx = null; }
   }
   function startVoice(url) {
@@ -173,7 +176,9 @@ export function createVnPortrait(hud, opts = {}) {
     try {
       if (actx.state === 'suspended') actx.resume();
       if (gain) { try { gain.gain.cancelScheduledValues(actx.currentTime); gain.gain.setValueAtTime(1, actx.currentTime); } catch (e) {} }
-      audioEl.src = url; audioEl.currentTime = 0; audioEl.play().catch(() => {}); voicePlaying = true;
+      audioEl.src = url; audioEl.currentTime = 0; voicePlaying = true;
+      // if play() rejects (404/autoplay block) 'ended' never fires - clear the flag and resolve the wait so the beat doesn't hang ~12s
+      audioEl.play().catch(() => { voicePlaying = false; if (voiceEndCb) { const c = voiceEndCb; voiceEndCb = null; c(); } });
     } catch (e) { /* ignore */ }
   }
   function fadeVoice(ms) {
@@ -339,7 +344,7 @@ export function createVnPortrait(hud, opts = {}) {
     root.classList.remove('vn-on'); bubble.classList.remove('vn-on'); root.hidden = true;
     stopFx(); sceneHold(false);
   }
-  function dispose() { hide(); try { root.remove(); } catch (e) {} window.removeEventListener('resize', resize); }
+  function dispose() { hide(); try { root.remove(); } catch (e) {} window.removeEventListener('resize', resize); try { if (actx) { actx.close(); actx = null; } } catch (e) {} }
   window.addEventListener('resize', resize);
 
   return { beat, hide, dispose, prime: ensureManifest };

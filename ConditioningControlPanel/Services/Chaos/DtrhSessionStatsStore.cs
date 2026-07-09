@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -81,6 +82,7 @@ internal static class DtrhSessionStatsStore
 
     private const int HistoryCap = 25;
     private static readonly object _lock = new();
+    private static readonly object _writeLock = new();   // serializes the background disk write so overlapping flushes never interleave
     private static Root? _root;
 
     private static string FilePath => Path.Combine(App.UserDataPath, "dtrh_session_stats.json");
@@ -166,11 +168,19 @@ internal static class DtrhSessionStatsStore
 
     private static void SaveNow()
     {
-        // caller holds _lock
-        try
+        // caller holds _lock; serialize the snapshot here but push the disk write off the UI thread
+        // (Record runs on the dispatcher thread via OnRunEnded).
+        string json;
+        try { json = JsonConvert.SerializeObject(_root, Formatting.Indented); }
+        catch (Exception ex) { App.Logger?.Warning("DtrhSessionStatsStore serialize failed: {E}", ex.Message); return; }
+        var path = FilePath;
+        Task.Run(() =>
         {
-            File.WriteAllText(FilePath, JsonConvert.SerializeObject(_root, Formatting.Indented));
-        }
-        catch (Exception ex) { App.Logger?.Warning("DtrhSessionStatsStore save failed: {E}", ex.Message); }
+            lock (_writeLock)
+            {
+                try { File.WriteAllText(path, json); }
+                catch (Exception ex) { App.Logger?.Warning("DtrhSessionStatsStore save failed: {E}", ex.Message); }
+            }
+        });
     }
 }

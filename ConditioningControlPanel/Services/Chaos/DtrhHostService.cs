@@ -225,6 +225,7 @@ internal static class DtrhHostService
             {
                 _runActive = true;
                 _vnSpeaking = false;   // never carry a stale duck into a run
+                ApplyWorldFreeze(false);   // a stale freeze from a crashed prior run must not bleed into this descent's dedup state
                 ResetRunMetrics();     // fresh native engagement counters for this descent
                 var diff = (string?)o["difficulty"] ?? "Gentle";
                 if (!_testMode)
@@ -379,6 +380,7 @@ internal static class DtrhHostService
     private static void OnRunEnded(JObject o)
     {
         _runActive = false;
+        ApplyWorldFreeze(false);   // a run ending mid-freeze must resume native video + voice, not wedge them through the hub
         try
         {
             double score = (double?)o["score"] ?? 0;
@@ -749,8 +751,8 @@ internal static class DtrhHostService
         CancelExitWatchdog();
         StopHeartbeatWatch();
         HookVideoEvents(false);
-        // Never leave a voiceline wedged paused if the window dies mid-freeze.
-        if (_worldFrozen) { _worldFrozen = false; try { App.AvatarWindow?.ResumeSpokenAudio(); } catch { } }
+        // Never leave a video or voiceline wedged paused if the window dies mid-freeze.
+        if (_worldFrozen) { _worldFrozen = false; try { App.Video?.PlayPrimary(); } catch { } try { App.AvatarWindow?.ResumeSpokenAudio(); } catch { } }
         try { _meta?.FlushSave(); } catch { }
         if (_runActive && !_testMode)
         {

@@ -225,6 +225,7 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
 
   // ---- one themed boon card --------------------------------------------------
   function buildCard(boon, pos, scale) {
+    let disposed = false;   // the CDN art can land after teardown; guard the async map swap so the texture isn't leaked
     const th = themeOf(boon);
     const group = new THREE.Group();
     group.position.copy(pos);
@@ -262,6 +263,7 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
     new THREE.TextureLoader().load(
       `${ART}boons/${boon.id}.png`,
       (tex) => {
+        if (disposed) { tex.dispose(); return; }   // card already torn down: don't leak the just-loaded GPU texture
         tex.colorSpace = THREE.SRGBColorSpace;
         const old = contentMat.map; contentMat.map = tex; contentMat.needsUpdate = true;
         if (old) old.dispose();
@@ -370,6 +372,7 @@ export function createBoonPick({ scene, camera, layout, nav, fx, hud }) {
         return fk >= 1; // done fading -> disposable
       },
       dispose() {
+        disposed = true;
         scene.remove(group);
         // unitPlane/glowTex/etc are shared, disposed by the module's dispose()
         glowMat.dispose(); frameMat.dispose();

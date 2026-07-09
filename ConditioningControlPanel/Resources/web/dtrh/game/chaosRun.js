@@ -2117,6 +2117,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     statsFlushCd = STATS_FLUSH_SEC;
     scriptedDraftActive = false;
     finalLandingActive = false;
+    vnHold = false;   // a run torn down mid-beat must not carry a stuck field-freeze into the next descent
     clearAmbient();
     // Four Chambers: Region I is the open fall; the Mood Ring forecasts the next
     // chamber's fixed sky. Legacy runs roll a random loop-2 sky instead.
@@ -2479,10 +2480,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       field?.dispose();
       ffx?.dispose();
       payloadFx?.dispose();
+      vn?.dispose();   // closes the VN AudioContext + removes its overlay/listeners (else it leaks per attach and hits Chromium's context ceiling)
       try { if (window.__sfPayloadFx === payloadFx) delete window.__sfPayloadFx; } catch { /* seam cleanup */ }
       try { delete window.__sfFireJunction; } catch { /* seam cleanup */ }
       field = null; hudUi = null; overlays = null; ffx = null; payloadFx = null;
-      warren = null; lessons = null; happy = null;
+      warren = null; lessons = null; happy = null; vn = null;
     },
   };
 }
