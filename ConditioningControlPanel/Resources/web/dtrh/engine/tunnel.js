@@ -117,7 +117,10 @@ const TUBE_FRAG = `
   // hairline line snaps pixel-to-pixel. Screen-space AA keeps slow motion fluid.
   float lineMask(float coord, float w) {
     float di = 0.5 - abs(fract(coord) - 0.5); // distance to nearest integer
-    float aa = max(w, 1.5 * fwidth(coord));   // never sharper than a soft pixel
+    // never sharper than the designed width, never so wide the line stops fully
+    // darkening at the midpoint (di maxes at 0.5) - that upper clamp keeps rings
+    // crisp instead of washing to a bright fill at grazing/foreshortened angles.
+    float aa = clamp(1.5 * fwidth(coord), w, 0.5);
     return 1.0 - smoothstep(0.0, aa, di);
   }
   // sharp periodic pulse (mostly dark, brief bright peaks = intermittent).

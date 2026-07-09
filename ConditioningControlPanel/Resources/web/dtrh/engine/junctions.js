@@ -79,7 +79,7 @@ const VEIN_FRAG = `
 
   float lineMask(float coord, float w) {
     float di = 0.5 - abs(fract(coord) - 0.5);
-    float aa = max(w, 1.5 * fwidth(coord)); // screen-space AA: no sub-pixel line crawl when the fall hovers at a fork
+    float aa = clamp(1.5 * fwidth(coord), w, 0.5); // screen-space AA (clamped so grazing rings don't wash out): no sub-pixel crawl when the fall hovers at a fork
     return 1.0 - smoothstep(0.0, aa, di);
   }
 
