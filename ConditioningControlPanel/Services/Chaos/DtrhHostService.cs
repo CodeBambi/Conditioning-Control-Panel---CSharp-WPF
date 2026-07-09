@@ -72,8 +72,10 @@ internal static class DtrhHostService
                     // needs CORS-clean responses (verified in the M0 spike).
                     ("ccp.assets", App.EffectiveAssetsPath, CoreWebView2HostResourceAccessKind.Allow),
                     // M4: the bundled Chaos art (bubble sprites, boon icons, announcer
-                    // banners) - plain <img> loads, so DenyCors suffices.
-                    ("ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"), CoreWebView2HostResourceAccessKind.DenyCors),
+                    // banners). Allow (not DenyCors): the in-tube boon draft
+                    // (engine/boonPick.js) uploads the boon icons to WebGL, which needs
+                    // CORS-clean responses; plain <img> consumers are unaffected.
+                    ("ccp.art", Path.Combine(AppContext.BaseDirectory, "assets", "Chaos"), CoreWebView2HostResourceAccessKind.Allow),
                 },
                 UserDataFolderName = "browser_data_dtrh",
                 InputEnabled = true,

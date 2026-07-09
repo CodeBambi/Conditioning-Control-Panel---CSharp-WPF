@@ -1454,7 +1454,7 @@ img.rh-fx-spiralspin {
   max-width: min(680px, 86vw); text-align: center; pointer-events: none;
   padding: 8px 16px; border-radius: 12px;
   background: rgba(12, 8, 20, 0.66); border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #efe7ff; font-size: 0.92rem; line-height: 1.35; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  color: #efe7ff; font-size: 1.2rem; line-height: 1.4; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 .cf-boonpick-btns {
   position: absolute; left: 50%; bottom: 6%; transform: translateX(-50%);

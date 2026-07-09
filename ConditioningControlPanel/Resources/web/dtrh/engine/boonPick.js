@@ -24,8 +24,8 @@ import { boonTheme } from '../game/boons.js';
 
 const ART = 'https://ccp.art/';       // boon art lives on the CDN (matches overlays.js)
 
-const CARD_AHEAD = 13;                 // units ahead of the parked camera the cards hang
-const STOP_AHEAD = 6;                  // the fall parks this far ahead of where it was (settles motion)
+const CARD_AHEAD = 8;                   // camera-to-card gap (was 13; closer = the Pow lands right on them)
+const STOP_AHEAD = 4;                   // the fall parks this far ahead of where it was (settles motion)
 const CARD_W = 2.4, CARD_H = 3.05;     // card content size (portrait, like the DOM boon cards)
 const ROW_SPREAD = 3.35;               // centre-to-centre for a 3-across row
 const GRID_X = 1.9, GRID_Y = 2.0;      // 2x2 half-offsets
