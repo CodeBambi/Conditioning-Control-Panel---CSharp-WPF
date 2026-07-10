@@ -348,6 +348,10 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 | **IMP-11 — orphaned `AvaloniaBubble` control**: `new AvaloniaBubble(` has 0 call sites; chaos bubbles render via the compositor `BubbleLayer` (`AvaloniaBubbleService.cs:533-535` routes `SetFuse` there); its per-call `new SolidColorBrush` pattern reads as a hot-path smell on every scan | `CCP.Avalonia/Chaos/AvaloniaBubble.cs` (~220 lines) | deletes dead UI code + a misleading allocation pattern; simplification, not runtime speed | MECHANICAL | confirm-then-delete: verify no XAML / resource-factory / reflection construction first; STOP if found |
 
 **Improvement-row claim ledger (append-only):**
+- **CLAIM 2026-07-10 · wip @driver (workflow-run, continuous-mode session):** IMP-11 (orphaned `AvaloniaBubble`
+  confirm-then-delete). Pre-verified twice this session by independent agents (word-boundary grep: only
+  self-references; chaos bubbles render via compositor `BubbleLayer`). Plan: confirm greps (new/axaml/
+  reflection-string/x:Class/DataTemplate) → delete file → build → deletion-only diff verify → gates → commit.
 - **CLAIM 2026-07-10 · wip @driver (workflow-run, continuous-mode session):** IMP-1 (VideoLayer `ConsumeDirty`
   override). Claimed after R-scrub `820526d5` + bubble-border fix `6346d964` closed out. Gate note: smoke
   runs at Findings 16 = recorded pre-existing drift (owner-waved; see drift row). Plan: recon dirty-path
