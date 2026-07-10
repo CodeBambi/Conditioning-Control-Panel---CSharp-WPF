@@ -612,7 +612,11 @@ namespace ConditioningControlPanel.Services
                 var name = displayName ?? App.Patreon?.DisplayName ?? App.Discord?.DisplayName ?? "Someone";
 
                 var unifiedId = App.EffectiveUserId;
-                if (string.IsNullOrEmpty(unifiedId)) return false;
+                if (string.IsNullOrEmpty(unifiedId))
+                {
+                    App.Logger?.Warning("Achievement share skipped: no unified user id (sharing is on but the account isn't fully linked)");
+                    return false;
+                }
 
                 var payload = new
                 {

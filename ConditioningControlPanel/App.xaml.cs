@@ -1863,12 +1863,24 @@ namespace ConditioningControlPanel
             // Play achievement sound
             PlayAchievementSound();
 
-            // Send Discord webhook if enabled (fire and forget)
+            // Send Discord webhook if enabled (fire and forget, but observe the outcome —
+            // silent drops are what made "my achievements never post" reports undiagnosable)
             // Always use CustomDisplayName for privacy - never expose real Discord/Patreon names
             if (Settings?.Current?.DiscordShareAchievements == true)
             {
                 var displayName = Discord?.CustomDisplayName ?? Patreon?.DisplayName ?? "Someone";
-                _ = Discord?.SendAchievementWebhookAsync(achievement, displayName);
+                var task = Discord?.SendAchievementWebhookAsync(achievement, displayName);
+                task?.ContinueWith(t =>
+                {
+                    try
+                    {
+                        if (t.IsFaulted)
+                            Logger?.Warning(t.Exception?.GetBaseException(), "Achievement '{Name}' did NOT post to Discord", achievement.Name);
+                        else if (t.IsCanceled || !t.Result)
+                            Logger?.Warning("Achievement '{Name}' did NOT post to Discord (see preceding warning for cause)", achievement.Name);
+                    }
+                    catch { /* diagnostics only — never let logging fault the continuation */ }
+                }, TaskContinuationOptions.ExecuteSynchronously);
             }
         }
         

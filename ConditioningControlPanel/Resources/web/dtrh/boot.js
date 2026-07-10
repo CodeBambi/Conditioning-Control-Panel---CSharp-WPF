@@ -41,6 +41,7 @@ let game = null;
 let initMsg = null;
 let haveManifest = false;
 let started = false;
+let bootSettled = false; // engine live OR boot failed - stops the boot deadline
 
 // Shared page state the run brain (M3+) reads; M2 just keeps it current.
 export const hostState = {
@@ -74,15 +75,43 @@ async function maybeStart() {
       challenge: false,   // DtRH is no-lose; the Fall's miss-death mode stays off
       game,
     });
+    bootSettled = true;
     if (dom.loader) dom.loader.hidden = true;
     bridge.log('engine live (game mode)');
   } catch (err) {
+    bootSettled = true;
     bridge.log('3D boot failed: ' + (err && (err.stack || err.message) || err));
     bridge.send({ type: 'boot-error', msg: String(err && err.message || err) });
     if (dom.loader) dom.loader.hidden = true;
     if (dom.nope) dom.nope.hidden = false;
   }
 }
+
+// Boot deadline: a genuine WebGL failure throws and is handled above, but a
+// never-resolving await during load (hung asset fetch, stalled dynamic import,
+// init/manifest that never arrive) keeps rAF beating - so the host's wedge
+// watchdog stays quiet and the loader spins forever (support: "fall minigame
+// stuck on loading"). Force the failure path instead; the host reacts to
+// boot-error by falling back to the classic WPF game.
+// Progress-aware: 45s from the LAST milestone (script start, init, manifest),
+// not wall-clock from page load - a slow-but-progressing boot (manifest scan,
+// AV-scanned module downloads, first shader compile) must not be misread as a
+// wedge, because boot-error downgrades to the classic game for the whole session.
+let bootDeadline = 0;
+function armBootDeadline() {
+  if (bootSettled) return;
+  clearTimeout(bootDeadline);
+  bootDeadline = setTimeout(() => {
+    if (bootSettled) return;
+    bootSettled = true;
+    bridge.log('boot deadline (45s since last progress) - engine never came live'
+      + (initMsg ? '' : ' [no init]') + (haveManifest ? '' : ' [no manifest]'));
+    bridge.send({ type: 'boot-error', msg: 'boot deadline: engine not live 45s after last progress' });
+    if (dom.loader) dom.loader.hidden = true;
+    if (dom.nope) dom.nope.hidden = false;
+  }, 45000);
+}
+armBootDeadline();
 
 function shutdown() {
   try { engine && engine.dispose && engine.dispose(); } catch (e) { /* best effort */ }
@@ -93,6 +122,7 @@ function shutdown() {
 
 bridge.on('init', (m) => {
   initMsg = m;
+  armBootDeadline(); // progress milestone - reset the boot deadline
   if (m.m2Test) {
     try { window.__dtrhVnTest = true; } catch (e) { /* lets the VN welcome fire on any descent for play-testing */ }
     import('./m2test.js').then((t) => t.run(bridge, hostState)).catch((e) => bridge.log('m2test load failed: ' + e));
@@ -108,6 +138,7 @@ bridge.on('manifest', (m) => {
     truncated: !!m.truncated,
   };
   haveManifest = true;
+  armBootDeadline(); // progress milestone - reset the boot deadline
   maybeStart();
 });
 // THE BIOMES (S3 read-back): host-ranked most-engaged asset names - the

@@ -284,6 +284,10 @@ namespace ConditioningControlPanel.Features
                     {
                         App.Logger?.Warning("User requested force reset of stuck video state");
                         App.Video?.ForceCleanup();
+                        // Also tear down any web-video takeover: ForceReset alone frees the
+                        // queue slot but leaves the browser video playing, and the test
+                        // video would then stack on top of it.
+                        App.Autonomy?.ForceEndWebVideoTakeover();
                         App.InteractionQueue?.ForceReset();
                     }
                     else return;
@@ -300,6 +304,7 @@ namespace ConditioningControlPanel.Features
                     if (result == MessageBoxResult.Yes)
                     {
                         App.Video?.ForceCleanup();
+                        App.Autonomy?.ForceEndWebVideoTakeover();
                         App.InteractionQueue.ForceReset();
                     }
                     else return;

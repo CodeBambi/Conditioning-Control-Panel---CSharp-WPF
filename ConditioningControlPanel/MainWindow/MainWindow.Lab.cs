@@ -339,9 +339,14 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Enable system key suppression on the keyboard hook
+                    // Enable system key suppression on the keyboard hook (the setter also
+                    // installs the hook if panic key / keyword triggers never started it)
                     if (_keyboardHook != null)
+                    {
                         _keyboardHook.SuppressSystemKeys = true;
+                        if (!_keyboardHook.IsInstalled)
+                            App.Logger?.Warning("Lockdown: keyboard hook could not be installed - Esc/Win/Alt-Tab will NOT be blocked this session");
+                    }
 
                     // Gray out strict lock and panic key toggles
                     if (SettingsTab.ChkStrictLock != null)
@@ -390,9 +395,17 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Disable system key suppression
+                    // Disable system key suppression. Lockdown may have installed the hook
+                    // itself; drop it again unless another feature still needs it (mirrors
+                    // the startup install condition). LockdownService restores the user's
+                    // real PanicKeyEnabled before raising this event, so the check is safe.
                     if (_keyboardHook != null)
+                    {
                         _keyboardHook.SuppressSystemKeys = false;
+                        if (App.Settings.Current.PanicKeyEnabled != true &&
+                            App.Settings.Current.KeywordTriggersEnabled != true)
+                            _keyboardHook.Stop();
+                    }
 
                     // Restore strict lock and panic key toggles
                     if (SettingsTab.ChkStrictLock != null)

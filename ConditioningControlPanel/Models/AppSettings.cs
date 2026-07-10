@@ -625,7 +625,32 @@ namespace ConditioningControlPanel.Models
         public bool FlashClickable
         {
             get => _flashClickable;
-            set { _flashClickable = value; OnPropertyChanged(); }
+            set
+            {
+                _flashClickable = value;
+                // Self-heal for the decoupling migration: it turned the gaze toggles off
+                // to preserve "no interaction" intent while clicking was off. The moment
+                // the user turns clicking back ON, that intent is gone — restore the gaze
+                // toggles the migration took, exactly once (support: "gaze-to-click
+                // doesn't work", v6.2.11). Users who toggled gaze off themselves never
+                // have the flag set, so their choice is untouched.
+                if (value && FlashGazeDisabledByDecoupling)
+                {
+                    FlashGazeDisabledByDecoupling = false;
+                    FlashGazePopEnabled = true;
+                    FlashGazeLingerEnabled = true;
+                }
+                OnPropertyChanged();
+            }
+        }
+
+        // Set by RunFlashClickableDecouplingMigration when IT (not the user) turned the
+        // gaze toggles off; consumed by the FlashClickable setter's self-heal above.
+        private bool _flashGazeDisabledByDecoupling = false;
+        public bool FlashGazeDisabledByDecoupling
+        {
+            get => _flashGazeDisabledByDecoupling;
+            set { _flashGazeDisabledByDecoupling = value; OnPropertyChanged(); }
         }
 
         private bool _corruptionMode = false; // Hydra effect
@@ -1580,6 +1605,7 @@ namespace ConditioningControlPanel.Models
             get => _migratedFlashClickableDecoupling;
             set { _migratedFlashClickableDecoupling = value; OnPropertyChanged(); }
         }
+
 
         // ---- Phase 4: Attention-Check headline mechanic --------------------
 
@@ -3531,6 +3557,22 @@ namespace ConditioningControlPanel.Models
             set { _autonomyCanTriggerWallpaper = value; OnPropertyChanged(); }
         }
 
+        private bool _takeoverVideosStrict = false;
+        /// <summary>
+        /// Opt-in: mandatory videos launched by Takeover play with Strict Lock (no skip,
+        /// no ESC). Default OFF — Takeover videos have always been skippable so surprise
+        /// autonomous videos can be dismissed; this lets users who want the full loss of
+        /// control turn that on (support request, 2026-07-10). Passed to
+        /// VideoService.TriggerVideo as strictOverride, independent of the global
+        /// StrictLockEnabled.
+        /// </summary>
+        [JsonProperty]
+        public bool TakeoverVideosStrict
+        {
+            get => _takeoverVideosStrict;
+            set { _takeoverVideosStrict = value; OnPropertyChanged(); }
+        }
+
         private int _autonomyAnnouncementChance = 50;
         /// <summary>
         /// Chance (0-100%) that she announces before triggering an action
@@ -4878,6 +4920,14 @@ namespace ConditioningControlPanel.Models
             {
                 FlashGazePopEnabled = false;
                 FlashGazeLingerEnabled = false;
+                // Record that WE took the gaze toggles (not the user), so the
+                // FlashClickable setter can restore them if clicking comes back on.
+                // A heuristic re-enable ("clickable on + both toggles off") was tried
+                // and rejected: it can't distinguish this stuck state from a user who
+                // deliberately opted out of gaze interaction, and silently re-enabling
+                // webcam-driven interaction against an explicit opt-out is worse than
+                // asking the affected upgraders to flip one toggle.
+                FlashGazeDisabledByDecoupling = true;
             }
 
             MigratedFlashClickableDecoupling = true;
