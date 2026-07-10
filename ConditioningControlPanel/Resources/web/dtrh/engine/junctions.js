@@ -52,6 +52,7 @@ import * as THREE from 'three';
 import { RADIUS, FOG_COLOR, FOG_DENSITY } from './tunnel.js';
 import { makeGlowTex, makeFrameTex, makeNamePanelTex } from './powerupDrops.js';
 import { intToHex } from './settings.js';
+import { loadTexture } from '../shared/assets.js';
 
 const ART = 'https://ccp.art/';   // power-up card art CDN (matches powerupDrops.js)
 
@@ -187,6 +188,30 @@ function makeRoomTitleTex(title) {
   return new THREE.CanvasTexture(c);
 }
 
+// A biome square for the draft room's roulette row: a dark rounded plate rimmed
+// in the biome's line color with its glyph as the face. Placeholder identity
+// only - when per-biome art lands at ART biomes/<id>.png it replaces the map
+// in-place (see buildBiomeRow's loadTexture hook).
+function makeBiomeSquareTex(item) {
+  const s = 128, c = document.createElement('canvas'); c.width = c.height = s;
+  const x = c.getContext('2d');
+  const col = typeof item.color === 'number' ? intToHex(item.color) : (item.color || '#ff69b4');
+  const r = 18;
+  x.beginPath();
+  x.moveTo(r, 3);
+  x.arcTo(s - 3, 3, s - 3, s - 3, r);
+  x.arcTo(s - 3, s - 3, 3, s - 3, r);
+  x.arcTo(3, s - 3, 3, 3, r);
+  x.arcTo(3, 3, s - 3, 3, r);
+  x.closePath();
+  x.fillStyle = 'rgba(12,7,18,0.85)'; x.fill();
+  x.strokeStyle = col; x.lineWidth = 5; x.globalAlpha = 0.9; x.stroke(); x.globalAlpha = 1;
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = '64px "Segoe UI Emoji", "Segoe UI", sans-serif';
+  x.fillText(item.glyph || '◈', s / 2, s / 2 + 4);
+  return new THREE.CanvasTexture(c);
+}
+
 // ---- vein material: a glowing corridor off the chamber wall ------------------
 // Kept visually close to the main tube (pink scrolling rings) so it reads as
 // tube. The uClip* flush-trim survives in the shader but idles (uClipOn=0):
@@ -312,7 +337,7 @@ const ROOM_FRAG = `
 export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
   let J = null;           // the live fork, or null when idle
   let active = false;     // only telegraph forks during a real descent
-  const api = { onCommit: null, onLinger: null, onVeinEnd: null };
+  const api = { onCommit: null, onLinger: null, onVeinEnd: null, onRevealFx: null };
   const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _m = new THREE.Matrix4();
   const shatters = [];    // live shard bursts (ticked in update)
 
@@ -585,7 +610,9 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     const cardQuat = mouthQuat.clone()
       .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
     let card = null;
-    if (desc.reward) {
+    if (desc.forceWall) {
+      card = null;   // deliberately prizeless (starved offer): schedule() walls it off
+    } else if (desc.reward) {
       try { card = buildRewardCard(desc.reward, cardPos, cardQuat, index); }
       catch (e) { console.warn('[dtrh] doorway prize card build failed:', e); card = null; }
     } else if (spawner && spawner.createDetachedCard) {
@@ -595,25 +622,21 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
         scene.add(card.group);   // the handle doesn't self-attach; the mouth owns it
       }
     }
-    // LAST line of defense (2026-07): a doorway must NEVER stand empty. If the
-    // game hung no prize on this branch (an upstream offer failed silently) or
-    // the media-card fallback had nothing to give, a flat 100-gold pouch takes
-    // the entrance - desc.reward is set so the commit path banks it like any
-    // other doorway prize.
-    if (!card) {
-      console.warn(`[dtrh] doorway "${desc.word || '?'}" had no card - 100-gold pouch takes the entrance`);
-      desc.reward = { kind: 'gold', amount: 100, name: '100 Gold', glyph: '🪙',
-        desc: 'a pouch of gold, no questions asked. spend it at the dollhouse.',
-        frameCol: 0xf2c14e, capCol: '#f2c14e' };
-      try { card = buildRewardCard(desc.reward, cardPos, cardQuat, index); }
-      catch (e) { console.warn('[dtrh] gold fallback card build failed too:', e); card = null; }
-    }
+    // A doorway with no real prize is no longer gold-pouched (2026-07): it gets
+    // WALLED OFF instead. We flag it here and let schedule()'s wall-off pass
+    // brick the hole in the room shader and drape a cluster of the user's gifs
+    // over the dead-end - a prizeless branch reads as a sealed, plastered wall
+    // rather than an open hole with a consolation pouch. The guard in schedule
+    // rescues one door with a gold pouch only if EVERY branch came up prizeless,
+    // so a room is never fully sealed.
+    const wallCandidate = !card;
 
     return {
       index, desc, curve, dir: dir.clone(), mouth: mouth.clone(),
       tube, mat, tubeGeo, seal, sealGeo, sealMat,
       endDisc, endDiscGeo, endDiscMat, endRing, endRingGeo, endRingMat,
       card, cardPos, cardQuat, sealed: false, dying: false, swayT: Math.random() * 6,
+      wallCandidate, walled: false, wallCards: null,
     };
   }
 
@@ -631,6 +654,10 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     if (vein.endDisc) { scene.remove(vein.endDisc); vein.endDiscGeo.dispose(); vein.endDiscMat.dispose(); vein.endDisc = null; }
     scene.remove(vein.endRing); vein.endRingGeo.dispose(); vein.endRingMat.dispose();
     if (vein.card) { try { vein.card.dispose(); } catch (e) { /* ignore */ } }
+    if (vein.wallCards) {
+      for (const c of vein.wallCards) { try { c.dispose && c.dispose(); } catch (e) { /* ignore */ } }
+      vein.wallCards = null;
+    }
   }
 
   // ---- the antechamber sphere: built once per fork, holes aligned to the pipes
@@ -671,32 +698,114 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
   }
 
   // ---- the room title: big writing above the doorway mouths (draft mode) -----
-  // Centered on the mean door azimuth and lifted well above the mouths (the
-  // doors carry a downward tilt; the title takes the same heading raised), so
-  // from the camera's mid-chamber park it hangs middle-and-slightly-higher
-  // than the doors - the next room announcing itself over its own entrances.
+  // Centered on the mean door azimuth and lifted above the mouths (the doors
+  // carry a downward tilt; the title takes the same heading raised), so from
+  // the camera's mid-chamber park it hangs just over the doors - the next room
+  // announcing itself over its own entrances. The biome roulette row hangs
+  // HIGHER still (buildBiomeRow, lift 0.80): tiles on top, writing under them.
   function buildTitle(C, veins, title, park) {
     const mean = new THREE.Vector3();
     for (const v of veins) mean.add(v.dir);
     if (mean.lengthSq() < 1e-6) return null;
     mean.normalize();
-    const dir = mean.clone().add(new THREE.Vector3(0, 0.62, 0)).normalize();
+    const dir = mean.clone().add(new THREE.Vector3(0, 0.28, 0)).normalize();
     const tex = makeRoomTitleTex(title);
     tex.colorSpace = THREE.SRGBColorSpace;
     const W = 15.5, H = W * (340 / 1024);
     const geo = new THREE.PlaneGeometry(W, H);
     const mat = new THREE.MeshBasicMaterial({
       map: tex, transparent: true, opacity: 0,
-      depthWrite: false, side: THREE.DoubleSide,
+      // depthTest off + a high renderOrder: the writing always draws OVER the
+      // room wall instead of z-fighting / poking through it (2026-07 fix). It's
+      // also pulled forward off the far wall (0.72 vs the old 0.93) so it floats
+      // clearly inside the chamber rather than hugging the plaster.
+      depthWrite: false, depthTest: false, side: THREE.DoubleSide,
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.copy(C).addScaledVector(dir, ROOM_R * 0.93);
+    mesh.renderOrder = 900;
+    mesh.position.copy(C).addScaledVector(dir, ROOM_R * 0.72);
     mesh.lookAt(park);   // face the camera's park just inside the entry
     scene.add(mesh);
     return {
       mesh, geo, mat, tex, t: 0,
       dispose() { scene.remove(mesh); geo.dispose(); mat.dispose(); tex.dispose(); },
     };
+  }
+
+  // The biome roulette: a row of 16 squares (rooms I..IV left to right, four
+  // each) hung ABOVE the room title - the marquee over the writing. On linger a highlight
+  // sweeps the row like a casino wheel - fast wraps easing into a heavy crawl -
+  // and lands on the biome the doors actually lead into (pre-rolled at run
+  // start; the game passes its index). The doors stay DEAD until it lands:
+  // pickIndex / getPickables / skipDraft / the draft clock all key off
+  // J.revealDone (see update's linger branch).
+  function buildBiomeRow(C, veins, spec, park) {
+    const mean = new THREE.Vector3();
+    for (const v of veins) mean.add(v.dir);
+    if (mean.lengthSq() < 1e-6) return null;
+    mean.normalize();
+    // above the title (0.28 at 0.72R): the row crowns the room like a marquee
+    const dir = mean.clone().add(new THREE.Vector3(0, 0.80, 0)).normalize();
+    const group = new THREE.Group();
+    group.position.copy(C).addScaledVector(dir, ROOM_R * 0.72);
+    group.lookAt(park);   // children (plane +Z) face the camera's park
+    scene.add(group);
+    const SIZE = 1.05, PITCH = 1.18;
+    const squares = spec.items.map((item, i) => {
+      const tex = makeBiomeSquareTex(item);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const geo = new THREE.PlaneGeometry(SIZE, SIZE);
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, opacity: 0,
+        depthWrite: false, depthTest: false, side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.renderOrder = 899;   // over the wall, under the title (900)
+      mesh.position.set((i - (spec.items.length - 1) / 2) * PITCH, 0, 0);
+      group.add(mesh);
+      return { mesh, geo, mat, tex, id: item.id, punch: 0, baseA: 0.8 };
+    });
+    // the sweep cursor: an additive glow riding behind the highlighted square;
+    // doubles as the settle flash when the wheel lands
+    const curTex = makeGlowTex();
+    const curGeo = new THREE.PlaneGeometry(SIZE * 2.4, SIZE * 2.4);
+    const curMat = new THREE.MeshBasicMaterial({
+      map: curTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
+      depthWrite: false, depthTest: false,
+    });
+    const cursor = new THREE.Mesh(curGeo, curMat);
+    cursor.renderOrder = 898;
+    cursor.position.set(squares[0].mesh.position.x, 0, -0.02);
+    group.add(cursor);
+    // hop schedule, fixed at build: 2-3 full wraps landing EXACTLY on the
+    // target (steps % 16 === targetIndex). Gaps grow cubically ~40ms -> ~260ms
+    // so it reads spin -> crawl -> land; total ~3-4.5s, then the draft clock
+    // starts. A precomputed schedule can never wedge the run.
+    const steps = 32 + spec.targetIndex;
+    const times = []; let acc = 0.35;   // a beat to register the room first
+    for (let i = 0; i <= steps; i++) { times.push(acc); acc += 0.04 + 0.22 * Math.pow(i / steps, 3); }
+    const row = {
+      group, squares, cursor, curMat, curGeo, curTex,
+      target: spec.targetIndex, times, t: 0, step: -1,
+      done: false, flare: 0, breatheT: 0, disposed: false,
+      dispose() {
+        row.disposed = true;
+        scene.remove(group);
+        // placeholder canvas textures are ours; swapped-in art belongs to the
+        // shared assets cache (scene.js disposeTextures owns it) - leave it
+        for (const s of squares) { s.geo.dispose(); s.mat.dispose(); s.tex.dispose(); }
+        curGeo.dispose(); curMat.dispose(); curTex.dispose();
+      },
+    };
+    // art hook, kicked off after `row` exists (a cached texture fires the
+    // callback synchronously): silent fallback keeps the glyph placeholder
+    for (const s of squares) {
+      loadTexture(`${ART}biomes/${s.id}.png`, (t) => {
+        if (row.disposed) return;
+        s.mat.map = t; s.mat.needsUpdate = true;
+      });
+    }
+    return row;
   }
 
   // brick up a doorway: cos threshold 2.0 can never be exceeded, so the wall
@@ -708,11 +817,49 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     J.room.mat.uniforms.uHoleCos.value[1 + index] = 2.0;
   }
 
+  // Rescue a prizeless door with a flat 100-gold pouch so a room is never fully
+  // sealed (used only when EVERY branch came up empty - see the wall-off pass).
+  function rescueDoorWithGold(v) {
+    if (!v) return;
+    v.desc.reward = { kind: 'gold', amount: 100, name: '100 Gold', glyph: '🪙',
+      desc: 'a pouch of gold, no questions asked. spend it at the dollhouse.',
+      frameCol: 0xf2c14e, capCol: '#f2c14e' };
+    try { v.card = buildRewardCard(v.desc.reward, v.cardPos, v.cardQuat, v.index); }
+    catch (e) { console.warn('[dtrh] gold rescue card build failed:', e); v.card = null; }
+    v.wallCandidate = false;
+  }
+
+  // Wall off a prizeless doorway: brick the hole in the room shader (solid wall,
+  // no open portal), cap the mouth with its dark seal disc, then drape a cluster
+  // of the user's gifs/photos over the dead-end so it reads as a plastered wall
+  // rather than a bare hole. Decorative cards are NOT raycast doorway targets
+  // (the mouth has no prize card) and ride the wall like posters.
+  function wallOffDoor(v) {
+    if (!v) return;
+    v.walled = true;
+    v.sealed = true;
+    closeDoor(v.index);
+    if (v.sealMat) v.sealMat.opacity = 0.92;
+    v.wallCards = [];
+    if (!(spawner && spawner.createDetachedCard)) return;
+    const n = 3 + ((Math.random() * 2) | 0);   // 3-4 gifs plastered over the entrance
+    for (let k = 0; k < n; k++) {
+      const off = new THREE.Vector3((Math.random() - 0.5) * 3.4, (Math.random() - 0.5) * 3.4, 0)
+        .applyQuaternion(v.cardQuat);
+      const pos = v.mouth.clone().addScaledVector(v.dir, 0.4 + Math.random() * 0.5).add(off);
+      const quat = v.cardQuat.clone()
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), (Math.random() - 0.5) * 0.5));
+      const c = spawner.createDetachedCard({ pos, quat, scale: CARD_SCALE * (0.5 + Math.random() * 0.3) });
+      if (c && c.group) { c.group.userData = { type: 'walldress' }; scene.add(c.group); v.wallCards.push(c); }
+    }
+  }
+
   function teardown() {
     if (!J) return;
     if (J.phase === 'linger' && api.onLinger) { try { api.onLinger(false, J.mode); } catch (e) { /* ignore */ } }
     for (const v of J.veins) destroyVein(v);
     if (J.title) { try { J.title.dispose(); } catch (e) { /* ignore */ } J.title = null; }
+    if (J.revealRow) { try { J.revealRow.dispose(); } catch (e) { /* ignore */ } J.revealRow = null; }
     if (J.room) { scene.remove(J.room.mesh); J.room.geo.dispose(); J.room.mat.dispose(); J.room = null; }
     if (tunnel && tunnel.clearHoles) tunnel.clearHoles();  // stale-state safety; v5 sets no wall holes
     if (tunnel && tunnel.clearCut) tunnel.clearCut();
@@ -811,6 +958,14 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       index = tubesPick();
     }
 
+    // never dive a sealed / walled / prizeless mouth (a passive faller or lane
+    // vote could land on one): fall through to the first door that's actually
+    // open. schedule()'s guard guarantees at least one such door exists.
+    if (!J.veins[index] || J.veins[index].sealed || J.veins[index].walled || !J.veins[index].card) {
+      const open = J.veins.findIndex((v) => v && !v.sealed && !v.walled && v.card && !v.dying);
+      if (open >= 0) { index = open; forced = true; }
+    }
+
     const winner = J.veins[index];
     // the losers stop loading immediately: dispose their veins + cards, brick up
     // their doorways (the winner's stays open - its corridor backs it)
@@ -834,6 +989,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
 
     // the title's moment is over - the dive owns the eye now
     if (J.title) { try { J.title.dispose(); } catch (e) { /* ignore */ } J.title = null; }
+    if (J.revealRow) { try { J.revealRow.dispose(); } catch (e) { /* ignore */ } J.revealRow = null; }
 
     J.phase = 'trail';
     J.winner = winner;
@@ -884,6 +1040,53 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     if (api.onLinger) { try { api.onLinger(true, J.mode); } catch (e) { /* ignore */ } }
   }
 
+  // The roulette wheel is spinning: advance its hops on the fixed schedule.
+  // Runs INSTEAD of the draft clock (see update's linger branch), so the
+  // auto-resume timer never eats the show. The landing hop index is
+  // steps % 16 === target by construction.
+  function tickRevealSweep(dt) {
+    const row = J.revealRow;
+    row.t += dt;
+    while (row.step < row.times.length - 1 && row.t >= row.times[row.step + 1]) {
+      row.step++;
+      const s = row.squares[row.step % row.squares.length];
+      s.punch = 1;
+      row.cursor.position.x = s.mesh.position.x;
+      const landed = row.step === row.times.length - 1;
+      if (landed) {
+        row.done = true;
+        J.revealDone = true;   // the doors come alive; the draft clock starts
+        row.flare = 1;
+        s.punch = 1.6;         // the winner pops...
+        for (let i = 0; i < row.squares.length; i++) {
+          if (i !== row.target) row.squares[i].baseA = 0.3;   // ...the losers dim
+        }
+      }
+      if (api.onRevealFx) { try { api.onRevealFx(landed ? 'settle' : 'tick'); } catch (e) { /* ignore */ } }
+      if (landed) break;
+    }
+  }
+
+  // Per-frame dressing for the roulette row: approach fade-up (same fog fade
+  // as the title), punch decay on the swept squares, the winner's breathe and
+  // the settle flare. Cheap - 16 scalar lerps.
+  function tickRevealAnim(row, depth, dt) {
+    const near = J.phase === 'approach'
+      ? clamp((depth - (J.atDepth - J.lead)) / J.lead, 0, 1) : 1;
+    row.breatheT += dt;
+    for (let i = 0; i < row.squares.length; i++) {
+      const s = row.squares[i];
+      s.punch *= Math.exp(-6 * dt);
+      s.mesh.scale.setScalar(1 + 0.4 * s.punch + (row.done && i === row.target ? 0.35 : 0));
+      let a = s.baseA + 0.2 * s.punch;
+      if (row.done && i === row.target) a = 0.9 + 0.1 * Math.sin(row.breatheT * 1.4);
+      s.mat.opacity = near * Math.min(1, a);
+    }
+    if (row.flare > 0) row.flare = Math.max(0, row.flare - dt * 2.2);
+    row.cursor.scale.setScalar(1 + 1.5 * row.flare);
+    row.curMat.opacity = near * (row.step >= 0 ? (row.done ? 0.25 + 0.65 * row.flare : 0.85) : 0);
+  }
+
   function update(depth, dt) {
     tickShatters(dt);
     if (!J) return;
@@ -919,6 +1122,9 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
         ? clamp((depth - (J.atDepth - J.lead)) / J.lead, 0, 1) : 1;
       J.title.mat.opacity = near * breathe;
     }
+    // the roulette row rides the same reveal (its hops advance in the linger
+    // branch below; this is just the every-frame dressing)
+    if (J.revealRow) tickRevealAnim(J.revealRow, depth, dt);
 
     if (J.phase === 'approach') {
       const near = clamp((depth - (J.atDepth - J.lead)) / J.lead, 0, 1);
@@ -933,15 +1139,22 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       // key vote only steers where the timeout surrender goes.
       if (J.presealIndex === 0 && nav.getLaneVote() < 0) nav.resetLaneVote();
       else if (J.presealIndex === J.veins.length - 1 && nav.getLaneVote() > 0) nav.resetLaneVote();
-      J.lingerT += dt;
-      // draft rooms run the game's draft timer; surrender forks (the 1-in-100
-      // easter egg) + presealed forks (no real choice anyway) auto-commit at
-      // 5s; every other fork waits for the player's click, with a long
-      // failsafe so a fork whose cards never loaded can't wedge the run.
-      const wait = J.mode === 'draft'
-        ? (J.lingerSec > 0 ? J.lingerSec : LINGER_FAILSAFE)
-        : (J.presealIndex != null || J.autoPick) ? LINGER_TIMEOUT : LINGER_FAILSAFE;
-      if (J.lingerT >= wait) commit('timeout');
+      // the biome roulette spins FIRST: while it runs the doors are dead
+      // (pickIndex/getPickables/skipDraft check revealDone) and the draft
+      // clock holds at zero - the timer starts counting when the wheel lands.
+      if (J.revealRow && !J.revealDone) {
+        tickRevealSweep(dt);
+      } else {
+        J.lingerT += dt;
+        // draft rooms run the game's draft timer; surrender forks (the 1-in-100
+        // easter egg) + presealed forks (no real choice anyway) auto-commit at
+        // 5s; every other fork waits for the player's click, with a long
+        // failsafe so a fork whose cards never loaded can't wedge the run.
+        const wait = J.mode === 'draft'
+          ? (J.lingerSec > 0 ? J.lingerSec : LINGER_FAILSAFE)
+          : (J.presealIndex != null || J.autoPick) ? LINGER_TIMEOUT : LINGER_FAILSAFE;
+        if (J.lingerT >= wait) commit('timeout');
+      }
     } else if (J.phase === 'handoff') {
       // the scene has rebased (fresh loop built coaxially at the exit); keep the
       // winner vein ENCLOSING the camera until fallNav hands off onto that loop
@@ -958,7 +1171,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
      * a door born shut (fork mode only). mode 'draft' stages the boon draft:
      * lingerSec is the game's draft timer (timeout dives the coaxed door with
      * skipped semantics), lead shortens the telegraph. */
-    schedule({ atDepth, branches, coaxIndex = 0, presealIndex = null, mode = 'fork', lingerSec = 0, lead = LEAD, title = null }) {
+    schedule({ atDepth, branches, coaxIndex = 0, presealIndex = null, mode = 'fork', lingerSec = 0, lead = LEAD, title = null, biomeReveal = null }) {
       if (!active) return;
       if (J) teardown();
       const descs = (branches || []).slice(0, 3);
@@ -980,35 +1193,63 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
         room: buildRoom(C, fr.tangent.clone().negate(), veins),
         // the Journey Rooms: the next room's title over its doors (draft rooms)
         title: title && title.text ? buildTitle(C, veins, title, park) : null,
+        revealRow: null, revealDone: true,
       };
+      // the biome roulette (draft rooms with a rolled biome only): while it
+      // spins, revealDone=false keeps the doors dead + the draft clock at zero.
+      // No payload (fork mode, scripted runs) = today's behavior untouched.
+      if (mode === 'draft' && biomeReveal && biomeReveal.items && biomeReveal.items.length
+          && biomeReveal.targetIndex >= 0 && biomeReveal.targetIndex < biomeReveal.items.length) {
+        J.revealRow = buildBiomeRow(C, veins, biomeReveal, park);
+        J.revealDone = !J.revealRow;
+      }
       applyCut(atDepth);   // hide the trunk through the chamber's span
       if (presealIndex != null && veins[presealIndex]) {
         const v = veins[presealIndex];
         v.sealed = true; v.sealMat.opacity = 0.9;
         if (v.card) { v.card.dispose(); v.card = null; }
       }
+      // Wall off any prizeless doorway (2026-07): brick + drape gifs instead of
+      // parking a consolation gold pouch in an open hole. Guard: a room must keep
+      // at least one ENTERABLE door (not sealed, not walled, has a card) - if the
+      // preseal + starved offers between them would leave none, rescue one door
+      // (never the presealed one) with a gold pouch and re-open it.
+      const enterable = (v) => v && !v.sealed && !v.walled && v.card;
+      if (!veins.some(enterable)) {
+        const rescue = veins.find((v, i) => v && i !== presealIndex) || veins[0];
+        if (rescue) { rescue.sealed = false; if (rescue.sealMat) rescue.sealMat.opacity = 0; rescueDoorWithGold(rescue); }
+      }
+      veins.forEach((v) => { if (v && v.wallCandidate && !v.card && !v.sealed) wallOffDoor(v); });
       try { nav.resetLaneVote(); nav.setJunctionArmed(true); } catch (e) { /* ignore */ }
     },
     update,
     isBusy: () => !!J,
-    /** raycast (scene.js) calls this when a doorway card is clicked. */
+    /** raycast (scene.js) calls this when a doorway card is clicked. Dead while
+     * the biome roulette is still spinning (revealDone gates every entry path). */
     pickIndex(index) {
-      if (!J || J.phase !== 'linger') return false;
-      if (J.presealIndex === index) return false; // can't enter a sealed mouth
+      if (!J || J.phase !== 'linger' || !J.revealDone) return false;
+      const v = J.veins[index];
+      if (!v || v.sealed || v.walled || !v.card) return false; // can't enter a sealed / walled mouth
       commit('click', index);
       return true;
     },
     /** draft mode: the game's resist button - dive the coaxed door, no boon
      * (commit reports skipped:true; the game banks +1 resistance). */
     skipDraft() {
-      if (!J || J.mode !== 'draft' || J.phase !== 'linger') return false;
+      if (!J || J.mode !== 'draft' || J.phase !== 'linger' || !J.revealDone) return false;
       commit('skip');
       return true;
     },
-    /** draft mode: seconds left on the linger timer (null outside a draft linger). */
+    /** draft mode: seconds left on the linger timer (null outside a draft
+     * linger, and null while the roulette spins - the clock hasn't started). */
     getDraftSecondsLeft() {
-      if (!J || J.mode !== 'draft' || J.phase !== 'linger' || !(J.lingerSec > 0)) return null;
+      if (!J || J.mode !== 'draft' || J.phase !== 'linger' || !(J.lingerSec > 0) || !J.revealDone) return null;
       return Math.max(0, Math.ceil(J.lingerSec - J.lingerT));
+    },
+    /** draft mode: true while the biome roulette is still spinning (doors dead,
+     * chrome held back - the game shows it on the 'settle' reveal FX). */
+    isRevealPending() {
+      return !!(J && !J.revealDone);
     },
     /** draft mode: a reroll re-deals the door cards in place - swap each vein's
      * desc + prize card and retint its rings + portal rim to the new boon. */
@@ -1035,7 +1276,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
      * grabbables beside the doorway. Clicking anywhere else must never commit
      * (it looks/grabs). Media-card fallback exposes its content plane only. */
     getPickables() {
-      if (!J || J.phase !== 'linger') return [];
+      if (!J || J.phase !== 'linger' || !J.revealDone) return [];
       const out = [];
       for (const m of J.veins) {
         if (m.dying || m.sealed || !m.card) continue;
@@ -1060,6 +1301,10 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     set onCommit(fn) { api.onCommit = fn; },
     get onLinger() { return api.onLinger; },
     set onLinger(fn) { api.onLinger = fn; },
+    /** onRevealFx('tick'|'settle') - the roulette's casino noises (the game
+     * owns the sfx bridge; the engine just narrates the hops). */
+    get onRevealFx() { return api.onRevealFx; },
+    set onRevealFx(fn) { api.onRevealFx = fn; },
     /** onVeinEnd(exitFrame) - the scene rebases the loop onto {pos,tangent,up}. */
     get onVeinEnd() { return api.onVeinEnd; },
     set onVeinEnd(fn) { api.onVeinEnd = fn; },

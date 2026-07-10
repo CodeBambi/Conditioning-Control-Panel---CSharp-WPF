@@ -212,7 +212,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="✦" Foreground="{StaticResource Purple}" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                 <TextBlock x:Name="TxtSparks" Text="0" Foreground="White" FontWeight="Bold" FontSize="14" VerticalAlignment="Center"/>
-                                <TextBlock Text="drops" Foreground="{StaticResource TextMut}" FontSize="11" VerticalAlignment="Bottom" Margin="5,0,0,1"/>
+                                <TextBlock Text="emotes" Foreground="{StaticResource TextMut}" FontSize="11" VerticalAlignment="Bottom" Margin="5,0,0,1"/>
                             </StackPanel>
                         </Border>
                         <Border Background="{StaticResource Card2}" CornerRadius="9" Padding="12,5" Margin="0,0,8,0">
@@ -326,7 +326,7 @@
                             <TextBlock Text="???" Foreground="{StaticResource TextMut}" FontSize="12" FontWeight="SemiBold"/>
                         </Border>
                         <TextBlock Text="Habits" Style="{StaticResource SectionHdr}" FontSize="20" Margin="2,14,0,2"/>
-                        <TextBlock Text="spend your drops. once trained they're yours for good. switch them on or off between descents."
+                        <TextBlock Text="spend your emotes. once trained they're yours for good. switch them on or off between descents."
                                    Foreground="{StaticResource TextMut}" FontSize="11" Margin="2,0,0,10"/>
                         <StackPanel x:Name="HabitsHost"/>
                     </StackPanel>
@@ -520,7 +520,7 @@
                                         <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Drops" Foreground="{StaticResource TextDim}" FontSize="15" Margin="0,4" Width="175"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Emotes" Foreground="{StaticResource TextDim}" FontSize="15" Margin="0,4" Width="175"/>
                                     <TextBlock Grid.Row="0" Grid.Column="1" x:Name="StSparks" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,4"/>
                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Descents completed" Foreground="{StaticResource TextDim}" FontSize="15" Margin="0,4"/>
                                     <TextBlock Grid.Row="1" Grid.Column="1" x:Name="StRuns" Foreground="White" FontWeight="Bold" FontSize="15" Margin="0,4"/>

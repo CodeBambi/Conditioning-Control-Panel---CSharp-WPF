@@ -180,6 +180,7 @@ export function createBiomeMech(g) {
       g.addHeat(0.02);
     };
     return {
+      enter() { g.audioColor('muffled'); },   // the ward eats the highs too
       tick(dt) {
         sinceTouch += dt;
         if (sinceTouch <= 7) return;
@@ -194,7 +195,7 @@ export function createBiomeMech(g) {
       },
       treatPop() { touch(); return null; },
       onGrabbed() { touch(); },
-      exit() { },
+      exit() { g.audioColor(null); },
     };
   };
 

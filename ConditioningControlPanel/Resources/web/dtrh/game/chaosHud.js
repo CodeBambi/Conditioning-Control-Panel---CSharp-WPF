@@ -25,6 +25,7 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
   const tips = createHudTips(hud, { isSuppressed });
   let lastSt = null;   // latest update() snapshot - tooltip getters read live values from it
   let lastWx = null;   // latest setWeather() payload
+  let lastBiome = null; // latest setBiome() payload (the active region mechanic)
 
   const mk = (cls, parent) => {
     const d = document.createElement('div');
@@ -38,6 +39,20 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
   scoreVal.className = 'cf-score-val';
   scoreVal.textContent = '0';
   scoreRow.append(scoreVal);
+
+  // ---- the biome banner: current place name + its live effect, up top so the
+  // player always knows which room's rules are in force ----
+  const biomeRow = mk('cf-hud-biome');
+  biomeRow.style.display = 'none';
+  const biomeArt = document.createElement('img'); biomeArt.className = 'cf-biome-art'; biomeArt.alt = '';
+  biomeArt.addEventListener('error', () => { biomeArt.style.display = 'none'; });   // tile missing: text-only chip
+  const biomeText = document.createElement('span'); biomeText.className = 'cf-biome-text';
+  const biomeGlyph = document.createElement('span'); biomeGlyph.className = 'cf-biome-glyph';
+  const biomeName = document.createElement('span'); biomeName.className = 'cf-biome-name';
+  const biomeFx = document.createElement('span'); biomeFx.className = 'cf-biome-fx';
+  const biomeHint = document.createElement('span'); biomeHint.className = 'cf-biome-hint';
+  biomeText.append(biomeGlyph, biomeName, biomeFx, biomeHint);
+  biomeRow.append(biomeArt, biomeText);
 
   // ---- the multiplier badge (Balatro-style: punches on combo, burns as it climbs) ----
   const badge = mk('cf-mult-badge tier-0');
@@ -136,6 +151,11 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
   // ---- hover tooltips for the mechanic readouts (rect-tested; see hudTips.js) ----
   const FIRE_TIERS = [15, 25, 50, 100];
   tips.attach(scoreRow, () => HUD_TIPS.score);
+  tips.attach(biomeRow, () => {
+    if (!lastBiome) return null;
+    return { glyph: lastBiome.glyph || '◈', kicker: 'the place', name: lastBiome.name || '',
+      desc: lastBiome.tagline || '', accent: '156,232,160' };
+  });
   tips.attach(badge, () => {
     if (!lastSt) return HUD_TIPS.mult;
     const c = lastSt.combo | 0;
@@ -204,6 +224,23 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
   const toyEls = new Map();
   let lastToys = [];
 
+  // ---- the Eye: hide/show the whole run HUD (bottom-right). The Eye itself and
+  // the Fall's gear stay put, so a hidden HUD still has an escape hatch. ----
+  const eyeBtn = document.createElement('button');
+  eyeBtn.type = 'button';
+  eyeBtn.className = 'cf-eye-btn';
+  eyeBtn.textContent = '👁';
+  eyeBtn.title = 'hide / show the HUD';
+  eyeBtn.setAttribute('aria-label', 'hide or show the HUD');
+  eyeBtn.style.display = 'none';   // shown only while the run HUD is up
+  eyeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const hidden = hud.classList.toggle('dtrh-hud-hidden');
+    eyeBtn.classList.toggle('is-off', hidden);
+    eyeBtn.textContent = hidden ? '🙈' : '👁';
+  });
+  hud.appendChild(eyeBtn);
+
   function updateToys(toys, status) {
     lastToys = toys;
     if (!toys.length) { dock.innerHTML = ''; toyEls.clear(); return; }
@@ -259,28 +296,42 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
   const annWrap = document.createElement('div');
   annWrap.className = 'cf-announce-wrap';
   hud.appendChild(annWrap);
-  function announce(text, kind = 'depth', holdMs = 2000, { artKey = null, subText = null } = {}) {
+  function announce(text, kind = 'depth', holdMs = 2000, { artKey = null, artUrl = null, artBig = false, subText = null, hint = null } = {}) {
     while (annWrap.children.length >= 2) annWrap.firstChild.remove();
     const el = document.createElement('div');
     el.className = `cf-announce cf-announce--${kind}`;
     el.style.setProperty('--hold', `${holdMs}ms`);
-    if (artKey) {
+    if (artKey || artUrl) {
+      // artUrl = a full image URL (the biome roulette tiles); artKey = a
+      // shipped announce banner. When both are given the URL leads and the
+      // banner is the on-error fallback (a missing tile never leaves a hole).
       const img = document.createElement('img');
-      img.className = 'cf-announce-art';
-      img.src = `${ART}announce/${artKey}.png`;
+      img.className = 'cf-announce-art' + (artUrl ? ' cf-announce-art--tile' : '') + (artBig ? ' cf-announce-art--big' : '');
+      img.src = artUrl || `${ART}announce/${artKey}.png`;
       img.alt = '';
-      img.addEventListener('error', () => img.remove());
+      img.addEventListener('error', () => {
+        if (artUrl && artKey && img.src !== `${ART}announce/${artKey}.png`) {
+          img.className = 'cf-announce-art';
+          img.src = `${ART}announce/${artKey}.png`;
+        } else img.remove();
+      });
       el.appendChild(img);
     }
     const txt = document.createElement('div');
     txt.className = 'cf-announce-text';
     txt.textContent = text;
     el.appendChild(txt);
-    if (subText && artKey) {   // like WPF: the subline only rides under banner art
+    if (subText && (artKey || artUrl)) {   // like WPF: the subline only rides under banner art
       const sub = document.createElement('div');
       sub.className = 'cf-announce-sub';
       sub.textContent = subText;
       el.appendChild(sub);
+    }
+    if (hint) {   // the quiet grey mechanics note under the flavour line
+      const h = document.createElement('div');
+      h.className = 'cf-announce-hint';
+      h.textContent = hint;
+      el.appendChild(h);
     }
     annWrap.appendChild(el);
     el.addEventListener('animationend', (e) => { if (e.target === el) el.remove(); });
@@ -366,6 +417,22 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
       weatherRow.style.display = '';
       weatherRow.textContent = `${wx.glyph} ${wx.name}` + (wx.forecast ? ` → ${wx.forecast}` : '');
       weatherRow.classList.toggle('is-reroll', !!wx.rerollable);
+    },
+    /** THE BIOMES: the active place's name + effect, top-left. Pass the biome
+     * object ({ glyph, name, tagline }) or null to hide (classic/no-biome runs). */
+    setBiome(b) {
+      lastBiome = b || null;
+      if (!b) { biomeRow.style.display = 'none'; return; }
+      biomeRow.style.display = '';
+      if (b.id) {
+        biomeArt.style.display = '';
+        biomeArt.src = `${ART}biomes/${b.id}.png`;   // the roulette tile, as the chip's face
+      } else biomeArt.style.display = 'none';
+      biomeGlyph.textContent = b.glyph || '';
+      biomeName.textContent = b.name || '';
+      biomeFx.textContent = b.tagline || '';
+      biomeHint.textContent = b.mechHint || '';
+      biomeHint.style.display = b.mechHint ? '' : 'none';
     },
     flashFocus() {
       focusBar.classList.remove('cf-focus-flash');
@@ -460,7 +527,13 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
       root.style.display = v ? '' : 'none';
       picksWrap.style.display = v ? '' : 'none';
       dock.style.display = v ? '' : 'none';
-      if (!v) { prevCombo = null; tips.hideNow(); } // next run's first update() sets the baseline silently
+      eyeBtn.style.display = v ? '' : 'none';
+      if (!v) {
+        // leaving a run: clear the Eye's hide state so the next run starts shown
+        hud.classList.remove('dtrh-hud-hidden');
+        eyeBtn.classList.remove('is-off'); eyeBtn.textContent = '👁';
+        prevCombo = null; tips.hideNow(); // next run's first update() sets the baseline silently
+      }
       syncEmbers();
     },
     dispose() {
@@ -468,7 +541,7 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
       clearInterval(emberTimer);
       tips.dispose();
       root.remove(); annWrap.remove(); toastWrap.remove(); pulseEl.remove();
-      picksWrap.remove(); dock.remove(); heatTint.remove();
+      picksWrap.remove(); dock.remove(); eyeBtn.remove(); heatTint.remove();
     },
   };
 }

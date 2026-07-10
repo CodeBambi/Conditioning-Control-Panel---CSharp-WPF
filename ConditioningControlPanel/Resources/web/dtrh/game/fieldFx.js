@@ -73,6 +73,27 @@ const PAL_DEFAULTS = {
   sparkleHue: 315,
 };
 
+// ---- THE BIOMES' ambient weather (identity pass) ---------------------------
+// One lightweight always-on particle field per biome, data-driven from
+// biomes.js style.ambient ({kind, color|colors, count?}). Two families:
+//   drifters (vy set)  - integrate + wrap at the viewport edges
+//   flashers (life set) - live briefly, respawn elsewhere (specks/glints/coins)
+// Counts stay small (<=24) - this canvas already redraws for the game FX and
+// the whole field is a few dozen additive sprites.
+const AMBIENT_KINDS = {
+  confetti: { count: 22, size: [2, 4.5], vy: [16, 40], vx: [-8, 8], sway: 16, shape: 'fleck', alpha: 0.50 },
+  motes:    { count: 16, size: [1.5, 3.2], vy: [3, 9], vx: [-3, 3], sway: 7, shape: 'dot', alpha: 0.20, twinkle: true },
+  specks:   { count: 20, size: [1, 2.2], life: [0.05, 0.30], shape: 'blink', alpha: 0.55 },
+  ash:      { count: 20, size: [1.5, 3], vy: [12, 26], vx: [-9, 3], sway: 11, shape: 'fleck', alpha: 0.30 },
+  glints:   { count: 7, size: [4, 9], life: [0.35, 0.80], shape: 'star', alpha: 0.80 },
+  bubbles:  { count: 14, size: [2, 5], vy: [-14, -34], vx: [-4, 4], sway: 9, shape: 'ring', alpha: 0.40 },
+  coins:    { count: 8, size: [3, 6], life: [0.25, 0.60], shape: 'star', alpha: 0.90 },
+  embers:   { count: 16, size: [1.5, 3], vy: [-70, -150], vx: [-8, 8], shape: 'streak', alpha: 0.50 },
+  goldleaf: { count: 12, size: [2, 4], vy: [-7, -18], vx: [-6, 6], sway: 13, shape: 'fleck', alpha: 0.45 },
+  petals:   { count: 11, size: [2.5, 5], vy: [-5, -12], vx: [-7, 7], sway: 18, shape: 'dot', alpha: 0.33 },
+};
+const rnd = (a, b) => a + Math.random() * (b - a);
+
 export function createFieldFx(hud) {
   let disposed = false;
   let PAL = { ...PAL_DEFAULTS };
@@ -113,6 +134,60 @@ export function createFieldFx(hud) {
   let inkPts = [];       // the Wand's ink: chaosField's live trail, re-fed by reference
   let inkClock = 0;      // drives the travelling shimmer along the ink
   let vibeOn = false;
+  let ambient = null;    // biome ambient field: { def, colors, parts: [...] }
+
+  /** THE BIOMES: dress the field in a biome's ambient weather (null clears).
+   * spec = {kind, color:[r,g,b] | colors:[[r,g,b]..], count?} from biomes.js. */
+  function setAmbient(spec) {
+    const def = spec && AMBIENT_KINDS[spec.kind];
+    if (!def) { ambient = null; return; }
+    const colors = spec.colors || [spec.color || [255, 255, 255]];
+    const n = spec.count != null ? spec.count : def.count;
+    const W = window.innerWidth, H = window.innerHeight;
+    const parts = [];
+    for (let i = 0; i < n; i++) {
+      parts.push({
+        x: Math.random() * W, y: Math.random() * H,
+        size: rnd(def.size[0], def.size[1]),
+        vx: def.vx ? rnd(def.vx[0], def.vx[1]) : 0,
+        vy: def.vy ? rnd(def.vy[0], def.vy[1]) : 0,
+        phase: Math.random() * Math.PI * 2,
+        life: def.life ? rnd(def.life[0], def.life[1]) : 0,
+        total: 0,
+        col: colors[(Math.random() * colors.length) | 0],
+      });
+      const p = parts[parts.length - 1];
+      p.total = p.life || 1;
+    }
+    ambient = { def, colors, parts };
+  }
+
+  /** Drift/respawn the ambient field. Drifters wrap at the edges; flashers
+   * (life-based) burn out and respawn somewhere new. */
+  function stepAmbient(dt) {
+    if (!ambient) return;
+    const { def, colors, parts } = ambient;
+    const W = window.innerWidth, H = window.innerHeight, m = 24;
+    for (const p of parts) {
+      if (def.life) {
+        p.life -= dt;
+        if (p.life <= 0) {
+          p.x = Math.random() * W; p.y = Math.random() * H;
+          p.size = rnd(def.size[0], def.size[1]);
+          p.life = p.total = rnd(def.life[0], def.life[1]);
+          p.col = colors[(Math.random() * colors.length) | 0];
+        }
+        continue;
+      }
+      p.phase += dt;
+      p.x += (p.vx + (def.sway ? Math.sin(p.phase * 1.7) * def.sway : 0)) * dt;
+      p.y += p.vy * dt;
+      if (p.y > H + m) { p.y = -m; p.x = Math.random() * W; }
+      else if (p.y < -m) { p.y = H + m; p.x = Math.random() * W; }
+      if (p.x > W + m) p.x = -m;
+      else if (p.x < -m) p.x = W + m;
+    }
+  }
 
   // ---- jagged bolt builder (perpendicular midpoint displacement, WPF BuildBolt) ----
   function buildBolt(ax, ay, bx, by) {
@@ -176,6 +251,7 @@ export function createFieldFx(hud) {
   /** Age + cull the timed buffers. Tethers + ink are re-fed each frame, not aged. */
   function step(dt) {
     inkClock += dt;
+    stepAmbient(dt);
     for (let i = residues.length - 1; i >= 0; i--) { if ((residues[i].life -= dt) <= 0) residues.splice(i, 1); }
     for (let i = bolts.length - 1; i >= 0; i--) {
       const b = bolts[i];
@@ -201,7 +277,9 @@ export function createFieldFx(hud) {
   }
 
   function anyActive() {
-    return bolts.length || residues.length || trail.length || sparkles.length || tethers.length || inkPts.length || beams.length;
+    return bolts.length || residues.length || trail.length || sparkles.length
+      || tethers.length || inkPts.length || beams.length
+      || (ambient && ambient.parts.length);
   }
 
   // ---- additive soft-sprite blit (the WPF DrawDot): tinted bloom, `lighter` ----
@@ -239,6 +317,53 @@ export function createFieldFx(hud) {
     if (!any) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalCompositeOperation = 'lighter';   // ADDITIVE = the glow
+
+    // --- Biome ambient weather: the biome's always-on particle field, drawn
+    // UNDER every gameplay effect so it reads as atmosphere, not signal. ---
+    if (ambient) {
+      const def = ambient.def;
+      for (const p of ambient.parts) {
+        const [ar, ag, ab] = p.col;
+        if (def.shape === 'dot') {
+          const tw = def.twinkle ? 0.6 + 0.4 * Math.sin(inkClock * 2.1 + p.phase * 3.0) : 1;
+          dot(p.x, p.y, p.size * 2.2, def.alpha * tw, ar, ag, ab);
+        } else if (def.shape === 'fleck') {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.phase * 1.3);
+          ctx.globalAlpha = def.alpha;
+          ctx.fillStyle = `rgb(${ar},${ag},${ab})`;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.5);
+          ctx.restore();
+          ctx.globalAlpha = 1;
+        } else if (def.shape === 'ring') {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = `rgba(${ar},${ag},${ab},${def.alpha})`;
+          ctx.stroke();
+          dot(p.x - p.size * 0.3, p.y - p.size * 0.3, p.size * 0.5, def.alpha * 0.8, 255, 255, 255);
+        } else if (def.shape === 'star') {
+          // brief 4-point glint: brightest mid-life, arms shrink as it dies
+          const t = Math.sin(Math.PI * Math.max(0, Math.min(1, p.life / p.total)));
+          const s = p.size * (0.4 + 0.6 * t);
+          ctx.strokeStyle = `rgba(${ar},${ag},${ab},${def.alpha * t})`;
+          ctx.lineWidth = 1.1;
+          ctx.beginPath();
+          ctx.moveTo(p.x - s, p.y); ctx.lineTo(p.x + s, p.y);
+          ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x, p.y + s);
+          ctx.stroke();
+          dot(p.x, p.y, s * 0.8, def.alpha * t, ar, ag, ab);
+        } else if (def.shape === 'streak') {
+          // a short motion trail behind the ember's velocity
+          glowLine([{ x: p.x, y: p.y }, { x: p.x - p.vx * 0.08, y: p.y - p.vy * 0.08 }],
+            p.size, ar, ag, ab, def.alpha, 4);
+        } else if (def.shape === 'blink') {
+          const t = Math.sin(Math.PI * Math.max(0, Math.min(1, p.life / p.total)));
+          dot(p.x, p.y, p.size * 2, def.alpha * t, ar, ag, ab);
+        }
+      }
+    }
 
     // --- Biome light pools (Keyhole candlelight / Searchlight cold sweep /
     // Undertow current rings): a wide soft bloom + a hot heart + a faint edge
@@ -355,7 +480,7 @@ export function createFieldFx(hud) {
 
   return {
     addBolt, addResidue, addSparkle, setTethers, setInk, setVibe, vibePoint, inResidue, draw,
-    setRegionPalette,
+    setRegionPalette, setAmbient,
     /** Biome light pools / current rings (null/[] clears them). Fed at the
      * 0.25s RunTick with TARGET positions; the draw loop eases the visible
      * pools toward them every frame so the sweep glides instead of stepping.

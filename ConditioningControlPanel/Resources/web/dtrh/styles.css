@@ -156,6 +156,23 @@ html, body {
 }
 .sf-audio-val { color: var(--pink); font-weight: 600; }
 .sf-audio-panel input[type="range"] { width: 100%; accent-color: var(--pink); cursor: pointer; }
+/* voiceover set: two-way toggle (sissy/bambi share a VO set, circe has her own) */
+.sf-voice-btns { display: flex; gap: 6px; }
+.sf-voice-btn {
+  flex: 1; padding: 0.32rem 0.2rem;
+  font: inherit; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em;
+  color: #cbb3d6; text-transform: lowercase;
+  background: rgba(40, 18, 50, 0.6);
+  border: 1px solid rgba(255, 105, 180, 0.25); border-radius: 9px;
+  cursor: pointer;
+  transition: border-color .2s, background .2s, color .2s;
+}
+.sf-voice-btn:hover { border-color: var(--pink); }
+.sf-voice-btn.is-on {
+  color: #ffe9f4;
+  background: rgba(255, 105, 180, 0.28);
+  border-color: var(--pink);
+}
 
 /* Paint button + tunnel color/theme picker */
 .sf-theme-wrap { position: relative; display: flex; align-items: center; pointer-events: none; }
@@ -1010,6 +1027,13 @@ img.rh-fx-spiralspin {
 .sf-game-mode .sf-score { display: none; }
 .sf-game-mode .sf-hint { display: none; }
 
+/* In the hub (Warren) the game owns its own dock (wr-dock), so the Fall's own
+   dock + chrome-toggle gear are redundant - hiding them kills the "double
+   options" overlap. A live descent (no .sf-hub) keeps them: that in-run gear is
+   what the Eye toggle leaves on screen. */
+.sf-game-mode.sf-hub .sf-dock { display: none; }
+.sf-game-mode.sf-hub .sf-uitoggle { display: none; }
+
 /* ---- field ---- */
 .cf-layer {
   position: absolute;
@@ -1377,6 +1401,27 @@ img.rh-fx-spiralspin {
 .cf-focus-bar.cf-focus-flash { animation: cfFocusFlash 0.5s ease-out; }
 @keyframes cfFocusFlash { 0%, 60% { box-shadow: 0 0 0 2px #ff5468, 0 0 14px #ff5468; } }
 .cf-hud-clock { font-size: 0.85rem; opacity: 0.9; }
+/* THE BIOMES: the active place's name + effect, top-left, so the rules are always visible */
+.cf-hud-biome {
+  align-self: flex-start;
+  display: flex; align-items: center; gap: 8px;
+  max-width: 18rem;
+  padding: 4px 10px 4px 5px; margin: 1px 0 2px;
+  border-radius: 10px;
+  background: rgba(156, 232, 160, 0.12);
+  box-shadow: 0 0 0 1px rgba(156, 232, 160, 0.4);
+}
+.cf-biome-art {
+  width: 46px; height: 46px; flex: none;
+  object-fit: cover; border-radius: 8px;
+  box-shadow: 0 0 0 1px rgba(156, 232, 160, 0.35), 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.cf-biome-text { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.cf-biome-glyph { font-size: 0.95rem; }
+.cf-biome-name { font-size: 0.86rem; font-weight: 800; letter-spacing: 0.04em; color: #daffe0; }
+.cf-biome-fx { font-size: 0.72rem; font-style: italic; opacity: 0.82; color: #bfeecb; flex-basis: 100%; }
+/* the grey how-it-plays line under the flavour */
+.cf-biome-hint { font-size: 0.68rem; opacity: 0.75; color: #aab3ac; flex-basis: 100%; }
 /* Wave 2: the weather chip - the loop's named sky (+ Mood Ring forecast) */
 .cf-hud-weather {
   align-self: flex-start;
@@ -1627,26 +1672,44 @@ img.rh-fx-spiralspin {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 6px;
+  gap: 8px;
   pointer-events: none;
   z-index: 9;
 }
 .cf-pick {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  border: 1px solid rgba(156, 232, 160, 0.55);
+  width: 54px;
+  height: 54px;
+  border-radius: 10px;
+  border: 2px solid rgba(156, 232, 160, 0.6);
   background: rgba(20, 30, 20, 0.55);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+  font-size: 1.5rem;
   color: #9ce8a0;
   overflow: hidden;
   animation: cfToastIn 0.25s ease-out;
 }
 .cf-pick img { width: 100%; height: 100%; object-fit: cover; }
 .cf-pick--sin { border-color: rgba(255, 138, 138, 0.65); color: #ff8a8a; background: rgba(40, 12, 16, 0.6); }
+
+/* ---- the Eye: hide/show the run HUD (bottom-right) ---- */
+.cf-eye-btn {
+  position: absolute; right: 14px; bottom: 14px; z-index: 12;
+  width: 42px; height: 42px; border-radius: 50%;
+  border: 1px solid rgba(156, 232, 160, 0.5);
+  background: rgba(20, 30, 20, 0.6); color: #cfeecf;
+  font-size: 1.2rem; line-height: 1; cursor: pointer;
+  pointer-events: auto; display: flex; align-items: center; justify-content: center;
+  opacity: 0.5; transition: opacity 0.18s, background 0.18s;
+}
+.cf-eye-btn:hover { opacity: 1; }
+.cf-eye-btn.is-off { opacity: 0.92; background: rgba(48, 44, 22, 0.62); }
+/* Eye ON: the persistent HUD elements fold away (the Eye + the Fall's gear stay) */
+.dtrh-hud-hidden .cf-hud,
+.dtrh-hud-hidden .cf-picks,
+.dtrh-hud-hidden .cf-toydock { display: none !important; }
 
 /* ---- the toy dock (active skills) ---- */
 .cf-toydock {
@@ -1740,6 +1803,29 @@ img.rh-fx-spiralspin {
   font-weight: 600;
   letter-spacing: 0.14em;
   opacity: 0.85;
+}
+/* biome roulette tiles riding an announce card (square art, not banner art) */
+.cf-announce-art--tile {
+  width: 120px;
+  max-height: 120px;
+  border-radius: 14px;
+  box-shadow: 0 0 22px rgba(255, 105, 180, 0.35), 0 6px 18px rgba(0, 0, 0, 0.6);
+}
+/* the settle card: the drawn biome, big */
+.cf-announce-art--big {
+  width: min(30vh, 260px);
+  max-height: min(30vh, 260px);
+}
+/* the quiet grey mechanics note under the flavour line */
+.cf-announce-hint {
+  max-width: 34rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  color: #b9b3c2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  opacity: 0.9;
 }
 
 /* ---- pop score float (Blank Eyes) ---- */
@@ -2191,11 +2277,11 @@ img.rh-fx-spiralspin {
 .wr-row--codex.is-hazy .wr-row-name { color: #777790; }
 
 /* ---- BAG tiles ---- */
-.wr-pockets { display: flex; gap: 10px; flex-wrap: wrap; }
-/* compact slot cards so all 4 HANDS fit one row in a 460px pane column
-   (86px + 2px borders each + 3 gaps = 390px inside the ~396px card) */
-.wr-pockets .wr-shelf { width: 86px; }
-.wr-pockets .wr-shelf-art { height: 84px; }
+.wr-pockets { display: flex; gap: 8px; flex-wrap: wrap; }
+/* compact slot cards so all 5 POCKETS fit one row in a 460px pane column
+   (70px + 2px borders each + 4 gaps = 390px inside the ~396px card) */
+.wr-pockets .wr-shelf { width: 70px; }
+.wr-pockets .wr-shelf-art { height: 70px; }
 .wr-pockets .wr-shelf-glyph { font-size: 1.7rem; }
 .wr-pockets .wr-shelf-foot { padding: 6px 8px 8px; gap: 3px; }
 .wr-pockets .wr-shelf-name { font-size: 0.72rem; }
@@ -2329,6 +2415,14 @@ img.rh-fx-spiralspin {
   background: rgba(156,232,160,0.14); border: 1px solid rgba(156,232,160,0.5);
 }
 .wr-mantra.is-sin .wr-mantra-glyph { background: rgba(255,138,138,0.14); border-color: rgba(255,138,138,0.5); }
+/* the big card art for a discovered mantra - reads as a card, not a bullet */
+.wr-mantra-img {
+  flex: none; width: 104px; height: 104px; border-radius: 10px; object-fit: cover;
+  background: rgba(156,232,160,0.1); border: 1px solid rgba(156,232,160,0.5);
+  box-shadow: 0 3px 14px rgba(0,0,0,0.35);
+}
+.wr-mantra.is-sin .wr-mantra-img { border-color: rgba(255,138,138,0.5); }
+.wr-mantra.is-start .wr-mantra-img { border-color: rgba(255,215,0,0.75); }
 .wr-mantra-badge { flex: none; font-size: 0.7rem; color: rgba(184,184,208,0.7); margin-left: 8px; }
 .wr-mantra.is-start .wr-mantra-badge { color: #ffd700; font-weight: 700; }
 .wr-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }

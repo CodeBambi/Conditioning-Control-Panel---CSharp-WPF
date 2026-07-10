@@ -51,7 +51,7 @@
 
 export const REGIONS = [
   {
-    id: 'longfall', numeral: 'I', name: 'Curiosity & Denial', subtitle: 'it’s just something silly',
+    id: 'longfall', numeral: 'ACT I', name: 'Curiosity & Denial', subtitle: 'it’s just something silly',
     weatherId: null,               // open sky - the fall itself is the identity
     band: { start: 0.10, peak: 0.42 },
     // Sparse and open - mostly plain treats drifting past. Few tricks; the fall
@@ -70,7 +70,7 @@ export const REGIONS = [
     },
   },
   {
-    id: 'doors', numeral: 'II', name: 'Fear & Confusion', subtitle: 'what if it isn’t a game?',
+    id: 'doors', numeral: 'ACT II', name: 'Fear & Confusion', subtitle: 'what if it isn’t a game?',
     weatherId: 'static',           // stray current, disorientation
     band: { start: 0.28, peak: 0.64 },
     // Everything comes in PAIRS - escorts and bound twins. Which door, which
@@ -91,7 +91,7 @@ export const REGIONS = [
     },
   },
   {
-    id: 'garden', numeral: 'III', name: 'Bargain & Struggle', subtitle: 'just this once',
+    id: 'garden', numeral: 'ACT III', name: 'Bargain & Struggle', subtitle: 'just this once',
     weatherId: 'perfume',          // her sweet fog, lust climbs
     band: { start: 0.46, peak: 0.84 },
     // Overgrown. The Echo multiplies if you let it, so the field BLOOMS - a
@@ -110,7 +110,7 @@ export const REGIONS = [
     },
   },
   {
-    id: 'court', numeral: 'IV', name: 'Surrender & Acceptance', subtitle: 'yes. this is you.',
+    id: 'court', numeral: 'ACT IV', name: 'Surrender & Acceptance', subtitle: 'yes. this is you.',
     weatherId: 'overstim',         // too bright, too fast - the deepest place
     band: { start: 0.60, peak: 1.00 },
     // Crescendo. The fullest field and the most Teases - deny, deny, deny under

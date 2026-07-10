@@ -41,6 +41,25 @@ export function createOverlays(hud) {
     });
   }
 
+  /** The descent's closing beat: 3 · 2 · 1, then onDone (the recap). Distinct
+   * from showCountdown's opening GO! - this one counts the hole SHUT. */
+  function showFinishCountdown(onDone, { onTick } = {}) {
+    clearCd();
+    cd.hidden = false;
+    cdNum.classList.remove('is-go');
+    const beats = ['3', '2', '1'];
+    beats.forEach((b, i) => {
+      cdTimers.push(window.setTimeout(() => {
+        cdNum.textContent = b;
+        cdNum.classList.remove('is-beat');
+        void cdNum.offsetWidth;
+        cdNum.classList.add('is-beat');
+        if (onTick) onTick(b);
+      }, i * 1000));
+    });
+    cdTimers.push(window.setTimeout(() => { cd.hidden = true; if (onDone) onDone(); }, beats.length * 1000));
+  }
+
   /** The post-draft beat: "Ready? :3" then a GO! flash, then resume. */
   function showReadyGo(onResume, { onTick } = {}) {
     clearCd();
@@ -271,6 +290,7 @@ export function createOverlays(hud) {
 
   return {
     showCountdown,
+    showFinishCountdown,
     showReadyGo,
     hideCountdown() { clearCd(); cd.hidden = true; },
     showDraft,

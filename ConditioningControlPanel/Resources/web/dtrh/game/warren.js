@@ -6,7 +6,7 @@
  *
  *   🕳 FALL IN (portal)  dive straight into a descent (difficulty + length
  *                        chips sit under it - everything else lives in ⚙ options)
- *   🧸 TOYBOX            level things up with drops ✦ (shelves + habits + hands)
+ *   🧸 TOYBOX            level things up with emotes ✦ (shelves + habits + pockets)
  *   🎛 THE DIALS         unlock things with gold 🪙 (the options-console ladder)
  *   📔 VANITY            the mirror: mantra, stats, rank, diary
  *
@@ -64,12 +64,12 @@ function fmtPlaytime(seconds) {
 // The stations: what hangs in the tube. TOYBOX/DIALS appear after the first
 // fall (the 'dollhouse' reveal); VANITY keeps the old Looking-Glass gate.
 const STATION_META = {
-  toybox: { label: 'TOYBOX', glyph: '🧸', accent: 0x66e0d0, sub: 'level up · drops ✦' },
+  toybox: { label: 'TOYBOX', glyph: '🧸', accent: 0x66e0d0, sub: 'level up · emotes ✦' },
   dials:  { label: 'THE DIALS', glyph: '🎛', accent: 0xe84393, sub: 'unlock · gold 🪙' },
   vanity: { label: 'VANITY', glyph: '📔', accent: 0xc178ff, sub: 'the mirror' },
 };
 
-export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, runSetup, onDescend, onExit, onOptions, guide }) {
+export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, runSetup, onDescend, onExit, onOptions, fullscreen, guide }) {
   const root = document.createElement('div');
   root.className = 'wr-root';
   root.hidden = true;
@@ -459,6 +459,11 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
     // bottom-left: the corner dock
     const dock = el('wr-dock', root);
     if (onOptions) btn('wr-dock-btn', '⚙ options', () => onOptions(), dock);
+    if (fullscreen && fullscreen.toggle) {
+      const label = () => (fullscreen.isActive && fullscreen.isActive() ? '⤢ exit fullscreen' : '⤢ fullscreen');
+      const fsBtn = btn('wr-dock-btn', label(), () => fullscreen.toggle(), dock);
+      if (fullscreen.onChange) fullscreen.onChange(() => { fsBtn.textContent = label(); });
+    }
     btn('wr-dock-btn', 'how to play', () => openHowTo(), dock);
     btn('wr-dock-btn wr-dock-btn--dim', 'wake up (exit)', () => onExit(), dock);
 
@@ -530,7 +535,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
 
   const STATION_WINDOWS = {
     toybox: [
-      { id: 'hands',  side: 'left',  title: 'HANDS', sub: 'grab toys in the fall, fire from the dock', render: renderHandsWin },
+      { id: 'hands',  side: 'left',  title: 'POCKETS', sub: 'grab toys in the fall, fire from the dock', render: renderHandsWin },
       { id: 'toys',   side: 'left',  title: 'TOYS', sub: 'you press them mid-descent', reveal: 'toybox_toys',
         gate: (v) => catHasDiscovery(v, 'skill'), render: shelfWin('skill') },
       { id: 'accs',   side: 'right', title: 'ACCESSORIES', sub: 'they shape the whole fall', reveal: 'toybox_accessories',
@@ -845,28 +850,28 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
 
   // ============================ 🧸 TOYBOX (level up · Sparks) ============================
 
-  /** HANDS pane: consumable HUD slots. */
+  /** POCKETS pane: consumable HUD slots. Start with one, sew the rest. */
   function renderHandsWin(body, v) {
     const handsCard = el('wr-card', body);
-    el('wr-card-sub', handsCard, `${v.consumableSlots} consumable slot${v.consumableSlots === 1 ? '' : 's'} · grab toys in the fall and fire them from the dock.`);
+    el('wr-card-sub', handsCard, `${v.consumableSlots} pocket${v.consumableSlots === 1 ? '' : 's'} · grab toys in the fall and fire them from the dock.`);
     const handsRow = el('wr-pockets', handsCard);
     for (let i = 0; i < MAX_CONSUMABLE_SLOTS; i++) {
       const owned = i < v.consumableSlots;
       handsRow.appendChild(shelfCard({
-        glyph: owned ? '✋' : '＋', title: owned ? `slot ${i + 1}` : 'locked',
+        glyph: owned ? '👝' : '＋', title: owned ? `pocket ${i + 1}` : 'locked',
         state: owned ? 'owned' : 'empty', foot: owned ? 'ready' : 'sew below',
-        tipText: owned ? 'a hand free to hold a grabbed toy' : 'buy another hand below',
+        tipText: owned ? 'a pocket free to hold a grabbed toy' : 'sew another pocket below',
       }));
     }
     const slotCost = v.nextConsumableSlotCost();
     if (slotCost != null) {
-      const buy = buyBtn(`sew a hand  ${GLYPHS.drops}${slotCost}`, v.canBuyConsumableSlot(), () => {
+      const buy = buyBtn(`sew a pocket  ${GLYPHS.drops}${slotCost}`, v.canBuyConsumableSlot(), () => {
         cmd('buy-consumable-slot', { cost: slotCost });
         sfx('ui_deepen', 0.5);
       });
       handsCard.appendChild(buy);
     } else {
-      el('wr-card-sub', handsCard, 'both hands and then some — you can hold no more.');
+      el('wr-card-sub', handsCard, 'pockets on pockets — you can hold no more.');
     }
   }
 
@@ -991,7 +996,22 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       const isStart = v.equippedStartBoon === b.id;
       const pickable = seen && !b.curse;
       const row = el('wr-mantra' + (isStart ? ' is-start' : '') + (b.curse ? ' is-sin' : '') + (seen ? '' : ' is-hazy'), card);
-      el('wr-mantra-glyph', row, seen ? (b.curse ? '☠' : '◈') : '?');
+      // discovered boons show their big card art; undiscovered stay a hazy glyph.
+      // Art that fails to load falls back to the boon glyph so a row never breaks.
+      if (seen) {
+        const art = document.createElement('img');
+        art.className = 'wr-mantra-img';
+        art.src = `${ART}boons/${b.id}.png`;
+        art.alt = b.name;
+        art.loading = 'lazy';
+        art.addEventListener('error', () => {
+          const g = el('wr-mantra-glyph', null, b.curse ? '☠' : '◈');
+          if (art.parentNode) art.parentNode.replaceChild(g, art);
+        }, { once: true });
+        row.appendChild(art);
+      } else {
+        el('wr-mantra-glyph', row, '?');
+      }
       const mid = el('wr-row-mid', row);
       el('wr-row-name', mid, seen ? b.name : '???');
       el('wr-row-desc', mid, seen ? b.desc : 'hazy. go back down and look closer.');
@@ -1018,7 +1038,7 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
       el('wr-stat-v', s, val);
       el('wr-stat-l', s, label);
     };
-    stat('drops carried', nfmt(v.sparks));
+    stat('emotes carried', nfmt(v.sparks));
     stat('descents finished', nfmt(v.runs));
     stat('time under', fmtPlaytime(v.totalRunSeconds));
     stat('best score', nfmt(v.bestScore));

@@ -269,6 +269,24 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     ['breath', 'uBreath'], ['ringDash', 'uRingDash'], ['lineWave', 'uLineWave'],
     ['ringDouble', 'uRingDouble'], ['spiralDrift', 'uSpiralDrift'],
     ['throb', 'uThrob'], ['strobe', 'uStrobe'],
+    // biome pattern knobs (biome identity pass) - same ease, all 0 = classic
+    ['scan', 'uScan'], ['glitch', 'uGlitch'], ['kaleido', 'uKaleido'],
+    ['chase', 'uChase'], ['chain', 'uChain'], ['caustic', 'uCaustic'],
+    ['arch', 'uArch'], ['mirrorY', 'uMirrorY'], ['streaks', 'uStreaks'],
+    ['ringFade', 'uRingFade'], ['spiralFade', 'uSpiralFade'],
+    ['surge', 'uSurge'], ['slip', 'uSlip'], ['beatScroll', 'uBeatScroll'],
+    ['dots', 'uDots'], ['checker', 'uChecker'], ['desat', 'uDesat'],
+    ['filigree', 'uFiligree'], ['panel', 'uPanel'],
+  ];
+  // biome pattern params: integer counts / frequencies / spiral direction.
+  // These SNAP at the chamber commit (hidden under commitWave's flash, exactly
+  // like setDensity) - easing a count smears the pattern, and easing the
+  // spiral direction would slew the swirl through the whole scroll phase.
+  // [styleKey, uniform, default, mustBeInteger]
+  const PATTERN_PARAMS = [
+    ['dashCount', 'uDashCount', 10, true], ['dashDuty', 'uDashDuty', 0.62, false],
+    ['waveF1', 'uWaveF1', 3, true], ['waveF2', 'uWaveF2', 7, true],
+    ['strobeHz', 'uStrobeHz', 1.4, false], ['spiralDir', 'uSpiralDir', 1, false],
   ];
   const _fogE = new THREE.Color(ZP.calm.fog), _lineE = new THREE.Color(ZP.calm.line),
     _spiralE = new THREE.Color(ZP.calm.spiral);
@@ -354,7 +372,8 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
         const e = regionKnobs.enter[key] || 0;
         const p = regionKnobs.peak[key] != null ? regionKnobs.peak[key] : e;
         target = e + (p - e) * regionProgress;
-        if (key === 'strobe') target *= strobeScale;
+        // photosensitivity guard: the flashy knobs ride the effect-intensity dial
+        if (key === 'strobe' || key === 'glitch') target *= strobeScale;
       }
       ku.value += (target - ku.value) * Math.min(1, dt * 0.8);
     }
@@ -543,6 +562,17 @@ export function createFx({ scene, layout, tunnelMat, particleFog }) {
     regionFx = style
       ? { sparkle: style.sparkleBoost || 0, ribbon: style.ribbonBoost || 0 } : null;
     strobeScale = (opts && opts.strobeScale != null) ? clamp01(opts.strobeScale) : 1;
+    // biome pattern params: SNAP to the style's values (or the classic
+    // defaults) right here at the commit - see PATTERN_PARAMS above. The knob
+    // AMOUNTS are still near their old values while they ease, but the commit
+    // flash hides the re-parameterization exactly as it hides setDensity.
+    const pp = (style && style.params) || null;
+    for (const [key, uName, dflt, integer] of PATTERN_PARAMS) {
+      const u = tunnelMat.uniforms[uName];
+      if (!u) continue;
+      const v = (pp && pp[key] != null) ? pp[key] : dflt;
+      u.value = integer ? Math.round(v) : v;
+    }
     if (!regionBase) regionProgress = 0;
     retargetGrade(fadeSec);
   }

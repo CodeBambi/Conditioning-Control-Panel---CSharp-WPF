@@ -58,7 +58,7 @@ export function createHubGuide({ vnBeat, vnCancel, teach, teachBusy, setFlag, lo
         // Guide cards queue back-to-back; the flash gets 1.4s to breathe first.
         teach({
           glyph: '🧸', name: 'THE TOYBOX', accent: '102,224,208',
-          desc: 'your drops ✦ land here. level what you grabbed in the fall - and train habits you keep forever.',
+          desc: 'your emotes ✦ land here. level what you grabbed in the fall - and train habits you keep forever.',
         }, { kicker: 'new in the burrow' });
         teach({
           glyph: '🎛', name: 'THE DIALS', accent: '232,67,147',

@@ -41,9 +41,10 @@ import { draft as dealDraft, boonById, boonTheme, duoPartnerScore } from './boon
 import { PASSIVE_APPLY, isGrabbablePassive } from './boonPassives.js';
 import { WEATHER_BY_ID, rollWeather } from './weather.js';
 import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL } from './regions.js';
-import { rollBiomeIds, biomeForWave, biomeById } from './biomes.js';
+import { rollBiomeIds, biomeForWave, biomeById, BIOMES_ALL } from './biomes.js';
 import { createBiomeMech } from './biomeMech.js';
 import { setAudioColor } from '../engine/audioBus.js';
+import { getVoice, setVoiceDefault, onVoice } from '../engine/audioLevels.js';
 import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
 import { createPayloadFx } from './payloadFx.js';
@@ -119,6 +120,9 @@ const smoothstep = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); }; /
 export function createChaosGame({ bridge, hostState, runSetup, requestExit, modId }) {
   // Active persona (Bambi/Sissy/Circe) - drives the VN portrait set + tint.
   const activeModId = modId || 'builtin-sissyhypno';
+  // ...and the DEFAULT voiceover set (the audio panel's sissy/circe buttons
+  // override it; getVoice() resolves pick-else-default).
+  setVoiceDefault(activeModId === 'builtin-locked' ? 'circe' : 'sissy');
   // rc/lo/cfg/flags are dealt PER RUN by applyRunConfig (the host's run-config
   // answer to request-run) - the Warren can change the loadout between runs.
   let rc = {}, cfg = null, flags = {}, levels = {};
@@ -207,7 +211,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       rippleCooldown: 0,
       freezeRemainingSec: 0, slowMoRemainingSec: 0,
       ordinarySpawns: 0, spawnSerial: 0, waveDetonations: 0, runDetonations: 0,
-      endingSoonFired: false, finalLoopAnnounced: false, finalLandingDone: false,
+      endingSoonFired: false, finalLoopAnnounced: false, finalLandingDone: false, finishing: false,
       lastComboBig: 0, lastActFired: 1,
 
       // ---- THE BIOMES: one rolled id per room (null on legacy/scripted runs) ----
@@ -1392,6 +1396,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (ctx.fx.applyRegionGrade) ctx.fx.applyRegionGrade(null, 1.5);
     if (ctx.fx.setRegionProgress) ctx.fx.setRegionProgress(0);
     if (ffx && ffx.setRegionPalette) ffx.setRegionPalette(null);
+    if (ffx && ffx.setAmbient) ffx.setAmbient(null);   // biome weather stays down the hole
     if (ctx.setBloomStrength) ctx.setBloomStrength(1);
   }
 
@@ -1479,8 +1484,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       ctx.drift.setRegion(cfg.regionMode ? regionIndex : 0);
       if (ctx.drift.setBiome) ctx.drift.setBiome(biome ? biome.id : null);
       // Biome lines are dual-voiced: Circe's Lock speaks her own set, every
-      // other persona shares the sissy set (Bambi Sleep included).
-      if (ctx.drift.setVoice) ctx.drift.setVoice(activeModId === 'builtin-locked' ? 'circe' : 'sissy');
+      // other persona shares the sissy set (Bambi Sleep included) - unless the
+      // audio panel's voiceover buttons picked one explicitly (audioLevels).
+      if (ctx.drift.setVoice) ctx.drift.setVoice(getVoice());
     }
     // Four Chambers visual identity: the chamber OWNS the tube. Palette grade
     // crossfades in (~3.2s, landing as the ready-GO beat clears); the ring/
@@ -1492,9 +1498,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     ctx.fx.applyRegionGrade(style, 3.2, { strobeScale: cfg.effectIntensity });
     if (style && style.density) ctx.fx.setDensity(style.density, { snap: true });
     if (ffx && ffx.setRegionPalette) ffx.setRegionPalette(style ? style.field : null);
+    // THE BIOMES: the place's ambient weather (confetti / ash / bubbles / ...)
+    if (ffx && ffx.setAmbient) ffx.setAmbient(style ? style.ambient : null);
     if (ctx.setBloomStrength) ctx.setBloomStrength(style && style.bloom ? style.bloom : 1);
     // THE BIOMES: swap the chamber's mechanic in (exits the old one cleanly).
     if (bMech) bMech.setBiome(regionIndex, biome);
+    // ...and show the place's name + effect on the HUD so the player always
+    // knows which room's rules are live (null on classic/no-biome runs).
+    if (hudUi && hudUi.setBiome) hudUi.setBiome(biome || null);
   }
 
   // ---- Wave 2: tunnel pickups (spawner.spawnPickup - clickable 3D objects) ----
@@ -1591,6 +1602,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   // resisting mouth more often (the "closing path" - the choice quietly leaves).
   const JUNCTION_LEAD = 120;          // world units of telegraph before commit
   const JUNCTION_EVERY = 55;          // rough seconds between forks (+ jitter)
+  // A descent must never END on a boon pick: stop offering any draft/fork this
+  // many seconds before the close, and fire the Court's terminal Landing right
+  // at this mark so ~60s of gameplay + the finish countdown carry the run out.
+  const FINAL_LANDING_LEAD = 60;
   const PRESEAL_BY_WAVE = [0, 0, 0.12, 0.4, 0.62]; // indexed by waveIndex (I..IV)
   // Each fork pairs a coaxed (deeper/surrender) mouth with a resisting one.
   const JUNCTION_PAIRS = [
@@ -1607,6 +1622,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (heldNow() || covered) return;
     if (ctx.spawner && ctx.spawner.spotlightActive()) return;
     if (st.elapsedSec < st.nextJunctionSec) return;
+    // no forks in the descent's final stretch (the Court's Landing owns that
+    // window; a run must not end on a doorway pick)
+    if (st.runDurationSec - st.elapsedSec <= FINAL_LANDING_LEAD) return;
     // don't collide with the region-boundary boon draft: skip near the edges
     const waveLen = st.runDurationSec / st.waveCount;
     const intoRegion = st.elapsedSec - (st.waveIndex - 1) * waveLen;
@@ -1638,27 +1656,26 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     // each doorway carries a PRIZE, overlaid on its card (a nameplate chip): the
     // road you take is the power-up you get, the other one is gone - so choosing
     // matters. Same offer pool + veto as the drifting drops; two distinct items.
-    // A starved pool (low rank / everything grabbed this run / dock full) falls
-    // back to a flat 100-gold pouch so an open doorway is never prizeless.
-    // Per-door try/catch (2026-07): the old single try around BOTH assignments
-    // meant one bad offer silently stripped BOTH doors - the "empty room" bug.
-    // junctions.buildVein carries the same 100-gold fallback as the last line
-    // of defense, so even a failure HERE can't produce a bare entrance.
-    const goldPrize = () => ({ kind: 'gold', amount: 100, name: '100 Gold', glyph: '🪙',
-      desc: 'a pouch of gold, no questions asked. spend it at the dollhouse.',
-      frameCol: 0xf2c14e, capCol: '#f2c14e' });   // warm gold card, not the relic violet
+    // A starved pool (low rank / everything grabbed this run / dock full) no
+    // longer parks a consolation gold pouch (2026-07): a prizeless doorway is
+    // WALLED OFF instead - junctions.schedule bricks it up and drapes the user's
+    // gifs over the dead-end (forceWall). junctions' wall-off guard rescues one
+    // door with a gold pouch if BOTH come up empty, so a fork is never fully
+    // sealed. Per-door try/catch keeps one bad offer from stripping both doors.
     const offer = (excludeIds) => {
       try {
         return ctx.powerupDrops && ctx.powerupDrops.pickOffer ? ctx.powerupDrops.pickOffer(excludeIds) : null;
       } catch (e) {
-        console.warn('[dtrh] junction prize offer failed - gold pouch takes the doorway:', e);
+        console.warn('[dtrh] junction prize offer failed - doorway will be walled off:', e);
         return null;
       }
     };
     const a = offer(null);
     const b = offer(a ? [a.def.id] : null);
-    left.reward = a ? { id: a.def.id, kind: a.kind, name: a.def.name, glyph: a.def.glyph || '◈', desc: a.def.desc || '' } : goldPrize();
-    right.reward = b ? { id: b.def.id, kind: b.kind, name: b.def.name, glyph: b.def.glyph || '◈', desc: b.def.desc || '' } : goldPrize();
+    if (a) left.reward = { id: a.def.id, kind: a.kind, name: a.def.name, glyph: a.def.glyph || '◈', desc: a.def.desc || '' };
+    else left.forceWall = true;
+    if (b) right.reward = { id: b.def.id, kind: b.kind, name: b.def.name, glyph: b.def.glyph || '◈', desc: b.def.desc || '' };
+    else right.forceWall = true;
     const presealChance = PRESEAL_BY_WAVE[Math.min(4, st.waveIndex)] || 0;
     let presealIndex = null;
     if (Math.random() < presealChance) presealIndex = (coaxSide === 'left') ? 1 : 0; // seal the resisting mouth
@@ -1755,6 +1772,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   let draftRoomDoors = 3;        // dealt door count (draftChoices can be 2)
   let draftDom = null;           // lazy DOM chrome: caption + reroll/resist (reuses boonPick's CSS)
   let draftCapTimer = null;      // 250ms caption countdown while the room lingers
+  let draftRevealBiome = null;   // the roulette's pre-rolled target, for the settle card
+  let offVoice = null;           // audio-panel voiceover subscription (undone in dispose)
 
   function boonBranch(boon) {
     const color = DRAFT_DOOR_COLORS[boonTheme(boon)] || DRAFT_DOOR_COLORS.common;
@@ -1821,8 +1840,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
   function onDraftRoomLinger(on) {
     onJunctionLinger(on);   // the same near-hover crawl while the doors are read
-    if (on && draftRoomActive) showDraftRoomChrome();
-    else hideDraftRoomChrome();
+    // while the biome roulette spins the chrome stays hidden (resist/reroll
+    // would be dead buttons anyway - the engine gates every pick path until
+    // the wheel lands); the onRevealFx 'settle' handler shows it instead
+    if (on && draftRoomActive && !(ctx.junctions.isRevealPending && ctx.junctions.isRevealPending())) showDraftRoomChrome();
+    else if (!on) hideDraftRoomChrome();
   }
 
   function onDraftReroll() {
@@ -1845,9 +1867,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     draftRoomDoors = options.length;
     // The Journey Rooms: the doors lead INTO the next room, so its title hangs
     // over them - big writing above the doorway mouths (junctions buildTitle).
-    // The room theme only; the rolled biome stays a surprise until arrival.
+    // The room dresses in its classic palette (never the biome's), but the
+    // rolled biome itself is no longer a total surprise: the roulette row
+    // (junctions buildBiomeRow) announces it here before the doors go live.
     const next = regionForWave(pendingWave);
     const nextStyle = next.style;   // classic room palette - never the biome's (no early hint)
+    const targetBiome = biomeForWave(pendingWave, st.biomes);   // null on scripted runs
+    draftRevealBiome = targetBiome;   // the settle card reads it when the wheel lands
     ctx.junctions.schedule({
       atDepth: ctx.nav.getDepth() + DRAFT_ROOM_LEAD,
       branches: options.map(boonBranch),
@@ -1857,6 +1883,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       lead: DRAFT_ROOM_LEAD,
       title: { numeral: next.numeral, text: next.name,
                color: (nextStyle && nextStyle.palette && nextStyle.palette.colLine) || 0xff69b4 },
+      biomeReveal: targetBiome ? {
+        items: BIOMES_ALL.map((b) => ({ id: b.id, glyph: b.glyph, name: b.name,
+          color: (b.style && b.style.palette && b.style.palette.colLine) || 0xff69b4 })),
+        targetIndex: BIOMES_ALL.findIndex((b) => b.id === targetBiome.id),
+      } : null,
     });
   }
 
@@ -2080,9 +2111,21 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       bark('ending-soon');
     }
 
-    // A live fork owns the tube: the Landing's parked draft (or the recap) must
-    // not fire mid-antechamber / mid-dive. The clock runs on a few extra seconds
-    // until the fork tears down, then this block fires normally.
+    // The Court's Landing (region IV's boon) is offered ~60s before the close, so
+    // a descent NEVER ends on a boon pick: gameplay + the finish countdown carry
+    // it out afterward. Held until any live fork tears down; skipped while a
+    // relapse is still armed (it then fires ~60s before the EXTENDED end).
+    if (cfg.regionMode && cfg.boonDraftEnabled && !st.finalLandingDone && !st.relapseArmed
+        && state === 'running' && !drafting
+        && st.runDurationSec - st.elapsedSec <= FINAL_LANDING_LEAD
+        && !(ctx && ctx.junctions && ctx.junctions.isBusy())) {
+      st.finalLandingDone = true;
+      beginFinalLanding();
+      return;
+    }
+
+    // A live fork owns the tube: the recap must not fire mid-antechamber /
+    // mid-dive. The clock runs on a few extra seconds until the fork tears down.
     if (st.elapsedSec >= st.runDurationSec && !(ctx && ctx.junctions && ctx.junctions.isBusy())) {
       // Relapse: the hole isn't done with you - one more loop, everything drips double.
       if (st.relapseArmed && !st.relapseActive) {
@@ -2094,14 +2137,16 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         hudUi.announce('☠ RELAPSE — one more loop', 'bad', 2600, { artKey: 'relapse', subText: 'one more loop' });
         sfx('sin_accept', 0.6);
         bark('wave-escalated', { wave: st.waveIndex + 1 });
-      } else if (cfg.regionMode && cfg.boonDraftEnabled && !st.finalLandingDone) {
-        // Four Chambers: the Court (IV) earns its Landing too. The run's other
-        // three drafts fire as you LEAVE a chamber; region IV has no chamber
-        // after it, so its boon is a terminal draft, then the descent ends.
-        st.finalLandingDone = true;
-        beginFinalLanding();
+      } else if (!st.finishing) {
+        // The closing beat: a 3·2·1 finish countdown, then the recap - a descent
+        // ends on a counted-down moment, not an abrupt cut. The Court's boon was
+        // already granted ~60s ago, so the run never ends on a pick.
+        st.finishing = true;
+        overlays.showFinishCountdown(() => endRun(true), { onTick: (b) => sfx(b === '1' ? 'sink' : 'countdown_tick', 0.5) });
         return;
-      } else { endRun(true); return; }
+      } else {
+        return;   // finish countdown running: endRun fires from its onDone
+      }
     }
 
     const waveLen = st.runDurationSec / st.waveCount;
@@ -2159,7 +2204,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     awardLoopTip();
     bark('wave-escalated', { wave: newWave });
 
-    if (!cfg.boonDraftEnabled) {
+    // Never offer a boon draft in the descent's final stretch: advance the loop
+    // counter without a table so the run doesn't end on (or just after) a pick.
+    if (!cfg.boonDraftEnabled || st.runDurationSec - st.elapsedSec <= FINAL_LANDING_LEAD) {
       commitWave(newWave);
       return;
     }
@@ -2394,16 +2441,18 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       bark('boon-skipped', { shields: st.shields });
     }
     happy.onDraftResolved(hpIo);   // the run-4 first-sin beat is spent either way
-    // The Court's Landing resolves into the end of the descent, not a next loop.
+    // The Court's Landing no longer ENDS the descent (a run must not end on a
+    // pick): its boon is granted, then gameplay resumes for the final stretch and
+    // the finish countdown closes the run out. Resume the field like a wave draft
+    // (no commitWave - there is no next chamber to advance to).
     if (finalLandingActive) {
       finalLandingActive = false;
-      drafting = false;
       syncHeld();
-      // endRun's reentry guard only admits 'running' - the Landing left us in
-      // 'drafting', which used to no-op the call and strand the run forever
-      // (clock frozen at 11:59, tube flying with nothing left to spawn).
-      state = 'running';
-      endRun(true);
+      overlays.showReadyGo(() => {
+        drafting = false;
+        state = 'running';
+        syncHeld();
+      }, { onTick: (b) => sfx(b === 'GO!' ? 'sink' : 'countdown_tick', 0.45) });
       return;
     }
     const scripted = scriptedDraftActive;
@@ -2458,9 +2507,13 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const r = regionForWave(regionIndex);
     const b = biomeAt(regionIndex);
     sfx('depth_change', 0.55);
+    // biome runs show the PLACE (its roulette tile) over the generic depth
+    // banner, with the grey how-it-plays note under the flavour line
     hudUi.announce(`${r.numeral} · ${r.name.toUpperCase()}`, 'depth', 3000, {
       artKey: 'depth',
+      artUrl: b ? `https://ccp.art/biomes/${b.id}.png` : null,
       subText: b ? `${b.glyph} ${b.name} — ${b.tagline}` : r.subtitle,
+      hint: b ? b.mechHint || null : null,
     });
     bark('act-changed', { act: Math.min(regionIndex, REGION_COUNT), wave: regionIndex });
   }
@@ -3080,7 +3133,30 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       if (ctx.junctions) {
         ctx.junctions.onCommit = (choice) => (choice && choice.mode === 'draft' ? onDraftDoorChosen(choice) : onJunctionChosen(choice));
         ctx.junctions.onLinger = (on, mode) => (mode === 'draft' ? onDraftRoomLinger(on) : onJunctionLinger(on));
+        // the biome roulette's casino noises: a tick per hop, a payoff on the
+        // landing - and only THEN the draft chrome (resist/reroll/countdown),
+        // which onDraftRoomLinger held back while the wheel spun
+        ctx.junctions.onRevealFx = (ev) => {
+          if (ev === 'tick') { sfx('countdown_tick', 0.22); return; }
+          if (ev !== 'settle') return;
+          sfx('boon_pick', 0.7);
+          ctx.fx.pulseFlash(0.35);
+          // the drawn biome, up close: its tile big center-screen with the
+          // flavour line + a plain-grey note on how the place actually plays
+          if (draftRevealBiome) {
+            const b = draftRevealBiome;
+            hudUi.announce(b.name.toUpperCase(), 'depth', 5200, {
+              artUrl: `https://ccp.art/biomes/${b.id}.png`, artBig: true,
+              subText: `${b.glyph} ${b.tagline}`,
+              hint: b.mechHint || null,
+            });
+            draftRevealBiome = null;
+          }
+          if (draftRoomActive) showDraftRoomChrome();
+        };
       }
+      // a voice-button click in the audio panel applies to the very next line
+      offVoice = onVoice((v) => { try { if (ctx.drift && ctx.drift.setVoice) ctx.drift.setVoice(v); } catch (e) { /* ignore */ } });
       // THE BIOMES: grab arbitration. The Gallery melts a denied grab in your
       // hands; every grab that holds feeds the run-wide tally the Coronation
       // reads back. Outside a live run everything stays 'allow'.
@@ -3145,6 +3221,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         },
         onExit: () => { if (requestExit) requestExit(); else bridge.send({ type: 'exit' }); },
         onOptions: ctx.openOptions,
+        fullscreen: ctx.fullscreenSupported
+          ? { toggle: ctx.toggleFullscreen, isActive: ctx.isFullscreen, onChange: ctx.onFullscreenChange }
+          : null,
         guide: hubGuide,
       });
       window.addEventListener('pointerdown', onPointerDownGlobal, true);
@@ -3342,6 +3421,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       hideDraftRoomChrome();
       if (draftDom && draftDom.root.parentNode) draftDom.root.parentNode.removeChild(draftDom.root);
       draftDom = null; draftRoomActive = false;
+      if (offVoice) { offVoice(); offVoice = null; }
       warren?.dispose();
       lessons?.dispose();
       lessonCardUi?.dispose();   // removes its capture keydown + hud node

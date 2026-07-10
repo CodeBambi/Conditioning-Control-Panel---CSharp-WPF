@@ -27,7 +27,7 @@ import { createDirector } from './director.js';
 import { createFx } from './fx.js';
 import { createPanel } from './panel.js';
 import { createDriftChain } from './driftChain.js';
-import { getLevel, setLevel, audioGroups } from './audioLevels.js';
+import { getLevel, setLevel, audioGroups, getVoice, setVoice, voiceSets, onVoice } from './audioLevels.js';
 import { getAudioCtx, getMasterOut, closeAudioBus } from './audioBus.js';
 import { S, updateSetting, onSettings, THEME_COLORS, THEME_PRESETS, applyThemePreset, intToHex, hexToInt } from './settings.js';
 
@@ -373,7 +373,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     if (e.button != null && e.button !== 0) return; // primary button / touch only
     // clicks on UI chrome or a bubble are not grabs
     if (e.target instanceof Element &&
-        e.target.closest('.sf-dock, .sf-panel, .sf-results, .sf-pause, .sf-skip, .sf-explore, .sf-uitoggle, .sf-fs-tip, .rh-bubble, .rh-fx-flashclip, .cf-bubble, .cf-hud, .cf-overlay')) return;
+        e.target.closest('.sf-dock, .sf-panel, .sf-results, .sf-pause, .sf-skip, .sf-explore, .sf-uitoggle, .sf-fs-tip, .rh-bubble, .rh-fx-flashclip, .cf-bubble, .cf-hud, .cf-eye-btn, .cf-overlay')) return;
     const r = canvas.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
@@ -578,6 +578,10 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
 
   function setRunActive(on) {
     runActive = !!on;
+    // In game mode the hub (Warren) owns its own chrome, so suppress the Fall's
+    // redundant dock + gear there (the "double options" bug); a live descent
+    // keeps them (that's the in-run gear the Eye toggle leaves visible).
+    hud.classList.toggle('sf-hub', !!game && !runActive);
     try { fx.forceZone(runActive ? null : 'calm'); } catch (e) { /* ignore */ }
     try { junctions.setActive(runActive); } catch (e) { /* ignore */ } // forks only inside a descent
     syncSpawner();                        // park the video conveyor outside a descent
@@ -600,6 +604,12 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       // the Ripple flings on-screen flash clips off screen along the hit angle
       flingFlashesNear: (px, py, r, probe) => bubbles.flingFlashesNear(px, py, r, probe),
       openOptions: () => panel.toggle(),
+      // Fullscreen for the Warren's own dock (the Fall dock's button is hidden in
+      // the hub - see the sf-hub CSS - so the hub carries its own).
+      fullscreenSupported: FS.supported,
+      isFullscreen: () => FS.isActive(),
+      toggleFullscreen: () => { FS.isActive() ? FS.leave() : FS.enter(); },
+      onFullscreenChange: (cb) => { document.addEventListener(FS.event, cb); return () => document.removeEventListener(FS.event, cb); },
       // Reveal earned option-panel dials from the meta snapshot (purchased "Dials").
       syncOptionUnlocks: (ids) => panel.setUnlocks(ids),
       // Live meta-rank for the panel's DESCENT section (deep pool variants).
@@ -917,6 +927,36 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
     row.append(head, slider);
     audioPanel.appendChild(row);
   }
+  // voiceover set: the biome VO ships in two voices (sissy/bambi share one,
+  // Circe's Lock has her own) - two buttons swap between them live. The
+  // highlighted one is the EFFECTIVE voice (persona default until picked).
+  const voiceRow = document.createElement('div');
+  voiceRow.className = 'sf-audio-row sf-voice-row';
+  const voiceHead = document.createElement('div');
+  voiceHead.className = 'sf-audio-rowhead';
+  const voiceName = document.createElement('span');
+  voiceName.textContent = 'voiceover';
+  voiceHead.appendChild(voiceName);
+  const voiceBtns = document.createElement('div');
+  voiceBtns.className = 'sf-voice-btns';
+  const voiceEls = new Map();
+  const syncVoice = () => {
+    const cur = getVoice();
+    for (const [key, b] of voiceEls) b.classList.toggle('is-on', key === cur);
+  };
+  for (const v of voiceSets()) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sf-voice-btn';
+    b.textContent = v.label;
+    b.addEventListener('click', () => { setVoice(v.key); syncVoice(); });
+    voiceEls.set(v.key, b);
+    voiceBtns.appendChild(b);
+  }
+  voiceRow.append(voiceHead, voiceBtns);
+  audioPanel.appendChild(voiceRow);
+  const offVoiceSync = onVoice(syncVoice);   // persona default can land after build
+  syncVoice();
   caretBtn.addEventListener('click', () => {
     const open = audioPanel.hidden;
     audioPanel.hidden = !open;
@@ -1151,6 +1191,6 @@ function buildHud(hud, { challenge, supportsMediaAdd, onMute, onAddMedia, onRest
       uiToggle.classList.toggle('is-on', v || chromeShown);
     },
     setSkipVisible(v) { if (skipBtn.hidden === !v) return; skipBtn.hidden = !v; },
-    dispose() { if (fsCleanup) fsCleanup(); for (const b of bits) b.remove(); },
+    dispose() { if (fsCleanup) fsCleanup(); offVoiceSync(); for (const b of bits) b.remove(); },
   };
 }

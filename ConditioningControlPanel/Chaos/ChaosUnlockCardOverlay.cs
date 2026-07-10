@@ -117,7 +117,7 @@ public static class ChaosUnlockCards
     /// purchasable's id — a lifetime boon or a trained habit. Null when neither resolves.</summary>
     public static ChaosUnlockCardData? ForLesson(string id)
     {
-        const string context = "now for sale in the toybox — drops will do the rest.";
+        const string context = "now for sale in the toybox — emotes will do the rest.";
         var b = ChaosLifetimeBoons.ById(id);
         if (b != null)
         {

@@ -178,7 +178,7 @@ export const BOONS = [
     apply: (s) => { s.urgeMult = 3.0; s.activesDisabled = true; },
     applyShielded: (s) => { s.urgeMult = 2.0; } },
   { id: 'double_or_nothing', name: 'Relapse', rarity: 'Rare', curse: true, mult: 0.0, unique: true,
-    desc: '60% chance the descent runs one loop longer than promised, and that loop pays double gold and double drops.',
+    desc: '60% chance the descent runs one loop longer than promised, and that loop pays double gold and double emotes.',
     flavor: 'one more. it\'s always just one more.',
     apply: (s) => { s.relapseArmed = Math.random() < 0.6; },
     applyShielded: (s) => { s.relapseArmed = true; } },   // shielded: the extra loop is certain

@@ -199,7 +199,7 @@ export const LIFETIME_BOONS = [
     value: (v) => `${pct(v)} lucky`,
     capstone: 'the gold doubles — twenty to forty a bubble.' },
   { id: 'drip_feed', cat: 'utility', rankFloor: RANK.Entranced, name: 'Drip Feed', glyph: '💧',
-    desc: 'every treat popped and every trance snapped banks +1/+2/+3/+4 drops by level — up to 60/90/120/150 a descent — collected when you surface.',
+    desc: 'every treat popped and every trance snapped banks +1/+2/+3/+4 emotes by level — up to 60/90/120/150 a descent — collected when you surface.',
     flavor: 'drop by drop. that’s how anything fills.',
     unlockCost: 250, upgradeCosts: [400, 650, 1000], levelValues: [1, 2, 3, 4],
     value: (v) => `+${v.toFixed(0)} a pop`,
@@ -261,11 +261,12 @@ export const LIFETIME_BOONS = [
 
 export const boonDefById = (id) => LIFETIME_BOONS.find((b) => b.id === id) || null;
 
-// grab-in-the-tube: consumable HUD slots. Mirrors ChaosMeta.MAX_CONSUMABLE_SLOTS (C#).
-// Sparks cost to sew the NEXT slot from the current count (1->2, 2->3, 3->4).
-export const MAX_CONSUMABLE_SLOTS = 4;
+// grab-in-the-tube: consumable HUD slots (POCKETS). Mirrors ChaosMeta.MAX_CONSUMABLE_SLOTS (C#).
+// Sparks cost to sew the NEXT pocket from the current count (1->2, 2->3, 3->4, 4->5).
+// You start with ONE pocket and sew the rest progressively - each costs more.
+export const MAX_CONSUMABLE_SLOTS = 5;
 export function consumableSlotCost(current) {
-  const price = { 1: 300, 2: 600, 3: 1000 };
+  const price = { 1: 300, 2: 600, 3: 1000, 4: 1500 };
   return price[current] ?? null;   // null once maxed
 }
 export const boonsInCat = (cat) => LIFETIME_BOONS.filter((b) => b.cat === cat);
@@ -412,7 +413,7 @@ export const DIARY_CODEX = [
     desc: 'Thin glass with something live sealed inside. Your cursor brushing it is enough — it shatters, and whatever it held fires. Toys slide around it; a frozen field is safe to cross. Steer wide.' },
   // ---- tunnel pickups (Wave 2): things you click ON the tube itself ----
   { codex: 'pickup:condensation', name: 'Condensation', glyph: '💧', tint: '255,215,0',
-    desc: 'Golden droplets bead on the tunnel wall and streak past. Click one before it\'s gone for a few drops, banked when you surface. The walls sweat when you\'re close.' },
+    desc: 'Golden droplets bead on the tunnel wall and streak past. Click one before it\'s gone for a few emotes, banked when you surface. The walls sweat when you\'re close.' },
   { codex: 'pickup:whiterabbit', name: 'The White Rabbit (in the walls)', glyph: '🐇', tint: '255,255,255',
     desc: 'Once in a while he dashes down the tube, faster than you fall. Catch him with a click before he outruns you — he tips 10-20 gold for the trouble. He\'s late. You\'re not.' },
   // ---- the weather (Wave 2): one sky per loop, worn by the tunnel itself ----
@@ -476,8 +477,8 @@ export const HOWTO_CARDS = [
     { body: 'Four chambers, then it ends. Between chambers she offers you a **mantra** — pick one and it bends the rules for that run only. **Power-up cards drift through the tube** as you fall: grab one to keep it — toys dock at the bottom to fire, charms and accessories cling on the moment you touch them. Finish the whole descent for the full reward; slip out early and you forfeit it.' },
   ] },
   { title: 'What you keep', image: 'howto_5', lines: [
-    { body: 'Every descent earns **XP** toward your normal level, plus two purses: **drops ✦** banked when you surface, and **gold 🪙** snatched live during the fall.' },
-    { body: 'Back in **the dollhouse** — the floating stations around the hole — one rule: **gold unlocks** (the DIALS console buys back the options panel one dial at a time), **drops level** (deepen what you’ve grabbed, train habits, sew extra hands at the TOYBOX).' },
+    { body: 'Every descent earns **XP** toward your normal level, plus two purses: **emotes ✦** banked when you surface, and **gold 🪙** snatched live during the fall.' },
+    { body: 'Back in **the dollhouse** — the floating stations around the hole — one rule: **gold unlocks** (the DIALS console buys back the options panel one dial at a time), **emotes level** (deepen what you’ve grabbed, train habits, sew extra pockets at the TOYBOX).' },
     { body: 'The more descents you finish, the higher your **RANK** — curious, tempted, slipping, entranced, devoted… — and the more of the Rabbit Hole opens up to you.' },
   ] },
 ];
