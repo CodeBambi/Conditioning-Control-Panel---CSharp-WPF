@@ -572,12 +572,20 @@ namespace ConditioningControlPanel
                 MinHeight = 200,
                 MaxHeight = 600,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Owner = this,
                 ResizeMode = ResizeMode.NoResize,
                 WindowStyle = WindowStyle.None,
                 AllowsTransparency = true,
                 Background = System.Windows.Media.Brushes.Transparent
             };
+
+            // Setting Owner to a closed window throws InvalidOperationException — this can
+            // fire from async continuations after MainWindow closed (#500). Center on
+            // screen instead when the owner is no longer usable.
+            try { dialog.Owner = this; }
+            catch (InvalidOperationException)
+            {
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
             
             var border = new Border
             {

@@ -71,6 +71,8 @@ namespace ConditioningControlPanel.Services.AIService.Enrichment
 
                   When the user is just chatting (not requesting an effect), keep "effects": [] empty. Don't fire effects unprovoked.
 
+                  HARD RULE for "video" and "audio": NEVER put them in "effects" unless the user literally asked you to PLAY a video/audio THIS turn. Persona instructions like "suggest videos frequently" mean naming or recommending one in your "response" TEXT — they never mean emitting the video effect command. Suggesting = text. Playing = effect. Only the user's explicit request makes it an effect.
+
                   ====================================================================
                   AVAILABLE COMMAND TYPES
                   ====================================================================

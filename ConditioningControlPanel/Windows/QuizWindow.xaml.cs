@@ -534,7 +534,7 @@ namespace ConditioningControlPanel
             // Build trend display and start session generation
             if (savedEntry != null)
             {
-                BuildTrendDisplay(savedEntry.Category);
+                BuildTrendDisplay(savedEntry);
                 _ = GenerateSessionInBackgroundAsync(result, savedEntry);
             }
 
@@ -641,13 +641,13 @@ namespace ConditioningControlPanel
             }
         }
 
-        private void BuildTrendDisplay(QuizCategory category)
+        private void BuildTrendDisplay(QuizHistoryEntry entry)
         {
             try
             {
                 TrendPanel.Children.Clear();
                 var history = QuizService.LoadHistory();
-                var trend = QuizService.GetScoreTrend(history, category);
+                var trend = QuizService.GetScoreTrend(history, QuizService.TrendKey(entry));
                 if (trend == null) return;
 
                 TxtTrendHeader.Visibility = Visibility.Visible;
@@ -667,7 +667,7 @@ namespace ConditioningControlPanel
                 };
 
                 var trendText = trend.Direction == TrendDirection.FirstQuiz
-                    ? $"Score: {trend.LatestPercent}% — Your first {category} quiz!"
+                    ? $"Score: {trend.LatestPercent}% — Your first {(!string.IsNullOrEmpty(entry.CategoryName) ? entry.CategoryName : entry.Category.ToString())} quiz!"
                     : $"Score: {trend.LatestPercent}% ({arrow}{Math.Abs(trend.DeltaPercent)}% from last time) \u00B7 Average: {trend.AveragePercent}% across {trend.QuizCount} quizzes";
 
                 var trendBlock = new TextBlock

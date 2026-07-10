@@ -38,6 +38,18 @@ namespace ConditioningControlPanel
 
             var isEnabled = BambiTakeoverTab.ChkAutonomyEnabled.IsChecked ?? false;
 
+            // Lockdown mode: Takeover cannot be disabled while locked in (#514) —
+            // same rule as the engine stop / exit / panic-key guards.
+            if (!isEnabled && App.Settings.Current.AutonomyModeEnabled && App.Lockdown?.IsActive == true)
+            {
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"), Loc.Get("title_lockdown"),
+                    MessageBoxButton.OK, MessageBoxImage.Stop);
+                _isLoading = true;
+                BambiTakeoverTab.ChkAutonomyEnabled.IsChecked = true;
+                _isLoading = false;
+                return;
+            }
+
             // If enabling for the first time, show consent dialog
             if (isEnabled && !App.Settings.Current.AutonomyConsentGiven)
             {
@@ -118,6 +130,14 @@ namespace ConditioningControlPanel
             if (settings == null) return;
 
             var isCurrentlyEnabled = settings.AutonomyModeEnabled;
+
+            // Lockdown mode: Takeover cannot be disabled while locked in (#514).
+            if (isCurrentlyEnabled && App.Lockdown?.IsActive == true)
+            {
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"), Loc.Get("title_lockdown"),
+                    MessageBoxButton.OK, MessageBoxImage.Stop);
+                return;
+            }
 
             // If starting for the first time, show consent dialog
             if (!isCurrentlyEnabled && !settings.AutonomyConsentGiven)

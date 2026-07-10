@@ -182,15 +182,19 @@ namespace ConditioningControlPanel
                 LabTab.TxtPastQuizzesHeader.Visibility = Visibility.Visible;
                 LabTab.PastQuizzesPanel.Visibility = Visibility.Visible;
 
-                // Trend summary at top — show latest archetype + trend per category that has history
-                var categories = history.Select(h => h.Category).Distinct();
+                // Trend summary at top — show latest archetype + trend per category that has history.
+                // Group by TrendKey (CategoryId string), not the enum: custom categories all
+                // collapse to Category=Sissy and would clobber the built-in Sissy stat (#518/#521).
+                var categories = history.Select(QuizService.TrendKey)
+                    .Distinct(StringComparer.OrdinalIgnoreCase);
                 foreach (var cat in categories)
                 {
                     var trend = QuizService.GetScoreTrend(history, cat);
                     if (trend == null) continue;
 
                     // Extract archetype from latest profile text
-                    var latestEntry = history.FirstOrDefault(h => h.Category == cat);
+                    var latestEntry = history.FirstOrDefault(h =>
+                        string.Equals(QuizService.TrendKey(h), cat, StringComparison.OrdinalIgnoreCase));
                     var archetype = "";
                     if (latestEntry != null)
                     {

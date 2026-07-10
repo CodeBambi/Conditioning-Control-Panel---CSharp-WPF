@@ -28,6 +28,14 @@ namespace ConditioningControlPanel.Services.Commands
 
         public Task<bool> ExecuteAsync()
         {
+            // The main Videos feature toggle is authoritative for AI-triggered videos too:
+            // users with videos disabled were still getting AI-fired videos (#512).
+            if (_kind == AICommandType.video && App.Settings?.Current?.MandatoryVideosEnabled != true)
+            {
+                App.Logger?.Information("MediaCommand: AI video request ignored — Videos feature is disabled");
+                return Task.FromResult(false);
+            }
+
             // Random pick — the AI can ask for "any video" / "any audio" without naming a file.
             if (_data.Random || string.IsNullOrEmpty(_data.Path))
             {
@@ -56,6 +64,12 @@ namespace ConditioningControlPanel.Services.Commands
                 return Task.FromResult(Application.Current.Dispatcher.Invoke(() =>
                 {
                     if (App.Video == null) return false;
+                    // Covers the audio-kind-but-video-file case the top gate can't see.
+                    if (App.Settings?.Current?.MandatoryVideosEnabled != true)
+                    {
+                        App.Logger?.Information("MediaCommand: AI video file ignored — Videos feature is disabled");
+                        return false;
+                    }
                     if (App.Video.IsPlaying)
                     {
                         App.Logger?.Information("MediaCommand: video already playing — skipping {Path}", fullPath);

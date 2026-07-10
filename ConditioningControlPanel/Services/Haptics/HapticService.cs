@@ -767,8 +767,10 @@ namespace ConditioningControlPanel.Services
             _videoStartTime = DateTime.Now;
 
             _currentEventType = "Video";
-            // Background vibe is 10% of slider so target hits feel impactful
-            _currentVideoIntensity = Math.Max(Settings.VideoIntensity * 0.1, 0.05);
+            // Background vibe is 10% of slider so target hits feel impactful.
+            // Floor must clear LovenseProvider's "intensity <= 0.05 = off" cutoff — a 0.05
+            // floor mapped to level 0 and the whole video ran silent (#516).
+            _currentVideoIntensity = Math.Max(Settings.VideoIntensity * 0.1, 0.06);
             HapticTriggered?.Invoke(this, $"Video: Background {(int)(_currentVideoIntensity * 100)}%");
 
             try
@@ -815,8 +817,13 @@ namespace ConditioningControlPanel.Services
             // This replaces the background vibe briefly with higher intensity
             await ApplyVibrationModeAsync(spikeIntensity, 100, Settings.TargetHitMode);
 
-            // Immediately resume background vibe without delay (no pause!)
-            if (_currentVideoIntensity > 0 && Settings.VideoEnabled && _activeProvider?.IsConnected == true)
+            // Let the spike actually be felt before the background command overrides it —
+            // both are near-instant HTTP posts, so an immediate resume erased the spike (#516).
+            await Task.Delay(150);
+
+            // Resume background vibe; skip when it maps to level 0 so we don't kill the spike
+            // with an "off" command (LovenseProvider treats <= 0.05 as off).
+            if (_currentVideoIntensity > 0.05 && Settings.VideoEnabled && _activeProvider?.IsConnected == true)
             {
                 await _activeProvider.VibrateAsync(_currentVideoIntensity, 30000);
             }
