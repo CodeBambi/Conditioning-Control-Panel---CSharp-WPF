@@ -559,6 +559,12 @@ public class VideoLayer : BaseLayer, IDisposable
         return dirty;
     }
 
+    // IMP-4: cache the letterbox background paint; rebuilt only when BackgroundColor changes
+    // (set once at construction — MandatoryVideoLayer overrides it — never per-frame). Render-
+    // thread-only state, disposed in Dispose().
+    private SKPaint? _bgPaint;
+    private SKColor _bgPaintColor;
+
     public override void Render(SKCanvas canvas, PixelRect bounds, TimeSpan deltaTime)
     {
         // Grab the FRONT wrapper reference under the lock, draw outside it: the draw
@@ -576,8 +582,13 @@ public class VideoLayer : BaseLayer, IDisposable
         // Fill the entire monitor with an opaque background before drawing the letterboxed
         // video, so the desktop never shows through the bars. Essential when the monitor's
         // aspect ratio differs from the clip (e.g. a landscape clip on a portrait screen).
-        using (var bg = new SKPaint { Color = BackgroundColor })
-            canvas.DrawRect(ToSkRect(bounds), bg);
+        if (_bgPaint is null || _bgPaintColor != BackgroundColor)
+        {
+            _bgPaint?.Dispose();
+            _bgPaint = new SKPaint { Color = BackgroundColor };
+            _bgPaintColor = BackgroundColor;
+        }
+        canvas.DrawRect(ToSkRect(bounds), _bgPaint);
 
         // Preserve aspect ratio (Uniform stretch) inside the monitor bounds.
         var frameW = (float)_videoWidth;
@@ -605,5 +616,7 @@ public class VideoLayer : BaseLayer, IDisposable
         if (_disposed) return;
         _disposed = true;
         Cleanup();
+        _bgPaint?.Dispose();
+        _bgPaint = null;
     }
 }

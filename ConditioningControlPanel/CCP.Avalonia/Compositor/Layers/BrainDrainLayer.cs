@@ -37,6 +37,18 @@ public sealed class BrainDrainLayer : BaseLayer, IDisposable
     private int _captureFps = 30;
     private double _pulsePhase;
 
+    // IMP-4: cache render-path paints/filter instead of allocating them per frame. The blur
+    // paint+filter is rebuilt only when sigma changes; the tint paint's Color is mutated in
+    // place each frame (SKColor is a struct, no alloc). All three are touched only on the single
+    // render thread. Blur access is additionally serialized under _frameLock; the tint fallback
+    // runs lock-free, so its teardown safety rests on shutdown ordering (Stop() sets intensity 0
+    // on the UI thread before Dispose), the `_intensity <= 0` render gate, and the engine's
+    // per-layer render try/catch — not on _frameLock. WPF-parity blur/tint math is unchanged.
+    private SKPaint? _blurPaint;
+    private SKImageFilter? _blurFilter;
+    private float _blurSigma = float.NaN;
+    private SKPaint? _tintPaint;
+
     public override int ZIndex => CompositorLayers.BrainDrain;
 
     public override bool IsActive => _intensity > 0;
@@ -162,9 +174,15 @@ public sealed class BrainDrainLayer : BaseLayer, IDisposable
                     // divided by the downscale factor, because the blurred bitmap is
                     // 1/Downscale size and the stretch back to full screen supplies the rest.
                     var sigma = (float)(_intensity * 0.4 / Downscale);
-                    using var blur = SKImageFilter.CreateBlur(sigma, sigma);
-                    using var paint = new SKPaint { ImageFilter = blur };
-                    canvas.DrawImage(frame.Image, ToSkRect(bounds), paint);
+                    if (_blurPaint is null || sigma != _blurSigma)
+                    {
+                        _blurPaint?.Dispose();
+                        _blurFilter?.Dispose();
+                        _blurFilter = SKImageFilter.CreateBlur(sigma, sigma);
+                        _blurPaint = new SKPaint { ImageFilter = _blurFilter };
+                        _blurSigma = sigma;
+                    }
+                    canvas.DrawImage(frame.Image, ToSkRect(bounds), _blurPaint);
                     return;
                 }
 
@@ -193,8 +211,9 @@ public sealed class BrainDrainLayer : BaseLayer, IDisposable
         var baseAlpha = Math.Clamp(_intensity / 100.0, 0, 1);
         var pulse = 0.85 + 0.15 * Math.Sin(_pulsePhase); // subtle 85%-100% pulse
         var alpha = (byte)Math.Clamp(baseAlpha * pulse * 255, 0, 255);
-        using var paint = new SKPaint { Color = new SKColor(20, 0, 40, alpha) };
-        canvas.DrawRect(ToSkRect(bounds), paint);
+        _tintPaint ??= new SKPaint();
+        _tintPaint.Color = new SKColor(20, 0, 40, alpha);
+        canvas.DrawRect(ToSkRect(bounds), _tintPaint);
     }
 
     // Name alone can collide (two same-model monitors share a DisplayName), so the key
@@ -212,7 +231,19 @@ public sealed class BrainDrainLayer : BaseLayer, IDisposable
         }
     }
 
-    public void Dispose() => ClearFrames();
+    public void Dispose()
+    {
+        ClearFrames();
+        lock (_frameLock)
+        {
+            _blurPaint?.Dispose();
+            _blurFilter?.Dispose();
+            _tintPaint?.Dispose();
+            _blurPaint = null;
+            _blurFilter = null;
+            _tintPaint = null;
+        }
+    }
 
     private sealed class ScreenFrame
     {
