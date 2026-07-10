@@ -641,6 +641,9 @@ public sealed class BubbleEngine
     {
         if (bubble.IsPopping) return;
         bubble.IsDetonated = true;
+        // WPF Detonate() sets _isPopping BEFORE _onDetonate (BubbleService.cs:3960-3961), and every
+        // pay path guards on it, so a same-frame AoE cannot re-pay the detonated live (IMP-ECON1).
+        bubble.IsPopping = true;
         _onDetonate?.Invoke(spec);
         _renderer.Pop(bubble, () => _bubbles.Remove(bubble));
     }
@@ -1344,6 +1347,9 @@ public sealed class BubbleEngine
                     bubble.IsChanneling = false;
                     _channelBubbleId = null;
                     bubble.IsDefused = true;
+                    // WPF CompleteDefuse() sets _isPopping BEFORE _onDefuse (BubbleService.cs:3688-3689)
+                    // so a same-frame AoE cannot re-pay this defused live (IMP-ECON1).
+                    bubble.IsPopping = true;
                     bubble.Scale = ChaosTuning.CHANNEL_MIN_SCALE;
 
                     if (bubble.BoundPairId != 0)
@@ -1379,6 +1385,9 @@ public sealed class BubbleEngine
                 {
                     bubble.FuseRemainingMs = 0;
                     bubble.IsDetonated = true;
+                    // WPF parity (Detonate BubbleService.cs:3960-3961): set the pop latch before the
+                    // payload callback so a same-tick AoE cannot re-pay this detonated live (IMP-ECON1).
+                    bubble.IsPopping = true;
 
                     if (spec.IsEcho)
                     {

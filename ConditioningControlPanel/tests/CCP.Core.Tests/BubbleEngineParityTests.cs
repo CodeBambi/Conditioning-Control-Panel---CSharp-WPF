@@ -260,6 +260,61 @@ public class BubbleEngineParityTests
         engine.EndChaosMode();
     }
 
+    // ============================ IMP-ECON1: no same-tick economy double-pay of a resolved live ============================
+
+    [AvaloniaFact]
+    public void ImpEcon1_DetonatedLive_IsNotRePaidBySameTickPlayerRipple()
+    {
+        // WPF invariant (BubbleService.cs:3960-3961 Detonate sets _isPopping BEFORE _onDetonate, and
+        // every pay path guards `if (!_isAlive || _isPopping) return;` at :3730/:3960): once a live
+        // resolves (here: fuse-out detonation), a same-frame AoE (The Ripple) must NOT re-pay it.
+        // Before the fix the port's detonation set IsDetonated but not IsPopping, so the ripple
+        // hazard pass popped the already-detonated live through the benign-pop reward branch — an
+        // economy DOUBLE-PAY. This test reproduces that exact same-tick sequence.
+        var engine = NewEngine();
+        var onDetonate = new List<ChaosBubbleSpec>();
+        var onBenignPop = new List<ChaosBubbleSpec>();
+        engine.BeginChaosMode(
+            onBenignPop: s => onBenignPop.Add(s),
+            onDefuse: (_, _, _) => { },
+            onDetonate: s => onDetonate.Add(s));
+
+        var live = new ChaosBubbleSpec
+        {
+            VariantId = "live",
+            IsLive = true,
+            FuseMs = 5000,
+            Motion = ChaosMotion.FloatUp,
+            LifetimeMs = 20000,
+            SizePx = 100,
+            SpeedMult = 1.0,
+            SpawnAtPxX = 900,
+            SpawnAtPxY = 500,
+        };
+        engine.SpawnChaosBubble(live);
+        engine.TickOnceForTesting(); // materialize
+
+        var b = engine.GetChaosBubble(live.Id);
+        Assert.NotNull(b);
+        Assert.False(b!.IsPopping);
+        Assert.False(b.IsDetonated);
+
+        // Arm a player ripple centred on the live (distance 0 → always covered), then push the fuse
+        // to the brink so it detonates in the NEXT tick's main loop, BEFORE that tick's ripple
+        // hazard pass runs on the (still-present, not-yet-missed-removed) corpse.
+        var center = new Point((b.X + b.Size / 2.0) * b.Scaling, (b.Y + b.Size / 2.0) * b.Scaling);
+        b.FuseRemainingMs = 1.0;
+        engine.TriggerPlayerRipple(center);
+
+        engine.TickOnceForTesting(); // fuse-out detonation (main loop) → ripple (hazard pass)
+
+        // The live paid its detonation exactly once and was NOT re-paid as a benign pop.
+        Assert.Single(onDetonate);
+        Assert.Empty(onBenignPop);
+
+        engine.EndChaosMode();
+    }
+
     private static ChaosBubbleSpec MakeDarter(bool isSweeper = false) => new()
     {
         VariantId = "darter",

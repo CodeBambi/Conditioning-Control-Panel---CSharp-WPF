@@ -396,12 +396,15 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 | Row | Evidence | Expected gain | Tier | Proportionality |
 |---|---|---|---|---|
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
-**major rows #1–#8** (the improvement queue is fully resolved this session). IMP-1 DONE `49ec3707`.
-IMP-11 DONE `28fa06a2`. IMP-5 DONE `23b4dd86`. IMP-7 DONE `85f036f1`. IMP-10 DONE `53f2b4d7`. IMP-4 DONE
-`e4f40bc1`. IMP-9 DONE `066063e4`. IMP-6 DONE `7e6e0d9e`. IMP-2 DONE `60b10afc`. IMP-8 EVALUATED →
-**DECLINED** (flag-don't-force; coupling not worth the marginal gain — rationale on the row). IMP-3 is
-CONDITIONAL on row #3's libmpv spike gate — never do both. NEW row filed this session: **IMP-ECON1**
-(latent chaos economy double-pay — JUDGMENT; see OPEN rows).
+**BubbleLayer-mod-resolver → row #2 re-baseline → subagents.json → AI_AUDIT → #6 (DTRH web) →
+#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)**. IMP-ECON1 DONE (this session) — economy double-pay fixed;
+**Core test floor 542→543** (new pinning test). Original 12-row improvement queue fully resolved this session:
+IMP-1 DONE `49ec3707`. IMP-11 DONE `28fa06a2`. IMP-5 DONE `23b4dd86`. IMP-7 DONE `85f036f1`. IMP-10 DONE
+`53f2b4d7`. IMP-4 DONE `e4f40bc1`. IMP-9 DONE `066063e4`. IMP-6 DONE `7e6e0d9e`. IMP-2 DONE `60b10afc`.
+IMP-8 EVALUATED → **DECLINED** `14db71f1` (flag-don't-force; coupling not worth the marginal gain —
+rationale on the row). IMP-3 is CONDITIONAL on row #3's libmpv spike gate — never do both. Excluded from
+the autonomous bar (product-gated / VERIFY / DEFER / visual-gated / Linux-VM): #1 (product Qs b+c), #5
+(Linux VM), #7 & Voice (VERIFY), #8a/#8b (visual), Tutorial / ai-command P3 / #9 backlog (DEFER).
 
 | **IMP-1 — `VideoLayer` lacks a `ConsumeDirty` override**: engine invalidates all windows at 60Hz while clips decode at ~25-30fps; `Update`'s `presented` flag (FRONT↔READY swap) IS the dirty signal | `Compositor/Layers/VideoLayer.cs` (no override; inherits always-true `BaseLayer.ConsumeDirty()`, `BaseLayer.cs:46`) | ~halves GPU render passes during plain video playback; `MandatoryVideoLayer` inherits the fix free | MECHANICAL | ~10 lines, UI-tick-only state, no protocol change; verify with `--verify-video` |
 | **IMP-2 — engine render tick runs at Background dispatcher priority** — **DONE 2026-07-10**: parameterless `DispatcherTimer` = background priority (VERIFIED, Avalonia 12.0.5 `Avalonia.Base.xml` `DispatcherTimer.#ctor`) — the whole UCE hung off one starvable timer | `Compositor/CompositorEngine.cs` ctor → `new DispatcherTimer(DispatcherPriority.Render)` | removed scheduling-induced stutter; measured before/after `--benchmark`: Idle 122.6→141.6 fps (min 118→136), Active 123.2→144.2 fps (min 117→129) | STANDARD | DONE — ~+15–17% avg fps AND higher mins (starvation removed); verify-layers PASS, 44-tab smoke confirms no input starvation from Render>Input |
@@ -560,17 +563,27 @@ CONDITIONAL on row #3's libmpv spike gate — never do both. NEW row filed this 
   server-side 'drone' tag absent this run, proving the count is server-content-coupled; delta-set check,
   not count-equality, is the real signal while the smoke env is authed).
 
-### IMP-ECON1 — latent chaos economy double-pay: defused/detonated lives never set `IsPopping` · **JUDGMENT**
+### IMP-ECON1 — latent chaos economy double-pay: defused/detonated lives never set `IsPopping` · **JUDGMENT** — **DONE 2026-07-10 (this session)**
 
 Filed 2026-07-10 by the IMP-9 JUDGMENT review (nit #5; PRE-EXISTING, not caused by IMP-9). In
-`CCP.Core/Services/Chaos/BubbleEngine.cs`, channel-defuse completion (~:1345) and fuse detonation (~:1362)
-resolve a live bubble WITHOUT setting `bubble.IsPopping = true`. A same-tick player-ripple hazard pass can
-then re-pop the just-defused/detonated live via `PopBubble`'s `else → _onBenignPop` branch — a potential
-economy double-pay of the exact class the WS0 slice-6 audit exists to catch. Verify against the WPF head
-(`Services/BubbleService.cs`) whether WPF's raw pop paths stamp an equivalent guard, then either set
-`IsPopping` at the defuse/detonation resolution or gate the benign-pop branch on already-resolved state.
-- **Tier:** JUDGMENT (economy/state). **Acceptance:** no same-tick re-pay of a defused/detonated live;
-  WPF-parity confirmed; a pinning unit test in `CCP.Core.Tests` reproducing the double-pay before the fix.
+`CCP.Core/Services/Chaos/BubbleEngine.cs`, three terminal live-resolution sites set `IsDetonated`/`IsDefused`
+but NOT `IsPopping`, so a same-tick player-ripple hazard pass re-popped the resolved live via `PopBubble`'s
+`_onBenignPop` reward branch — an economy double-pay.
+**FIXED:** `wpf-archaeologist` extracted the WPF ground truth — WPF sets `_isPopping = true` synchronously
+BEFORE every economy callback (`CompleteDefuse BubbleService.cs:3688-3689`, `Detonate :3960-3961`), guarded
+by `if (!_isAlive || _isPopping) return;`; `_isPopping` is WPF's single resolution latch (no separate
+IsDefused/IsDetonated), removal deferred (corpse lingers). Ported that invariant: set `bubble.IsPopping =
+true` before the callback at all three sites — `DetonateBubble` (:643), channel-defuse (:1346), fuse-out
+detonation (:1381). Added pinning test `ImpEcon1_DetonatedLive_IsNotRePaidBySameTickPlayerRipple`
+(`BubbleEngineParityTests.cs`) that reproduces the exact same-tick sequence (fuse-out → ripple → missed-
+removal): FAILS pre-fix ("Collection was not empty"), passes post-fix. `port-parity-auditor` VERDICT SHIP —
+also a WPF-parity improvement (corpse now freezes instead of spuriously moving/missing) + closes a sibling
+double-detonate hole; no consumer needed the old unlatched corpse. Gates: slnf 0 · WPF sln 0 · Core
+**543/543** (floor 542→543) · smoke 44 tabs / 0 unhandled / in-run ChaosRun economy correct.
+- **Residual (low-pri follow-up, non-blocking):** the pinning test covers site 3 (fuse-out); sites 1
+  (DetonateBubble) + 2 (channel-defuse) share the identical one-line latch and were structurally verified by
+  the auditor but are not independently pinned — a channel-defuse test variant is cheap insurance if a future
+  session touches this area.
 
 Scan verdicts recorded as explicitly GOOD (checked, no action): VideoLayer's triple-buffer frame path
 matches its zero-alloc spec (index-swap locks, zero-copy `SKImage.FromPixels`, stale-session guards);
