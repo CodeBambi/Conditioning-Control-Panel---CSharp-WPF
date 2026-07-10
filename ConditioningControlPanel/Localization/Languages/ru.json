@@ -653,6 +653,8 @@
   "label_web_videos": "Веб-видео",
   "label_takeover_strict_videos": "Строгие видео",
   "tooltip_takeover_strict_videos": "Видео, запущенные захватом, используют строгую блокировку (без пропуска и ESC). Выкл = всегда можно пропустить",
+  "title_discord_linked": "Discord привязан",
+  "msg_discord_share_achievements_prompt": "Discord привязан! Публиковать ваши достижения в Discord сообщества?\n\nЭто можно изменить в любой момент через 'Делиться достижениями' во вкладке Discord.",
   "tooltip_auto_plays_hypnotube_videos_fullscreen": "Авто-воспроизведение видео HypnoTube в полноэкранном режиме",
   "label_comments": "Комментарии",
   "label_advanced_2": "Расширенные",

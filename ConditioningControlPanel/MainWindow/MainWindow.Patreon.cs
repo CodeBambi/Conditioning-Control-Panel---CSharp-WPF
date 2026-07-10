@@ -667,6 +667,7 @@ namespace ConditioningControlPanel
                     UpdateQuickDiscordUI();
                     UpdateDiscordUI();
                     UpdateAccountLinkingUI();
+                    OfferAchievementSharingAfterDiscordLink();
                 }
             }
             catch (OperationCanceledException)
@@ -686,6 +687,28 @@ namespace ConditioningControlPanel
             }
         }
 
+
+        /// <summary>
+        /// Achievement sharing is a separate opt-in that defaults OFF — users routinely
+        /// link Discord and then wonder why nothing posts (support, 2026-07-10). Offer it
+        /// once right after a successful link instead of leaving them to find the toggle.
+        /// </summary>
+        internal void OfferAchievementSharingAfterDiscordLink()
+        {
+            var s = App.Settings?.Current;
+            if (s == null || s.DiscordShareAchievements) return;
+
+            var share = MessageBox.Show(
+                Loc.Get("msg_discord_share_achievements_prompt"),
+                Loc.Get("title_discord_linked"),
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (share == MessageBoxResult.Yes)
+            {
+                s.DiscordShareAchievements = true;
+                App.Settings?.Save();
+                UpdateDiscordTabUI(); // sync the Share Achievements checkbox
+            }
+        }
 
         internal void ChkShareAchievements_Changed(object sender, RoutedEventArgs e)
         {

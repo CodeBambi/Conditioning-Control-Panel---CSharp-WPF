@@ -41,6 +41,7 @@ let game = null;
 let initMsg = null;
 let haveManifest = false;
 let started = false;
+let bootSettled = false; // engine live OR boot failed - stops the boot deadline
 
 // Shared page state the run brain (M3+) reads; M2 just keeps it current.
 export const hostState = {
@@ -74,15 +75,32 @@ async function maybeStart() {
       challenge: false,   // DtRH is no-lose; the Fall's miss-death mode stays off
       game,
     });
+    bootSettled = true;
     if (dom.loader) dom.loader.hidden = true;
     bridge.log('engine live (game mode)');
   } catch (err) {
+    bootSettled = true;
     bridge.log('3D boot failed: ' + (err && (err.stack || err.message) || err));
     bridge.send({ type: 'boot-error', msg: String(err && err.message || err) });
     if (dom.loader) dom.loader.hidden = true;
     if (dom.nope) dom.nope.hidden = false;
   }
 }
+
+// Boot deadline: a genuine WebGL failure throws and is handled above, but a
+// never-resolving await during load (hung asset fetch, stalled dynamic import,
+// init/manifest that never arrive) keeps rAF beating - so the host's wedge
+// watchdog stays quiet and the loader spins forever (support: "fall minigame
+// stuck on loading"). Force the failure path instead; the host reacts to
+// boot-error by falling back to the classic WPF game.
+setTimeout(() => {
+  if (bootSettled) return;
+  bridge.log('boot deadline (30s) hit - engine never came live'
+    + (initMsg ? '' : ' [no init]') + (haveManifest ? '' : ' [no manifest]'));
+  bridge.send({ type: 'boot-error', msg: 'boot deadline: engine not live after 30s' });
+  if (dom.loader) dom.loader.hidden = true;
+  if (dom.nope) dom.nope.hidden = false;
+}, 30000);
 
 function shutdown() {
   try { engine && engine.dispose && engine.dispose(); } catch (e) { /* best effort */ }

@@ -200,6 +200,14 @@ namespace ConditioningControlPanel.Services
                 PreserveCorruptSettingsFile();
             }
 
+            // Last resort before factory defaults: the file was corrupt (not missing), so
+            // try the rolling daily backups — losing up to a day beats losing everything.
+            if (WasSettingsFileCorrupt)
+            {
+                var restored = TryLoadFromDailyBackup();
+                if (restored != null) return restored;
+            }
+
             if (!WasSettingsFileCorrupt)
                 WasSettingsFileMissing = true;
             App.Logger?.Information("Using default settings ({Reason})",
@@ -207,6 +215,44 @@ namespace ConditioningControlPanel.Services
             var fresh = new AppSettings();
             MergeBuiltInAwarenessPresets(fresh);
             return fresh;
+        }
+
+        /// <summary>
+        /// Tries settings.bak-1.json .. settings.bak-3.json (newest first) after the main
+        /// file failed to parse. Returns the first backup that deserializes, with the same
+        /// post-load migrations the normal path applies, or null if none work.
+        /// </summary>
+        private AppSettings? TryLoadFromDailyBackup()
+        {
+            for (var i = 1; i <= 3; i++)
+            {
+                var bakPath = _settingsPath.Replace(".json", $".bak-{i}.json");
+                try
+                {
+                    if (!File.Exists(bakPath)) continue;
+                    var json = File.ReadAllText(bakPath);
+                    var serializerSettings = new JsonSerializerSettings
+                    {
+                        ObjectCreationHandling = ObjectCreationHandling.Replace,
+                        Error = (sender, args) => { args.ErrorContext.Handled = true; }
+                    };
+                    var settings = JsonConvert.DeserializeObject<AppSettings>(json, serializerSettings);
+                    if (settings == null) continue;
+
+                    MigrateKeywordTriggerActions(settings);
+                    MergeBuiltInAwarenessPresets(settings);
+                    settings.MigrateFromContentModeToMod();
+                    settings.MigrateLoudnessThreshold();
+
+                    App.Logger?.Warning("Settings RESTORED from daily backup {Backup} (main file was unparseable)", bakPath);
+                    return settings;
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Warning("Daily backup {Backup} also failed to load: {Error}", bakPath, ex.Message);
+                }
+            }
+            return null;
         }
 
         /// <summary>
@@ -485,6 +531,13 @@ namespace ConditioningControlPanel.Services
                 App.Logger?.Debug("Settings.Save: ActivePackIds BEFORE serialize: [{Ids}]",
                     string.Join(", ", Current.ActivePackIds ?? new List<string>()));
 
+                // Snapshot the previous good file into the rolling daily backups before the
+                // first overwrite of the day. The atomic write below protects against a crash
+                // MID-write, but not against the file being destroyed by something else
+                // entirely (support: preset wiped by a PC crash) — this gives Load() and the
+                // user up to 3 previous days to fall back on.
+                RotateDailyBackupBeforeWrite();
+
                 var json = JsonConvert.SerializeObject(Current, Formatting.Indented);
 
                 // Atomic write: write to temp file then replace, so a crash mid-write
@@ -522,6 +575,33 @@ namespace ConditioningControlPanel.Services
             catch (Exception ex)
             {
                 App.Logger?.Error(ex, "Could not save settings");
+            }
+        }
+
+        /// <summary>
+        /// Keeps settings.bak-1.json (newest) .. settings.bak-3.json (oldest): one snapshot
+        /// of the previous settings file per calendar day, rotated on the first save of the
+        /// day. Daily (not per-save) so a corruption doesn't immediately propagate into
+        /// every backup before anyone notices.
+        /// </summary>
+        private void RotateDailyBackupBeforeWrite()
+        {
+            try
+            {
+                if (!File.Exists(_settingsPath)) return;
+                var bak1 = _settingsPath.Replace(".json", ".bak-1.json");
+                if (File.Exists(bak1) && File.GetLastWriteTime(bak1).Date == DateTime.Now.Date) return;
+
+                var bak2 = _settingsPath.Replace(".json", ".bak-2.json");
+                var bak3 = _settingsPath.Replace(".json", ".bak-3.json");
+                if (File.Exists(bak2)) File.Move(bak2, bak3, overwrite: true);
+                if (File.Exists(bak1)) File.Move(bak1, bak2, overwrite: true);
+                File.Copy(_settingsPath, bak1, overwrite: true);
+                App.Logger?.Information("Settings daily backup rotated: {Backup}", bak1);
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Debug("Settings backup rotation failed: {Error}", ex.Message);
             }
         }
 

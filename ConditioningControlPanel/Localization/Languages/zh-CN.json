@@ -1321,6 +1321,8 @@
   "label_web_videos": "网页视频",
   "label_takeover_strict_videos": "严格视频",
   "tooltip_takeover_strict_videos": "接管启动的视频使用严格锁定（不可跳过、不可按ESC）。关闭 = 始终可跳过",
+  "title_discord_linked": "Discord已关联",
+  "msg_discord_share_achievements_prompt": "Discord已关联！要把你的成就也发布到社区Discord吗？\n\n可随时在Discord标签页的「分享成就」中更改。",
   "tooltip_auto_plays_hypnotube_videos_fullscreen": "自动全屏播放 HypnoTube 视频",
   "tooltip_autonomy_interval": "接管模式检查是否触发动作的频率。较低 = 尝试更频繁。60秒间隔下她每分钟评估一次，选择一种启用的行为，根据强度决定是否触发",
   "tooltip_autonomy_cooldown": "两次连续接管动作间的最小等待时间。防止即使间隔检查通过也连续触发。感觉接管过于持续时设高",
