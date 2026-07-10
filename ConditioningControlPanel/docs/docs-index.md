@@ -66,7 +66,7 @@ agentTypes and the mandatory skills below are how the tier model stays disciplin
 
 | Tier | Model id | Allowed work |
 |---|---|---|
-| **small** (MECHANICAL) | `kimi/kimi-k2.7-code-highspeed` | Literal, list-driven execution of **pre-sliced** turnkey edits with WPF file:line citations, deletions, sweeps, tracker updates. Fast but literal. MUST stop with a `BLOCKED:` note instead of improvising when a precondition fails or a step is ambiguous. |
+| **small** (MECHANICAL) | `kimi-for-coding` | Literal, list-driven execution of **pre-sliced** turnkey edits with WPF file:line citations, deletions, sweeps, tracker updates. Fast but literal. MUST stop with a `BLOCKED:` note instead of improvising when a precondition fails or a step is ambiguous. |
 | **medium** (STANDARD) | `zai/glm-5.2` | Bounded implementation, research digestion, reference reconciliation, routine reviews, inventories. |
 | **big** (JUDGMENT) | `anthropic/claude-fable-5` | Architecture, slicing, adversarial review, and anything touching state, economy, security, input hooks, or compositor internals. |
 

@@ -74,7 +74,7 @@ quality patterns (adversarial fact-checking of findings; candidate selection on 
 
 | Tier | Model | Allowed work |
 |---|---|---|
-| small — **MECHANICAL** | `kimi/kimi-k2.7-code-highspeed` | Literal, list-driven execution ONLY: pre-sliced turnkey edits with WPF file:line citations, deletions, sweeps, tracker updates. Dumb but very fast. MUST STOP with a `BLOCKED:` note on the board instead of improvising when a precondition fails or a step is ambiguous. |
+| small — **MECHANICAL** | `kimi-for-coding` | Literal, list-driven execution ONLY: pre-sliced turnkey edits with WPF file:line citations, deletions, sweeps, tracker updates. Dumb but very fast. MUST STOP with a `BLOCKED:` note on the board instead of improvising when a precondition fails or a step is ambiguous. |
 | medium — **STANDARD** | `zai/glm-5.2` | Bounded implementation, research digestion, reference reconciliation, routine reviews, inventories. |
 | big — **JUDGMENT** | `anthropic/claude-fable-5` | Architecture, slicing, adversarial review, and anything touching state, economy, security, input hooks, or compositor internals. |
 

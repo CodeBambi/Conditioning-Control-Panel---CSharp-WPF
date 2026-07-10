@@ -27,7 +27,7 @@ behavior contracts, `port-feature` for implementation, `mechanical-port-work` fo
 `unified-compositor-engine` for all layer/video work, `overlay-clickthrough` for all input/ex-style/hook
 work, `dashboard-design` for all user-facing surfaces, `port-audit` at workstream close-out):
 
-- **MECHANICAL** — `kimi/kimi-k2.7-code-highspeed`: literal, list-driven execution of pre-sliced turnkey
+- **MECHANICAL** — `kimi-for-coding`: literal, list-driven execution of pre-sliced turnkey
   edits WITH WPF file:line citations, deletions, sweeps, tracker updates. Rows must be turnkey (steps
   pre-sliced + cites + gates). Dumb but fast; STOPS with `BLOCKED:` on any failed precondition.
 - **STANDARD** — `zai/glm-5.2`: bounded implementation, research digestion, reference reconciliation,
