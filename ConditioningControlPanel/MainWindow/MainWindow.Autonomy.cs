@@ -38,15 +38,16 @@ namespace ConditioningControlPanel
 
             var isEnabled = BambiTakeoverTab.ChkAutonomyEnabled.IsChecked ?? false;
 
-            // Lockdown mode: Takeover cannot be disabled while locked in (#514) —
-            // same rule as the engine stop / exit / panic-key guards.
-            if (!isEnabled && App.Settings.Current.AutonomyModeEnabled && App.Lockdown?.IsActive == true)
+            // Lockdown mode: a RUNNING Takeover cannot be disabled while locked in (#514) —
+            // same rule as the engine stop / exit / panic-key guards. Keyed on the service
+            // actually running (not the persisted setting) so a stale setting can be cleared.
+            if (!isEnabled && App.Autonomy?.IsEnabled == true && App.Lockdown?.IsActive == true)
             {
                 MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"), Loc.Get("title_lockdown"),
                     MessageBoxButton.OK, MessageBoxImage.Stop);
                 _isLoading = true;
-                BambiTakeoverTab.ChkAutonomyEnabled.IsChecked = true;
-                _isLoading = false;
+                try { BambiTakeoverTab.ChkAutonomyEnabled.IsChecked = true; }
+                finally { _isLoading = false; }
                 return;
             }
 
@@ -131,8 +132,8 @@ namespace ConditioningControlPanel
 
             var isCurrentlyEnabled = settings.AutonomyModeEnabled;
 
-            // Lockdown mode: Takeover cannot be disabled while locked in (#514).
-            if (isCurrentlyEnabled && App.Lockdown?.IsActive == true)
+            // Lockdown mode: a RUNNING Takeover cannot be disabled while locked in (#514).
+            if (isCurrentlyEnabled && App.Autonomy?.IsEnabled == true && App.Lockdown?.IsActive == true)
             {
                 MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"), Loc.Get("title_lockdown"),
                     MessageBoxButton.OK, MessageBoxImage.Stop);

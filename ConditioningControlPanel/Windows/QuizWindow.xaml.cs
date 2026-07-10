@@ -667,7 +667,7 @@ namespace ConditioningControlPanel
                 };
 
                 var trendText = trend.Direction == TrendDirection.FirstQuiz
-                    ? $"Score: {trend.LatestPercent}% — Your first {(!string.IsNullOrEmpty(entry.CategoryName) ? entry.CategoryName : entry.Category.ToString())} quiz!"
+                    ? $"Score: {trend.LatestPercent}% — Your first {QuizService.DisplayName(entry)} quiz!"
                     : $"Score: {trend.LatestPercent}% ({arrow}{Math.Abs(trend.DeltaPercent)}% from last time) \u00B7 Average: {trend.AveragePercent}% across {trend.QuizCount} quizzes";
 
                 var trendBlock = new TextBlock

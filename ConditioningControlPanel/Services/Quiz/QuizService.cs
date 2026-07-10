@@ -1169,6 +1169,10 @@ Make all phrases thematically consistent with the quiz category and the user's s
         public static string TrendKey(QuizHistoryEntry h) =>
             !string.IsNullOrEmpty(h.CategoryId) ? h.CategoryId : h.Category.ToString();
 
+        /// <summary>Human-readable category name with the legacy-entry fallback.</summary>
+        public static string DisplayName(QuizHistoryEntry h) =>
+            !string.IsNullOrEmpty(h.CategoryName) ? h.CategoryName : h.Category.ToString();
+
         public static QuizScoreTrend? GetScoreTrend(List<QuizHistoryEntry> history, string categoryId)
         {
             var filtered = history

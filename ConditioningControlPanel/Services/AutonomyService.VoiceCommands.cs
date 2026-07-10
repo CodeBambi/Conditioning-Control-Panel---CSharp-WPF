@@ -893,7 +893,9 @@ namespace ConditioningControlPanel.Services
                     await Application.Current.Dispatcher.InvokeAsync(() => ExecuteIntentAndConfirm(toRun));
 
                 // Remember the last actionable command so a later "again"/"more" can replay it.
-                if (best.Repeatable) _lastVoiceIntent = best;
+                // A Blocked (refused) command must not become the replay target, or "again"
+                // repeats the refusal instead of the last real effect.
+                if (best.Repeatable && best.Blocked?.Invoke() != true) _lastVoiceIntent = best;
 
                 return best.NoChain ? VoiceCmdOutcome.HandledFinal : VoiceCmdOutcome.Handled;
             }

@@ -1015,8 +1015,8 @@ namespace ConditioningControlPanel
                 return;
             }
 
-            // Lockdown mode: Takeover cannot be disabled while locked in (#514).
-            if (settings.AutonomyModeEnabled && App.Lockdown?.IsActive == true)
+            // Lockdown mode: a RUNNING Takeover cannot be disabled while locked in (#514).
+            if (settings.AutonomyModeEnabled && App.Autonomy?.IsEnabled == true && App.Lockdown?.IsActive == true)
             {
                 Giggle("Lockdown is active~ you can't turn me off~");
                 return;

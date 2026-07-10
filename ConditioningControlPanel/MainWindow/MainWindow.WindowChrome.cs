@@ -404,8 +404,9 @@ namespace ConditioningControlPanel
                 // (no point running effects when user can't see them)
                 if (_avatarTubeWindow != null && !_avatarTubeWindow.IsDetached)
                 {
-                    // Pause autonomy if it's running
-                    if (App.Autonomy?.IsEnabled == true)
+                    // Pause autonomy if it's running — but never during Lockdown: minimize
+                    // would otherwise be a silent escape from Takeover (#514).
+                    if (App.Autonomy?.IsEnabled == true && App.Lockdown?.IsActive != true)
                     {
                         _wasAutonomyRunningBeforeMinimize = true;
                         _autonomyWasPausedOnMinimize = true;

@@ -206,13 +206,21 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
+        /// Lowest intensity that still maps to a real vibration level. LovenseProvider
+        /// treats intensity &lt;= 0.05 as "off", so any floor of exactly 0.05 silences the
+        /// device instead of keeping a faint buzz (#516). Every minimum floor in this
+        /// service must clear that cutoff.
+        /// </summary>
+        private const double MinPerceptibleIntensity = 0.06;
+
+        /// <summary>
         /// Get slider intensity with minimum floor (devices need ~5% to respond)
         /// Slider value directly controls device power: 1% = min, 100% = max
         /// </summary>
         private double GetSliderIntensity(double sliderValue)
         {
-            // Minimum 5% floor so device always responds, max 100%
-            return Math.Clamp(sliderValue, 0.05, 1.0);
+            // Minimum floor so device always responds, max 100%
+            return Math.Clamp(sliderValue, MinPerceptibleIntensity, 1.0);
         }
 
         /// <summary>
@@ -250,14 +258,14 @@ namespace ConditioningControlPanel.Services
                     {
                         if (token?.IsCancellationRequested == true) break;
                         var stepIntensity = intensity * (i / (double)waveSteps);
-                        await _activeProvider.VibrateAsync(Math.Max(stepIntensity, 0.05), waveStepDuration);
+                        await _activeProvider.VibrateAsync(Math.Max(stepIntensity, MinPerceptibleIntensity), waveStepDuration);
                     }
                     // Ramp down
                     for (int i = waveSteps - 1; i >= 0; i--)
                     {
                         if (token?.IsCancellationRequested == true) break;
                         var stepIntensity = intensity * (i / (double)waveSteps);
-                        await _activeProvider.VibrateAsync(Math.Max(stepIntensity, 0.05), waveStepDuration);
+                        await _activeProvider.VibrateAsync(Math.Max(stepIntensity, MinPerceptibleIntensity), waveStepDuration);
                     }
                     break;
 
@@ -578,7 +586,7 @@ namespace ConditioningControlPanel.Services
                 if (!Settings.VideoEnabled) { _currentEventType = null; return; }
                 var percent = startPercent + (intensityStep * i);
                 var intensity = maxIntensity * percent;
-                await _activeProvider.VibrateAsync(Math.Clamp(intensity, 0.05, 1), stepDuration);
+                await _activeProvider.VibrateAsync(Math.Clamp(intensity, MinPerceptibleIntensity, 1), stepDuration);
                 if (i < steps) await Task.Delay(stepDuration);
             }
             _currentEventType = null;
@@ -617,7 +625,7 @@ namespace ConditioningControlPanel.Services
 
                     // Exponential decay from slider intensity
                     var decayFactor = Math.Pow(0.7, i);
-                    var intensity = Math.Max(startIntensity * decayFactor, 0.05);
+                    var intensity = Math.Max(startIntensity * decayFactor, MinPerceptibleIntensity);
 
                     await ApplyVibrationModeAsync(intensity, 250, mode, token);
                     await Task.Delay(200, token);
@@ -661,7 +669,7 @@ namespace ConditioningControlPanel.Services
                     if (token.IsCancellationRequested || !Settings.FlashClickEnabled) break;
 
                     var decayFactor = Math.Pow(0.7, i);
-                    var intensity = Math.Max(startIntensity * decayFactor, 0.05);
+                    var intensity = Math.Max(startIntensity * decayFactor, MinPerceptibleIntensity);
 
                     await ApplyVibrationModeAsync(intensity, 250, mode, token);
                     await Task.Delay(200, token);
@@ -757,6 +765,17 @@ namespace ConditioningControlPanel.Services
         {
             if (!Settings.Enabled || !Settings.VideoEnabled || _activeProvider == null || !_activeProvider.IsConnected)
                 return;
+
+            // Slider at 0 means "no background vibe, target-hit spikes only" — the
+            // MinPerceptibleIntensity floor below must not turn 0 into a constant buzz.
+            if (Settings.VideoIntensity <= 0)
+            {
+                _videoVibeCts?.Cancel();
+                _currentVideoIntensity = 0;
+                _videoTargetHits = 0;
+                return;
+            }
+
             var provider = _activeProvider;
 
             _videoVibeCts?.Cancel();
@@ -807,7 +826,7 @@ namespace ConditioningControlPanel.Services
             if (!Settings.Enabled || !Settings.TargetHitEnabled || _activeProvider == null || !_activeProvider.IsConnected)
                 return;
 
-            _videoTargetHits++;
+            var gen = ++_videoTargetHits;
 
             // Use target hit intensity (not video intensity) for the spike
             var spikeIntensity = GetSliderIntensity(Settings.TargetHitIntensity);
@@ -820,6 +839,11 @@ namespace ConditioningControlPanel.Services
             // Let the spike actually be felt before the background command overrides it —
             // both are near-instant HTTP posts, so an immediate resume erased the spike (#516).
             await Task.Delay(150);
+
+            // Only the newest hit resumes the background: an older hit's delayed resume
+            // would land mid-spike of a newer hit and flatten it. Stop also resets the
+            // counter, so a resume can't fire after the video ended.
+            if (gen != _videoTargetHits) return;
 
             // Resume background vibe; skip when it maps to level 0 so we don't kill the spike
             // with an "off" command (LovenseProvider treats <= 0.05 as off).

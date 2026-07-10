@@ -209,8 +209,7 @@ namespace ConditioningControlPanel
                         TrendDirection.Flat => "\u2192",
                         _ => ""
                     };
-                    var catDisplay = latestEntry != null && !string.IsNullOrEmpty(latestEntry.CategoryName)
-                        ? latestEntry.CategoryName : cat.ToString();
+                    var catDisplay = latestEntry != null ? QuizService.DisplayName(latestEntry) : cat;
                     var trendLabel = trend.Direction == TrendDirection.FirstQuiz
                         ? $"{catDisplay}: {trend.LatestPercent}%"
                         : $"{catDisplay}: {trend.LatestPercent}% {arrow}{Math.Abs(trend.DeltaPercent)}%";
@@ -231,7 +230,7 @@ namespace ConditioningControlPanel
                 foreach (var entry in history)
                 {
                     var pct = entry.MaxScore > 0 ? (int)Math.Round((double)entry.TotalScore / entry.MaxScore * 100) : 0;
-                    var catName = !string.IsNullOrEmpty(entry.CategoryName) ? entry.CategoryName : entry.Category.ToString();
+                    var catName = QuizService.DisplayName(entry);
                     var label = $"{entry.TakenAt:MMM d}  ·  {catName}  ·  {entry.TotalScore}/{entry.MaxScore} ({pct}%)";
 
                     var row = new Border
