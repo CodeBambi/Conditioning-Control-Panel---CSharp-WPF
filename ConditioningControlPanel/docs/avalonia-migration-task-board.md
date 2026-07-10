@@ -156,14 +156,21 @@ environmentally invalidate the "not-worse than benchmark-optimized.json" compari
   max-intensity full-session window-show path crashes. A fresh MaxIntensity re-baseline cannot be captured on
   this machine until that crash is fixed — see the new row directly below.
 
-### Release `--max-benchmark` SIGSEGV at window-show · **JUDGMENT (native crash) — BLOCKS row #2 re-baseline** (filed 2026-07-10)
+### Release Windows head SIGSEGV at window-show (flag-independent) · **JUDGMENT (native crash) — BLOCKS row #2 re-baseline + all Release verification** (filed 2026-07-10)
 
-Release `--max-benchmark` (Windows head) crashes with SIGSEGV (exit 139) during window-show, before the first
-`[BENCH]` marker, immediately after the compositor layers register (`VideoLayer`/`MandatoryVideoLayer`). No
-managed exception is logged (global handlers don't fire → native fault). Reproduced 3/3 across two commits
-including the pre-code baseline `c9475bdd`, so **pre-existing** (candidate origin: the main merge `a06509eb`
-or earlier; the 2026-07-05 Release baseline was captured on a since-changed env). Debug `--benchmark`
-(Idle/Active) is UNAFFECTED — the fault is specific to the Release full-session/max-intensity first-show path.
+The **Release** build of the Windows Avalonia head crashes with SIGSEGV (exit 139) during **window-show**,
+immediately after the compositor layers register (`VideoLayer`/`MandatoryVideoLayer`), **before** any
+`[BENCH]` / smoke tab-visit marker. No managed exception is logged (global handlers don't fire → native
+fault). **Flag-independent:** reproduces with BOTH `--max-benchmark` (2/2) AND `--smoke-test` (1/1) — it is
+NOT a benchmark artifact but a generic Release launch/window-show crash. **Pre-existing:** also reproduces at
+the pre-code baseline `c9475bdd` (1/1), so not a session regression (candidate origin: the main merge
+`a06509eb` or earlier). **Debug is fully UNAFFECTED** — every Debug gate passed this session (`--smoke-test`
+44 tabs, `--verify-layers`, `--benchmark` Idle/Active). So this is a **Release-only** (optimized/JIT or
+native-interop-timing) fault, observed on THIS machine (run via `dotnet run -c Release --no-build`).
+- **SEVERITY UNKNOWN — needs owner/CI input:** is this reproducible in CI's Release single-file publish and
+  in the shipped installer build (→ shipping-critical, users can't launch), or is it machine/GPU-driver/
+  LibVLC-native-state specific to this dev box? A published-exe run + a CI Release artifact check should settle
+  it before deep forensics.
 - **Prescribed first step:** capture the faulting module — set `DOTNET_DbgEnableMiniDump=1` (+ `DbgMiniDumpType=4`)
   and re-run, then triage the dump with `dotnet-dump`; prime suspects are LibVLC video-layer native init and the
   Skia/GPU context at first show under the heavy session. Do NOT guess a fix without the module.
