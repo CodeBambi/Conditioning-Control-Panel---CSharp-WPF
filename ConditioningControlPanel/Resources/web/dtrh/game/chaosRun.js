@@ -1296,6 +1296,8 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         const i = toys.indexOf(t);
         if (i >= 0) toys.splice(i, 1);
         toys.forEach((x, k) => { x.key = String(k + 1); });
+        // the ribbon keeps the record: grey out its tile now that it's spent
+        if (t.pickRef) { t.pickRef.spent = true; hudUi.setPicks(st.runPicks); }
       }
     }
     hudUi.updateToys(toys, toyStatus());
@@ -2370,6 +2372,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (toys.length >= st.consumableSlots) return;   // dock full (canOfferPowerup should have vetoed)
     const lvl = Math.max(1, level | 0);
     const power = def.levelValues[Math.min(lvl, def.levelValues.length) - 1];
+    // The pickup also lands in the run ribbon (an active vanishes from the dock
+    // when spent - the ribbon tile stays as the record, greying out on the last
+    // charge). The toy record keeps a ref so the spend site can flip it.
+    const pick = { id, name: def.name, curse: false, desc: def.desc, flavor: def.flavor, glyph: def.glyph, toy: true, spent: false };
     toys.push({
       id, name: def.name, glyph: def.glyph || '◈', desc: def.desc || '',
       key: String(toys.length + 1),                       // slot 1 -> "1", etc.
@@ -2378,9 +2384,11 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       // Consumables dock with 3 uses (charge-based toys keep their levelled charge
       // count when it's higher — e.g. a deepened wand still brings 4).
       chargesLeft: (def.cooldownSec ?? 0) <= 0 ? Math.max(3, Math.round(power)) : 3,
-      cooldownLeft: 0, effectActive: false, consumable: true,
+      cooldownLeft: 0, effectActive: false, consumable: true, pickRef: pick,
     });
     st.runEquipment.add(id);
+    st.runPicks.push(pick);
+    hudUi.setPicks(st.runPicks);
     hudUi.updateToys(toys, toyStatus());
   }
 

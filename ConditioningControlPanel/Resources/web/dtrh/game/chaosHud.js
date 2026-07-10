@@ -199,19 +199,21 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } =
     picksWrap.innerHTML = '';
     for (const p of picks) {
       const tile = document.createElement('div');
-      tile.className = 'cf-pick' + (p.curse ? ' cf-pick--sin' : '');
+      tile.className = 'cf-pick' + (p.curse ? ' cf-pick--sin' : '')
+        + (p.toy ? ' cf-pick--toy' : '') + (p.spent ? ' cf-pick--spent' : '');
       tips.attach(tile, () => ({
         glyph: p.glyph || (p.curse ? '☠' : '◈'),
-        kicker: (p.curse ? 'sin' : p.relic ? 'relic' : 'mantra') + (p.rarity ? ` · ${p.rarity}` : ''),
+        kicker: (p.curse ? 'sin' : p.toy ? (p.spent ? 'toy · spent' : 'toy') : p.relic ? 'relic' : 'mantra')
+          + (p.rarity ? ` · ${p.rarity}` : ''),
         name: p.name,
         desc: p.desc || '',
         flavor: p.flavor || '',
-        accent: p.curse ? '255,138,138' : p.relic ? '255,215,130' : '156,232,160',
+        accent: p.curse ? '255,138,138' : p.toy ? '102,224,208' : p.relic ? '255,215,130' : '156,232,160',
       }));
       const img = document.createElement('img');
       img.src = `${ART}boons/${p.id}.png`;
       img.alt = '';
-      img.addEventListener('error', () => { img.remove(); tile.textContent = p.curse ? '☠' : '◈'; });
+      img.addEventListener('error', () => { img.remove(); tile.textContent = p.glyph || (p.curse ? '☠' : '◈'); });
       tile.appendChild(img);
       picksWrap.appendChild(tile);
     }
