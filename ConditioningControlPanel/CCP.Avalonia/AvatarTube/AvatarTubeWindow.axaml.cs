@@ -390,6 +390,13 @@ _parentWindow = parentWindow;
             if (_parentWindow == null) return;
             _parentWindow.PositionChanged += ParentWindow_PositionChanged;
             _parentWindow.PropertyChanged += ParentWindow_PropertyChanged;
+            // WPF parity (AvatarTube/AvatarTubeWindow.xaml.cs L189-194): the WPF head also
+            // wires parent SizeChanged and Activated to reposition. A resize (user drag,
+            // theme/mod relayout) changes ClientSize WITHOUT firing PositionChanged, and
+            // Activated is the settled "second chance" pass after minimize/restore and
+            // fullscreen exits - without both, the tube rests in a stale spot.
+            _parentWindow.SizeChanged += ParentWindow_SizeChanged;
+            _parentWindow.Activated += ParentWindow_Activated;
             _parentWindow.Closed += ParentWindow_Closed;
         }
 
@@ -1741,6 +1748,8 @@ _parentWindow = parentWindow;
             {
                 _parentWindow.PositionChanged -= ParentWindow_PositionChanged;
                 _parentWindow.PropertyChanged -= ParentWindow_PropertyChanged;
+                _parentWindow.SizeChanged -= ParentWindow_SizeChanged;
+                _parentWindow.Activated -= ParentWindow_Activated;
                 _parentWindow.Closed -= ParentWindow_Closed;
             }
             if (_achievementService != null)
@@ -1777,6 +1786,35 @@ _parentWindow = parentWindow;
             UpdatePosition();
         }
 
+        private void ParentWindow_SizeChanged(object? sender, SizeChangedEventArgs e)
+        {
+            // WPF parity: parent SizeChanged -> reposition. Synchronous like PositionChanged
+            // so the pair stays glued during a live resize; no z-order work here either.
+            if (_parentWindow?.WindowState == WindowState.Minimized) return;
+            UpdatePosition();
+        }
+
+        private void ParentWindow_Activated(object? sender, EventArgs e)
+        {
+            // WPF parity: Activated fires right after minimize/restore and exclusive-
+            // fullscreen exits, once the -32000 restore parking position has settled -
+            // the WPF head uses it as the second-chance anchor + raise pass.
+            if (!_isAttached || _hiddenForFullscreen) return;
+            if (_settings?.Current?.AvatarEnabled != true) return;
+            if (_parentWindow == null || !_parentWindow.IsVisible || _parentWindow.WindowState == WindowState.Minimized) return;
+            if (!IsVisible) Show();
+            UpdatePosition();
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_isAttached && _parentWindow?.IsVisible == true
+                    && _parentWindow.WindowState != WindowState.Minimized)
+                {
+                    UpdatePosition();
+                    BringAttachedPairToFront();
+                }
+            }, DispatcherPriority.Background);
+        }
+
         private void ParentWindow_PropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
         {
             if (e.Property == Window.WindowStateProperty)
@@ -1800,7 +1838,24 @@ _parentWindow = parentWindow;
                     if (_parentWindow.IsVisible && _settings?.Current?.AvatarEnabled == true)
                     {
                         Show();
-                        if (_isAttached) { UpdatePosition(); BringAttachedPairToFront(); }
+                        if (_isAttached)
+                        {
+                            UpdatePosition();
+                            BringAttachedPairToFront();
+                            // Second pass: at the instant WindowState flips back the platform
+                            // can still report the minimized -32000 parking position, which the
+                            // out-of-range guard rejects. Re-anchor once the restore settled
+                            // (WPF gets this pass for free from its Activated wiring).
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                if (_isAttached && _parentWindow?.IsVisible == true
+                                    && _parentWindow.WindowState != WindowState.Minimized)
+                                {
+                                    UpdatePosition();
+                                    BringAttachedPairToFront();
+                                }
+                            }, DispatcherPriority.Background);
+                        }
                     }
                     break;
             }
@@ -1844,6 +1899,17 @@ _parentWindow = parentWindow;
             {
                 UpdatePosition();
                 if (_isAttached) BringAttachedPairToFront();
+                // Second anchor pass after the first layout/SizeToContent freeze settles:
+                // on the very first Show the synchronous pass above can run against
+                // pre-layout geometry (WPF defers the same way at Loaded priority).
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_isAttached && _parentWindow?.IsVisible == true
+                        && _parentWindow.WindowState != WindowState.Minimized)
+                    {
+                        UpdatePosition();
+                    }
+                }, DispatcherPriority.Background);
             }
             StartFloatingAnimation();
         }

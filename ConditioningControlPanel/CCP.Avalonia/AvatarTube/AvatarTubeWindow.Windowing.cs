@@ -23,6 +23,8 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         private bool _reassertingAboveParent;
         private IScreenProvider? _screenProvider;
         private string _diagLastFullscreenWindow = "(none)";
+        private int _anchorRetryCount;
+        private const int MaxAnchorRetries = 3;
 
         // Win32 constants (kept for reference; P/Invoke calls are Windows-only and stubbed here).
         private const uint SWP_NOMOVE = 0x0002;
@@ -230,11 +232,19 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
         {
             try
             {
-                var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+                // WPF parity (AvatarTube/AvatarTubeWindow.Windowing.cs CalculateScaleFactor):
+                // the WPF head sizes against Screen.PrimaryScreen.WorkingArea converted to
+                // LOGICAL units (divided by the DPI scale). Prefer the primary screen for the
+                // same basis, and divide Avalonia's physical-pixel WorkingArea by Scaling -
+                // otherwise a >100% DPI monitor computes an inflated scale factor.
+                var screen = Screens.Primary ?? Screens.ScreenFromWindow(this);
                 if (screen != null)
                 {
-                    double maxHeightScale = (screen.WorkingArea.Height * 0.85) / DesignHeight;
-                    double maxWidthScale = (screen.WorkingArea.Width * 0.3) / DesignWidth;
+                    double scaling = screen.Scaling > 0 ? screen.Scaling : 1.0;
+                    double workH = screen.WorkingArea.Height / scaling;
+                    double workW = screen.WorkingArea.Width / scaling;
+                    double maxHeightScale = (workH * 0.85) / DesignHeight;
+                    double maxWidthScale = (workW * 0.3) / DesignWidth;
                     _scaleFactor = Math.Max(0.4, Math.Min(1.0, Math.Min(maxHeightScale, maxWidthScale)));
                 }
                 else
@@ -304,7 +314,22 @@ namespace ConditioningControlPanel.Avalonia.AvatarTube
 
             double newLeft = _parentWindow.Position.X - (tubeWidth + scaledOffset) * s;
             double newTop = _parentWindow.Position.Y + ((_parentWindow.ClientSize.Height - tubeHeight) / 2 + VerticalOffset * _scaleFactor) * s;
-            if (newTop < -500 || newTop > 5000 || newLeft < -2000 || newLeft > 5000) return;
+            if (newTop < -500 || newTop > 5000 || newLeft < -2000 || newLeft > 5000)
+            {
+                // Transient parent geometry (e.g. the -32000 minimized parking spot while a
+                // restore is still in flight). Never strand the tube where Show() parked it:
+                // retry on a short one-shot timer until the parent settles. Bounded so a
+                // parent legitimately parked out of range cannot spin this forever.
+                if (_anchorRetryCount < MaxAnchorRetries)
+                {
+                    _anchorRetryCount++;
+                    var retry = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+                    retry.Tick += (_, _) => { retry.Stop(); UpdatePosition(); };
+                    retry.Start();
+                }
+                return;
+            }
+            _anchorRetryCount = 0;
 
             // Round rather than truncate: (int) floors, which accumulates a sub-pixel up/left bias
             // versus the WPF head (which positions in logical DIPs without truncation).

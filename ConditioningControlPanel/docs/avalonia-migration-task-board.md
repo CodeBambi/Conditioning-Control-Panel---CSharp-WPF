@@ -594,6 +594,24 @@ path (z-order still maintained by `_zOrderRefreshTimer` + attach/activate/reappe
 `(int)` truncation to kill sub-pixel up/left bias; kept the follow synchronous (no `Dispatcher.Post` in the
 follow path — deferral is reappear-only).
 
+**Pass 2 (from-scratch wiring redo, committed):** the real root cause of "wrong at idle after
+resize/theme/reappear" was MISSING event wiring vs WPF. WPF wires parent `SizeChanged` AND `Activated` to
+reposition (`AvatarTubeWindow.xaml.cs:190,193`, verified); Avalonia only wired `PositionChanged`, so a
+resize/theme-relayout changed `ClientSize` WITHOUT repositioning and the tube rested stale. Added: parent
+`SizeChanged`+`Activated` wiring (+matching unsubscribe) and handlers; a bounded anchor-retry (3x150ms
+`DispatcherTimer`) so the out-of-range guard never strands the tube on the transient minimized parking
+position (additive hardening — WPF bare-returns here, has no retry); `CalculateScaleFactor` -> primary-screen
+basis + `WorkingArea/Scaling` logical units (WPF `PrimaryScreen`/`dpiScale` parity, `Windowing.cs:434`);
+deferred second-pass re-anchor on restore + first Show. **Verification:** read-only 3-agent parity workflow
+(`wpf-archaeologist` + `port-parity-auditor` + consolidation) audited the uncommitted diff line-for-line vs
+the WPF contract — verdict **no Broken rows, safe to commit**; every deviation is bounded additive hardening,
+no NRE/stranding/parity break. Positioned side-by-side desktop capture is NOT reliably automatable (needs a
+headed session with login + AvatarEnabled); code-parity audit + isolated tube render are the automated
+evidence, owner is the positioned verifier. **Non-blocking follow-ups (later commit):** store the retry timer
+in a field and `Stop()` it in `OnClosed`; drop the redundant `UpdatePosition()` in the `Activated` deferred
+pass + re-add WPF's PopQuiz/Quiz raise short-circuit if those windows exist in the port; add
+`BringAttachedPairToFront()` on the resize path for full `PositionChanged` parity.
+
 **Queued if still not WPF-smooth (advisor Step 4, the "better than WPF" card):** a Windows-head
 `Win32Properties.AddWndProcHookCallback` on MainWindow to reposition the tube inside the parent's OS move
 loop (`WM_MOVING`/`WM_WINDOWPOSCHANGED`) so both windows move in the same compose pass — replicates WPF's
