@@ -331,15 +331,19 @@ from WPF).
 session gate practice under the owner ruling: gates 1-3 hard, gate 4 = 44 tabs + 0 unhandled + delta-set
 ⊆ the recorded benign set (count-equality meaningless while the env is authed).
 
-### BubbleLayer bubble.png bypasses the mod resolver · **STANDARD**
+### BubbleLayer bubble.png bypasses the mod resolver · **STANDARD** — **DONE 2026-07-10 (this session)**
 
-Found by the 2026-07-10 bubble-border completeness sweep: `BubbleLayer` always decodes the embedded
-`avares://CCP.Avalonia/Assets/bubble.png` (`BubbleLayer.cs:97-99`), while WPF resolves `bubble.png`
-through mods (`Services/BubbleService.cs:812-820` → `ModResourceResolver`) and the Avalonia mini-game/
-avatar paths are already mod-aware via `AvaloniaBitmapHelper.LoadResource` (`Helpers/AvaloniaBitmapHelper.cs:46-48`).
-Live ambient/chaos bubbles therefore ignore mod bubble reskins in the Avalonia head. Port = resolve the
-bubble bitmap through the mod resolver at layer init + on mod change, keeping the embedded asset as
-fallback. Parity gap, not a white-border source.
+Found by the 2026-07-10 bubble-border completeness sweep: `BubbleLayer` always decoded the embedded
+`avares://CCP.Avalonia/Assets/bubble.png`, ignoring mod bubble reskins (WPF resolves `bubble.png` through
+mods, `Services/BubbleService.cs:812-820`). **FIXED:** `BubbleLayer.EnsureBubbleImage` now resolves via
+`AvaloniaModResourceResolver.ResolveUri("bubble.png")` (mod override → embedded fallback) and subscribes
+lazily to `ResourcesChanged` so a mid-run mod switch reskins live bubbles. The reload decodes OUTSIDE
+`_sync`, swaps the immutable `SKImage` reference under `_sync`, and NEVER disposes the old handle —
+preserving the never-freed invariant (0xC0000005 guard, AvaloniaUI/Avalonia#13521); leaks one handle per
+rare mod switch. Decode-failure ladder keeps the current image (no blank bubbles). JUDGMENT-tier threading
+review (6 attack vectors: use-after-free, render-thread DI/event, deadlock, dispose-ordering, parity,
+`_dirty` access): **VERDICT SHIP**. Gates: slnf 0 · WPF sln 0 · Core 543/543 · `--verify-layers`
+BubbleLayer PASS · smoke 44 tabs / 0 unhandled.
 
 ### Voice — E2E mic live run · **VERIFY**
 
@@ -396,8 +400,8 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 | Row | Evidence | Expected gain | Tier | Proportionality |
 |---|---|---|---|---|
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
-**BubbleLayer-mod-resolver → row #2 re-baseline → subagents.json → AI_AUDIT → #6 (DTRH web) →
-#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)**. IMP-ECON1 DONE (this session) — economy double-pay fixed;
+**row #2 re-baseline → subagents.json → AI_AUDIT → #6 (DTRH web) → #4 (WS3 sweep) →
+#3 (libmpv, CONDITIONAL)**. BubbleLayer-mod-resolver DONE (this session). IMP-ECON1 DONE (this session) — economy double-pay fixed;
 **Core test floor 542→543** (new pinning test). Original 12-row improvement queue fully resolved this session:
 IMP-1 DONE `49ec3707`. IMP-11 DONE `28fa06a2`. IMP-5 DONE `23b4dd86`. IMP-7 DONE `85f036f1`. IMP-10 DONE
 `53f2b4d7`. IMP-4 DONE `e4f40bc1`. IMP-9 DONE `066063e4`. IMP-6 DONE `7e6e0d9e`. IMP-2 DONE `60b10afc`.

@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Avalonia;
 using Avalonia.Media;
 using ConditioningControlPanel.Avalonia.Compositor.Layers;
+using ConditioningControlPanel.Avalonia.Services.Mod;
 using ConditioningControlPanel.Core.Platform;
+using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
 
 namespace ConditioningControlPanel.Avalonia.Compositor.Layers;
@@ -60,6 +63,14 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
     private bool _imageLoadAttempted;
     private bool _disposed;
 
+    // Mod-resolver wiring (parity gap fix): resolve bubble.png through the active mod so ambient
+    // and chaos bubbles honour mod reskins (WPF BubbleService.cs:812-820 -> ModResourceResolver),
+    // with the embedded asset as fallback. Subscribed lazily on the first render decode; a mod
+    // switch re-decodes and swaps the immutable SKImage under _sync, NEVER disposing the old one
+    // (same never-freed invariant as the first decode).
+    private AvaloniaModResourceResolver? _modResolver;
+    private bool _modSubscribed;
+
     public override int ZIndex => CompositorLayers.Bubbles;
 
     public override bool IsActive
@@ -82,27 +93,105 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
     }
 
     /// <summary>
-    /// Lazily decodes the bubble.png asset into an immutable SKImage cached for the app lifetime.
-    /// Called from the render path. Safe to call from any thread; the decode is gated by
-    /// <see cref="_imageLoadAttempted"/> so it runs at most once. The resulting image is never
-    /// disposed (intentional — see the field comment above) which keeps the native handle valid
-    /// for every subsequent render.
+    /// Lazily decodes the bubble image (mod-resolved, embedded-asset fallback) into an immutable
+    /// SKImage cached for the app lifetime. Called from the render path under <see cref="_sync"/>.
+    /// The decode is gated by <see cref="_imageLoadAttempted"/> so it runs at most once here; a
+    /// later active-mod change re-decodes via <see cref="OnModResourcesChanged"/>. The image is
+    /// never disposed (intentional — see the field comment above) which keeps the native handle
+    /// valid for every subsequent render.
     /// </summary>
     private SKImage? EnsureBubbleImage()
     {
         if (_bubbleImage != null || _imageLoadAttempted) return _bubbleImage;
         _imageLoadAttempted = true;
+        EnsureModSubscription();
+        _bubbleImage = LoadBubbleImage();
+        return _bubbleImage;
+    }
+
+    /// <summary>
+    /// Resolves the active mod's bubble.png (WPF parity: BubbleService.cs:812-820) and decodes it
+    /// into an immutable SKImage, falling back to the embedded asset. Never throws.
+    /// </summary>
+    private SKImage? LoadBubbleImage()
+    {
+        try
+        {
+            var uri = _modResolver?.ResolveUri("bubble.png");
+            if (!string.IsNullOrEmpty(uri))
+            {
+                using var stream = OpenResourceStream(uri);
+                if (stream != null)
+                {
+                    var image = SKImage.FromEncodedData(stream);
+                    if (image != null) return image;
+                }
+            }
+        }
+        catch
+        {
+            // fall through to the embedded asset
+        }
+        return LoadEmbeddedBubbleImage();
+    }
+
+    private static SKImage? LoadEmbeddedBubbleImage()
+    {
         try
         {
             using var stream = global::Avalonia.Platform.AssetLoader.Open(
                 new Uri("avares://CCP.Avalonia/Assets/bubble.png"));
-            _bubbleImage = stream != null ? SKImage.FromEncodedData(stream) : null;
+            return stream != null ? SKImage.FromEncodedData(stream) : null;
         }
         catch
         {
-            _bubbleImage = null;
+            return null;
         }
-        return _bubbleImage;
+    }
+
+    /// <summary>Opens a stream for a resolver URI: avares:// (embedded), file:// or a plain path.</summary>
+    private static Stream? OpenResourceStream(string uri)
+    {
+        if (uri.StartsWith("avares://", StringComparison.OrdinalIgnoreCase))
+            return global::Avalonia.Platform.AssetLoader.Open(new Uri(uri));
+        if (uri.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+        {
+            var path = new Uri(uri).LocalPath;
+            return File.Exists(path) ? File.OpenRead(path) : null;
+        }
+        return File.Exists(uri) ? File.OpenRead(uri) : null;
+    }
+
+    /// <summary>
+    /// One-time subscription (from the first render decode) to the mod resolver's resource-change
+    /// event so a mid-run mod switch reskins live bubbles. Field-like event += is thread-safe.
+    /// </summary>
+    private void EnsureModSubscription()
+    {
+        if (_modSubscribed) return;
+        _modSubscribed = true;
+        _modResolver = App.Services?.GetService<AvaloniaModResourceResolver>();
+        if (_modResolver != null)
+            _modResolver.ResourcesChanged += OnModResourcesChanged;
+    }
+
+    /// <summary>
+    /// Re-decodes the bubble image for the newly-active mod. Decodes OUTSIDE <see cref="_sync"/>,
+    /// then swaps the reference under the lock. The previous SKImage is deliberately NOT disposed
+    /// (the render thread may still hold it; leaking one handle per rare mod change is far safer
+    /// than racing its lifetime — AvaloniaUI/Avalonia#13521). Keeps the current image if the new
+    /// asset fails to decode.
+    /// </summary>
+    private void OnModResourcesChanged(object? sender, EventArgs e)
+    {
+        var reloaded = LoadBubbleImage();
+        if (reloaded == null) return;
+        lock (_sync)
+        {
+            _bubbleImage = reloaded;
+            _imageLoadAttempted = true;
+            _dirty = true;
+        }
     }
 
     public void AddBubble(Guid id, double x, double y, double size, double opacity, double scale,
@@ -315,6 +404,8 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        if (_modResolver != null)
+            _modResolver.ResourcesChanged -= OnModResourcesChanged;
         lock (_sync)
         {
             // NOTE: _bubbleImage is intentionally NOT disposed here. It is an immutable,
