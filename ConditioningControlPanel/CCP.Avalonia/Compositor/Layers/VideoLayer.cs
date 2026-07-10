@@ -377,7 +377,14 @@ public class VideoLayer : BaseLayer, IDisposable
         // drain it on app shutdown.
         if (player != null || media != null || buffers != null || images != null)
         {
-            _teardownTask = Task.Run(async () =>
+            // Chain onto any still-pending prior teardown (IMP-6). A rapid stop->play->stop can
+            // schedule a second real teardown; without chaining, _teardownTask would drop the
+            // earlier one and WaitForTeardown() could let the process exit while that earlier
+            // native player.Dispose()/FreeHGlobal is still pending — the segfault race this drain
+            // exists to close. Only chain a prior task that has not finished (completed teardowns
+            // need no wait) so the tracked task does not accrete already-done antecedents.
+            var previousTeardown = _teardownTask;
+            var thisTeardown = Task.Run(async () =>
             {
                 await Task.Delay(400);
                 try { player?.Dispose(); } catch { }
@@ -397,6 +404,9 @@ public class VideoLayer : BaseLayer, IDisposable
                     }
                 }
             });
+            _teardownTask = previousTeardown is { IsCompleted: false }
+                ? Task.WhenAll(previousTeardown, thisTeardown)
+                : thisTeardown;
         }
     }
 
