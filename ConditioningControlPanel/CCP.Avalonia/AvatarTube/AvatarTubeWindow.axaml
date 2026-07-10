@@ -35,6 +35,38 @@
       <GradientStop Color="{DynamicResource PatreonDarkPurple}" Offset="0"/>
       <GradientStop Color="{DynamicResource DarkerBg}" Offset="1"/>
     </LinearGradientBrush>
+
+    <!-- Avatar right-click context menu: reskin the default Fluent flyout to CCP's neon grammar.
+         The chrome (surface / border / hover) is themed via DynamicResource so it reskins across
+         all 5 themes. Assigned directly to the MenuFlyout (FlyoutPresenterTheme / ItemContainerTheme)
+         because a flyout renders in a separate popup tree that Window.Styles selectors can't reach.
+         Semantic per-item Foregrounds set locally on the MenuItems (engine-green, personality-pink)
+         keep winning over the :selected setter here because a local value outranks a theme setter. -->
+    <ControlTheme x:Key="AvatarMenuFlyoutPresenterTheme"
+                  TargetType="MenuFlyoutPresenter"
+                  BasedOn="{StaticResource {x:Type MenuFlyoutPresenter}}">
+      <Setter Property="Background" Value="{DynamicResource ElevatedSurfaceBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource GlassBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="4"/>
+    </ControlTheme>
+
+    <ControlTheme x:Key="AvatarMenuItemTheme"
+                  TargetType="MenuItem"
+                  BasedOn="{StaticResource {x:Type MenuItem}}">
+      <Setter Property="Foreground" Value="{DynamicResource TextLightBrush}"/>
+      <Setter Property="Padding" Value="10,6"/>
+      <Style Selector="^:selected /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource TransparentPinkBrush}"/>
+      </Style>
+      <Style Selector="^:selected">
+        <Setter Property="Foreground" Value="{DynamicResource PinkBrush}"/>
+      </Style>
+      <Style Selector="^:pressed /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource TransparentPink40Brush}"/>
+      </Style>
+    </ControlTheme>
   </Window.Resources>
 
   <Grid>
@@ -236,7 +268,9 @@
                 ClipToBounds="False">
 
           <Border.ContextFlyout>
-            <MenuFlyout Opening="AvatarContextMenu_Opened">
+            <MenuFlyout Opening="AvatarContextMenu_Opened"
+                        FlyoutPresenterTheme="{StaticResource AvatarMenuFlyoutPresenterTheme}"
+                        ItemContainerTheme="{StaticResource AvatarMenuItemTheme}">
               <MenuItem x:Name="MenuItemTalkToBambi"
                         Header="{Binding [section_talk_to_companion], Source={x:Static loc:LocalizationManager.Instance}}"
                         Click="MenuItemTalkToBambi_Click"

@@ -547,6 +547,32 @@ vs WPF (esp. Enhancements) and the dashboard helper buttons looked ugly.
   (JUDGMENT) + official Avalonia docs. Gates: slnf 0 err, WPF sln 0 err, smoke 44/0, Findings 16 (no
   HelperButton errors). Skill-tree visual not smoke-screenshotted — flagged for user eyeball.
 
+**AvatarTube: reappear-position bug + right-click menu restyle — 2026-07-10 (this session, 2 commits):**
+user reported the attached avatar ("the one on the left") renders correctly on first render but comes
+back in the WRONG SPOT after it reappears, and the right-click context menu looked ugly. Root-caused by
+a JUDGMENT (fable-5) agent (hit its turn limit during research; driver implemented the verified plan).
+- **Reappear position** (`AvatarTube/AvatarTubeWindow.Windowing.cs`): `FullscreenCheckTimer_Tick`'s
+  restore branch cleared `_hiddenForFullscreen` and called `Show(); UpdatePosition();` unconditionally on
+  the first non-fullscreen tick. During exclusive-fullscreen exit the parent is transiently MINIMIZED
+  (reports Position ~-32000), so `UpdatePosition()` computed an off-screen anchor, hit its out-of-range
+  guard, silently skipped the move, and left the tube parked wrong with nothing to re-trigger it. Fix
+  mirrors the WPF head (`AvatarTube/AvatarTubeWindow.Windowing.cs`): only clear the flag + `Show()` once
+  `_parentWindow.IsVisible && WindowState != Minimized` (keep flag set to retry on the next 500ms tick),
+  and defer `CalculateScaleFactor()+UpdatePosition()+BringAttachedPairToFront()` one dispatcher pass
+  (`Dispatcher.UIThread.Post`, Background) so the just-shown window has settled size/scale before we read
+  RenderScaling. Design-size anchoring (the prior "drifts up" fix) untouched.
+- **Context menu restyle** (`AvatarTube/AvatarTubeWindow.axaml`): the `ContextFlyout MenuFlyout` used the
+  raw Fluent theme. Added two window-scoped `ControlTheme`s (`MenuFlyoutPresenter` + `MenuItem`, both
+  `BasedOn` the built-in type themes) assigned via `FlyoutPresenterTheme`/`ItemContainerTheme` on the
+  MenuFlyout — the correct v12 route since a flyout renders in a separate popup tree that `Window.Styles`
+  can't reach. Dark `ElevatedSurfaceBrush` surface, `GlassBorderBrush` 1px + CornerRadius 10, `:selected`
+  hover `TransparentPinkBrush` on `Border#PART_LayoutRoot` + `PinkBrush` text, `:pressed`
+  `TransparentPink40Brush` — all DynamicResource (5-theme reskin). Every MenuItem x:Name / Click / Header /
+  IsVisible / `Opening="AvatarContextMenu_Opened"` preserved; local semantic Foregrounds (engine-green,
+  personality-pink) still win over the `:selected` setter by value precedence. Gates: slnf 0 err, WPF sln
+  0 err, smoke 44 tabs / 0 unhandled / Findings 17 (authed benign band) / 0 avatar+menu findings. Menu
+  appearance + reappear behavior are NOT smoke-exercised — flagged for user verification.
+
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
 **#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)** for autonomous tiers. **row #2 re-baseline is now BLOCKED**
 (this session): its scheduling half is DONE via IMP-2 and `MinFps=0` is root-caused (un-decodable YouTube
