@@ -218,6 +218,10 @@ export function createOverlays(hud) {
     line('cf-recap-score', `${Math.floor(stats.score).toLocaleString()} pts`);
     line('', `${DIFF_NAMES[stats.difficulty] || stats.difficulty} · ${stats.waveCount} loops · you sank ${Math.round(stats.depth).toLocaleString()} m`);
     line('', `best streak ×${Math.max(1, stats.bestCombo)} · ${stats.defused} snapped · ${stats.detonated} triggered`);
+    // THE BIOMES: the route this fall took (one rolled place per room)
+    if (stats.biomes && stats.biomes.length) {
+      line('', `the fall took you through ${stats.biomes.map((b) => `${b.glyph} ${b.name}`).join(' → ')}`);
+    }
     if (stats.trickleDrops > 0) line('', `💧 drip feed gathered ${Math.floor(stats.trickleDrops)} ✦`);
     payoutSlot = document.createElement('div');
     payoutSlot.className = 'cf-recap-payout';

@@ -109,6 +109,7 @@ export function createFieldFx(hud) {
   const trail = [];      // vibe pointer trail: { x, y, life }
   const sparkles = [];   // rabbit tail-plug sparkles: { x, y, life, hue }
   let tethers = [];      // per-frame: [{ ax, ay, bx, by, fraying }]
+  let beams = [];        // Keyhole biome light pools: [{ x, y, r }], re-fed per tick
   let inkPts = [];       // the Wand's ink: chaosField's live trail, re-fed by reference
   let inkClock = 0;      // drives the travelling shimmer along the ink
   let vibeOn = false;
@@ -200,7 +201,7 @@ export function createFieldFx(hud) {
   }
 
   function anyActive() {
-    return bolts.length || residues.length || trail.length || sparkles.length || tethers.length || inkPts.length;
+    return bolts.length || residues.length || trail.length || sparkles.length || tethers.length || inkPts.length || beams.length;
   }
 
   // ---- additive soft-sprite blit (the WPF DrawDot): tinted bloom, `lighter` ----
@@ -238,6 +239,27 @@ export function createFieldFx(hud) {
     if (!any) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalCompositeOperation = 'lighter';   // ADDITIVE = the glow
+
+    // --- Biome light pools (Keyhole candlelight / Searchlight cold sweep /
+    // Undertow current rings): a wide soft bloom + a hot heart + a faint edge
+    // ring, so the light reads as a place to stand, not just a smudge. Targets
+    // arrive at RunTick cadence; ease toward them here so the sweep glides. ---
+    for (const b of beams) {
+      if (b.tx != null) {
+        const e = Math.min(1, dt * 9);
+        b.x += (b.tx - b.x) * e; b.y += (b.ty - b.y) * e; b.r += (b.tr - b.r) * e;
+      }
+      const c = b.color || [255, 214, 150];
+      const hot = [Math.min(255, c[0] + 40), Math.min(255, c[1] + 35), Math.min(255, c[2] + 60)];
+      dot(b.x, b.y, b.r * 1.35, 0.20, c[0], c[1], c[2]);      // wide spill
+      dot(b.x, b.y, b.r * 0.85, 0.30, c[0], c[1], c[2]);      // body
+      dot(b.x, b.y, b.r * 0.40, 0.35, hot[0], hot[1], hot[2]); // hot heart
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},0.22)`;
+      ctx.stroke();
+    }
 
     // --- Bound tethers: an elastic thread, glowing, reddening as it frays. ---
     for (const t of tethers) {
@@ -334,8 +356,22 @@ export function createFieldFx(hud) {
   return {
     addBolt, addResidue, addSparkle, setTethers, setInk, setVibe, vibePoint, inResidue, draw,
     setRegionPalette,
+    /** Biome light pools / current rings (null/[] clears them). Fed at the
+     * 0.25s RunTick with TARGET positions; the draw loop eases the visible
+     * pools toward them every frame so the sweep glides instead of stepping.
+     * Optional per-beam `color: [r,g,b]` (default warm candlelight). */
+    setBeams(list) {
+      if (!list || !list.length) { beams = []; return; }
+      const next = [];
+      for (let i = 0; i < list.length; i++) {
+        const t = list[i], prev = beams[i];
+        if (prev) { prev.tx = t.x; prev.ty = t.y; prev.tr = t.r; prev.color = t.color; next.push(prev); }
+        else next.push({ x: t.x, y: t.y, r: t.r, tx: t.x, ty: t.y, tr: t.r, color: t.color });
+      }
+      beams = next;
+    },
     clear() {
-      bolts.length = 0; residues.length = 0; trail.length = 0; sparkles.length = 0; tethers = []; inkPts = [];
+      bolts.length = 0; residues.length = 0; trail.length = 0; sparkles.length = 0; tethers = []; inkPts = []; beams = [];
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       canvas._dirty = false;

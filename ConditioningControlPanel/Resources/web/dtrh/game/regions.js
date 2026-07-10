@@ -35,13 +35,23 @@
  *     `sparkleBoost`/`ribbonBoost` and the `field` accents (fieldFx 2D glow)
  *     finish the dress. All knob values 0 (or absent) = the classic look.
  *
- * This maps a hypnotic deepening arc onto an Alice-in-Wonderland motif:
- *   I  Curiosity  -> II Confusion -> III Fixation -> IV Surrender
+ * This maps a hypnotic deepening arc onto the emotional journey of discovering
+ * what you're into (the Journey Rooms retitle, 2026-07):
+ *   I  CURIOSITY & DENIAL      "it's just something silly"
+ *   II FEAR & CONFUSION        "what if it isn't a game?"
+ *   III BARGAIN & STRUGGLE     "just this once"
+ *   IV SURRENDER & ACCEPTANCE  "yes. this is you."
+ * The old Alice place-names (Long Fall / Hall of Doors / Mad Garden / Court of
+ * Hearts) retired as ROOM names; place-flavor now lives in each room's BIOMES
+ * (game/biomes.js) - four variants per room, one rolled per run, each with its
+ * own dress AND mechanic. A room's `style` below is the CLASSIC look, kept as
+ * the fallback for legacy/scripted runs (no biome rolled = byte-for-byte the
+ * Four Chambers identity pass).
  * ==========================================================================*/
 
 export const REGIONS = [
   {
-    id: 'longfall', numeral: 'I', name: 'The Long Fall', subtitle: 'curiosity',
+    id: 'longfall', numeral: 'I', name: 'Curiosity & Denial', subtitle: 'it’s just something silly',
     weatherId: null,               // open sky - the fall itself is the identity
     band: { start: 0.10, peak: 0.42 },
     // Sparse and open - mostly plain treats drifting past. Few tricks; the fall
@@ -60,7 +70,7 @@ export const REGIONS = [
     },
   },
   {
-    id: 'doors', numeral: 'II', name: 'The Hall of Doors', subtitle: 'confusion',
+    id: 'doors', numeral: 'II', name: 'Fear & Confusion', subtitle: 'what if it isn’t a game?',
     weatherId: 'static',           // stray current, disorientation
     band: { start: 0.28, peak: 0.64 },
     // Everything comes in PAIRS - escorts and bound twins. Which door, which
@@ -81,7 +91,7 @@ export const REGIONS = [
     },
   },
   {
-    id: 'garden', numeral: 'III', name: 'The Mad Garden', subtitle: 'fixation',
+    id: 'garden', numeral: 'III', name: 'Bargain & Struggle', subtitle: 'just this once',
     weatherId: 'perfume',          // her sweet fog, lust climbs
     band: { start: 0.46, peak: 0.84 },
     // Overgrown. The Echo multiplies if you let it, so the field BLOOMS - a
@@ -100,7 +110,7 @@ export const REGIONS = [
     },
   },
   {
-    id: 'court', numeral: 'IV', name: 'The Court of Hearts', subtitle: 'surrender',
+    id: 'court', numeral: 'IV', name: 'Surrender & Acceptance', subtitle: 'yes. this is you.',
     weatherId: 'overstim',         // too bright, too fast - the deepest place
     band: { start: 0.60, peak: 1.00 },
     // Crescendo. The fullest field and the most Teases - deny, deny, deny under

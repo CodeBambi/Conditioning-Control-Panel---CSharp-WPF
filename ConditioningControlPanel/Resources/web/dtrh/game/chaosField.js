@@ -107,7 +107,20 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     trailBounce: false,   // Hopscotch duo: rabbits ricochet off the Wand's ink
     thoughtOrbit: false,  // One-Track Mind duo: intrusive thoughts orbit the cursor
     inkFreeze: false,     // Milking Machine duo: the pump's suction holds the ink fresh
+    // ---- THE BIOMES (wave 2) ----
+    currents: null,           // Undertow: [{x,y,r,pull}] vortices that drag the field
+    currentChannelMult: 1.0,  // Undertow: hold-to-snap takes this much longer inside one
+    fuseTickMult: 1.0,        // Vertigo: fuses burn hotter while the world is flipped
   };
+
+  /** Any Undertow current covering (x,y)? (biome mech re-feeds phys.currents) */
+  function inCurrent(x, y) {
+    if (!phys.currents) return false;
+    for (const cz of phys.currents) {
+      if (Math.hypot(cz.x - x, cz.y - y) <= cz.r) return true;
+    }
+    return false;
+  }
   let vibeOn = false, vibeHover = false;
 
   const W = () => window.innerWidth, H = () => window.innerHeight;
@@ -598,6 +611,29 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     try { onBoundEnraged(b.spec); } catch (err) { /* ignore */ }
   }
 
+  /** THE BIOMES (Searchlight): the light finds you - every fused bubble within
+   * the radius enrages (halved fuse, sprints). Returns how many were caught. */
+  function enrageNear(x, y, radiusPx) {
+    let n = 0;
+    for (const b of live) {
+      if (b.spec.kind !== 'live' || b.state !== 'live' || b.enraged || isShielded(b)) continue;
+      if (Math.hypot(b.x - x, b.y - y) > radiusPx + b.size / 2) continue;
+      enrage(b); n++;
+    }
+    return n;
+  }
+
+  /** THE BIOMES (Vertigo): the flip - every drifter's vertical motion reverses
+   * on the spot. One-shot: call again to flip back. New spawns arrive normal
+   * either way (the cull is direction-aware, so wrong-way exits stay clean). */
+  function flipDrift() {
+    for (const b of live) {
+      const m = b.spec.motion;
+      if (b.state !== 'live' || (m !== MOTION.FloatUp && m !== MOTION.RainDown)) continue;
+      b.vy = -b.vy;
+    }
+  }
+
   // ---- the Spanker -----------------------------------------------------------------
   function smack(b, x, y) {
     // Turn it away from the hand, swell it once, speed it up - and now it mows.
@@ -929,7 +965,9 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       // channel runs on REAL time (a frozen field still channels - that's the
       // freeze's reward); the fuse holds while the hand is on it either way.
       if (b.channel) {
-        b.channel.elapsed += dt * 1000;
+        // the Undertow: holding on inside a current is a real fight
+        const drag = phys.currentChannelMult > 1 && inCurrent(b.x, b.y) ? phys.currentChannelMult : 1;
+        b.channel.elapsed += (dt * 1000) / drag;
         channelSeconds += dt;
         const p = Math.min(1, b.channel.elapsed / DEFUSE_HOLD_MS);
         b.chan.style.setProperty('--cdeg', `${p * 360}`);
@@ -937,7 +975,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         if (p >= 1) { defuse(b, true); }
         continue;   // the grip holds it still: no motion, no fuse, no rot
       } else if (b.spec.kind === 'live' && b.fuseLeft > 0) {
-        b.fuseLeft -= ts * 1000;
+        b.fuseLeft -= ts * 1000 * (phys.fuseTickMult || 1);   // Vertigo: hotter mid-flip
         if (b.fuseLeft <= 0) { detonate(b); continue; }
       }
 
@@ -1039,11 +1077,32 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         if (b.baseY != null) b.baseY += (dy / d) * phys.pumpPull * ts;
       }
 
+      // THE BIOMES - the Undertow's currents: slow vortices that drag everything
+      // sweet (and the fused) toward their eye, with a sideways swirl folded in
+      // so it reads as water, not a magnet. The mech re-feeds positions per tick.
+      if (phys.currents && phys.currents.length
+          && (k === 'treat' || k === 'live' || k === 'golden' || k === 'heart' || k === 'droplet' || k === 'prism')) {
+        for (const cz of phys.currents) {
+          const dx = cz.x - b.x, dy = cz.y - b.y;
+          const d = Math.hypot(dx, dy);
+          if (d > cz.r || d < 20) continue;
+          const pull = (cz.pull || 50) * (1 - d / cz.r);
+          const fx2 = ((dx / d) * pull + (-dy / d) * pull * 0.7) * ts;
+          const fy2 = ((dy / d) * pull + (dx / d) * pull * 0.7) * ts;
+          b.x += fx2; b.y += fy2;
+          if (b.baseX != null) b.baseX += fx2;
+          if (b.baseY != null) b.baseY += fy2;
+        }
+      }
+
       if (m === MOTION.FloatUp || m === MOTION.RainDown) {
         b.y += b.vy * ts;
         b.swayT += b.swaySpeed * ts;
         b.x = b.baseX + Math.sin(b.swayT) * b.swayAmp;
-        if ((m === MOTION.FloatUp && b.y < -b.size) || (m === MOTION.RainDown && b.y > h + b.size)) {
+        // cull at the edge the bubble is actually travelling toward - after a
+        // Vertigo flip a "riser" may be falling (and vice versa), and it should
+        // still leave the screen cleanly out the side it exits.
+        if (b.vy < 0 ? b.y < -b.size : b.y > h + b.size) {
           if (k === 'treat' || k === 'golden') expire(b);
           else fadeOut(b);   // freeze/live/heart/droplet/brittle dissolve, never blink off
           continue;
@@ -1268,6 +1327,8 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     inkDetonate,   // Milking Machine: the pump's end detonates the drawing
     sonarAt,       // Trust Exercise: reveal-ping the Blindfold's dimmed bubbles
     gildNear,      // Midas Ricochet: gild treats near a popped lucky bubble
+    enrageNear,    // Searchlight biome: the light finds the fused
+    flipDrift,     // Vertigo biome: reverse every drifter's vertical on the spot
     /** Radius pop at (x,y) - the Pump's arrival burst (formerly the Wand's beam).
      * includeSpecials also takes golden/heart/droplet/prism. Lives, teases and
      * brittles ignore it entirely. Returns pops. */

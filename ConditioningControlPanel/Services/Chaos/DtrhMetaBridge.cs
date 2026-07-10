@@ -273,6 +273,22 @@ internal sealed class DtrhMetaBridge
                     if (sec > 0 && sec < 36000) { S.TotalChannelSeconds += sec; applied = true; }
                     break;
                 }
+                case "reset-onboarding":
+                {
+                    // Full FTUE replay WITHOUT touching progression. Re-arms every seen-once
+                    // teach/debut/guide flag, the non-boon discovery ledger (lesson cards), and
+                    // the dollhouse station flash; arms the one-shot scripted-classroom deal.
+                    // Rewards stay: FirstTimesAwarded/LessonProgress/GiftGiven are grants, not lessons.
+                    foreach (var name in OnboardingFlagNames)
+                        typeof(ChaosMetaState).GetProperty(name)?.SetValue(S, false);
+                    S.DiscoveredCodexIds.RemoveWhere(id => !id.StartsWith("boon:", StringComparison.Ordinal));
+                    S.BubbleHintsLearned.Clear();
+                    S.SeenReveals.Remove("dollhouse");
+                    S.PendingReveals.Remove("dollhouse");
+                    S.ForceScriptedRun = true;
+                    applied = true;
+                    break;
+                }
                 default:
                     App.Logger?.Warning("DtrhMetaBridge: unknown op '{Op}' ignored", op);
                     break;
@@ -355,6 +371,22 @@ internal sealed class DtrhMetaBridge
     }
 
     private static int Cost(JObject o) => Math.Max(0, (int?)o["cost"] ?? 0);
+
+    /// <summary>Seen-once bools re-armed by reset-onboarding. Teaching/guide state only —
+    /// never anything that grants currency or records progression.</summary>
+    private static readonly string[] OnboardingFlagNames =
+    {
+        // hub / FTUE guides
+        "SeenWarrenWelcome", "SeenFirstReturn", "SeenIntroGuide", "SeenDollhouse",
+        // verb / system teaches
+        "SeenDefuseTutorial", "SeenFocusTip", "SeenRippleTeach", "SeenHeatTeach", "SeenGoldFirst",
+        // once-ever teaching barks
+        "SeenBarkDefuseFirst", "SeenBarkDefuseNoFocus", "SeenBarkDefuseRelease", "SeenBarkClickDetonate",
+        // behavioral-bubble debuts (extended-trance solo introductions)
+        "SeenEcho", "SeenChaperone", "SeenTease", "SeenBound", "SeenBrittle", "SeenBraindrain",
+        // happy-path one-shots (defanged sin demo, duo gold card, skip debut)
+        "SeenFirstSin", "SeenDuoDemo", "SeenSkipDebut",
+    };
 
     private static PropertyInfo? FlagProp(string? camelKey)
     {

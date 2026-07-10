@@ -90,7 +90,7 @@ export function makeNamePanelTex(def, hexFrame) {
   return new THREE.CanvasTexture(c);
 }
 
-export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, onGrab }) {
+export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, synergyBoost, onGrab }) {
   const unitPlane = new THREE.PlaneGeometry(1, 1);
   const glowTex = makeGlowTex();
   const frameTex = makeFrameTex();
@@ -117,7 +117,12 @@ export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, o
       if (canOffer && !canOffer(def.id, kind)) continue;       // game veto (already grabbed / dock full)
       // weight undiscovered higher - discovery is the reward loop
       const discovered = (levels[def.id] | 0) >= 1;
-      const weight = discovered ? 1 : 3;
+      let weight = discovered ? 1 : 3;
+      // duo bait: the game layer multiplies up items whose grab would unlock or
+      // progress a still-draftable synergy boon (bigger nudge in early chambers)
+      if (synergyBoost) {
+        try { weight *= Math.max(0.1, synergyBoost(def.id) || 1); } catch (e) { /* neutral on failure */ }
+      }
       pool.push({ def, kind, weight });
     }
     if (!pool.length) return null;
@@ -225,11 +230,9 @@ export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, o
       _camDepth = camDepth;
       if (card) {
         const done = card.update(dt, camDepth, camQuat || camera.quaternion);
-        // cull: faded out, or the fall has carried us past it
-        if ((done && card.isFading()) || camDepth > card.cardDepth + CULL_BEHIND) {
-          if (!card.isFading() && camDepth > card.cardDepth + CULL_BEHIND) { card.startFade(); }
-          else { card.dispose(); card = null; }
-        }
+        // cull: start the fade when the fall carries us past it, dispose only once faded
+        if (done && card.isFading()) { card.dispose(); card = null; }
+        else if (!card.isFading() && camDepth > card.cardDepth + CULL_BEHIND) { card.startFade(); }
       }
       if (!spawnEnabled) return;
       if (!card) {
@@ -245,8 +248,10 @@ export function createPowerupDrops({ scene, camera, layout, getMeta, canOffer, o
     grab(group) {
       if (!card || card.group !== group || card.isFading()) return false;
       const pos = card.screenPos();
-      const g = card; card = null;   // detach so a second pointer can't double-grab
-      try { if (onGrab) onGrab(g.def.id, g.kind, pos); } catch (e) { /* ignore */ }
+      let taken = true;
+      try { if (onGrab) taken = onGrab(card.def.id, card.kind, pos) !== false; } catch (e) { /* ignore */ }
+      if (!taken) return false;   // the game declined (draft room / recap): the card stays live
+      const g = card; card = null;
       g.dispose();
       return true;
     },

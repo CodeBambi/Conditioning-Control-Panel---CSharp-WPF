@@ -28,7 +28,7 @@ import { createFx } from './fx.js';
 import { createPanel } from './panel.js';
 import { createDriftChain } from './driftChain.js';
 import { getLevel, setLevel, audioGroups } from './audioLevels.js';
-import { getAudioCtx, closeAudioBus } from './audioBus.js';
+import { getAudioCtx, getMasterOut, closeAudioBus } from './audioBus.js';
 import { S, updateSetting, onSettings, THEME_COLORS, THEME_PRESETS, applyThemePreset, intToHex, hexToInt } from './settings.js';
 
 const DRONE_URL = '/dtrh/assets/audio/drone1.mp3'; // Explore uses drift-under-glass; the fall gets its own bed
@@ -157,7 +157,7 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
         droneGain = droneCtx.createGain();
         droneGain.gain.value = droneVol;
         src.connect(droneGain);
-        droneGain.connect(droneCtx.destination);
+        droneGain.connect(getMasterOut() || droneCtx.destination);
         drone.volume = 1; // loudness lives in the gain node now
       }
     } catch (e) { droneCtx = null; droneGain = null; }
@@ -222,7 +222,8 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
     scene, camera, layout,
     getMeta: () => (game && game.getMeta ? game.getMeta() : null),
     canOffer: (id, kind) => (game && game.canOfferPowerup ? game.canOfferPowerup(id, kind) : false),
-    onGrab: (id, kind, screenPos) => { if (game && game.onPowerupGrabbed) game.onPowerupGrabbed(id, kind, screenPos); },
+    synergyBoost: (id) => (game && game.powerupSynergyBoost ? game.powerupSynergyBoost(id) : 1),
+    onGrab: (id, kind, screenPos) => (game && game.onPowerupGrabbed) ? game.onPowerupGrabbed(id, kind, screenPos) : false,
   });
   const _uray = new THREE.Raycaster(), _undc = new THREE.Vector2();
 
@@ -492,7 +493,10 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       canvas.style.cursor = aimed ? 'pointer' : '';
       return;
     }
-    if (!boonPick || !boonPick.isBusy()) return;
+    if (!boonPick || !boonPick.isBusy()) {
+      if (canvas.style.cursor) canvas.style.cursor = '';   // hub closed mid-hover: drop the hand cursor
+      return;
+    }
     const r = canvas.getBoundingClientRect();
     if (!r.width || !r.height) return;
     const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
@@ -605,6 +609,9 @@ export async function start({ canvas, hud, tier, media, challenge, game = null }
       // strength). No-ops gracefully on the mobile tier (no bloom pass).
       setBloomStrength: (mult) => { if (bloomPass) bloomPass.strength = BLOOM_BASE * (mult || 1); },
       setRunActive });
+    // The lessons row (guided FTUE replay) only exists in game mode - the reset
+    // op lives on the meta bridge the standalone Fall doesn't have.
+    panel.setGameHooks({ resetOnboarding: () => game.resetOnboarding() });
   }
 
   // ---- loop --------------------------------------------------------------------

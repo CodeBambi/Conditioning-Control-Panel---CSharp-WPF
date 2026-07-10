@@ -25,7 +25,7 @@ import { Q } from '../shared/quality.js';
 import { isMuted } from '../shared/audioMute.js';
 import { getLevel } from './audioLevels.js';
 import { loadTexture } from '../shared/assets.js';
-import { getAudioCtx } from './audioBus.js';
+import { getAudioCtx, getMasterOut } from './audioBus.js';
 import { S, activeWords } from './settings.js';
 import { createAssetTracker } from './assetTracker.js';
 
@@ -275,7 +275,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
       const src = ctx.createMediaElementSource(video);
       const gain = ctx.createGain();
       gain.gain.value = 0;
-      src.connect(gain); gain.connect(ctx.destination);
+      src.connect(gain); gain.connect(getMasterOut() || ctx.destination);
       try { video.volume = 1; } catch (e) { /* ignore (mobile) */ }
       return gain;
     } catch (e) { return null; }
@@ -944,6 +944,8 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
 
   function applyImageItem(rec, shell, item) {
     if (rec.dead) { item.dispose(); return; } // despawned while decoding
+    rec.contentMat = shell.mat;      // melt fade + mirror swap need the content material
+    rec.dressedMats = shell.dressed;
     shell.mat.map = item.tex;
     shell.mat.needsUpdate = true;
     sizeShell(shell, item.aspect);
@@ -964,11 +966,14 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     rec.kb = kb;
     rec.tex = item.tex;
     shell.group.visible = true;
+    if (mirror) applyMirror(rec);    // born mid-Mirror-Moment: wear the favorite
   }
 
   function applyGifItem(rec, shell, item) {
     if (rec.dead) { item.dispose(); return; }
     DIAG.gifApplied += 1;
+    rec.contentMat = shell.mat;      // melt fade + mirror swap need the content material
+    rec.dressedMats = shell.dressed;
     shell.mat.map = item.tex;
     shell.mat.needsUpdate = true;
     sizeShell(shell, item.aspect);
@@ -978,6 +983,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     rec.gifTex = item.tex;
     rec.gifItem = item;
     shell.group.visible = true;
+    if (mirror) applyMirror(rec);    // born mid-Mirror-Moment: wear the favorite
   }
 
   // Image/gif card from a decoded pool item - visible from its first frame.
@@ -1394,8 +1400,70 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   // automatically when a spotlight video takes the stage.
   function grabbableGroups() {
     const out = [];
-    for (const r of live) if (r.kind === 'image' && r.group.visible && !r.isGrabbed) out.push(r.group);
+    for (const r of live) if (r.kind === 'image' && r.group.visible && !r.isGrabbed && !r.melting) out.push(r.group);
     return out;
+  }
+
+  // ---- biome seams: grab arbitration, the melt, the Mirror Moment -------------
+  // THE BIOMES (game/biomeMech.js): the game may veto a grab ('melt' - the
+  // Gallery's look-don't-touch), and wants to hear about grabs that hold.
+  let grabHooks = null;   // { policy(rec)->'allow'|'melt', onGrab(rec), onMelt(rec) }
+  function setGrabHooks(h) { grabHooks = h || null; }
+
+  // The melt: a denied grab dissolves in your hand - the card squashes down,
+  // droops and fades over ~0.7s, then despawns. Animated in update().
+  function meltCard(rec) {
+    if (!rec || rec.melting || rec.pickup || rec.kind === 'veil') return;
+    rec.melting = { t: 0, dur: 0.7 };
+    rec.isGrabbed = false;
+    if (grabbed === rec) grabbed = null;
+  }
+
+  /** THE BIOMES (Incognito): the wipe - every live card melts at once. The one
+   * in your hand is spared (yanking a held card reads as a bug, not a wipe).
+   * Returns how many started melting. */
+  function meltAll() {
+    let n = 0;
+    for (const rec of live) {
+      if (rec.melting || rec.pickup || rec.kind === 'veil' || rec.isGrabbed) continue;
+      meltCard(rec);
+      if (rec.melting) n++;
+    }
+    return n;
+  }
+
+  // The Mirror Moment (Hall of Mirrors): every live image card temporarily
+  // wears ONE texture - the player's most-engaged asset. Videos keep playing
+  // (a stalled video reads as a bug, not a mirror); gif stepping and Ken Burns
+  // pause while mirrored so nothing fights the shared texture.
+  let mirror = null;   // { url, tex }
+  function applyMirror(rec) {
+    if (!mirror || rec.kind !== 'image' || !rec.contentMat || rec.melting || rec.mirrorSaved) return;
+    rec.mirrorSaved = { map: rec.contentMat.map, kb: rec.kb, gifAnim: rec.gifAnim };
+    rec.kb = null;
+    rec.gifAnim = null;
+    rec.contentMat.map = mirror.tex;
+    rec.contentMat.needsUpdate = true;
+  }
+  function restoreMirror(rec) {
+    if (!rec.mirrorSaved || !rec.contentMat) return;
+    rec.contentMat.map = rec.mirrorSaved.map;
+    rec.kb = rec.mirrorSaved.kb || null;
+    rec.gifAnim = rec.mirrorSaved.gifAnim || null;
+    rec.contentMat.needsUpdate = true;
+    rec.mirrorSaved = null;
+  }
+  function setMirror(url) {
+    if (!url) {
+      if (!mirror) return;
+      for (const r of live) restoreMirror(r);
+      mirror = null;   // texture is owned by the shared assets cache - no dispose
+      return;
+    }
+    if (mirror && mirror.url === url) return;
+    if (mirror) setMirror(null);   // swap: restore first
+    mirror = { url, tex: loadTexture(url) };   // cached: repeat moments reuse the decode
+    for (const r of live) applyMirror(r);
   }
   function clickableGroups() {
     const out = [];
@@ -1448,9 +1516,16 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     return false;
   }
   function startGrab(rec, camera) {
+    // THE BIOMES: the Gallery melts a denied grab in your hand instead of holding it
+    if (grabHooks && grabHooks.policy && grabHooks.policy(rec) === 'melt') {
+      meltCard(rec);
+      if (grabHooks.onMelt) { try { grabHooks.onMelt(rec); } catch (e) { /* ignore */ } }
+      return;
+    }
     grabbed = rec;
     rec.isGrabbed = true;
     tracker.noteGrab(rec.assetName, rec.assetKind);   // deliberate act: strong "like" signal
+    if (grabHooks && grabHooks.onGrab) { try { grabHooks.onGrab(rec); } catch (e) { /* ignore */ } }
     // seed the follow from the card's current offset so it eases in, not snaps
     camera.getWorldDirection(_dir);
     rec.spotDist = Math.max(3, _target.subVectors(rec.group.position, camera.position).dot(_dir));
@@ -1662,6 +1737,17 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
           if (rec.fade <= 0) { endSpotlight(i); continue; }
         }
         continue;
+      }
+
+      // THE BIOMES: a melting card (Gallery-denied grab) squashes, droops and
+      // fades where it was seized, then despawns - it never joins the conveyor.
+      if (rec.melting) {
+        rec.melting.t += dt;
+        const k = Math.min(1, rec.melting.t / rec.melting.dur);
+        rec.group.scale.set(1 + k * 0.25, Math.max(0.03, 1 - k * 1.05), 1); // squash wide, drip down
+        rec.group.position.y -= dt * 2.2;
+        if (rec.contentMat) setCardFade(rec, 1 - k);
+        if (k >= 1) { removeCard(i); continue; }
       }
 
       // a grabbed card is a PADDLE: it tracks the cursor through the space, placed
@@ -1941,6 +2027,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   return {
     update, reset, dispose, setPaused, warm,
     grabAtPointer, releaseGrab, probeGrab,
+    setGrabHooks, setMirror, meltAll,
     setBlockedSpan: (s) => { blockedSpan = s || null; },
     // junction branch-mouth media cards
     createDetachedCard, clearLive,

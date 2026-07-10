@@ -43,6 +43,11 @@ const RIPPLE_FOCUS_COST = 30;   // base per-cast focus cost (mirror chaosRun.js)
 
 const r = Math.round;
 
+/** Blindfold dim strength for a pay-mult level value. Exported so biome
+ * mechanics that borrow the dim plumbing (Keyhole/Searchlight) can re-assert
+ * the relic's own dim on chamber exit instead of a stale pre-grab snapshot. */
+export const blindfoldOpacityFor = (v) => (v >= 2.0 ? 0.25 : v >= 1.75 ? 0.32 : 0.40);
+
 /* Each entry mutates st in place. `level` is 1-indexed; `v` is the level value.
  * Physics passives (cursorPull/spanker/chainReach/blindfold) are read by
  * syncPhys(), which the caller runs right after - they just set st fields here. */
@@ -57,7 +62,7 @@ export const PASSIVE_APPLY = {
   blindfold: (st, _level, v) => {
     st.blindfoldPayMult = v;
     st.blindfoldActive = true;
-    st.blindfoldOpacity = v >= 2.0 ? 0.25 : v >= 1.75 ? 0.32 : 0.40;
+    st.blindfoldOpacity = blindfoldOpacityFor(v);
   },
   last_breath: (st, _level, v) => {
     st.lastBreathPayMult = v;

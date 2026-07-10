@@ -10,14 +10,21 @@
  * (ccp.art/announce/{key}.png) like the WPF ChaosAnnouncerOverlay.
  * ==========================================================================*/
 
+import { createHudTips } from './hudTips.js';
+import { HUD_TIPS } from './catalog.js';
+
 const DEFUSE_COST = 30; // FOCUS bar low-threshold (ChaosTuning.DEFUSE_COST)
 const RIPPLE_COST = 30; // the ripple spends this much focus per cast (chaosRun RIPPLE_FOCUS_COST)
 const ART = 'https://ccp.art/';
 
-export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
+export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } = {}) {
   const root = document.createElement('div');
   root.className = 'cf-hud';
   hud.appendChild(root);
+
+  const tips = createHudTips(hud, { isSuppressed });
+  let lastSt = null;   // latest update() snapshot - tooltip getters read live values from it
+  let lastWx = null;   // latest setWeather() payload
 
   const mk = (cls, parent) => {
     const d = document.createElement('div');
@@ -30,12 +37,69 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
   const scoreVal = document.createElement('span');
   scoreVal.className = 'cf-score-val';
   scoreVal.textContent = '0';
-  const multVal = document.createElement('span');
-  multVal.className = 'cf-mult-val';
-  multVal.textContent = '×1.0';
-  scoreRow.append(scoreVal, multVal);
+  scoreRow.append(scoreVal);
 
-  const streakRow = mk('cf-hud-streak');
+  // ---- the multiplier badge (Balatro-style: punches on combo, burns as it climbs) ----
+  const badge = mk('cf-mult-badge tier-0');
+  const badgeFx = document.createElement('div');
+  badgeFx.className = 'cf-mult-embers';
+  const badgeCore = document.createElement('div');
+  badgeCore.className = 'cf-mult-core';
+  const multVal = document.createElement('span');
+  multVal.className = 'cf-mult-hero';
+  multVal.textContent = '×1.0';
+  const streakVal = document.createElement('span');
+  streakVal.className = 'cf-mult-streak';
+  badgeCore.append(multVal, streakVal);
+  badge.append(badgeFx, badgeCore);
+
+  // Fire tiers ride the raw streak count (the tunnel itself fully warps at 25);
+  // prevCombo=null means "baseline unset" so a fresh run never reads as a break.
+  let prevCombo = null;
+  let curTier = 0;
+  let emberTimer = 0;
+  const EMBER_MS = [0, 500, 260, 150, 100]; // tier -> spawn period
+  const EMBER_MAX = 14;                     // live ember node cap
+  const tierOf = (c) => (c >= 100 ? 4 : c >= 50 ? 3 : c >= 25 ? 2 : c >= 15 ? 1 : 0);
+
+  function syncEmbers() {
+    clearInterval(emberTimer);
+    emberTimer = 0;
+    if (curTier > 0 && root.style.display !== 'none') {
+      emberTimer = window.setInterval(spawnEmber, EMBER_MS[curTier]);
+    }
+  }
+  function spawnEmber() {
+    if (badgeFx.childElementCount >= EMBER_MAX) return;
+    const s = document.createElement('span');
+    s.className = 'cf-ember';
+    s.style.left = `${8 + Math.random() * 84}%`;
+    s.style.setProperty('--ex', `${(Math.random() * 26 - 13) | 0}px`);
+    s.style.setProperty('--edur', `${(0.7 + Math.random() * 0.8).toFixed(2)}s`);
+    s.style.setProperty('--esize', `${curTier >= 3 ? 5 + Math.random() * 4 : 3 + Math.random() * 3}px`);
+    s.addEventListener('animationend', () => s.remove());
+    badgeFx.appendChild(s);
+  }
+  function setTier(t) {
+    if (t === curTier) return;
+    badge.classList.remove(`tier-${curTier}`);
+    badge.classList.add(`tier-${t}`);
+    curTier = t;
+    syncEmbers();
+  }
+  function punch() {
+    badgeCore.style.setProperty('--punch-scale', String(1.16 + curTier * 0.05));
+    badgeCore.style.setProperty('--punch-rot', `${(Math.random() * 10 - 5).toFixed(1)}deg`);
+    badgeCore.classList.remove('is-punch', 'is-break', 'is-crack');
+    void badgeCore.offsetWidth;
+    badgeCore.classList.add('is-punch');
+  }
+  function breakFx(hard) {
+    badgeCore.classList.remove('is-punch', 'is-break', 'is-crack');
+    void badgeCore.offsetWidth;
+    badgeCore.classList.add(hard ? 'is-break' : 'is-crack');
+  }
+
   const shieldRow = mk('cf-hud-shields');
 
   const focusRow = mk('cf-hud-focus');
@@ -69,6 +133,43 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
 
   const rippleRow = mk('cf-hud-ripple');
 
+  // ---- hover tooltips for the mechanic readouts (rect-tested; see hudTips.js) ----
+  const FIRE_TIERS = [15, 25, 50, 100];
+  tips.attach(scoreRow, () => HUD_TIPS.score);
+  tips.attach(badge, () => {
+    if (!lastSt) return HUD_TIPS.mult;
+    const c = lastSt.combo | 0;
+    const next = FIRE_TIERS.find((t) => c < t);
+    return {
+      ...HUD_TIPS.mult,
+      extra: `streak ${c} · ×${lastSt.totalMult.toFixed(1)} total` + (next ? ` · next fire at ${next}` : ' · fully ablaze'),
+    };
+  });
+  tips.attach(shieldRow, () => {
+    if (!shieldRow.textContent) return null;   // row is empty = nothing to explain
+    const extra = lastSt
+      ? `${lastSt.shields}/${Math.max(lastSt.startingShields, lastSt.shields)} hearts`
+        + (lastSt.collarSaves > 0 ? ` · 📿 ${lastSt.collarSaves} collar save${lastSt.collarSaves > 1 ? 's' : ''} left` : '')
+      : '';
+    return { ...HUD_TIPS.shields, extra };
+  });
+  tips.attach(focusRow, () => ({ ...HUD_TIPS.focus, extra: lastSt ? `${Math.round(lastSt.focus)}/100` : '' }));
+  tips.attach(heatRow, () => HUD_TIPS.lust);
+  tips.attach(clockRow, () => HUD_TIPS.clock);
+  tips.attach(rippleRow, () => {
+    const cost = (lastSt && lastSt.rippleCost) || RIPPLE_COST;
+    const ready = lastSt ? lastSt.focus >= cost : false;
+    return { ...HUD_TIPS.ripple, extra: `costs ${cost} focus a cast · ${ready ? 'READY' : 'charging'}` };
+  });
+  tips.attach(weatherRow, () => {
+    if (!lastWx) return null;
+    return {
+      glyph: lastWx.glyph, kicker: 'the weather', name: lastWx.name,
+      desc: lastWx.desc || '',
+      extra: lastWx.rerollable ? '💍 click: she changes her mind (once per descent)' : '',
+    };
+  });
+
   // ---- the run-pick ribbon (drafted mantras/sins, in pick order) ----
   const picksWrap = document.createElement('div');
   picksWrap.className = 'cf-picks';
@@ -79,7 +180,14 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
     for (const p of picks) {
       const tile = document.createElement('div');
       tile.className = 'cf-pick' + (p.curse ? ' cf-pick--sin' : '');
-      tile.title = p.name;
+      tips.attach(tile, () => ({
+        glyph: p.glyph || (p.curse ? '☠' : '◈'),
+        kicker: (p.curse ? 'sin' : p.relic ? 'relic' : 'mantra') + (p.rarity ? ` · ${p.rarity}` : ''),
+        name: p.name,
+        desc: p.desc || '',
+        flavor: p.flavor || '',
+        accent: p.curse ? '255,138,138' : p.relic ? '255,215,130' : '156,232,160',
+      }));
       const img = document.createElement('img');
       img.src = `${ART}boons/${p.id}.png`;
       img.alt = '';
@@ -94,8 +202,10 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
   dock.className = 'cf-toydock';
   hud.appendChild(dock);
   const toyEls = new Map();
+  let lastToys = [];
 
   function updateToys(toys, status) {
+    lastToys = toys;
     if (!toys.length) { dock.innerHTML = ''; toyEls.clear(); return; }
     // prune buttons for toys no longer in the dock (a consumable was spent/removed)
     const live = new Set(toys.map((t) => t.id));
@@ -117,6 +227,20 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
         el.append(g, n, s);
         el._status = s;
         el._name = n;
+        // look the toy back up by id at show time - re-equips swap record objects
+        const toyId = t.id;
+        tips.attach(el, () => {
+          const cur = lastToys.find((x) => x.id === toyId);
+          if (!cur) return null;
+          const state = cur.chargesLeft >= 0
+            ? (cur.chargesLeft === 0 ? 'spent' : `${cur.chargesLeft} use${cur.chargesLeft > 1 ? 's' : ''} left`)
+            : (cur.cooldownLeft > 0 ? `${Math.ceil(cur.cooldownLeft)}s cooldown` : 'ready');
+          return {
+            glyph: cur.glyph, kicker: 'toy', name: cur.name,
+            desc: cur.desc || '',
+            extra: (cur.key ? `press ${cur.key} or click · ` : '') + state,
+          };
+        });
         dock.appendChild(el);
         toyEls.set(t.id, el);
       }
@@ -204,9 +328,17 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
     setPicks,
     updateToys,
     update(st) {
+      lastSt = st;
       scoreVal.textContent = Math.floor(st.score).toLocaleString();
       multVal.textContent = `×${st.totalMult.toFixed(1)}`;
-      streakRow.textContent = st.combo > 1 ? `🔥 streak ×${st.combo}` : '';
+      streakVal.textContent = st.combo > 1 ? `streak ${st.combo}` : '';
+      const c = st.combo | 0;
+      if (prevCombo != null && c !== prevCombo) {
+        if (c > prevCombo) punch();                 // +1 pops AND the private-show ×2
+        else breakFx(c === 0 && prevCombo >= 5);    // detonation reset = hard break; halving / 1->0 = crack
+      }
+      prevCombo = c;
+      setTier(tierOf(c));
       const capacity = Math.max(st.startingShields, st.shields);
       shieldRow.textContent = (capacity > 0 || st.collarSaves > 0)
         ? '♥'.repeat(st.shields) + '♡'.repeat(Math.max(0, st.startingShields - st.shields))
@@ -225,6 +357,7 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
     /** Wave 2: show/hide the weather chip. wx = { glyph, name, desc,
      * forecast: 'glyph NAME' | null, rerollable: bool } or null to hide. */
     setWeather(wx) {
+      lastWx = wx || null;
       if (!wx) {
         weatherRow.style.display = 'none';
         weatherRow.classList.remove('is-reroll');
@@ -232,8 +365,6 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
       }
       weatherRow.style.display = '';
       weatherRow.textContent = `${wx.glyph} ${wx.name}` + (wx.forecast ? ` → ${wx.forecast}` : '');
-      weatherRow.title = (wx.desc || '')
-        + (wx.rerollable ? '\n💍 click: she changes her mind (once per descent)' : '');
       weatherRow.classList.toggle('is-reroll', !!wx.rerollable);
     },
     flashFocus() {
@@ -324,9 +455,18 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
         requestAnimationFrame(step);
       } catch (e) { /* ignore */ }
     },
-    setVisible(v) { root.style.display = v ? '' : 'none'; picksWrap.style.display = v ? '' : 'none'; dock.style.display = v ? '' : 'none'; },
+    resetCombo() { prevCombo = null; },   // fresh run without a hide (recap "Again"): no phantom break
+    setVisible(v) {
+      root.style.display = v ? '' : 'none';
+      picksWrap.style.display = v ? '' : 'none';
+      dock.style.display = v ? '' : 'none';
+      if (!v) { prevCombo = null; tips.hideNow(); } // next run's first update() sets the baseline silently
+      syncEmbers();
+    },
     dispose() {
       clearTimeout(pulseTimer);
+      clearInterval(emberTimer);
+      tips.dispose();
       root.remove(); annWrap.remove(); toastWrap.remove(); pulseEl.remove();
       picksWrap.remove(); dock.remove(); heatTint.remove();
     },

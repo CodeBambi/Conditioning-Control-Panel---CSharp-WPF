@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -82,6 +83,27 @@ internal static class DtrhAssetStatsStore
                 touched++;
             }
             if (touched > 0) SaveNow();
+        }
+    }
+
+    /// <summary>
+    /// Top-N asset names ranked by cumulative engagement - the "read-back" this
+    /// store was built for. Grabs weigh heaviest (a deliberate act), then pops
+    /// taken while held, then raw weighted attention. The DtRH page receives
+    /// these as {type:'favorites'} so biomes can bias toward what the user
+    /// actually engages with (Hall of Mirrors' Mirror Moments etc.).
+    /// </summary>
+    public static List<string> TopAssets(int n)
+    {
+        lock (_lock)
+        {
+            EnsureLoaded();
+            return _stats!
+                .Where(kv => kv.Value != null)
+                .OrderByDescending(kv => kv.Value.Weighted + kv.Value.Grabs * 8 + kv.Value.Pops * 2)
+                .Take(Math.Max(0, n))
+                .Select(kv => kv.Key)
+                .ToList();
         }
     }
 

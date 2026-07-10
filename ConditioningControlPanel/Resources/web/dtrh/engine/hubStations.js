@@ -147,8 +147,8 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
   let visible = false;
   let stations = [];        // live station handles
   let focused = null;       // focused station id (camera swung onto it)
-  let focusBias = 0;        // screen-right offset of the face target (world units):
-                            // the focused card rests LEFT of center, its DOM sheet on the right
+  let focusBias = 0;        // screen-right offset of the face target (world units);
+                            // 0 = the focused card centers between the flanking pane columns
   let aimedId = null;       // hover lift
   // camera pan: the face target eases from where you were looking to the new
   // station over FOCUS_GLIDE (card-to-card glides too, never a snap)
@@ -160,7 +160,7 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
   const DEFAULT_SLOTS = {
     toybox:  { x: -3.4, y: 1.4 },
     dials:   { x: 3.4,  y: 1.4 },
-    vanity:  { x: 0,    y: 2.6 },
+    vanity:  { x: 0,    y: 2.15 },   // ducks under the DOM logo marquee
     portal:  { x: 0,    y: -0.4 },
   };
 
@@ -411,10 +411,11 @@ export function createHubStations({ scene, camera, layout, nav, fx, hud }) {
         if (done && stations[i].isFading()) { stations[i].dispose(); stations.splice(i, 1); }
       }
       // keep the camera swung onto the focused station as it rides the crawl
-      // (biased screen-right so the card settles left-of-center, clear of the
-      // sheet). The face point PANS: it eases from where you were looking to
-      // the station over FOCUS_GLIDE, then tracks it - nav's own FACE_LERP
-      // smooths on top, so focus and card-to-card both read as a camera glide.
+      // (bias 0 centers the card between the two pane columns; a nonzero bias
+      // still offsets screen-right). The face point PANS: it eases from where
+      // you were looking to the station over FOCUS_GLIDE, then tracks it -
+      // nav's own FACE_LERP smooths on top, so focus and card-to-card both
+      // read as a camera glide.
       if (focused) {
         const st = byId(focused);
         if (st) {

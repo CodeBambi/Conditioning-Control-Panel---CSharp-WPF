@@ -51,6 +51,7 @@
 import * as THREE from 'three';
 import { RADIUS, FOG_COLOR, FOG_DENSITY } from './tunnel.js';
 import { makeGlowTex, makeFrameTex, makeNamePanelTex } from './powerupDrops.js';
+import { intToHex } from './settings.js';
 
 const ART = 'https://ccp.art/';   // power-up card art CDN (matches powerupDrops.js)
 
@@ -150,6 +151,39 @@ function makeRewardCaptionTex(reward) {
   else if (lines.length === 2 && line) lines[1] = lines[1].slice(0, 39) + '…';
   const y0 = lines.length > 1 ? 106 : 122;
   lines.forEach((l, i) => x.fillText(l, w / 2, y0 + i * 38));
+  return new THREE.CanvasTexture(c);
+}
+
+// The Journey Rooms: the NEXT room's title, hung as big glowing writing above
+// the draft-room doors (draft mode only). Split on the ampersand so the two
+// beats stack ("CURIOSITY" / "& DENIAL"); the numeral rides small on top.
+function makeRoomTitleTex(title) {
+  const w = 1024, h = 340, c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  const col = typeof title.color === 'number' ? intToHex(title.color) : (title.color || '#ff69b4');
+  const text = String(title.text || '').toUpperCase();
+  const amp = text.indexOf(' & ');
+  const lines = amp > 0 ? [text.slice(0, amp), '& ' + text.slice(amp + 3)] : [text];
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  // the numeral, small and quiet above the writing
+  if (title.numeral) {
+    x.font = '600 44px Georgia, "Times New Roman", serif';
+    x.fillStyle = 'rgba(255,255,255,0.72)';
+    x.fillText(`· ${title.numeral} ·`, w / 2, 42);
+  }
+  // the title itself: engraved serif caps with a soft self-colored glow. Two
+  // passes - a wide blurred halo, then the crisp face - reads as neon-lit stone.
+  x.font = '700 108px Georgia, "Times New Roman", serif';
+  const y0 = lines.length > 1 ? 138 : 188;
+  for (let i = 0; i < lines.length; i++) {
+    const ly = y0 + i * 122;
+    x.shadowColor = col; x.shadowBlur = 42;
+    x.fillStyle = col;
+    x.fillText(lines[i], w / 2, ly);
+    x.shadowBlur = 0;
+    x.fillStyle = 'rgba(255,246,252,0.94)';
+    x.fillText(lines[i], w / 2, ly);
+  }
   return new THREE.CanvasTexture(c);
 }
 
@@ -636,6 +670,35 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     return { mesh, geo, mat };
   }
 
+  // ---- the room title: big writing above the doorway mouths (draft mode) -----
+  // Centered on the mean door azimuth and lifted well above the mouths (the
+  // doors carry a downward tilt; the title takes the same heading raised), so
+  // from the camera's mid-chamber park it hangs middle-and-slightly-higher
+  // than the doors - the next room announcing itself over its own entrances.
+  function buildTitle(C, veins, title, park) {
+    const mean = new THREE.Vector3();
+    for (const v of veins) mean.add(v.dir);
+    if (mean.lengthSq() < 1e-6) return null;
+    mean.normalize();
+    const dir = mean.clone().add(new THREE.Vector3(0, 0.62, 0)).normalize();
+    const tex = makeRoomTitleTex(title);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const W = 15.5, H = W * (340 / 1024);
+    const geo = new THREE.PlaneGeometry(W, H);
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, opacity: 0,
+      depthWrite: false, side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(C).addScaledVector(dir, ROOM_R * 0.93);
+    mesh.lookAt(park);   // face the camera's park just inside the entry
+    scene.add(mesh);
+    return {
+      mesh, geo, mat, tex, t: 0,
+      dispose() { scene.remove(mesh); geo.dispose(); mat.dispose(); tex.dispose(); },
+    };
+  }
+
   // brick up a doorway: cos threshold 2.0 can never be exceeded, so the wall
   // renders solid there (and the rim glow dies with it). Used on the LOSERS at
   // commit - their corridors are destroyed, and an open hole with nothing
@@ -649,6 +712,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     if (!J) return;
     if (J.phase === 'linger' && api.onLinger) { try { api.onLinger(false, J.mode); } catch (e) { /* ignore */ } }
     for (const v of J.veins) destroyVein(v);
+    if (J.title) { try { J.title.dispose(); } catch (e) { /* ignore */ } J.title = null; }
     if (J.room) { scene.remove(J.room.mesh); J.room.geo.dispose(); J.room.mat.dispose(); J.room = null; }
     if (tunnel && tunnel.clearHoles) tunnel.clearHoles();  // stale-state safety; v5 sets no wall holes
     if (tunnel && tunnel.clearCut) tunnel.clearCut();
@@ -768,6 +832,9 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     nav.setJunctionArmed(false);
     nav.enterVein(winner.curve, { length: VEIN_LEN });
 
+    // the title's moment is over - the dive owns the eye now
+    if (J.title) { try { J.title.dispose(); } catch (e) { /* ignore */ } J.title = null; }
+
     J.phase = 'trail';
     J.winner = winner;
     if (api.onCommit) {
@@ -843,6 +910,15 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       J.room.mat.uniforms.uTime.value += dt;
       J.room.mat.uniforms.uFogColor.value.copy(fc);
     }
+    // the room title breathes: a slow opacity swell so the writing feels lit,
+    // not painted. Its reveal tracks the phase (fog fade-up on approach).
+    if (J.title) {
+      J.title.t += dt;
+      const breathe = 0.86 + 0.14 * Math.sin(J.title.t * 1.4);
+      const near = J.phase === 'approach'
+        ? clamp((depth - (J.atDepth - J.lead)) / J.lead, 0, 1) : 1;
+      J.title.mat.opacity = near * breathe;
+    }
 
     if (J.phase === 'approach') {
       const near = clamp((depth - (J.atDepth - J.lead)) / J.lead, 0, 1);
@@ -882,7 +958,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
      * a door born shut (fork mode only). mode 'draft' stages the boon draft:
      * lingerSec is the game's draft timer (timeout dives the coaxed door with
      * skipped semantics), lead shortens the telegraph. */
-    schedule({ atDepth, branches, coaxIndex = 0, presealIndex = null, mode = 'fork', lingerSec = 0, lead = LEAD }) {
+    schedule({ atDepth, branches, coaxIndex = 0, presealIndex = null, mode = 'fork', lingerSec = 0, lead = LEAD, title = null }) {
       if (!active) return;
       if (J) teardown();
       const descs = (branches || []).slice(0, 3);
@@ -893,6 +969,8 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       const C = fr.pos.clone().addScaledVector(fr.tangent, X_RING);
       const az = DOOR_AZIMUTHS[descs.length] || DOOR_AZIMUTHS[2];
       const veins = descs.map((d, i) => buildVein(i, az[i], d, fr, C));
+      // the camera's eventual mid-chamber park: what the title plane faces
+      const park = fr.pos.clone().addScaledVector(fr.tangent, STOP_IN);
       J = {
         phase: 'approach', atDepth, coaxIndex, presealIndex, mode, lingerSec, lead,
         winner: null, lingerT: 0,
@@ -900,6 +978,8 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
         autoPick: mode === 'fork' && Math.random() < AUTO_PICK_CHANCE,
         veins,
         room: buildRoom(C, fr.tangent.clone().negate(), veins),
+        // the Journey Rooms: the next room's title over its doors (draft rooms)
+        title: title && title.text ? buildTitle(C, veins, title, park) : null,
       };
       applyCut(atDepth);   // hide the trunk through the chamber's span
       if (presealIndex != null && veins[presealIndex]) {
