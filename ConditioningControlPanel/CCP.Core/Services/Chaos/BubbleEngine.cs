@@ -195,6 +195,9 @@ public sealed class BubbleEngine
         _ripples.Clear();
         _residues.Clear();
         _playerRipples.Clear();
+        _missedBuffer.Clear();
+        _movedBuffer.Clear();
+        _tickSnapshot.Clear();
         Knobs.Reset();
         _chaosActive = false;
     }
@@ -798,6 +801,15 @@ public sealed class BubbleEngine
         return result;
     }
 
+    // IMP-9: reusable per-tick buffers, avoiding ~4 Gen0 allocs/frame in bubble-mode steady
+    // state. SAFE ONLY because Tick is non-reentrant (single UI-thread DispatcherTimer; no
+    // pop/miss callback pumps a nested dispatcher frame) — a nested Tick would Clear() these
+    // mid-enumeration. Cleared in Stop() so a stopped run does not root the last tick's bubbles.
+    // _tickSnapshot is the ONE shared hazard-pass snapshot; safety note at the call site below.
+    private readonly List<BubbleState> _missedBuffer = new();
+    private readonly List<BubbleState> _movedBuffer = new();
+    private readonly List<BubbleState> _tickSnapshot = new();
+
     private void Tick()
     {
         if (!_isRunning || _isPaused) return;
@@ -815,8 +827,10 @@ public sealed class BubbleEngine
             _channelBubbleId = null;
         }
 
-        var missed = new List<BubbleState>();
-        var moved = new List<BubbleState>();
+        _missedBuffer.Clear();
+        _movedBuffer.Clear();
+        var missed = _missedBuffer;
+        var moved = _movedBuffer;
 
         // Spawn queued chaos bubbles first so they appear this frame.
         DrainChaosSpawnQueue();
@@ -850,8 +864,19 @@ public sealed class BubbleEngine
         // Spanked-rabbit body mows (runs on a snapshot — pops mutate _bubbles) BEFORE the field
         // hazards, mirroring WPF where sweeps fire inside each darter's AnimateFrame and
         // TickFieldHazards runs after the animate pass (WPF BubbleService.cs:3075-3076, :505ff).
-        TickSpankSweeps();
-        TickFieldHazards(dt);
+        // ONE shared snapshot for both hazard passes (reused buffer, zero-alloc steady state):
+        // PopBubble sets IsPopping before any removal and every pass guards on IsPopping, so a
+        // bubble popped by the spank pass is skipped by the field pass exactly as it was when
+        // each pass took its own _bubbles.ToArray(). Built only in chaos mode — both passes
+        // early-return on !_chaosActive/_chaosFrozen, so ambient ticks skip the copy entirely
+        // (matching pre-IMP-9 behaviour where neither pass reached its ToArray).
+        if (_chaosActive && !_chaosFrozen)
+        {
+            _tickSnapshot.Clear();
+            _tickSnapshot.AddRange(_bubbles);
+            TickSpankSweeps(_tickSnapshot);
+            TickFieldHazards(dt, _tickSnapshot);
+        }
 
         foreach (var bubble in missed)
         {
@@ -1411,7 +1436,7 @@ public sealed class BubbleEngine
         }
     }
 
-    private void TickFieldHazards(double dt)
+    private void TickFieldHazards(double dt, List<BubbleState> snapshot)
     {
         if (!_chaosActive || _chaosFrozen) return;
         if (_ripples.Count == 0 && _residues.Count == 0 && _playerRipples.Count == 0
@@ -1424,7 +1449,6 @@ public sealed class BubbleEngine
             return dx * dx + dy * dy;
         }
 
-        var snapshot = _bubbles.ToArray();
         var dtMs = dt * 1000.0;
 
         // Size Queen ripples: only treats pop (the ring is a reward wave, never a threat trigger).
@@ -1494,7 +1518,7 @@ public sealed class BubbleEngine
         {
             foreach (var darter in snapshot)
             {
-                if (darter.Spec?.IsDarter != true || darter.TrailPoints.Count == 0) continue;
+                if (darter.Spec?.IsDarter != true || darter.IsPopping || darter.TrailPoints.Count == 0) continue;
                 foreach (var b in snapshot)
                 {
                     if (b.IsPopping || b.Spec == null || ReferenceEquals(b, darter)) continue;
@@ -1523,11 +1547,10 @@ public sealed class BubbleEngine
     /// states the auto-sweep rule; this engine's PopBubble would route a tease as a TOUCH — a
     /// detonation — where WPF's raw Pop() paid it as a plain pop, so sweeping them would punish
     /// where WPF rewards).</summary>
-    private void TickSpankSweeps()
+    private void TickSpankSweeps(List<BubbleState> snapshot)
     {
         if (!_chaosActive || _chaosFrozen) return;
 
-        var snapshot = _bubbles.ToArray();
         foreach (var darter in snapshot)
         {
             if (darter.Spec?.IsDarter != true || !darter.IsSpanked || darter.IsPopping) continue;

@@ -392,10 +392,11 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 | Row | Evidence | Expected gain | Tier | Proportionality |
 |---|---|---|---|---|
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
-IMP-9 → IMP-6 → IMP-2 (STANDARD) → IMP-8 (JUDGMENT,
+IMP-6 → IMP-2 (STANDARD) → IMP-8 (JUDGMENT,
 flag-don't-force) → major rows #1–#8. IMP-1 DONE `49ec3707`. IMP-11 DONE `28fa06a2`. IMP-5 DONE `23b4dd86`.
-IMP-7 DONE `85f036f1`. IMP-10 DONE `53f2b4d7`. IMP-4 DONE (this commit; hash reconciled at next claim).
-IMP-3 is CONDITIONAL on row #3's libmpv spike gate — never do both.
+IMP-7 DONE `85f036f1`. IMP-10 DONE `53f2b4d7`. IMP-4 DONE `e4f40bc1`. IMP-9 DONE (this commit; hash
+reconciled at next claim). IMP-3 is CONDITIONAL on row #3's libmpv spike gate — never do both. NEW row
+filed this session: **IMP-ECON1** (latent chaos economy double-pay — JUDGMENT; see OPEN rows).
 
 | **IMP-1 — `VideoLayer` lacks a `ConsumeDirty` override**: engine invalidates all windows at 60Hz while clips decode at ~25-30fps; `Update`'s `presented` flag (FRONT↔READY swap) IS the dirty signal | `Compositor/Layers/VideoLayer.cs` (no override; inherits always-true `BaseLayer.ConsumeDirty()`, `BaseLayer.cs:46`) | ~halves GPU render passes during plain video playback; `MandatoryVideoLayer` inherits the fix free | MECHANICAL | ~10 lines, UI-tick-only state, no protocol change; verify with `--verify-video` |
 | **IMP-2 — engine render tick runs at Background dispatcher priority**: parameterless `DispatcherTimer` = background priority in Avalonia 12.0.x (pinned 12.0.5) — the whole UCE hangs off one starvable timer | `Compositor/CompositorEngine.cs` ctor; Avalonia.Base 12.0.x XML docs (`M:Avalonia.Threading.DispatcherTimer.#ctor`) | removes scheduling-induced stutter under UI-thread load; candidate one-liner `new DispatcherTimer(DispatcherPriority.Render)`; doubles as a row-#2 MinFps=0 hypothesis | STANDARD | one line + before/after benchmark (row #2's re-baseline is the measurement vehicle) |
@@ -405,11 +406,25 @@ IMP-3 is CONDITIONAL on row #3's libmpv spike gate — never do both.
 | **IMP-6 — chain `VideoLayer` teardown tasks**: `Stop()` overwrites `_teardownTask`, so `WaitForTeardown` drains only the LATEST teardown; rapid stop→play→quit leaves an untracked native free (player dispose + `FreeHGlobal` after 400ms) racing process exit | `Compositor/Layers/VideoLayer.cs` Stop()/WaitForTeardown (called by `AvaloniaVideoService.Dispose`) | closes a crash-on-exit race window (segfault class) | STANDARD | ~5 lines (`_teardownTask = Task.WhenAll(previous, new)` or a small list) |
 | **IMP-7 — remove dead seam method `IV2AuthService.SendHeartbeatAsync(string)`** — **DONE 2026-07-10**: had ZERO Core/Avalonia callers; the real heartbeat is the internal no-arg `ProfileSyncService.SendHeartbeatAsync()` on the 120s timer; the DI comment itself admitted it dead | interface member `IV2AuthService.cs` + impl `AvaloniaV2AuthService.cs` (−26) DELETED; stale DI comment `ServiceCollectionExtensions.cs:~219` updated | removed the misleading interface member + dead impl + the stale comment contradicting the single-heartbeat-owner invariant (invariant now strengthened) | STANDARD (+JUDGMENT review for the interface change: SHIP) | DONE — no behavior change; WPF head keeps its own legacy copy (`Services/Account/V2AuthService.cs:528`, untouched) |
 | **IMP-8 — coalesce the two 30s dirty-save timers**: `AchievementService._saveTimer` + `QuestService._saveTimer` do identical "if dirty, serialize+flush" work with near-identical tmp-recovery boilerplate | `CCP.Core/Services/Progression/AchievementService.cs:86,:99`; `QuestService.cs:71,:95` | one fewer always-waking timer (latency/battery on laptops), shared crash-recovery logic, fewer moving parts | JUDGMENT | low-medium; structural win, not headline perf — flag, don't force. Keep the 1s tracking timers separate (different state, higher risk) |
-| **IMP-9 — `BubbleEngine` per-tick allocations**: 2 transient lists allocated EVERY active 32ms tick (after the early-return guard) + 2 redundant full `_bubbles.ToArray()` snapshots per tick in the hazard passes | `CCP.Core/Services/Chaos/BubbleEngine.cs:822-823` (driver `:174-176`, `TickIntervalSec=0.032` `:13`); `:1534` (`TickSpankSweeps`), `:1431` (`TickFieldHazards`) | removes ~4 Gen0 allocs/frame (~120/s) on the UI thread in bubble-mode steady state; net code smaller (reusable field buffers + ONE shared snapshot passed to both passes) | STANDARD | low risk, behavior-preserving; pinned by existing BubbleEngine unit tests in CCP.Core.Tests |
+| **IMP-9 — `BubbleEngine` per-tick allocations** — **DONE 2026-07-10**: 2 transient lists per active 32ms tick + 2 redundant `_bubbles.ToArray()` snapshots in the hazard passes | `CCP.Core/Services/Chaos/BubbleEngine.cs` — missed/moved → reusable `_missedBuffer`/`_movedBuffer` fields; the two hazard-pass `ToArray()`s → ONE shared reused `_tickSnapshot` passed to both `TickSpankSweeps`/`TickFieldHazards` | removed ~4 Gen0 allocs/frame (~120/s) on the UI thread in bubble-mode steady state | STANDARD (+JUDGMENT review: state-mutating) | DONE — behavior-preserving (shared snapshot equivalent via PopBubble idempotency + IsPopping-before-removal + per-pass IsPopping guards); pinned by BubbleEngine unit tests; hardened per review (ambient-gated copy, buffers cleared in Stop, trail-pop IsPopping guard, non-reentrancy documented) |
 | **IMP-10 — `ActiveRipples` dead alloc-y getter** — **DONE 2026-07-10**: `ToList()` + closure on every read; repo-wide grep = the declaration only, zero readers | `CCP.Core/Services/Chaos/BubbleEngine.cs` getter DELETED (doc comment + expression body) | removed a latent per-frame footgun (any future per-frame reader = per-frame `List<>` alloc) | STANDARD | DONE — deleted the dead exposure getter only; `_ripples` state + `RIPPLE_LIFE_MS` (14 refs) + the Size-Queen ripple effect (`:1434-1445`) untouched; ripple-overlay port still pending, will re-add a zero-alloc accessor when a consumer exists |
 | **IMP-11 — orphaned `AvaloniaBubble` control** — **DONE 2026-07-10 (`28fa06a2`)**: `new AvaloniaBubble(` had 0 call sites; chaos bubbles render via the compositor `BubbleLayer` (`AvaloniaBubbleService.cs:533-535` routes `SetFuse` there); its per-call `new SolidColorBrush` pattern read as a hot-path smell on every scan | `CCP.Avalonia/Chaos/AvaloniaBubble.cs` (274 lines) DELETED | deleted dead UI code + a misleading allocation pattern; simplification, not runtime speed | MECHANICAL | confirm-then-deleted: verified no XAML / resource-factory / reflection construction (sealed Panel, parameterized ctor, no typeof/Activator/nameof, no paired .axaml, glob-included) |
 
 **Improvement-row claim ledger (append-only):**
+- **CLAIM+DONE 2026-07-10 · @driver (continuous-mode session):** IMP-9 (BubbleEngine per-tick allocs).
+  State-mutating chaos logic → dispatched the mandatory JUDGMENT-tier adversarial review (`claude-fable-5`,
+  read-only, 6 attack vectors) on the diff: **VERDICT SHIP** — the ONE shared snapshot is provably
+  equivalent to the two re-snapshots because `PopBubble` is idempotent (early-returns on already-`IsPopping`)
+  and sets `IsPopping` before any removal, and every hazard-pass victim loop guards on `IsPopping`; no code
+  mutates `_bubbles` between the main loop and the two passes; darters cannot be popped mid-tick. Applied 4
+  reviewer hardenings (all behaviour-neutral): the shared-snapshot copy is now gated on `_chaosActive &&
+  !_chaosFrozen` (ambient ticks skip it, matching pre-IMP-9); the 3 buffers are cleared in `Stop()` (no
+  post-run bubble rooting); an `IsPopping` guard added to the trail-pop outer loop; the non-reentrancy
+  requirement documented on the buffer fields. Gates: slnf **0 err** (383 warn) · WPF sln **0 err** · Core
+  **542/542** (BubbleEngine tests) · `--smoke-test` 44 tabs / 0 unhandled / Findings 5 (logged-out baseline)
+  with the in-run ChaosRun completing on correct economy (score 209, sparks 107→131, xp advanced — exercises
+  the changed tick path). Core-only; no compositor/video path. **FILED a new row from the review's nit #5:**
+  IMP-ECON1 (pre-existing latent economy double-pay, out of IMP-9 scope).
 - **CLAIM+DONE 2026-07-10 · @driver (continuous-mode session):** IMP-4 (cache per-frame render-path
   paints). Touches compositor render internals → followed `unified-compositor-engine` skill (read VideoLayer's
   protocol block first) and dispatched the mandatory JUDGMENT-tier adversarial review (`claude-fable-5`,
@@ -499,6 +514,18 @@ IMP-3 is CONDITIONAL on row #3's libmpv spike gate — never do both.
   findings delta-set ⊆ recorded drift (see drift row; count flapped 16→15 exactly as predicted —
   server-side 'drone' tag absent this run, proving the count is server-content-coupled; delta-set check,
   not count-equality, is the real signal while the smoke env is authed).
+
+### IMP-ECON1 — latent chaos economy double-pay: defused/detonated lives never set `IsPopping` · **JUDGMENT**
+
+Filed 2026-07-10 by the IMP-9 JUDGMENT review (nit #5; PRE-EXISTING, not caused by IMP-9). In
+`CCP.Core/Services/Chaos/BubbleEngine.cs`, channel-defuse completion (~:1345) and fuse detonation (~:1362)
+resolve a live bubble WITHOUT setting `bubble.IsPopping = true`. A same-tick player-ripple hazard pass can
+then re-pop the just-defused/detonated live via `PopBubble`'s `else → _onBenignPop` branch — a potential
+economy double-pay of the exact class the WS0 slice-6 audit exists to catch. Verify against the WPF head
+(`Services/BubbleService.cs`) whether WPF's raw pop paths stamp an equivalent guard, then either set
+`IsPopping` at the defuse/detonation resolution or gate the benign-pop branch on already-resolved state.
+- **Tier:** JUDGMENT (economy/state). **Acceptance:** no same-tick re-pay of a defused/detonated live;
+  WPF-parity confirmed; a pinning unit test in `CCP.Core.Tests` reproducing the double-pay before the fix.
 
 Scan verdicts recorded as explicitly GOOD (checked, no action): VideoLayer's triple-buffer frame path
 matches its zero-alloc spec (index-swap locks, zero-copy `SKImage.FromPixels`, stale-session guards);
