@@ -100,7 +100,13 @@ public sealed class CompositorEngine : IDisposable
         _screenProvider = screenProvider;
         _settings = settings;
 
-        _timer = new DispatcherTimer
+        // IMP-2: run the engine tick at Render priority. The parameterless DispatcherTimer ctor
+        // defaults to Background priority (verified against Avalonia 12.0.5 Avalonia.Base.xml:
+        // "process the timer event at background priority"), which is starvable under UI-thread
+        // load — a scheduling stutter that also feeds the row #2 MinFps=0 hypothesis. Render
+        // priority ("same priority as render") schedules the tick with the framework's own render
+        // pass so it is not deferred behind Background/Input work.
+        _timer = new DispatcherTimer(DispatcherPriority.Render)
         {
             Interval = TimeSpan.FromMilliseconds(ActiveIntervalMs)
         };

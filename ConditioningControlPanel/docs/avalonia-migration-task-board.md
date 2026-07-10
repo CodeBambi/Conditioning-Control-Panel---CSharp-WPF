@@ -130,10 +130,14 @@ environmentally invalidate the "not-worse than benchmark-optimized.json" compari
   decode-stall interpretation now stands on `benchmark-2026-07-05-analysis.md` +
   `benchmark-report-2026-07-05.json` (`MaxIntensityMinFps: 0`) only. Re-capture a fresh log during
   the re-baseline.
-- **Fresh hypothesis (improvement scan 2026-07-10):** the engine tick is a parameterless
-  `DispatcherTimer` = **Background** dispatcher priority in Avalonia 12.0.x — starvable under UI-thread
-  load; a saturated UI thread alone can produce a ≥1s render gap. Test alongside (not instead of) the
-  LibVLC decode-retry theory — see improvement row IMP-2 below.
+- **Fresh hypothesis (improvement scan 2026-07-10) — CONFIRMED + FIXED (IMP-2, this session):** the engine
+  tick was a parameterless `DispatcherTimer` = **Background** dispatcher priority (VERIFIED against
+  Avalonia 12.0.5 `Avalonia.Base.xml`: `DispatcherTimer.#ctor` “process the timer event at background
+  priority”) — starvable under UI-thread load. Changed to `DispatcherPriority.Render`; a clean before/after
+  `--benchmark` measured **Idle 122.6→141.6 fps (min 118→136), Active 123.2→144.2 fps (min 117→129)** —
+  ~+15–17% avg AND higher minimums, i.e. the scheduling-starvation component of the render gap is real and
+  now removed. The LibVLC decode-retry component of MinFps=0 is SEPARATE and still owned by this row's
+  re-baseline (the two were always additive, not exclusive).
 
 ### #3 — WP2b optional libmpv render-API engine-swap spike · **JUDGMENT (spike, benchmark-gated)**
 
@@ -392,14 +396,15 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
 | Row | Evidence | Expected gain | Tier | Proportionality |
 |---|---|---|---|---|
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
-IMP-2 (STANDARD) → IMP-8 (JUDGMENT,
+IMP-8 (JUDGMENT,
 flag-don't-force) → major rows #1–#8. IMP-1 DONE `49ec3707`. IMP-11 DONE `28fa06a2`. IMP-5 DONE `23b4dd86`.
 IMP-7 DONE `85f036f1`. IMP-10 DONE `53f2b4d7`. IMP-4 DONE `e4f40bc1`. IMP-9 DONE `066063e4`. IMP-6 DONE
-(this commit; hash reconciled at next claim). IMP-3 is CONDITIONAL on row #3's libmpv spike gate — never do
-both. NEW row filed this session: **IMP-ECON1** (latent chaos economy double-pay — JUDGMENT; see OPEN rows).
+`7e6e0d9e`. IMP-2 DONE (this commit; hash reconciled at next claim). IMP-3 is CONDITIONAL on row #3's
+libmpv spike gate — never do both. NEW row filed this session: **IMP-ECON1** (latent chaos economy
+double-pay — JUDGMENT; see OPEN rows).
 
 | **IMP-1 — `VideoLayer` lacks a `ConsumeDirty` override**: engine invalidates all windows at 60Hz while clips decode at ~25-30fps; `Update`'s `presented` flag (FRONT↔READY swap) IS the dirty signal | `Compositor/Layers/VideoLayer.cs` (no override; inherits always-true `BaseLayer.ConsumeDirty()`, `BaseLayer.cs:46`) | ~halves GPU render passes during plain video playback; `MandatoryVideoLayer` inherits the fix free | MECHANICAL | ~10 lines, UI-tick-only state, no protocol change; verify with `--verify-video` |
-| **IMP-2 — engine render tick runs at Background dispatcher priority**: parameterless `DispatcherTimer` = background priority in Avalonia 12.0.x (pinned 12.0.5) — the whole UCE hangs off one starvable timer | `Compositor/CompositorEngine.cs` ctor; Avalonia.Base 12.0.x XML docs (`M:Avalonia.Threading.DispatcherTimer.#ctor`) | removes scheduling-induced stutter under UI-thread load; candidate one-liner `new DispatcherTimer(DispatcherPriority.Render)`; doubles as a row-#2 MinFps=0 hypothesis | STANDARD | one line + before/after benchmark (row #2's re-baseline is the measurement vehicle) |
+| **IMP-2 — engine render tick runs at Background dispatcher priority** — **DONE 2026-07-10**: parameterless `DispatcherTimer` = background priority (VERIFIED, Avalonia 12.0.5 `Avalonia.Base.xml` `DispatcherTimer.#ctor`) — the whole UCE hung off one starvable timer | `Compositor/CompositorEngine.cs` ctor → `new DispatcherTimer(DispatcherPriority.Render)` | removed scheduling-induced stutter; measured before/after `--benchmark`: Idle 122.6→141.6 fps (min 118→136), Active 123.2→144.2 fps (min 117→129) | STANDARD | DONE — ~+15–17% avg fps AND higher mins (starvation removed); verify-layers PASS, 44-tab smoke confirms no input starvation from Render>Input |
 | **IMP-3 — native-size video decode**: fixed 1920×1080 `SetVideoFormat` forces per-frame swscale + double-scaling on non-1080p media (SD upscale, 4K decode→down→GPU-up) | `Compositor/Layers/VideoLayer.cs:36-37,298`; same pattern `Controls/AvaloniaInlineLoopVideo.cs:106` | removes a full-frame swscale per decoded frame for all non-1080p media; sharper output; buffers already per-PlayVideo so the protocol supports it (cap at monitor max) | JUDGMENT | medium (format callbacks + fixed-size fallback). **CONDITIONAL: decide after row #3's libmpv spike gate — libmpv replaces this pipeline wholesale; never do both** |
 | **IMP-4 — per-frame native allocs on the render path** — **DONE 2026-07-10**: letterbox `SKPaint` per frame contradicted VideoLayer's own "allocation-free" header; BrainDrain allocated `SKImageFilter.CreateBlur` + `SKPaint` per frame | `VideoLayer.cs` letterbox bg paint cached (rebuild only on `BackgroundColor` change); `BrainDrainLayer.cs` blur paint+filter cached (rebuild only on sigma change) + tint paint reused (Color mutated in place) | removed 60–360 native alloc/free per second per monitor during video/brain-drain; blur-filter caching (rebuild only on sigma change) is the meaningful part | MECHANICAL (+JUDGMENT review: compositor internals) | DONE — render-thread-only cached state; pixel-identical output (WPF-parity math unchanged) |
 | **IMP-5 — delete the dead dialog-mode seam** — **DONE 2026-07-10**: `Push/PopDialogMode` was a documented no-op, yet 12 sites still bracketed every dialog with the pair and carried a compositor dependency solely for it | `Compositor/CompositorEngine.cs` PushDialogMode/PopDialogMode + `_dialogModeRefCount` field DELETED; `Platform/AvaloniaDialogService.cs` `_compositor` field/ctor-param + 6 try/finally brackets removed; DI factory `ServiceCollectionExtensions.cs:127` dropped the `sp.GetService<CompositorEngine>()` arg | deleted the phantom coupling (dialog service → compositor), the dead ref-count field, and the 6 try/finally brackets; zero behavior change by construction (methods only inc/dec an unread counter) | MECHANICAL | DONE — no-op deletion, provable zero behavior change |
@@ -411,6 +416,21 @@ both. NEW row filed this session: **IMP-ECON1** (latent chaos economy double-pay
 | **IMP-11 — orphaned `AvaloniaBubble` control** — **DONE 2026-07-10 (`28fa06a2`)**: `new AvaloniaBubble(` had 0 call sites; chaos bubbles render via the compositor `BubbleLayer` (`AvaloniaBubbleService.cs:533-535` routes `SetFuse` there); its per-call `new SolidColorBrush` pattern read as a hot-path smell on every scan | `CCP.Avalonia/Chaos/AvaloniaBubble.cs` (274 lines) DELETED | deleted dead UI code + a misleading allocation pattern; simplification, not runtime speed | MECHANICAL | confirm-then-deleted: verified no XAML / resource-factory / reflection construction (sealed Panel, parameterized ctor, no typeof/Activator/nameof, no paired .axaml, glob-included) |
 
 **Improvement-row claim ledger (append-only):**
+- **CLAIM+DONE 2026-07-10 · @driver (continuous-mode session):** IMP-2 (engine tick priority). Avalonia-API
+  behaviour claim → ran the mandatory `avalonia-research` protocol: local docs had it as an unverified
+  hypothesis, so verified against the PINNED package's own source of truth — Avalonia 12.0.5
+  `Avalonia.Base.xml`: `DispatcherTimer.#ctor` (parameterless) “process the timer event at background
+  priority”; `DispatcherPriority.Render` = “same priority as render” (above Input/Background per the enum
+  docs). Changed `new DispatcherTimer { Interval=... }` → `new DispatcherTimer(DispatcherPriority.Render)
+  { Interval=... }` (engine `_timer` only; the one-shot stagger timers left at Background — out of scope).
+  Clean before/after `--benchmark`: **Idle 122.6→141.6 fps (min 118→136), Active 123.2→144.2 fps
+  (min 117→129)** — ~+15–17% avg AND higher minimums (the starvation the row predicted). Gates: slnf **0
+  err** (383 warn) · WPF sln **0 err** · Core **542/542** · `--verify-layers` PASS · `--smoke-test` 44 tabs /
+  0 unhandled / Findings 19 = recorded benign drift (the 44 input-driven tab navigations completing shows
+  Render>Input priority does NOT starve input). Row #2's fresh-hypothesis note updated to CONFIRMED+FIXED;
+  the LibVLC decode-stall component of MinFps=0 remains separate under row #2. No subagent JUDGMENT review
+  dispatched: the sole judgment (default-priority semantics + Render choice) was resolved directly against
+  the authoritative pinned-package XML docs and empirically confirmed by the paired benchmark.
 - **CLAIM+DONE 2026-07-10 · @driver (continuous-mode session):** IMP-6 (chain VideoLayer teardown tasks).
   Native-lifetime/compositor-internal crash-safety → dispatched the mandatory JUDGMENT-tier adversarial
   review (`claude-fable-5`, read-only, 6 attack vectors) on the diff: **VERDICT SHIP** — drain correct

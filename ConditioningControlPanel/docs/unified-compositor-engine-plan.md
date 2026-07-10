@@ -194,7 +194,11 @@ across a full run incl. a 60s Chaos phase — but the comparison to `benchmark-o
   video-path stall, NOT a Skia/UCE regression. (Evidence gap 2026-07-10: the primary run log was
   overwritten — `ccp-run.log` now has 0 decode-failure matches; the correlation stands on
   `benchmark-2026-07-05-analysis.md` + `benchmark-report-2026-07-05.json` `MaxIntensityMinFps: 0`
-  only. A Background-priority engine-tick starvation hypothesis was also filed — board row IMP-2.)
+  only. A Background-priority engine-tick starvation hypothesis was also filed — board row IMP-2, now
+  **CONFIRMED + FIXED**: the parameterless `DispatcherTimer` defaulted to Background priority (verified vs
+  Avalonia 12.0.5 `Avalonia.Base.xml`); switching the engine tick to `DispatcherPriority.Render` measured
+  Idle 122.6→141.6 fps / Active 123.2→144.2 fps with higher minimums. The LibVLC decode-stall component of
+  MinFps=0 is separate and remains under row #2.)
 - Phase 2 is 120s of web video that **FAILED to decode** (~half the run); its LibVLC
   decode-retry loop accounts for BOTH the AvgFps drop and the ~4× CPU.
 - Secondary confound: the 180s→240s duration drift (the extra 60s is the heaviest Chaos phase).
