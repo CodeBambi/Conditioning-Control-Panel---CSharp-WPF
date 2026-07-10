@@ -272,12 +272,16 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
         }
         else
         {
-            // Fallback: white circle with a subtle border.
+            // Fallback: white circle with a subtle border. The border exists ONLY here,
+            // mirroring WPF (BubbleService image==null fallback): the normal image path
+            // draws bubble.png with no stroke — its edge comes from the PNG's own alpha.
             (byte r, byte g, byte b) fb = item.IsChaos
                 ? (item.Tint ?? ((byte)0xFF, (byte)0x69, (byte)0xB4))
                 : ((byte)0xE8, (byte)0xE8, (byte)0xF0);
             _fillPaint.Color = new SKColor(fb.r, fb.g, fb.b, alpha);
             canvas.DrawCircle(cx, cy, radius, _fillPaint);
+            _strokePaint.Color = new SKColor(255, 255, 255, (byte)(alpha * 0.8));
+            canvas.DrawCircle(cx, cy, radius, _strokePaint);
         }
 
         // 2. Chaos variant tint overlay — only chaos bubbles get coloured. Ambient bubbles
@@ -289,11 +293,7 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
             canvas.DrawCircle(cx, cy, radius, _tintPaint);
         }
 
-        // 3. White border ring for definition.
-        _strokePaint.Color = new SKColor(255, 255, 255, (byte)(alpha * 0.8));
-        canvas.DrawCircle(cx, cy, radius, _strokePaint);
-
-        // 4. Fuse ring (shrinking countdown) — only live chaos bubbles. Ambient bubbles never show this.
+        // 3. Fuse ring (shrinking countdown) — only live chaos bubbles. Ambient bubbles never show this.
         if (item.IsChaos && item.FuseFraction > 0 && item.FuseFraction < 1)
         {
             _fusePaint.Color = new SKColor(0xFF, 0xFF, 0x00, alpha);
@@ -302,7 +302,7 @@ public sealed class BubbleLayer : BaseLayer, IDisposable
                 canvas.DrawCircle(cx, cy, fuseRadius, _fusePaint);
         }
 
-        // 5. Label (chaos treat bubbles carry a short word).
+        // 4. Label (chaos treat bubbles carry a short word).
         if (!string.IsNullOrEmpty(item.Label))
         {
             _textPaint.Color = new SKColor(255, 255, 255, alpha);

@@ -250,6 +250,32 @@ Gates: slnf 0 · WPF sln 0 · Core 542/542 (count never decreases) · smoke Find
   `Services/Chaos/CHAOS_DESIGN.md` lives in the WPF tree — if that head is ever removed, relocate the
   design doc into Core (recorded by the verifier as non-blocking).
 
+### Smoke-drift record — baseline Findings 5 → 16 at clean HEAD · **owner-waved 2026-07-10**
+
+First live smoke re-run since the recorded baseline (verified 2× at clean HEAD `b0319b0f`, 2026-07-10):
+44 tabs / 0 unhandled / **Findings 16**. All 11 deltas are auth-gated `availablesubjects` surface noise,
+diagnosed **benign-by-design, not parity bugs**: 10× loc-key-heuristic misfires on canonical subject tags
+that BOTH heads render raw by recorded intent (WPF `AvailableSubjectsTabView.xaml` `Text="{Binding}"`
+"mirrors cclabs-web /dashboard/subjects"; Avalonia `:186` identical; harness regex `SmokeTestRunner.cs:753`)
++ 1× transient `ConnectCommand` DataContext-null warning during tab content-swap (command IS source-generated,
+`AvailableSubjectsTabViewModel.cs:112-113`; button live). Visibility flip = environment (smoke env's
+settings.json gained cached cclabs auth after 2026-07-04), NOT git — every commit in `fb704a6d..HEAD`
+exonerated. **Owner ruling 2026-07-10: continue the port; no re-baseline apparatus now — expected to
+self-resolve.** Commits over this drift record "Findings 16 = known pre-existing drift", never "at
+baseline". Deterministic fallback if it flaps: pin the smoke env logged-out (strip cached UnifiedId/
+AuthToken) → findings return to 5. Never edit `SmokeTestRunner.cs`; never loc-map the chips (diverges
+from WPF).
+
+### BubbleLayer bubble.png bypasses the mod resolver · **STANDARD**
+
+Found by the 2026-07-10 bubble-border completeness sweep: `BubbleLayer` always decodes the embedded
+`avares://CCP.Avalonia/Assets/bubble.png` (`BubbleLayer.cs:97-99`), while WPF resolves `bubble.png`
+through mods (`Services/BubbleService.cs:812-820` → `ModResourceResolver`) and the Avalonia mini-game/
+avatar paths are already mod-aware via `AvaloniaBitmapHelper.LoadResource` (`Helpers/AvaloniaBitmapHelper.cs:46-48`).
+Live ambient/chaos bubbles therefore ignore mod bubble reskins in the Avalonia head. Port = resolve the
+bubble bitmap through the mod resolver at layer init + on mod change, keeping the embedded asset as
+fallback. Parity gap, not a white-border source.
+
 ### Voice — E2E mic live run · **VERIFY**
 
 Carry the open `⏳ Remaining` from [`voice-port-status.md`](voice-port-status.md): an end-to-end mic live
@@ -377,6 +403,7 @@ hash. Re-read hashes live from `git` before re-claiming them.
 | **Companion AI — all three transports ported** | cloud `61ca0d1`, local/Ollama `2bd37899`, OpenAI `ca873d25`; AI-command dispatch `70cf9803`/`9fa09853`/`424ea528` (cloud faithfully omits); `IModerationLog` wired `b3b8da4`; `SystemPromptBuilder` parity `b84eb90` |
 | **v6.2.11 sync** | merge `cd2ff1f9` (+ChaosImagePool facade fix + DtrhHostService `using` fix); all heads → 6.2.11; quiz #501 + speech #505 ported to Core; bark floor N/A (no rule gate); trigger-bubble settings already ported |
 | **v6.2.9 #5** interaction-queue slot-leak guard | `f4a556a` |
+| **Bubble white-border fix** (user-reported 2026-07-10): deleted the port-invented unconditional 2px white stroke ring in `BubbleLayer.RenderBubble` (old L292-294) — no WPF equivalent (WPF strokes ONLY in the image==null fallback, `BubbleService.cs:2710`); stroke relocated into the Avalonia fallback branch for exact parity. Fixes ambient + chaos bubbles in one shared paint path; 3/3 independent verifiers + parity audit SHIP; all 7 bubble render paths swept clean. Residual filed: mod-resolver row above | this session 2026-07-10 (`fix(av)` commit; gates: slnf 0 · WPF sln 0 · Core 542/542 · verify-layers exit 0 · smoke Findings 16 = recorded drift) |
 | **Wins vs WPF** (recorded; WPF halves UNBACKED) | Avalonia recorded: startup ~2.0s (`benchmark-optimized.json` `MainWindowShownMs` 1976.9; better than the previously claimed 2.5s), working set ~422MB (`perf-avalonia.json`); chaos FPS-floor 2026-07-05 AvgFps 138.7 ≫ 30 floor (MinFps=0 caveat → open row #2). UNVERIFIED (2026-07-10): "~4.2s / ~1218MB WPF" — evidence gap: NO recorded WPF benchmark artifact exists anywhere in the repo; re-measure the WPF head before citing a vs-WPF win |
 | **Pre-WS0 foundation** (Core carve-out, DI, theming, tabs/dialogs, smoke harness) | WPF→`CCP.Core` reference collapse + WPF `Models/` deleted; `Microsoft.WindowsAppSDK` pinned; 5-theme reskin (dashboard-design lit/unlit borders); ~44 tabs + ~40 dialogs ported; `--smoke-test` harness (44 tabs, Findings 5 baseline); Buttplug.io haptics; cross-platform audio-device detection |
 
