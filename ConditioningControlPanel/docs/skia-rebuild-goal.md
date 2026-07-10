@@ -227,6 +227,11 @@ Windows is reverted, not patched around.
    green.
 7. **Compact** per Context discipline below.
 
+**Token economy (binding):** follow the board's "Workflow & token economy" rules — escalation ladder
+(cheapest tier that clears the bar; JUDGMENT only for slicing/adversarial review/synthesis and
+state/economy/security/input-hook/compositor work), journaled resume over re-runs, phase budgets on
+JUDGMENT-heavy phases, intermediate results in workflow variables not driver chat, `/ultracode` off.
+
 **Stop conditions** (stop and ask; never improvise past them): a change would diverge from WPF
 behavior (product decision needed); research contradicts project code with no safe answer; a guardrail
 would be crossed; the tree is red for reasons you do not own. MECHANICAL tier additionally: ANY failed

@@ -45,6 +45,24 @@ tracker updates; never burn the JUDGMENT model on the long-lived driver context)
 (`zai/glm-5v-turbo` is an acceptable cheap vision fallback). `kimi-for-coding` has a 256k window —
 MECHANICAL prompts stay self-contained (slice spec + cites only, never whole docs or the 100KB+ WPF files).
 
+**Workflow & token economy (cost rules — pi-dynamic-workflows v2.12+):**
+- **Escalation ladder, never start-big:** route every unit to the cheapest tier that can clear the bar and
+  exit at the first tier that does; escalate only on failure, low confidence, or a high-stakes trigger
+  (state/economy/security/input-hook/compositor goes to JUDGMENT directly). Target shape: ~80% of units on
+  MECHANICAL/STANDARD; JUDGMENT reserved for slicing, adversarial review, and final synthesis only.
+- **Resume, never re-run:** runs are journaled — a resumed run replays finished agents at zero token cost.
+  Diagnose a null/empty agent via `/workflows` drill-down (error code + compact history, e.g.
+  `AGENT_EMPTY_OUTPUT`) BEFORE dispatching any fresh run.
+- **Budget-gate expensive phases:** `phase('Name', {budget: N})` on JUDGMENT-heavy phases (wrap in
+  try/catch so later phases proceed); branch on `budget.remaining()` to skip optional review rounds;
+  bounded `retry()`/`gate()` only — no unbounded loops.
+- **Intermediate results stay in workflow variables**, never in the driver chat — the driver receives one
+  synthesized result per row. Recurring orchestrations (e.g. the gate suite) get `/workflows save <name>`
+  instead of being regenerated each session.
+- **`/ultracode` stays OFF for port sessions** — the standing exhaustive fan-out fights the one-row loop;
+  dispatch one targeted workflow per row instead. `verify()`/`judgePanel()` only on high-stakes outputs;
+  the commit gates catch mechanical errors for free.
+
 Project agentTypes available inside workflows: `wpf-archaeologist` (read-only WPF behavior contracts with
 File.cs:line cites — nobody opens the 100KB+ WPF files raw), `port-slice-executor` (one pre-planned slice
 under the iron rules), `port-parity-auditor` (adversarial working-tree diff vs WPF ground truth before
