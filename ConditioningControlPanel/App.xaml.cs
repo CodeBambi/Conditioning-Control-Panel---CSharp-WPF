@@ -1270,6 +1270,7 @@ namespace ConditioningControlPanel
                 if (Settings.Current != null)
                 {
                     Settings.Current.RunFlashClickableDecouplingMigration();
+                    Settings.Current.RunFlashGazeReEnableMigration();
                     Settings.Save();
                 }
             }

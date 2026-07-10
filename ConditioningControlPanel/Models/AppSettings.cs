@@ -1581,6 +1581,16 @@ namespace ConditioningControlPanel.Models
             set { _migratedFlashClickableDecoupling = value; OnPropertyChanged(); }
         }
 
+        // One-shot flag for RunFlashGazeReEnableMigration (6.3) — un-sticks gaze
+        // toggles for users the decoupling migration turned off but who have
+        // since re-enabled FlashClickable.
+        private bool _migratedFlashGazeReEnable = false;
+        public bool MigratedFlashGazeReEnable
+        {
+            get => _migratedFlashGazeReEnable;
+            set { _migratedFlashGazeReEnable = value; OnPropertyChanged(); }
+        }
+
         // ---- Phase 4: Attention-Check headline mechanic --------------------
 
         public enum AttentionCheckFailModeKind { LockCard, XpPenalty, None }
@@ -4881,6 +4891,33 @@ namespace ConditioningControlPanel.Models
             }
 
             MigratedFlashClickableDecoupling = true;
+        }
+
+        /// <summary>
+        /// 6.3: un-stick the gaze toggles the decoupling migration turned off.
+        /// That migration disabled gaze-pop/linger for FlashClickable=false
+        /// upgraders to preserve "no interaction" intent — correct while
+        /// FlashClickable stays off, but users who later re-enabled clicking
+        /// were left with both gaze toggles silently off and no idea why
+        /// (support report: "gaze-to-click doesn't work", v6.2.11). Re-enable
+        /// only for that exact stuck signature: the old migration ran, clicking
+        /// is back ON, and BOTH gaze toggles are still off (if the user touched
+        /// either toggle themselves, leave their choice alone). FlashClickable
+        /// =false users keep their hands-off setup untouched. Must run after
+        /// RunFlashClickableDecouplingMigration; caller persists afterwards.
+        /// </summary>
+        public void RunFlashGazeReEnableMigration()
+        {
+            if (MigratedFlashGazeReEnable) return;
+
+            if (MigratedFlashClickableDecoupling && FlashClickable &&
+                !FlashGazePopEnabled && !FlashGazeLingerEnabled)
+            {
+                FlashGazePopEnabled = true;
+                FlashGazeLingerEnabled = true;
+            }
+
+            MigratedFlashGazeReEnable = true;
         }
 
         #endregion

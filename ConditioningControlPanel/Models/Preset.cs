@@ -99,6 +99,10 @@ namespace ConditioningControlPanel.Models
         // Bubbles Settings (Level 20+)
         public bool BubblesEnabled { get; set; } = false;
         public int BubblesFrequency { get; set; } = 5;
+        public int BubblesVolume { get; set; } = 50;
+        public bool BubbleSharedHost { get; set; } = true;
+        public bool BubblesLinkRamp { get; set; } = false;
+        public bool BubblesClickable { get; set; } = true;
 
         // Trigger Bubbles (ambient bubbles that fire a Chaos effect on pop)
         public bool BubbleTriggersEnabled { get; set; } = false;
@@ -367,6 +371,10 @@ namespace ConditioningControlPanel.Models
             // Bubbles
             settings.BubblesEnabled = BubblesEnabled;
             settings.BubblesFrequency = BubblesFrequency;
+            settings.BubblesVolume = BubblesVolume;
+            settings.BubbleSharedHost = BubbleSharedHost;
+            settings.BubblesLinkRamp = BubblesLinkRamp;
+            settings.BubblesClickable = BubblesClickable;
             settings.BubbleTriggersEnabled = BubbleTriggersEnabled;
             settings.BubbleTriggerChance = BubbleTriggerChance;
             settings.BubbleSpeedBoost = BubbleSpeedBoost;
@@ -473,6 +481,10 @@ namespace ConditioningControlPanel.Models
                 // Bubbles
                 BubblesEnabled = settings.BubblesEnabled,
                 BubblesFrequency = settings.BubblesFrequency,
+                BubblesVolume = settings.BubblesVolume,
+                BubbleSharedHost = settings.BubbleSharedHost,
+                BubblesLinkRamp = settings.BubblesLinkRamp,
+                BubblesClickable = settings.BubblesClickable,
                 BubbleTriggersEnabled = settings.BubbleTriggersEnabled,
                 BubbleTriggerChance = settings.BubbleTriggerChance,
                 BubbleSpeedBoost = settings.BubbleSpeedBoost,

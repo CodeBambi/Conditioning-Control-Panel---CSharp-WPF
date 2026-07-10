@@ -21,10 +21,25 @@ public class GlobalKeyboardHook : IDisposable
     public event Action<Key>? KeyPressed;
     public event Action<Key, int>? KeyPressedWithVkCode;
 
+    private bool _suppressSystemKeys;
+
     /// <summary>
     /// When true, suppresses system keys (Win, Alt+Tab, Alt+F4, Escape) for lockdown mode.
+    /// Setting this true also installs the hook if it isn't running: the hook is only
+    /// started at launch when the panic key or keyword triggers need it, so lockdown on a
+    /// machine with both disabled would otherwise flip this flag on a hook that never
+    /// existed and no key would actually be blocked. While true, Stop() is refused so a
+    /// feature toggle can't uninstall the hook out from under an active lockdown.
     /// </summary>
-    public bool SuppressSystemKeys { get; set; }
+    public bool SuppressSystemKeys
+    {
+        get => _suppressSystemKeys;
+        set
+        {
+            _suppressSystemKeys = value;
+            if (value) Start();
+        }
+    }
 
     public GlobalKeyboardHook()
     {
@@ -35,11 +50,20 @@ public class GlobalKeyboardHook : IDisposable
     {
         if (_hookId != IntPtr.Zero) return;
         _hookId = SetHook(_proc);
-        App.Logger?.Debug("Global keyboard hook started");
+        if (_hookId == IntPtr.Zero)
+            App.Logger?.Error("Global keyboard hook failed to install (win32 error {Code})",
+                Marshal.GetLastWin32Error());
+        else
+            App.Logger?.Debug("Global keyboard hook started");
     }
 
     public void Stop()
     {
+        if (_suppressSystemKeys)
+        {
+            App.Logger?.Debug("Global keyboard hook Stop() ignored - system key suppression (lockdown) active");
+            return;
+        }
         if (_hookId == IntPtr.Zero) return;
         UnhookWindowsHookEx(_hookId);
         _hookId = IntPtr.Zero;
@@ -112,6 +136,7 @@ public class GlobalKeyboardHook : IDisposable
     {
         if (_isDisposed) return;
         _isDisposed = true;
+        _suppressSystemKeys = false; // allow Stop() during shutdown even mid-lockdown
         Stop();
     }
 
