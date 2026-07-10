@@ -12,11 +12,13 @@
   </Design.DataContext>
 
   <Grid>
-    <ScrollViewer IsVisible="{Binding !IsHelpOverlayVisible}"
-                  Margin="16"
-                  HorizontalScrollBarVisibility="Disabled"
-                  VerticalScrollBarVisibility="Auto">
-      <Grid RowDefinitions="*,Auto,Auto">
+    <!-- Responsive dashboard (user-requested 2026-07-10): fills the bounded tab area with NO
+         scroll. The left 4x4 feature-card block scales uniformly via a Viewbox so cards/pics/
+         labels/emblem shrink or grow with the window; the browser panel flexes via layout
+         (native-safe resize, no render-transform on the WebView2 host). -->
+    <Grid IsVisible="{Binding !IsHelpOverlayVisible}"
+          Margin="16"
+          RowDefinitions="*,Auto,Auto">
 
         <!-- Velvet mosaic dashboard: PREMIUM QUICK-TOGGLE RAIL on the far left, then 4x4 feature
              cards, then browser/audio/quick-links on the right. Port of the WPF SettingsTabView
@@ -158,12 +160,18 @@
           </Grid>
         </Border>
 
-        <!-- Velvet mosaic dashboard: 4x4 feature cards, then browser/audio/quick-links on the right -->
-        <Grid Grid.Column="1" ColumnDefinitions="640,*">
+        <!-- Velvet mosaic dashboard: 4x4 feature cards, then browser/audio/quick-links on the right.
+             Column split is proportional (approved screenshot: left grid ~47% of the row) so the
+             Viewbox-scaled feature block has no dead gutter. -->
+        <Grid Grid.Column="1" ColumnDefinitions="47*,53*">
 
-        <!-- Feature card grid -->
-        <Grid Grid.Column="0"
-              Margin="5"
+        <!-- Feature card grid, wrapped in a Viewbox so the whole 4x4 block + centre emblem scales
+             uniformly to the available space (cards/pics get smaller or bigger with the window).
+             The child carries an explicit 640x600 design size so Uniform stretch has a fixed
+             aspect ratio; it centres in its cell. StretchDirection defaults to Both (up + down). -->
+        <Viewbox Grid.Column="0" Stretch="Uniform" Margin="5"
+                 HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Grid Width="640" Height="600"
               ColumnDefinitions="*,*,*,*"
               RowDefinitions="*,*,*,*">
 
@@ -262,6 +270,7 @@
                                 IsActive="{Binding BubbleCountEnabled}"
                                 Click="CardBubbleCount_Click" />
         </Grid>
+        </Viewbox>
 
         <!-- Right half: browser / audio / quick links / media path -->
         <Grid Grid.Column="1" Margin="5" RowDefinitions="*,Auto,Auto">
@@ -270,8 +279,8 @@
           <Border Grid.Row="0" CornerRadius="12" Padding="9" Margin="0,0,0,5"
                   Background="{DynamicResource ElevatedSurfaceBrush}"
                   BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
-            <StackPanel>
-              <Grid Margin="0,0,0,4" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
+            <Grid RowDefinitions="Auto,*">
+              <Grid Grid.Row="0" Margin="0,0,0,4" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                   <TextBlock Text="{loc:Str label_browser}"
                              Foreground="{DynamicResource TextLightBrush}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" />
@@ -341,8 +350,10 @@
                         ToolTip.Tip="{loc:Str tooltip_pop_out_browser_to_resizable_window}" />
               </Grid>
 
-              <!-- Browser container -->
-              <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True" Height="340">
+              <!-- Browser container: Grid.Row=1, no fixed height so it flexes to fill the panel
+                   (lets the dashboard fit without scrolling; the native browser resizes safely
+                   via layout rather than a render-transform). -->
+              <Border Grid.Row="1" Background="{DynamicResource SurfaceBgBrush}" CornerRadius="6" ClipToBounds="True">
                 <Grid RowDefinitions="Auto,Auto,*">
                   <Border Grid.Row="0" Background="{DynamicResource PanelBgBrush}" Padding="8,4">
                     <Grid ColumnDefinitions="Auto,*">
@@ -392,7 +403,7 @@
                   </Border>
                 </Grid>
               </Border>
-            </StackPanel>
+            </Grid>
           </Border>
 
           <!-- Audio + Quick Links -->
@@ -597,7 +608,6 @@
         </Canvas>
       </Border>
     </Grid>
-    </ScrollViewer>
 
     <Border Background="{DynamicResource PanelBgBrush}"
             CornerRadius="10"

@@ -483,6 +483,17 @@ WPF `UpdateService.cs` 90-line diff was patch-notes + version only (verified). *
 AGENTS.md version-bump list named only the WPF `Services/Update/UpdateService.cs`; corrected to also list the
 port-critical `CCP.Core/Services/Update/UpdateService.cs` (the one the Avalonia head actually reads).
 
+**User-requested: responsive dashboard (no-scroll, scale-to-fit) — 2026-07-10 (this session):** the
+dashboard tab (`SettingsTabView.axaml`) required vertical scrolling to see everything. Fixed by removing the
+outer `ScrollViewer` so the tab fills its bounded `ContentControl`, wrapping the 4x4 feature-card block +
+centre emblem in a `Viewbox Stretch="Uniform"` (explicit 640x600 design child; proportional `47*,53*` column
+split to kill the dead gutter) so cards/pics/labels scale with window size, and converting the browser
+panel's inner `StackPanel`→`Grid RowDefinitions="Auto,*"` with the browser container's fixed `Height="340"`
+removed so it flexes via LAYOUT (native WebView2 host resizes safely — NOT under a render-transform, which
+would break it). Verified: slnf 0 err, smoke 44 tabs/0 unhandled, per-theme dashboard screenshot shows all
+16 cards + emblem + browser/audio/quick-links fitting with no scrollbar. JUDGMENT (advisor) validated the
+approach + caught the StackPanel-infinite-measure + 640-gutter traps pre-implementation.
+
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
 **#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)** for autonomous tiers. **row #2 re-baseline is now BLOCKED**
 (this session): its scheduling half is DONE via IMP-2 and `MinFps=0` is root-caused (un-decodable YouTube
