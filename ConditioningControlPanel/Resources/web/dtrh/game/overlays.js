@@ -272,7 +272,7 @@ export function createOverlays(hud) {
     payoutSlot.appendChild(l1);
     if (p.sparksEarned > 0) {
       const l2 = document.createElement('p');
-      l2.textContent = `+${p.sparksEarned} ✦ sparks banked`;
+      l2.textContent = `+${p.sparksEarned} ✦ emotes banked`;
       payoutSlot.appendChild(l2);
     }
     if (p.rankUp) {

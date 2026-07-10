@@ -700,15 +700,18 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
   // ---- the room title: big writing above the doorway mouths (draft mode) -----
   // Centered on the mean door azimuth and lifted above the mouths (the doors
   // carry a downward tilt; the title takes the same heading raised), so from
-  // the camera's mid-chamber park it hangs just over the doors - the next room
-  // announcing itself over its own entrances. The biome roulette row hangs
-  // HIGHER still (buildBiomeRow, lift 0.80): tiles on top, writing under them.
+  // the camera's mid-chamber park it hangs well over the doors - the next room
+  // announcing itself over its own entrances. Lift 0.42 is the sweet spot:
+  // clearly higher than the old 0.28 (which sat right behind the center-screen
+  // settle card) yet still under the biome roulette row (buildBiomeRow, lift
+  // 0.80) - any higher and the engraving's top line kisses the tiles. The
+  // title also DELAYS its fade-in until the settle card is done (see update).
   function buildTitle(C, veins, title, park) {
     const mean = new THREE.Vector3();
     for (const v of veins) mean.add(v.dir);
     if (mean.lengthSq() < 1e-6) return null;
     mean.normalize();
-    const dir = mean.clone().add(new THREE.Vector3(0, 0.28, 0)).normalize();
+    const dir = mean.clone().add(new THREE.Vector3(0, 0.42, 0)).normalize();
     const tex = makeRoomTitleTex(title);
     tex.colorSpace = THREE.SRGBColorSpace;
     const W = 15.5, H = W * (340 / 1024);
@@ -744,7 +747,7 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     for (const v of veins) mean.add(v.dir);
     if (mean.lengthSq() < 1e-6) return null;
     mean.normalize();
-    // above the title (0.28 at 0.72R): the row crowns the room like a marquee
+    // above the title (0.42 at 0.72R): the row crowns the room like a marquee
     const dir = mean.clone().add(new THREE.Vector3(0, 0.80, 0)).normalize();
     const group = new THREE.Group();
     group.position.copy(C).addScaledVector(dir, ROOM_R * 0.72);
@@ -849,7 +852,9 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       const pos = v.mouth.clone().addScaledVector(v.dir, 0.4 + Math.random() * 0.5).add(off);
       const quat = v.cardQuat.clone()
         .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), (Math.random() - 0.5) * 0.5));
-      const c = spawner.createDetachedCard({ pos, quat, scale: CARD_SCALE * (0.5 + Math.random() * 0.3) });
+      // 'still' = gifs/photos only: a cluster of muted videos is heavy, and a
+      // failed video prefetch used to leave the wall bare (an "empty" doorway)
+      const c = spawner.createDetachedCard({ pos, quat, scale: CARD_SCALE * (0.5 + Math.random() * 0.3), prefer: 'still' });
       if (c && c.group) { c.group.userData = { type: 'walldress' }; scene.add(c.group); v.wallCards.push(c); }
     }
   }
@@ -1115,12 +1120,18 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
     }
     // the room title breathes: a slow opacity swell so the writing feels lit,
     // not painted. Its reveal tracks the phase (fog fade-up on approach).
+    // With a roulette in the room the title HOLDS BACK until the settle card
+    // has said its piece (the big center-screen biome reveal, ~5.2s): the two
+    // announce the same moment and used to collide mid-screen. lingerT only
+    // starts counting at settle, so the ramp below trails the card's fade.
     if (J.title) {
       J.title.t += dt;
       const breathe = 0.86 + 0.14 * Math.sin(J.title.t * 1.4);
       const near = J.phase === 'approach'
         ? clamp((depth - (J.atDepth - J.lead)) / J.lead, 0, 1) : 1;
-      J.title.mat.opacity = near * breathe;
+      const hadReveal = !!(J.revealRow || J.revealDone === false);
+      const afterCard = hadReveal ? clamp((J.lingerT - 4.2) / 1.6, 0, 1) : 1;
+      J.title.mat.opacity = near * breathe * afterCard;
     }
     // the roulette row rides the same reveal (its hops advance in the linger
     // branch below; this is just the every-frame dressing)
@@ -1205,9 +1216,12 @@ export function createJunctions({ scene, layout, nav, tunnel, spawner }) {
       }
       applyCut(atDepth);   // hide the trunk through the chamber's span
       if (presealIndex != null && veins[presealIndex]) {
+        // A door born shut gets the full wall-off (brick + gif drape): the old
+        // bare seal read as an "empty" doorway - an open glowing hole with a
+        // dark disc and nothing in it, neither prize nor plaster.
         const v = veins[presealIndex];
-        v.sealed = true; v.sealMat.opacity = 0.9;
         if (v.card) { v.card.dispose(); v.card = null; }
+        wallOffDoor(v);
       }
       // Wall off any prizeless doorway (2026-07): brick + drape gifs instead of
       // parking a consolation gold pouch in an open hole. Guard: a room must keep

@@ -288,6 +288,11 @@ html, body {
 .sf-hud.sf-chrome-hidden .sf-dock,
 .sf-hud.sf-chrome-hidden .sf-explore,
 .sf-hud.sf-chrome-hidden .sf-panel { display: none; }
+/* ...but the Warren hub hides the chrome-toggle gear (see .sf-hub rules) so
+   sf-chrome-hidden never clears there. An explicitly-opened options panel must
+   still show over the dollhouse (its z32 is set up for exactly that) - only
+   is-open is deliberate, so this never leaks a closed panel in the Fall. */
+.sf-hud.sf-chrome-hidden .sf-panel.is-open { display: block; }
 /* Warren hub open - the scene's score/meters would bleed through its corner chips */
 .sf-hud.wr-open .sf-meters,
 .sf-hud.wr-open .sf-score { display: none; }
@@ -1420,8 +1425,16 @@ img.rh-fx-spiralspin {
 .cf-biome-glyph { font-size: 0.95rem; }
 .cf-biome-name { font-size: 0.86rem; font-weight: 800; letter-spacing: 0.04em; color: #daffe0; }
 .cf-biome-fx { font-size: 0.72rem; font-style: italic; opacity: 0.82; color: #bfeecb; flex-basis: 100%; }
-/* the grey how-it-plays line under the flavour */
-.cf-biome-hint { font-size: 0.68rem; opacity: 0.75; color: #aab3ac; flex-basis: 100%; }
+/* the how-it-plays line under the flavour - these are the RULES, keep it readable */
+.cf-biome-hint { font-size: 0.72rem; opacity: 0.95; color: #cfe0d2; flex-basis: 100%; }
+/* the mechanic fired: the chip flares so the event reads as "the place did that" */
+.cf-hud-biome.is-ping { animation: cfBiomePing 0.9s ease-out; }
+@keyframes cfBiomePing {
+  0%   { box-shadow: 0 0 0 1px rgba(156, 232, 160, 0.4); }
+  22%  { box-shadow: 0 0 0 2px rgba(156, 232, 160, 0.95), 0 0 26px rgba(156, 232, 160, 0.55);
+         background: rgba(156, 232, 160, 0.30); }
+  100% { box-shadow: 0 0 0 1px rgba(156, 232, 160, 0.4); }
+}
 /* Wave 2: the weather chip - the loop's named sky (+ Mood Ring forecast) */
 .cf-hud-weather {
   align-self: flex-start;
@@ -1693,6 +1706,8 @@ img.rh-fx-spiralspin {
 }
 .cf-pick img { width: 100%; height: 100%; object-fit: cover; }
 .cf-pick--sin { border-color: rgba(255, 138, 138, 0.65); color: #ff8a8a; background: rgba(40, 12, 16, 0.6); }
+.cf-pick--toy { border-color: rgba(102, 224, 208, 0.6); color: #66e0d0; background: rgba(14, 34, 32, 0.55); }
+.cf-pick--spent { border-color: rgba(150, 158, 168, 0.35); filter: grayscale(1); opacity: 0.45; animation: none; }
 
 /* ---- the Eye: hide/show the run HUD (bottom-right) ---- */
 .cf-eye-btn {
@@ -1830,6 +1845,12 @@ img.rh-fx-spiralspin {
 
 /* ---- pop score float (Blank Eyes) ---- */
 .cf-pop--score { color: #ffe9a0; font-size: 0.9rem; text-shadow: 0 0 10px rgba(255, 233, 160, 0.7), 0 1px 3px rgba(0, 0, 0, 0.9); }
+
+/* ---- biome pay receipt: the place's ×N - green when it pays, grey when it docks ---- */
+.cf-pop--biome { color: #9ce8a0; font-size: 1.05rem; font-weight: 800;
+  text-shadow: 0 0 14px rgba(156, 232, 160, 0.85), 0 1px 2px rgba(0, 0, 0, 0.75); }
+.cf-pop--biome-dim { color: #98a2aa; font-size: 0.85rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85); }
 
 /* ---- the menagerie's looks ---- */
 .cf-bubble--darter .cf-bubble-body {

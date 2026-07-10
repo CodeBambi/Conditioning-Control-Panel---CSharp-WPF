@@ -44,7 +44,7 @@ import { REGIONS, REGION_COUNT, regionForWave, profileForWave, PROFILE_NEUTRAL }
 import { rollBiomeIds, biomeForWave, biomeById, BIOMES_ALL } from './biomes.js';
 import { createBiomeMech } from './biomeMech.js';
 import { setAudioColor } from '../engine/audioBus.js';
-import { getVoice, setVoiceDefault, onVoice } from '../engine/audioLevels.js';
+import { getVoice, setVoiceDefault, onVoice, getLevel } from '../engine/audioLevels.js';
 import { createChaosField } from './chaosField.js';
 import { createFieldFx } from './fieldFx.js';
 import { createPayloadFx } from './payloadFx.js';
@@ -57,7 +57,7 @@ import { createHappyPath } from './happyPath.js';
 import { createVnPortrait } from './vnPortrait.js';
 import { createLessonCard } from './lessonCard.js';
 import { createHubGuide } from './hubGuide.js';
-import { setDucked } from '../shared/audioMute.js';
+import { setDucked, isMuted } from '../shared/audioMute.js';
 import { lessonById, boonDefById, DIARY_CODEX, DIARY_VERBS, RANKS } from './catalog.js';
 
 // ---- first-discovery lesson copy (catalog is the single source of truth) ----
@@ -440,7 +440,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     const stats = ctx.spawner.drainAssetStats();
     if (stats && stats.length) bridge.send({ type: 'asset-stats', stats });
   }
-  const sfx = (name, scale) => bridge.send({ type: 'sfx', name, scale });
+  // Native stingers play in WPF (ChaosSfx), which can't see the web mix - so
+  // the audio panel is applied HERE: the master mute silences them, the
+  // 'effects' slider scales them, and a flat 0.5 trim keeps them under the
+  // in-page bubble pops (they read much hotter than the DOM-field sounds).
+  const sfx = (name, scale) => {
+    if (isMuted()) return;
+    bridge.send({ type: 'sfx', name, scale: (scale ?? 0.6) * 0.5 * getLevel('fx') });
+  };
   const bark = (event, data) => bridge.send({ type: 'bark', event, ...(data || {}) });
   // The boon draft plays IN the tube (engine/boonPick.js): the fall parks, themed
   // cards hang ahead, click one to shatter-and-drop-through. Same callback
@@ -523,6 +530,22 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   const showPopScore = (pts, x, y) => {
     if (!st.showPopScores || pts <= 0 || x == null) return;
     field.floatText('+' + Math.floor(pts).toLocaleString(), x, y + 30, 'cf-pop--score');
+  };
+  // THE BIOMES: the visible receipt for the place's pay rules. Any biome
+  // multiplier that isn't ×1 floats at the pop (biome glyph + ×N — green when
+  // the place pays extra, grey when it docks you) and pings the HUD chip so
+  // the eye ties the number back to the place. Throttled so beam-camping
+  // doesn't wallpaper the screen; big hits (×2+) always show.
+  let biomePayFxAt = 0;
+  const noteBiomePay = (mult, x, y) => {
+    if (!bMech || x == null || Math.abs(mult - 1) < 0.05) return;
+    const now = performance.now();
+    if (now - biomePayFxAt < (mult >= 2 ? 350 : 1100)) return;
+    biomePayFxAt = now;
+    const glyph = (bMech.active() && bMech.active().glyph) || '◈';
+    field.floatText(`${glyph} ×${mult.toFixed(1)}`, x, y - 26,
+      mult > 1 ? 'cf-pop--biome' : 'cf-pop--biome-dim');
+    hudUi?.biomePing();
   };
   const bankDripFeed = () => {
     if (st.dropPerPop <= 0) return;
@@ -804,11 +827,14 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (showActive && st.privateShowPayMult > 1) pts *= st.privateShowPayMult;
     // THE BIOMES: the place weighs in - positional pay (Keyhole beams, Gallery
     // restraint) plus the mechanic's own pop reaction (Toybox mimic flips, the
-    // Grey Ward's color touch, Mirror Moment chains).
+    // Grey Ward's color touch, Mirror Moment chains). The combined multiplier
+    // floats at the pop via noteBiomePay so the rules are never silent.
     if (bMech) {
-      pts *= bMech.payMultAt(x, y, spec);
+      let bm = bMech.payMultAt(x, y, spec);
       const tp = bMech.treatPop(spec, x, y, src);
-      if (tp && tp.payMult) pts *= tp.payMult;
+      if (tp && tp.payMult) bm *= tp.payMult;
+      pts *= bm;
+      noteBiomePay(bm, x, y);
     }
     st.score += pts;
     bankDripFeed();
@@ -1163,7 +1189,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
       power: t.power ?? 0,
       level: t.level ?? 1,
       maxed: !!t.maxed,
-      chargesLeft: (t.cooldownSec ?? 0) <= 0 ? Math.round(t.power ?? 0) : -1,
+      chargesLeft: (t.cooldownSec ?? 0) <= 0 ? Math.max(3, Math.round(t.power ?? 0)) : -1,
       cooldownLeft: 0,
       effectActive: false,
     }));
@@ -1180,12 +1206,12 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
 
     switch (t.id) {
       case 'vibe_popping':
-        field.setVibe(true, t.maxed);
+        field.setVibe(true, t.maxed);   // maxed = the capstone's doubled brush reach
         vibeRemainingSec = Math.max(1, t.power);
         afterglowApplied = false;
         t.cooldownLeft = t.cooldownSec;
         sfx('vibe_buzz', 0.5);
-        hudUi.toast('🔸 it buzzes. hold and sweep');
+        hudUi.toast('🔸 it buzzes. sweep');
         break;
       case 'freeze_trigger':
         if (t.chargesLeft <= 0) { sfx('toy_denied', 0.4); return; }
@@ -1261,12 +1287,18 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         break;
     }
     lessons.onToyFired();   // first_play
-    // Grab-in-the-tube: a grabbed toy is single-use. Consume it and renumber the dock
-    // so the remaining consumables keep contiguous 1..N slot keys.
+    // Grab-in-the-tube: a grabbed toy carries 3 uses. Spend one (freeze/wand already
+    // decremented their own charge above); when the last is gone, drop it from the
+    // dock and renumber so the remaining consumables keep contiguous 1..N slot keys.
     if (t.consumable) {
-      const i = toys.indexOf(t);
-      if (i >= 0) toys.splice(i, 1);
-      toys.forEach((x, k) => { x.key = String(k + 1); });
+      if (t.id !== 'freeze_trigger' && t.id !== 'the_wand') t.chargesLeft--;
+      if (t.chargesLeft <= 0) {
+        const i = toys.indexOf(t);
+        if (i >= 0) toys.splice(i, 1);
+        toys.forEach((x, k) => { x.key = String(k + 1); });
+        // the ribbon keeps the record: grey out its tile now that it's spent
+        if (t.pickRef) { t.pickRef.spent = true; hudUi.setPicks(st.runPicks); }
+      }
     }
     hudUi.updateToys(toys, toyStatus());
   }
@@ -1311,7 +1343,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         if (st.afterglowSec > 0 && !afterglowApplied) {
           afterglowApplied = true;
           vibeRemainingSec = st.afterglowSec;
-          field.setVibe(true, true);   // the lingering window pops on hover alone
+          field.setVibe(true, false);   // the buzz lingers on (normal reach)
           hudUi.toast('🔸 afterglow — it lingers');
         } else {
           field.setVibe(false);
@@ -2332,7 +2364,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     return level;
   }
 
-  // A grabbed consumable (active toy) docks as a single-use record in the module `toys`
+  // A grabbed consumable (active toy) docks as a 3-use record in the module `toys`
   // array (the HUD's bottom dock), at its dollhouse level. Number-keyed by slot position.
   function addConsumable(id, level) {
     const def = boonDefById(id);
@@ -2340,15 +2372,23 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (toys.length >= st.consumableSlots) return;   // dock full (canOfferPowerup should have vetoed)
     const lvl = Math.max(1, level | 0);
     const power = def.levelValues[Math.min(lvl, def.levelValues.length) - 1];
+    // The pickup also lands in the run ribbon (an active vanishes from the dock
+    // when spent - the ribbon tile stays as the record, greying out on the last
+    // charge). The toy record keeps a ref so the spend site can flip it.
+    const pick = { id, name: def.name, curse: false, desc: def.desc, flavor: def.flavor, glyph: def.glyph, toy: true, spent: false };
     toys.push({
       id, name: def.name, glyph: def.glyph || '◈', desc: def.desc || '',
       key: String(toys.length + 1),                       // slot 1 -> "1", etc.
       cooldownSec: def.cooldownSec ?? 0,
       power, level: lvl, maxed: lvl >= def.levelValues.length,
-      chargesLeft: 1,                                     // consumable: one use, whatever the native model
-      cooldownLeft: 0, effectActive: false, consumable: true,
+      // Consumables dock with 3 uses (charge-based toys keep their levelled charge
+      // count when it's higher — e.g. a deepened wand still brings 4).
+      chargesLeft: (def.cooldownSec ?? 0) <= 0 ? Math.max(3, Math.round(power)) : 3,
+      cooldownLeft: 0, effectActive: false, consumable: true, pickRef: pick,
     });
     st.runEquipment.add(id);
+    st.runPicks.push(pick);
+    hudUi.setPicks(st.runPicks);
     hudUi.updateToys(toys, toyStatus());
   }
 
@@ -3097,6 +3137,7 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
         firePayload: (spec) => firePayload(spec),
         toast: (t) => hudUi && hudUi.toast(t),
         announce: (text, kind, ms, opts) => hudUi && hudUi.announce(text, kind, ms, opts),
+        biomePing: () => hudUi && hudUi.biomePing(),
         favoriteAsset: (kind) => (ctx.media && ctx.media.favorite ? ctx.media.favorite(kind) : null),
         assetUrl: (name) => (ctx.media && ctx.media.urlByName ? ctx.media.urlByName(name) : null),
         audioColor: (mode) => { try { setAudioColor(mode); } catch (e) { /* ignore */ } },
@@ -3279,6 +3320,10 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     /** scene.js hub-station pointer routing (only live while the Warren is up). */
     onStationPick(id) { if (state === 'warren' && warren) warren.onStationPick(id); },
     onStationMiss() { if (state === 'warren' && warren) warren.onStationMiss(); },
+
+    /** Sticky Fingers: scene.js asks before a wall-poster hold - owning the boon
+     * turns the hold into a RIP (the gif comes off the wall as the paddle). */
+    wieldPosters() { return state === 'running' && !!st && st.stickyFingersLevel > 0; },
 
     /** Called every frame from the scene loop (dt already clamped). */
     frame(dt) {

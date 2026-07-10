@@ -29,6 +29,12 @@ const NAME = {
 };
 const DEFAULT_TINT = TINT['builtin-sissyhypno'];
 
+// TEMPORARY (pre-release hide): the VN portrait beats aren't ready to ship, so
+// every beat is a no-op for now. The wiring (happyPath intro/outro, hubGuide
+// welcome/return) is left intact - the guide/teach cards those sequences also
+// show are a SEPARATE system and still fire. Flip this back to false to re-enable.
+const VN_BEATS_DISABLED = true;
+
 const CSS = `
 .vn-root{position:absolute;inset:0;z-index:40;pointer-events:none;overflow:hidden;opacity:0;transition:opacity .45s ease}
 .vn-root.vn-on{opacity:1;pointer-events:auto;cursor:pointer}
@@ -286,6 +292,7 @@ export function createVnPortrait(hud, opts = {}) {
 
   /** Play a beat: halt the tunnel, perform the emote, type + speak the line, hold, fade. */
   async function beat(arg) {
+    if (VN_BEATS_DISABLED) return false;   // pre-release hide (see VN_BEATS_DISABLED)
     await ensureManifest();
     const modId = getModId() || 'builtin-sissyhypno';
     const o = (typeof arg === 'string') ? resolveBeat(arg, modId) : (arg || {});

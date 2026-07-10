@@ -121,7 +121,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     }
     return false;
   }
-  let vibeOn = false, vibeHover = false;
+  let vibeOn = false, vibeWide = false;   // wide = the capstone's doubled brush reach
 
   const W = () => window.innerWidth, H = () => window.innerHeight;
   let curX = W() / 2, curY = H() / 2;
@@ -291,10 +291,6 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     layer.appendChild(wrap);
     return b;
   }
-
-  let anyButtonDown = false;
-  window.addEventListener('pointerdown', (e) => { if (e.button === 0 || e.button === 2) anyButtonDown = true; }, true);
-  window.addEventListener('pointerup', () => { anyButtonDown = false; }, true);
 
   /** Route a primary press on a bubble to its verb. */
   function pressOn(b, x, y) {
@@ -944,11 +940,10 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     const ts = dt * timeScale;
     const w = W(), h = H();
     const tethers = [];
-    // VibePopping: a live buzz trails the cursor, and while the hand commits
-    // (any button held - or hovering alone at the capstone) the sweep runs on
-    // proximity, popping whatever the cursor brushes even if the bubble is the
-    // one doing the moving.
-    const vibeSweeping = vibeOn && !inputLocked && (vibeHover || anyButtonDown);
+    // VibePopping: a live buzz trails the cursor. While it buzzes the sweep runs
+    // on proximity - hovering alone pops whatever the cursor brushes, even if
+    // the bubble is the one doing the moving. The capstone widens the reach.
+    const vibeSweeping = vibeOn && !inputLocked;
     if (vibeOn) fx.vibePoint(curX, curY);
 
     for (const b of Array.from(live)) {
@@ -1021,7 +1016,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
 
       // VibePopping brush: treats pop, lives snap clean (sweepPop guards the
       // toy-immune kinds + shields itself).
-      if (vibeSweeping && Math.hypot(b.x - curX, b.y - curY) <= b.size / 2 + VIBE_BRUSH_PX) {
+      if (vibeSweeping && Math.hypot(b.x - curX, b.y - curY) <= b.size / 2 + VIBE_BRUSH_PX * (vibeWide ? 2.2 : 1)) {
         sweepPop(b, 'vibe');
         if (b.state !== 'live') continue;
       }
@@ -1304,7 +1299,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     setTimeScale(f) { pendingTimeScale = Math.max(0, f); if (!frozen) timeScale = pendingTimeScale; },
     setHeld(v) { held = !!v; layer.classList.toggle('cf-held', held); },
     setInputLocked(v) { inputLocked = !!v; },
-    setVibe(on, hoverPops = false) { vibeOn = !!on; vibeHover = !!hoverPops; fx.setVibe(vibeOn); },
+    setVibe(on, wide = false) { vibeOn = !!on; vibeWide = !!wide; fx.setVibe(vibeOn); },
     phys,   // the run brain writes the accessory knobs here once at start
     count: () => live.size,
     freezeCount: () => { let n = 0; for (const b of live) if (b.spec.kind === 'freeze') n++; return n; },

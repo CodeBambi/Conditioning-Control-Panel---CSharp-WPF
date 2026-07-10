@@ -481,6 +481,34 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
     return rec;
   }
   function releasePoster() { _heldSlot = null; _heldGap = null; }
+  // Sticky Fingers: RIP the poster off the wall to wield it - the slot retires
+  // instantly and the caller (spawner.grabExternalCard) builds the paddle card
+  // around the SAME texture. The map stays pool-owned: the pool keeps its gif
+  // animating and future posters may wear it again, so the card must never
+  // dispose or Ken-Burns it. Same Gallery melt-veto as a plain hold.
+  function ripPoster(mesh) {
+    const slot = mesh && mesh.userData && mesh.userData.slot;
+    if (!slot || !slot.active || slot.melt) return null;
+    const rec = { assetName: slot.assetName || null };
+    if (grabHooks && grabHooks.policy && grabHooks.policy(rec) === 'melt') {
+      meltSlot(slot);
+      if (grabHooks.onMelt) { try { grabHooks.onMelt(rec); } catch (e) { /* ignore */ } }
+      return null;
+    }
+    // rip the REAL picture, not the Mirror Moment's borrowed favorite
+    const tex = slot.mirrorMap !== undefined ? slot.mirrorMap : slot.mat.map;
+    if (!tex) return null;
+    const aspect = slot.mesh.scale.y > 0 ? slot.mesh.scale.x / slot.mesh.scale.y : 1;
+    const pos = slot.mesh.getWorldPosition(new THREE.Vector3());   // the paddle eases in from here
+    if (_heldSlot === slot) { _heldSlot = null; _heldGap = null; }
+    slot.active = false;
+    slot.mesh.visible = false;
+    slot.mat.map = null;
+    slot.mirrorMap = undefined;
+    liveCount = Math.max(0, liveCount - 1);
+    if (grabHooks && grabHooks.onGrab) { try { grabHooks.onGrab(rec); } catch (e) { /* ignore */ } }
+    return { tex, aspect, assetName: rec.assetName, pos };
+  }
   // Ride the held poster along with the camera AND ease it to be level with us
   // (gap -> 0), so the camera swings all the way onto it and we look straight
   // into its face (perpendicular) instead of at it obliquely from ahead. Call
@@ -572,5 +600,5 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
     unit.dispose();
   }
 
-  return { setRegion, setPaused, setBlockedSpan, update, dispose, reset, getPickables, grabPoster, releasePoster, advanceHeld, getHeldWorldPos, setGrabHooks, setMirror, meltAll };
+  return { setRegion, setPaused, setBlockedSpan, update, dispose, reset, getPickables, grabPoster, releasePoster, ripPoster, advanceHeld, getHeldWorldPos, setGrabHooks, setMirror, meltAll };
 }

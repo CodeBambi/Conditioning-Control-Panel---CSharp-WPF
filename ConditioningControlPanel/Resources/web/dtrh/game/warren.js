@@ -35,6 +35,8 @@ import {
 import { BOONS } from './boons.js';
 import * as reveals from './reveals.js';
 import { S, updateSetting, descentSetup, UNLOCK_LADDER, RANK_NAMES } from '../engine/settings.js';
+import { getLevel } from '../engine/audioLevels.js';
+import { isMuted } from '../shared/audioMute.js';
 
 const ART = 'https://ccp.art/';
 const nfmt = (n) => Math.floor(n).toLocaleString();
@@ -75,7 +77,12 @@ export function createWarren({ hud, bridge, stations, getMeta, getMediaStats, ru
   root.hidden = true;
   hud.appendChild(root);
 
-  const sfx = (name, scale = 0.45) => bridge.send({ type: 'sfx', name, scale });
+  // Hub clicks are native stingers too (ChaosSfx can't see the web mix):
+  // honor the master mute + 'effects' slider here, same 0.5 trim as the run.
+  const sfx = (name, scale = 0.45) => {
+    if (isMuted()) return;
+    bridge.send({ type: 'sfx', name, scale: scale * 0.5 * getLevel('fx') });
+  };
   const bark = (event, data) => bridge.send({ type: 'bark', event, ...(data || {}) });
   const cmd = (op, extra) => bridge.send({ type: 'meta-command', op, ...(extra || {}) });
   const setFlag = (key) => cmd('set-flag', { key });
