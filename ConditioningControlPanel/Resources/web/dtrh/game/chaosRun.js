@@ -2123,8 +2123,18 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
   }
 
   // A combo just moved - repaint the HUD immediately so the badge punch/break
-  // lands with the moment instead of up to TICK (250ms) later.
-  const hudNow = () => { if (hudUi && st) hudUi.update(hudState()); };
+  // lands with the moment instead of up to TICK (250ms) later. Coalesced per
+  // frame: a mass pop (ripple/chain) calls this once per bubble in the same
+  // tick, and one repaint next rAF is both cheaper and visually identical.
+  let hudNowQueued = false;
+  const hudNow = () => {
+    if (hudNowQueued) return;
+    hudNowQueued = true;
+    requestAnimationFrame(() => {
+      hudNowQueued = false;
+      if (hudUi && st) hudUi.update(hudState());
+    });
+  };
 
   const hudState = () => ({
     score: st.score, totalMult: totalMult(), combo: st.combo,

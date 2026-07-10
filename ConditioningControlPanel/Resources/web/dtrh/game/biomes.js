@@ -32,6 +32,8 @@
  * 'muffled' | 'underwater') the mechanic applies on entry and lifts on exit.
  * ==========================================================================*/
 
+import { REGION_COUNT } from './regions.js';
+
 export const BIOMES_BY_ROOM = {
   // ---- Room I - CURIOSITY & DENIAL ("it's just something silly") ----------
   1: [
@@ -368,21 +370,21 @@ export function biomeById(id) {
   return ALL.find((b) => b.id === id) || null;
 }
 
-/** Roll one biome id per room (1..4). Every descent re-rolls, so the mix stays
- * unknown until each chamber's arrival card names it. */
+/** Roll one biome id per room (1..REGION_COUNT). Every descent re-rolls, so the
+ * mix stays unknown until each chamber's arrival card names it. */
 export function rollBiomeIds() {
   const out = [];
-  for (let room = 1; room <= 4; room++) {
+  for (let room = 1; room <= REGION_COUNT; room++) {
     const pool = BIOMES_BY_ROOM[room] || [];
     out.push(pool.length ? pool[(Math.random() * pool.length) | 0].id : null);
   }
   return out;
 }
 
-/** Resolve the rolled biome for a 1-based waveIndex (relapse loops past IV
- * reuse the Court's roll, mirroring regionForWave). rolled = st.biomes. */
+/** Resolve the rolled biome for a 1-based waveIndex (relapse loops past the
+ * last region reuse its roll, mirroring regionForWave). rolled = st.biomes. */
 export function biomeForWave(waveIndex, rolled) {
   if (!rolled) return null;
-  const i = Math.min(Math.max(1, waveIndex | 0), 4) - 1;
+  const i = Math.min(Math.max(1, waveIndex | 0), REGION_COUNT) - 1;
   return rolled[i] ? biomeById(rolled[i]) : null;
 }

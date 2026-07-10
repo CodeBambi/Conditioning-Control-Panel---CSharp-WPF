@@ -51,6 +51,7 @@
 import * as THREE from 'three';
 import { RADIUS, FOG_COLOR, FOG_DENSITY } from './tunnel.js';
 import { makeGlowTex, makeFrameTex, makeNamePanelTex } from './powerupDrops.js';
+import { intToHex } from './settings.js';
 
 const ART = 'https://ccp.art/';   // power-up card art CDN (matches powerupDrops.js)
 
@@ -159,8 +160,7 @@ function makeRewardCaptionTex(reward) {
 function makeRoomTitleTex(title) {
   const w = 1024, h = 340, c = document.createElement('canvas'); c.width = w; c.height = h;
   const x = c.getContext('2d');
-  const col = typeof title.color === 'number'
-    ? `#${(title.color | 0).toString(16).padStart(6, '0')}` : (title.color || '#ff69b4');
+  const col = typeof title.color === 'number' ? intToHex(title.color) : (title.color || '#ff69b4');
   const text = String(title.text || '').toUpperCase();
   const amp = text.indexOf(' & ');
   const lines = amp > 0 ? [text.slice(0, amp), '& ' + text.slice(amp + 3)] : [text];

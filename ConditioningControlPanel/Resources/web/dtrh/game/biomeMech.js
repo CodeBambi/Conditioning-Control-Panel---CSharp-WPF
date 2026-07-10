@@ -30,10 +30,28 @@
  * on entry it restores on exit, so chamber -> chamber is always clean.
  * ==========================================================================*/
 
+import { blindfoldOpacityFor } from './boonPassives.js';
+
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const rand = (a, b) => a + Math.random() * (b - a);
 
 export function createBiomeMech(g) {
+  // Keyhole/Searchlight borrow the Blindfold's dim plumbing via snapshot +
+  // restore. If the Blindfold RELIC was grabbed mid-chamber the snapshot is
+  // stale (pre-grab); its payMult marks ownership, so re-assert ITS dim
+  // instead of blowing it away while the pay bonus keeps running.
+  const restoreBlindfold = (saved) => {
+    const st = g.st();
+    if (!st) return;
+    if ((st.blindfoldPayMult || 1) > 1) {
+      st.blindfoldActive = true;
+      st.blindfoldOpacity = blindfoldOpacityFor(st.blindfoldPayMult);
+    } else if (saved) {
+      st.blindfoldActive = saved.active;
+      st.blindfoldOpacity = saved.opacity;
+    }
+    g.syncPhys();
+  };
   // ---- run-wide counters (fed regardless of which biome is up: the
   // Coronation reads the WHOLE run back, not just chamber IV) ----------------
   let runGrabs = 0;
@@ -101,8 +119,7 @@ export function createBiomeMech(g) {
       },
       payMultAt(x, y) { return inBeam(x, y) ? 1.6 : 0.8; },
       exit() {
-        const st = g.st();
-        if (saved && st) { st.blindfoldActive = saved.active; st.blindfoldOpacity = saved.opacity; g.syncPhys(); }
+        restoreBlindfold(saved);
         g.ffx.setBeams(null);
       },
     };
@@ -514,8 +531,7 @@ export function createBiomeMech(g) {
       },
       payMultAt(x, y) { return inBeam(x, y) ? 0.6 : 1.35; },
       exit() {
-        const st = g.st();
-        if (saved && st) { st.blindfoldActive = saved.active; st.blindfoldOpacity = saved.opacity; g.syncPhys(); }
+        restoreBlindfold(saved);
         g.ffx.setBeams(null);
         g.audioColor(null);
       },
@@ -736,6 +752,7 @@ export function createBiomeMech(g) {
       activeBiome = biome || null;
       const make = biome && biome.mech && REGISTRY[biome.mech];
       if (make) { impl = make(); safe(impl.enter); }
+      else if (biome && biome.mech) console.warn('[dtrh] unknown biome mech id:', biome.mech, '- biome runs as a re-tint only');
     },
     reset() {
       if (impl) safe(impl.exit);

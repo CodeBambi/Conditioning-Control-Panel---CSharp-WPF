@@ -28,6 +28,7 @@
 
 import * as THREE from 'three';
 import { Q } from '../shared/quality.js';
+import { loadTexture } from '../shared/assets.js';
 import { RADIUS } from './tunnel.js';
 
 // How many DISTINCT textures the shared pool holds. Slots sample from these, so
@@ -407,15 +408,12 @@ export function createWallPosters({ scene, layout, media, renderer, camera }) {
         s.mirrorMap = undefined;
         s.mat.needsUpdate = true;
       }
-      if (mirror.tex) mirror.tex.dispose();
-      mirror = null;
+      mirror = null;   // texture is owned by the shared assets cache - no dispose
       return;
     }
     if (mirror && mirror.url === url) return;
     if (mirror) setMirror(null);   // swap: restore first
-    const tex = new THREE.TextureLoader().load(url);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    mirror = { url, tex };
+    mirror = { url, tex: loadTexture(url) };   // cached: repeat moments reuse the decode
     for (const s of slots) {
       if (!s.active || !s.mesh.visible || s.melt) continue;
       s.mirrorMap = s.mat.map;

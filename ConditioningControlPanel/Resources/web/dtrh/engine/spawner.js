@@ -1457,16 +1457,12 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     if (!url) {
       if (!mirror) return;
       for (const r of live) restoreMirror(r);
-      if (mirror.tex) mirror.tex.dispose();
-      mirror = null;
+      mirror = null;   // texture is owned by the shared assets cache - no dispose
       return;
     }
     if (mirror && mirror.url === url) return;
     if (mirror) setMirror(null);   // swap: restore first
-    const tex = new THREE.TextureLoader().load(url);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-    mirror = { url, tex };
+    mirror = { url, tex: loadTexture(url) };   // cached: repeat moments reuse the decode
     for (const r of live) applyMirror(r);
   }
   function clickableGroups() {
