@@ -171,11 +171,19 @@ are not swept. This is essentially the whole remaining Linux gap (head overall ~
 - **Acceptance:** Linux head feature-swept with per-feature status recorded; click-through works on X11;
   genuine platform gaps recorded (never silently absent).
 
-### #6 — DTRH "The Fall" web mini-game epic · **JUDGMENT** (NOT seam-blocked — corrected 2026-07-10)
+### #6 — DTRH web roguelite port epic (dollhouse rewrite) · **JUDGMENT** (NOT seam-blocked; re-inventoried after merge `a06509eb` 2026-07-10)
 
-A brand-new v6.2.11 roguelite ("endless rabbit hole") that renders a Three.js/WebGL 3D world inside a
-WebView2 host and bridges to C# for XP, assets, and chaos payloads. This is the single largest parity gap
-introduced since the port began. **FALSIFIED at the 2026-07-10 trust-nothing verification pass:** the old
+**SUPERSEDED / RE-INVENTORIED 2026-07-10 (merge `a06509eb`, main `6e55bcc3`):** the earlier "The Fall"
+snapshot this row was written against has been replaced upstream by the **dollhouse rewrite** — an
+in-ambient 3D hub, gold economy (SchemaVersion 3), Four Chambers identity, journey rooms + 16 biomes,
+junction v6, and a duo-boon wave. **The old plan is scrapped; the current merged bundle is the version to
+implement**; the inventory below is corrected to the post-merge tree. NOTE the game is a **WebView2 web
+app (HTML/JS + Three.js), NOT Skia** — it ports through the `IBrowserHost` seam (copy the web bundle + port
+the JS↔C# bridge), not as native Avalonia/Skia layers.
+
+A web-era roguelite ("endless rabbit hole") that renders a Three.js/WebGL 3D world inside a WebView2 host
+and bridges to C# for XP, assets, and chaos payloads. This is the single largest parity gap introduced
+since the port began. **FALSIFIED at the 2026-07-10 trust-nothing verification pass:** the old
 "BLOCKED on a missing `IBrowserHost` seam (only `OpenExternalAsync` exists)" premise is wrong —
 `IBrowserHost` is an implemented, rich 11-member in-app WebView seam (`CCP.Core/Platform/IBrowserHost.cs`:
 `NavigateAsync`, `ExecuteScriptAsync`, `WebMessageReceived`/`PostWebMessageAsJson`,
@@ -191,9 +199,9 @@ messaging (`CCP.Avalonia.Desktop.Windows/Services/Chaos/ChaosTunnelService.cs:24
 
 | Sub-part | WPF source | Avalonia/Core target | Notes |
 |---|---|---|---|
-| **Web game assets** — inventory corrected 2026-07-10: `Resources/web/dtrh/**` holds 200+ assets (barks, bubbles, VN avatars, sfx) + `styles.css` 2225L ✓, but the top-level JS actually present is `boot.js`/`bridge.js`/`hostMedia.js`/`m2test.js`/`spike.js` — the previously listed `chaosRun.js` (2490L) and `warren.js` (1314L) do NOT exist at that path (`wc -l` → no such file). UNVERIFIED: where the engine JS actually lives; re-inventory the WPF-side game JS before slicing the asset copy | `Resources/web/dtrh/**` | `CCP.Avalonia` resources (Content-linked / `avares://`) | Platform-agnostic JS/HTML/CSS. Mostly copy+wire, served through the browser-host seam, not `Resources/`. |
-| **Host + bridge services** | `Services/Chaos/DtrhHostService.cs` (967L, WebView2), `DtrhMetaBridge.cs` (378L), `DtrhSpike.cs` (226L) | new `CCP.Core/Services/Chaos/Dtrh*` (portable logic) + head browser-host impl | Split: JS↔C# message bridge + run/session orchestration is portable; the WebView2 surface is head-specific. |
-| **Asset + session telemetry** | `DtrhAssetManifest.cs` (130L), `DtrhAssetStatsStore.cs` (105L), `DtrhSessionStatsStore.cs` (186L) | `CCP.Core/Services/Chaos/` | Portable (file I/O + models). Respect the privacy contract: per-asset engagement stays local. |
+| **Web game bundle** — re-inventoried post-merge `a06509eb` 2026-07-10. Engine JS lives in SUBDIRS (the old top-level-only scan missed it): `engine/` (20 JS — `spawner.js` 99KB, `junctions.js` 69KB, `scene.js` 58KB, `tunnel.js` 32KB: the Three.js 3D world), `game/` (22 JS — `chaosRun.js` ~170KB, `chaosField.js` 63KB, `warren.js` 53KB, `catalog.js` 44KB, `biomeMech.js` 33KB: roguelite logic incl gold economy / Four Chambers / 16 biomes / junction v6), `shared/` (5), `vendor/` (10 — `three.module.min.js` 687KB, `omggif`), `assets/` (barks `manifest.js` 339KB + 458 mp3), + 5 top-level (`boot.js`/`bridge.js`/`hostMedia.js`/`m2test.js`/`spike.js`) + `styles.css`. RESOLVED: `chaosRun.js`/`warren.js` DO exist — under `game/`, not top-level | `Resources/web/dtrh/**` | `CCP.Avalonia` resources (Content-linked / `avares://`) | Platform-agnostic JS/HTML/CSS. Mostly copy+wire, served through the browser-host seam, not `Resources/`. |
+| **Host + bridge services** | `Services/Chaos/DtrhHostService.cs` (914L, WebView2), `DtrhMetaBridge.cs` (406L), `DtrhSpike.cs` (226L) | new `CCP.Core/Services/Chaos/Dtrh*` (portable logic) + head browser-host impl | Split: JS↔C# message bridge + run/session orchestration is portable; the WebView2 surface is head-specific. |
+| **Asset + session telemetry** | `DtrhAssetManifest.cs` (130L), `DtrhAssetStatsStore.cs` (127L), `DtrhSessionStatsStore.cs` (186L) | `CCP.Core/Services/Chaos/` | Portable (file I/O + models). Respect the privacy contract: per-asset engagement stays local. |
 | **Chaos meta/progression model deltas** | `Services/Chaos/ChaosModels.cs`, `ChaosUpgrades.cs`, `ChaosMetaState.cs`, `ChaosLifetimeBoons.cs` (68L new) | `CCP.Core/Services/Chaos/` counterparts | Lifetime boons, upgrades, meta-state feed the roguelite. Mirror the model changes into Core so both heads share them. |
 | **Legacy chaos WebView host** | `Chaos/ChaosWebViewHost.cs`, `Chaos/ChaosHubWindow.xaml.cs` | browser-host seam | WebView2 shells for the hub/game. |
 | **Lab-tab launch hook** | `Views/Tabs/LabTabView.xaml`, `MainWindow.LabTab.cs`, `MainWindow.Lab.cs` | `CCP.Avalonia` Lab tab view + VM | The entry point that boots the web game. |
@@ -455,6 +463,7 @@ hash. Re-read hashes live from `git` before re-claiming them.
 | **22-layer UCE lane — COMPLETE** (DoD #4 ✅; 9 session + 12 chaos + 1 attention-check = 22 registered `IAvaloniaLayer`s) | last LIVE passive effect migrated `57f6f048`; no passive effect window remains in `CCP.Avalonia` |
 | **Companion AI — all three transports ported** | cloud `61ca0d1`, local/Ollama `2bd37899`, OpenAI `ca873d25`; AI-command dispatch `70cf9803`/`9fa09853`/`424ea528` (cloud faithfully omits); `IModerationLog` wired `b3b8da4`; `SystemPromptBuilder` parity `b84eb90` |
 | **v6.2.11 sync** | merge `cd2ff1f9` (+ChaosImagePool facade fix + DtrhHostService `using` fix); all heads → 6.2.11; quiz #501 + speech #505 ported to Core; bark floor N/A (no rule gate); trigger-bubble settings already ported |
+| **main → feat/crossplatform sync (DTRH dollhouse rewrite)** | merge `a06509eb` (main `6e55bcc3`; 41 commits, 620 files, +11,075/−1,953). Brought the web-era DTRH rewrite (in-ambient 3D hub, gold economy SchemaVersion 3, Four Chambers, journey rooms + 16 biomes, junction v6, duo-boon wave; engine JS under `Resources/web/dtrh/{engine,game,shared,vendor}` + 458 barks), the pre-6.3 bugfix batch (#518/#521/#514/#516/#512/#500), and the support-chat 0710 batch (video overlap arbitration, lockdown keys, presets, Discord share, settings backups, DtRH boot deadline). Clean merge, no conflicts. Gates: slnf 0 err (384 warn) · WPF sln 0 err · Core **542/542**. WPF-head content — not yet ported; row #6 re-inventoried against this tree. Old "The Fall" plan scrapped |
 | **v6.2.9 #5** interaction-queue slot-leak guard | `f4a556a` |
 | **Bubble white-border fix** (user-reported 2026-07-10): deleted the port-invented unconditional 2px white stroke ring in `BubbleLayer.RenderBubble` (old L292-294) — no WPF equivalent (WPF strokes ONLY in the image==null fallback, `BubbleService.cs:2710`); stroke relocated into the Avalonia fallback branch for exact parity. Fixes ambient + chaos bubbles in one shared paint path; 3/3 independent verifiers + parity audit SHIP; all 7 bubble render paths swept clean. Residual filed: mod-resolver row above | this session 2026-07-10 (`fix(av)` commit; gates: slnf 0 · WPF sln 0 · Core 542/542 · verify-layers exit 0 · smoke Findings 16 = recorded drift) |
 | **Wins vs WPF** (recorded; WPF halves UNBACKED) | Avalonia recorded: startup ~2.0s (`benchmark-optimized.json` `MainWindowShownMs` 1976.9; better than the previously claimed 2.5s), working set ~422MB (`perf-avalonia.json`); chaos FPS-floor 2026-07-05 AvgFps 138.7 ≫ 30 floor (MinFps=0 caveat → open row #2). UNVERIFIED (2026-07-10): "~4.2s / ~1218MB WPF" — evidence gap: NO recorded WPF benchmark artifact exists anywhere in the repo; re-measure the WPF head before citing a vs-WPF win |
