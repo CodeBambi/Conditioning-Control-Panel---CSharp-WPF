@@ -1161,9 +1161,23 @@ Make all phrases thematically consistent with the quiz category and the user's s
 
         // ============ TRENDS ============
 
-        public static QuizScoreTrend? GetScoreTrend(List<QuizHistoryEntry> history, QuizCategory category)
+        /// <summary>
+        /// Aggregation key for trend/stat grouping. The Category enum is lossy for custom
+        /// categories (StartQuizAsync collapses them all to Sissy), so group by the string
+        /// CategoryId and only fall back to the enum name for legacy entries that predate it.
+        /// </summary>
+        public static string TrendKey(QuizHistoryEntry h) =>
+            !string.IsNullOrEmpty(h.CategoryId) ? h.CategoryId : h.Category.ToString();
+
+        /// <summary>Human-readable category name with the legacy-entry fallback.</summary>
+        public static string DisplayName(QuizHistoryEntry h) =>
+            !string.IsNullOrEmpty(h.CategoryName) ? h.CategoryName : h.Category.ToString();
+
+        public static QuizScoreTrend? GetScoreTrend(List<QuizHistoryEntry> history, string categoryId)
         {
-            var filtered = history.Where(h => h.Category == category).OrderByDescending(h => h.TakenAt).ToList();
+            var filtered = history
+                .Where(h => string.Equals(TrendKey(h), categoryId, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(h => h.TakenAt).ToList();
             if (filtered.Count == 0) return null;
 
             var latest = filtered[0];

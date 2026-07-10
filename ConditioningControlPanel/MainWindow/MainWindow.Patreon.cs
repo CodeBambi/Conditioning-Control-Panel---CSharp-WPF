@@ -1635,6 +1635,53 @@ namespace ConditioningControlPanel
         }
 
         /// <summary>
+        /// Populate the Lab tab's AI effect-permission controls from settings. These
+        /// checkboxes live on the Lab tab but were only synced when the Companion tab
+        /// was visited, so after a restart the Lab tab showed XAML defaults while the
+        /// persisted AllowAi* values kept gating effects — videos fired that the UI
+        /// said were off (#512). Called from SyncAiBrainUI and on Lab tab open.
+        /// </summary>
+        internal void SyncLabEffectPermsUI()
+        {
+            var s = App.Settings?.Current;
+            if (s?.CompanionPrompt == null) return;
+
+            var wasLoading = _isLoading;
+            _isLoading = true;
+            try
+            {
+                if (LabTab.ChkCapEffects != null)
+                    LabTab.ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
+                if (LabTab.EffectPermsPanel != null)
+                    LabTab.EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
+                        ? Visibility.Visible : Visibility.Collapsed;
+
+                // Effect permission grid
+                if (LabTab.ChkAllowFlash != null)       LabTab.ChkAllowFlash.IsChecked       = s.CompanionPrompt.AllowAiFlash;
+                if (LabTab.ChkAllowVideo != null)       LabTab.ChkAllowVideo.IsChecked       = s.CompanionPrompt.AllowAiVideo;
+                if (LabTab.ChkAllowAudio != null)       LabTab.ChkAllowAudio.IsChecked       = s.CompanionPrompt.AllowAiAudio;
+                if (LabTab.ChkAllowBubbles != null)     LabTab.ChkAllowBubbles.IsChecked     = s.CompanionPrompt.AllowAiBubbles;
+                if (LabTab.ChkAllowSubliminal != null)  LabTab.ChkAllowSubliminal.IsChecked  = s.CompanionPrompt.AllowAiSubliminal;
+                if (LabTab.ChkAllowOverlay != null)     LabTab.ChkAllowOverlay.IsChecked     = s.CompanionPrompt.AllowAiOverlay;
+                if (LabTab.ChkAllowLockCard != null)    LabTab.ChkAllowLockCard.IsChecked    = s.CompanionPrompt.AllowAiLockCard;
+                if (LabTab.ChkAllowBounce != null)      LabTab.ChkAllowBounce.IsChecked      = s.CompanionPrompt.AllowAiBounce;
+                if (LabTab.ChkAllowHaptic != null)      LabTab.ChkAllowHaptic.IsChecked      = s.CompanionPrompt.AllowAiHaptic;
+                if (LabTab.ChkAllowGetBackToMe != null) LabTab.ChkAllowGetBackToMe.IsChecked = s.CompanionPrompt.AllowAiGetBackToMe;
+
+                // Max haptic intensity
+                if (LabTab.SliderMaxHapticIntensity != null) LabTab.SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
+                if (LabTab.TxtMaxHapticIntensity != null)    LabTab.TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
+
+                // Chat memory toggle
+                if (LabTab.ChkChatMemoryEnabled != null) LabTab.ChkChatMemoryEnabled.IsChecked = s.CompanionPrompt.ChatMemoryEnabled;
+            }
+            finally
+            {
+                _isLoading = wasLoading;
+            }
+        }
+
+        /// <summary>
         /// Populate AI Brain controls from settings. Called from SyncCompanionTabUI.
         /// </summary>
         private void SyncAiBrainUI()
@@ -1686,30 +1733,7 @@ namespace ConditioningControlPanel
             }
 
             // Capability checkboxes (CompanionTab.ChkAwarenessMode handled by its own sync path; AiChatEnabled is driven solely by the provider radios)
-            if (LabTab.ChkCapEffects != null)
-                LabTab.ChkCapEffects.IsChecked = s.CompanionPrompt.AllowAiToControlEffects;
-            if (LabTab.EffectPermsPanel != null)
-                LabTab.EffectPermsPanel.Visibility = s.CompanionPrompt.AllowAiToControlEffects
-                    ? Visibility.Visible : Visibility.Collapsed;
-
-            // Effect permission grid
-            if (LabTab.ChkAllowFlash != null)       LabTab.ChkAllowFlash.IsChecked       = s.CompanionPrompt.AllowAiFlash;
-            if (LabTab.ChkAllowVideo != null)       LabTab.ChkAllowVideo.IsChecked       = s.CompanionPrompt.AllowAiVideo;
-            if (LabTab.ChkAllowAudio != null)       LabTab.ChkAllowAudio.IsChecked       = s.CompanionPrompt.AllowAiAudio;
-            if (LabTab.ChkAllowBubbles != null)     LabTab.ChkAllowBubbles.IsChecked     = s.CompanionPrompt.AllowAiBubbles;
-            if (LabTab.ChkAllowSubliminal != null)  LabTab.ChkAllowSubliminal.IsChecked  = s.CompanionPrompt.AllowAiSubliminal;
-            if (LabTab.ChkAllowOverlay != null)     LabTab.ChkAllowOverlay.IsChecked     = s.CompanionPrompt.AllowAiOverlay;
-            if (LabTab.ChkAllowLockCard != null)    LabTab.ChkAllowLockCard.IsChecked    = s.CompanionPrompt.AllowAiLockCard;
-            if (LabTab.ChkAllowBounce != null)      LabTab.ChkAllowBounce.IsChecked      = s.CompanionPrompt.AllowAiBounce;
-            if (LabTab.ChkAllowHaptic != null)      LabTab.ChkAllowHaptic.IsChecked      = s.CompanionPrompt.AllowAiHaptic;
-            if (LabTab.ChkAllowGetBackToMe != null) LabTab.ChkAllowGetBackToMe.IsChecked = s.CompanionPrompt.AllowAiGetBackToMe;
-
-            // Max haptic intensity
-            if (LabTab.SliderMaxHapticIntensity != null) LabTab.SliderMaxHapticIntensity.Value = s.CompanionPrompt.MaxAiHapticIntensity;
-            if (LabTab.TxtMaxHapticIntensity != null)    LabTab.TxtMaxHapticIntensity.Text    = $"{(int)(s.CompanionPrompt.MaxAiHapticIntensity * 100)}%";
-
-            // Chat memory toggle
-            if (LabTab.ChkChatMemoryEnabled != null) LabTab.ChkChatMemoryEnabled.IsChecked = s.CompanionPrompt.ChatMemoryEnabled;
+            SyncLabEffectPermsUI();
 
             // Awareness panel visibility (from previous handler logic)
             if (CompanionTab.AwarenessSettingsPanel != null)

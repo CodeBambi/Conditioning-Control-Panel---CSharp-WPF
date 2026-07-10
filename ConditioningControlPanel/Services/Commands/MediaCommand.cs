@@ -53,6 +53,17 @@ namespace ConditioningControlPanel.Services.Commands
             var ext = Path.GetExtension(fullPath).ToLowerInvariant();
             if (IsVideo(ext))
             {
+                // The main Videos feature toggle is authoritative for AI-triggered videos
+                // too (#512). Guarded at the playback sink so every path is covered; an
+                // audio-kind request that resolved to a video file still gets its audio
+                // fallback instead of a silent drop.
+                if (App.Settings?.Current?.MandatoryVideosEnabled != true)
+                {
+                    App.Logger?.Information("MediaCommand: AI video ignored — Videos feature is disabled");
+                    if (_kind == AICommandType.audio) return Task.FromResult(PlayRandomAudio());
+                    return Task.FromResult(false);
+                }
+
                 return Task.FromResult(Application.Current.Dispatcher.Invoke(() =>
                 {
                     if (App.Video == null) return false;
@@ -79,6 +90,13 @@ namespace ConditioningControlPanel.Services.Commands
 
         private static bool PlayRandomVideo()
         {
+            // Playback sink gate: the main Videos feature toggle governs AI videos (#512).
+            if (App.Settings?.Current?.MandatoryVideosEnabled != true)
+            {
+                App.Logger?.Information("MediaCommand: random video ignored — Videos feature is disabled");
+                return false;
+            }
+
             return Application.Current.Dispatcher.Invoke(() =>
             {
                 if (App.Video == null) return false;

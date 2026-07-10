@@ -35,6 +35,11 @@ namespace ConditioningControlPanel.Services
             public string[] Aliases = Array.Empty<string>();
             /// <summary>Run on the UI thread when matched. Null + <see cref="IsMantra"/> = fall back to a mantra.</summary>
             public Action? Execute;
+            /// <summary>When it returns true the command is refused: Execute is skipped and
+            /// <see cref="BlockedConfirm"/> is spoken instead of <see cref="Confirm"/>.</summary>
+            public Func<bool>? Blocked;
+            /// <summary>mod-key -> refusal line used when <see cref="Blocked"/> fires.</summary>
+            public Dictionary<string, string> BlockedConfirm = new();
             public bool IsMantra;
             /// <summary>"again"/"one more"/"more"/"harder" — re-run the last actionable command instead of a fixed action.</summary>
             public bool IsReplay;
@@ -504,6 +509,14 @@ namespace ConditioningControlPanel.Services
             {
                 Name = "takeover_off",
                 Aliases = new[] { "stop taking over", "stop the takeover", "you can stop now", "give me control back", "stop taking control", "i want control back", "let me drive", "give me back control", "take over off", "release control" },
+                // Lockdown mode: Takeover cannot be released while locked in (#514).
+                Blocked = () => App.Lockdown?.IsActive == true,
+                BlockedConfirm = new()
+                {
+                    ["bambi"] = "nuh-uh~ lockdown says i keep control, hehe!",
+                    ["sissy"] = "not during lockdown, good girl. i keep control.",
+                    ["circe"] = "lockdown is active. control stays with me.",
+                },
                 Execute = () => App.Autonomy?.Stop(),
                 VoiceRuleId = "voicecmd_takeover_off",
                 Confirm = new()
@@ -880,7 +893,9 @@ namespace ConditioningControlPanel.Services
                     await Application.Current.Dispatcher.InvokeAsync(() => ExecuteIntentAndConfirm(toRun));
 
                 // Remember the last actionable command so a later "again"/"more" can replay it.
-                if (best.Repeatable) _lastVoiceIntent = best;
+                // A Blocked (refused) command must not become the replay target, or "again"
+                // repeats the refusal instead of the last real effect.
+                if (best.Repeatable && best.Blocked?.Invoke() != true) _lastVoiceIntent = best;
 
                 return best.NoChain ? VoiceCmdOutcome.HandledFinal : VoiceCmdOutcome.Handled;
             }
@@ -933,6 +948,18 @@ namespace ConditioningControlPanel.Services
         /// <summary>Run an intent's action and speak its confirmation. Must be called on the UI thread.</summary>
         private static void ExecuteIntentAndConfirm(VoiceCommandIntent intent)
         {
+            bool blocked = false;
+            try { blocked = intent.Blocked?.Invoke() == true; } catch { }
+            if (blocked)
+            {
+                var refuseKey = ModKey();
+                var refusal = intent.BlockedConfirm.TryGetValue(refuseKey, out var r) && !string.IsNullOrWhiteSpace(r)
+                    ? r
+                    : intent.BlockedConfirm.Values.FirstOrDefault() ?? "no~";
+                try { App.AvatarWindow?.GigglePriority(refusal, playSound: false, aiGenerated: false); } catch { }
+                return;
+            }
+
             try { intent.Execute?.Invoke(); }
             catch (Exception ex) { App.Logger?.Warning(ex, "AutonomyService: voice command '{Name}' execute failed", intent.Name); }
 
