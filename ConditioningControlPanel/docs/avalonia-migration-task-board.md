@@ -573,6 +573,39 @@ a JUDGMENT (fable-5) agent (hit its turn limit during research; driver implement
   0 err, smoke 44 tabs / 0 unhandled / Findings 17 (authed benign band) / 0 avatar+menu findings. Menu
   appearance + reappear behavior are NOT smoke-exercised — flagged for user verification.
 
+### AvatarTube attached positioning — **SUPERSEDED → GROUND-UP REBUILD** (owner ruling 2026-07-11) · **JUDGMENT**
+
+**2026-07-11 owner ruling — rewrite the WINDOWING concern from scratch.** Owner tested `5d4efbdc` AND the
+follow-up size-pin (below) on the live head: the attached tube is STILL `smaller + shown to the top of
+center + static (does not follow) + laggy`. Both incremental fixes are insufficient. Owner directive verbatim:
+"delete all the old code and start over ... better under the hood, do what you want to make it better, but it
+should look and feel similar", plus a NEW requirement: **the tube must scale WITH the main window** (resize
+the main app bigger/smaller and the tube scales proportionally and stays well-composed — WPF only scales to
+the screen; this is an owner-approved deviation). Scope of the rewrite = the windowing concern ONLY
+(`AvatarTubeWindow.Windowing.cs` + the windowing bits in `axaml.cs`: `OnLoaded`/`OnFirstContentRendered`,
+parent-event wiring + `ParentWindow_*` handlers, `ContentViewbox_SizeChanged`, float/bounce transforms,
+`ApplyScale`/`_currentScale`); KEEP the AXAML visual tree, speech/chat/pose/emote code, and the public API
+(`Attach/Detach/SetDetached/UpdatePosition`, ctor) so callers + `SmokeTestRunner.cs` keep working. New logic
+lands in a single-responsibility controller with ONE writer of `Position` and ONE writer of
+`ContentViewbox.Width/Height`, telemetry-first (anchor trace to `app-*.log`). New sizing contract:
+`parentScale = clamp(parentClientHeight / ReferenceParentHeight, min, 1.0)`, `finalScale = parentScale *
+_currentScale`, hard-capped by the old screen-fit clamp. Prime suspects to ANSWER (not carry over): (a) bounds
+guard copied from WPF LOGICAL space (`-500/5000`) into Avalonia PHYSICAL space -> trips -> retry exhausts ->
+tube parks at `Show()` spot (best fit for "static + top-of-center"); (b) size-pin not actually holding; (c)
+dead/wrong parent reference after session auto-resume.
+
+**Size-pin checkpoint (this commit, isolated per advisor):** `ContentViewbox_SizeChanged` now pins
+`Window.Width/Height` to the deterministic `ContentViewbox.Width/Height` (WPF `xaml.cs:534-539` parity) and
+`OnFirstContentRendered` freezes to `ContentViewbox` size (not transient greeting-bubble-inflated
+`ClientSize`), `SizeToContent=Manual` set before the size assignment. Gates green (slnf/WPF 0 err, Core
+543/543, smoke 44/0/Findings 17); `port-parity-auditor` verdict SAFE (8/8 Verified). **Does NOT fix the
+owner-visible symptom** — kept only as a correct WPF-invariant base for the rebuild. The rewrite below
+supersedes this file's windowing logic wholesale.
+
+---
+
+#### Prior (pre-rebuild) history
+
 ### AvatarTube attached positioning — **FAILED, REDO** (owner ruling 2026-07-10) · **JUDGMENT**
 
 Owner tested the reappear fix (`2c3dc0d5`) and rejected it: the attached avatar **still lands in the wrong

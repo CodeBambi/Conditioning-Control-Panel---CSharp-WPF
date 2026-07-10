@@ -414,7 +414,20 @@ _parentWindow = parentWindow;
 
         private void ContentViewbox_SizeChanged(object? sender, SizeChangedEventArgs e)
         {
-            // TODO: mirror the explicit SizeToContent=Manual sizing used in WPF to avoid layered-window hangs.
+            // WPF parity (AvatarTube/AvatarTubeWindow.xaml.cs L534-539): the tube window is a
+            // FIXED size pinned to the deterministic ContentViewbox.Width/Height (design x scale),
+            // so the speech bubble stays a pure in-design-space overlay and can never resize the
+            // window. Without this pin the window kept its first-render ClientSize while
+            // ContentViewbox changed (user grow/shrink via ApplyScale, mod relayout, or a greeting
+            // bubble that inflated the auto-size): the Uniform Viewbox then rescaled the avatar
+            // (shrink) and the centering math parked it high (drift up), and resizing the
+            // layered/topmost window mid-session stalled the render (freeze). Only act after the
+            // first-render freeze to Manual so this does not fight the initial auto-size pass.
+            if (ContentViewbox == null || SizeToContent != SizeToContent.Manual) return;
+            double w = ContentViewbox.Width, h = ContentViewbox.Height;
+            if (double.IsNaN(w) || w <= 0 || double.IsNaN(h) || h <= 0) return;
+            if (Math.Abs(Width - w) > 0.5) Width = w;
+            if (Math.Abs(Height - h) > 0.5) Height = h;
         }
 
         private void SpeechBubble_MouseEnter(object? sender, PointerEventArgs e)
@@ -1720,12 +1733,26 @@ _parentWindow = parentWindow;
             _tubeHandle = this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
             _parentHandle = _parentWindow?.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
 
-            if (ClientSize.Width > 0 && ClientSize.Height > 0)
+            // Freeze to the DETERMINISTIC content size (ContentViewbox.Width/Height = design x
+            // scale), NOT the transient ClientSize: OnLoaded posts ShowGreeting(), so a greeting
+            // speech bubble can already have inflated the SizeToContent=WidthAndHeight ClientSize
+            // by first render - freezing to that oversized value letterboxes the avatar smaller
+            // and high in a too-big window. WPF freezes to ContentViewbox and keeps it pinned via
+            // ContentViewbox_SizeChanged (xaml.cs L534-539). Set Manual BEFORE assigning
+            // Width/Height - Avalonia discards explicit sizes while auto-sizing is still active.
+            double freezeW = ContentViewbox?.Width ?? double.NaN;
+            double freezeH = ContentViewbox?.Height ?? double.NaN;
+            if (double.IsNaN(freezeW) || freezeW <= 0 || double.IsNaN(freezeH) || freezeH <= 0)
             {
-                Width = ClientSize.Width;
-                Height = ClientSize.Height;
+                freezeW = ClientSize.Width;
+                freezeH = ClientSize.Height;
             }
             SizeToContent = SizeToContent.Manual;
+            if (freezeW > 0 && freezeH > 0)
+            {
+                Width = freezeW;
+                Height = freezeH;
+            }
             InvalidateVisual();
         }
 
