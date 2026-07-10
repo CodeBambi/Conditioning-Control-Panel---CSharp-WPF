@@ -265,6 +265,11 @@ self-resolve.** Commits over this drift record "Findings 16 = known pre-existing
 baseline". Deterministic fallback if it flaps: pin the smoke env logged-out (strip cached UnifiedId/
 AuthToken) → findings return to 5. Never edit `SmokeTestRunner.cs`; never loc-map the chips (diverges
 from WPF).
+**Data point 2026-07-10 (same day, ~2h later):** live run at IMP-1 close produced **15** (9 tags —
+'drone' absent from the server directory this run — + 1 ConnectCommand), a strict subset of the recorded
+11-delta set with ZERO new findings. Confirms the count is server-content-coupled exactly as predicted;
+session gate practice under the owner ruling: gates 1-3 hard, gate 4 = 44 tabs + 0 unhandled + delta-set
+⊆ the recorded benign set (count-equality meaningless while the env is authed).
 
 ### BubbleLayer bubble.png bypasses the mod resolver · **STANDARD**
 
@@ -348,6 +353,20 @@ rather than filed here; the Background-priority-tick hypothesis also feeds row #
   runs at Findings 16 = recorded pre-existing drift (owner-waved; see drift row). Plan: recon dirty-path
   contract → implement override (~10 lines, UI-tick-only state) → --verify-video + --verify-layers →
   parity audit → full gates → one commit.
+- **DONE 2026-07-10 (same session):** `VideoLayer.ConsumeDirty()` override landed — one file, +29/−1:
+  UI-tick-only `_dirty` set on FRONT↔READY present (`Update`, :537) and on `Stop()` (:335), one-shot
+  consumed (PinkTintLayer idiom); `IsActive => _bufferValid || _dirty` one-tick linger so the post-Stop
+  clear is consumable. Invalidation now tracks the ~25-30fps present rate instead of unconditional 60Hz
+  (the row's ~halved GPU passes during plain video playback); `MandatoryVideoLayer` inherits free (sealed,
+  no extra compositor-painted elements — audited). BONUS: fixes a latent stale-frame trap — video stop
+  under a co-active persistently-static layer (constant PinkTint) previously left the last frame trapped
+  on screen forever (engine only idle-invalidates at activeCount==0). Adversarial audit: SHIP (all four
+  failure classes clean at line level; threading UI-tick-only confirmed; no engine edits). Evidence:
+  `--verify-video` with a real clip PASS (first frame published, frames advancing 14→25/~700ms, 3/3
+  monitors) · `--verify-layers` PASS · slnf 0 · WPF sln 0 · Core 542/542 · smoke 44 tabs / 0 unhandled /
+  findings delta-set ⊆ recorded drift (see drift row; count flapped 16→15 exactly as predicted —
+  server-side 'drone' tag absent this run, proving the count is server-content-coupled; delta-set check,
+  not count-equality, is the real signal while the smoke env is authed).
 
 Scan verdicts recorded as explicitly GOOD (checked, no action): VideoLayer's triple-buffer frame path
 matches its zero-alloc spec (index-swap locks, zero-copy `SKImage.FromPixels`, stale-session guards);

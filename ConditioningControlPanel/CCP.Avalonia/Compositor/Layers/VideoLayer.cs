@@ -116,6 +116,12 @@ public class VideoLayer : BaseLayer, IDisposable
     // teardown and segfaults on exit. UI-thread-only (Stop is UI-thread-only), so no volatile.
     private Task? _teardownTask;
 
+    // Dirty gate state (IMP-1): UI-tick-only — set by Update() when it presents a frame
+    // (FRONT<->READY swap) and by Stop() so the torn-down frame's region repaints (clears)
+    // once even when a co-active static layer keeps the engine out of its idle path.
+    // Consumed once per tick by ConsumeDirty(). Plain bool per the PinkTintLayer idiom:
+    // writers (Update/Stop, UI thread) and the consumer share the engine's UI tick.
+    private bool _dirty;
     private bool _firstFrameLogged;
     private bool _loop;
     private bool _withAudio;
@@ -195,7 +201,11 @@ public class VideoLayer : BaseLayer, IDisposable
     public long FramesCopied => Interlocked.Read(ref _framesPresented);
 
     public override int ZIndex => CompositorLayers.Video;
-    public override bool IsActive => _bufferValid;
+    // "|| _dirty" keeps the layer engine-visible for the one tick needed to consume a
+    // post-Stop dirty (the engine skips inactive layers): that final invalidate clears the
+    // last frame's region even when a co-active static layer (e.g. a constant tint) keeps
+    // activeCount > 0 so the engine's idle-transition invalidate never runs (IMP-1).
+    public override bool IsActive => _bufferValid || _dirty;
 
     /// <summary>
     /// Opaque color used to fill the monitor around a letterboxed video so the desktop never
@@ -322,6 +332,7 @@ public class VideoLayer : BaseLayer, IDisposable
     public void Stop()
     {
         _bufferValid = false;
+        _dirty = true; // the presented frame goes away — its region must repaint (clear) once (IMP-1)
         _firstFrameLogged = false;
         _loop = false;
         _lastTimeRelayTickMs = 0; // a queued TimeChanged from the dying player must not relay
@@ -523,12 +534,29 @@ public class VideoLayer : BaseLayer, IDisposable
         }
         if (!presented) return;
 
+        _dirty = true; // a new frame is on FRONT — this tick must invalidate (IMP-1)
         Interlocked.Increment(ref _framesPresented);
         if (!_firstFrameLogged)
         {
             _firstFrameLogged = true;
             _logger?.LogInformation("VideoLayer: first frame presented {Width}x{Height} (Z={Z})", _videoWidth, _videoHeight, ZIndex);
         }
+    }
+
+    /// <summary>
+    /// Dirty gate (IMP-1): the engine ticks at ~60Hz while clips decode at ~25-30fps, so
+    /// reporting dirty only when <see cref="Update"/> actually presented a frame
+    /// (FRONT&lt;-&gt;READY swap) — or when <see cref="Stop"/> tore the frame down and its
+    /// region must clear — roughly halves full-screen GPU render passes during plain video
+    /// playback. Consume-once flag per the PinkTintLayer idiom; no lock (set and consumed on
+    /// the engine's UI tick). A false here never starves overlapping effects: the engine
+    /// re-renders ALL active layers whenever any window invalidates.
+    /// </summary>
+    public override bool ConsumeDirty()
+    {
+        var dirty = _dirty;
+        _dirty = false;
+        return dirty;
     }
 
     public override void Render(SKCanvas canvas, PixelRect bounds, TimeSpan deltaTime)
