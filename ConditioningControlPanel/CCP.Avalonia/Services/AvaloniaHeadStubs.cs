@@ -150,7 +150,9 @@ public sealed class AvaloniaChaosService : IChaosService
     private bool _focusLowBarkFired;
     // Snap Chain: triggers bounce off inside this window (WPF ChaosModeService.cs:1923).
     private DateTime _invulnUntilUtc = DateTime.MinValue;
-    // Pendulum swing activation lands in S6/S7 (plan: chaos-run-engine-port-plan.md); false until then.
+    // True only while a Pendulum-swing slow-mo is active — set by ActivateSlowMo when its banner
+    // is "Pendulum", cleared by EndSlowMo/BeginRun/EndRun. Idle default is false. Feeds
+    // ChaosScoring.PendulumFactor so triple pay rides the pendulum's own swing (WPF :2336-2338).
     private bool _pendulumSlowActive = false;
 
     // ---- spawn-director run transients (S4; WPF ChaosModeService.cs SpawnTick/RunTick state) ----
@@ -1812,9 +1814,8 @@ public sealed class AvaloniaChaosService : IChaosService
         // (WPF BubbleService.cs:1610-1611 `if (reachMult <= 1.0) return`). The engine's chain knob
         // is a centre-distance DIP radius, so the multiple maps onto the engine's 120-DIP base
         // reach; <=1 turns chaining OFF, matching WPF's no-boon default.
-        // (plan: chaos-run-engine-port-plan.md S4b-4) the engine's ChainPop still differs from
-        // WPF ChainPopNeighbors (pickup-only targets, no 80ms hop stagger, benign-pop trigger
-        // only) — reported as a follow-up row; this sync only makes the reach LIVE.
+        // The engine's ChainPop still differs from WPF ChainPopNeighbors (pickup-only targets,
+        // no 80ms hop stagger, benign-pop trigger only); this sync only makes the reach LIVE.
         knobs.ChainReachDip = s.ChainReactionReach <= 1.0 ? 0.0 : 120.0 * s.ChainReactionReach;
         knobs.HitboxScale = s.Config?.HitboxScale ?? 1.0;                     // WPF :368
         knobs.BubbleOpacity = s.BlindfoldActive ? s.BlindfoldOpacity : 1.0;   // WPF :369
@@ -2229,7 +2230,7 @@ public sealed class AvaloniaChaosService : IChaosService
             // ---- XP payout (P0-3: XP is paid PRE-multiplier). baseXp is the run Score CLAMPED
             //      to 250·durMin·diff — the run's TotalMult stack never touches XP, and the
             //      skill-tree multiplier is applied ONCE inside Progression.AddXP, NOT here.
-            //      (WPF ChaosModeService.cs:3162-3169; economy-scoring.md §3.) ----
+            //      (WPF ChaosModeService.cs:3162-3169; see Services/Chaos/CHAOS_DESIGN.md.) ----
             double baseXp = ChaosEconomy.BaseXp(state.Score, state.RunDurationSec, state.DifficultyMult);
             double skillMult = _skillTree?.GetTotalXpMultiplier() ?? 1.0;   // WPF ChaosModels.cs:535
             double finalXp = baseXp * skillMult;                            // DISPLAY ONLY (recap/bark; WPF :3166)

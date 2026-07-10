@@ -14,8 +14,9 @@ namespace ConditioningControlPanel.Core.Services.Chaos;
 ///
 /// The learned-set persistence (MarkLearned + the on-screen HideChaosHints strip) lives head-side —
 /// <c>ChaosMeta</c> is an Avalonia-head static facade, and the hint pill has no portable render seam —
-/// so this Core class holds only the pure key/text tables and a learned-set predicate. Contract:
-/// docs/chaos-run-engine-contracts/spawn-system.md §6.
+/// so this Core class holds only the pure key/text tables and a learned-set predicate. Contract: the
+/// WPF source above is the permanent behavior reference, pinned by
+/// tests/CCP.Core.Tests/ChaosBubbleHintsTests.cs; chaos design notes in Services/Chaos/CHAOS_DESIGN.md.
 /// </summary>
 public static class ChaosBubbleHints
 {

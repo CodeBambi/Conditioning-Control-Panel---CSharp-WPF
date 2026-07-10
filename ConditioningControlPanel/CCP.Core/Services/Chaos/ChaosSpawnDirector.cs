@@ -5,7 +5,8 @@ namespace ConditioningControlPanel.Core.Services.Chaos;
 /// (WPF ChaosModeService.cs:1103-1230) so the cadence, density and gating formulas are
 /// Core-testable and shared by any head. The service composes these pieces exactly like
 /// the WPF tick does; NO formula may be inlined back into service code
-/// (contract: docs/chaos-run-engine-contracts/spawn-system.md §1).
+/// (contract: WPF ChaosModeService.cs SpawnTick + Services/Chaos/CHAOS_DESIGN.md,
+/// pinned by tests/CCP.Core.Tests/ChaosSpawnDirectorTests.cs).
 /// All state (intensity, difficulty, knobs) arrives as parameters — nothing here reads
 /// run state or randomness of its own.
 /// </summary>

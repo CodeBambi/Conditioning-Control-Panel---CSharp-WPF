@@ -242,6 +242,13 @@ Gates: slnf 0 · WPF sln 0 · Core 542/542 (count never decreases) · smoke Find
   and `CCP.Avalonia/ServiceCollectionExtensions.cs:216` (both cite `profilesync-port-plan.md`; chokepoint
   file edit is comments-only). `AvaloniaHeadStubs.cs` has 3 sites (`:153`, `:1815`, `:2232`). No WPF-head
   hits. Plan: parallel per-file comment scrub via workflow agents → re-grep 0 hits → gates → one commit.
+- **DONE 2026-07-10 (same session):** all 12 lines scrubbed/re-pointed across the 11 files; adversarial
+  verifier confirmed comments-only (23+/17−, zero code tokens), residual grep 0 hits, all WPF file:line
+  cites preserved (one net-ADDED: WPF `:2336-2338` on the pendulum comment). Gates: slnf 0 · WPF sln 0 ·
+  Core 542/542 · smoke 44 tabs / 0 unhandled / Findings 16 = pre-existing drift at clean HEAD (see the
+  smoke-drift row below; owner-waved 2026-07-10). Note for a future session: successor cite
+  `Services/Chaos/CHAOS_DESIGN.md` lives in the WPF tree — if that head is ever removed, relocate the
+  design doc into Core (recorded by the verifier as non-blocking).
 
 ### Voice — E2E mic live run · **VERIFY**
 

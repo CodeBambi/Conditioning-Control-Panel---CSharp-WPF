@@ -7,7 +7,8 @@ namespace ConditioningControlPanel.Core.Services.Chaos;
 /// (the chaos service's EndRun) feeds the primitives in and mutates <c>ChaosMeta.State</c>
 /// itself, exactly like the WPF <c>AwardRunRewards</c>/<c>EndRun</c> split.
 ///
-/// Sources (contract: docs/chaos-run-engine-contracts/economy-scoring.md §2-3):
+/// Sources (behavior contract — the permanent reference is the WPF source cited below, pinned by
+/// tests/CCP.Core.Tests/ChaosEconomyTests.cs and documented in Services/Chaos/CHAOS_DESIGN.md):
 ///  • Spark reward  → WPF <c>ChaosUpgrades.cs:495-521</c> (<c>ChaosMeta.AwardRunRewards</c>)
 ///  • XP grant      → WPF <c>ChaosModeService.cs:3163-3169</c> (<c>EndRun</c>)
 ///

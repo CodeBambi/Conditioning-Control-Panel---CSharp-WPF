@@ -6,7 +6,7 @@ namespace ConditioningControlPanel.Core.Tests;
 
 /// <summary>
 /// Pins the pure end-of-run ECONOMY formulas in <see cref="ChaosEconomy"/> against the WPF
-/// originals (contract: docs/chaos-run-engine-contracts/economy-scoring.md §2-3):
+/// originals (contract: WPF source cited below + Services/Chaos/CHAOS_DESIGN.md):
 ///  • Spark reward → WPF <c>ChaosUpgrades.cs:495-521</c> (AwardRunRewards):
 ///    <c>round((1.5·√score + 35·diff·min(1,durMin/3))·SparkGainMult) + TrickleDrops</c>,
 ///    ×1.10 drip capstone on the WHOLE haul, +25 first-fall (once ever).

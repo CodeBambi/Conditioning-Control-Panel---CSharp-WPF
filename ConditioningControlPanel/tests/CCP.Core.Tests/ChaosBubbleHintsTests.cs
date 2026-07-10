@@ -7,7 +7,7 @@ namespace ConditioningControlPanel.Core.Tests;
 /// <summary>
 /// Pins the first-contact verb-hint key/text tables in <see cref="ChaosBubbleHints"/> against the
 /// WPF original (ConditioningControlPanel/Services/Chaos/ChaosBubbleHints.cs; contract:
-/// docs/chaos-run-engine-contracts/spawn-system.md §6). Covers the full KeyFor priority ladder, the
+/// that WPF source + Services/Chaos/CHAOS_DESIGN.md). Covers the full KeyFor priority ladder, the
 /// TextFor lexicon, the per-variant live:/treat: split, and the fail-toward-no-hint IsLearned predicate.
 /// </summary>
 public class ChaosBubbleHintsTests

@@ -11,7 +11,7 @@ namespace ConditioningControlPanel.Core.Services.Settings;
 /// actions (skill purchase, oopsie insurance, display-name change, GDPR delete/export).
 ///
 /// Ported slice-by-slice from the WPF <c>ProfileSyncService</c>; see
-/// <c>docs/profilesync-port-plan.md</c>. Async members are declared as default interface
+/// <c>docs/avalonia-ui-parity-matrix.md</c> row 1. Async members are declared as default interface
 /// methods so the seam can be introduced without an implementation forcing every consumer
 /// to change at once. The two <c>event</c> members cannot be default interface members and
 /// must be declared by implementations.

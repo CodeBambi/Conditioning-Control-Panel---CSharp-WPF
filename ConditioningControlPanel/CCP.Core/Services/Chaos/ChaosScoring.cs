@@ -4,7 +4,8 @@ namespace ConditioningControlPanel.Core.Services.Chaos;
 /// Pure per-pop scoring and focus-economy formulas, extracted verbatim from the WPF chaos
 /// engine (WPF ChaosModeService.cs) so every payout is unit-testable without the service.
 /// The service composes these pieces exactly like the WPF handlers do; NO formula may be
-/// inlined back into handler code (contract: docs/chaos-run-engine-contracts/economy-scoring.md §1).
+/// inlined back into handler code (contract: WPF ChaosModeService.cs + pinned
+/// tests/CCP.Core.Tests/ChaosScoringTests.cs + Services/Chaos/CHAOS_DESIGN.md).
 /// All state (multiplier stack, boon knobs) arrives as parameters — nothing here reads
 /// run state or randomness of its own.
 /// </summary>

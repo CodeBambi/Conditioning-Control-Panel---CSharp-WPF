@@ -8,7 +8,7 @@ namespace ConditioningControlPanel.Avalonia.Compositor.Layers;
 /// AttentionCheckLayer — the "eye is watching" gaze target (migrated from the standalone
 /// click-through <c>Window</c> hosting <c>AttentionCheckControl</c> onto the compositor,
 /// WS2/WP3 UCE migration; recipe in <c>docs/unified-compositor-engine-plan.md</c> Phase F,
-/// spec in <c>docs/attention-check-layer-migration-spec.md</c>). It is the last live
+/// behaviour reference = the WPF <c>AttentionCheckControl</c> source). It is the last live
 /// window-based passive effect; migrating it completes the UCE window-migration lane.
 ///
 /// Behaviour contract (the shipped behaviour of <c>AttentionCheckControl</c>, the contract

@@ -24,7 +24,7 @@ namespace ConditioningControlPanel.Core.Services.Settings;
 /// per-user <c>X-Auth-Token</c> (plus HMAC anti-cheat signing on the sync push).
 ///
 /// Ported slice-by-slice from the WPF <c>ProfileSyncService</c>; see
-/// <c>docs/profilesync-port-plan.md</c>. All slices (1-7) have landed and the service is LIVE:
+/// <c>docs/avalonia-ui-parity-matrix.md</c> row 1. All slices (1-7) have landed and the service is LIVE:
 /// registered in the Avalonia DI graph (<c>ServiceCollectionExtensions.cs</c>) and wired to
 /// login/logout, startup restored-session, the sync triggers, cloud backup/restore, skill
 /// purchase, oopsie insurance, GDPR export, and the easter-egg counter.

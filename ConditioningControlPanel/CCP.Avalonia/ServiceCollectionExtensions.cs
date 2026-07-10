@@ -213,7 +213,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<ILogger<LeaderboardService>>(),
                 sp.GetService<ISeasonRecapService>());
         });
-        // Cloud profile sync (ProfileSync slice 7 live wiring; docs/profilesync-port-plan.md §8).
+        // Cloud profile sync (ProfileSync slice 7 live wiring, shipped 4f051ab0/80e1442; see docs/avalonia-ui-parity-matrix.md row 1).
         // Owns progression push/pull (/v2/user/sync IS the leaderboard submit), cloud settings
         // backup/restore, server-authoritative actions (purchase/oopsie/display-name) and GDPR
         // export. Auth stays in IV2AuthService (plan §6). SINGLE heartbeat owner: this service's

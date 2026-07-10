@@ -8,7 +8,7 @@ namespace ConditioningControlPanel.Core.Tests;
 
 /// <summary>
 /// Pins every pure scoring/focus formula in <see cref="ChaosScoring"/> against the WPF
-/// originals (contract: docs/chaos-run-engine-contracts/economy-scoring.md §1):
+/// originals (contract: WPF source cited below + Services/Chaos/CHAOS_DESIGN.md):
 /// BasePoints (WPF ChaosModeService.cs:1670), the treat-pop chain (:1862-1869), the defuse
 /// chain with Last Breath + Slowburner (:2015-2021), the prism 10x (:1836-1837), the flat
 /// tease denial (:1411-1413), the darter/freeze catches WITHOUT BoonPayMult (:2280-2281,
