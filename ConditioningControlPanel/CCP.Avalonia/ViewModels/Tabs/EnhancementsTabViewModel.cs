@@ -265,8 +265,9 @@ public partial class EnhancementsTabViewModel : TabItemViewModel
 
         foreach (var skill in SkillDefinition.All)
         {
-            // Non-secret skills render in their own tier; secrets are collected into tier 5.
-            if (skill.IsSecret && skill.Tier != 5)
+            // Mirror the WPF head: secret skills are never drawn in the tree
+            // (MainWindow.Enhancements.cs draws `.Where(s => !s.IsSecret)`).
+            if (skill.IsSecret)
                 continue;
 
             var tierGroup = SkillTiers.FirstOrDefault(g => g.Tier == skill.Tier);
@@ -328,10 +329,12 @@ public partial class EnhancementsTabViewModel : TabItemViewModel
             {
                 Connections.Add(new SkillConnectionViewModel
                 {
-                    X1 = source.PositionX + 80,
-                    Y1 = source.PositionY + 200,
-                    X2 = node.PositionX + 80,
-                    Y2 = node.PositionY,
+                    // Horizontal tree: prerequisite's right-center -> skill's left-center
+                    // (cards are 160x200). WPF lays skills out in 3 left-to-right paths.
+                    X1 = source.PositionX + 160,
+                    Y1 = source.PositionY + 100,
+                    X2 = node.PositionX,
+                    Y2 = node.PositionY + 100,
                     IsUnlocked = source.IsUnlocked,
                     IsAvailable = node.CanPurchase || node.IsUnlocked
                 });
@@ -339,26 +342,74 @@ public partial class EnhancementsTabViewModel : TabItemViewModel
         }
     }
 
-    private void AssignSkillPositions()
+    // Skill-tree layout ported from the WPF head (MainWindow.Enhancements.cs:91-137): three linear
+    // horizontal paths (top/mid/bottom rows) + a root node + the tier-6 analytics chain, keyed by
+    // skill id. WPF's 500px header lived on the canvas (its paths started at x=570); our redesign
+    // moved the header out of the canvas, so paths start at x=40. colSpacing matches WPF (270);
+    // rowSpacing is 220 to clear our 200px-tall cards (WPF's 160 fit its shorter nodes). Rows at
+    // y=0/220/440 -> content box ~3200x640, which drives the canvas size and the height-scale.
+    private static readonly IReadOnlyDictionary<string, (double X, double Y)> SkillLayout = BuildSkillLayout();
+
+    private static IReadOnlyDictionary<string, (double X, double Y)> BuildSkillLayout()
     {
         const double startX = 40;
-        const double startY = 40;
-        const double tierSpacingX = 280;
-        const double nodeSpacingY = 220;
-
-        var tierList = SkillTiers.OrderBy(g => g.Tier).ToList();
-        for (int tierIndex = 0; tierIndex < tierList.Count; tierIndex++)
+        const double colSpacing = 270;
+        const double rowSpacing = 220;
+        double top = 0, mid = rowSpacing, bot = rowSpacing * 2;
+        double Col(int c) => startX + colSpacing * c;
+        return new Dictionary<string, (double X, double Y)>
         {
-            var tier = tierList[tierIndex];
-            int count = tier.Skills.Count;
-            double totalHeight = count * nodeSpacingY;
-            double baseY = startY + (460 - totalHeight) / 2;
+            ["pink_hours"] = (Col(0), mid),
+            // Path 1 (top row)
+            ["ditzy_data"] = (Col(1), top),
+            ["hive_mind"] = (Col(2), top),
+            ["trophy_case"] = (Col(3), top),
+            ["popular_girl"] = (Col(4), top),
+            ["quest_refresh"] = (Col(5), top),
+            ["better_quests"] = (Col(6), top),
+            // Path 2 (mid row)
+            ["sparkle_boost_1"] = (Col(1), mid),
+            ["sparkle_boost_2"] = (Col(2), mid),
+            ["lucky_bimbo"] = (Col(3), mid),
+            ["sparkle_boost_3"] = (Col(4), mid),
+            ["lucky_bubbles"] = (Col(5), mid),
+            ["pink_rush"] = (Col(6), mid),
+            // Path 3 (bottom row)
+            ["good_girl_streak"] = (Col(1), bot),
+            ["milestone_rewards"] = (Col(2), bot),
+            ["oopsie_insurance"] = (Col(3), bot),
+            ["streak_power"] = (Col(4), bot),
+            ["reroll_addict"] = (Col(5), bot),
+            ["perfect_bimbo_week"] = (Col(6), bot),
+            // Tier-6 analytics chain (continues the mid row)
+            ["ditzy_data_pro"] = (Col(7), mid),
+            ["season_rewind"] = (Col(8), mid),
+            ["bestie_records"] = (Col(9), mid),
+            ["brain_drain_report"] = (Col(10), mid),
+            ["certified_data_bimbo"] = (Col(11), mid),
+        };
+    }
 
-            for (int i = 0; i < count; i++)
+    private void AssignSkillPositions()
+    {
+        // Position mapped skills per the WPF layout; any unmapped (future) skill is appended to the
+        // end of the mid row so it still renders instead of stacking at the origin.
+        double nextUnmappedX = 40 + 270 * 12;
+        foreach (var group in SkillTiers)
+        {
+            foreach (var skill in group.Skills)
             {
-                var skill = tier.Skills[i];
-                skill.PositionX = startX + tierIndex * tierSpacingX;
-                skill.PositionY = baseY + i * nodeSpacingY;
+                if (SkillLayout.TryGetValue(skill.SkillId, out var pos))
+                {
+                    skill.PositionX = pos.X;
+                    skill.PositionY = pos.Y;
+                }
+                else
+                {
+                    skill.PositionX = nextUnmappedX;
+                    skill.PositionY = 220;
+                    nextUnmappedX += 270;
+                }
             }
         }
     }

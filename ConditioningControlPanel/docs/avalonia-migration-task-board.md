@@ -524,6 +524,29 @@ win). ~55-60px reclaimed by the browser; cards now near-equal height (no dead sp
 x:Names preserved (grep-verified). Driver reviewed diff + screenshot. Gates: slnf 0 err, smoke 44 tabs/0
 unhandled.
 
+**JUDGMENT redesign: Presets / Quests / Enhancements pages + dashboard helper buttons + skill-tree
+layout parity — 2026-07-10 (this session, 3 surgical commits):** user reported those tabs looked bad
+vs WPF (esp. Enhancements) and the dashboard helper buttons looked ugly.
+- **Dashboard helper buttons** (`SettingsTabView.axaml`): bare default Buttons → themed `OutlineButton`
+  (rounded pink outline, centered) with spaced emoji+label. HARNESS CONSTRAINT discovered: the smoke
+  `GetTextFromObject` only reads `string`/`TextBlock`/`ContentControl` — a `StackPanel` content returns
+  null and breaks helper-button detection (3 "not found" errors). Kept a SINGLE `TextBlock` with `Run`s
+  (emoji + space + label) so `GetTextBlockText` concatenates inlines. Findings 19→16 confirms the fix.
+- **Presets + Quests** (`PresetsTabView.axaml`, `QuestsTabView.axaml`): JUDGMENT (fable-5) minimalistic
+  restyle. Set-diff verified 0 dropped bindings/x:Names (118→118 / 106→106). Quests keeps its 6 semantic
+  status colors (gold/green/purple) hardcoded — confirmed matching WPF (theme-independent).
+- **Enhancements** (`EnhancementsTabView.axaml` + `.axaml.cs` + `EnhancementsTabViewModel.cs`): two bugs
+  fixed. (1) container-position no-op — `Canvas.Left/Top` on a DataTemplate root is ignored in an Avalonia
+  ItemsControl (the ContentPresenter is the Canvas child), so nodes stacked at 0,0 with lines slashing
+  across; fixed with the official v12 `Style Selector="ItemsControl > ContentPresenter"` idiom. (2) wrong
+  layout — VM stacked each tier vertically (tier 4 = 9 skills → 1980px in a 460 canvas → top/bottom clip).
+  Ported WPF's exact 3-horizontal-path position map (`MainWindow.Enhancements.cs:91-137`), re-anchored
+  lines right-center→left-center, excluded secrets (WPF parity), canvas 2400x460→3200x640, and added
+  height-driven scaling (`LayoutTransformControl` + `scale=clamp(viewportH/640,0.5,1.25)`) so cards +
+  images grow/shrink with the window while width scrolls horizontally like WPF. Validated by advisor
+  (JUDGMENT) + official Avalonia docs. Gates: slnf 0 err, WPF sln 0 err, smoke 44/0, Findings 16 (no
+  HelperButton errors). Skill-tree visual not smoke-screenshotted — flagged for user eyeball.
+
 **Claim-priority order (LIVE — the claimer updates this line as rows close/land):**
 **#4 (WS3 sweep) → #3 (libmpv, CONDITIONAL)** for autonomous tiers. **row #2 re-baseline is now BLOCKED**
 (this session): its scheduling half is DONE via IMP-2 and `MinFps=0` is root-caused (un-decodable YouTube
