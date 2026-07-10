@@ -12,9 +12,9 @@
 
   <Grid>
     <ScrollViewer>
-      <StackPanel Margin="16" Spacing="12">
+      <StackPanel Margin="16" Spacing="16">
         <!-- Sub-tab navigation -->
-        <StackPanel Orientation="Horizontal" Spacing="10">
+        <StackPanel Orientation="Horizontal" Spacing="8">
           <Button Content="{Binding [btn_daily_weekly], Source={x:Static loc:LocalizationManager.Instance}}"
                   Command="{Binding ShowDailyWeeklyCommand}"
                   Theme="{DynamicResource PinkButton}"
@@ -29,61 +29,53 @@
         <StackPanel IsVisible="{Binding DailyWeeklyPanelVisible}" Spacing="16">
           <!-- Season title banner -->
           <Border Background="{DynamicResource DarkerBgBrush}"
-                  CornerRadius="12"
-                  Padding="20,14"
+                  BorderBrush="{DynamicResource GlassBorderBrush}"
                   BorderThickness="1"
-                  BorderBrush="{DynamicResource PanelAccentBrush}">
-            <Grid>
-              <TextBlock Text="{Binding SeasonTitle}"
-                         FontSize="28"
-                         FontWeight="ExtraBold"
-                         FontStyle="Italic"
-                         HorizontalAlignment="Center"
-                         TextAlignment="Center">
-                <TextBlock.Foreground>
-                  <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                    <GradientStop Color="{DynamicResource PinkColor}" Offset="0.0" />
-                    <GradientStop Color="#DA70D6" Offset="0.25" />
-                    <GradientStop Color="{DynamicResource DarkPinkColor}" Offset="0.5" />
-                    <GradientStop Color="#DA70D6" Offset="0.75" />
-                    <GradientStop Color="{DynamicResource PinkColor}" Offset="1.0" />
-                  </LinearGradientBrush>
-                </TextBlock.Foreground>
-              </TextBlock>
-              <Border BoxShadow="0 0 15 0 #99FF69B4"
-                      HorizontalAlignment="Center"
-                      IsHitTestVisible="False"
-                      Margin="0,-36,0,0"
-                      VerticalAlignment="Top"
-                      Width="300"
-                      Height="40" />
-            </Grid>
+                  CornerRadius="12"
+                  Padding="20,14">
+            <TextBlock Text="{Binding SeasonTitle}"
+                       FontSize="26"
+                       FontWeight="ExtraBold"
+                       FontStyle="Italic"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center">
+              <TextBlock.Foreground>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                  <GradientStop Color="{DynamicResource PinkColor}" Offset="0.0" />
+                  <GradientStop Color="{DynamicResource DarkPinkColor}" Offset="0.5" />
+                  <GradientStop Color="{DynamicResource PinkColor}" Offset="1.0" />
+                </LinearGradientBrush>
+              </TextBlock.Foreground>
+            </TextBlock>
           </Border>
 
-          <!-- Header -->
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Text="{Binding [label_quests], Source={x:Static loc:LocalizationManager.Instance}}"
-                       FontSize="18"
-                       FontWeight="Bold"
-                       Foreground="{DynamicResource PinkBrush}"
-                       VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1"
-                       Text="{Binding QuestStatsText}"
-                       FontSize="12"
-                       Foreground="{DynamicResource TextMutedBrush}"
-                       VerticalAlignment="Center" />
-          </Grid>
+          <!-- Quests section header (slim) -->
+          <StackPanel Spacing="6">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="{Binding [label_quests], Source={x:Static loc:LocalizationManager.Instance}}"
+                         FontSize="15"
+                         FontWeight="SemiBold"
+                         Foreground="{DynamicResource PinkBrush}"
+                         VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1"
+                         Text="{Binding QuestStatsText}"
+                         FontSize="12"
+                         Foreground="{DynamicResource TextMutedBrush}"
+                         VerticalAlignment="Center" />
+            </Grid>
+            <Border Height="1" Background="{DynamicResource GlassBorderBrush}" />
+          </StackPanel>
 
-          <!-- Two-column quest cards -->
-          <Grid ColumnDefinitions="*,20,*">
+          <!-- Two-column quest cards (the hero content) -->
+          <Grid ColumnDefinitions="*,16,*">
             <!-- Daily Quest -->
             <StackPanel Grid.Column="0" Spacing="8">
               <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <TextBlock Text="☀️" FontSize="20" VerticalAlignment="Center" />
+                  <TextBlock Text="☀️" FontSize="18" VerticalAlignment="Center" />
                   <TextBlock Text="{Binding [label_daily_quest], Source={x:Static loc:LocalizationManager.Instance}}"
-                             FontSize="16"
-                             FontWeight="Bold"
+                             FontSize="14"
+                             FontWeight="SemiBold"
                              Foreground="#FFD700"
                              VerticalAlignment="Center" />
                   <Border Background="{DynamicResource PanelAccentBrush}" CornerRadius="8" Padding="6,2" VerticalAlignment="Center">
@@ -109,6 +101,7 @@
               <TextBlock Text="{Binding [label_complete_3_daily_quests_1_weekly_quest], Source={x:Static loc:LocalizationManager.Instance}}"
                          FontSize="10"
                          Foreground="{DynamicResource TextMutedBrush}"
+                         Opacity="0.8"
                          HorizontalAlignment="Center" />
 
               <features:QuestCard IsVisible="{Binding DailyCardVisible}"
@@ -129,13 +122,13 @@
               <Border IsVisible="{Binding DailyAllCompletedMessageVisible}"
                       Background="#2D4A2D"
                       CornerRadius="10"
-                      Padding="15"
+                      Padding="16"
                       MinHeight="180">
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6">
                   <TextBlock Text="✅" FontSize="44" HorizontalAlignment="Center" />
                   <TextBlock Text="{Binding [label_all_daily_quests_completed], Source={x:Static loc:LocalizationManager.Instance}}"
-                             FontSize="16"
-                             FontWeight="Bold"
+                             FontSize="15"
+                             FontWeight="SemiBold"
                              Foreground="#00E676"
                              HorizontalAlignment="Center" />
                   <TextBlock Text="{Binding [label_check_back_tomorrow_for_new_quests], Source={x:Static loc:LocalizationManager.Instance}}"
@@ -150,10 +143,10 @@
             <StackPanel Grid.Column="2" Spacing="8">
               <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <TextBlock Text="🌙" FontSize="20" VerticalAlignment="Center" />
+                  <TextBlock Text="🌙" FontSize="18" VerticalAlignment="Center" />
                   <TextBlock Text="{Binding [label_weekly_quest], Source={x:Static loc:LocalizationManager.Instance}}"
-                             FontSize="16"
-                             FontWeight="Bold"
+                             FontSize="14"
+                             FontWeight="SemiBold"
                              Foreground="#9370DB"
                              VerticalAlignment="Center" />
                 </StackPanel>
@@ -166,6 +159,7 @@
               <TextBlock Text="{Binding [label_1_weekly_quest_to_complete], Source={x:Static loc:LocalizationManager.Instance}}"
                          FontSize="10"
                          Foreground="{DynamicResource TextMutedBrush}"
+                         Opacity="0.8"
                          HorizontalAlignment="Center" />
 
               <features:QuestCard Title="{Binding WeeklyQuestName}"
@@ -187,26 +181,30 @@
           <Border IsVisible="{Binding QuestCompleteBannerVisible}"
                   Background="#2D4A2D"
                   CornerRadius="10"
-                  Padding="15">
+                  Padding="12">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10">
-              <TextBlock Text="✨" FontSize="26" />
+              <TextBlock Text="✨" FontSize="22" />
               <TextBlock Text="{Binding [label_quest_complete], Source={x:Static loc:LocalizationManager.Instance}}"
-                         FontSize="18"
-                         FontWeight="Bold"
+                         FontSize="16"
+                         FontWeight="SemiBold"
                          Foreground="#00E676"
                          VerticalAlignment="Center" />
-              <TextBlock Text="✨" FontSize="26" />
+              <TextBlock Text="✨" FontSize="22" />
             </StackPanel>
           </Border>
 
           <!-- Quest streak calendar -->
-          <Border Background="{DynamicResource DarkerBgBrush}" CornerRadius="10" Padding="15,12">
+          <Border Background="{DynamicResource SurfaceBgBrush}"
+                  BorderBrush="{DynamicResource GlassBorderBrush}"
+                  BorderThickness="1"
+                  CornerRadius="12"
+                  Padding="16,12">
             <StackPanel Spacing="10">
               <Grid ColumnDefinitions="*,*,Auto">
                 <TextBlock Grid.Column="0"
                            Text="{Binding [label_quest_streak], Source={x:Static loc:LocalizationManager.Instance}}"
                            FontSize="14"
-                           FontWeight="Bold"
+                           FontWeight="SemiBold"
                            Foreground="{DynamicResource TextLightBrush}"
                            VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1"
@@ -263,16 +261,20 @@
           </Border>
 
           <!-- Quest statistics -->
-          <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10" Padding="15">
-            <StackPanel Spacing="15">
+          <Border Background="{DynamicResource SurfaceBgBrush}"
+                  BorderBrush="{DynamicResource GlassBorderBrush}"
+                  BorderThickness="1"
+                  CornerRadius="12"
+                  Padding="16,12">
+            <StackPanel Spacing="12">
               <TextBlock Text="{Binding [label_quest_statistics], Source={x:Static loc:LocalizationManager.Instance}}"
                          FontSize="14"
-                         FontWeight="Bold"
+                         FontWeight="SemiBold"
                          Foreground="{DynamicResource TextLightBrush}" />
               <Grid ColumnDefinitions="*,*,*">
-                <StackPanel HorizontalAlignment="Center">
+                <StackPanel HorizontalAlignment="Center" Spacing="2">
                   <TextBlock Text="{Binding TotalDailyCompletedText}"
-                             FontSize="28"
+                             FontSize="26"
                              FontWeight="Bold"
                              Foreground="#FFD700"
                              HorizontalAlignment="Center" />
@@ -281,9 +283,9 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              HorizontalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
                   <TextBlock Text="{Binding TotalWeeklyCompletedText}"
-                             FontSize="28"
+                             FontSize="26"
                              FontWeight="Bold"
                              Foreground="#9370DB"
                              HorizontalAlignment="Center" />
@@ -292,9 +294,9 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              HorizontalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
                   <TextBlock Text="{Binding TotalQuestXpText}"
-                             FontSize="28"
+                             FontSize="26"
                              FontWeight="Bold"
                              Foreground="{DynamicResource PinkBrush}"
                              HorizontalAlignment="Center" />
@@ -311,36 +313,40 @@
         <!-- Roadmap Panel -->
         <StackPanel IsVisible="{Binding RoadmapPanelVisible}" Spacing="16">
           <TextBlock Text="{Binding [label_look_how_far_you_ve_come_sweetie], Source={x:Static loc:LocalizationManager.Instance}}"
-                     FontSize="26"
+                     FontSize="24"
                      FontStyle="Italic"
                      FontWeight="Light"
-                     Foreground="#CC88AACC"
+                     Foreground="{DynamicResource TextMutedBrush}"
                      HorizontalAlignment="Center"
                      TextAlignment="Center" />
 
-          <Border Background="#30FFD700"
+          <!-- Journal info callout -->
+          <Border Background="#26FFD700"
                   BorderBrush="#AAFFD700"
-                  BorderThickness="1.5"
-                  CornerRadius="6"
-                  Padding="14,10"
+                  BorderThickness="1"
+                  CornerRadius="10"
+                  Padding="14,12"
                   MaxWidth="700"
                   HorizontalAlignment="Center">
             <StackPanel Spacing="6">
               <TextBlock Text="{Binding [label_what_is_the_bimbo_journal], Source={x:Static loc:LocalizationManager.Instance}}"
                          FontSize="14"
-                         FontWeight="Bold"
+                         FontWeight="SemiBold"
                          Foreground="#FFD700" />
               <TextBlock Text="{Binding [label_each_track_has_steps_that_ask_you_to_take_a_p], Source={x:Static loc:LocalizationManager.Instance}}"
                          FontSize="12"
-                         Foreground="#DDFFFFFF"
+                         Foreground="{DynamicResource TextLightBrush}"
+                         Opacity="0.85"
                          TextWrapping="Wrap" />
               <TextBlock Text="{Binding [label_click_a_step_take_the_pic_and_upload_it_to_ma], Source={x:Static loc:LocalizationManager.Instance}}"
                          FontSize="12"
-                         Foreground="#DDFFFFFF"
+                         Foreground="{DynamicResource TextLightBrush}"
+                         Opacity="0.85"
                          TextWrapping="Wrap" />
               <TextBlock Text="{Binding [label_complete_all_steps_in_a_track_to_unlock_the_n], Source={x:Static loc:LocalizationManager.Instance}}"
                          FontSize="12"
-                         Foreground="#DDFFFFFF"
+                         Foreground="{DynamicResource TextLightBrush}"
+                         Opacity="0.85"
                          TextWrapping="Wrap" />
               <TextBlock Text="{Binding [label_all_photos_are_stored_locally_on_your_pc_only], Source={x:Static loc:LocalizationManager.Instance}}"
                          FontSize="11"
@@ -353,7 +359,7 @@
           <ItemsControl ItemsSource="{Binding RoadmapTracks}">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
-                <StackPanel Orientation="Horizontal" Spacing="10" />
+                <StackPanel Orientation="Horizontal" Spacing="8" />
               </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
@@ -367,58 +373,58 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
-          <!-- Track info header -->
-          <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10" Padding="15">
-            <Grid>
-              <StackPanel Spacing="4">
-                <TextBlock Text="{Binding TrackName}"
-                           FontSize="20"
-                           FontWeight="Bold"
-                           Foreground="{DynamicResource PinkBrush}" />
-                <TextBlock Text="{Binding TrackSubtitle}"
-                           FontSize="14"
-                           Foreground="{DynamicResource TextMutedBrush}" />
-                <TextBlock Text="{Binding TrackProgressText}"
-                           FontSize="12"
-                           Foreground="{DynamicResource TextDimBrush}"
-                           Margin="0,5,0,0" />
-              </StackPanel>
-              <StackPanel Orientation="Horizontal"
-                          HorizontalAlignment="Right"
-                          VerticalAlignment="Center"
-                          Spacing="5"
-                          IsVisible="{Binding ShowBadgeIndicator}">
-                <TextBlock Text="🏆" FontSize="26" />
-                <TextBlock Text="{Binding [label_badge_earned], Source={x:Static loc:LocalizationManager.Instance}}"
-                           FontSize="14"
-                           FontWeight="Bold"
-                           Foreground="#FFD700"
-                           VerticalAlignment="Center" />
-              </StackPanel>
-            </Grid>
-          </Border>
+          <!-- Track info header (slim, no box) -->
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Spacing="2">
+              <TextBlock Text="{Binding TrackName}"
+                         FontSize="20"
+                         FontWeight="Bold"
+                         Foreground="{DynamicResource PinkBrush}" />
+              <TextBlock Text="{Binding TrackSubtitle}"
+                         FontSize="13"
+                         Foreground="{DynamicResource TextMutedBrush}" />
+              <TextBlock Text="{Binding TrackProgressText}"
+                         FontSize="12"
+                         Foreground="{DynamicResource TextDimBrush}"
+                         Margin="0,4,0,0" />
+            </StackPanel>
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Spacing="6"
+                        IsVisible="{Binding ShowBadgeIndicator}">
+              <TextBlock Text="🏆" FontSize="24" />
+              <TextBlock Text="{Binding [label_badge_earned], Source={x:Static loc:LocalizationManager.Instance}}"
+                         FontSize="14"
+                         FontWeight="SemiBold"
+                         Foreground="#FFD700"
+                         VerticalAlignment="Center" />
+            </StackPanel>
+          </Grid>
 
           <!-- Locked track overlay -->
           <Border IsVisible="{Binding IsTrackLocked}"
-                  Background="#CC1A1A2E"
-                  CornerRadius="10"
-                  Padding="40">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="15">
+                  Background="{DynamicResource DarkerBgBrush}"
+                  BorderBrush="{DynamicResource GlassBorderBrush}"
+                  BorderThickness="1"
+                  CornerRadius="12"
+                  Padding="32">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="12">
               <TextBlock Text="🔒" FontSize="52" HorizontalAlignment="Center" />
               <TextBlock Text="{Binding LockReason}"
-                         FontSize="16"
+                         FontSize="15"
                          Foreground="{DynamicResource TextLightBrush}"
                          HorizontalAlignment="Center"
                          TextAlignment="Center" />
             </StackPanel>
           </Border>
 
-          <!-- Horizontal scrolling roadmap -->
+          <!-- Horizontal scrolling roadmap (the hero content) -->
           <Border Background="{DynamicResource PanelBgBrush}"
                   BorderBrush="{DynamicResource GlassBorderBrush}"
                   BorderThickness="1"
                   CornerRadius="12"
-                  Padding="10"
+                  Padding="12"
                   MinHeight="240">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
               <ItemsControl ItemsSource="{Binding RoadmapNodes}">
@@ -444,14 +450,18 @@
           </Border>
 
           <!-- Roadmap statistics -->
-          <Border Background="{DynamicResource SurfaceBgBrush}" CornerRadius="10" Padding="15">
-            <StackPanel Spacing="15">
+          <Border Background="{DynamicResource SurfaceBgBrush}"
+                  BorderBrush="{DynamicResource GlassBorderBrush}"
+                  BorderThickness="1"
+                  CornerRadius="12"
+                  Padding="16,12">
+            <StackPanel Spacing="12">
               <TextBlock Text="{Binding [label_transformation_progress], Source={x:Static loc:LocalizationManager.Instance}}"
                          FontSize="14"
-                         FontWeight="Bold"
+                         FontWeight="SemiBold"
                          Foreground="{DynamicResource TextLightBrush}" />
               <Grid ColumnDefinitions="*,*,*">
-                <StackPanel HorizontalAlignment="Center">
+                <StackPanel HorizontalAlignment="Center" Spacing="2">
                   <TextBlock Text="{Binding TotalStepsText}"
                              FontSize="24"
                              FontWeight="Bold"
@@ -462,7 +472,7 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              HorizontalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
                   <TextBlock Text="{Binding TotalPhotosText}"
                              FontSize="24"
                              FontWeight="Bold"
@@ -473,7 +483,7 @@
                              Foreground="{DynamicResource TextMutedBrush}"
                              HorizontalAlignment="Center" />
                 </StackPanel>
-                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
                   <TextBlock Text="{Binding JourneyDaysText}"
                              FontSize="24"
                              FontWeight="Bold"
@@ -492,13 +502,13 @@
     </ScrollViewer>
 
     <!-- Login required overlay -->
-    <Border IsVisible="{Binding IsLoginOverlayVisible}"
-            Background="#E6151528"
-            CornerRadius="12"
-            Padding="40"
-            HorizontalAlignment="Stretch"
-            VerticalAlignment="Stretch">
-      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="15">
+    <Panel IsVisible="{Binding IsLoginOverlayVisible}"
+           HorizontalAlignment="Stretch"
+           VerticalAlignment="Stretch">
+      <Border Background="{DynamicResource DarkerBgBrush}"
+              Opacity="0.96"
+              CornerRadius="12" />
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Margin="40">
         <TextBlock Text="🔒" FontSize="52" HorizontalAlignment="Center" />
         <TextBlock Text="{Binding [label_login_required], Source={x:Static loc:LocalizationManager.Instance}}"
                    FontSize="22"
@@ -507,12 +517,12 @@
                    HorizontalAlignment="Center" />
         <TextBlock Text="{Binding [label_log_in_with_discord_or_patreon_to_access_ques], Source={x:Static loc:LocalizationManager.Instance}}"
                    FontSize="14"
-                   Foreground="#AA99AA"
+                   Foreground="{DynamicResource TextMutedBrush}"
                    HorizontalAlignment="Center"
                    TextAlignment="Center"
                    TextWrapping="Wrap"
                    MaxWidth="350" />
       </StackPanel>
-    </Border>
+    </Panel>
   </Grid>
 </UserControl>
