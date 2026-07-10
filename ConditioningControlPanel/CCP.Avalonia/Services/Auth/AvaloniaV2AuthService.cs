@@ -296,32 +296,6 @@ public sealed class AvaloniaV2AuthService : IV2AuthService
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// One-shot utility only — this service owns NO heartbeat schedule and this method has no
-    /// callers in the Avalonia head. The SINGLE heartbeat owner (plan §6) is
-    /// <c>Core.Services.Settings.ProfileSyncService</c>, whose 120s timer posts the richer
-    /// <c>{unified_id, is_active, in_session, app_version}</c> body. Do not add a timer here.
-    /// </remarks>
-    public async Task<bool> SendHeartbeatAsync(string unifiedId)
-    {
-        try
-        {
-            var payload = new JObject { ["unified_id"] = unifiedId };
-
-            var request = new HttpRequestMessage(HttpMethod.Post, $"{ServerUrl}/v2/user/heartbeat");
-            AddAuthHeader(request);
-            request.Content = new StringContent(payload.ToString(), Encoding.UTF8, "application/json");
-            var response = await _http.SendAsync(request);
-
-            return response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    /// <inheritdoc />
     public async Task<bool> DeleteAccountAsync(string unifiedId)
     {
         try

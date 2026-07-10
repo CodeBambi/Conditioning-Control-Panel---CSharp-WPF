@@ -50,11 +50,6 @@ public interface IV2AuthService
         JObject? stats = null, string[]? achievements = null);
 
     /// <summary>
-    /// Send heartbeat to update online status.
-    /// </summary>
-    Task<bool> SendHeartbeatAsync(string unifiedId);
-
-    /// <summary>
     /// Delete user account (GDPR).
     /// </summary>
     Task<bool> DeleteAccountAsync(string unifiedId);

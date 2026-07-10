@@ -216,7 +216,8 @@ public static class ServiceCollectionExtensions
         // Owns progression push/pull (/v2/user/sync IS the leaderboard submit), cloud settings
         // backup/restore, server-authoritative actions (purchase/oopsie/display-name) and GDPR
         // export. Auth stays in IV2AuthService (plan §6). SINGLE heartbeat owner: this service's
-        // 120s timer — AvaloniaV2AuthService.SendHeartbeatAsync has no timer and no callers.
+        // 120s timer (the dead one-arg AvaloniaV2AuthService.SendHeartbeatAsync seam — no timer, no
+        // callers — was removed, IMP-7).
         // Sibling seams resolve via GetService (all-optional ctor) like the LeaderboardService
         // precedent above; SettingsService reaches it only lazily through ISettingsBackupProvider,
         // so no construction cycle exists.
