@@ -128,9 +128,16 @@ export function createDriftChain({ getDepth }) {
   // that rolled biome dresses the current chamber - a Gallery line must never
   // whisper in the Casino. Fed alongside setRegion from applyRegionSky.
   let curBiome = null;
-  const inRegion = (b) => (!b.region || b.region === curRegion) && (!b.biome || b.biome === curBiome);
+  // Voice gate: biome-tagged entries ship per persona voice - 'sissy' serves
+  // Bambi Sleep too (they share one VO set), Circe's Lock has her own 'circe'
+  // set. Only biome lines are dual-voiced; untagged / region-only entries stay
+  // voice-agnostic (the shipped backbone corpus). Fed by setVoice from chaosRun.
+  let curVoice = 'sissy';
+  const inRegion = (b) => (!b.region || b.region === curRegion)
+    && (!b.biome || (b.biome === curBiome && (b.mod || 'sissy') === curVoice));
   function setRegion(n) { curRegion = (n | 0) || 0; }
   function setBiome(id) { curBiome = id || null; }
+  function setVoice(v) { curVoice = v === 'circe' ? 'circe' : 'sissy'; }
 
   function pick(poolId) {
     const pool = FALL_DRIFT[poolId];
@@ -348,7 +355,7 @@ export function createDriftChain({ getDepth }) {
   const isSpeaking = () => started && !el.paused;
 
   // read-only state for the ?e2e hook
-  const debugState = () => ({ started, blocksLeft, region: curRegion, speaking: !el.paused, routed: !!voiceGain, duck });
+  const debugState = () => ({ started, blocksLeft, region: curRegion, biome: curBiome, voice: curVoice, speaking: !el.paused, routed: !!voiceGain, duck });
 
-  return { start, stop, setSpeed, setDuck, setRegion, setBiome, isSpeaking, dispose, debugState };
+  return { start, stop, setSpeed, setDuck, setRegion, setBiome, setVoice, isSpeaking, dispose, debugState };
 }

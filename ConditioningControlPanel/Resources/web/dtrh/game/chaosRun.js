@@ -1478,6 +1478,9 @@ export function createChaosGame({ bridge, hostState, runSetup, requestExit, modI
     if (ctx && ctx.drift) {
       ctx.drift.setRegion(cfg.regionMode ? regionIndex : 0);
       if (ctx.drift.setBiome) ctx.drift.setBiome(biome ? biome.id : null);
+      // Biome lines are dual-voiced: Circe's Lock speaks her own set, every
+      // other persona shares the sissy set (Bambi Sleep included).
+      if (ctx.drift.setVoice) ctx.drift.setVoice(activeModId === 'builtin-locked' ? 'circe' : 'sissy');
     }
     // Four Chambers visual identity: the chamber OWNS the tube. Palette grade
     // crossfades in (~3.2s, landing as the ready-GO beat clears); the ring/
