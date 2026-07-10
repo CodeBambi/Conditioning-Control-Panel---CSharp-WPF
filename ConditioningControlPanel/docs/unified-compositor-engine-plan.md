@@ -245,7 +245,7 @@ is evidence:
 dotnet build ConditioningControlPanel/CCP.Desktop.slnf -clp:ErrorsOnly      # 0 errors
 dotnet build ConditioningControlPanel.sln -clp:ErrorsOnly                   # 0 errors (WPF guardrail)
 dotnet test ConditioningControlPanel/tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release   # ALL pass; count NEVER decreases
-dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -c Debug -- --smoke-test      # Findings: 5 baseline, exit 0
+dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -c Debug -- --smoke-test      # 44 tabs + 0 unhandled + findings ⊆ recorded benign drift set (board smoke-drift row; logged-out baseline = Findings 5), exit 0
 
 # UCE-specific (Debug builds)
 dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -c Debug -- --verify-layers    # exit 0; all registered layers PASS

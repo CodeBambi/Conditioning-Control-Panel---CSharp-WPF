@@ -46,7 +46,9 @@ commit — mandatory for state/economy/lifecycle diffs).
 **Gates before every commit (all must pass):** slnf build 0 errors; WPF sln build 0 errors; Core tests all
 pass and the count NEVER decreases (floor **542** — re-run LIVE 2026-07-10: Core **542/542** Release 0
 failed · slnf **0 errors**/384 warnings · WPF sln **0 errors** — read the live count); `--smoke-test`
-at baseline (Findings 5); `--verify-layers`/`--verify-video` when touching the compositor/video;
+→ 44 tabs + 0 unhandled + findings ⊆ the recorded benign drift set (smoke-drift row below; logged-out
+baseline = Findings 5, count-equality NOT the signal while the env is authed — owner-waved 2026-07-10);
+`--verify-layers`/`--verify-video` when touching the compositor/video;
 `--benchmark` before/after on hot paths — not worse than [`docs/benchmark-optimized.json`](benchmark-optimized.json)
 (re-baseline caveat: open row #2). Re-verify live before signing off.
 

@@ -590,7 +590,7 @@ section (every row starts `[ ] linux`; the sweep earns them). Run inside the VM 
 Every phase ends with a **build checkpoint** and a **test checkpoint**; never a "big bang" integration — the WPF
 app stays runnable until the Avalonia desktop app fully replaces it. **The binding gates block EVERY commit**
 (copy-paste block in `skia-rebuild-goal.md`): slnf build 0 errors; WPF sln build 0 errors; Core tests all pass
-with the count NEVER decreasing (floor 542/542, verified live 2026-07-10); `--smoke-test` at baseline (Findings 5);
+with the count NEVER decreasing (floor 542/542, verified live 2026-07-10); `--smoke-test` → 44 tabs + 0 unhandled + findings ⊆ the recorded benign drift set (task-board smoke-drift row; logged-out baseline = Findings 5);
 `--verify-layers`/`--verify-video` when touching compositor/video; `--benchmark`/`--max-benchmark` before/after on
 hot paths — not worse than `benchmark-optimized.json` (re-baseline caveat: board row #2).
 

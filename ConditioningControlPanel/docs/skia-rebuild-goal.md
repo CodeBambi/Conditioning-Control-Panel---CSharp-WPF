@@ -29,7 +29,7 @@ feature ports, not just the UCE**.
 | Windows AND Linux: build, launch, features function | Matching WPF pixel-for-pixel (keep the design language, see `dashboard-design`) |
 | Per-region click-through (team review 2026-07-09): only the color filter + spiral are ambient tinted glass the user works through; every other active layer captures input over its painted region | Keeping legacy per-effect windows |
 | Privacy/security posture never regresses (see Guardrails) | Preserving old workarounds whose reason died |
-| **Trust nothing written:** every claimed status (done / exists / deleted / count / perf) is re-verified against code, git, or live output before being built on — docs are hypotheses, code and the running app are truth | Doc prose citing other doc prose as evidence |
+| **Doc trust (post-reconciliation, owner ruling 2026-07-10):** doc statuses are trustworthy since the full doc-vs-code audit landed; spot-verify only claims load-bearing for state/economy/security/input-hook/compositor changes, or when live evidence contradicts them — fix stale docs in the same commit | Wholesale re-auditing of already-reconciled doc statuses (double work) |
 
 **Acceptance gate:** a ported feature is accepted only when at least as fast and smooth as the WPF head
 — preferably measurably improved (startup, memory, FPS, reliability, security). Big changes are
@@ -107,9 +107,11 @@ found anywhere is historical debris — purge it, do not honor it.
 
 **Gates, re-run live 2026-07-10 (trust-nothing verification pass):** slnf build **0 errors** (384
 warnings) · WPF sln build **0 errors** · Core tests **542/542** (Release, 0 failed). App/`--smoke-test`
-not re-run (GUI); the smoke baseline `[SMOKE] Findings: 5`, exit 0, 44 tabs is a RECORDED runtime value
-(commit `fb704a6d` message — there is no in-code baseline constant), so treat it as recorded evidence
-until the next headed run (the `StartSession` blocker IS baseline).
+not re-run (GUI); the recorded logged-out smoke baseline is `[SMOKE] Findings: 5`, exit 0, 44 tabs
+(commit `fb704a6d` message — there is no in-code baseline constant; the `StartSession` blocker IS
+baseline). LIVE authed envs produce 15–16 findings of benign server-content-coupled drift — owner-waved
+2026-07-10; the gate signal is 44 tabs + 0 unhandled + findings ⊆ the recorded benign drift set (task
+board smoke-drift row), NOT count-equality with 5.
 
 **Trust-nothing verification pass (2026-07-10):** 90 material status claims extracted from the
 canonical docs were checked against code/git/live gates — **68 VERIFIED · 16 WEAKENED (downgraded in
@@ -202,8 +204,11 @@ Windows is reverted, not patched around.
 ## Loop protocol (how a workflow-driven session runs this goal)
 
 1. **`port-plan`**: read `docs-index.md` → this file → the task board; check `git status` + recent log.
-   **Trust nothing written:** before building on any claimed-done area, re-verify the claim against
-   code (grep/read/git/live gates) — docs are hypotheses, code and the running app are truth.
+   **Doc trust (owner ruling 2026-07-10, supersedes the same-day trust-nothing ruling):** the full
+   doc-vs-code reconciliation pass completed 2026-07-10 (90 claims audited, corrections landed) — doc
+   statuses are now trustworthy; do NOT re-audit them wholesale. Spot-verify a claim only when it is
+   load-bearing for a change touching state, economy, security, input hooks, or compositor internals,
+   or when live evidence contradicts it; a stale doc is fixed in the same commit.
    Verified-existing features are still fair game for improvement — big changes allowed on merit.
 2. **Claim ONE board row** (append-only claim ledger entry). One task per session where possible.
 3. **Fan out discovery** via the `workflow` tool: `wpf-archaeologist` for the behavior contract
@@ -233,7 +238,7 @@ precondition or ambiguous step → `BLOCKED:` note on the board.
 dotnet build ConditioningControlPanel/CCP.Desktop.slnf -clp:ErrorsOnly    # 0 errors
 dotnet build ConditioningControlPanel.sln -clp:ErrorsOnly                 # 0 errors (WPF guardrail)
 dotnet test ConditioningControlPanel/tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release   # ALL pass; count NEVER decreases (floor 542/542, live 2026-07-10 — read the live count)
-dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -c Debug -- --smoke-test   # [SMOKE] Findings: 5 = baseline (StartSession blocker IS baseline)
+dotnet run --project ConditioningControlPanel/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj -c Debug -- --smoke-test   # 44 tabs + 0 unhandled + findings ⊆ recorded benign drift set (board smoke-drift row; logged-out baseline = Findings 5; StartSession blocker IS baseline)
 ```
 
 - Compositor/video work: also `-- --verify-layers` / `-- --verify-video` (exit 0).

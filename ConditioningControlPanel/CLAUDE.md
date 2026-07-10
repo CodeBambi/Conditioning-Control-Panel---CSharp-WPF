@@ -30,7 +30,7 @@ See repo-root [`AGENTS.md`](../AGENTS.md) for the full set. Quick reference:
 - Avalonia desktop: `dotnet build ConditioningControlPanel/CCP.Desktop.slnf -c Debug`; run `…/CCP.Avalonia.Desktop.Windows/CCP.Avalonia.Desktop.Windows.csproj`.
 - Core tests: `dotnet test ConditioningControlPanel/tests/CCP.Core.Tests/CCP.Core.Tests.csproj -c Release` (floor **542** — never decrease; read the live count).
 - Legacy WPF (reference only): `dotnet build ConditioningControlPanel/ConditioningControlPanel.csproj`.
-- **Gates block every commit:** `CCP.Desktop.slnf` 0 errors; WPF `.sln` 0 errors; Core tests green; `--smoke-test` at baseline (Findings 5); `--verify-layers` / `--verify-video` when touching compositor/video; `--benchmark` before/after on hot paths — not worse than `docs/benchmark-optimized.json`.
+- **Gates block every commit:** `CCP.Desktop.slnf` 0 errors; WPF `.sln` 0 errors; Core tests green; `--smoke-test` → 44 tabs + 0 unhandled + findings ⊆ the recorded benign drift set (task-board smoke-drift row; logged-out baseline = Findings 5); `--verify-layers` / `--verify-video` when touching compositor/video; `--benchmark` before/after on hot paths — not worse than `docs/benchmark-optimized.json`.
 
 ## How to work here (NOT the legacy WPF patterns)
 

@@ -98,7 +98,7 @@ All live in `.pi/skills/` (authoritative) with `.kimi-code/skills/` mirrors. Fir
 
 - `CCP.Desktop.slnf` build 0 errors; legacy WPF `.sln` build 0 errors.
 - Core tests all pass and the count NEVER decreases (floor **542** as of 2026-07-10 — read the live count).
-- `--smoke-test` at baseline (Findings 5); `--verify-layers` / `--verify-video` when touching the compositor/video.
+- `--smoke-test` → 44 tabs + 0 unhandled + findings ⊆ the recorded benign drift set (task-board smoke-drift row; logged-out baseline = Findings 5, count-equality is NOT the signal while the smoke env is authed — owner-waved 2026-07-10); `--verify-layers` / `--verify-video` when touching the compositor/video.
 - `--benchmark` before/after on hot paths — not worse than `benchmark-optimized.json` (re-baseline caveat: task-board row #2).
 
 **Acceptance gate (the spirit):** a ported feature is accepted only when at least as fast and smooth as the
@@ -204,13 +204,15 @@ the UCE plan, the cross-platform plan).
 - **Evidence is re-read live, never invented.** Commit hashes, dates, and test counts are re-read from
   `git` and the live gate runs (or copied from the task-board SHIPPED ledger / parity-matrix rows) before
   they are claimed — there is no separate `progress`/`gates` scratch file in the read path.
-- **Doc-claimed state is a hypothesis, not truth (owner ruling 2026-07-10).** Before building on ANY
-  claimed-done area, re-verify the claim (done / exists / deleted / count / perf / open / blocked)
-  against actual code, git history, or live command output; doc prose citing other doc prose is
-  inadmissible evidence — docs are hypotheses, code and the running app are truth. Verified-existing
-  features are still fair game for improvement: big changes are allowed when they win on merit (behavior
-  is the only contract). Each verification pass records its date + claim total + verdict counts here and
-  in `skia-rebuild-goal.md`.
+- **Doc trust (owner ruling 2026-07-10 — supersedes the same-day "docs are hypotheses" ruling).** The
+  full doc-vs-code reconciliation pass completed 2026-07-10 (90 claims audited: 68 verified / 16 weakened
+  / 2 falsified / 4 platform-limited; corrections landed same day). Doc statuses are now trustworthy — do
+  NOT re-audit them wholesale; that is double work. Spot-verify a claim only when it is load-bearing for a
+  change touching state, economy, security, input hooks, or compositor internals, or when live evidence
+  contradicts it; a stale doc is fixed in the same commit. Verified-existing features are still fair game
+  for improvement: big changes are allowed when they win on merit (behavior is the only contract). Any
+  future full verification pass records its date + claim total + verdict counts here and in
+  `skia-rebuild-goal.md`.
 - **Transient workflow scratch is not part of this index.** Recon/scratch directories produced by a docs
   rework (e.g. a local `.rework/`) are local-only, not committed, not listed here, and not pointed at by any
   governed doc — the workflow that creates them purges them on close. Only the docs in sections 1–3 belong
