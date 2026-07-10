@@ -236,6 +236,13 @@ behavior reference + pinned tests + the surviving design doc):
 
 Gates: slnf 0 · WPF sln 0 · Core 542/542 (count never decreases) · smoke Findings 5.
 
+- **CLAIM 2026-07-10 · wip @driver (workflow-run, continuous-mode session):** grounded live before work —
+  full-basename grep over `**/*.cs` (all 44 deleted docs + the 2 pre-rework deletions) = **12 stale-cite
+  lines across 11 files**: the row's 9 listed files PLUS `CCP.Core/Services/Settings/IProfileSyncService.cs:14`
+  and `CCP.Avalonia/ServiceCollectionExtensions.cs:216` (both cite `profilesync-port-plan.md`; chokepoint
+  file edit is comments-only). `AvaloniaHeadStubs.cs` has 3 sites (`:153`, `:1815`, `:2232`). No WPF-head
+  hits. Plan: parallel per-file comment scrub via workflow agents → re-grep 0 hits → gates → one commit.
+
 ### Voice — E2E mic live run · **VERIFY**
 
 Carry the open `⏳ Remaining` from [`voice-port-status.md`](voice-port-status.md): an end-to-end mic live
