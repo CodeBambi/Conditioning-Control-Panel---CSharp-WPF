@@ -960,6 +960,23 @@ Concrete things hit during implementation that the original draft did not antici
   and port the per-mod re-skin path. The current `App.axaml` hard-codes the palette with no re-skin path — see
   §15.11. This is the cause of "looks wrong after switching mods."
 - **Models are duplicated into Core** — the single largest drift hazard; see §19.4.
+- **Win32 WndProc hook (v12 verified 2026-07-11):** to track a parent window's OS move/resize loop
+  (e.g. AvatarTube fluid follow), use `Avalonia.Controls.Win32Properties.AddWndProcHookCallback(TopLevel,
+  CustomWndProcHookCallback)` — NOT a v11-only API; namespace is `Avalonia.Controls` (assembly
+  `Avalonia.Controls`), and it is absent from the v12 breaking-changes list so it is stable v11→v12.
+  Delegate shape: `delegate IntPtr CustomWndProcHookCallback(IntPtr hWnd, uint msg, IntPtr wParam,
+  IntPtr lParam, ref bool handled)` (note `uint msg`). Hold the delegate in a field so it isn't GC'd
+  (Avalonia itself does this in `Win32Platform.cs`). Handle `WM_MOVING=0x0216` (live drag, lParam=RECT*)
+  and `WM_WINDOWPOSCHANGED=0x0047` (any move/size/z, lParam=WINDOWPOS*) to reposition the follower in
+  the SAME compose pass. **HWND acquisition in v12:** `window.TryGetPlatformHandle()?.Handle` (descriptor
+  `"HWND"`) — the old `Window.PlatformImpl.Handle`/`WindowInteropHelper` are NOT available in v12
+  (Breaking Changes wiki; `PlatformImpl` is inaccessible). Then `SetWindowPos` the follower HWND directly
+  (physical px) to skip the managed layout pass. Sources: api-docs.avaloniaui.net
+  (T_/M_Avalonia_Controls_Win32Properties*), docs/avalonia12-breaking-changes,
+  docs/app-development/native-interop, github.com/AvaloniaUI/Avalonia/wiki/Breaking-Changes,
+  learn.microsoft.com WM_WINDOWPOSCHANGED/WM_MOVING. Linux/macOS keep `WindowBase.PositionChanged`
+  (verified `EventHandler<PixelPointEventArgs>`, fires during drag — issue #4225) as the fallback.
+  Windows-head-only seam; verified by the `avalonia-research` skill.
 
 ---
 

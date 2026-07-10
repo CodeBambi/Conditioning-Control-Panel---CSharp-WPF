@@ -648,8 +648,14 @@ pass + re-add WPF's PopQuiz/Quiz raise short-circuit if those windows exist in t
 **Queued if still not WPF-smooth (advisor Step 4, the "better than WPF" card):** a Windows-head
 `Win32Properties.AddWndProcHookCallback` on MainWindow to reposition the tube inside the parent's OS move
 loop (`WM_MOVING`/`WM_WINDOWPOSCHANGED`) so both windows move in the same compose pass — replicates WPF's
-continuous `LocationChanged` cadence that Avalonia's coalesced `PositionChanged` may not match. MUST verify
-the v12 API via the `avalonia-research` skill first; Windows-seam only; Linux/macOS keep event-chasing.
+continuous `LocationChanged` cadence that Avalonia's coalesced `PositionChanged` may not match. **API
+VERIFIED 2026-07-11 via `avalonia-research` skill** (see `crossplatform-rebuild-plan.md` §21 last bullet):
+`Avalonia.Controls.Win32Properties.AddWndProcHookCallback(TopLevel, CustomWndProcHookCallback)` is in v12
+(stable v11→v12, not in breaking-changes); delegate is `IntPtr(IntPtr hWnd, uint msg, IntPtr wParam,
+IntPtr lParam, ref bool handled)` — HOLD it in a field so it isn't GC'd. HWND via `TryGetPlatformHandle()`
+(NEW finding: `Window.PlatformImpl.Handle`/`WindowInteropHelper` are NOT in v12 — current tube code's
+`new WindowInteropHelper(this).Handle` must be replaced). Move the tube by `SetWindowPos` on its HWND
+(physical px) inside the hook = same compose pass. Windows-seam only; Linux/macOS keep `PositionChanged`.
 
 **Acceptance (owner is the ONLY verifier — not smoke-testable):** drag the main window fast → tube tracks with
 no lag/detach; minimize+restore, exclusive-fullscreen exit, theme switch → tube lands in the WPF spot.
