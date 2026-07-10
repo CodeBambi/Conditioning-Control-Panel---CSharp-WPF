@@ -288,6 +288,11 @@ html, body {
 .sf-hud.sf-chrome-hidden .sf-dock,
 .sf-hud.sf-chrome-hidden .sf-explore,
 .sf-hud.sf-chrome-hidden .sf-panel { display: none; }
+/* ...but the Warren hub hides the chrome-toggle gear (see .sf-hub rules) so
+   sf-chrome-hidden never clears there. An explicitly-opened options panel must
+   still show over the dollhouse (its z32 is set up for exactly that) - only
+   is-open is deliberate, so this never leaks a closed panel in the Fall. */
+.sf-hud.sf-chrome-hidden .sf-panel.is-open { display: block; }
 /* Warren hub open - the scene's score/meters would bleed through its corner chips */
 .sf-hud.wr-open .sf-meters,
 .sf-hud.wr-open .sf-score { display: none; }
