@@ -327,6 +327,11 @@ public static class ChaosMeta
     /// inflated saves on top of <see cref="SanitizePockets"/>.</summary>
     public const int MAX_POCKETS_PER_CATEGORY = 2;
 
+    /// <summary>Grab-in-the-tube rework: the most consumable (active-toy) HUD slots (POCKETS) the
+    /// player can ever hold at once. Starts at 1 (<see cref="ChaosMetaState.ConsumableSlots"/>); the
+    /// dollhouse sews more with Sparks up to this cap. Must match MAX_CONSUMABLE_SLOTS in catalog.js.</summary>
+    public const int MAX_CONSUMABLE_SLOTS = 5;
+
     /// <summary>Equip pockets for a category: purchase-driven (her bench sews them), starting
     /// at ZERO toys / ZERO accessories on a fresh save, capped at 2; Utility toggles are uncapped.</summary>
     public static int SlotsFor(ChaosBoonCategory cat) => cat switch

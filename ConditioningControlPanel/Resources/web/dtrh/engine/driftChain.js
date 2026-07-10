@@ -17,7 +17,7 @@
 import { FALL_DRIFT } from '/dtrh/assets/barks/manifest.js';
 import { isMuted, onMuteChange } from '../shared/audioMute.js';
 import { getLevel, onLevels } from './audioLevels.js';
-import { getAudioCtx, makeSfxPlayer } from './audioBus.js';
+import { getAudioCtx, getMasterOut, makeSfxPlayer } from './audioBus.js';
 
 const BASE = '/dtrh/assets/barks/';
 const SFX_BASE = '/dtrh/assets/bubbles/sfx/';
@@ -61,7 +61,7 @@ export function createDriftChain({ getDepth }) {
       const src = ctx.createMediaElementSource(el);
       voiceGain = ctx.createGain();
       voiceGain.gain.value = getLevel('voice');
-      src.connect(voiceGain); voiceGain.connect(ctx.destination);
+      src.connect(voiceGain); voiceGain.connect(getMasterOut() || ctx.destination);
       el.volume = 1; // loudness lives in the gain node now
     } catch (e) { voiceGain = null; }
   }
@@ -117,10 +117,32 @@ export function createDriftChain({ getDepth }) {
   let lastKey = null;
   const keyOf = (b) => b.mod + '/' + b.file;
 
+  // Region gate (Four Chambers). Entries with no `region` are UNIVERSAL - the
+  // original flat corpus - and stay eligible in every chamber as connective
+  // tissue. Entries tagged `region: 1..4` only play while that chamber is
+  // active. curRegion 0 = no region set (legacy / ASMR / scripted runs) so only
+  // the universal backbone speaks, exactly as before. Fed by setRegion() from
+  // chaosRun.applyRegionSky, mirroring the wallPosters region feed.
+  let curRegion = 0;
+  // Biome gate (THE BIOMES): entries tagged `biome: '<id>'` only play while
+  // that rolled biome dresses the current chamber - a Gallery line must never
+  // whisper in the Casino. Fed alongside setRegion from applyRegionSky.
+  let curBiome = null;
+  // Voice gate: biome-tagged entries ship per persona voice - 'sissy' serves
+  // Bambi Sleep too (they share one VO set), Circe's Lock has her own 'circe'
+  // set. Only biome lines are dual-voiced; untagged / region-only entries stay
+  // voice-agnostic (the shipped backbone corpus). Fed by setVoice from chaosRun.
+  let curVoice = 'sissy';
+  const inRegion = (b) => (!b.region || b.region === curRegion)
+    && (!b.biome || (b.biome === curBiome && (b.mod || 'sissy') === curVoice));
+  function setRegion(n) { curRegion = (n | 0) || 0; }
+  function setBiome(id) { curBiome = id || null; }
+  function setVoice(v) { curVoice = v === 'circe' ? 'circe' : 'sissy'; }
+
   function pick(poolId) {
     const pool = FALL_DRIFT[poolId];
     if (!pool || !pool.length) return null;
-    const eligible = pool.map((_, i) => i).filter((i) => keyOf(pool[i]) !== lastKey);
+    const eligible = pool.map((_, i) => i).filter((i) => inRegion(pool[i]) && keyOf(pool[i]) !== lastKey);
     if (!eligible.length) return null;
     let idx;
     if (eligible.length === 1) {
@@ -333,7 +355,7 @@ export function createDriftChain({ getDepth }) {
   const isSpeaking = () => started && !el.paused;
 
   // read-only state for the ?e2e hook
-  const debugState = () => ({ started, blocksLeft, speaking: !el.paused, routed: !!voiceGain, duck });
+  const debugState = () => ({ started, blocksLeft, region: curRegion, biome: curBiome, voice: curVoice, speaking: !el.paused, routed: !!voiceGain, duck });
 
-  return { start, stop, setSpeed, setDuck, isSpeaking, dispose, debugState };
+  return { start, stop, setSpeed, setDuck, setRegion, setBiome, setVoice, isSpeaking, dispose, debugState };
 }

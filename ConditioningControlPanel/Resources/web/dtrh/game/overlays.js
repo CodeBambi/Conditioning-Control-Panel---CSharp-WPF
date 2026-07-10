@@ -41,6 +41,25 @@ export function createOverlays(hud) {
     });
   }
 
+  /** The descent's closing beat: 3 · 2 · 1, then onDone (the recap). Distinct
+   * from showCountdown's opening GO! - this one counts the hole SHUT. */
+  function showFinishCountdown(onDone, { onTick } = {}) {
+    clearCd();
+    cd.hidden = false;
+    cdNum.classList.remove('is-go');
+    const beats = ['3', '2', '1'];
+    beats.forEach((b, i) => {
+      cdTimers.push(window.setTimeout(() => {
+        cdNum.textContent = b;
+        cdNum.classList.remove('is-beat');
+        void cdNum.offsetWidth;
+        cdNum.classList.add('is-beat');
+        if (onTick) onTick(b);
+      }, i * 1000));
+    });
+    cdTimers.push(window.setTimeout(() => { cd.hidden = true; if (onDone) onDone(); }, beats.length * 1000));
+  }
+
   /** The post-draft beat: "Ready? :3" then a GO! flash, then resume. */
   function showReadyGo(onResume, { onTick } = {}) {
     clearCd();
@@ -218,6 +237,10 @@ export function createOverlays(hud) {
     line('cf-recap-score', `${Math.floor(stats.score).toLocaleString()} pts`);
     line('', `${DIFF_NAMES[stats.difficulty] || stats.difficulty} · ${stats.waveCount} loops · you sank ${Math.round(stats.depth).toLocaleString()} m`);
     line('', `best streak ×${Math.max(1, stats.bestCombo)} · ${stats.defused} snapped · ${stats.detonated} triggered`);
+    // THE BIOMES: the route this fall took (one rolled place per room)
+    if (stats.biomes && stats.biomes.length) {
+      line('', `the fall took you through ${stats.biomes.map((b) => `${b.glyph} ${b.name}`).join(' → ')}`);
+    }
     if (stats.trickleDrops > 0) line('', `💧 drip feed gathered ${Math.floor(stats.trickleDrops)} ✦`);
     payoutSlot = document.createElement('div');
     payoutSlot.className = 'cf-recap-payout';
@@ -267,6 +290,7 @@ export function createOverlays(hud) {
 
   return {
     showCountdown,
+    showFinishCountdown,
     showReadyGo,
     hideCountdown() { clearCd(); cd.hidden = true; },
     showDraft,

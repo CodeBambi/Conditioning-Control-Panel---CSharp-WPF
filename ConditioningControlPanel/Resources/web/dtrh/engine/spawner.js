@@ -25,7 +25,7 @@ import { Q } from '../shared/quality.js';
 import { isMuted } from '../shared/audioMute.js';
 import { getLevel } from './audioLevels.js';
 import { loadTexture } from '../shared/assets.js';
-import { getAudioCtx } from './audioBus.js';
+import { getAudioCtx, getMasterOut } from './audioBus.js';
 import { S, activeWords } from './settings.js';
 import { createAssetTracker } from './assetTracker.js';
 
@@ -42,6 +42,14 @@ const CARD_W = 2.52;         // card bounding width (height follows aspect) - 40
 const CARD_MAX_H = 2.52;
 const FRAME_SCALE = 1.04;    // metal frame plane vs content (slim border)
 const SIDE_OFFSET = 2.4;     // how far off the spine a card sits
+// Videos hug the POV: a clip parked out at the wall only lives inside the
+// play/audio radius for a heartbeat as the camera screams past, so it's glanced,
+// never watched. A tighter lateral seat keeps the closest approach small (the
+// card stays big and near-center for the whole VIDEO_PLAY_NEAR window) while a
+// >=1.1u floor keeps the spine clear for the camera and the screen center
+// readable for the bubble field.
+const VIDEO_SIDE_OFFSET = 1.3;
+const VIDEO_NORMAL_JITTER = 0.4;  // vs the +/-0.9 photos get
 const SPAWN_PER_FRAME = Q.tier === 'mobile' ? 1 : 2; // spawn budget per frame - one at a time on mobile so a card mount (new VideoTexture / decoder) never doubles up on a single frame
 
 // Video-texture upload throttle: a VideoTexture re-uploads the current frame to
@@ -267,7 +275,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
       const src = ctx.createMediaElementSource(video);
       const gain = ctx.createGain();
       gain.gain.value = 0;
-      src.connect(gain); gain.connect(ctx.destination);
+      src.connect(gain); gain.connect(getMasterOut() || ctx.destination);
       try { video.volume = 1; } catch (e) { /* ignore (mobile) */ }
       return gain;
     } catch (e) { return null; }
@@ -479,12 +487,15 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     return [glowMat, frameMat];
   }
 
-  function placeGroup(group, depth) {
+  function placeGroup(group, depth, kind) {
     const fr = layout.frameAtDepth(depth);
     const side = (live.length % 2 === 0 ? 1 : -1) * (Math.random() < 0.2 ? -1 : 1);
+    // videos sit closer to the camera path than photos (see VIDEO_SIDE_OFFSET)
+    const lat = kind === 'video' ? VIDEO_SIDE_OFFSET : SIDE_OFFSET;
+    const vert = kind === 'video' ? VIDEO_NORMAL_JITTER : 0.9;
     group.position.copy(fr.pos)
-      .addScaledVector(fr.binormal, side * SIDE_OFFSET)
-      .addScaledVector(fr.normal, rand(-0.9, 0.9));
+      .addScaledVector(fr.binormal, side * lat)
+      .addScaledVector(fr.normal, rand(-vert, vert));
   }
 
   // ---- user media: decode-ahead pipeline --------------------------------------
@@ -933,6 +944,8 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
 
   function applyImageItem(rec, shell, item) {
     if (rec.dead) { item.dispose(); return; } // despawned while decoding
+    rec.contentMat = shell.mat;      // melt fade + mirror swap need the content material
+    rec.dressedMats = shell.dressed;
     shell.mat.map = item.tex;
     shell.mat.needsUpdate = true;
     sizeShell(shell, item.aspect);
@@ -953,11 +966,14 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     rec.kb = kb;
     rec.tex = item.tex;
     shell.group.visible = true;
+    if (mirror) applyMirror(rec);    // born mid-Mirror-Moment: wear the favorite
   }
 
   function applyGifItem(rec, shell, item) {
     if (rec.dead) { item.dispose(); return; }
     DIAG.gifApplied += 1;
+    rec.contentMat = shell.mat;      // melt fade + mirror swap need the content material
+    rec.dressedMats = shell.dressed;
     shell.mat.map = item.tex;
     shell.mat.needsUpdate = true;
     sizeShell(shell, item.aspect);
@@ -967,6 +983,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     rec.gifTex = item.tex;
     rec.gifItem = item;
     shell.group.visible = true;
+    if (mirror) applyMirror(rec);    // born mid-Mirror-Moment: wear the favorite
   }
 
   // Image/gif card from a decoded pool item - visible from its first frame.
@@ -1147,7 +1164,7 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         if (release) release();
       },
     };
-    placeGroup(group, depth);
+    placeGroup(group, depth, 'video');
     return rec;
   }
 
@@ -1383,13 +1400,90 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
   // automatically when a spotlight video takes the stage.
   function grabbableGroups() {
     const out = [];
-    for (const r of live) if (r.kind === 'image' && r.group.visible && !r.isGrabbed) out.push(r.group);
+    for (const r of live) if (r.kind === 'image' && r.group.visible && !r.isGrabbed && !r.melting) out.push(r.group);
     return out;
+  }
+
+  // ---- biome seams: grab arbitration, the melt, the Mirror Moment -------------
+  // THE BIOMES (game/biomeMech.js): the game may veto a grab ('melt' - the
+  // Gallery's look-don't-touch), and wants to hear about grabs that hold.
+  let grabHooks = null;   // { policy(rec)->'allow'|'melt', onGrab(rec), onMelt(rec) }
+  function setGrabHooks(h) { grabHooks = h || null; }
+
+  // The melt: a denied grab dissolves in your hand - the card squashes down,
+  // droops and fades over ~0.7s, then despawns. Animated in update().
+  function meltCard(rec) {
+    if (!rec || rec.melting || rec.pickup || rec.kind === 'veil') return;
+    rec.melting = { t: 0, dur: 0.7 };
+    rec.isGrabbed = false;
+    if (grabbed === rec) grabbed = null;
+  }
+
+  /** THE BIOMES (Incognito): the wipe - every live card melts at once. The one
+   * in your hand is spared (yanking a held card reads as a bug, not a wipe).
+   * Returns how many started melting. */
+  function meltAll() {
+    let n = 0;
+    for (const rec of live) {
+      if (rec.melting || rec.pickup || rec.kind === 'veil' || rec.isGrabbed) continue;
+      meltCard(rec);
+      if (rec.melting) n++;
+    }
+    return n;
+  }
+
+  // The Mirror Moment (Hall of Mirrors): every live image card temporarily
+  // wears ONE texture - the player's most-engaged asset. Videos keep playing
+  // (a stalled video reads as a bug, not a mirror); gif stepping and Ken Burns
+  // pause while mirrored so nothing fights the shared texture.
+  let mirror = null;   // { url, tex }
+  function applyMirror(rec) {
+    if (!mirror || rec.kind !== 'image' || !rec.contentMat || rec.melting || rec.mirrorSaved) return;
+    rec.mirrorSaved = { map: rec.contentMat.map, kb: rec.kb, gifAnim: rec.gifAnim };
+    rec.kb = null;
+    rec.gifAnim = null;
+    rec.contentMat.map = mirror.tex;
+    rec.contentMat.needsUpdate = true;
+  }
+  function restoreMirror(rec) {
+    if (!rec.mirrorSaved || !rec.contentMat) return;
+    rec.contentMat.map = rec.mirrorSaved.map;
+    rec.kb = rec.mirrorSaved.kb || null;
+    rec.gifAnim = rec.mirrorSaved.gifAnim || null;
+    rec.contentMat.needsUpdate = true;
+    rec.mirrorSaved = null;
+  }
+  function setMirror(url) {
+    if (!url) {
+      if (!mirror) return;
+      for (const r of live) restoreMirror(r);
+      mirror = null;   // texture is owned by the shared assets cache - no dispose
+      return;
+    }
+    if (mirror && mirror.url === url) return;
+    if (mirror) setMirror(null);   // swap: restore first
+    mirror = { url, tex: loadTexture(url) };   // cached: repeat moments reuse the decode
+    for (const r of live) applyMirror(r);
   }
   function clickableGroups() {
     const out = [];
     for (const r of live) if (r.pickup && !r.dead) out.push(r.group);
     return out;
+  }
+  // Nearest interactive hit distance (pickups + grabbable cards) WITHOUT acting -
+  // scene.js uses it to arbitrate a junction doorway-card click against a closer
+  // grab target under the same cursor.
+  function probeGrab(ndcX, ndcY, camera) {
+    _ndc.set(ndcX, ndcY);
+    _ray.setFromCamera(_ndc, camera);
+    let best = Infinity;
+    const ph = _ray.intersectObjects(clickableGroups(), true);
+    if (ph.length) best = ph[0].distance;
+    if (!grabbed && !spotlight) {
+      const gh = _ray.intersectObjects(grabbableGroups(), true);
+      if (gh.length && gh[0].distance < best) best = gh[0].distance;
+    }
+    return Number.isFinite(best) ? best : null;
   }
   function grabAtPointer(ndcX, ndcY, camera) {
     _ndc.set(ndcX, ndcY);
@@ -1422,9 +1516,16 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     return false;
   }
   function startGrab(rec, camera) {
+    // THE BIOMES: the Gallery melts a denied grab in your hand instead of holding it
+    if (grabHooks && grabHooks.policy && grabHooks.policy(rec) === 'melt') {
+      meltCard(rec);
+      if (grabHooks.onMelt) { try { grabHooks.onMelt(rec); } catch (e) { /* ignore */ } }
+      return;
+    }
     grabbed = rec;
     rec.isGrabbed = true;
     tracker.noteGrab(rec.assetName, rec.assetKind);   // deliberate act: strong "like" signal
+    if (grabHooks && grabHooks.onGrab) { try { grabHooks.onGrab(rec); } catch (e) { /* ignore */ } }
     // seed the follow from the card's current offset so it eases in, not snaps
     camera.getWorldDirection(_dir);
     rec.spotDist = Math.max(3, _target.subVectors(rec.group.position, camera.position).dot(_dir));
@@ -1510,9 +1611,24 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
     return true;
   }
 
+  // junction chamber span (scene.setBlockedSpan): no card/veil spawns inside it -
+  // they'd float in the hidden-trunk cut or hide behind the opaque room, starving
+  // the fork approach of grabbables.
+  let blockedSpan = null;
+
   // ---- per-frame update -------------------------------------------------------
   function update(camera, camDepth, dt, t, heat = 1, runTime = 999) {
     camDepthNow = camDepth;
+    // Junction rebase: fallNav zeroes its depth at the vein tail (the chosen
+    // branch becomes a FRESH loop), but these cursors were minted on the OLD
+    // loop's depths. Left alone they sit past the spawn window for the rest of
+    // the run - no wall cards, no veils, no spotlights ever again (the "later
+    // chambers have no gif cards" bug). A cursor stranded beyond any depth the
+    // conveyor could legitimately have minted can only mean the camera jumped
+    // backwards - reel it back in.
+    if (nextCardDepth > camDepth + SPAWN_AHEAD + CARD_GAP_FAR + CARD_GAP_JITTER) nextCardDepth = camDepth + 30;
+    if (nextVeilDepth > camDepth + SPAWN_AHEAD + VEIL_GAP_MAX * VEIL_GAP_EARLY_MULT) nextVeilDepth = camDepth + 70;
+    if (nextSpotlightOkAt > camDepth + SPOTLIGHT_GAP) nextSpotlightOkAt = camDepth + 60;
     // keep the next few seconds of user media decoded (runs during spotlights
     // too, so the conveyor restarts with content in hand)
     pumpPrefetch();
@@ -1533,6 +1649,9 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
         const d = nextCardDepth;
         nextCardDepth += gap + rand(-CARD_GAP_JITTER, CARD_GAP_JITTER);
         budget -= 1;
+        // a junction chamber owns this span - skip it (the stretch short of the
+        // fork keeps its cards, so the approach still has things to grab)
+        if (blockedSpan && d > blockedSpan.lo - 2 && d < blockedSpan.hi) continue;
         spawning += 1;
         Promise.resolve(spawnCardAt(d)).then((rec) => {
           spawning -= 1;
@@ -1547,8 +1666,12 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
       if (runTime < FIRST_VEIL_SEC) {
         nextVeilDepth = Math.max(nextVeilDepth, camDepth + VEIL_GAP_MIN);
       } else if (nextVeilDepth < camDepth + SPAWN_AHEAD && liveVeils < MAX_LIVE_VEILS) {
-        addCard(buildVeil(nextVeilDepth));
-        nextVeilDepth += rand(VEIL_GAP_MIN, VEIL_GAP_MAX) * veilGapMult;
+        if (blockedSpan && nextVeilDepth > blockedSpan.lo - 2 && nextVeilDepth < blockedSpan.hi) {
+          nextVeilDepth = blockedSpan.hi + 5;   // no veils inside the chamber span
+        } else {
+          addCard(buildVeil(nextVeilDepth));
+          nextVeilDepth += rand(VEIL_GAP_MIN, VEIL_GAP_MAX) * veilGapMult;
+        }
       }
     }
 
@@ -1614,6 +1737,17 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
           if (rec.fade <= 0) { endSpotlight(i); continue; }
         }
         continue;
+      }
+
+      // THE BIOMES: a melting card (Gallery-denied grab) squashes, droops and
+      // fades where it was seized, then despawns - it never joins the conveyor.
+      if (rec.melting) {
+        rec.melting.t += dt;
+        const k = Math.min(1, rec.melting.t / rec.melting.dur);
+        rec.group.scale.set(1 + k * 0.25, Math.max(0.03, 1 - k * 1.05), 1); // squash wide, drip down
+        rec.group.position.y -= dt * 2.2;
+        if (rec.contentMat) setCardFade(rec, 1 - k);
+        if (k >= 1) { removeCard(i); continue; }
       }
 
       // a grabbed card is a PADDLE: it tracks the cursor through the space, placed
@@ -1892,7 +2026,9 @@ export function createSpawner({ scene, layout, media, renderer, camera, onCardAp
 
   return {
     update, reset, dispose, setPaused, warm,
-    grabAtPointer, releaseGrab,
+    grabAtPointer, releaseGrab, probeGrab,
+    setGrabHooks, setMirror, meltAll,
+    setBlockedSpan: (s) => { blockedSpan = s || null; },
     // junction branch-mouth media cards
     createDetachedCard, clearLive,
     // Wave 2 game verbs

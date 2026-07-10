@@ -1015,6 +1015,13 @@ namespace ConditioningControlPanel
                 return;
             }
 
+            // Lockdown mode: a RUNNING Takeover cannot be disabled while locked in (#514).
+            if (settings.AutonomyModeEnabled && App.Autonomy?.IsEnabled == true && App.Lockdown?.IsActive == true)
+            {
+                Giggle("Lockdown is active~ you can't turn me off~");
+                return;
+            }
+
             // Auto-grant consent when enabling from avatar menu
             // (user is explicitly choosing to enable, so consent is implied)
             if (!settings.AutonomyConsentGiven)

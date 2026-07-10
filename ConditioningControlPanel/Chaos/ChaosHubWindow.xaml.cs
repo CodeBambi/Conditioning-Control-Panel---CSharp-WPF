@@ -161,7 +161,7 @@ public partial class ChaosHubWindow : Window
         TxtHint.Text = tag switch
         {
             "loadout" => "click a tile to slip it into a pocket. + takes you where it's sold.",
-            "enhance" => "spend your drops. deepen what you like.",
+            "enhance" => "spend your emotes. deepen what you like.",
             "run"     => "dress up the fall, then FALL IN.",
             "improve" => "the bench, the mantras, how far you've fallen.",
             "diary"   => "everything you've met down there. click an entry to pop it out.",

@@ -13,11 +13,14 @@
  * 2D canvas with `globalCompositeOperation = 'lighter'` + a pre-baked radial
  * sprite. So that's exactly what this does - additive soft-sprite bloom in the
  * SAME client-pixel space the bubbles live in (no second WebGL context, no
- * coordinate offset, no WASM). Palettes mirror the desktop overlay:
+ * coordinate offset, no WASM). Default palettes mirror the desktop overlay:
  *   E-Stim  electric cyan 0x42DCE6 glow + white-blue 0xBFECFF core
  *   Vibe    warm amber 0xFFB03A + gold 0xFFE9A0 core
  *   Sparkle rabbit pink 0xFF4DC4 + gold core
  *   Residue crackle cyan 0x7AE0FF
+ * Four Chambers: setRegionPalette() overlays a chamber's accent colors
+ * (regions.js style.field) on these defaults; null restores them. The sprite
+ * cache keys by RGB, so tinted sprites bake on demand.
  * ==========================================================================*/
 
 /** hsl -> rgb (0..255), kept for the rabbit sparkles' shifting hue. */
@@ -60,8 +63,44 @@ function spriteFor(r, g, b) {
 }
 const SPR_WHITE = () => spriteFor(255, 255, 255);
 
+// Accent palette (the WPF colors above). A chamber overlay replaces entries;
+// gameplay-signal colors (tether lavender/fray-red) stay fixed on purpose.
+const PAL_DEFAULTS = {
+  bolt: [66, 220, 230], boltCore: [191, 236, 255],
+  vibe: [255, 176, 58], vibeCore: [255, 233, 160],
+  residue: [122, 224, 255], residueCore: [190, 245, 255],
+  ink: [255, 130, 225], inkCore: [255, 226, 250],
+  sparkleHue: 315,
+};
+
+// ---- THE BIOMES' ambient weather (identity pass) ---------------------------
+// One lightweight always-on particle field per biome, data-driven from
+// biomes.js style.ambient ({kind, color|colors, count?}). Two families:
+//   drifters (vy set)  - integrate + wrap at the viewport edges
+//   flashers (life set) - live briefly, respawn elsewhere (specks/glints/coins)
+// Counts stay small (<=24) - this canvas already redraws for the game FX and
+// the whole field is a few dozen additive sprites.
+const AMBIENT_KINDS = {
+  confetti: { count: 22, size: [2, 4.5], vy: [16, 40], vx: [-8, 8], sway: 16, shape: 'fleck', alpha: 0.50 },
+  motes:    { count: 16, size: [1.5, 3.2], vy: [3, 9], vx: [-3, 3], sway: 7, shape: 'dot', alpha: 0.20, twinkle: true },
+  specks:   { count: 20, size: [1, 2.2], life: [0.05, 0.30], shape: 'blink', alpha: 0.55 },
+  ash:      { count: 20, size: [1.5, 3], vy: [12, 26], vx: [-9, 3], sway: 11, shape: 'fleck', alpha: 0.30 },
+  glints:   { count: 7, size: [4, 9], life: [0.35, 0.80], shape: 'star', alpha: 0.80 },
+  bubbles:  { count: 14, size: [2, 5], vy: [-14, -34], vx: [-4, 4], sway: 9, shape: 'ring', alpha: 0.40 },
+  coins:    { count: 8, size: [3, 6], life: [0.25, 0.60], shape: 'star', alpha: 0.90 },
+  embers:   { count: 16, size: [1.5, 3], vy: [-70, -150], vx: [-8, 8], shape: 'streak', alpha: 0.50 },
+  goldleaf: { count: 12, size: [2, 4], vy: [-7, -18], vx: [-6, 6], sway: 13, shape: 'fleck', alpha: 0.45 },
+  petals:   { count: 11, size: [2.5, 5], vy: [-5, -12], vx: [-7, 7], sway: 18, shape: 'dot', alpha: 0.33 },
+};
+const rnd = (a, b) => a + Math.random() * (b - a);
+
 export function createFieldFx(hud) {
   let disposed = false;
+  let PAL = { ...PAL_DEFAULTS };
+
+  /** Four Chambers: overlay a chamber's accent colors (null = defaults).
+   * Only affects NEW draws/spawns; live buffers fade out in the old color. */
+  function setRegionPalette(field) { PAL = { ...PAL_DEFAULTS, ...(field || {}) }; }
 
   const canvas = document.createElement('canvas');
   canvas.className = 'cf-fieldfx';
@@ -91,7 +130,64 @@ export function createFieldFx(hud) {
   const trail = [];      // vibe pointer trail: { x, y, life }
   const sparkles = [];   // rabbit tail-plug sparkles: { x, y, life, hue }
   let tethers = [];      // per-frame: [{ ax, ay, bx, by, fraying }]
+  let beams = [];        // Keyhole biome light pools: [{ x, y, r }], re-fed per tick
+  let inkPts = [];       // the Wand's ink: chaosField's live trail, re-fed by reference
+  let inkClock = 0;      // drives the travelling shimmer along the ink
   let vibeOn = false;
+  let ambient = null;    // biome ambient field: { def, colors, parts: [...] }
+
+  /** THE BIOMES: dress the field in a biome's ambient weather (null clears).
+   * spec = {kind, color:[r,g,b] | colors:[[r,g,b]..], count?} from biomes.js. */
+  function setAmbient(spec) {
+    const def = spec && AMBIENT_KINDS[spec.kind];
+    if (!def) { ambient = null; return; }
+    const colors = spec.colors || [spec.color || [255, 255, 255]];
+    const n = spec.count != null ? spec.count : def.count;
+    const W = window.innerWidth, H = window.innerHeight;
+    const parts = [];
+    for (let i = 0; i < n; i++) {
+      parts.push({
+        x: Math.random() * W, y: Math.random() * H,
+        size: rnd(def.size[0], def.size[1]),
+        vx: def.vx ? rnd(def.vx[0], def.vx[1]) : 0,
+        vy: def.vy ? rnd(def.vy[0], def.vy[1]) : 0,
+        phase: Math.random() * Math.PI * 2,
+        life: def.life ? rnd(def.life[0], def.life[1]) : 0,
+        total: 0,
+        col: colors[(Math.random() * colors.length) | 0],
+      });
+      const p = parts[parts.length - 1];
+      p.total = p.life || 1;
+    }
+    ambient = { def, colors, parts };
+  }
+
+  /** Drift/respawn the ambient field. Drifters wrap at the edges; flashers
+   * (life-based) burn out and respawn somewhere new. */
+  function stepAmbient(dt) {
+    if (!ambient) return;
+    const { def, colors, parts } = ambient;
+    const W = window.innerWidth, H = window.innerHeight, m = 24;
+    for (const p of parts) {
+      if (def.life) {
+        p.life -= dt;
+        if (p.life <= 0) {
+          p.x = Math.random() * W; p.y = Math.random() * H;
+          p.size = rnd(def.size[0], def.size[1]);
+          p.life = p.total = rnd(def.life[0], def.life[1]);
+          p.col = colors[(Math.random() * colors.length) | 0];
+        }
+        continue;
+      }
+      p.phase += dt;
+      p.x += (p.vx + (def.sway ? Math.sin(p.phase * 1.7) * def.sway : 0)) * dt;
+      p.y += p.vy * dt;
+      if (p.y > H + m) { p.y = -m; p.x = Math.random() * W; }
+      else if (p.y < -m) { p.y = H + m; p.x = Math.random() * W; }
+      if (p.x > W + m) p.x = -m;
+      else if (p.x < -m) p.x = W + m;
+    }
+  }
 
   // ---- jagged bolt builder (perpendicular midpoint displacement, WPF BuildBolt) ----
   function buildBolt(ax, ay, bx, by) {
@@ -130,11 +226,15 @@ export function createFieldFx(hud) {
 
   function addSparkle(x, y) {
     sparkles.push({ x: x + (Math.random() - 0.5) * 14, y: y + (Math.random() - 0.5) * 14,
-      life: 0.5, hue: 315 + Math.random() * 30 });
+      life: 0.5, hue: PAL.sparkleHue + Math.random() * 30 });
   }
 
   /** The Bound's threads, re-fed every frame by chaosField. */
   function setTethers(list) { tethers = list; }
+
+  /** The Wand's ink, re-fed every frame by chaosField. Points carry lifeMs
+   * (chaosField owns the aging, so a freeze holds the drawing mid-fade). */
+  function setInk(list) { inkPts = list || []; }
 
   function setVibe(on) { vibeOn = !!on; if (!on) trail.length = 0; }
   function vibePoint(x, y) { if (vibeOn) trail.push({ x, y, life: 0.45 }); }
@@ -148,8 +248,10 @@ export function createFieldFx(hud) {
     return false;
   }
 
-  /** Age + cull the timed buffers. Tethers are re-fed each frame, not aged. */
+  /** Age + cull the timed buffers. Tethers + ink are re-fed each frame, not aged. */
   function step(dt) {
+    inkClock += dt;
+    stepAmbient(dt);
     for (let i = residues.length - 1; i >= 0; i--) { if ((residues[i].life -= dt) <= 0) residues.splice(i, 1); }
     for (let i = bolts.length - 1; i >= 0; i--) {
       const b = bolts[i];
@@ -175,7 +277,9 @@ export function createFieldFx(hud) {
   }
 
   function anyActive() {
-    return bolts.length || residues.length || trail.length || sparkles.length || tethers.length;
+    return bolts.length || residues.length || trail.length || sparkles.length
+      || tethers.length || inkPts.length || beams.length
+      || (ambient && ambient.parts.length);
   }
 
   // ---- additive soft-sprite blit (the WPF DrawDot): tinted bloom, `lighter` ----
@@ -214,6 +318,74 @@ export function createFieldFx(hud) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalCompositeOperation = 'lighter';   // ADDITIVE = the glow
 
+    // --- Biome ambient weather: the biome's always-on particle field, drawn
+    // UNDER every gameplay effect so it reads as atmosphere, not signal. ---
+    if (ambient) {
+      const def = ambient.def;
+      for (const p of ambient.parts) {
+        const [ar, ag, ab] = p.col;
+        if (def.shape === 'dot') {
+          const tw = def.twinkle ? 0.6 + 0.4 * Math.sin(inkClock * 2.1 + p.phase * 3.0) : 1;
+          dot(p.x, p.y, p.size * 2.2, def.alpha * tw, ar, ag, ab);
+        } else if (def.shape === 'fleck') {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.phase * 1.3);
+          ctx.globalAlpha = def.alpha;
+          ctx.fillStyle = `rgb(${ar},${ag},${ab})`;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.5);
+          ctx.restore();
+          ctx.globalAlpha = 1;
+        } else if (def.shape === 'ring') {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = `rgba(${ar},${ag},${ab},${def.alpha})`;
+          ctx.stroke();
+          dot(p.x - p.size * 0.3, p.y - p.size * 0.3, p.size * 0.5, def.alpha * 0.8, 255, 255, 255);
+        } else if (def.shape === 'star') {
+          // brief 4-point glint: brightest mid-life, arms shrink as it dies
+          const t = Math.sin(Math.PI * Math.max(0, Math.min(1, p.life / p.total)));
+          const s = p.size * (0.4 + 0.6 * t);
+          ctx.strokeStyle = `rgba(${ar},${ag},${ab},${def.alpha * t})`;
+          ctx.lineWidth = 1.1;
+          ctx.beginPath();
+          ctx.moveTo(p.x - s, p.y); ctx.lineTo(p.x + s, p.y);
+          ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x, p.y + s);
+          ctx.stroke();
+          dot(p.x, p.y, s * 0.8, def.alpha * t, ar, ag, ab);
+        } else if (def.shape === 'streak') {
+          // a short motion trail behind the ember's velocity
+          glowLine([{ x: p.x, y: p.y }, { x: p.x - p.vx * 0.08, y: p.y - p.vy * 0.08 }],
+            p.size, ar, ag, ab, def.alpha, 4);
+        } else if (def.shape === 'blink') {
+          const t = Math.sin(Math.PI * Math.max(0, Math.min(1, p.life / p.total)));
+          dot(p.x, p.y, p.size * 2, def.alpha * t, ar, ag, ab);
+        }
+      }
+    }
+
+    // --- Biome light pools (Keyhole candlelight / Searchlight cold sweep /
+    // Undertow current rings): a wide soft bloom + a hot heart + a faint edge
+    // ring, so the light reads as a place to stand, not just a smudge. Targets
+    // arrive at RunTick cadence; ease toward them here so the sweep glides. ---
+    for (const b of beams) {
+      if (b.tx != null) {
+        const e = Math.min(1, dt * 9);
+        b.x += (b.tx - b.x) * e; b.y += (b.ty - b.y) * e; b.r += (b.tr - b.r) * e;
+      }
+      const c = b.color || [255, 214, 150];
+      const hot = [Math.min(255, c[0] + 40), Math.min(255, c[1] + 35), Math.min(255, c[2] + 60)];
+      dot(b.x, b.y, b.r * 1.35, 0.20, c[0], c[1], c[2]);      // wide spill
+      dot(b.x, b.y, b.r * 0.85, 0.30, c[0], c[1], c[2]);      // body
+      dot(b.x, b.y, b.r * 0.40, 0.35, hot[0], hot[1], hot[2]); // hot heart
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},0.22)`;
+      ctx.stroke();
+    }
+
     // --- Bound tethers: an elastic thread, glowing, reddening as it frays. ---
     for (const t of tethers) {
       const midX = (t.ax + t.bx) / 2, midY = (t.ay + t.by) / 2 + 26;
@@ -231,45 +403,66 @@ export function createFieldFx(hud) {
     }
 
     // --- Residue zones: a soft additive disc + a dashed glowing ring + motes. ---
+    const [zr, zg, zb] = PAL.residue;
     for (const z of residues) {
       const a = 0.32 * (z.life / z.total);
-      dot(z.x, z.y, z.r, a * 0.9, 122, 224, 255);            // soft bloom disc
+      dot(z.x, z.y, z.r, a * 0.9, zr, zg, zb);               // soft bloom disc
       ctx.beginPath();
       ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2);
       ctx.setLineDash([6, 10]);
       ctx.lineWidth = 2;
-      ctx.strokeStyle = `rgba(122,224,255,${a * 1.4})`;
-      ctx.shadowColor = `rgba(122,224,255,${a * 1.4})`;
+      ctx.strokeStyle = `rgba(${zr},${zg},${zb},${a * 1.4})`;
+      ctx.shadowColor = `rgba(${zr},${zg},${zb},${a * 1.4})`;
       ctx.shadowBlur = 8;
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
       if (Math.random() < 0.35) {
         const ang = Math.random() * Math.PI * 2, rr = Math.random() * z.r;
-        dot(z.x + Math.cos(ang) * rr, z.y + Math.sin(ang) * rr, 5, a * 1.5, 190, 245, 255);
+        dot(z.x + Math.cos(ang) * rr, z.y + Math.sin(ang) * rr, 5, a * 1.5,
+          PAL.residueCore[0], PAL.residueCore[1], PAL.residueCore[2]);
       }
     }
 
-    // --- Lightning bolts: blurred cyan glow stroke + white-blue core + flashes + forks. ---
+    // --- Lightning bolts: blurred glow stroke + pale core + flashes + forks. ---
+    const [br, bg, bb] = PAL.bolt, [cr, cg, cb] = PAL.boltCore;
     for (const b of bolts) {
       const t = b.life / b.total;
       const a = t > 0.4 ? 1 : t / 0.4;                       // hold hot, then fade
-      glowLine(b.pts, 6.5, 66, 220, 230, 0.55 * a, 8);       // cyan glow halo
-      for (const fk of b.forks) glowLine(fk, 5, 66, 220, 230, 0.4 * a, 6);
-      glowLine(b.pts, 1.8, 191, 236, 255, 0.95 * a, 0);      // white-blue core
-      for (const fk of b.forks) glowLine(fk, 1.4, 191, 236, 255, 0.62 * a, 0);
+      glowLine(b.pts, 6.5, br, bg, bb, 0.55 * a, 8);         // glow halo
+      for (const fk of b.forks) glowLine(fk, 5, br, bg, bb, 0.4 * a, 6);
+      glowLine(b.pts, 1.8, cr, cg, cb, 0.95 * a, 0);         // pale core
+      for (const fk of b.forks) glowLine(fk, 1.4, cr, cg, cb, 0.62 * a, 0);
       const fr = 16 * a + 6;
-      dot(b.ex, b.ey, fr, 0.8 * a, 66, 220, 230);            // strike flash
-      dot(b.ax, b.ay, fr * 0.7, 0.6 * a, 66, 220, 230);      // source spark
+      dot(b.ex, b.ey, fr, 0.8 * a, br, bg, bb);              // strike flash
+      dot(b.ax, b.ay, fr * 0.7, 0.6 * a, br, bg, bb);        // source spark
     }
 
     // --- Vibe trail: a warm additive ribbon (bloom + gold core) behind the pointer. ---
+    const [vr, vg, vb] = PAL.vibe, [wr, wg, wb] = PAL.vibeCore;
     for (const p of trail) {
       const a = p.life / 0.45;
       const rad = 10 * a + 3;
-      dot(p.x, p.y, rad * 1.8, 0.28 * a, 255, 176, 58);      // bloom
-      dot(p.x, p.y, rad, 0.6 * a, 255, 176, 58);             // body
-      dot(p.x, p.y, rad * 0.5, 0.7 * a, 255, 233, 160);      // gold core
+      dot(p.x, p.y, rad * 1.8, 0.28 * a, vr, vg, vb);        // bloom
+      dot(p.x, p.y, rad, 0.6 * a, vr, vg, vb);               // body
+      dot(p.x, p.y, rad * 0.5, 0.7 * a, wr, wg, wb);         // gold core
+    }
+
+    // --- The Wand's ink: a hand-drawn shimmering ribbon that outlives the hand.
+    // lifeMs drives the slow fade over the final 1.4s; a travelling sine along
+    // the point index makes the light crawl down the line. ---
+    const [ir, ig, ib2] = PAL.ink, [kr, kg, kb] = PAL.inkCore;
+    for (let i = 0; i < inkPts.length; i++) {
+      const p = inkPts[i];
+      const a = Math.min(1, (p.lifeMs || 0) / 1400);
+      if (a <= 0) continue;
+      const sh = 0.72 + 0.28 * Math.sin(inkClock * 7 - i * 0.9);
+      dot(p.x, p.y, 26, 0.10 * a, ir, ig, ib2);            // wide bloom
+      dot(p.x, p.y, 13, 0.30 * a * sh, ir, ig, ib2);       // body
+      dot(p.x, p.y, 6.5, 0.55 * a * sh, kr, kg, kb);       // hot core
+      if (Math.random() < 0.03) {                          // stray glints
+        dot(p.x + (Math.random() - 0.5) * 20, p.y + (Math.random() - 0.5) * 20, 3, 0.7 * a, 255, 255, 255);
+      }
     }
 
     // --- Rabbit sparkles (Tail-Plug): pink soft sprite + gold core. ---
@@ -286,9 +479,24 @@ export function createFieldFx(hud) {
   }
 
   return {
-    addBolt, addResidue, addSparkle, setTethers, setVibe, vibePoint, inResidue, draw,
+    addBolt, addResidue, addSparkle, setTethers, setInk, setVibe, vibePoint, inResidue, draw,
+    setRegionPalette, setAmbient,
+    /** Biome light pools / current rings (null/[] clears them). Fed at the
+     * 0.25s RunTick with TARGET positions; the draw loop eases the visible
+     * pools toward them every frame so the sweep glides instead of stepping.
+     * Optional per-beam `color: [r,g,b]` (default warm candlelight). */
+    setBeams(list) {
+      if (!list || !list.length) { beams = []; return; }
+      const next = [];
+      for (let i = 0; i < list.length; i++) {
+        const t = list[i], prev = beams[i];
+        if (prev) { prev.tx = t.x; prev.ty = t.y; prev.tr = t.r; prev.color = t.color; next.push(prev); }
+        else next.push({ x: t.x, y: t.y, r: t.r, tx: t.x, ty: t.y, tr: t.r, color: t.color });
+      }
+      beams = next;
+    },
     clear() {
-      bolts.length = 0; residues.length = 0; trail.length = 0; sparkles.length = 0; tethers = [];
+      bolts.length = 0; residues.length = 0; trail.length = 0; sparkles.length = 0; tethers = []; inkPts = []; beams = [];
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       canvas._dirty = false;

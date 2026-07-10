@@ -137,7 +137,7 @@ public partial class ChaosHudWindow : Window
             const string TIP_CLOCK =
                 "how long you've been down this descent (minutes:seconds).";
             const string TIP_SCORE =
-                "every pop and snap pays base points x the multiplier stack. at the recap the score banks into drops ✦.";
+                "every pop and snap pays base points x the multiplier stack. at the recap the score banks into emotes ✦.";
             const string TIP_MULT =
                 "the whole stack multiplied out: streak x difficulty x lust x mantras (sins can stretch it further). every payout is scaled by this.";
             const string TIP_STREAK =

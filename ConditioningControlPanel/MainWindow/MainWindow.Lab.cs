@@ -183,15 +183,19 @@ namespace ConditioningControlPanel
                 LabTab.TxtPastQuizzesHeader.Visibility = Visibility.Visible;
                 LabTab.PastQuizzesPanel.Visibility = Visibility.Visible;
 
-                // Trend summary at top — show latest archetype + trend per category that has history
-                var categories = history.Select(h => h.Category).Distinct();
+                // Trend summary at top — show latest archetype + trend per category that has history.
+                // Group by TrendKey (CategoryId string), not the enum: custom categories all
+                // collapse to Category=Sissy and would clobber the built-in Sissy stat (#518/#521).
+                var categories = history.Select(QuizService.TrendKey)
+                    .Distinct(StringComparer.OrdinalIgnoreCase);
                 foreach (var cat in categories)
                 {
                     var trend = QuizService.GetScoreTrend(history, cat);
                     if (trend == null) continue;
 
                     // Extract archetype from latest profile text
-                    var latestEntry = history.FirstOrDefault(h => h.Category == cat);
+                    var latestEntry = history.FirstOrDefault(h =>
+                        string.Equals(QuizService.TrendKey(h), cat, StringComparison.OrdinalIgnoreCase));
                     var archetype = "";
                     if (latestEntry != null)
                     {
@@ -206,8 +210,7 @@ namespace ConditioningControlPanel
                         TrendDirection.Flat => "\u2192",
                         _ => ""
                     };
-                    var catDisplay = latestEntry != null && !string.IsNullOrEmpty(latestEntry.CategoryName)
-                        ? latestEntry.CategoryName : cat.ToString();
+                    var catDisplay = latestEntry != null ? QuizService.DisplayName(latestEntry) : cat;
                     var trendLabel = trend.Direction == TrendDirection.FirstQuiz
                         ? $"{catDisplay}: {trend.LatestPercent}%"
                         : $"{catDisplay}: {trend.LatestPercent}% {arrow}{Math.Abs(trend.DeltaPercent)}%";
@@ -228,7 +231,7 @@ namespace ConditioningControlPanel
                 foreach (var entry in history)
                 {
                     var pct = entry.MaxScore > 0 ? (int)Math.Round((double)entry.TotalScore / entry.MaxScore * 100) : 0;
-                    var catName = !string.IsNullOrEmpty(entry.CategoryName) ? entry.CategoryName : entry.Category.ToString();
+                    var catName = QuizService.DisplayName(entry);
                     var label = $"{entry.TakenAt:MMM d}  ·  {catName}  ·  {entry.TotalScore}/{entry.MaxScore} ({pct}%)";
 
                     var row = new Border
@@ -337,9 +340,14 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Enable system key suppression on the keyboard hook
+                    // Enable system key suppression on the keyboard hook (the setter also
+                    // installs the hook if panic key / keyword triggers never started it)
                     if (_keyboardHook != null)
+                    {
                         _keyboardHook.SuppressSystemKeys = true;
+                        if (!_keyboardHook.IsInstalled)
+                            App.Logger?.Warning("Lockdown: keyboard hook could not be installed - Esc/Win/Alt-Tab will NOT be blocked this session");
+                    }
 
                     // Gray out strict lock and panic key toggles
                     if (SettingsTab.ChkStrictLock != null)
@@ -388,9 +396,17 @@ namespace ConditioningControlPanel
             {
                 try
                 {
-                    // Disable system key suppression
+                    // Disable system key suppression. Lockdown may have installed the hook
+                    // itself; drop it again unless another feature still needs it (mirrors
+                    // the startup install condition). LockdownService restores the user's
+                    // real PanicKeyEnabled before raising this event, so the check is safe.
                     if (_keyboardHook != null)
+                    {
                         _keyboardHook.SuppressSystemKeys = false;
+                        if (App.Settings.Current.PanicKeyEnabled != true &&
+                            App.Settings.Current.KeywordTriggersEnabled != true)
+                            _keyboardHook.Stop();
+                    }
 
                     // Restore strict lock and panic key toggles
                     if (SettingsTab.ChkStrictLock != null)

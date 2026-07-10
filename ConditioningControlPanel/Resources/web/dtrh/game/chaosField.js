@@ -36,6 +36,7 @@ const CHIME_SFX = ['chime1.mp3', 'chime2.mp3', 'chime3.mp3'];
 const DEFUSE_HOLD_MS = 1000;     // hold this long over a live one to snap it
 const CLICK_THRESHOLD_MS = 180;  // a faster press+release reads as a CLICK
 const CHANNEL_MIN_SCALE = 0.55;  // visual shrink floor while channeling
+const VIBE_BRUSH_PX = 14;        // extra brush reach around a bubble's radius for the vibe sweep
 
 // ---- motion tuning (self-calibrated for the browser field) ----
 const CROSS_SEC_MIN = 8, CROSS_SEC_MAX = 13;   // vertical travellers: screen-cross time
@@ -59,7 +60,7 @@ const CHAINABLE = new Set(['treat', 'golden', 'droplet', 'heart']);
 export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreezeCaught,
   onDefused, onDetonated, onTreatExpired, onChannelBroken,
   onDarterCaught, onTeaseTouched, onTeaseDenied, onBrittleShattered, onBoundEnraged,
-  onRabbitSmacked = null }) {
+  onRabbitSmacked = null, onDvdCorner = null }) {
   const layer = document.createElement('div');
   layer.className = 'cf-layer';
   hud.insertBefore(layer, hud.firstChild); // under HUD chrome, above the canvas + fieldFx
@@ -84,6 +85,14 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
   let fieldClockMs = 0;     // monotonic real-time clock for paddle immunity / rate cap
   const paddleDefuses = []; // fieldClockMs timestamps of recent paddle defuses (rate cap)
 
+  // ---- the Wand's ink (drawn for ~2s, lingers 4s; pops whatever touches it) ----
+  const ink = [];              // { x, y, lifeMs } - ages on the field clock (a freeze holds it)
+  let inkAnchorX = null, inkAnchorY = null;   // last laid point, for segment interpolation
+  let inkSpecials = false;     // capstone: the trail takes golden/heart/droplet/prism too
+  const inkDefuses = [];       // fieldClockMs stamps of recent ink defuses (rate cap)
+  const INK_LIFE_MS = 4000, INK_SPACING_PX = 16, INK_MAX_POINTS = 280, INK_RADIUS_PX = 30;
+  const INK_DEFUSE_CAP = 3, INK_DEFUSE_WINDOW_MS = 1500, INK_BOUNCE_IMMUNE_MS = 450;
+
   // ---- accessory physics knobs (set once by the run brain at attach) ----
   const phys = {
     cursorPull: 0,        // px/s toward the cursor (negative = Cam Girl flee wins)
@@ -95,7 +104,23 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     residueZones: false,  // Aftermath drafted: poll fx.inResidue per bubble
     rabbitTrailSec: 0,    // Tail-Plug: rabbits drag a popping sparkle trail
     pumpPull: 0,          // The Pump (toy): temporary suction, sweet kinds only
+    trailBounce: false,   // Hopscotch duo: rabbits ricochet off the Wand's ink
+    thoughtOrbit: false,  // One-Track Mind duo: intrusive thoughts orbit the cursor
+    inkFreeze: false,     // Milking Machine duo: the pump's suction holds the ink fresh
+    // ---- THE BIOMES (wave 2) ----
+    currents: null,           // Undertow: [{x,y,r,pull}] vortices that drag the field
+    currentChannelMult: 1.0,  // Undertow: hold-to-snap takes this much longer inside one
+    fuseTickMult: 1.0,        // Vertigo: fuses burn hotter while the world is flipped
   };
+
+  /** Any Undertow current covering (x,y)? (biome mech re-feeds phys.currents) */
+  function inCurrent(x, y) {
+    if (!phys.currents) return false;
+    for (const cz of phys.currents) {
+      if (Math.hypot(cz.x - x, cz.y - y) <= cz.r) return true;
+    }
+    return false;
+  }
   let vibeOn = false, vibeHover = false;
 
   const W = () => window.innerWidth, H = () => window.innerHeight;
@@ -103,7 +128,6 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
   window.addEventListener('pointermove', onPointerMove, { passive: true });
   function onPointerMove(e) {
     curX = e.clientX; curY = e.clientY;
-    if (vibeOn) fx.vibePoint(curX, curY);
   }
 
   // ---- float text -----------------------------------------------------------
@@ -213,6 +237,9 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       b.baseX = b.x;
       b.baseY = b.y;
     }
+    // Echo Chamber blooms spawn under the held card: a short grace so the
+    // paddle doesn't erase them the same frame they appear.
+    if (spec.paddleGraceMs) b.paddleImmuneUntil = fieldClockMs + spec.paddleGraceMs;
     // Darters idle at their telegraph point until the flare ends.
     if (spec.kind === 'darter') {
       if (!spec.spawnAt) { b.x = rand(0.15, 0.85) * W(); b.y = rand(0.15, 0.8) * H(); }
@@ -251,16 +278,13 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     wrap.addEventListener('pointerup', () => endChannel(b, false));
     wrap.addEventListener('pointercancel', () => endChannel(b, false));
     wrap.addEventListener('pointerleave', () => endChannel(b, false));
-    // Hover verbs: the Brittle shatters at a touch of the cursor; a running
-    // vibe buzz pops everything brushed.
+    // Hover verb: the Brittle shatters at a touch of the cursor. (The vibe sweep
+    // is NOT event-driven: fallNav's canvas pointer-capture retargets every
+    // enter/move during a mouse hold, so the buzz runs as a per-frame proximity
+    // sweep in update() instead - same pattern as the Wand's ink trail.)
     wrap.addEventListener('pointerenter', () => {
       if (b.state !== 'live' || held || inputLocked) return;
-      if (b.spec.kind === 'brittle') { tryShatter(b); return; }
-      if (vibeOn && (vibeHover || anyButtonDown)) sweepPop(b, 'vibe');
-    });
-    wrap.addEventListener('pointermove', () => {
-      if (vibeOn && b.state === 'live' && !held && !inputLocked
-          && b.spec.kind !== 'brittle' && (vibeHover || anyButtonDown)) sweepPop(b, 'vibe');
+      if (b.spec.kind === 'brittle') tryShatter(b);
     });
 
     live.add(b);
@@ -287,8 +311,11 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     }
     if (k === 'brittle') { tryShatter(b); return; }
     if (k === 'darter') {
-      if (b.telegraphLeft > 0 || b.sweeper) return;   // not active yet / sweepers can't be caught
+      if (b.telegraphLeft > 0) return;                // not active yet
+      // The Spanker keeps working after the first hit: a mowing sweeper can be
+      // re-smacked (fresh fling, fresh bounces) as many times as you land it.
       if (phys.spanker) { smack(b, x, y); return; }
+      if (b.sweeper) return;                          // sweepers can't be CAUGHT bare-handed
       const quick = (performance.now() - b.activeAt) <= (b.spec.quickWindowMs || 500);
       popVisual(b, 0.3);
       floatText(quick ? 'QUICK!' : '🐇', x, y, 'cf-pop--freeze');
@@ -584,6 +611,29 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     try { onBoundEnraged(b.spec); } catch (err) { /* ignore */ }
   }
 
+  /** THE BIOMES (Searchlight): the light finds you - every fused bubble within
+   * the radius enrages (halved fuse, sprints). Returns how many were caught. */
+  function enrageNear(x, y, radiusPx) {
+    let n = 0;
+    for (const b of live) {
+      if (b.spec.kind !== 'live' || b.state !== 'live' || b.enraged || isShielded(b)) continue;
+      if (Math.hypot(b.x - x, b.y - y) > radiusPx + b.size / 2) continue;
+      enrage(b); n++;
+    }
+    return n;
+  }
+
+  /** THE BIOMES (Vertigo): the flip - every drifter's vertical motion reverses
+   * on the spot. One-shot: call again to flip back. New spawns arrive normal
+   * either way (the cull is direction-aware, so wrong-way exits stay clean). */
+  function flipDrift() {
+    for (const b of live) {
+      const m = b.spec.motion;
+      if (b.state !== 'live' || (m !== MOTION.FloatUp && m !== MOTION.RainDown)) continue;
+      b.vy = -b.vy;
+    }
+  }
+
   // ---- the Spanker -----------------------------------------------------------------
   function smack(b, x, y) {
     // Turn it away from the hand, swell it once, speed it up - and now it mows.
@@ -604,6 +654,130 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     b.wrap.classList.add('cf-bubble--sweeper');
     floatText('SMACK', x, y, 'cf-pop--word');
     playPop(0.3);
+  }
+
+  // ---- the Wand's ink trail ----------------------------------------------------
+  /** A fresh draw window opens (one wand charge). The previous trail may still
+   * be fading - charges stack ink, capped at INK_MAX_POINTS oldest-first. */
+  function wandInkStart(takesSpecials) {
+    inkAnchorX = null; inkAnchorY = null;
+    inkSpecials = !!takesSpecials;
+  }
+  /** Lay ink under the cursor (called per frame while the draw window is open).
+   * Interpolates from the last laid point so a fast flick still leaves an
+   * unbroken line instead of a dotted one. */
+  function wandInkAt(x, y) {
+    if (inkAnchorX == null) { pushInk(x, y); return; }
+    const dx = x - inkAnchorX, dy = y - inkAnchorY;
+    const d = Math.hypot(dx, dy);
+    if (d < INK_SPACING_PX) return;
+    const steps = Math.min(40, (d / INK_SPACING_PX) | 0);
+    const ax = inkAnchorX, ay = inkAnchorY;
+    for (let i = 1; i <= steps; i++) pushInk(ax + dx * (i / steps), ay + dy * (i / steps));
+  }
+  function pushInk(x, y) {
+    ink.push({ x, y, lifeMs: INK_LIFE_MS });
+    if (ink.length > INK_MAX_POINTS) ink.splice(0, ink.length - INK_MAX_POINTS);
+    inkAnchorX = x; inkAnchorY = y;
+  }
+  function inkHit(b) {
+    const reach = INK_RADIUS_PX + b.size / 2;
+    for (const p of ink) {
+      const dx = b.x - p.x, dy = b.y - p.y;
+      if (dx * dx + dy * dy <= reach * reach) return p;
+    }
+    return null;
+  }
+  /** Everything that drifts across the shimmering trail: treats pop (the capstone
+   * adds the sweet specials), live fuses snap clean (rate-capped like the paddle),
+   * and with Hopscotch drafted rabbits RICOCHET - each bounce is a fresh smack. */
+  function sweepInk() {
+    while (inkDefuses.length && inkDefuses[0] <= fieldClockMs - INK_DEFUSE_WINDOW_MS) inkDefuses.shift();
+    for (const b of Array.from(live)) {
+      if (b.state !== 'live' || isShielded(b)) continue;
+      const k = b.spec.kind;
+      if (k === 'darter') {   // Hopscotch only - the trail is a wall, not a hand
+        if (!phys.trailBounce || b.telegraphLeft > 0) continue;
+        if (b.trailImmuneUntil && fieldClockMs < b.trailImmuneUntil) continue;
+        const p = inkHit(b);
+        if (p) { smack(b, p.x, p.y); b.trailImmuneUntil = fieldClockMs + INK_BOUNCE_IMMUNE_MS; }
+        continue;
+      }
+      if (TOY_IMMUNE.has(k)) continue;
+      if (k === 'live') {
+        if (inkDefuses.length >= INK_DEFUSE_CAP || !inkHit(b)) continue;
+        defuse(b, false);
+        inkDefuses.push(fieldClockMs);
+      } else if (k === 'treat' || (inkSpecials && (k === 'golden' || k === 'heart' || k === 'droplet' || k === 'prism'))) {
+        if (inkHit(b)) popBenign(b, b.x, b.y, 'ink');
+      }
+    }
+  }
+
+  /** Milking Machine duo: the pump lets go and the whole drawing detonates -
+   * everything within reach of any ink point pops/snaps at once, sparkle
+   * bursts run the trail's length, and the ink is spent. Returns takes. */
+  function inkDetonate() {
+    if (!ink.length) return 0;
+    let n = 0;
+    const reachBase = INK_RADIUS_PX * 3;
+    for (const b of Array.from(live)) {
+      if (b.state !== 'live' || TOY_IMMUNE.has(b.spec.kind) || isShielded(b)) continue;
+      const reach = reachBase + b.size / 2;
+      let hit = false;
+      for (const p of ink) {
+        const dx = b.x - p.x, dy = b.y - p.y;
+        if (dx * dx + dy * dy <= reach * reach) { hit = true; break; }
+      }
+      if (!hit) continue;
+      if (b.spec.kind === 'live') defuse(b, false);
+      else popBenign(b, b.x, b.y, 'ink');
+      n++;
+    }
+    for (let i = 0; i < ink.length; i += 6) sparkleBurst(ink[i].x, ink[i].y, 'treat', 70);
+    ink.length = 0; inkAnchorX = null; inkAnchorY = null;
+    fx.setInk(ink);
+    return n;
+  }
+
+  /** Trust Exercise duo: an expanding sonar ring that briefly lights the
+   * Blindfold's dimmed bubbles back to full opacity as it passes over them.
+   * It reveals - it never pops; the hand does the taking. */
+  function sonarAt(x, y, radiusPx) {
+    const ring = document.createElement('div');
+    ring.className = 'cf-ripple cf-ripple--sonar';
+    ring.style.left = `${x}px`;
+    ring.style.top = `${y}px`;
+    ring.style.setProperty('--r', `${radiusPx}px`);
+    ring.style.setProperty('--life', '620ms');
+    fxLayer.appendChild(ring);
+    ring.addEventListener('animationend', () => ring.remove(), { once: true });
+    for (const b of live) {
+      if (b.state !== 'live' || !b.wrap.dataset.dim) continue;
+      const d = Math.hypot(b.x - x, b.y - y);
+      if (d > radiusPx + b.size / 2) continue;
+      window.setTimeout(() => {
+        if (b.state !== 'live') return;
+        b.revealUntil = fieldClockMs + 1400;
+        b.wrap.style.opacity = '1';
+      }, (d / radiusPx) * 620);
+    }
+  }
+
+  /** Midas Ricochet duo: gild plain treats near a popped lucky bubble. A gilded
+   * pop tips gold (the run brain reads spec.gilded). Reverts after 2.5s. */
+  function gildNear(x, y, radiusPx) {
+    let n = 0;
+    for (const b of live) {
+      if (b.state !== 'live' || b.spec.kind !== 'treat') continue;
+      if (Math.hypot(b.x - x, b.y - y) > radiusPx + b.size / 2) continue;
+      b.spec.gilded = true;
+      b.gildUntil = fieldClockMs + 2500;
+      b.wrap.classList.add('cf-gilded');
+      n++;
+    }
+    if (n) sparkleBurst(x, y, 'golden', 150);
+    return n;
   }
 
   // ---- E-Stim -----------------------------------------------------------------
@@ -674,19 +848,38 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       const d = dvds[i];
       d.lifeLeft -= ts;
       if (d.lifeLeft <= 0) { d.el.remove(); dvds.splice(i, 1); continue; }
-      d.x += d.vx * ts;
-      d.y += d.vy * ts;
-      let bounced = false;
-      if (d.x < d.w / 2) { d.x = d.w / 2; d.vx = Math.abs(d.vx); bounced = true; }
-      else if (d.x > w - d.w / 2) { d.x = w - d.w / 2; d.vx = -Math.abs(d.vx); bounced = true; }
-      if (d.y < d.h / 2) { d.y = d.h / 2; d.vy = Math.abs(d.vy); bounced = true; }
-      else if (d.y > h - d.h / 2) { d.y = h - d.h / 2; d.vy = -Math.abs(d.vy); bounced = true; }
-      if (bounced) {
-        d.bounces++;
-        // Casting Couch: the logo splits on its first bounces - one becomes two, then four.
-        if (d.splitsLeft > 0) {
-          d.splitsLeft--;
-          spawnDvd({ durationSec: d.lifeLeft, speed: d.speed, scale: d.scale, splitBounces: 0, text: d.text, x: d.x, y: d.y });
+      if (phys.thoughtOrbit && d.text) {
+        // One-Track Mind: the thought stops racing past and orbits the cursor -
+        // a popping halo the pull feeds. Radius eases in from wherever it was.
+        if (d.orbitAngle == null) {
+          d.orbitAngle = Math.atan2(d.y - curY, d.x - curX);
+          d.orbitR = Math.max(90, Math.min(260, Math.hypot(d.x - curX, d.y - curY)));
+        }
+        d.orbitR += (130 - d.orbitR) * Math.min(1, ts * 2.2);
+        d.orbitAngle += 2.3 * ts;
+        d.x = curX + Math.cos(d.orbitAngle) * d.orbitR;
+        d.y = curY + Math.sin(d.orbitAngle) * d.orbitR;
+      } else {
+        d.x += d.vx * ts;
+        d.y += d.vy * ts;
+        let bounced = false;
+        if (d.x < d.w / 2) { d.x = d.w / 2; d.vx = Math.abs(d.vx); bounced = true; }
+        else if (d.x > w - d.w / 2) { d.x = w - d.w / 2; d.vx = -Math.abs(d.vx); bounced = true; }
+        if (d.y < d.h / 2) { d.y = d.h / 2; d.vy = Math.abs(d.vy); bounced = true; }
+        else if (d.y > h - d.h / 2) { d.y = h - d.h / 2; d.vy = -Math.abs(d.vy); bounced = true; }
+        if (bounced) {
+          d.bounces++;
+          // Autoplay: the mythical CORNER shot - the other wall within a hair of the hit.
+          const nearX = d.x <= d.w / 2 + 36 || d.x >= w - d.w / 2 - 36;
+          const nearY = d.y <= d.h / 2 + 36 || d.y >= h - d.h / 2 - 36;
+          if (nearX && nearY && !d.text && onDvdCorner) {
+            try { onDvdCorner(d.x, d.y); } catch (err) { /* ignore */ }
+          }
+          // Casting Couch: the logo splits on its first bounces - one becomes two, then four.
+          if (d.splitsLeft > 0) {
+            d.splitsLeft--;
+            spawnDvd({ durationSec: d.lifeLeft, speed: d.speed, scale: d.scale, splitBounces: 0, text: d.text, x: d.x, y: d.y });
+          }
         }
       }
       d.el.style.transform = `translate3d(${d.x - d.w / 2}px, ${d.y - d.h / 2}px, 0)`;
@@ -751,12 +944,30 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     const ts = dt * timeScale;
     const w = W(), h = H();
     const tethers = [];
+    // VibePopping: a live buzz trails the cursor, and while the hand commits
+    // (any button held - or hovering alone at the capstone) the sweep runs on
+    // proximity, popping whatever the cursor brushes even if the bubble is the
+    // one doing the moving.
+    const vibeSweeping = vibeOn && !inputLocked && (vibeHover || anyButtonDown);
+    if (vibeOn) fx.vibePoint(curX, curY);
 
     for (const b of Array.from(live)) {
+      // Trust Exercise / Midas Ricochet: timed visual states expire on the field clock.
+      if (b.revealUntil && fieldClockMs >= b.revealUntil) {
+        b.revealUntil = 0;
+        if (b.wrap.dataset.dim) b.wrap.style.opacity = String(phys.dimOpacity);
+      }
+      if (b.gildUntil && fieldClockMs >= b.gildUntil) {
+        b.gildUntil = 0;
+        b.spec.gilded = false;
+        b.wrap.classList.remove('cf-gilded');
+      }
       // channel runs on REAL time (a frozen field still channels - that's the
       // freeze's reward); the fuse holds while the hand is on it either way.
       if (b.channel) {
-        b.channel.elapsed += dt * 1000;
+        // the Undertow: holding on inside a current is a real fight
+        const drag = phys.currentChannelMult > 1 && inCurrent(b.x, b.y) ? phys.currentChannelMult : 1;
+        b.channel.elapsed += (dt * 1000) / drag;
         channelSeconds += dt;
         const p = Math.min(1, b.channel.elapsed / DEFUSE_HOLD_MS);
         b.chan.style.setProperty('--cdeg', `${p * 360}`);
@@ -764,7 +975,7 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         if (p >= 1) { defuse(b, true); }
         continue;   // the grip holds it still: no motion, no fuse, no rot
       } else if (b.spec.kind === 'live' && b.fuseLeft > 0) {
-        b.fuseLeft -= ts * 1000;
+        b.fuseLeft -= ts * 1000 * (phys.fuseTickMult || 1);   // Vertigo: hotter mid-flip
         if (b.fuseLeft <= 0) { detonate(b); continue; }
       }
 
@@ -806,6 +1017,13 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         if (b.spec.kind === 'live') { defuse(b, false); continue; }
         popBenign(b, b.x, b.y, 'zone');
         continue;
+      }
+
+      // VibePopping brush: treats pop, lives snap clean (sweepPop guards the
+      // toy-immune kinds + shields itself).
+      if (vibeSweeping && Math.hypot(b.x - curX, b.y - curY) <= b.size / 2 + VIBE_BRUSH_PX) {
+        sweepPop(b, 'vibe');
+        if (b.state !== 'live') continue;
       }
 
       // ---- motion ----
@@ -859,11 +1077,32 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         if (b.baseY != null) b.baseY += (dy / d) * phys.pumpPull * ts;
       }
 
+      // THE BIOMES - the Undertow's currents: slow vortices that drag everything
+      // sweet (and the fused) toward their eye, with a sideways swirl folded in
+      // so it reads as water, not a magnet. The mech re-feeds positions per tick.
+      if (phys.currents && phys.currents.length
+          && (k === 'treat' || k === 'live' || k === 'golden' || k === 'heart' || k === 'droplet' || k === 'prism')) {
+        for (const cz of phys.currents) {
+          const dx = cz.x - b.x, dy = cz.y - b.y;
+          const d = Math.hypot(dx, dy);
+          if (d > cz.r || d < 20) continue;
+          const pull = (cz.pull || 50) * (1 - d / cz.r);
+          const fx2 = ((dx / d) * pull + (-dy / d) * pull * 0.7) * ts;
+          const fy2 = ((dy / d) * pull + (dx / d) * pull * 0.7) * ts;
+          b.x += fx2; b.y += fy2;
+          if (b.baseX != null) b.baseX += fx2;
+          if (b.baseY != null) b.baseY += fy2;
+        }
+      }
+
       if (m === MOTION.FloatUp || m === MOTION.RainDown) {
         b.y += b.vy * ts;
         b.swayT += b.swaySpeed * ts;
         b.x = b.baseX + Math.sin(b.swayT) * b.swayAmp;
-        if ((m === MOTION.FloatUp && b.y < -b.size) || (m === MOTION.RainDown && b.y > h + b.size)) {
+        // cull at the edge the bubble is actually travelling toward - after a
+        // Vertigo flip a "riser" may be falling (and vice versa), and it should
+        // still leave the screen cleanly out the side it exits.
+        if (b.vy < 0 ? b.y < -b.size : b.y > h + b.size) {
           if (k === 'treat' || k === 'golden') expire(b);
           else fadeOut(b);   // freeze/live/heart/droplet/brittle dissolve, never blink off
           continue;
@@ -911,8 +1150,19 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       }
     }
 
+    // the Wand's ink: age on the field clock (a freeze holds the drawing; the
+    // Milking Machine's suction holds it fresh too), then sweep it - the trail
+    // pops/defuses/bounces whatever drifts across it.
+    if (ink.length) {
+      if (!phys.inkFreeze) {
+        for (let i = ink.length - 1; i >= 0; i--) { if ((ink[i].lifeMs -= ts * 1000) <= 0) ink.splice(i, 1); }
+      }
+      if (ink.length) sweepInk();
+    }
+
     updateDvds(ts);
     fx.setTethers(tethers);
+    fx.setInk(ink);
     fx.draw(dt);
   }
 
@@ -1012,7 +1262,9 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
     boundPairs.clear();
     for (const d of dvds) d.el.remove();
     dvds.length = 0;
+    ink.length = 0; inkAnchorX = null; inkAnchorY = null; inkDefuses.length = 0;
     fx.setTethers([]);
+    fx.setInk([]);
     fx.clear();
   }
 
@@ -1068,9 +1320,18 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
       }
       return min;
     },
-    /** Wave 2 (the Wand): pop every treat within the beam's radius of (x,y).
-     * includeSpecials (capstone) also takes golden/heart/droplet/prism. Lives,
-     * teases and brittles ignore the wand entirely. Returns pops. */
+    // ---- the Wand's ink trail (the run brain drives the 2s draw window) ----
+    wandInkStart,
+    wandInkAt,
+    wandInkActive: () => ink.length > 0,
+    inkDetonate,   // Milking Machine: the pump's end detonates the drawing
+    sonarAt,       // Trust Exercise: reveal-ping the Blindfold's dimmed bubbles
+    gildNear,      // Midas Ricochet: gild treats near a popped lucky bubble
+    enrageNear,    // Searchlight biome: the light finds the fused
+    flipDrift,     // Vertigo biome: reverse every drifter's vertical on the spot
+    /** Radius pop at (x,y) - the Pump's arrival burst (formerly the Wand's beam).
+     * includeSpecials also takes golden/heart/droplet/prism. Lives, teases and
+     * brittles ignore it entirely. Returns pops. */
     wandSweep(x, y, radiusPx, includeSpecials) {
       let n = 0;
       for (const b of [...live]) {
@@ -1104,9 +1365,11 @@ export function createChaosField({ hud, fx, canChannel, onBenignPopped, onFreeze
         if (b.x < rect.left || b.x > rect.right || b.y < rect.top || b.y > rect.bottom) continue;
         if (b.paddleImmuneUntil && fieldClockMs < b.paddleImmuneUntil) continue;
         const kind = b.spec.kind;
-        // rabbits: fling them away from the card center (not the hand-only rule below)
+        // rabbits: fling them away from the card center (not the hand-only rule
+        // below). Sweepers stay smackable - the paddle can punt a mowing rabbit
+        // again and again (the per-bubble immunity window paces the hits).
         if (kind === 'darter') {
-          if (b.telegraphLeft > 0 || b.sweeper) continue; // not catchable yet / already mowing
+          if (b.telegraphLeft > 0) continue; // not catchable yet
           smack(b, cx, cy);
           b.paddleImmuneUntil = fieldClockMs + PADDLE_IMMUNE_MS;
           tally.flung++;

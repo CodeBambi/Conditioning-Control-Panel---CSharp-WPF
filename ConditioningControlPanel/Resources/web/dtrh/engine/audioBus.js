@@ -36,6 +36,46 @@ export function getAudioCtx() {
   return ctx;
 }
 
+// ---- THE BIOMES' audio color (S2): one master filter the whole mix wears.
+// Parked way above hearing it is transparent; a biome pulls it down and the
+// drone, the video cards, the SFX and the drift whisper all go under together
+// (the Searchlight's held-breath muffle, the Undertow's water). One node, one
+// automation - never per-voice.
+let master = null;   // BiquadFilterNode -> destination
+const AUDIO_COLORS = { muffled: 780, underwater: 400 };
+const COLOR_OPEN_HZ = 20000;
+
+/** The node every voice should connect to instead of ctx.destination. Falls
+ * back to the raw destination if the filter can't be built. */
+export function getMasterOut() {
+  const c = getAudioCtx();
+  if (!c) return null;
+  if (!master) {
+    try {
+      master = c.createBiquadFilter();
+      master.type = 'lowpass';
+      master.frequency.value = COLOR_OPEN_HZ;
+      master.Q.value = 0.5;
+      master.connect(c.destination);
+    } catch (e) { master = null; return c.destination; }
+  }
+  return master;
+}
+
+/** Ease the whole mix toward a biome color ('muffled' | 'underwater' | null). */
+export function setAudioColor(mode) {
+  const target = (mode && AUDIO_COLORS[mode]) || COLOR_OPEN_HZ;
+  if (target >= COLOR_OPEN_HZ && !master) return;   // nothing was colored: nothing to restore
+  getMasterOut();
+  if (!master || !ctx) return;
+  try {
+    master.frequency.cancelScheduledValues(ctx.currentTime);
+    master.frequency.setTargetAtTime(target, ctx.currentTime, 0.35);
+  } catch (e) {
+    try { master.frequency.value = target; } catch (e2) { /* ignore */ }
+  }
+}
+
 // Panel diagnostics: report without creating (getAudioCtx would spin one up).
 export function peekAudioState() {
   if (dead) return 'unavailable';
@@ -49,6 +89,7 @@ export function closeAudioBus() {
     resumeHook = null;
   }
   if (ctx) { try { ctx.close(); } catch (e) { /* ignore */ } ctx = null; }
+  master = null;   // died with its context
   dead = false;
 }
 
@@ -96,7 +137,7 @@ export function makeSfxPlayer() {
             gain.gain.value = vol;
             const node = c.createBufferSource();
             node.buffer = buf;
-            node.connect(gain); gain.connect(c.destination);
+            node.connect(gain); gain.connect(getMasterOut() || c.destination);
             node.start();
             return;
           } catch (e) { /* fall through */ }

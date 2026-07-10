@@ -1349,7 +1349,11 @@ namespace ConditioningControlPanel.Services
         }
 
         /// <summary>
-        /// Trigger video safely - NEVER uses strict mode
+        /// Trigger video with takeover strictness (non-strict unless the user opted in
+        /// via TakeoverVideosStrict). Strictness is passed per-call instead of the old
+        /// "flip global StrictLockEnabled off for 3 seconds" dance — that window made
+        /// engine-scheduled videos come up non-strict and raced every other reader of
+        /// the setting (see SessionEngine's session-start snapshot workaround).
         /// </summary>
         private void TriggerVideoSafely()
         {
@@ -1358,36 +1362,11 @@ namespace ConditioningControlPanel.Services
 
             // Skip mandatory video if a web video is currently active — playing both
             // simultaneously stacks two videos on screen, which is what users reported
-            // in BUG-XRFQH4AHDN.
+            // in BUG-XRFQH4AHDN. Advisory fast-path; the interaction queue inside
+            // TriggerVideo is the authoritative arbiter.
             if (_webVideoActive) return;
 
-            // Store original strict mode state
-            var wasStrict = settings.StrictLockEnabled;
-
-            // Temporarily disable strict mode for autonomous video
-            settings.StrictLockEnabled = false;
-
-            try
-            {
-                App.Video?.TriggerVideo();
-            }
-            finally
-            {
-                // Restore strict mode after a delay (after video starts). This MUST be
-                // scheduled even if TriggerVideo() throws — otherwise an exception leaves
-                // StrictLockEnabled stuck off for the rest of the session (#388).
-                Task.Delay(3000).ContinueWith(_ =>
-                {
-                    if (Application.Current?.Dispatcher == null) return;
-                    Application.Current?.Dispatcher?.BeginInvoke(() =>
-                    {
-                        if (App.Settings?.Current != null)
-                        {
-                            App.Settings.Current.StrictLockEnabled = wasStrict;
-                        }
-                    });
-                });
-            }
+            App.Video?.TriggerVideo(strictOverride: settings.TakeoverVideosStrict);
         }
 
         /// <summary>
@@ -1411,10 +1390,25 @@ namespace ConditioningControlPanel.Services
                 return;
             }
 
+            // Authoritative claim: atomically reserve the fullscreen slot BEFORE picking a
+            // video or navigating. The IsPlaying check above races VideoService's ~2s
+            // pre-roll window (freeze delay + pre-announce) where a committed mandatory
+            // video still reads as not playing; the queue slot is claimed synchronously at
+            // trigger time so TryStart cannot. Never queue web videos — autonomy's own
+            // retry tick re-attempts within RetryIntervalSeconds anyway.
+            if (App.InteractionQueue != null && !App.InteractionQueue.TryStart(
+                    InteractionQueueService.InteractionType.WebVideo, () => { }, queue: false))
+            {
+                App.Logger?.Information("AutonomyService: Fullscreen slot busy ({Current}), skipping web video",
+                    App.InteractionQueue.CurrentInteraction);
+                return;
+            }
+
             var videoLinks = AvatarTubeWindow.KnownVideoLinks;
             if (videoLinks == null || videoLinks.Count == 0)
             {
                 App.Logger?.Warning("AutonomyService: No known video links available");
+                App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.WebVideo);
                 return;
             }
 
@@ -1447,6 +1441,7 @@ namespace ConditioningControlPanel.Services
             if (mainWindow == null)
             {
                 App.Logger?.Warning("AutonomyService: MainWindow not found, cannot play web video");
+                App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.WebVideo);
                 return;
             }
 
@@ -1458,10 +1453,19 @@ namespace ConditioningControlPanel.Services
             // (page should load within ~10s; 30s is generous but doesn't block autonomy for ages)
             Task.Delay(TimeSpan.FromSeconds(30)).ContinueWith(_ =>
             {
-                if (_webVideoActive && _webVideoWatchdogGeneration == watchdogGen)
+                if (Application.Current?.Dispatcher == null) return;
+                try
                 {
-                    _webVideoActive = false;
-                    App.Logger?.Warning("AutonomyService: Web video watchdog fired - resetting stuck _webVideoActive after 30s");
+                    if (_webVideoActive && _webVideoWatchdogGeneration == watchdogGen)
+                    {
+                        _webVideoActive = false;
+                        App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.WebVideo);
+                        App.Logger?.Warning("AutonomyService: Web video watchdog fired - resetting stuck _webVideoActive after 30s");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    App.Logger?.Debug("AutonomyService: web video watchdog failed: {Error}", ex.Message);
                 }
             });
 
@@ -1474,6 +1478,7 @@ namespace ConditioningControlPanel.Services
             {
                 // Navigation failed - reset state
                 _webVideoActive = false;
+                App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.WebVideo);
                 App.Logger?.Warning("AutonomyService: Failed to navigate to web video - browser not available");
             }
         }
@@ -1493,12 +1498,23 @@ namespace ConditioningControlPanel.Services
             if (!_webVideoActive)
             {
                 _webVideoActive = true;
+                // Best-effort claim: the navigation already happened (user-clicked link),
+                // so we can't skip it — but registering with the queue keeps scheduled
+                // interactions from stacking on top for the rest of the playback.
+                App.InteractionQueue?.TryStart(
+                    InteractionQueueService.InteractionType.WebVideo, () => { }, queue: false);
                 App.Logger?.Information("AutonomyService: Web video started (external trigger), blocking autonomy actions");
             }
             else
             {
                 App.Logger?.Debug("AutonomyService: Web video confirmed playing, watchdog cancelled");
             }
+
+            // Pending-duration leash: the queue's default stuck window is 5 minutes, which
+            // would force-end a healthy video that never reports a duration (live streams,
+            // JS injection miss). Give it an hour up front; OnWebVideoDuration tightens
+            // this to the real length + grace. Type-guarded: no-ops unless WE hold the slot.
+            App.InteractionQueue?.ExtendTimeout(3600, InteractionQueueService.InteractionType.WebVideo);
         }
 
         /// <summary>
@@ -1516,6 +1532,56 @@ namespace ConditioningControlPanel.Services
             {
                 _webVideoActive = false;
                 App.Logger?.Information("AutonomyService: Web video ended, autonomy actions resumed");
+            }
+
+            // Release the fullscreen slot (dequeues any waiting interaction). Idempotent
+            // and type-guarded — the JS 'ended', fullscreen-exit and duration hard stop
+            // can all fire for the same video; only the first release matters.
+            App.InteractionQueue?.CompleteIfCurrent(InteractionQueueService.InteractionType.WebVideo);
+        }
+
+        /// <summary>
+        /// Hard-terminates a fullscreen web-video takeover from outside the normal JS
+        /// lifecycle (interaction-queue stuck recovery, user force-reset): ends the
+        /// browser takeover and runs the normal ended bookkeeping (flag + slot release).
+        /// Marshals to the UI thread if needed; on the UI thread it runs synchronously.
+        /// </summary>
+        public void ForceEndWebVideoTakeover()
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.HasShutdownStarted)
+            {
+                OnWebVideoEnded(); // no UI to tear down; still release the flag + queue slot
+                return;
+            }
+            if (dispatcher.CheckAccess())
+                ForceEndWebVideoTakeoverCore();
+            else
+                dispatcher.BeginInvoke(ForceEndWebVideoTakeoverCore);
+        }
+
+        /// <summary>
+        /// Synchronous body of <see cref="ForceEndWebVideoTakeover"/> — UI thread only.
+        /// Callers that must guarantee "teardown happened before the queue slot frees"
+        /// (stuck recovery, the duration hard stop's generation re-check) call this
+        /// directly so no extra dispatcher hop can interleave a new video in between.
+        /// </summary>
+        internal void ForceEndWebVideoTakeoverCore()
+        {
+            try
+            {
+                var mainWindow = App.MainWindowRef
+                    ?? Application.Current?.MainWindow as MainWindow
+                    ?? Application.Current?.Windows.OfType<MainWindow>().FirstOrDefault();
+                mainWindow?.EndWebVideoTakeover();
+            }
+            catch (Exception ex)
+            {
+                App.Logger?.Warning(ex, "AutonomyService: force-ending web video takeover failed");
+            }
+            finally
+            {
+                OnWebVideoEnded();
             }
         }
 
@@ -1542,28 +1608,25 @@ namespace ConditioningControlPanel.Services
             App.Logger?.Information("AutonomyService: Web video reports {Seconds:F0}s - hard stop scheduled at +{Cap:F0}s",
                 seconds, cap.TotalSeconds);
 
+            // Keep the interaction queue's stuck-recovery from force-ending a long video
+            // mid-play (its default window is 5 minutes) — mirrors the native VLC path.
+            // Type-guarded: if our best-effort claim failed (slot held by something else),
+            // this must NOT stretch that other interaction's recovery window.
+            App.InteractionQueue?.ExtendTimeout(cap.TotalSeconds, InteractionQueueService.InteractionType.WebVideo);
+
             Task.Delay(cap).ContinueWith(_ =>
             {
                 if (!_webVideoActive || _webVideoDurationGeneration != gen) return;
                 if (Application.Current?.Dispatcher == null) return;
                 Application.Current.Dispatcher.BeginInvoke(() =>
                 {
-                    try
-                    {
-                        if (!_webVideoActive || _webVideoDurationGeneration != gen) return;
-                        App.Logger?.Information("AutonomyService: Web video ran past its reported length - force-ending takeover");
-                        var mainWindow = Application.Current?.MainWindow as MainWindow
-                            ?? Application.Current?.Windows.OfType<MainWindow>().FirstOrDefault();
-                        mainWindow?.EndWebVideoTakeover();
-                    }
-                    catch (Exception ex)
-                    {
-                        App.Logger?.Warning(ex, "AutonomyService: web video hard stop failed");
-                    }
-                    finally
-                    {
-                        OnWebVideoEnded();
-                    }
+                    // Re-check on the UI thread: the video may have ended (and a new one
+                    // started) between the timer firing and this dispatch. The teardown
+                    // must run synchronously HERE — another dispatcher hop between this
+                    // check and the teardown would let a fresh video start and be killed.
+                    if (!_webVideoActive || _webVideoDurationGeneration != gen) return;
+                    App.Logger?.Information("AutonomyService: Web video ran past its reported length - force-ending takeover");
+                    ForceEndWebVideoTakeoverCore();
                 });
             });
         }

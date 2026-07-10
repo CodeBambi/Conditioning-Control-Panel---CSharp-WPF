@@ -139,15 +139,16 @@ public static class ChaosLifetimeBoons
         },
         new()
         {
-            // Wave 2 (browser game): a 2.5s cursor beam that pops every treat it sweeps.
+            // Wave 2 (browser game), reworked: 2s of drawing - a shimmering ink trail that
+            // lingers 4 more seconds and pops/defuses whatever touches it.
             Id = "the_wand", Category = ChaosBoonCategory.Skill, RankFloor = ChaosRank.Slipping, Name = "The Wand", Glyph = "🪄",
-            Desc = "press: for 2.5s a humming beam rides your cursor and every treat it sweeps pops itself — the whole tunnel glares while it's on. 2/3/4 charges per descent by level.",
-            Flavor = "the wand doesn't ask. it announces.",
+            Desc = "press: for 2s the wand draws wherever your cursor goes — a shimmering trail that lingers 4 more seconds. every treat that touches it pops itself, and live fuses it grazes snap clean. 2/3/4 charges per descent by level.",
+            Flavor = "draw the line. watch them cross it.",
             UnlockCost = 600,
             UpgradeCosts = new[] { 900, 1400 },                   // levels 2..3
             LevelValues  = new[] { 2.0, 3, 4 },                   // charges per descent
             ValueLabel = "{0:0} charges",
-            CapstoneDesc = "the beam takes the sweet specials too — lucky bubbles, hearts, droplets, prisms.",
+            CapstoneDesc = "the trail takes the sweet specials too — lucky bubbles, hearts, droplets, prisms.",
             IsActiveUse = true, UseCooldownSec = 0,               // charge-based
             WebOnly = true,
             Apply = (s, v) => s.ToyPower["the_wand"] = v,

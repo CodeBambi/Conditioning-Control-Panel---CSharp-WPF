@@ -1005,6 +1005,7 @@ namespace ConditioningControlPanel
                             UpdatePatreonUI();
                             UpdateAccountLinkingUI();
                             UpdateBannerWelcomeMessage();
+                            OfferAchievementSharingAfterDiscordLink();
                         }
                     }
                     catch (OperationCanceledException)

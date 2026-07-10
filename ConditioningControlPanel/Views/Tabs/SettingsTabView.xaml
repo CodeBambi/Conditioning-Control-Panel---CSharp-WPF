@@ -1403,8 +1403,14 @@
                                         </TextBlock.Effect>
                                     </TextBlock>
                                 </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="BtnLinkPhone" Content="📱 Link phone"
+                                        Click="BtnLinkPhone_Click" Margin="0,0,6,0" VerticalAlignment="Center"
+                                        ToolTip="Sign in to the CCP mobile app by scanning a QR code"
+                                        Padding="10,5" Background="{DynamicResource AccentTintedBgBrush}" Foreground="{DynamicResource PinkBrush}"
+                                        BorderThickness="0" FontSize="10" Cursor="Hand"/>
                                 <!-- Prominent, high-contrast Logout button -->
-                                <Button x:Name="BtnQuickLogout" Grid.Column="1" Content="{loc:Str btn_logout}"
+                                <Button x:Name="BtnQuickLogout" Content="{loc:Str btn_logout}"
                                         Click="BtnQuickLogout_Click" VerticalAlignment="Center"
                                         Padding="16,7" FontSize="12" FontWeight="Bold" Cursor="Hand"
                                         ToolTip="{loc:Str btn_logout}">
@@ -1434,6 +1440,7 @@
                                         </Style>
                                     </Button.Style>
                                 </Button>
+                                </StackPanel>
                             </Grid>
                         </Border>
     

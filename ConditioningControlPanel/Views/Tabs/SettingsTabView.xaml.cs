@@ -142,6 +142,11 @@ namespace ConditioningControlPanel.Views.Tabs
             if (Window.GetWindow(this) is MainWindow mw)
                 mw.BtnQuickLogout_Click(sender, e);
         }
+        private void BtnLinkPhone_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new LinkPhoneDialog { Owner = Window.GetWindow(this) };
+            dialog.ShowDialog();
+        }
         private void BtnReloadBrowser_Click(object sender, RoutedEventArgs e)
         {
             if (Window.GetWindow(this) is MainWindow mw)

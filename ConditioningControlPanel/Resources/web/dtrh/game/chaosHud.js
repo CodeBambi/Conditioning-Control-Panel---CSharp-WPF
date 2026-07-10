@@ -10,14 +10,22 @@
  * (ccp.art/announce/{key}.png) like the WPF ChaosAnnouncerOverlay.
  * ==========================================================================*/
 
+import { createHudTips } from './hudTips.js';
+import { HUD_TIPS } from './catalog.js';
+
 const DEFUSE_COST = 30; // FOCUS bar low-threshold (ChaosTuning.DEFUSE_COST)
 const RIPPLE_COST = 30; // the ripple spends this much focus per cast (chaosRun RIPPLE_FOCUS_COST)
 const ART = 'https://ccp.art/';
 
-export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
+export function createChaosHud(hud, { onToyUse, onWeatherClick, isSuppressed } = {}) {
   const root = document.createElement('div');
   root.className = 'cf-hud';
   hud.appendChild(root);
+
+  const tips = createHudTips(hud, { isSuppressed });
+  let lastSt = null;   // latest update() snapshot - tooltip getters read live values from it
+  let lastWx = null;   // latest setWeather() payload
+  let lastBiome = null; // latest setBiome() payload (the active region mechanic)
 
   const mk = (cls, parent) => {
     const d = document.createElement('div');
@@ -30,12 +38,83 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
   const scoreVal = document.createElement('span');
   scoreVal.className = 'cf-score-val';
   scoreVal.textContent = '0';
-  const multVal = document.createElement('span');
-  multVal.className = 'cf-mult-val';
-  multVal.textContent = '×1.0';
-  scoreRow.append(scoreVal, multVal);
+  scoreRow.append(scoreVal);
 
-  const streakRow = mk('cf-hud-streak');
+  // ---- the biome banner: current place name + its live effect, up top so the
+  // player always knows which room's rules are in force ----
+  const biomeRow = mk('cf-hud-biome');
+  biomeRow.style.display = 'none';
+  const biomeArt = document.createElement('img'); biomeArt.className = 'cf-biome-art'; biomeArt.alt = '';
+  biomeArt.addEventListener('error', () => { biomeArt.style.display = 'none'; });   // tile missing: text-only chip
+  const biomeText = document.createElement('span'); biomeText.className = 'cf-biome-text';
+  const biomeGlyph = document.createElement('span'); biomeGlyph.className = 'cf-biome-glyph';
+  const biomeName = document.createElement('span'); biomeName.className = 'cf-biome-name';
+  const biomeFx = document.createElement('span'); biomeFx.className = 'cf-biome-fx';
+  const biomeHint = document.createElement('span'); biomeHint.className = 'cf-biome-hint';
+  biomeText.append(biomeGlyph, biomeName, biomeFx, biomeHint);
+  biomeRow.append(biomeArt, biomeText);
+
+  // ---- the multiplier badge (Balatro-style: punches on combo, burns as it climbs) ----
+  const badge = mk('cf-mult-badge tier-0');
+  const badgeFx = document.createElement('div');
+  badgeFx.className = 'cf-mult-embers';
+  const badgeCore = document.createElement('div');
+  badgeCore.className = 'cf-mult-core';
+  const multVal = document.createElement('span');
+  multVal.className = 'cf-mult-hero';
+  multVal.textContent = '×1.0';
+  const streakVal = document.createElement('span');
+  streakVal.className = 'cf-mult-streak';
+  badgeCore.append(multVal, streakVal);
+  badge.append(badgeFx, badgeCore);
+
+  // Fire tiers ride the raw streak count (the tunnel itself fully warps at 25);
+  // prevCombo=null means "baseline unset" so a fresh run never reads as a break.
+  let prevCombo = null;
+  let curTier = 0;
+  let emberTimer = 0;
+  const EMBER_MS = [0, 500, 260, 150, 100]; // tier -> spawn period
+  const EMBER_MAX = 14;                     // live ember node cap
+  const tierOf = (c) => (c >= 100 ? 4 : c >= 50 ? 3 : c >= 25 ? 2 : c >= 15 ? 1 : 0);
+
+  function syncEmbers() {
+    clearInterval(emberTimer);
+    emberTimer = 0;
+    if (curTier > 0 && root.style.display !== 'none') {
+      emberTimer = window.setInterval(spawnEmber, EMBER_MS[curTier]);
+    }
+  }
+  function spawnEmber() {
+    if (badgeFx.childElementCount >= EMBER_MAX) return;
+    const s = document.createElement('span');
+    s.className = 'cf-ember';
+    s.style.left = `${8 + Math.random() * 84}%`;
+    s.style.setProperty('--ex', `${(Math.random() * 26 - 13) | 0}px`);
+    s.style.setProperty('--edur', `${(0.7 + Math.random() * 0.8).toFixed(2)}s`);
+    s.style.setProperty('--esize', `${curTier >= 3 ? 5 + Math.random() * 4 : 3 + Math.random() * 3}px`);
+    s.addEventListener('animationend', () => s.remove());
+    badgeFx.appendChild(s);
+  }
+  function setTier(t) {
+    if (t === curTier) return;
+    badge.classList.remove(`tier-${curTier}`);
+    badge.classList.add(`tier-${t}`);
+    curTier = t;
+    syncEmbers();
+  }
+  function punch() {
+    badgeCore.style.setProperty('--punch-scale', String(1.16 + curTier * 0.05));
+    badgeCore.style.setProperty('--punch-rot', `${(Math.random() * 10 - 5).toFixed(1)}deg`);
+    badgeCore.classList.remove('is-punch', 'is-break', 'is-crack');
+    void badgeCore.offsetWidth;
+    badgeCore.classList.add('is-punch');
+  }
+  function breakFx(hard) {
+    badgeCore.classList.remove('is-punch', 'is-break', 'is-crack');
+    void badgeCore.offsetWidth;
+    badgeCore.classList.add(hard ? 'is-break' : 'is-crack');
+  }
+
   const shieldRow = mk('cf-hud-shields');
 
   const focusRow = mk('cf-hud-focus');
@@ -69,6 +148,48 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
 
   const rippleRow = mk('cf-hud-ripple');
 
+  // ---- hover tooltips for the mechanic readouts (rect-tested; see hudTips.js) ----
+  const FIRE_TIERS = [15, 25, 50, 100];
+  tips.attach(scoreRow, () => HUD_TIPS.score);
+  tips.attach(biomeRow, () => {
+    if (!lastBiome) return null;
+    return { glyph: lastBiome.glyph || '◈', kicker: 'the place', name: lastBiome.name || '',
+      desc: lastBiome.tagline || '', accent: '156,232,160' };
+  });
+  tips.attach(badge, () => {
+    if (!lastSt) return HUD_TIPS.mult;
+    const c = lastSt.combo | 0;
+    const next = FIRE_TIERS.find((t) => c < t);
+    return {
+      ...HUD_TIPS.mult,
+      extra: `streak ${c} · ×${lastSt.totalMult.toFixed(1)} total` + (next ? ` · next fire at ${next}` : ' · fully ablaze'),
+    };
+  });
+  tips.attach(shieldRow, () => {
+    if (!shieldRow.textContent) return null;   // row is empty = nothing to explain
+    const extra = lastSt
+      ? `${lastSt.shields}/${Math.max(lastSt.startingShields, lastSt.shields)} hearts`
+        + (lastSt.collarSaves > 0 ? ` · 📿 ${lastSt.collarSaves} collar save${lastSt.collarSaves > 1 ? 's' : ''} left` : '')
+      : '';
+    return { ...HUD_TIPS.shields, extra };
+  });
+  tips.attach(focusRow, () => ({ ...HUD_TIPS.focus, extra: lastSt ? `${Math.round(lastSt.focus)}/100` : '' }));
+  tips.attach(heatRow, () => HUD_TIPS.lust);
+  tips.attach(clockRow, () => HUD_TIPS.clock);
+  tips.attach(rippleRow, () => {
+    const cost = (lastSt && lastSt.rippleCost) || RIPPLE_COST;
+    const ready = lastSt ? lastSt.focus >= cost : false;
+    return { ...HUD_TIPS.ripple, extra: `costs ${cost} focus a cast · ${ready ? 'READY' : 'charging'}` };
+  });
+  tips.attach(weatherRow, () => {
+    if (!lastWx) return null;
+    return {
+      glyph: lastWx.glyph, kicker: 'the weather', name: lastWx.name,
+      desc: lastWx.desc || '',
+      extra: lastWx.rerollable ? '💍 click: she changes her mind (once per descent)' : '',
+    };
+  });
+
   // ---- the run-pick ribbon (drafted mantras/sins, in pick order) ----
   const picksWrap = document.createElement('div');
   picksWrap.className = 'cf-picks';
@@ -79,7 +200,14 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
     for (const p of picks) {
       const tile = document.createElement('div');
       tile.className = 'cf-pick' + (p.curse ? ' cf-pick--sin' : '');
-      tile.title = p.name;
+      tips.attach(tile, () => ({
+        glyph: p.glyph || (p.curse ? '☠' : '◈'),
+        kicker: (p.curse ? 'sin' : p.relic ? 'relic' : 'mantra') + (p.rarity ? ` · ${p.rarity}` : ''),
+        name: p.name,
+        desc: p.desc || '',
+        flavor: p.flavor || '',
+        accent: p.curse ? '255,138,138' : p.relic ? '255,215,130' : '156,232,160',
+      }));
       const img = document.createElement('img');
       img.src = `${ART}boons/${p.id}.png`;
       img.alt = '';
@@ -94,9 +222,31 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
   dock.className = 'cf-toydock';
   hud.appendChild(dock);
   const toyEls = new Map();
+  let lastToys = [];
+
+  // ---- the Eye: hide/show the whole run HUD (bottom-right). The Eye itself and
+  // the Fall's gear stay put, so a hidden HUD still has an escape hatch. ----
+  const eyeBtn = document.createElement('button');
+  eyeBtn.type = 'button';
+  eyeBtn.className = 'cf-eye-btn';
+  eyeBtn.textContent = '👁';
+  eyeBtn.title = 'hide / show the HUD';
+  eyeBtn.setAttribute('aria-label', 'hide or show the HUD');
+  eyeBtn.style.display = 'none';   // shown only while the run HUD is up
+  eyeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const hidden = hud.classList.toggle('dtrh-hud-hidden');
+    eyeBtn.classList.toggle('is-off', hidden);
+    eyeBtn.textContent = hidden ? '🙈' : '👁';
+  });
+  hud.appendChild(eyeBtn);
 
   function updateToys(toys, status) {
+    lastToys = toys;
     if (!toys.length) { dock.innerHTML = ''; toyEls.clear(); return; }
+    // prune buttons for toys no longer in the dock (a consumable was spent/removed)
+    const live = new Set(toys.map((t) => t.id));
+    for (const [id, el] of toyEls) { if (!live.has(id)) { el.remove(); toyEls.delete(id); } }
     for (const t of toys) {
       let el = toyEls.get(t.id);
       if (!el) {
@@ -109,14 +259,30 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
         g.textContent = t.glyph;
         const n = document.createElement('span');
         n.className = 'cf-toy-name';
-        n.textContent = t.name + (t.key ? ` · ${t.key}` : '');
         const s = document.createElement('span');
         s.className = 'cf-toy-status';
         el.append(g, n, s);
         el._status = s;
+        el._name = n;
+        // look the toy back up by id at show time - re-equips swap record objects
+        const toyId = t.id;
+        tips.attach(el, () => {
+          const cur = lastToys.find((x) => x.id === toyId);
+          if (!cur) return null;
+          const state = cur.chargesLeft >= 0
+            ? (cur.chargesLeft === 0 ? 'spent' : `${cur.chargesLeft} use${cur.chargesLeft > 1 ? 's' : ''} left`)
+            : (cur.cooldownLeft > 0 ? `${Math.ceil(cur.cooldownLeft)}s cooldown` : 'ready');
+          return {
+            glyph: cur.glyph, kicker: 'toy', name: cur.name,
+            desc: cur.desc || '',
+            extra: (cur.key ? `press ${cur.key} or click · ` : '') + state,
+          };
+        });
         dock.appendChild(el);
         toyEls.set(t.id, el);
       }
+      // refresh the label each frame - a consumable's slot number can shift as the dock drains
+      el._name.textContent = t.name + (t.key ? ` · ${t.key}` : '');
       const ready = t.cooldownLeft <= 0 && t.chargesLeft !== 0;
       el._status.textContent = t.chargesLeft >= 0
         ? (t.chargesLeft === 0 ? 'spent' : `${t.chargesLeft} left`)
@@ -130,28 +296,42 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
   const annWrap = document.createElement('div');
   annWrap.className = 'cf-announce-wrap';
   hud.appendChild(annWrap);
-  function announce(text, kind = 'depth', holdMs = 2000, { artKey = null, subText = null } = {}) {
+  function announce(text, kind = 'depth', holdMs = 2000, { artKey = null, artUrl = null, artBig = false, subText = null, hint = null } = {}) {
     while (annWrap.children.length >= 2) annWrap.firstChild.remove();
     const el = document.createElement('div');
     el.className = `cf-announce cf-announce--${kind}`;
     el.style.setProperty('--hold', `${holdMs}ms`);
-    if (artKey) {
+    if (artKey || artUrl) {
+      // artUrl = a full image URL (the biome roulette tiles); artKey = a
+      // shipped announce banner. When both are given the URL leads and the
+      // banner is the on-error fallback (a missing tile never leaves a hole).
       const img = document.createElement('img');
-      img.className = 'cf-announce-art';
-      img.src = `${ART}announce/${artKey}.png`;
+      img.className = 'cf-announce-art' + (artUrl ? ' cf-announce-art--tile' : '') + (artBig ? ' cf-announce-art--big' : '');
+      img.src = artUrl || `${ART}announce/${artKey}.png`;
       img.alt = '';
-      img.addEventListener('error', () => img.remove());
+      img.addEventListener('error', () => {
+        if (artUrl && artKey && img.src !== `${ART}announce/${artKey}.png`) {
+          img.className = 'cf-announce-art';
+          img.src = `${ART}announce/${artKey}.png`;
+        } else img.remove();
+      });
       el.appendChild(img);
     }
     const txt = document.createElement('div');
     txt.className = 'cf-announce-text';
     txt.textContent = text;
     el.appendChild(txt);
-    if (subText && artKey) {   // like WPF: the subline only rides under banner art
+    if (subText && (artKey || artUrl)) {   // like WPF: the subline only rides under banner art
       const sub = document.createElement('div');
       sub.className = 'cf-announce-sub';
       sub.textContent = subText;
       el.appendChild(sub);
+    }
+    if (hint) {   // the quiet grey mechanics note under the flavour line
+      const h = document.createElement('div');
+      h.className = 'cf-announce-hint';
+      h.textContent = hint;
+      el.appendChild(h);
     }
     annWrap.appendChild(el);
     el.addEventListener('animationend', (e) => { if (e.target === el) el.remove(); });
@@ -199,9 +379,17 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
     setPicks,
     updateToys,
     update(st) {
+      lastSt = st;
       scoreVal.textContent = Math.floor(st.score).toLocaleString();
       multVal.textContent = `×${st.totalMult.toFixed(1)}`;
-      streakRow.textContent = st.combo > 1 ? `🔥 streak ×${st.combo}` : '';
+      streakVal.textContent = st.combo > 1 ? `streak ${st.combo}` : '';
+      const c = st.combo | 0;
+      if (prevCombo != null && c !== prevCombo) {
+        if (c > prevCombo) punch();                 // +1 pops AND the private-show ×2
+        else breakFx(c === 0 && prevCombo >= 5);    // detonation reset = hard break; halving / 1->0 = crack
+      }
+      prevCombo = c;
+      setTier(tierOf(c));
       const capacity = Math.max(st.startingShields, st.shields);
       shieldRow.textContent = (capacity > 0 || st.collarSaves > 0)
         ? '♥'.repeat(st.shields) + '♡'.repeat(Math.max(0, st.startingShields - st.shields))
@@ -220,6 +408,7 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
     /** Wave 2: show/hide the weather chip. wx = { glyph, name, desc,
      * forecast: 'glyph NAME' | null, rerollable: bool } or null to hide. */
     setWeather(wx) {
+      lastWx = wx || null;
       if (!wx) {
         weatherRow.style.display = 'none';
         weatherRow.classList.remove('is-reroll');
@@ -227,9 +416,23 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
       }
       weatherRow.style.display = '';
       weatherRow.textContent = `${wx.glyph} ${wx.name}` + (wx.forecast ? ` → ${wx.forecast}` : '');
-      weatherRow.title = (wx.desc || '')
-        + (wx.rerollable ? '\n💍 click: she changes her mind (once per descent)' : '');
       weatherRow.classList.toggle('is-reroll', !!wx.rerollable);
+    },
+    /** THE BIOMES: the active place's name + effect, top-left. Pass the biome
+     * object ({ glyph, name, tagline }) or null to hide (classic/no-biome runs). */
+    setBiome(b) {
+      lastBiome = b || null;
+      if (!b) { biomeRow.style.display = 'none'; return; }
+      biomeRow.style.display = '';
+      if (b.id) {
+        biomeArt.style.display = '';
+        biomeArt.src = `${ART}biomes/${b.id}.png`;   // the roulette tile, as the chip's face
+      } else biomeArt.style.display = 'none';
+      biomeGlyph.textContent = b.glyph || '';
+      biomeName.textContent = b.name || '';
+      biomeFx.textContent = b.tagline || '';
+      biomeHint.textContent = b.mechHint || '';
+      biomeHint.style.display = b.mechHint ? '' : 'none';
     },
     flashFocus() {
       focusBar.classList.remove('cf-focus-flash');
@@ -277,11 +480,68 @@ export function createChaosHud(hud, { onToyUse, onWeatherClick } = {}) {
         requestAnimationFrame(step);
       } catch (e) { /* ignore */ }
     },
-    setVisible(v) { root.style.display = v ? '' : 'none'; picksWrap.style.display = v ? '' : 'none'; dock.style.display = v ? '' : 'none'; },
+    // Grab-in-the-tube: a grabbed power-up's art flies from the tube grab point
+    // (screen px) to its HUD slot - the bottom dock for a consumable, the top pick
+    // strip for a relic (passive) - then shrinks in. Purely cosmetic; the item is
+    // already docked/applied by the time this runs.
+    flyArtToSlot(id, fromPos, target = 'relic') {
+      try {
+        const dest = target === 'consumable' ? dock : picksWrap;
+        const el = document.createElement('img');
+        el.src = `${ART}boons/${id}.png`;
+        el.alt = '';
+        el.addEventListener('error', () => { el.remove(); });
+        const S = 108;
+        Object.assign(el.style, {
+          position: 'fixed', width: S + 'px', height: S + 'px', left: '0', top: '0',
+          transform: 'translate(-50%,-50%)', zIndex: '99999', pointerEvents: 'none',
+          borderRadius: '12px', boxShadow: '0 0 22px rgba(220,180,255,0.7)', opacity: '1',
+        });
+        document.body.appendChild(el);
+        const sx = (fromPos && fromPos.x) || window.innerWidth / 2;
+        const sy = (fromPos && fromPos.y) || window.innerHeight / 2;
+        el.style.left = sx + 'px'; el.style.top = sy + 'px';
+        const FLY = 620;
+        const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+        let t0 = null;
+        const step = (ts) => {
+          if (t0 == null) t0 = ts;
+          const k = Math.min(1, (ts - t0) / FLY);
+          const r = dest.getBoundingClientRect();
+          const tx = (r.left || window.innerWidth / 2) + (r.width ? r.width / 2 : 0);
+          const ty = (r.top || window.innerHeight) + (r.height ? r.height / 2 : 0);
+          const kk = ease(k);
+          el.style.left = (sx + (tx - sx) * kk) + 'px';
+          el.style.top = (sy + (ty - sy) * kk) + 'px';
+          el.style.transform = `translate(-50%,-50%) scale(${1 - 0.68 * kk})`;
+          el.style.opacity = String(1 - 0.3 * kk);
+          if (k < 1) { requestAnimationFrame(step); return; }
+          el.remove();
+          dest.classList.remove('cf-slot-flash'); void dest.offsetWidth; dest.classList.add('cf-slot-flash');
+        };
+        requestAnimationFrame(step);
+      } catch (e) { /* ignore */ }
+    },
+    resetCombo() { prevCombo = null; },   // fresh run without a hide (recap "Again"): no phantom break
+    setVisible(v) {
+      root.style.display = v ? '' : 'none';
+      picksWrap.style.display = v ? '' : 'none';
+      dock.style.display = v ? '' : 'none';
+      eyeBtn.style.display = v ? '' : 'none';
+      if (!v) {
+        // leaving a run: clear the Eye's hide state so the next run starts shown
+        hud.classList.remove('dtrh-hud-hidden');
+        eyeBtn.classList.remove('is-off'); eyeBtn.textContent = '👁';
+        prevCombo = null; tips.hideNow(); // next run's first update() sets the baseline silently
+      }
+      syncEmbers();
+    },
     dispose() {
       clearTimeout(pulseTimer);
+      clearInterval(emberTimer);
+      tips.dispose();
       root.remove(); annWrap.remove(); toastWrap.remove(); pulseEl.remove();
-      picksWrap.remove(); dock.remove(); heatTint.remove();
+      picksWrap.remove(); dock.remove(); eyeBtn.remove(); heatTint.remove();
     },
   };
 }

@@ -248,9 +248,11 @@ public sealed class ChaosRunConfig
     }
 
     /// <summary>
-    /// Rank clamp for the run's bubble pool: the <c>video</c> / <c>htlink</c> variants only
-    /// enter a run once their reveals unlock (Entranced). Returns the saved list untouched
-    /// when both are open; otherwise a NEW narrowed list — the saved setting is never mutated.
+    /// Rank clamp for the run's bubble pool: narrows out <c>video</c> / <c>htlink</c> while
+    /// their reveals are locked. Since 2026-07 both reveals are open from the first run
+    /// (depth-gating moved in-run: the web spawner only deals them in chambers III-IV), so
+    /// this passes the saved list through untouched — kept as the backstop should the
+    /// predicates ever gate again. The saved setting is never mutated.
     /// </summary>
     private static List<string>? ClampVariants(List<string>? saved)
     {

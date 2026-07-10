@@ -64,3 +64,49 @@ export function audioGroups() {
 
 // Subscribe to level changes; returns an unsubscribe fn.
 export function onLevels(fn) { subs.add(fn); return () => subs.delete(fn); }
+
+// ---- DtRH voiceover set ------------------------------------------------------
+// The biome VO corpus ships dual-voiced: one set shared by Sissy + Bambi Sleep,
+// one for Circe's Lock (driftChain gates biome lines by `mod`). The DEFAULT
+// follows the active persona (seeded by chaosRun at attach); an explicit pick
+// here overrides it and persists, so the player can listen to either voice
+// regardless of which mod is dressed.
+const VOICE_KEY = 'sf-voice-set';
+let voiceDefault = 'sissy';   // persona-derived, runtime only (not persisted)
+let voicePref = null;         // the player's explicit choice, persisted
+try {
+  const v = localStorage.getItem(VOICE_KEY);
+  if (v === 'sissy' || v === 'circe') voicePref = v;
+} catch (e) { /* fresh default */ }
+
+const voiceSubs = new Set();
+const pingVoice = () => voiceSubs.forEach((fn) => { try { fn(getVoice()); } catch (e) { /* ignore */ } });
+
+export function voiceSets() {
+  return [
+    { key: 'sissy', label: 'sissy / bambi' },
+    { key: 'circe', label: 'circe' },
+  ];
+}
+
+/** The effective voice: the player's pick, else the persona default. */
+export function getVoice() { return voicePref || voiceDefault; }
+
+export function setVoice(key) {
+  if (key !== 'sissy' && key !== 'circe') return;
+  voicePref = key;
+  try { localStorage.setItem(VOICE_KEY, key); } catch (e) { /* private mode */ }
+  pingVoice();
+}
+
+/** Seed the persona-derived default (Circe's Lock speaks circe, everyone else
+ * sissy). Only moves the needle while the player hasn't picked explicitly. */
+export function setVoiceDefault(key) {
+  const v = key === 'circe' ? 'circe' : 'sissy';
+  if (v === voiceDefault) return;
+  voiceDefault = v;
+  if (!voicePref) pingVoice();
+}
+
+// Subscribe to effective-voice changes; returns an unsubscribe fn.
+export function onVoice(fn) { voiceSubs.add(fn); return () => voiceSubs.delete(fn); }

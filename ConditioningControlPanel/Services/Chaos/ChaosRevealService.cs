@@ -11,7 +11,7 @@ public static class RevealIds
     public const string TabLookingGlass    = "tab_looking_glass";    // Slipping
     public const string SectionToys        = "toybox_toys";          // first toy pocket owned
     public const string SectionAccessories = "toybox_accessories";   // first accessory pocket owned
-    public const string HerCorner          = "toybox_her_corner";    // bench stub in the Toybox (run 2+, until Looking Glass reveals)
+    public const string HerCorner          = "toybox_her_corner";    // RETIRED (v3 gold cutover) - only the legacy WPF hub references it
     public const string PillTeasing        = "pill_teasing";         // Tempted
     public const string PillRelentless     = "pill_relentless";      // Entranced
     public const string PillInescapable    = "pill_inescapable";     // extreme_tier owned (unchanged)
@@ -19,8 +19,8 @@ public static class RevealIds
     public const string StartPicker        = "start_picker";         // bench: the starting mantra
     public const string Diary              = "diary";                // bench: the Diary
     public const string StatsPanel         = "stats_panel";          // bench: the stats panel
-    public const string BenchToyPocket2    = "bench_toy_pocket_2";   // Devoted
-    public const string BenchAccPocket2    = "bench_acc_pocket_2";   // Devoted
+    public const string BenchToyPocket2    = "bench_toy_pocket_2";   // RETIRED (v3 gold cutover) - only the legacy WPF hub references it
+    public const string BenchAccPocket2    = "bench_acc_pocket_2";   // RETIRED (v3 gold cutover) - only the legacy WPF hub references it
     public const string VariantVideo       = "variant_video";        // Entranced (run whitelist clamp)
     public const string VariantHtlink      = "variant_htlink";       // Entranced (run whitelist clamp)
     public const string Capstones          = "capstones";            // Devoted (final levels purchasable)
@@ -53,9 +53,12 @@ public static class RevealService
     {
         [RevealIds.Dollhouse]          = () => ChaosMeta.State.RunsCompleted >= 1,
         [RevealIds.TabLookingGlass]    = () => ChaosMeta.RankIndex >= ChaosRank.Slipping,
-        [RevealIds.SectionToys]        = () => ChaosMeta.State.ToyPockets >= 1,
-        [RevealIds.SectionAccessories] = () => ChaosMeta.State.AccessoryPockets >= 1,
-        [RevealIds.HerCorner]          = () => ChaosMeta.State.RunsCompleted >= 2 && ChaosMeta.RankIndex < ChaosRank.Slipping,
+        // grab-in-the-tube rework: discovered in the fall, not pocket-gated - open from run 1.
+        [RevealIds.SectionToys]        = () => ChaosMeta.State.RunsCompleted >= 1,
+        [RevealIds.SectionAccessories] = () => ChaosMeta.State.RunsCompleted >= 1,
+        // v3 gold cutover: HerCorner / BenchToyPocket2 / BenchAccPocket2 retired (pockets
+        // gone; migration prunes the ids from pending/seen). Missing = always-unlocked,
+        // which only the dormant legacy WPF hub would ever notice.
         [RevealIds.PillTeasing]        = () => ChaosMeta.RankIndex >= ChaosRank.Tempted,
         [RevealIds.PillRelentless]     = () => ChaosMeta.RankIndex >= ChaosRank.Entranced,
         [RevealIds.PillInescapable]    = () => ChaosMeta.State.ExtremeUnlocked,
@@ -63,10 +66,12 @@ public static class RevealService
         [RevealIds.StartPicker]        = () => ChaosMeta.State.BenchPurchases.Contains(BenchIds.StartMantra),
         [RevealIds.Diary]              = () => ChaosMeta.State.BenchPurchases.Contains(BenchIds.Diary),
         [RevealIds.StatsPanel]         = () => ChaosMeta.State.BenchPurchases.Contains(BenchIds.StatsPanel),
-        [RevealIds.BenchToyPocket2]    = () => ChaosMeta.RankIndex >= ChaosRank.Devoted,
-        [RevealIds.BenchAccPocket2]    = () => ChaosMeta.RankIndex >= ChaosRank.Devoted,
-        [RevealIds.VariantVideo]       = () => ChaosMeta.RankIndex >= ChaosRank.Entranced,
-        [RevealIds.VariantHtlink]      = () => ChaosMeta.RankIndex >= ChaosRank.Entranced,
+        // 2026-07: the giants are open from the first run (ClampVariants passes
+        // through) - depth-gating moved in-run: the web spawner only deals
+        // video/htlink in chambers III-IV (chaosRun.js). Ids stay so persisted
+        // pending/seen sets keep parsing.
+        [RevealIds.VariantVideo]       = () => true,
+        [RevealIds.VariantHtlink]      = () => true,
         [RevealIds.Capstones]          = () => ChaosMeta.RankIndex >= ChaosRank.Devoted,
         [RevealIds.ExtremeTierRow]     = () => ChaosMeta.RankIndex >= ChaosRank.Devoted,
     };

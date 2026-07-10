@@ -10,13 +10,15 @@ namespace ConditioningControlPanel.Services.Chaos;
 /// </summary>
 public sealed class ChaosMetaState
 {
-    public int SchemaVersion { get; set; } = 2;   // v2: added narrative-line persistence (additive, no migration)
+    // v2: added narrative-line persistence (additive, no migration)
+    // v3: gold cutover - dials cost gold, pockets retired + refunded (ChaosMetaStore migration)
+    public int SchemaVersion { get; set; } = 3;
 
     public int Sparks { get; set; } = 0;
     public HashSet<string> PurchasedUpgrades { get; set; } = new();
-    /// <summary>Options-panel "Dials" the player has bought back with drops (UNLOCK_LADDER
-    /// ids in engine/settings.js). Absent = locked, so old saves start with the fall
-    /// pre-set and the gear panel almost entirely padlocked until earned.</summary>
+    /// <summary>Options-panel "Dials" the player has bought back with GOLD (UNLOCK_LADDER
+    /// ids in engine/settings.js; drops until the v3 gold cutover). Absent = locked, so old
+    /// saves start with the fall pre-set and the gear panel almost entirely padlocked.</summary>
     public HashSet<string> PurchasedDials { get; set; } = new();
     /// <summary>Trained habits the player has switched OFF (absent = on, so old saves stay fully active).</summary>
     public HashSet<string> DisabledUpgrades { get; set; } = new();
@@ -50,13 +52,20 @@ public sealed class ChaosMetaState
     /// <summary>Braindrain's happy-path debut on the second descent (spawn alone + announce).</summary>
     public bool SeenBraindrain { get; set; } = false;
 
-    // ---- two-currency split (2026-06-11): Sparks (code name frozen) is the DROPS balance,
-    // banked end-of-run; Gold is the instant in-run balance, spent only at her bench ----
+    // ---- two-currency split (v3 gold cutover): Sparks (code name frozen) is the DROPS
+    // balance banked end-of-run - it LEVELS things (deepen/train/hands). Gold is the
+    // instant in-run balance - it UNLOCKS things (dials + console extras) ----
     public int Gold { get; set; } = 0;
 
-    // ---- pockets are purchase-driven now: counts start at zero, her bench sews more ----
+    // ---- RETIRED (v3): loadout pockets. Kept for schema compat; migration zeroes
+    // them and refunds their gold. Do not read in new code ----
     public int ToyPockets { get; set; } = 0;
     public int AccessoryPockets { get; set; } = 0;
+
+    /// <summary>Grab-in-the-tube rework (2026-07): consumable (active-toy) HUD slots the player
+    /// can hold at once during a fall. Starts at 1; the dollhouse sews more with Sparks up to
+    /// <see cref="ChaosMeta.MAX_CONSUMABLE_SLOTS"/>. Defaults to 1 so old saves get a working slot.</summary>
+    public int ConsumableSlots { get; set; } = 1;
 
     /// <summary>Gold purchases at her bench (non-power conveniences): id -> owned.</summary>
     public HashSet<string> BenchPurchases { get; set; } = new();
@@ -92,6 +101,15 @@ public sealed class ChaosMetaState
     public bool SeenRippleTeach { get; set; } = false;
     /// <summary>Once-ever line the first time heat climbs — names the orange bar and its x2.</summary>
     public bool SeenHeatTeach { get; set; } = false;
+
+    // ---- guided FTUE (2026-07): the Warren hub hand-holding beats ----
+    /// <summary>The hub welcome beats + portal guide card, shown once on the first-ever Warren open.</summary>
+    public bool SeenWarrenWelcome { get; set; } = false;
+    /// <summary>The first-return beats + TOYBOX/DIALS guide cards, shown once after run 1.</summary>
+    public bool SeenFirstReturn { get; set; } = false;
+    /// <summary>One-shot: the NEXT descent deals the scripted classroom config regardless of
+    /// RunsCompleted (set by reset-onboarding, consumed + cleared at request-run deal time).</summary>
+    public bool ForceScriptedRun { get; set; } = false;
 
     /// <summary>First-contact verb hints (ChaosBubbleHints): interaction archetypes the player
     /// has performed correctly once — their over-bubble hint text never shows again.</summary>

@@ -184,7 +184,9 @@ namespace ConditioningControlPanel.Services.Commands
             return cmd switch
             {
                 AICommandType.flash_image => s.AllowAiFlash,
-                AICommandType.video => s.AllowAiVideo,
+                // Videos also require the main Videos feature toggle (#512) — gating here
+                // (not just in MediaCommand) keeps blocked videos out of the Live actions feed.
+                AICommandType.video => s.AllowAiVideo && App.Settings?.Current?.MandatoryVideosEnabled == true,
                 AICommandType.audio => s.AllowAiAudio,
                 AICommandType.bubbles => s.AllowAiBubbles,
                 AICommandType.subliminal => s.AllowAiSubliminal,

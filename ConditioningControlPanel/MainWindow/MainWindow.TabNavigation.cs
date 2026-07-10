@@ -236,6 +236,7 @@ namespace ConditioningControlPanel
                     LabTab.Visibility = Visibility.Visible;
                     AnimateTabIn(LabTab);
                     BtnLab.Style = activeStyle;
+                    SyncLabEffectPermsUI();
                     RefreshWebcamDeviceList();
                     RefreshWebcamMonitorList();
                     if (LabTab.ChkRestrictGazeToCalScreen != null && App.Settings?.Current != null)

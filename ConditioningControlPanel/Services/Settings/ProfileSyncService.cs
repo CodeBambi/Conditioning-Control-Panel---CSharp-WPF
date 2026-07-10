@@ -877,15 +877,39 @@ namespace ConditioningControlPanel.Services
                             }
                             else if (localTotalXp > serverTotalXp + 75000)
                             {
-                                // Server clamped our XP significantly — force adopt to prevent exploit
-                                var serverLevel = v2Result.User.Level;
-                                var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverTotalXp) ?? 0;
+                                // Server significantly below local — normally an anti-cheat clamp.
+                                // BUT mirror the V1 defense (see the legacy path below): distinguish
+                                // "server clamped a real inflated profile" from "server returned an
+                                // uninitialized/empty record" (e.g. a broken Discord link so the
+                                // account resolves to a pristine profile, or a failed server read).
+                                // The latter looks like Level<=1, 0 XP, no achievements, no skills,
+                                // no points — nothing a genuinely progressed user could have. Clamping
+                                // to that resets the player to Level 1 on EVERY sync (repeat data loss).
+                                bool serverLooksUninitialized =
+                                    v2Result.User.Level <= 1 &&
+                                    v2Result.User.Xp == 0 &&
+                                    (v2Result.User.Achievements == null || v2Result.User.Achievements.Count == 0) &&
+                                    (v2Result.UnlockedSkills == null || v2Result.UnlockedSkills.Count == 0) &&
+                                    (v2Result.SkillPoints ?? 0) == 0;
 
-                                App.Logger?.Warning("[Anti-cheat] V2 Sync: Server clamped XP — forcing Level {ServerLevel} XP {ServerXp} (local was {LocalXp})",
-                                    serverLevel, serverTotalXp, localTotalXp);
-                                settings.PlayerLevel = serverLevel;
-                                settings.PlayerXP = serverLevelXp;
-                                App.Settings?.Save();
+                                if (serverLooksUninitialized)
+                                {
+                                    App.Logger?.Warning("[Anti-cheat] V2 Sync DEFENDED: server profile looks uninitialized (Level {SL}, 0 XP, no achievements/skills/points) but local has progress (Level {LL}, {LX} XP). Refusing to clamp — likely a failed/empty server read or broken account link, not an exploit. Local kept.",
+                                        v2Result.User.Level, settings.PlayerLevel, localTotalXp);
+                                    // Keep local values; a later good sync (or admin action) reconciles.
+                                }
+                                else
+                                {
+                                    // Server clamped our XP significantly — force adopt to prevent exploit
+                                    var serverLevel = v2Result.User.Level;
+                                    var serverLevelXp = App.Progression?.GetCurrentLevelXP(serverLevel, serverTotalXp) ?? 0;
+
+                                    App.Logger?.Warning("[Anti-cheat] V2 Sync: Server clamped XP — forcing Level {ServerLevel} XP {ServerXp} (local was {LocalXp})",
+                                        serverLevel, serverTotalXp, localTotalXp);
+                                    settings.PlayerLevel = serverLevel;
+                                    settings.PlayerXP = serverLevelXp;
+                                    App.Settings?.Save();
+                                }
                             }
                         }
                     }

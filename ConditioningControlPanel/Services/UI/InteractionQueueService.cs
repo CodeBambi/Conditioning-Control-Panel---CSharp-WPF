@@ -16,7 +16,12 @@ public class InteractionQueueService
         Video,
         BubbleCount,
         LockCard,
-        PopQuiz
+        PopQuiz,
+        /// <summary>Takeover "Hypnotube" video playing fullscreen in the embedded browser.
+        /// Deliberately a distinct type from <see cref="Video"/>: native teardown paths
+        /// (panic, ForceCleanup, session switch) call CompleteIfCurrent(Video) and must
+        /// never be able to release a web video's claim.</summary>
+        WebVideo
     }
 
     private readonly Queue<(InteractionType Type, Action Trigger)> _queue = new();
@@ -232,11 +237,21 @@ public class InteractionQueueService
     /// Call this when the actual duration becomes known (e.g., video duration from VLC).
     /// </summary>
     /// <param name="durationSeconds">The expected duration in seconds</param>
-    public void ExtendTimeout(double durationSeconds)
+    /// <param name="onlyIf">When set, extend only if this type currently holds the slot.
+    /// Callers reporting a duration for THEIR interaction must pass their type — a
+    /// type-blind extension can stretch an unrelated (possibly genuinely stuck)
+    /// interaction's recovery window to the reported duration.</param>
+    public void ExtendTimeout(double durationSeconds, InteractionType? onlyIf = null)
     {
         lock (_lock)
         {
             if (!CurrentInteraction.HasValue) return;
+            if (onlyIf.HasValue && CurrentInteraction != onlyIf)
+            {
+                App.Logger?.Debug("InteractionQueue: ExtendTimeout for {OnlyIf} skipped - current is {Current}",
+                    onlyIf, CurrentInteraction);
+                return;
+            }
 
             // Restart the timer with: expected duration + 30s buffer, minimum 5 minutes
             var timeoutMinutes = Math.Max(DefaultMaxInteractionMinutes, (durationSeconds + 30) / 60.0);
@@ -292,6 +307,7 @@ public class InteractionQueueService
     {
         _stuckDetectionTimer?.Stop();
 
+        InteractionType stuckType;
         lock (_lock)
         {
             if (!CurrentInteraction.HasValue)
@@ -299,51 +315,48 @@ public class InteractionQueueService
                 return; // Not stuck anymore
             }
 
-            var stuckType = CurrentInteraction.Value;
+            stuckType = CurrentInteraction.Value;
             var activeDuration = DateTime.Now - _interactionStartTime;
             App.Logger?.Warning("InteractionQueue: STUCK INTERACTION DETECTED! {Type} has been active for {Duration:F1} minutes. Auto-recovering...",
                 stuckType, activeDuration.TotalMinutes);
+        }
 
-            // Force-cleanup the stuck service so its windows don't linger on screen
-            try
+        // Tear down OUTSIDE the lock, then release. Ordering matters twice over:
+        // - Not under _lock: the cleanups call back into CompleteIfCurrent; running them
+        //   inside the (re-entrant) lock used to dequeue the next item and then the old
+        //   code below cleared the slot and dequeued a SECOND item (double-dispatch).
+        // - Release AFTER teardown returns, never before: the old code cleared the slot
+        //   and dispatched the next queued interaction first, but ForceCleanup/CloseAll
+        //   pumps messages for seconds — the next interaction's trigger executed INSIDE
+        //   that pump, creating fullscreen windows while LibVLC players were mid-detach
+        //   (the multi-monitor freeze path). The cleanups' own CompleteIfCurrent (plus
+        //   the backstop in finally) dequeues only once teardown is done.
+        // This tick runs on the UI thread (DispatcherTimer), so the cleanups can run
+        // inline here now that the lock is released.
+        try
+        {
+            switch (stuckType)
             {
-                DispatcherHelper.RunOnUI(() =>
-                {
-                    switch (stuckType)
-                    {
-                        case InteractionType.Video:
-                            App.Video?.ForceCleanup();
-                            break;
-                        case InteractionType.BubbleCount:
-                            App.BubbleCount?.ForceCleanup();
-                            break;
-                    }
-                });
+                case InteractionType.Video:
+                    App.Video?.ForceCleanup();               // ends with CompleteIfCurrent(Video)
+                    break;
+                case InteractionType.BubbleCount:
+                    App.BubbleCount?.ForceCleanup();
+                    break;
+                case InteractionType.WebVideo:
+                    App.Autonomy?.ForceEndWebVideoTakeoverCore(); // sync teardown, then releases
+                    break;
             }
-            catch (Exception ex)
-            {
-                App.Logger?.Debug("InteractionQueue: Failed to force-cleanup stuck {Type}: {Error}", stuckType, ex.Message);
-            }
-
-            // Force reset to recover
-            CurrentInteraction = null;
-
-            // Trigger next queued interaction if any
-            if (_queue.Count > 0)
-            {
-                var next = _queue.Dequeue();
-                CurrentInteraction = next.Type;
-                _interactionStartTime = DateTime.Now;
-                StartStuckDetectionTimer();
-                App.Logger?.Information("InteractionQueue: Auto-recovery starting queued {Type} (remaining: {Count})",
-                    next.Type, _queue.Count);
-
-                DispatchTrigger(next.Trigger);
-            }
-            else
-            {
-                App.Logger?.Information("InteractionQueue: Auto-recovery complete, queue is now clear");
-            }
+        }
+        catch (Exception ex)
+        {
+            App.Logger?.Debug("InteractionQueue: Failed to force-cleanup stuck {Type}: {Error}", stuckType, ex.Message);
+        }
+        finally
+        {
+            // Backstop: if the cleanup path didn't release the slot itself (or threw),
+            // free it now that no teardown is running. Idempotent and type-guarded.
+            CompleteIfCurrent(stuckType);
         }
     }
 }

@@ -621,7 +621,7 @@ public partial class ChaosOverlayWindow : Window
         // The chips pop in as their own beat once the score tally has landed.
         var takeHome = ChipRow(
             StatChip("XP", $"{ChaosGlyphs.Xp} {finalXp:N0}", pink, $"base {baseXp:N0} x{skillMult:0.0}"),
-            StatChip("DROPS", $"{ChaosGlyphs.Drops} {sparksEarned:N0}", gold, "banked in the dollhouse"));
+            StatChip("EMOTES", $"{ChaosGlyphs.Drops} {sparksEarned:N0}", gold, "banked in the dollhouse"));
         ResultsBody.Children.Add(takeHome);
         PopRewardChips(takeHome, firstDelayMs: 900);
 

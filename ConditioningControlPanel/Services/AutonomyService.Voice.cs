@@ -403,7 +403,7 @@ namespace ConditioningControlPanel.Services
                 var toRun = best;
                 if (Application.Current?.Dispatcher != null)
                     _ = Application.Current.Dispatcher.InvokeAsync(() => ExecuteIntentAndConfirm(toRun));
-                if (best.Repeatable) _lastVoiceIntent = best;
+                if (best.Repeatable && best.Blocked?.Invoke() != true) _lastVoiceIntent = best;
                 return true;
             }
             catch (Exception ex)

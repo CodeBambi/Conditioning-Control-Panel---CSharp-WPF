@@ -16,9 +16,11 @@ import { boonById } from './boons.js';
 
 // ---- tunables (ChaosHappyPath.cs, one block) ----
 const R1_THREAT_AT_PROGRESS = 0.30;
+const R1_RIPPLE_PROMPT_AT_PROGRESS = 0.45;
 const R1_DRAFT_AT_PROGRESS = 0.55;
-const R1_DRAFT_FALLBACK_PROGRESS = 0.70;
 const R1_DARTER_AT_PROGRESS = 0.88;
+const R1_OUTRO_AT_PROGRESS = 0.96;
+const R1_DRAFT_FALLBACK_PROGRESS = 0.70;
 const R1_THREAT_FUSE_MULT = 3.0;
 const R1_STREAK_TEACH_COMBO = 3;
 const R2_BRAINDRAIN_AT_PROGRESS = 0.25;
@@ -33,6 +35,7 @@ export function createHappyPath() {
   // run 1 beats
   let streakTaught, threatSpawned, threatDefuseSeen, variantsJoined, draftFired, darterSpawned;
   let introStarted;   // the VN welcome plays once, on the first scripted tick
+  let ripplePrompted, outroStarted;
   // run 2 beats
   let braindrainDebuted, goldenSpawned;
   // draft rigging
@@ -45,6 +48,7 @@ export function createHappyPath() {
     streakTaught = threatSpawned = threatDefuseSeen = variantsJoined = false;
     draftFired = darterSpawned = false;
     introStarted = false;
+    ripplePrompted = outroStarted = false;
     braindrainDebuted = goldenSpawned = false;
     draftsThisRun = 0;
     shieldRigBoonId = null;
@@ -115,10 +119,23 @@ export function createHappyPath() {
         .slice(0, 3);
       draftFired = pool.length === 0 || io.triggerScriptedDraft(pool);
     }
+    // The ~6s lesson card explained the ripple; this is the invitation to actually
+    // cast one. Only fires if they never have and the focus meter can pay for it.
+    if (!ripplePrompted && io.progress() >= R1_RIPPLE_PROMPT_AT_PROGRESS
+        && io.ripplesCast && io.ripplesCast() === 0 && io.focusFull && io.focusFull()) {
+      ripplePrompted = true;
+      io.announce('🌊 try it now — right-click the water', 'powerup', 3200);
+    }
     if (!darterSpawned && io.progress() >= R1_DARTER_AT_PROGRESS) {
       darterSpawned = true;
       io.announce('🐇 a white rabbit. catch it.', 'powerup', 3200);
       io.spawnDarter();
+    }
+    // The bridge into the hub: she calls you back up just before the hole closes,
+    // so the first return (the burrow grew) doesn't land as a cold cut.
+    if (!outroStarted && io.progress() >= R1_OUTRO_AT_PROGRESS) {
+      outroStarted = true;
+      if (io.vnBeat) io.vnBeat('outro1');   // fire-and-forget, like the intro
     }
   }
 

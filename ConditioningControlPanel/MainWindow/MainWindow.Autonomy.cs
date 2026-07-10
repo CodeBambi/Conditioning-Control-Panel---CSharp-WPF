@@ -38,6 +38,19 @@ namespace ConditioningControlPanel
 
             var isEnabled = BambiTakeoverTab.ChkAutonomyEnabled.IsChecked ?? false;
 
+            // Lockdown mode: a RUNNING Takeover cannot be disabled while locked in (#514) —
+            // same rule as the engine stop / exit / panic-key guards. Keyed on the service
+            // actually running (not the persisted setting) so a stale setting can be cleared.
+            if (!isEnabled && App.Autonomy?.IsEnabled == true && App.Lockdown?.IsActive == true)
+            {
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"), Loc.Get("title_lockdown"),
+                    MessageBoxButton.OK, MessageBoxImage.Stop);
+                _isLoading = true;
+                try { BambiTakeoverTab.ChkAutonomyEnabled.IsChecked = true; }
+                finally { _isLoading = false; }
+                return;
+            }
+
             // If enabling for the first time, show consent dialog
             if (isEnabled && !App.Settings.Current.AutonomyConsentGiven)
             {
@@ -45,11 +58,11 @@ namespace ConditioningControlPanel
                     "AUTONOMY MODE\n\n" +
                     "This feature allows the companion to autonomously trigger effects:\n" +
                     "• Flash images\n" +
-                    "• Videos (without strict mode)\n" +
+                    "• Videos\n" +
                     "• Subliminal messages\n" +
                     "• Make comments\n\n" +
                     "She will act on her own within your configured intensity settings.\n\n" +
-                    "You can disable this at any time. Videos triggered autonomously will NEVER use strict mode.\n\n" +
+                    "You can disable this at any time. Videos triggered autonomously are skippable unless you explicitly enable Strict Videos in the Takeover settings.\n\n" +
                     "Do you consent to enable Autonomy Mode?",
                     "Enable Autonomy Mode",
                     MessageBoxButton.YesNo,
@@ -119,6 +132,14 @@ namespace ConditioningControlPanel
 
             var isCurrentlyEnabled = settings.AutonomyModeEnabled;
 
+            // Lockdown mode: a RUNNING Takeover cannot be disabled while locked in (#514).
+            if (isCurrentlyEnabled && App.Autonomy?.IsEnabled == true && App.Lockdown?.IsActive == true)
+            {
+                MessageBox.Show(Loc.Get("msg_you_are_in_lockdown_mode_nyou_cannot_stop_dur"), Loc.Get("title_lockdown"),
+                    MessageBoxButton.OK, MessageBoxImage.Stop);
+                return;
+            }
+
             // If starting for the first time, show consent dialog
             if (!isCurrentlyEnabled && !settings.AutonomyConsentGiven)
             {
@@ -126,7 +147,7 @@ namespace ConditioningControlPanel
                     "AUTONOMY MODE\n\n" +
                     "This feature allows the companion to autonomously trigger effects:\n" +
                     "• Flash images\n" +
-                    "• Videos (without strict mode)\n" +
+                    "• Videos (skippable unless you enable Strict Videos)\n" +
                     "• Subliminal messages\n" +
                     "• Make comments\n\n" +
                     "She will act on her own schedule based on your intensity setting.\n" +
@@ -275,6 +296,33 @@ namespace ConditioningControlPanel
             App.Settings.Current.AutonomyCanTriggerFlash = BambiTakeoverTab.ChkAutonomyFlash.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerVideo = BambiTakeoverTab.ChkAutonomyVideo.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerWebVideo = BambiTakeoverTab.ChkAutonomyWebVideo.IsChecked ?? false;
+
+            // Strict takeover videos are a no-escape amplifier (surprise fullscreen videos
+            // with no skip/ESC; combined with a disabled panic key there is NO way out) —
+            // gate enabling behind the same double warning the NoPanic toggle uses.
+            var strictRequested = BambiTakeoverTab.ChkTakeoverVideosStrict.IsChecked ?? false;
+            if (strictRequested && !App.Settings.Current.TakeoverVideosStrict)
+            {
+                var confirmed = WarningDialog.ShowDoubleWarning(this,
+                    "Strict Takeover Videos",
+                    "• Takeover videos will be UNSKIPPABLE (no ESC, no close)\n" +
+                    "• They fire WITHOUT warning at random moments\n" +
+                    "• With the Panic Key disabled there is NO way to end them early\n" +
+                    "• You must watch every video to the end");
+                if (!confirmed)
+                {
+                    strictRequested = false;
+                    // Defer the revert so it runs after the dialog's event stack unwinds
+                    // (same pattern as the NoPanic toggle).
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _isLoading = true;
+                        BambiTakeoverTab.ChkTakeoverVideosStrict.IsChecked = false;
+                        _isLoading = false;
+                    }));
+                }
+            }
+            App.Settings.Current.TakeoverVideosStrict = strictRequested;
             App.Settings.Current.AutonomyCanTriggerSubliminal = BambiTakeoverTab.ChkAutonomySubliminal.IsChecked ?? false;
             App.Settings.Current.AutonomyCanTriggerBubbles = BambiTakeoverTab.ChkAutonomyBubbles.IsChecked ?? false;
             App.Settings.Current.AutonomyCanComment = BambiTakeoverTab.ChkAutonomyComment.IsChecked ?? false;

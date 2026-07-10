@@ -677,7 +677,13 @@ namespace ConditioningControlPanel.Services
         /// who simply hasn't added videos isn't greeted by a blocking prompt every launch.
         /// User-initiated triggers leave this false so they still get the helpful guidance.
         /// </param>
-        public void TriggerVideo(bool silentIfEmpty = false)
+        /// <param name="strictOverride">
+        /// Per-call strictness: null reads the global StrictLockEnabled (normal scheduled /
+        /// manual videos); true/false forces it for this video only. Takeover passes the
+        /// TakeoverVideosStrict setting here instead of the old "flip the global setting off
+        /// for 3 seconds" hack, which made concurrently-scheduled videos come up non-strict.
+        /// </param>
+        public void TriggerVideo(bool silentIfEmpty = false, bool? strictOverride = null)
         {
             App.Logger?.Information("VideoService: TriggerVideo called");
 
@@ -685,6 +691,20 @@ namespace ConditioningControlPanel.Services
             if (_triggerInProgress)
             {
                 App.Logger?.Information("VideoService: TriggerVideo skipped - trigger already in progress");
+                return;
+            }
+
+            // Teardown of a previous video is pumping messages (CloseAll/WaitWithMessagePump
+            // runs a nested dispatcher loop for up to ~4s) — a trigger re-entering through
+            // that pump would start creating windows while players are mid-detach, the
+            // proven multi-monitor freeze path. Drop WITHOUT touching the queue slot:
+            // during teardown, CurrentInteraction==Video is the DYING video's claim
+            // (ForceCleanup sets _videoPlaying=false at its top), and releasing it here
+            // would dequeue the next interaction into this very pump. ForceCleanup's own
+            // trailing CompleteIfCurrent(Video) releases once teardown is done.
+            if (_isCleaningUp)
+            {
+                App.Logger?.Information("VideoService: TriggerVideo dropped - cleanup in progress");
                 return;
             }
 
@@ -717,7 +737,7 @@ namespace ConditioningControlPanel.Services
                     App.InteractionQueue.CurrentInteraction);
                 App.InteractionQueue.TryStart(
                     InteractionQueueService.InteractionType.Video,
-                    () => TriggerVideo(silentIfEmpty),
+                    () => TriggerVideo(silentIfEmpty, strictOverride),
                     queue: true);
                 return;
             }
@@ -739,6 +759,10 @@ namespace ConditioningControlPanel.Services
             }
 
             _triggerInProgress = true;
+
+            // Resolve strictness NOW (trigger time), not after the 800ms freeze delay —
+            // the global setting can change inside that window.
+            var strict = strictOverride ?? App.Settings.Current.StrictLockEnabled;
 
             var path = GetNextVideo();
             App.Logger?.Information("VideoService: GetNextVideo returned: {Path}", path ?? "(null)");
@@ -807,7 +831,7 @@ namespace ConditioningControlPanel.Services
                         App.Logger?.Debug("VideoService: Freeze delay complete, calling PlayVideo on UI thread");
                         DispatcherHelper.RunOnUISync(() =>
                         {
-                            PlayVideo(path, App.Settings.Current.StrictLockEnabled);
+                            PlayVideo(path, strict);
                         });
                     }
                     catch (Exception ex)
@@ -822,7 +846,7 @@ namespace ConditioningControlPanel.Services
             {
                 // Attention checks or minigame active - play video without freeze
                 App.Logger?.Debug("VideoService: Playing video immediately (skipFreeze=true)");
-                PlayVideo(path, App.Settings.Current.StrictLockEnabled);
+                PlayVideo(path, strict);
             }
         }
 
@@ -834,6 +858,16 @@ namespace ConditioningControlPanel.Services
             if (string.IsNullOrEmpty(videoPath) || !System.IO.File.Exists(videoPath))
             {
                 App.Logger?.Warning("VideoService: Specific video not found: {Path}", videoPath);
+                return;
+            }
+
+            // Same re-entrancy protection as TriggerVideo: never start creating windows
+            // while a previous video's teardown is pumping messages (freeze path). Drop
+            // without releasing the queue slot — it's the dying video's claim, and
+            // ForceCleanup's trailing CompleteIfCurrent(Video) frees it after teardown.
+            if (_isCleaningUp)
+            {
+                App.Logger?.Information("VideoService: PlaySpecificVideo dropped - cleanup in progress");
                 return;
             }
 
@@ -1153,13 +1187,22 @@ namespace ConditioningControlPanel.Services
                 {
                     if (_isRunning && !_videoPlaying && !_triggerInProgress)
                     {
-                        if (App.Autonomy?.IsWebVideoActive == true)
+                        if (App.Autonomy?.IsWebVideoActive == true ||
+                            App.InteractionQueue?.CurrentInteraction == InteractionQueueService.InteractionType.WebVideo)
                         {
                             // A fullscreen browser/HypnoTube video is on screen — don't stack a
                             // mandatory video (and its audio) on top (BUG-XRFQH4AHDN). Nothing
                             // else re-arms us in this branch (there's no mandatory-video Cleanup
                             // to follow), so reschedule to retry once the web video has ended.
+                            // Reschedule rather than queue: an ambient video shouldn't pile up
+                            // behind a possibly-long web video.
                             App.Logger?.Information("VideoService: scheduler tick skipped — web video active; rescheduling");
+                            ScheduleNext();
+                        }
+                        else if (_isCleaningUp)
+                        {
+                            // Previous video's teardown still pumping — same reschedule logic.
+                            App.Logger?.Information("VideoService: scheduler tick skipped — cleanup in progress; rescheduling");
                             ScheduleNext();
                         }
                         else
@@ -2220,7 +2263,7 @@ namespace ConditioningControlPanel.Services
                         // Extend the stuck detection timeout to prevent InteractionQueue from
                         // auto-completing Video during the retry gap, which would let queued
                         // interactions (e.g. BubbleCount) start while the retry video plays.
-                        App.InteractionQueue?.ExtendTimeout(300);
+                        App.InteractionQueue?.ExtendTimeout(300, InteractionQueueService.InteractionType.Video);
                         // Pick a fresh video for the retry — replaying the same video makes
                         // attention checks easier to game (memorize the timing) and was a
                         // user-reported inconsistency vs. BubbleCount which always picks new.
@@ -2335,7 +2378,7 @@ namespace ConditioningControlPanel.Services
             _fallbackSafetyTimer = null;
 
             // Extend stuck detection timeout so long videos aren't killed prematurely
-            App.InteractionQueue?.ExtendTimeout(videoDurationSeconds);
+            App.InteractionQueue?.ExtendTimeout(videoDurationSeconds, InteractionQueueService.InteractionType.Video);
 
             // Add 5 second buffer beyond video duration
             var timeoutSeconds = videoDurationSeconds + 5;
