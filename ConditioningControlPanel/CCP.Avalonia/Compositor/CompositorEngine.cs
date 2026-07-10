@@ -345,29 +345,6 @@ public sealed class CompositorEngine : IDisposable
     /// <summary>True when the update loop is running.</summary>
     public bool IsRunning => _timer.IsEnabled;
 
-    private int _dialogModeRefCount;
-
-    /// <summary>
-    /// Temporarily lower compositor windows so dialogs and popups can be clicked.
-    /// DEPRECATED: compositor now uses WS_EX_LAYERED | WS_EX_TRANSPARENT for native
-    /// click-through, so it stays on top of dialogs while still passing clicks through.
-    /// This method is kept for API compatibility but is a no-op.
-    /// </summary>
-    public void PushDialogMode()
-    {
-        Interlocked.Increment(ref _dialogModeRefCount);
-        // No longer lowering Topmost — compositor stays on top with click-through styles
-    }
-
-    /// <summary>Restore compositor windows after a dialog closes. No-op for compatibility.</summary>
-    public void PopDialogMode()
-    {
-        if (Interlocked.Decrement(ref _dialogModeRefCount) <= 0)
-        {
-            _dialogModeRefCount = 0;
-        }
-    }
-
     /// <summary>
     /// Force every compositor window back to the front of the topmost band. WPF parity with
     /// OverlayService.NotifyTopWindowClosed: call after a topmost window (fullscreen video,

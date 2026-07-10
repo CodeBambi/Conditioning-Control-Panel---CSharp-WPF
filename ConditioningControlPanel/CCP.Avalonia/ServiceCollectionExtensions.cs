@@ -125,8 +125,7 @@ public static class ServiceCollectionExtensions
 
         // Dialog service needs a way to reach the current TopLevel at call time.
         services.AddSingleton<IDialogService>(sp => new AvaloniaDialogService(
-            () => GetCurrentTopLevel(),
-            sp.GetService<CompositorEngine>()));
+            () => GetCurrentTopLevel()));
 
         // Overlay surface is a Window, so a new instance per consumer is safer than a singleton.
         services.AddTransient<IOverlaySurface, AvaloniaOverlaySurface>();
